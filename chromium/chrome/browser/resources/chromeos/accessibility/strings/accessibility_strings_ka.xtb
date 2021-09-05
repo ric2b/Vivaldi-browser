@@ -5,6 +5,7 @@
 <translation id="1011903154582639569">იპოვეთ კლავიში, შემდეგ კი აუშვით თითი ასაკრეფად</translation>
 <translation id="1012173283529841972">სიის ელემენტი</translation>
 <translation id="1013742170491673792">srched</translation>
+<translation id="1014370462248694370">ორი თითით გადაფურცვლა მარჯვნივ</translation>
 <translation id="1022586497894531524">ChromeVox-ის გახმოვანებულ უკუკავშირს პირველად იყენებთ? მოცემული სწრაფი სახელმძღვანელო ChromeVox-თან მუშაობის საფუძვლებს გაგაცნობთ.</translation>
 <translation id="1025074108959230262">ფიქსაციის რეჟიმი გამორთულია</translation>
 <translation id="1031961866430398710">შემდეგ</translation>
@@ -18,6 +19,7 @@
 <translation id="1088402100970133699">სიის წინა ერთეული არ არის</translation>
 <translation id="1114836634143403764">შემოთავაზება</translation>
 <translation id="1120743664840974483">{„a“: „ალფა“, „b“: „ბრავო“, „c“: „ცელსიუსი“, „d“: „დელტა“, „e“: „ექო“, „f“: „ფოქსტროტი“, „g“: „გოლფი“, „h“: „ჰაერი“, „i“: „ინდოეთი“, „j“: „ჯულიეტა“, „k“: „კილო“, „l“: „ლიმა“, „m“: „მაიკი“, „n“: „ნოემბერი“, „o“: „ოსკარი“, „p“: „პაპა“, „q“: „ქვებეკი“, „r“: „რომეო“, „s“: „სიერა“, „t“: „ტანგო“, „u“: „უნიფორმა“, „v“: „ვიქტორი“, „w“: „ვისკი“, „x“: „ქსეროქსი“, „y“: „იანკი“, „z“: „ზულუ“}</translation>
+<translation id="1120938014254001895">ორი თითით გადაფურცვლა ზემოთ</translation>
 <translation id="1126928665165112660">დაუხრელი</translation>
 <translation id="113582498867142724"><ph name="TAG" /> კოლექცია <ph name="NUM" /> ელემენტით</translation>
 <translation id="1161762950103988776">გადასვლა</translation>
@@ -49,6 +51,7 @@
 <translation id="1291286136605998134">გადართვის ღილაკი</translation>
 <translation id="1299774449519412690">ღია ცისფერი</translation>
 <translation id="1303806948938513162">ChromeVox-ის მენიუებში შესასვლელად შეეხეთ 4 თითით</translation>
+<translation id="1325363694295259631"><ph name="NAME" />, მენიუს ერთეული არჩევანის ღილაკი აურჩეველი</translation>
 <translation id="1325946044405407859">რუჯისფერი</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> სულ: <ph name="TOTAL" /></translation>
 <translation id="1334095593597963605">სიმბოლო და სიტყვის ექო</translation>
@@ -69,6 +72,7 @@
 <translation id="146450394670219700">გრაფიკული ობიექტი</translation>
 <translation id="1480046233931937785">შემქმნელები</translation>
 <translation id="1487494366197411587">Chromebook-ზე კლავიში „Search“ მარცხენა Shift კლავიშის თავზე მდებარეობს.</translation>
+<translation id="1498498210836053409">ტექსტის რედაქტირებისას ფიქსირებული რეჟიმის გამორთვა (გონიერი ფიქსირებული რეჟიმი)</translation>
 <translation id="1499041187027566160">ხმის აწევა</translation>
 <translation id="1502086903961450562">წინა გრაფიკა</translation>
 <translation id="1506187449813838456">გაზარდეთ დახრა</translation>
@@ -104,6 +108,7 @@
 <translation id="1727806147743597030">ქვედა კოლონტიტული</translation>
 <translation id="174268867904053074">შემდეგი გრაფიკა</translation>
 <translation id="1756785467854861272">მუქი მაჯენტა</translation>
+<translation id="1765245556747822181">ერთი თითით გადაფურცვლა ზემოთ</translation>
 <translation id="1771761307086386028">გადაადგილება მარჯვნივ</translation>
 <translation id="1781173782405573156">გადადით გასაღების მეშვეობით</translation>
 <translation id="1787176709638001873">პაროლის რედაქტირების ტექსტი</translation>
@@ -132,6 +137,7 @@
 <translation id="2010555995361223825">ChromeVox-ის მენიუები</translation>
 <translation id="203030071582665758">წინა მე-4 დონის სათაური არ არის</translation>
 <translation id="2045055672832940894">წინა მართვის საშუალება არ არის</translation>
+<translation id="2045606329038304310">ფორმის ველების მართვის საშუალებები</translation>
 <translation id="2063539687800151747">ეპიგრაფი</translation>
 <translation id="2086961585857038472">შემდეგი სიტყვა</translation>
 <translation id="2087981446621639008">dscrplst dtl</translation>
@@ -158,6 +164,7 @@
 <translation id="225732394367814946">მეტყველების სიჩქარის გაზრდა</translation>
 <translation id="2267538686624070261">მართლწერის შეცდომა რჩება</translation>
 <translation id="2267945578749931355">შემდეგი სიმბოლო</translation>
+<translation id="2278490101488436824">სამი თითით გადაფურცვლა მარცხნივ</translation>
 <translation id="2305942658236913680">შემდეგი სათაური არ არის</translation>
 <translation id="2311237334957139798">დეტალიზაციის წინა დონეზე გადასვლა</translation>
 <translation id="2314393392395134769">არ არის ქვედა ინდექსი</translation>
@@ -166,6 +173,7 @@
 <translation id="2347456970887948350">ბმული</translation>
 <translation id="2381733276052567791">გახმოვანების ჩართვა ან გამორთვა</translation>
 <translation id="2390264819538553347">წინ გადასასვლელად, დააჭირეთ „Enter“-ს; უკან გადასასვლელად, დააჭირეთ „უკუშლას“.</translation>
+<translation id="2398579267367951220">აკრიფეთ ტექსტი გვერდზე ძიებისთვის. შედეგზე გადასასვლელად დააჭირეთ კლავიშს „enter“, შედეგების დასათვალიერებლად — კლავიშებს ზემოთ/ქვემოთ მიმართული ისრებით. საძიებო მოთხოვნის შესაცვლელად გააგრძელეთ ტექსტის აკრეფა, ხოლო გასაუქმებლად დააჭირეთ კლავიშს „escape“.</translation>
 <translation id="240709722712693803">მოლურჯო იისფერი</translation>
 <translation id="2416512023405990736">მოუნიშნავი მოსანიშნი ველი</translation>
 <translation id="2417569100218200841">შიგთავსის ინფორმაცია</translation>
@@ -230,12 +238,14 @@
 <translation id="2867808975387772810">ბიბლიოგრაფია</translation>
 <translation id="2873259058405069099">ცხრილის დასაწყისში გადასვლა</translation>
 <translation id="287383510823843610">მუქი ნარინჯისფერი</translation>
+<translation id="2879867157561757640">სამი თითით გადაფურცვლა ქვემოთ</translation>
 <translation id="288178314850623291">ელემენტების კონკრეტული ტიპების გამოსატოვებლად, გამოიყენეთ გადასვლის ბრძანებები. სათაურებს შორის წინ გადასასვლელად, დააჭირეთ კლავიშთა კომბინაციას: Search + H, ხოლო უკან გადასასვლელად, გამოიყენეთ კომბინაცია: Search + Shift + H.</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{წუთი}other{წუთი}}</translation>
 <translation id="2894654529758326923">ინფორმაცია</translation>
 <translation id="2899328121302785497">{COUNT,plural, =1{მარცხენა ფიგურული ფრჩხილი}other{# მარცხენა ფიგურული ფრჩხილები}}</translation>
 <translation id="2909584066358367921">შემდეგი ღილაკი არ არის</translation>
 <translation id="2911433807131383493">ChromeVox-ის სახელმძღვანელოს გახსნა</translation>
+<translation id="2912405967290226587">სამი თითით გადაფურცვლა მარჯვნივ</translation>
 <translation id="2937799153569150791">შემდეგი მე-3 დონის სათაური არ არის</translation>
 <translation id="2942710183375260152">მუქი ასპიდისფერი ლურჯი</translation>
 <translation id="2943596527105977722">მუქი ოქროწკეპლისფერი</translation>
@@ -243,6 +253,7 @@
 <translation id="2968634799764242930">ზღვისფერი მწვანე</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{ჩანართი}other{# ჩანართების}}</translation>
 <translation id="2972205263822847197">მინიშნება</translation>
+<translation id="297825089465017871">ორი თითით გადაფურცვლა მარცხნივ</translation>
 <translation id="2998131015536248178">წინა სიმბოლო</translation>
 <translation id="2999559350546931576">სიმაღლის შემცირება</translation>
 <translation id="3014130421870723208">@შეცვლ 8წერტ</translation>
@@ -252,6 +263,7 @@
 <translation id="3046838483509668188">ChromeVox პარამეტრები</translation>
 <translation id="3060756054951570867"><ph name="TITLE" /> მენიუ გახსნილია</translation>
 <translation id="3060880924447482063">ერთეულების მიხედვით გადასაადგილებლად გადაფურცლეთ მარცხნივ ან მარჯვნივ</translation>
+<translation id="3070245424257836917">სამი თითით გადაფურცვლა ზემოთ</translation>
 <translation id="3078345202707391975">შემდეგი მ-2 დონის სათაური</translation>
 <translation id="3078740164268491126">ცხრილი</translation>
 <translation id="3082249673510793544">უკან გადაადგილება</translation>
@@ -433,6 +445,7 @@
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">გაჯერებული ცისფერი</translation>
 <translation id="4432457053224379116">ინდური წითელი</translation>
+<translation id="4437615272777527928">აკრიფეთ ტექსტი მენიუებში ძიებისთვის. შედეგებში ნავიგაციისთვის გამოიყენეთ ზემოთ და ქვემოთ მიმართული ისრები. ტექსტში კურსორის კორექტირებისთვისა და მენიუებს შორის გადაადგილებისთვის გამოიყენეთ მარჯვნივ და მარცხნივ მიმართული ისრები.</translation>
 <translation id="4457472090507035117">აირჩიეთ ამჟამინდელი ხმა:</translation>
 <translation id="4476183483923481720">ახალი ხაზი</translation>
 <translation id="4479068155583208887">აგურისფერი</translation>
@@ -457,6 +470,7 @@
 <translation id="4677535310137735442">შემდეგ სვეტზე გადასვლა</translation>
 <translation id="4688873778442829762">ბადე</translation>
 <translation id="4693675773662933727">წინა ორიენტირი</translation>
+<translation id="4710166929009737753">ერთი თითით გადაფურცვლა მარჯვნივ</translation>
 <translation id="4712898966495541134">არჩევანის დასასრული</translation>
 <translation id="4740661827607246557">დახმარების ბრძანებები</translation>
 <translation id="4755857887974653209">ChromeVox-ის გათიშვა</translation>
@@ -501,6 +515,7 @@
 <translation id="4994420463726586413">ბატარეის ამჟამინდელი სტატუსის გამოცხადება</translation>
 <translation id="4997282455736854877"><ph name="NAME" />, რადიო ღილაკი არჩეულია</translation>
 <translation id="5011664330025416377">გასააქტიურებლად დააჭირეთ კლავიშთა შემდეგ კომბინაციას: Search+შორისი</translation>
+<translation id="5012724933919010465"><ph name="NAME" />, მენიუს ერთეული არჩევანის ღილაკი არჩეული</translation>
 <translation id="5020651427400641814">მეტყველების აღრიცხვის ჩართვა</translation>
 <translation id="5041394372352067729">გადაადგილეთ ბრაილი ეკრანის საწყის გვერდზე</translation>
 <translation id="5042770794184672516">მეტყველების ხმის აწევა</translation>
@@ -707,9 +722,11 @@
 <translation id="6793101435925451627">სიის უჯრა</translation>
 <translation id="6815255864998354418">ლიმონის კრემისფერი</translation>
 <translation id="6816066673340002913">მკრთალი ოქროწკეპლისფერი</translation>
+<translation id="6826226459053491773">ორი თითით გადაფურცვლა ქვემოთ</translation>
 <translation id="6833103209700200188">ქვედა კოლონტიტული</translation>
 <translation id="6837853484260746864">აირჩიეთ ხმა:</translation>
 <translation id="6858047746862060282">პროლოგი</translation>
+<translation id="6859876496651143278">ერთი თითით გადაფურცვლა მარცხნივ</translation>
 <translation id="6865519907510167493">მართლწერის შეცდომა</translation>
 <translation id="6894148351896207544">მიმდინარე დროისა და თარიღის გახმოვანება</translation>
 <translation id="6896758677409633944">კოპირება</translation>
@@ -905,6 +922,7 @@
 <translation id="8428603554127842284">დონე <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="8446884382197647889">შეიტყვეთ მეტი</translation>
+<translation id="8448196839635577295">ChromeVox-ის ფოკუსში ამჟამად არაფერია მოქცეული. ერთეულების საპოვნელად შეეხეთ „მიმოხილვას“.</translation>
 <translation id="8455868257606149352">მაქს. <ph name="X" /></translation>
 <translation id="84575901236241018">გააჩნია წვდომის კლავიში, <ph name="KEY" /></translation>
 <translation id="8463645336674919227">გრამატიკული შეცდომა რჩება</translation>
@@ -990,6 +1008,7 @@
 <translation id="923331726185079994">ChromeVox განახლდა</translation>
 <translation id="93384979447910801">მუქი ზღვისფერი მწვანე</translation>
 <translation id="948171205378458592">მეტყველების სიჩქარის შემცირება</translation>
+<translation id="958854023026327378">ერთი თითით გადაფურცვლა ქვემოთ</translation>
 <translation id="962913030769097253">შემდეგი 1-ლი დონის სათაური</translation>
 <translation id="966588271015727539">აირჩიეთ ბრაილის Bluetooth ეკრანი</translation>
 <translation id="973955474346881951">ფიქსაციის რეჟიმის ჩართვა/გამორთვა</translation>

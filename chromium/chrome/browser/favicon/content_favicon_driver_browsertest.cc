@@ -32,6 +32,7 @@
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "net/base/load_flags.h"
@@ -238,7 +239,7 @@ class ContentFaviconDriverTest : public InProcessBrowserTest {
     base::RunLoop loop;
     favicon_service()->GetFaviconForPageURL(
         url, {icon_type}, desired_size_in_dip,
-        base::Bind(
+        base::BindOnce(
             [](std::vector<favicon_base::FaviconRawBitmapResult>* save_results,
                base::RunLoop* loop,
                const std::vector<favicon_base::FaviconRawBitmapResult>&

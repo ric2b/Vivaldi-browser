@@ -43,7 +43,9 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
     if (menu.is_dict()) {
       const std::string* type = menu.FindStringPath("type");
       const std::string* guid = menu.FindStringPath("guid");
-      if (guid && type && *type == "menu") {
+      bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
+
+      if (guid_valid && type && *type == "menu") {
         const std::string* action = menu.FindStringPath("action");
         const std::string* role = menu.FindStringPath("role");
         if (action && role) {
@@ -87,8 +89,8 @@ bool MenuCodec::Decode(Menu_Node* root, Menu_Control* control,
           }
         }
       } else {
-        if (!guid) {
-          LOG(ERROR) << "Menu Codec: Guid missing";
+        if (!guid_valid) {
+          LOG(ERROR) << "Menu Codec: Guid missing or not valid";
 #if !defined(OFFICIAL_BUILD)
           if (is_bundle) {
             LOG(ERROR) << "Menu Codec: Developer - Missing in bundled file, "
@@ -129,11 +131,11 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
     const std::string* title = value.FindStringPath("title");
     const std::string* guid = value.FindStringPath("guid");
     const int origin = value.FindIntKey("origin").value_or(Menu_Node::BUNDLE);
-
+    bool guid_valid = guid && !guid->empty() && base::IsValidGUID(*guid);
 
     if (type) {
-      if (!guid) {
-        LOG(ERROR) << "Menu Codec: Guid missing for " << *type;
+      if (!guid_valid) {
+        LOG(ERROR) << "Menu Codec: Guid missing or not valid for " << *type;
 #if !defined(OFFICIAL_BUILD)
         if (is_bundle) {
           LOG(ERROR) << "Menu Codec: Developer - Missing in bundled file, "

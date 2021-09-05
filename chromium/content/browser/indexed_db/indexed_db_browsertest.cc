@@ -40,6 +40,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -1013,9 +1014,7 @@ INSTANTIATE_TEST_SUITE_P(IndexedDBBrowserTestInstantiation,
                                            "failTransactionCommit",
                                            "clearObjectStore"));
 
-// TODO(crbug.com/1071292): Make this test less brittle and re-enable it.
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
-                       DISABLED_DeleteCompactsBackingStore) {
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteCompactsBackingStore) {
   const GURL kTestUrl = GetTestUrl("indexeddb", "delete_compact.html");
   const url::Origin kTestOrigin = url::Origin::Create(kTestUrl);
   SimpleTest(GURL(kTestUrl.spec() + "#fill"));
@@ -1182,21 +1181,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestV2SchemaCorruption, LifecycleTest) {
   SimpleTest(embedded_test_server()->GetURL(test_file));
 }
 
-class IndexedDBBrowserTestSingleProcess : public IndexedDBBrowserTest {
- public:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kSingleProcess);
-  }
-};
-
-// https://crbug.com/788788
-#if defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
-#define MAYBE_RenderThreadShutdownTest DISABLED_RenderThreadShutdownTest
-#else
-#define MAYBE_RenderThreadShutdownTest RenderThreadShutdownTest
-#endif  // defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestSingleProcess,
-                       MAYBE_RenderThreadShutdownTest) {
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, ShutdownWithRequests) {
   SimpleTest(GetTestUrl("indexeddb", "shutdown_with_requests.html"));
 }
 

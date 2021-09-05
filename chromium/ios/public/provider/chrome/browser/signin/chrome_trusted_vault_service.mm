@@ -22,4 +22,23 @@ void ChromeTrustedVaultService::FetchKeys(
   NOTREACHED();
 }
 
+void ChromeTrustedVaultService::Reauthentication(
+    ChromeIdentity* chrome_identity,
+    UIViewController* presentingViewController,
+    void (^callback)(BOOL success, NSError* error)) {
+  NOTREACHED();
+}
+
+void ChromeTrustedVaultService::CancelReauthentication(BOOL animated,
+                                                       void (^callback)(void)) {
+  NOTREACHED();
+}
+
+std::unique_ptr<ChromeTrustedVaultService::Subscription>
+ChromeTrustedVaultService::AddKeysChangedObserver(
+    const base::RepeatingClosure& cb) {
+  NOTREACHED();
+  return nullptr;
+}
+
 }  // namespace ios

@@ -284,7 +284,7 @@ void WebController::LoadURL(const GURL& url) {
 
 void WebController::ClickOrTapElement(
     const Selector& selector,
-    ClickAction::ClickType click_type,
+    ClickType click_type,
     base::OnceCallback<void(const ClientStatus&)> callback) {
   VLOG(3) << __func__ << " " << selector;
   DCHECK(!selector.empty());
@@ -297,7 +297,7 @@ void WebController::ClickOrTapElement(
 
 void WebController::OnFindElementForClickOrTap(
     base::OnceCallback<void(const ClientStatus&)> callback,
-    ClickAction::ClickType click_type,
+    ClickType click_type,
     const ClientStatus& status,
     std::unique_ptr<ElementFinder::Result> result) {
   // Found element must belong to a frame.
@@ -307,19 +307,22 @@ void WebController::OnFindElementForClickOrTap(
     return;
   }
 
+  auto wrapped_callback = GetAssistantActionRunningStateRetainingCallback(
+      result.get(), std::move(callback));
+
   std::string element_object_id = result->object_id;
   WaitForDocumentToBecomeInteractive(
       settings_->document_ready_check_count, element_object_id,
       result->node_frame_id,
       base::BindOnce(
           &WebController::OnWaitDocumentToBecomeInteractiveForClickOrTap,
-          weak_ptr_factory_.GetWeakPtr(), std::move(callback), click_type,
-          std::move(result)));
+          weak_ptr_factory_.GetWeakPtr(), std::move(wrapped_callback),
+          click_type, std::move(result)));
 }
 
 void WebController::OnWaitDocumentToBecomeInteractiveForClickOrTap(
     base::OnceCallback<void(const ClientStatus&)> callback,
-    ClickAction::ClickType click_type,
+    ClickType click_type,
     std::unique_ptr<ElementFinder::Result> target_element,
     bool result) {
   if (!result) {
@@ -332,7 +335,7 @@ void WebController::OnWaitDocumentToBecomeInteractiveForClickOrTap(
 
 void WebController::ClickOrTapElement(
     std::unique_ptr<ElementFinder::Result> target_element,
-    ClickAction::ClickType click_type,
+    ClickType click_type,
     base::OnceCallback<void(const ClientStatus&)> callback) {
   std::string element_object_id = target_element->object_id;
   std::vector<std::unique_ptr<runtime::CallArgument>> argument;
@@ -353,7 +356,7 @@ void WebController::ClickOrTapElement(
 void WebController::OnScrollIntoView(
     std::unique_ptr<ElementFinder::Result> target_element,
     base::OnceCallback<void(const ClientStatus&)> callback,
-    ClickAction::ClickType click_type,
+    ClickType click_type,
     const DevtoolsClient::ReplyStatus& reply_status,
     std::unique_ptr<runtime::CallFunctionOnResult> result) {
   ClientStatus status =
@@ -364,7 +367,7 @@ void WebController::OnScrollIntoView(
     return;
   }
 
-  if (click_type == ClickAction::JAVASCRIPT) {
+  if (click_type == ClickType::JAVASCRIPT) {
     std::string element_object_id = target_element->object_id;
     std::vector<std::unique_ptr<runtime::CallArgument>> argument;
     AddRuntimeCallArgumentObjectId(element_object_id, &argument);
@@ -408,7 +411,7 @@ void WebController::TapOrClickOnCoordinates(
     ElementPositionGetter* getter_to_release,
     base::OnceCallback<void(const ClientStatus&)> callback,
     const std::string& node_frame_id,
-    ClickAction::ClickType click_type,
+    ClickType click_type,
     bool has_coordinates,
     int x,
     int y) {
@@ -422,8 +425,8 @@ void WebController::TapOrClickOnCoordinates(
     return;
   }
 
-  DCHECK(click_type == ClickAction::TAP || click_type == ClickAction::CLICK);
-  if (click_type == ClickAction::CLICK) {
+  DCHECK(click_type == ClickType::TAP || click_type == ClickType::CLICK);
+  if (click_type == ClickType::CLICK) {
     devtools_client_->GetInput()->DispatchMouseEvent(
         input::DispatchMouseEventParams::Builder()
             .SetX(x)
@@ -722,7 +725,7 @@ void WebController::FillAddressForm(
     const autofill::AutofillProfile* profile,
     const Selector& selector,
     base::OnceCallback<void(const ClientStatus&)> callback) {
-  VLOG(3) << __func__ << selector;
+  VLOG(3) << __func__ << " " << selector;
   auto data_to_autofill = std::make_unique<FillFormInputData>();
   data_to_autofill->profile =
       std::make_unique<autofill::AutofillProfile>(*profile);
@@ -1395,7 +1398,7 @@ void WebController::OnFindElementForSendKeyboardInput(
     return;
   }
   ClickOrTapElement(
-      selector, ClickAction::CLICK,
+      selector, ClickType::CLICK,
       base::BindOnce(&WebController::OnClickElementForSendKeyboardInput,
                      weak_ptr_factory_.GetWeakPtr(),
                      element_result->node_frame_id, codepoints,
@@ -1645,6 +1648,61 @@ void WebController::OnWaitForDocumentToBecomeInteractive(
                      weak_ptr_factory_.GetWeakPtr(), --remaining_rounds,
                      object_id, node_frame_id, std::move(callback)),
       settings_->document_ready_check_interval);
+}
+
+WebController::ScopedAssistantActionStateRunning::
+    ScopedAssistantActionStateRunning(
+        autofill::ContentAutofillDriver* content_autofill_driver)
+    : content_autofill_driver_(content_autofill_driver) {
+  SetAssistantActionState(/* running= */ true);
+}
+
+WebController::ScopedAssistantActionStateRunning::
+    ~ScopedAssistantActionStateRunning() {
+  SetAssistantActionState(/* running= */ false);
+}
+
+void WebController::ScopedAssistantActionStateRunning::SetAssistantActionState(
+    bool running) {
+  if (content_autofill_driver_) {
+    // TODO(b/153625351): We assume the |ContentAutofillDriver| is still valid
+    // at this point. This assumes the |RenderFrameHost| does not get destroyed
+    // during the execution of a web action (e.g. clicking an element).
+    content_autofill_driver_->GetAutofillAgent()->SetAssistantActionState(
+        running);
+  }
+}
+
+void WebController::RetainAssistantActionRunningStateAndExecuteCallback(
+    std::unique_ptr<ScopedAssistantActionStateRunning> scoped_state,
+    base::OnceCallback<void(const ClientStatus&)> callback,
+    const ClientStatus& client_status) {
+  // Deallocating the ScopedAssistantActionStateRunning sets the running state
+  // to "not running" again.
+  scoped_state.reset();
+
+  std::move(callback).Run(client_status);
+}
+
+base::OnceCallback<void(const ClientStatus&)>
+WebController::GetAssistantActionRunningStateRetainingCallback(
+    ElementFinder::Result* element_result,
+    base::OnceCallback<void(const ClientStatus&)> callback) {
+  ContentAutofillDriver* content_autofill_driver =
+      ContentAutofillDriver::GetForRenderFrameHost(
+          element_result->container_frame_host);
+  if (content_autofill_driver == nullptr) {
+    return callback;
+  }
+
+  auto scoped_assistant_action_state_running =
+      std::make_unique<ScopedAssistantActionStateRunning>(
+          content_autofill_driver);
+
+  return base::BindOnce(
+      &WebController::RetainAssistantActionRunningStateAndExecuteCallback,
+      weak_ptr_factory_.GetWeakPtr(),
+      std::move(scoped_assistant_action_state_running), std::move(callback));
 }
 
 }  // namespace autofill_assistant

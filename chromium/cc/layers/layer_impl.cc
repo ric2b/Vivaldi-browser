@@ -69,7 +69,6 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl,
       current_draw_mode_(DRAW_MODE_NONE),
       has_will_change_transform_hint_(false),
       needs_push_properties_(false),
-      is_scrollbar_(false),
       scrollbars_hidden_(false),
       needs_show_scrollbars_(false),
       raster_even_if_not_drawn_(false),
@@ -408,8 +407,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->SetBounds(bounds_);
   layer->UpdateScrollable();
 
-  layer->set_is_scrollbar(is_scrollbar_);
-
   layer->UnionUpdateRect(update_rect_);
 
   layer->UpdateDebugInfo(debug_info_.get());
@@ -512,8 +509,8 @@ void LayerImpl::SetBounds(const gfx::Size& bounds) {
   NoteLayerPropertyChanged();
 }
 
-ScrollbarLayerImplBase* LayerImpl::ToScrollbarLayer() {
-  return nullptr;
+bool LayerImpl::IsScrollbarLayer() const {
+  return false;
 }
 
 void LayerImpl::SetDrawsContent(bool draws_content) {
@@ -704,7 +701,6 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   }
 
   state->SetBoolean("hit_testable", HitTestable());
-  state->SetBoolean("can_use_lcd_text", CanUseLCDText());
   state->SetBoolean("contents_opaque", contents_opaque());
 
   state->SetBoolean("has_will_change_transform_hint",
@@ -772,32 +768,6 @@ gfx::Transform LayerImpl::ScreenSpaceTransform() const {
   }
 
   return draw_properties().screen_space_transform;
-}
-
-bool LayerImpl::CanUseLCDText() const {
-  if (layer_tree_impl()->settings().layers_always_allowed_lcd_text)
-    return true;
-  if (!layer_tree_impl()->settings().can_use_lcd_text)
-    return false;
-  if (!contents_opaque())
-    return false;
-
-  if (GetEffectTree().Node(effect_tree_index())->screen_space_opacity != 1.f)
-    return false;
-  if (!GetTransformTree()
-           .Node(transform_tree_index())
-           ->node_and_ancestors_have_only_integer_translation)
-    return false;
-  if (static_cast<int>(offset_to_transform_parent().x()) !=
-      offset_to_transform_parent().x())
-    return false;
-  if (static_cast<int>(offset_to_transform_parent().y()) !=
-      offset_to_transform_parent().y())
-    return false;
-
-  if (has_will_change_transform_hint())
-    return false;
-  return true;
 }
 
 int LayerImpl::GetSortingContextId() const {

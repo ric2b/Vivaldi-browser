@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
@@ -24,6 +25,7 @@
 #include "base/util/type_safety/strong_alias.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/allow_service_worker_result.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/generated_code_cache_settings.h"
 #include "content/public/common/page_visibility_state.h"
@@ -31,7 +33,6 @@
 #include "content/public/common/window_container_type.mojom-forward.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "media/base/video_codecs.h"
-#include "media/cdm/cdm_proxy.h"
 #include "media/mojo/mojom/media_service.mojom-forward.h"
 #include "media/mojo/mojom/remoting.mojom-forward.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
@@ -51,6 +52,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/url_constants.h"
 
 #if (defined(OS_POSIX) && !defined(OS_MACOSX)) || defined(OS_FUCHSIA)
 #include "base/posix/global_descriptors.h"
@@ -78,7 +80,6 @@ class SequencedTaskRunner;
 namespace blink {
 namespace mojom {
 class BadgeService;
-class CredentialManager;
 class RendererPreferences;
 class RendererPreferenceWatcher;
 class WebUsbService;
@@ -99,6 +100,11 @@ class AudioManager;
 enum class EncryptionScheme;
 }  // namespace media
 
+namespace mojo {
+template <typename>
+class BinderMapWithContext;
+}  // namespace mojo
+
 namespace network {
 enum class OriginPolicyState;
 class SharedURLLoaderFactory;
@@ -116,9 +122,6 @@ class Service;
 template <typename...>
 class BinderRegistryWithArgs;
 using BinderRegistry = BinderRegistryWithArgs<>;
-
-template <typename>
-class BinderMapWithContext;
 
 namespace mojom {
 class Service;
@@ -321,10 +324,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // curve for scrolling.
   virtual bool ShouldUseMobileFlingCurve();
 
-  // Returns whether all instances of the specified effective URL should be
+  // Returns whether all instances of the specified site URL should be
   // rendered by the same process, rather than using process-per-site-instance.
   virtual bool ShouldUseProcessPerSite(BrowserContext* browser_context,
-                                       const GURL& effective_url);
+                                       const GURL& site_url);
 
   // Returns whether a spare RenderProcessHost should be used for navigating to
   // the specified site URL.
@@ -355,6 +358,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // and origin lock can be applied to all URLs.
   virtual bool ShouldLockToOrigin(BrowserContext* browser_context,
                                   const GURL& effective_url);
+
+  // Returns a boolean indicating whether the WebUI |scheme| requires its
+  // process to be locked to the WebUI origin.
+  // Note: This method can be called from multiple threads. It is not safe to
+  // assume it runs only on the UI thread.
+  virtual bool DoesWebUISchemeRequireProcessLock(base::StringPiece scheme);
 
   // Returns true if everything embedded inside a document with given scheme
   // should be treated as first-party content. |scheme| will be in canonical
@@ -573,9 +582,11 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allow the embedder to control if an AppCache can be used for the given url.
   // This is called on the UI thread.
-  virtual bool AllowAppCache(const GURL& manifest_url,
-                             const GURL& first_party,
-                             BrowserContext* context);
+  virtual bool AllowAppCache(
+      const GURL& manifest_url,
+      const GURL& site_for_cookies,
+      const base::Optional<url::Origin>& top_frame_origin,
+      BrowserContext* context);
 
   // Allows the embedder to control if a service worker is allowed at the given
   // |scope| and can be accessed from |site_for_cookies| and |top_frame_origin|.
@@ -592,24 +603,20 @@ class CONTENT_EXPORT ContentBrowserClient {
   // made to access the registration but there is no specific service worker in
   // the registration being acted on.
   //
-  // A null |wc_getter| callback indicates this is for starting a service
-  // worker, which is not necessarily associated with a particular tab.
   // This is called on the IO thread.
-  virtual bool AllowServiceWorkerOnIO(
+  virtual AllowServiceWorkerResult AllowServiceWorkerOnIO(
       const GURL& scope,
       const GURL& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
-      ResourceContext* context,
-      base::RepeatingCallback<WebContents*()> wc_getter);
+      ResourceContext* context);
   // Same but for the UI thread.
-  virtual bool AllowServiceWorkerOnUI(
+  virtual AllowServiceWorkerResult AllowServiceWorkerOnUI(
       const GURL& scope,
       const GURL& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin,
       const GURL& script_url,
-      BrowserContext* context,
-      base::RepeatingCallback<WebContents*()> wc_getter);
+      BrowserContext* context);
 
   // Allow the embedder to control if a Shared Worker can be connected from a
   // given tab.
@@ -786,6 +793,10 @@ class CONTENT_EXPORT ContentBrowserClient {
       bool is_main_frame_request,
       bool strict_enforcement,
       base::OnceCallback<void(CertificateRequestResultType)> callback);
+
+  // Returns true if all requests with certificate errors should be blocked
+  // for a given |main_frame_url|, regardless of any other security settings.
+  virtual bool ShouldDenyRequestOnCertificateError(const GURL main_frame_url);
 
   // Selects a SSL client certificate and returns it to the |delegate|. Note:
   // |delegate| may be called synchronously or asynchronously.
@@ -979,6 +990,11 @@ class CONTENT_EXPORT ContentBrowserClient {
       blink::AssociatedInterfaceRegistry* associated_registry,
       RenderProcessHost* render_process_host) {}
 
+  // Called to bind additional frame-bound media interfaces to the renderer.
+  virtual void BindMediaServiceReceiver(RenderFrameHost* render_frame_host,
+                                        mojo::GenericPendingReceiver receiver) {
+  }
+
   // Called when RenderFrameHostImpl connects to the Media service. Expose
   // interfaces to the service using |registry|.
   virtual void ExposeInterfacesToMediaService(
@@ -998,20 +1014,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // handling InterfaceProvider's GetInterface() calls (see crbug.com/718652).
   virtual void RegisterBrowserInterfaceBindersForFrame(
       RenderFrameHost* render_frame_host,
-      service_manager::BinderMapWithContext<RenderFrameHost*>* map) {}
-
-  // Content was unable to bind a request for this interface, so the embedder
-  // should try.
-  virtual void BindInterfaceRequestFromFrame(
-      RenderFrameHost* render_frame_host,
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle interface_pipe) {}
-
-  // Content was unable to bind a CredentialManager pending receiver, so the
-  // embedder should try.
-  virtual void BindCredentialManagerReceiver(
-      RenderFrameHost* render_frame_host,
-      mojo::PendingReceiver<blink::mojom::CredentialManager> receiver) {}
+      mojo::BinderMapWithContext<RenderFrameHost*>* map) {}
 
   // Content was unable to bind a receiver for this associated interface, so the
   // embedder should try. Returns true if the |handle| was actually taken and
@@ -1141,13 +1144,9 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Gets supported hardware secure |video_codecs| and |encryption_schemes| for
   // the purpose of decrypting encrypted media using a Content Decryption Module
-  // (CDM) and a CdmProxy associated with |key_system|. The CDM supports all
-  // protocols in |cdm_proxy_protocols|, but only one CdmProxy protocol will be
-  // supported by the CdmProxy on the system, for which the capabilities will
-  // be returned.
+  // (CDM) associated with |key_system|.
   virtual void GetHardwareSecureDecryptionCaps(
       const std::string& key_system,
-      const base::flat_set<media::CdmProxy::Protocol>& cdm_proxy_protocols,
       base::flat_set<media::VideoCodec>* video_codecs,
       base::flat_set<media::EncryptionScheme>* encryption_schemes);
 
@@ -1462,15 +1461,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void OnNetworkServiceCreated(
       network::mojom::NetworkService* network_service);
 
-  // Creates a NetworkContext for a BrowserContext's StoragePartition. If the
-  // network service is enabled, it must return a NetworkContext using the
-  // network service. If the network service is disabled, the embedder may
-  // return a NetworkContext, or it may return nullptr, in which case the
-  // StoragePartition will create one wrapping the URLRequestContext obtained
-  // from the BrowserContext.
-  //
-  // Called before the corresonding BrowserContext::CreateRequestContext method
-  // is called.
+  // Configures the NetworkContextParams (|network_context_params|) and
+  // CertVerifierCreationParams (|cert_verifier_creation_params|) for a
+  // BrowserContext's StoragePartition. StoragePartition will use the
+  // NetworkService to create a new NetworkContext using these params.
   //
   // If |in_memory| is true, |relative_partition_path| is still a path that
   // uniquely identifies the storage partition, though nothing should be written
@@ -1478,14 +1472,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   //
   // If |relative_partition_path| is the empty string, it means this needs to
   // create the default NetworkContext for the BrowserContext.
-  //
-  // For NetworkContexts returned from the Network Service, some requirements:
-  //   -enable data URL support (or else data URLs will fail)
-  //   -disable file URL support (for security)
-  virtual mojo::Remote<network::mojom::NetworkContext> CreateNetworkContext(
+  virtual void ConfigureNetworkContextParams(
       BrowserContext* context,
       bool in_memory,
-      const base::FilePath& relative_partition_path);
+      const base::FilePath& relative_partition_path,
+      network::mojom::NetworkContextParams* network_context_params,
+      network::mojom::CertVerifierCreationParams*
+          cert_verifier_creation_params);
 
   // Returns the parent paths that contain all the network service's
   // BrowserContexts' storage. Multiple paths can be returned, e.g. in case the
@@ -1812,7 +1805,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Called to log a UKM event for the
   // Extensions.CrossOriginFetchFromContentScript3 metric.  See the metric
   // definition in //tools/metrics/ukm/ukm.xml for more details, including when
-  // this metric should be logged.
+  // this event should be logged.
   //
   // |isolated_world_host| is the hostname of the isolated world origin that has
   // initiated the network request.  See the doc comment for
@@ -1834,6 +1827,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // functionality.
   virtual XrIntegrationClient* GetXrIntegrationClient();
 #endif
+
+  virtual bool IsOriginTrialRequiredForAppCache(
+      content::BrowserContext* browser_text);
+
+  // Returns true when a context (e.g., iframe) whose URL is |url| should
+  // inherit the parent COEP value implicitly, similar to "blob:"
+  virtual bool ShouldInheritCrossOriginEmbedderPolicyImplicitly(
+      const GURL& url);
 };
 
 }  // namespace content

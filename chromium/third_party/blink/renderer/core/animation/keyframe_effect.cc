@@ -32,11 +32,15 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/unrestricted_double_or_keyframe_effect_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
+#include "third_party/blink/renderer/core/animation/animation_input_helpers.h"
+#include "third_party/blink/renderer/core/animation/animation_utils.h"
 #include "third_party/blink/renderer/core/animation/css/compositor_keyframe_transform.h"
 #include "third_party/blink/renderer/core/animation/effect_input.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/animation/sampled_effect.h"
 #include "third_party/blink/renderer/core/animation/timing_input.h"
+#include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
@@ -242,14 +246,17 @@ HeapVector<ScriptValue> KeyframeEffect::getKeyframes(
   // the given keyframe.
   //
   // https://w3c.github.io/web-animations/#dom-keyframeeffectreadonly-getkeyframes
-  const KeyframeVector& keyframes = model_->GetFrames();
+  KeyframeVector keyframes = ignore_css_keyframes_
+                                 ? model_->GetFrames()
+                                 : model_->GetComputedKeyframes(EffectTarget());
+
   Vector<double> computed_offsets =
       KeyframeEffectModelBase::GetComputedOffsets(keyframes);
   computed_keyframes.ReserveInitialCapacity(keyframes.size());
   ScriptState::Scope scope(script_state);
   for (wtf_size_t i = 0; i < keyframes.size(); i++) {
     V8ObjectBuilder object_builder(script_state);
-    keyframes[i]->AddKeyframePropertiesToV8Object(object_builder);
+    keyframes[i]->AddKeyframePropertiesToV8Object(object_builder, target());
     object_builder.Add("computedOffset", computed_offsets[i]);
     computed_keyframes.push_back(object_builder.GetScriptValue());
   }
@@ -288,6 +295,10 @@ void KeyframeEffect::SetKeyframes(StringKeyframeVector keyframes) {
 
 bool KeyframeEffect::Affects(const PropertyHandle& property) const {
   return model_->Affects(property);
+}
+
+bool KeyframeEffect::HasRevert() const {
+  return model_->HasRevert();
 }
 
 void KeyframeEffect::NotifySampledEffectRemovedFromEffectStack() {

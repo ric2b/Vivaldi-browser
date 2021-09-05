@@ -63,6 +63,8 @@ inspector_protocol_generate("protocol_sources") {
 
   # These are relative to $target_gen_dir.
   outputs = [
+    "protocol/audits.cc",
+    "protocol/audits.h",
     "protocol/background_service.cc",
     "protocol/background_service.h",
     "protocol/base_string_adapter.cc",
@@ -82,6 +84,8 @@ inspector_protocol_generate("protocol_sources") {
     "protocol/inspector.h",
     "protocol/io.cc",
     "protocol/io.h",
+    "protocol/log.cc",
+    "protocol/log.h",
     "protocol/memory.cc",
     "protocol/memory.h",
     "protocol/network.cc",

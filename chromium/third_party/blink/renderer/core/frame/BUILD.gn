@@ -92,6 +92,8 @@ blink_core_sources("frame") {
     "intervention.h",
     "intervention_report_body.cc",
     "intervention_report_body.h",
+    "is_input_pending_options.cc",
+    "is_input_pending_options.h",
     "layout_subtree_root_list.cc",
     "layout_subtree_root_list.h",
     "local_dom_window.cc",
@@ -177,8 +179,6 @@ blink_core_sources("frame") {
     "scheduling.h",
     "screen.cc",
     "screen.h",
-    "screen_orientation_controller.cc",
-    "screen_orientation_controller.h",
     "settings.cc",
     "settings.h",
     "settings_delegate.cc",
@@ -217,6 +217,6 @@ blink_core_sources("frame") {
   deps = [
     "//skia",
     "//ui/base/cursor",
-    "//ui/base/mojom:cursor_type_blink",
+    "//ui/base/cursor/mojom:cursor_type_blink",
   ]
 }

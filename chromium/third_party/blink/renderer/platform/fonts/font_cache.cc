@@ -33,6 +33,7 @@
 #include <memory>
 
 #include "base/debug/alias.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
@@ -44,6 +45,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_cache_key.h"
 #include "third_party/blink/renderer/platform/fonts/font_data_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_description.h"
+#include "third_party/blink/renderer/platform/fonts/font_fallback_map.h"
 #include "third_party/blink/renderer/platform/fonts/font_global_context.h"
 #include "third_party/blink/renderer/platform/fonts/font_platform_data.h"
 #include "third_party/blink/renderer/platform/fonts/font_smoothing_mode.h"
@@ -69,6 +71,11 @@
 
 namespace blink {
 
+namespace {
+const base::Feature kFontCacheNoSizeInKey{"FontCacheNoSizeInKey",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+}
+
 // Special locale for retrieving the color emoji font based on the proposed
 // changes in UTR #51 for introducing an Emoji script code:
 // https://unicode.org/reports/tr51/#Emoji_Script
@@ -91,7 +98,8 @@ FontCache* FontCache::GetFontCache() {
 }
 
 FontCache::FontCache()
-    : purge_prevent_count_(0),
+    : no_size_in_key_(base::FeatureList::IsEnabled(kFontCacheNoSizeInKey)),
+      purge_prevent_count_(0),
       font_manager_(sk_ref_sp(static_font_manager_)),
       font_size_limit_(std::nextafter(
           (static_cast<float>(std::numeric_limits<unsigned>::max()) - 2.f) /
@@ -163,6 +171,12 @@ FontPlatformData* FontCache::GetFontPlatformData(
   FontCacheKey key =
       font_description.CacheKey(creation_params, is_unique_match);
   DCHECK(!key.IsHashTableDeletedValue());
+
+  if (no_size_in_key_) {
+    // Clear font size from they key. Size is not required in the primary key
+    // because per-size FontPlatformData are held in a nested map.
+    key.ClearFontSize();
+  }
 
   // Remove the font size from the cache key, and handle the font size
   // separately in the inner HashMap. So that different size of FontPlatformData
@@ -543,6 +557,14 @@ const std::vector<FontEnumerationEntry>& FontCache::EnumerateAvailableFonts() {
   }
 
   return font_enumeration_cache_;
+}
+
+FontFallbackMap& FontCache::GetFontFallbackMap() {
+  if (!font_fallback_map_) {
+    font_fallback_map_ = MakeGarbageCollected<FontFallbackMap>(nullptr);
+    AddClient(font_fallback_map_);
+  }
+  return *font_fallback_map_;
 }
 
 }  // namespace blink

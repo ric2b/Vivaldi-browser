@@ -85,6 +85,7 @@ vs-chromium-project.txt
 /chrome/build/chrome.x86.orderfile
 /chrome/build/chrome_child.x64.orderfile
 /chrome/build/chrome_child.x86.orderfile
+/chrome/build/pgo_profiles/
 /chrome/gl_tests_run.xml
 /chrome/gles2_conform_test_run.xml
 /chrome/tab_capture_performance_tests_run.xml
@@ -173,6 +174,7 @@ vs-chromium-project.txt
 /chromecast/internal
 /chromeos/assistant/internal
 /chromeos/components/help_app_ui/resources/app
+/chromeos/components/help_app_ui/resources/prod
 /chromeos/components/media_app_ui/resources/app
 /chromeos/components/media_app_ui/resources/pkg
 /chromeos/profiles/chromeos.orderfile.txt
@@ -191,6 +193,7 @@ vs-chromium-project.txt
 /components/resources/default_200_percent/google_chrome
 /components/resources/default_300_percent/google_chrome
 /components/search_engines/prepopulated_engines.xml
+/components/site_isolation/internal
 /components/suggestions.xml
 /components/test/data/paint_preview/**/*.pb
 /components/test/data/paint_preview/**/*.skp

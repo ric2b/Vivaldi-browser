@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/workers/shared_worker_client.h"
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -27,7 +27,7 @@ void SharedWorkerClient::OnCreated(
   worker_->SetIsBeingConnected(true);
 
   // No nested workers (for now) - connect() can only be called from a
-  // document context.
+  // window context.
   DCHECK(worker_->GetExecutionContext()->IsDocument());
   DCHECK_EQ(creation_context_type,
             worker_->GetExecutionContext()->IsSecureContext()

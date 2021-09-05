@@ -493,6 +493,12 @@ bool AutofillTable::MigrateToVersion(int version,
     case 84:
       *update_compatible_version = false;
       return MigrateToVersion84AddNicknameColumn();
+    case 85:
+      *update_compatible_version = false;
+      return MigrateToVersion85AddCardIssuerColumnToMaskedCreditCard();
+    case 86:
+      *update_compatible_version = false;
+      return MigrateToVersion86RemoveUnmaskedCreditCardsUseColumns();
   }
   return true;
 }
@@ -1226,7 +1232,8 @@ bool AutofillTable::GetServerCreditCards(
       "exp_year,"                     // 9
       "metadata.billing_address_id,"  // 10
       "bank_name,"                    // 11
-      "nickname "                     // 12
+      "nickname,"                     // 12
+      "card_issuer "                  // 13
       "FROM masked_credit_cards masked "
       "LEFT OUTER JOIN unmasked_credit_cards USING (id) "
       "LEFT OUTER JOIN server_card_metadata metadata USING (id)"));
@@ -1269,7 +1276,9 @@ bool AutofillTable::GetServerCreditCards(
     card->SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, s.ColumnString16(index++));
     card->set_billing_address_id(s.ColumnString(index++));
     card->set_bank_name(s.ColumnString(index++));
-    card->set_nickname(s.ColumnString16(index++));
+    card->SetNickname(s.ColumnString16(index++));
+    card->set_card_issuer(
+        static_cast<CreditCard::Issuer>(s.ColumnInt(index++)));
     credit_cards->push_back(std::move(card));
   }
   return s.Succeeded();
@@ -1528,8 +1537,9 @@ void AutofillTable::SetServerCardsData(
                               "exp_month,"     // 5
                               "exp_year,"      // 6
                               "bank_name,"     // 7
-                              "nickname)"      // 8
-                              "VALUES (?,?,?,?,?,?,?,?,?)"));
+                              "nickname,"      // 8
+                              "card_issuer)"   // 9
+                              "VALUES (?,?,?,?,?,?,?,?,?,?)"));
   int index;
   for (const CreditCard& card : credit_cards) {
     DCHECK_EQ(CreditCard::MASKED_SERVER_CARD, card.record_type());
@@ -1545,6 +1555,7 @@ void AutofillTable::SetServerCardsData(
                                card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR));
     masked_insert.BindString(index++, card.bank_name());
     masked_insert.BindString16(index++, card.nickname());
+    masked_insert.BindInt(index++, static_cast<int>(card.card_issuer()));
     masked_insert.Run();
     masked_insert.Reset(true);
   }
@@ -2783,6 +2794,37 @@ bool AutofillTable::MigrateToVersion84AddNicknameColumn() {
              "ALTER TABLE masked_credit_cards ADD COLUMN nickname VARCHAR");
 }
 
+bool AutofillTable::MigrateToVersion85AddCardIssuerColumnToMaskedCreditCard() {
+  // Add the new card_issuer column to the masked_credit_cards table and set the
+  // default value to ISSUER_UNKNOWN.
+  return db_->DoesColumnExist("masked_credit_cards", "card_issuer") ||
+         db_->Execute(
+             "ALTER TABLE masked_credit_cards "
+             "ADD COLUMN card_issuer INTEGER "
+             "DEFAULT 0");
+}
+
+bool AutofillTable::MigrateToVersion86RemoveUnmaskedCreditCardsUseColumns() {
+  // Sqlite does not support "alter table drop column" syntax, so it has be done
+  // manually.
+  sql::Transaction transaction(db_);
+  return transaction.Begin() &&
+         db_->Execute(
+             "CREATE TABLE unmasked_credit_cards_temp ("
+             "id VARCHAR,"
+             "card_number_encrypted VARCHAR,"
+             "unmask_date INTEGER NOT NULL DEFAULT 0)") &&
+         db_->Execute(
+             "INSERT INTO unmasked_credit_cards_temp "
+             "SELECT id, card_number_encrypted, unmask_date "
+             "FROM unmasked_credit_cards") &&
+         db_->Execute("DROP TABLE unmasked_credit_cards") &&
+         db_->Execute(
+             "ALTER TABLE unmasked_credit_cards_temp "
+             "RENAME TO unmasked_credit_cards") &&
+         transaction.Commit();
+}
+
 bool AutofillTable::AddFormFieldValuesTime(
     const std::vector<FormFieldData>& elements,
     std::vector<AutofillChange>* changes,
@@ -2949,8 +2991,9 @@ void AutofillTable::AddMaskedCreditCards(
                               "exp_month,"     // 5
                               "exp_year,"      // 6
                               "bank_name,"     // 7
-                              "nickname)"      // 8
-                              "VALUES (?,?,?,?,?,?,?,?,?)"));
+                              "nickname,"      // 8
+                              "card_issuer)"   // 9
+                              "VALUES (?,?,?,?,?,?,?,?,?,?)"));
   int index;
   for (const CreditCard& card : credit_cards) {
     DCHECK_EQ(CreditCard::MASKED_SERVER_CARD, card.record_type());
@@ -2966,6 +3009,7 @@ void AutofillTable::AddMaskedCreditCards(
                                card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR));
     masked_insert.BindString(index++, card.bank_name());
     masked_insert.BindString16(index++, card.nickname());
+    masked_insert.BindInt(index++, static_cast<int>(card.card_issuer()));
     masked_insert.Run();
     masked_insert.Reset(true);
 
@@ -3138,7 +3182,8 @@ bool AutofillTable::InitMaskedCreditCardsTable() {
                       "exp_month INTEGER DEFAULT 0,"
                       "exp_year INTEGER DEFAULT 0, "
                       "bank_name VARCHAR, "
-                      "nickname VARCHAR)")) {
+                      "nickname VARCHAR, "
+                      "card_issuer INTEGER DEFAULT 0)")) {
       NOTREACHED();
       return false;
     }
@@ -3150,9 +3195,7 @@ bool AutofillTable::InitUnmaskedCreditCardsTable() {
   if (!db_->DoesTableExist("unmasked_credit_cards")) {
     if (!db_->Execute("CREATE TABLE unmasked_credit_cards ("
                       "id VARCHAR,"
-                      "card_number_encrypted VARCHAR, "
-                      "use_count INTEGER NOT NULL DEFAULT 0, "
-                      "use_date INTEGER NOT NULL DEFAULT 0, "
+                      "card_number_encrypted VARCHAR,"
                       "unmask_date INTEGER NOT NULL DEFAULT 0)")) {
       NOTREACHED();
       return false;

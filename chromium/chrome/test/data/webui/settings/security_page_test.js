@@ -3,32 +3,37 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {SafeBrowsingBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {flushTasks} from 'chrome://test/test_util.m.js';
-// #import {PrivacyPageBrowserProxyImpl, SyncBrowserProxyImpl, MetricsBrowserProxyImpl, PrivacyElementInteractions} from 'chrome://settings/settings.js';
-// #import {TestMetricsBrowserProxy} from 'chrome://test/settings/test_metrics_browser_proxy.m.js';
-// #import {TestSyncBrowserProxy} from 'chrome://test/settings/test_sync_browser_proxy.m.js';
-// #import {TestPrivacyPageBrowserProxy} from 'chrome://test/settings/test_privacy_page_browser_proxy.m.js';
-// #import {TestSafeBrowsingBrowserProxy} from 'chrome://test/settings/test_safe_browsing_browser_proxy.m.js';
-// #import {CrPolicyIndicatorType} from 'chrome://resources/cr_elements/policy/cr_policy_indicator_behavior.m.js';
-// #import {isMac, isWindows} from 'chrome://resources/js/cr.m.js';
+import {CrPolicyIndicatorType} from 'chrome://resources/cr_elements/policy/cr_policy_indicator_behavior.m.js';
+import {isMac, isWindows} from 'chrome://resources/js/cr.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {SafeBrowsingBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import {MetricsBrowserProxyImpl, PrivacyElementInteractions,PrivacyPageBrowserProxyImpl, Router, routes, SyncBrowserProxyImpl} from 'chrome://settings/settings.js';
+
+import {assertEquals, assertFalse, assertTrue} from '../chai_assert.js';
+import {flushTasks} from '../test_util.m.js';
+
+import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
+import {TestPrivacyPageBrowserProxy} from './test_privacy_page_browser_proxy.js';
+import {TestSafeBrowsingBrowserProxy} from './test_safe_browsing_browser_proxy.js';
+import {TestSyncBrowserProxy} from './test_sync_browser_proxy.m.js';
+
 // clang-format on
 
 suite('CrSettingsSecurityPageTestWithEnhanced', function() {
-  /** @type {settings.TestMetricsBrowserProxy} */
+  /** @type {!TestMetricsBrowserProxy} */
   let testMetricsBrowserProxy;
 
-  /** @type {settings.SyncBrowserProxy} */
+  /** @type {!TestSyncBrowserProxy} */
   let syncBrowserProxy;
 
-  /** @type {settings.TestPrivacyPageBrowserProxy} */
+  /** @type {!TestPrivacyPageBrowserProxy} */
   let testPrivacyBrowserProxy;
 
-  /** @type {settings.SafeBrowsingBrowserProxy} */
+  /** @type {!TestSafeBrowsingBrowserProxy} */
   let testSafeBrowsingBrowserProxy;
 
-  /** @type {SettingsSecurityPageElement} */
+  /** @type {!SettingsSecurityPageElement} */
   let page;
 
   suiteSetup(function() {
@@ -39,16 +44,16 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
 
   setup(function() {
     testMetricsBrowserProxy = new TestMetricsBrowserProxy();
-    settings.MetricsBrowserProxyImpl.instance_ = testMetricsBrowserProxy;
+    MetricsBrowserProxyImpl.instance_ = testMetricsBrowserProxy;
     testPrivacyBrowserProxy = new TestPrivacyPageBrowserProxy();
-    settings.PrivacyPageBrowserProxyImpl.instance_ = testPrivacyBrowserProxy;
+    PrivacyPageBrowserProxyImpl.instance_ = testPrivacyBrowserProxy;
     syncBrowserProxy = new TestSyncBrowserProxy();
-    settings.SyncBrowserProxyImpl.instance_ = syncBrowserProxy;
+    SyncBrowserProxyImpl.instance_ = syncBrowserProxy;
     testSafeBrowsingBrowserProxy = new TestSafeBrowsingBrowserProxy();
-    settings.SafeBrowsingBrowserProxyImpl.instance_ =
-        testSafeBrowsingBrowserProxy;
-    PolymerTest.clearBody();
-    page = document.createElement('settings-security-page');
+    SafeBrowsingBrowserProxyImpl.instance_ = testSafeBrowsingBrowserProxy;
+    document.body.innerHTML = '';
+    page = /** @type {!SettingsSecurityPageElement} */ (
+        document.createElement('settings-security-page'));
     page.prefs = {
       profile: {password_manager_leak_detection: {value: true}},
       signin: {
@@ -62,32 +67,45 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
       },
     };
     document.body.appendChild(page);
-    Polymer.dom.flush();
+    flush();
   });
 
   teardown(function() {
     page.remove();
   });
 
-  if (cr.isMac || cr.isWindows) {
+  if (isMac || isWindows) {
     test('NativeCertificateManager', function() {
       page.$$('#manageCertificates').click();
       return testPrivacyBrowserProxy.whenCalled('showManageSSLCertificates');
     });
   }
 
-  test('LogManageCerfificatesClick', function() {
+  test('LogManageCerfificatesClick', async function() {
     page.$$('#manageCertificates').click();
-    return testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram')
-        .then(result => {
-          assertEquals(
-              settings.PrivacyElementInteractions.MANAGE_CERTIFICATES, result);
-        });
+    const result =
+        await testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram');
+    assertEquals(PrivacyElementInteractions.MANAGE_CERTIFICATES, result);
+  });
+
+  test('ManageSecurityKeysSubpageRoute', function() {
+    page.$$('#security-keys-subpage-trigger').click();
+    assertEquals(Router.getInstance().getCurrentRoute(), routes.SECURITY_KEYS);
+  });
+
+  test('LogSafeBrowsingExtendedToggle', async function() {
+    page.$$('#safeBrowsingStandard').click();
+    flush();
+
+    page.$$('#safeBrowsingReportingToggle').click();
+    const result =
+        await testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram');
+    assertEquals(PrivacyElementInteractions.IMPROVE_SECURITY, result);
   });
 
   test('safeBrowsingReportingToggle', function() {
     page.$$('#safeBrowsingStandard').click();
-    const safeBrowsingReportingToggle = page.$.safeBrowsingReportingToggle;
+    const safeBrowsingReportingToggle = page.$$('#safeBrowsingReportingToggle');
     assertTrue(
         page.prefs.safebrowsing.enabled.value &&
         !page.prefs.safebrowsing.enhanced.value);
@@ -95,7 +113,7 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
     assertTrue(safeBrowsingReportingToggle.checked);
     // This could also be set to disabled, anything other than standard.
     page.$$('#safeBrowsingEnhanced').click();
-    Polymer.dom.flush();
+    flush();
 
     assertFalse(
         page.prefs.safebrowsing.enabled.value &&
@@ -104,7 +122,7 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
     assertTrue(safeBrowsingReportingToggle.checked);
     assertTrue(page.prefs.safebrowsing.scout_reporting_enabled.value);
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
 
     assertTrue(
         page.prefs.safebrowsing.enabled.value &&
@@ -115,18 +133,18 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
 
   test('DisableSafebrowsingDialog_Confirm', async function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('#safeBrowsingDisabled').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('settings-disable-safebrowsing-dialog')
         .$$('.action-button')
         .click();
-    Polymer.dom.flush();
+    flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
-    await test_util.flushTasks();
+    await flushTasks();
 
     assertEquals(null, page.$$('settings-disable-safebrowsing-dialog'));
 
@@ -140,18 +158,18 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
 
   test('DisableSafebrowsingDialog_CancelFromEnhanced', async function() {
     page.$$('#safeBrowsingEnhanced').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('#safeBrowsingDisabled').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('settings-disable-safebrowsing-dialog')
         .$$('.cancel-button')
         .click();
-    Polymer.dom.flush();
+    flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
-    await test_util.flushTasks();
+    await flushTasks();
 
     assertEquals(null, page.$$('settings-disable-safebrowsing-dialog'));
 
@@ -165,18 +183,18 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
 
   test('DisableSafebrowsingDialog_CancelFromStandard', async function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('#safeBrowsingDisabled').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('settings-disable-safebrowsing-dialog')
         .$$('.cancel-button')
         .click();
-    Polymer.dom.flush();
+    flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
-    await test_util.flushTasks();
+    await flushTasks();
 
     assertEquals(null, page.$$('settings-disable-safebrowsing-dialog'));
 
@@ -190,97 +208,96 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
 
   test('noControlSafeBrowsingReportingInEnhanced', function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
 
-    assertFalse(page.$.safeBrowsingReportingToggle.disabled);
+    assertFalse(page.$$('#safeBrowsingReportingToggle').disabled);
     page.$$('#safeBrowsingEnhanced').click();
-    Polymer.dom.flush();
+    flush();
 
-    assertTrue(page.$.safeBrowsingReportingToggle.disabled);
+    assertTrue(page.$$('#safeBrowsingReportingToggle').disabled);
   });
 
   test('noValueChangeSafeBrowsingReportingInEnhanced', function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
     const previous = page.prefs.safebrowsing.scout_reporting_enabled.value;
 
     page.$$('#safeBrowsingEnhanced').click();
-    Polymer.dom.flush();
+    flush();
 
     assertTrue(
-        page.prefs.safebrowsing.scout_reporting_enabled.value == previous);
+        page.prefs.safebrowsing.scout_reporting_enabled.value === previous);
   });
 
   test('noControlSafeBrowsingReportingInDisabled', async function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
 
-    assertFalse(page.$.safeBrowsingReportingToggle.disabled);
-
+    assertFalse(page.$$('#safeBrowsingReportingToggle').disabled);
     page.$$('#safeBrowsingDisabled').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('settings-disable-safebrowsing-dialog')
         .$$('.action-button')
         .click();
-    Polymer.dom.flush();
+    flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
-    await test_util.flushTasks();
+    await flushTasks();
 
-    assertTrue(page.$.safeBrowsingReportingToggle.disabled);
+    assertTrue(page.$$('#safeBrowsingReportingToggle').disabled);
   });
 
   test('noValueChangeSafeBrowsingReportingInDisabled', async function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
     const previous = page.prefs.safebrowsing.scout_reporting_enabled.value;
 
     page.$$('#safeBrowsingDisabled').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('settings-disable-safebrowsing-dialog')
         .$$('.action-button')
         .click();
-    Polymer.dom.flush();
+    flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
-    await test_util.flushTasks();
+    await flushTasks();
 
     assertTrue(
-        page.prefs.safebrowsing.scout_reporting_enabled.value == previous);
+        page.prefs.safebrowsing.scout_reporting_enabled.value === previous);
   });
 
   test('noValueChangePasswordLeakSwitchToEnhanced', function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
     const previous = page.prefs.profile.password_manager_leak_detection.value;
 
     page.$$('#safeBrowsingEnhanced').click();
-    Polymer.dom.flush();
+    flush();
 
     assertTrue(
-        page.prefs.profile.password_manager_leak_detection.value == previous);
+        page.prefs.profile.password_manager_leak_detection.value === previous);
   });
 
   test('noValuePasswordLeakSwitchToDisabled', async function() {
     page.$$('#safeBrowsingStandard').click();
-    Polymer.dom.flush();
+    flush();
     const previous = page.prefs.profile.password_manager_leak_detection.value;
 
     page.$$('#safeBrowsingDisabled').click();
-    Polymer.dom.flush();
+    flush();
 
     page.$$('settings-disable-safebrowsing-dialog')
         .$$('.action-button')
         .click();
-    Polymer.dom.flush();
+    flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
-    await test_util.flushTasks();
+    await flushTasks();
 
     assertTrue(
-        page.prefs.profile.password_manager_leak_detection.value == previous);
+        page.prefs.profile.password_manager_leak_detection.value === previous);
   });
 
   test('SafeBrowsingRadio_PreferenceUpdate', function() {
@@ -292,7 +309,7 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
     // correctly reflect this.
     page.set('prefs.safebrowsing.enabled.value', true);
     page.set('prefs.safebrowsing.enhanced.value', true);
-    Polymer.dom.flush();
+    flush();
     assertTrue(enhancedRadio.checked);
     assertFalse(standardRadio.checked);
     assertFalse(disabledRadio.checked);
@@ -300,7 +317,7 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
     // As above but for an enabled protection state.
     page.set('prefs.safebrowsing.enabled.value', true);
     page.set('prefs.safebrowsing.enhanced.value', false);
-    Polymer.dom.flush();
+    flush();
     assertFalse(enhancedRadio.checked);
     assertTrue(standardRadio.checked);
     assertFalse(disabledRadio.checked);
@@ -308,7 +325,7 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
     // As above but for a safebrowsing disabled state.
     page.set('prefs.safebrowsing.enabled.value', false);
     page.set('prefs.safebrowsing.enhanced.value', false);
-    Polymer.dom.flush();
+    flush();
     assertFalse(enhancedRadio.checked);
     assertFalse(standardRadio.checked);
     assertTrue(disabledRadio.checked);
@@ -333,14 +350,14 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
         'getSafeBrowsingRadioManagedState');
     testSafeBrowsingBrowserProxy.reset();
 
-    testSafeBrowsingBrowserProxy.setResultFor(
-        'getSafeBrowsingRadioManagedState', Promise.resolve(managedRadioState));
+    testSafeBrowsingBrowserProxy.setSafeBrowsingRadioManagedState(
+        managedRadioState);
     // Change an arbitrary Safe Browsing pref to trigger managed state update.
     page.set('prefs.safebrowsing.enabled.value', false);
     await testSafeBrowsingBrowserProxy.whenCalled(
         'getSafeBrowsingRadioManagedState');
     testSafeBrowsingBrowserProxy.reset();
-    Polymer.dom.flush();
+    flush();
 
     assertTrue(enhancedRadio.disabled);
     assertEquals(
@@ -358,15 +375,14 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
       standard: {disabled: false, indicator: CrPolicyIndicatorType.NONE},
       disabled: {disabled: false, indicator: CrPolicyIndicatorType.NONE},
     };
-    testSafeBrowsingBrowserProxy.setResultFor(
-        'getSafeBrowsingRadioManagedState',
-        Promise.resolve(unmanagedRadioState));
+    testSafeBrowsingBrowserProxy.setSafeBrowsingRadioManagedState(
+        unmanagedRadioState);
     // Change an arbitrary Safe Browsing pref to trigger managed state update.
     page.set('prefs.safebrowsing.enabled.value', true);
     await testSafeBrowsingBrowserProxy.whenCalled(
         'getSafeBrowsingRadioManagedState');
     testSafeBrowsingBrowserProxy.reset();
-    Polymer.dom.flush();
+    flush();
 
     assertFalse(enhancedRadio.disabled);
     assertEquals(enhancedRadio.policyIndicatorType, CrPolicyIndicatorType.NONE);
@@ -379,10 +395,10 @@ suite('CrSettingsSecurityPageTestWithEnhanced', function() {
 
 
 suite('CrSettingsSecurityPageTestWithoutEnhanced', function() {
-  /** @type {SettingsSecurityPageElement} */
+  /** @type {!SettingsSecurityPageElement} */
   let page;
 
-  /** @type {SafeBrowsingBrowserProxy} */
+  /** @type {!TestSafeBrowsingBrowserProxy} */
   let testSafeBrowsingBrowserProxy;
 
   suiteSetup(function() {
@@ -393,9 +409,10 @@ suite('CrSettingsSecurityPageTestWithoutEnhanced', function() {
 
   setup(function() {
     testSafeBrowsingBrowserProxy = new TestSafeBrowsingBrowserProxy();
-    settings.SafeBrowsingBrowserProxyImpl.instance_ = testSafeBrowsingBrowserProxy;
-    PolymerTest.clearBody();
-    page = document.createElement('settings-security-page');
+    SafeBrowsingBrowserProxyImpl.instance_ = testSafeBrowsingBrowserProxy;
+    document.body.innerHTML = '';
+    page = /** @type {!SettingsSecurityPageElement} */ (
+        document.createElement('settings-security-page'));
     page.prefs = {
       profile: {password_manager_leak_detection: {value: true}},
       signin: {
@@ -409,7 +426,7 @@ suite('CrSettingsSecurityPageTestWithoutEnhanced', function() {
       },
     };
     document.body.appendChild(page);
-    Polymer.dom.flush();
+    flush();
   });
 
   teardown(function() {

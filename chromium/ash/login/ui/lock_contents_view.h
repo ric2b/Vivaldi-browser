@@ -99,9 +99,10 @@ class ASH_EXPORT LockContentsView
     views::View* main_view() const;
     const std::vector<LockContentsView::UserState>& users() const;
 
-    // Finds and focuses User view specified by |account_id|. Returns nullptr if
-    // not found.
-    LoginBigUserView* FindUser(const AccountId& account_id);
+    // Finds and focuses (if needed) Big User View view specified by
+    // |account_id|. Returns nullptr if the user not found.
+    LoginBigUserView* FindBigUser(const AccountId& account_id);
+    LoginUserView* FindUserView(const AccountId& account_id);
     bool RemoveUser(const AccountId& account_id);
     bool IsOobeDialogVisible() const;
 
@@ -197,6 +198,9 @@ class ASH_EXPORT LockContentsView
   void OnFocusLeavingLockScreenApps(bool reverse) override;
   void OnOobeDialogStateChanged(OobeDialogState state) override;
 
+  void MaybeUpdateExpandedView(const AccountId& account_id,
+                               const LoginUserInfo& user_info);
+
   // SystemTrayFocusObserver:
   void OnFocusLeavingSystemTray(bool reverse) override;
 
@@ -218,6 +222,10 @@ class ASH_EXPORT LockContentsView
   void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
 
   void ShowAuthErrorMessageForDebug(int unlock_attempt);
+
+  // Called for debugging to make |user| managed and display an icon along with
+  // a note in the menu user view.
+  void ToggleManagementForUserForDebug(const AccountId& user);
 
   // Called by LockScreenMediaControlsView.
   void CreateMediaControlsLayout();

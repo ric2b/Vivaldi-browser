@@ -179,7 +179,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   SwapPromiseManager* GetSwapPromiseManager();
 
   std::unique_ptr<EventsMetricsManager::ScopedMonitor>
-  GetScopedEventMetricsMonitor(const EventMetrics& event_metrics);
+  GetScopedEventMetricsMonitor(std::unique_ptr<EventMetrics> event_metrics);
   void ClearEventsMetrics();
 
   // Visibility and LayerTreeFrameSink -------------------------------
@@ -592,6 +592,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void RecordStartOfFrameMetrics();
   void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
                                ActiveFrameSequenceTrackers trackers);
+  void NotifyThroughputTrackerResults(CustomTrackerResults results);
 
   LayerTreeHostClient* client() { return client_; }
   LayerTreeHostSchedulingClient* scheduling_client() {

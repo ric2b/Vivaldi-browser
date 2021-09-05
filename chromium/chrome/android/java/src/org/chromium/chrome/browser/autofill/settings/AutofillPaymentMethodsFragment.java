@@ -29,7 +29,6 @@ import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 /**
  * Autofill credit cards fragment, which allows the user to edit credit cards and control
  * payment apps.
- * TODO(crbug.com/949269): Add tests for AutofillProfilesFragment.
  */
 public class AutofillPaymentMethodsFragment extends PreferenceFragmentCompat
         implements PersonalDataManager.PersonalDataManagerObserver {
@@ -100,7 +99,10 @@ public class AutofillPaymentMethodsFragment extends PreferenceFragmentCompat
         for (CreditCard card : PersonalDataManager.getInstance().getCreditCardsForSettings()) {
             // Add a preference for the credit card.
             Preference card_pref = new Preference(getStyledContext());
-            card_pref.setTitle(card.getObfuscatedNumber());
+            // Make the card_pref multi-line, since cards with long nicknames won't fit on a single
+            // line.
+            card_pref.setSingleLineTitle(false);
+            card_pref.setTitle(card.getCardLabel());
             card_pref.setSummary(card.getFormattedExpirationDate(getActivity()));
             card_pref.setIcon(
                     AppCompatResources.getDrawable(getActivity(), card.getIssuerIconDrawableId()));
@@ -123,8 +125,8 @@ public class AutofillPaymentMethodsFragment extends PreferenceFragmentCompat
             Preference add_card_pref = new Preference(getStyledContext());
             Drawable plusIcon = ApiCompatibilityUtils.getDrawable(getResources(), R.drawable.plus);
             plusIcon.mutate();
-            plusIcon.setColorFilter(
-                    ApiCompatibilityUtils.getColor(getResources(), R.color.pref_accent_color),
+            plusIcon.setColorFilter(ApiCompatibilityUtils.getColor(
+                                            getResources(), R.color.default_control_color_active),
                     PorterDuff.Mode.SRC_IN);
             add_card_pref.setIcon(plusIcon);
             add_card_pref.setTitle(R.string.autofill_create_credit_card);

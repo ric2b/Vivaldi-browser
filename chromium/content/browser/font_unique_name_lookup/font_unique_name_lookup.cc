@@ -5,10 +5,10 @@
 #include "content/browser/font_unique_name_lookup/font_unique_name_lookup.h"
 
 #include "base/android/build_info.h"
+#include "base/check.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
@@ -187,7 +187,7 @@ void IndexFile(FT_Library ft_library,
     if (!IsRelevantNameRecord(sfnt_name))
       continue;
 
-    std::string sfnt_name_string = "";
+    std::string sfnt_name_string;
     std::string codepage_name;
     // Codepage names from http://demo.icu-project.org/icu-bin/convexp
     if (sfnt_name.platform_id == TT_PLATFORM_MICROSOFT &&

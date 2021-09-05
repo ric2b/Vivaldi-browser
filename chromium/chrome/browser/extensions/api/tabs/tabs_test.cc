@@ -48,6 +48,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/api_test_utils.h"
@@ -343,8 +344,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, GetAllWindows) {
   CloseAppWindow(app_window);
 }
 
-// Flaky. https://crbug.com/1035620
-IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, DISABLED_GetAllWindowsAllTypes) {
+// Flaky on Windows. https://crbug.com/1035620
+#if defined(OS_WIN)
+#define MAYBE_GetAllWindowsAllTypes DISABLED_GetAllWindowsAllTypes
+#else
+#define MAYBE_GetAllWindowsAllTypes GetAllWindowsAllTypes
+#endif
+IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, MAYBE_GetAllWindowsAllTypes) {
   const size_t NUM_WINDOWS = 5;
   std::set<int> window_ids;
   std::set<int> result_ids;
@@ -2282,7 +2288,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, WindowsCreate_OpenerAndOrigin) {
   };
 
   auto run_test_case = [&web_contents](const TestCase& test_case) {
-    std::string maybe_specify_set_self_as_opener = "";
+    std::string maybe_specify_set_self_as_opener;
     if (test_case.set_self_as_opener) {
       maybe_specify_set_self_as_opener =
           base::StringPrintf(", setSelfAsOpener: %s",

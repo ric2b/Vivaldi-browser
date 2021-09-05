@@ -30,6 +30,8 @@ cr.define('device_page_tests', function() {
     this.noteTakingApps_ = [];
     this.setPreferredAppCount_ = 0;
     this.setAppOnLockScreenCount_ = 0;
+
+    this.lastHighlightedDisplayId_ = '-1';
   }
 
   TestDevicePageBrowserProxy.prototype = {
@@ -102,8 +104,8 @@ cr.define('device_page_tests', function() {
 
       let changed = false;
       this.noteTakingApps_.forEach(function(app) {
-        changed = changed || app.preferred != (app.value == appId);
-        app.preferred = app.value == appId;
+        changed = changed || app.preferred !== (app.value === appId);
+        app.preferred = app.value === appId;
       });
 
       if (changed) {
@@ -122,7 +124,7 @@ cr.define('device_page_tests', function() {
                 settings.NoteAppLockScreenSupport.SUPPORTED,
                 app.lockScreenSupport);
           }
-          if (app.lockScreenSupport ==
+          if (app.lockScreenSupport ===
               settings.NoteAppLockScreenSupport.SUPPORTED) {
             app.lockScreenSupport = settings.NoteAppLockScreenSupport.ENABLED;
           }
@@ -132,7 +134,7 @@ cr.define('device_page_tests', function() {
                 settings.NoteAppLockScreenSupport.ENABLED,
                 app.lockScreenSupport);
           }
-          if (app.lockScreenSupport ==
+          if (app.lockScreenSupport ===
               settings.NoteAppLockScreenSupport.ENABLED) {
             app.lockScreenSupport = settings.NoteAppLockScreenSupport.SUPPORTED;
           }
@@ -140,6 +142,11 @@ cr.define('device_page_tests', function() {
       });
 
       this.scheduleLockScreenAppsUpdated_();
+    },
+
+    /** @override */
+    highlightDisplay: function(id) {
+      this.lastHighlightedDisplayId_ = id;
     },
 
     // Test interface:
@@ -451,16 +458,51 @@ cr.define('device_page_tests', function() {
         id: 'fakeDisplayId' + n,
         name: 'fakeDisplayName' + n,
         mirroring: '',
-        isPrimary: n == 1,
-        isInternal: n == 1,
+        isPrimary: n === 1,
+        isInternal: n === 1,
         rotation: 0,
-        modes: [{
-          deviceScaleFactor: 1.0,
-          widthInNativePixels: 1920,
-          heightInNativePixels: 1080,
-          width: 1920,
-          height: 1080,
-        }],
+        modes: [
+          {
+            deviceScaleFactor: 1.0,
+            widthInNativePixels: 1920,
+            heightInNativePixels: 1080,
+            width: 1920,
+            height: 1080,
+            refreshRate: 60,
+          },
+          {
+            deviceScaleFactor: 1.0,
+            widthInNativePixels: 1920,
+            heightInNativePixels: 1080,
+            width: 1920,
+            height: 1080,
+            refreshRate: 30,
+          },
+          {
+            deviceScaleFactor: 1.0,
+            widthInNativePixels: 3000,
+            heightInNativePixels: 2000,
+            width: 3000,
+            height: 2000,
+            refreshRate: 45,
+          },
+          {
+            deviceScaleFactor: 1.0,
+            widthInNativePixels: 3000,
+            heightInNativePixels: 2000,
+            width: 3000,
+            height: 2000,
+            refreshRate: 75,
+          },
+          {
+            deviceScaleFactor: 1.0,
+            widthInNativePixels: 3000,
+            heightInNativePixels: 2000,
+            width: 3000,
+            height: 2000,
+            refreshRate: 100,
+          }
+        ],
         bounds: {
           left: 0,
           top: 0,
@@ -774,6 +816,7 @@ cr.define('device_page_tests', function() {
 
     test(assert(TestNames.Display), function() {
       let displayPage;
+      const browserProxy = settings.DevicePageBrowserProxyImpl.getInstance();
       return Promise
           .all([
             // Get the display sub-page.
@@ -792,6 +835,9 @@ cr.define('device_page_tests', function() {
                       true, true, displayPage.displays));
                   expectFalse(displayPage.showUnifiedDesktop_(
                       false, false, displayPage.displays));
+                  expectEquals(
+                      displayPage.invalidDisplayId_,
+                      browserProxy.lastHighlightedDisplayId_);
                 }),
             // Wait for the initial call to getInfo.
             fakeSystemDisplay.getInfoCalled.promise,
@@ -858,6 +904,12 @@ cr.define('device_page_tests', function() {
             expectTrue(displayPage.showMirror_(false, displayPage.displays));
             expectFalse(displayPage.isMirrored_(displayPage.displays));
 
+            // Set display identification highlights for the selected display as
+            // there are now multiple displays.
+            expectEquals(
+                displayPage.displays[0].id,
+                browserProxy.lastHighlightedDisplayId_);
+
             // Verify unified desktop only shown when enabled.
             expectTrue(displayPage.showUnifiedDesktop_(
                 true, true, displayPage.displays));
@@ -866,6 +918,27 @@ cr.define('device_page_tests', function() {
 
             // Sanity check the second display is not internal.
             expectFalse(displayPage.displays[1].isInternal);
+
+
+            // Verify the display modes are parsed correctly.
+
+            // 5 total modes, 2 parent modes.
+            expectEquals(5, displayPage.modeToParentModeMap_.size);
+            expectEquals(0, displayPage.modeToParentModeMap_.get(0));
+            expectEquals(0, displayPage.modeToParentModeMap_.get(1));
+            expectEquals(2, displayPage.modeToParentModeMap_.get(2));
+            expectEquals(2, displayPage.modeToParentModeMap_.get(3));
+            expectEquals(2, displayPage.modeToParentModeMap_.get(4));
+
+            // Two resolution options, one for each parent mode.
+            expectEquals(2, displayPage.refreshRateList_.length);
+
+            // Each parent mode has the correct number of refresh rates.
+            expectEquals(2, displayPage.parentModeToRefreshRateMap_.size);
+            expectEquals(
+                2, displayPage.parentModeToRefreshRateMap_.get(0).length);
+            expectEquals(
+                3, displayPage.parentModeToRefreshRateMap_.get(2).length);
 
             // Ambient EQ never shown on non-internal display regardless of
             // whether it is enabled.
@@ -910,6 +983,12 @@ cr.define('device_page_tests', function() {
                 displayPage.displays[1].id, displayPage.primaryDisplayId);
             expectEquals(90, displayPage.displays[1].rotation);
 
+            // Change the display that display identification highlight renders
+            // on to the newly selected display.
+            expectEquals(
+                displayPage.displays[1].id,
+                browserProxy.lastHighlightedDisplayId_);
+
             // Mirror the displays.
             displayPage.onMirroredTap_({target: {blur: function() {}}});
             fakeSystemDisplay.onDisplayChanged.callListeners();
@@ -932,6 +1011,12 @@ cr.define('device_page_tests', function() {
             expectTrue(displayPage.showMirror_(false, displayPage.displays));
             expectTrue(displayPage.isMirrored_(displayPage.displays));
 
+            // setSelectedDisplay is called on a new display id even though no
+            // display identification highlight is generated in mirrored mode.
+            expectEquals(
+                displayPage.displays[0].id,
+                browserProxy.lastHighlightedDisplayId_);
+
             // Verify that the arrangement section is shown while mirroring.
             expectTrue(!!displayPage.$$('#arrangement-section'));
 
@@ -953,6 +1038,26 @@ cr.define('device_page_tests', function() {
             expectEquals(1, displayPage.selectedZoomPref_.value);
             pointerEvent('pointerup', 0);
             expectEquals(1.25, displayPage.selectedZoomPref_.value);
+
+            // Navigate out of the display page.
+            return showAndGetDeviceSubpage('power', settings.routes.POWER);
+          })
+          .then(function() {
+            // Moving out of the display page should set selected display to
+            // invalid.
+            expectEquals(
+                displayPage.invalidDisplayId_,
+                browserProxy.lastHighlightedDisplayId_);
+
+            // Navigate back to the display page.
+            return showAndGetDeviceSubpage('display', settings.routes.DISPLAY);
+          })
+          .then(function() {
+            // Moving back into the display page should call setSelectedDisplay
+            // with selectedDisplay_.
+            expectEquals(
+                displayPage.selectedDisplay.id,
+                browserProxy.lastHighlightedDisplayId_);
           });
     });
 
@@ -1002,36 +1107,12 @@ cr.define('device_page_tests', function() {
             isLowPowerCharger);
       }
 
-      suite('no power settings', function() {
-        suiteSetup(function() {
-          // Never show power settings.
-          loadTimeData.overrideValues({
-            enablePowerSettings: false,
-          });
-        });
-
-        test('power row hidden', function() {
-          assertEquals(null, devicePage.$$('#powerRow'));
-          assertEquals(
-              0,
-              settings.DevicePageBrowserProxyImpl.getInstance()
-                  .updatePowerStatusCalled_);
-        });
-      });
-
       suite('power settings', function() {
         let powerPage;
         let powerSourceRow;
         let powerSourceSelect;
         let acIdleSelect;
         let lidClosedToggle;
-
-        suiteSetup(function() {
-          // Always show power settings.
-          loadTimeData.overrideValues({
-            enablePowerSettings: true,
-          });
-        });
 
         setup(function() {
           return showAndGetDeviceSubpage('power', settings.routes.POWER)
@@ -2032,7 +2113,7 @@ cr.define('device_page_tests', function() {
        */
       function isHidden(element) {
         return !element ||
-            (element.offsetWidth == 0 && element.offsetHeight == 0);
+            (element.offsetWidth === 0 && element.offsetHeight === 0);
       }
 
       /**

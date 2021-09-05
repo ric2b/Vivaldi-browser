@@ -7,6 +7,7 @@
 #include "base/test/trace_event_analyzer.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "content/public/test/browser_test.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
 using ukm::TestUkmRecorder;
@@ -39,7 +40,7 @@ class TotalInputDelayIntegrationTest : public MetricIntegrationTest {
         TestUkmRecorder::GetEntryMetric(kv->second.get(), metric_name);
     EXPECT_NE(metric_value, nullptr);
     double delta = *metric_value - expected_value;
-    EXPECT_LE(delta * delta, 0.25 * num_input_events * num_input_events);
+    EXPECT_LE(delta * delta, num_input_events * num_input_events);
   }
 };
 

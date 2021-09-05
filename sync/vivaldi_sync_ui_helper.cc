@@ -77,8 +77,6 @@ VivaldiSyncUIHelper::CycleData VivaldiSyncUIHelper::GetCycleData() {
     case syncer::SyncerError::SYNCER_OK:
       if (cycle_data.download_updates_status != SUCCESS)
         cycle_data.commit_status = NOT_SYNCED;
-      else if (cycle_snapshot.has_remaining_local_changes())
-        cycle_data.commit_status = IN_PROGRESS;
       else
         cycle_data.commit_status = SUCCESS;
       break;

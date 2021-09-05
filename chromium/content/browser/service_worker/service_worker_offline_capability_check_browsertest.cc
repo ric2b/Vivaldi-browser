@@ -18,6 +18,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -666,6 +667,9 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerOfflineCapabilityCheckBrowserTest,
   EXPECT_EQ(
       OfflineCapability::kSupported,
       CheckOfflineCapability("/service_worker/empty.html?fetch_or_offline"));
+
+  EXPECT_EQ(OfflineCapability::kUnsupported,
+            CheckOfflineCapability("/service_worker/empty.html?cache_add"));
 }
 
 // Sites with a service worker which is not activated yet are identified as

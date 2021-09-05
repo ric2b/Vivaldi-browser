@@ -6,7 +6,9 @@
 
 #include <vector>
 
+#include "base/check.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -143,7 +145,6 @@ void ConvertEventLocationToTargetWindowLocation(
   gfx::PointF location_in_pixel_in_host =
       located_event->location_f() + gfx::Vector2dF(offset);
   located_event->set_location_f(location_in_pixel_in_host);
-  located_event->set_root_location_f(location_in_pixel_in_host);
 }
 
 const char* EventTypeName(EventType type) {

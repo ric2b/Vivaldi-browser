@@ -14,8 +14,14 @@
 // Called when the user taps the cancel button in the navigation bar.
 - (void)navigationCancelButtonWasPressed:(UIButton*)button;
 
+// Called when the user selects a credential.
+- (void)userSelectedCredential:(id<Credential>)credential;
+
 // Called when the user is filtering results through search.
 - (void)updateResultsWithFilter:(NSString*)filter;
+
+// Called when user wants to see details for the given credential.
+- (void)showDetailsForCredential:(id<Credential>)credential;
 
 @end
 

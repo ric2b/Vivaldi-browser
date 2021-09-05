@@ -46,7 +46,7 @@ namespace blink {
 
 class ExceptionState;
 class ExecutionContext;
-class LocalFrame;
+class LocalDOMWindow;
 class SpeechRecognitionController;
 
 class MODULES_EXPORT SpeechRecognition final
@@ -61,7 +61,7 @@ class MODULES_EXPORT SpeechRecognition final
  public:
   static SpeechRecognition* Create(ExecutionContext*);
 
-  SpeechRecognition(LocalFrame*, ExecutionContext*);
+  SpeechRecognition(LocalDOMWindow*);
   ~SpeechRecognition() override;
 
   // SpeechRecognition.idl implemementation.
@@ -137,7 +137,9 @@ class MODULES_EXPORT SpeechRecognition final
   bool started_;
   bool stopping_;
   HeapVector<Member<SpeechRecognitionResult>> final_results_;
-  HeapMojoReceiver<mojom::blink::SpeechRecognitionSessionClient> receiver_;
+  HeapMojoReceiver<mojom::blink::SpeechRecognitionSessionClient,
+                   SpeechRecognition>
+      receiver_;
   HeapMojoRemote<mojom::blink::SpeechRecognitionSession> session_;
 };
 

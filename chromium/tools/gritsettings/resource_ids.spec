@@ -153,9 +153,11 @@
   "chrome/browser/resources/local_ntp/local_ntp_resources.grd": {
     "includes": [1620],
   },
- "chrome/browser/resources/new_tab_page/new_tab_page_resources.grd": {
+  "chrome/browser/resources/new_tab_page/new_tab_page_resources_vulcanized.grd": {
     "includes": [1640],
-    "structures": [1660],
+  },
+  "chrome/browser/resources/new_tab_page/new_tab_page_resources.grd": {
+    "includes": [1660],
   },
   "chrome/browser/resources/print_preview/print_preview_resources_vulcanized.grd": {
     "includes": [1680],
@@ -178,19 +180,25 @@
     "includes": [1810],
     "structures": [1820],
   },
-  "chrome/browser/resources/tab_strip/tab_strip_resources.grd": {
+  "chrome/browser/resources/signin/profile_picker/profile_picker_resources.grd": {
     "structures": [1840],
-    "includes": [1860],
+  },
+  "chrome/browser/resources/tab_strip/tab_strip_resources.grd": {
+    "structures": [1860],
+    "includes": [1880],
   },
   "chrome/browser/resources/welcome/welcome_resources.grd": {
-    "includes": [1880],
-    "structures": [1900],
+    "includes": [1900],
+    "structures": [1920],
   },
   "chrome/browser/supervised_user/supervised_user_unscaled_resources.grd": {
-    "includes": [1910],
+    "includes": [1930],
+  },
+  "chrome/browser/test_dummy/internal/android/resources/resources.grd": {
+    "includes": [1940],
   },
   "chrome/browser/vr/testapp/vr_testapp_resources.grd": {
-    "includes": [1930],
+    "includes": [1950],
   },
   # END chrome/browser section.
 
@@ -249,12 +257,9 @@
   # END chrome/ WebUI resources section
 
   # START chrome/ miscellaneous section.
-  "chrome/android/features/test_dummy/internal/resources/resources.grd": {
+  "chrome/common/common_resources.grd": {
     # Big alignment at start of section.
     "META": {"align": 100},
-    "includes": [2300],
-  },
-  "chrome/common/common_resources.grd": {
     "includes": [2320],
   },
   "chrome/credential_provider/gaiacp/gaia_resources.grd": {
@@ -281,10 +286,11 @@
   },
   # Both help_app_bundle_resources.grd and help_app_bundle_mock_resources.grd
   # start with the same id because only one of them is built depending on if
-  # src_internal is available. Lower bound for number of resource ids is number
-  # of languages (74).
-  "chromeos/components/help_app_ui/resources/app/help_app_bundle_resources.grd": {
-    "META": {"sizes": {"includes": [100],}},  # Relies on src-internal.
+  # src_internal is available. Lower bound is that we bundle ~100 images for
+  # offline articles with the app, as well as strings in every language (74),
+  # and bundled content in the top 25 languages (25 x 2).
+  "chromeos/components/help_app_ui/resources/prod/help_app_bundle_resources.grd": {
+    "META": {"sizes": {"includes": [300],}},  # Relies on src-internal.
     "includes": [2540],
   },
   "chromeos/components/help_app_ui/resources/mock/help_app_bundle_mock_resources.grd": {
@@ -308,12 +314,13 @@
   "chromeos/components/print_management/resources/print_management_resources.grd": {
     "META": {"join": 2},
     "includes": [2600],
+    "structures": [2620],
   },
   "chromeos/components/sample_system_web_app_ui/resources/sample_system_web_app_resources.grd": {
-    "includes": [2620],
+    "includes": [2640],
   },
   "chromeos/resources/chromeos_resources.grd": {
-    "includes": [2640],
+    "includes": [2660],
   },
   # END chromeos/ section.
 
@@ -576,6 +583,9 @@
   },
   "ui/strings/ui_strings.grd": {
     "messages": [3760],
+  },
+  "ui/views/examples/views_examples_resources.grd": {
+    "messages": [3770],
   },
   "ui/views/resources/views_resources.grd": {
     "structures": [3780],

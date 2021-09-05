@@ -153,6 +153,32 @@ bool ShouldLaunchPlayStoreApp(Profile* profile,
   return true;
 }
 
+// Defines the conditions that require UI to present eventual error conditions
+// to the end user.
+//
+// Don't show UI for ARC Kiosk because the only one UI in kiosk mode must
+// be the kiosk app. In case of error the UI will be useless as well, because
+// in typical use case there will be no one nearby the kiosk device, who can
+// do some action to solve the problem be means of UI.
+// Same considerations apply for MGS sessions in Demo Mode.
+// All other managed sessions will be attended by a user and require an error
+// UI.
+bool ShouldUseErrorDialog() {
+  if (!g_ui_enabled)
+    return false;
+
+  if (IsArcOptInVerificationDisabled())
+    return false;
+
+  if (IsArcKioskMode())
+    return false;
+
+  if (chromeos::DemoSession::IsDeviceInDemoMode())
+    return false;
+
+  return true;
+}
+
 void ResetStabilityMetrics() {
   // TODO(shaochuan): Make this an event observable by StabilityMetricsManager
   // and eliminate this null check.
@@ -514,30 +540,23 @@ void ArcSessionManager::Initialize() {
   state_ = State::STOPPED;
 
   auto* prefs = profile_->GetPrefs();
-  const std::string user_id_hash(
-      chromeos::ProfileHelper::GetUserIdHashFromProfile(profile_));
-  arc_session_runner_->SetUserInfo(user_id_hash,
-                                   GetOrCreateSerialNumber(prefs));
+  const cryptohome::Identification cryptohome_id(
+      multi_user_util::GetAccountIdFromProfile(profile_));
+  arc_session_runner_->SetUserInfo(
+      cryptohome_id,
+      chromeos::ProfileHelper::GetUserIdHashFromProfile(profile_),
+      GetOrCreateSerialNumber(prefs));
 
   // Create the support host at initialization. Note that, practically,
   // ARC support Chrome app is rarely used (only opt-in and re-auth flow).
   // So, it may be better to initialize it lazily.
   // TODO(hidehiko): Revisit to think about lazy initialization.
-  //
-  // Don't show UI for ARC Kiosk because the only one UI in kiosk mode must
-  // be the kiosk app. In case of error the UI will be useless as well, because
-  // in typical use case there will be no one nearby the kiosk device, who can
-  // do some action to solve the problem be means of UI.
-  if (g_ui_enabled && !IsArcOptInVerificationDisabled() &&
-      !IsRobotOrOfflineDemoAccountMode()) {
+  if (ShouldUseErrorDialog()) {
     DCHECK(!support_host_);
     support_host_ = std::make_unique<ArcSupportHost>(profile_);
     support_host_->SetErrorDelegate(this);
   }
-  data_remover_ = std::make_unique<ArcDataRemover>(
-      prefs, cryptohome::Identification(
-                 multi_user_util::GetAccountIdFromProfile(profile_)));
-  data_remover_->set_user_id_hash_for_profile(user_id_hash);
+  data_remover_ = std::make_unique<ArcDataRemover>(prefs, cryptohome_id);
 
   if (g_enable_check_android_management_in_tests.value_or(g_ui_enabled))
     ArcAndroidManagementChecker::StartClient();
@@ -1008,11 +1027,6 @@ void ArcSessionManager::OnAndroidManagementChecked(
   switch (result) {
     case policy::AndroidManagementClient::Result::UNMANAGED:
       VLOG(1) << "Starting ARC for first sign in.";
-      sign_in_start_time_ = base::TimeTicks::Now();
-      arc_sign_in_timer_.Start(
-          FROM_HERE, GetArcSignInTimeout(),
-          base::Bind(&ArcSessionManager::OnArcSignInTimeout,
-                     weak_ptr_factory_.GetWeakPtr()));
       StartArc();
       // Since opt-in is an explicit user (or admin) action, relax the
       // cgroups restriction now.
@@ -1078,6 +1092,8 @@ void ArcSessionManager::StartArc() {
          state_ == State::CHECKING_ANDROID_MANAGEMENT)
       << state_;
   state_ = State::ACTIVE;
+
+  MaybeStartTimer();
 
   // ARC must be started only if no pending data removal request exists.
   DCHECK(!profile_->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));
@@ -1196,6 +1212,22 @@ void ArcSessionManager::MaybeReenableArc() {
   reenable_arc_ = false;
   VLOG(1) << "Reenable ARC";
   RequestEnableImpl();
+}
+
+// Starts a timer to check if provisioning takes too loong.
+// The timer will not be set if this device was previously provisioned
+// successfully.
+void ArcSessionManager::MaybeStartTimer() {
+  if (IsArcProvisioned(profile_)) {
+    return;
+  }
+
+  VLOG(1) << "Setup provisioning timer";
+  sign_in_start_time_ = base::TimeTicks::Now();
+  arc_sign_in_timer_.Start(
+      FROM_HERE, GetArcSignInTimeout(),
+      base::BindOnce(&ArcSessionManager::OnArcSignInTimeout,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcSessionManager::OnWindowClosed() {

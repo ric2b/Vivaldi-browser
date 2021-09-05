@@ -789,6 +789,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void SetBoxLayoutExtraInput(const BoxLayoutExtraInput* input) {
     extra_input_ = input;
   }
+  const BoxLayoutExtraInput* GetBoxLayoutExtraInput() const {
+    return extra_input_;
+  }
 
   void UpdateLayout() override;
   void Paint(const PaintInfo&) const override;
@@ -814,6 +817,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   LayoutUnit OverrideLogicalHeight() const;
   LayoutUnit OverrideLogicalWidth() const;
+  bool IsOverrideLogicalHeightDefinite() const;
   bool HasOverrideLogicalHeight() const;
   bool HasOverrideLogicalWidth() const;
   void SetOverrideLogicalHeight(LayoutUnit);
@@ -926,6 +930,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   LayoutUnit PageRemainingLogicalHeightForOffset(LayoutUnit,
                                                  PageBoundaryRule) const;
 
+  int CurrentPageNumber(LayoutUnit child_logical_top) const;
+
   bool CrossesPageBoundary(LayoutUnit offset, LayoutUnit logical_height) const;
 
   // Calculate the strut to insert in order fit content of size
@@ -969,6 +975,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // Store one layout result (with its physical fragment) at the specified
   // index, and delete all entries following it.
   void AddLayoutResult(scoped_refptr<const NGLayoutResult>, wtf_size_t index);
+  void ReplaceLayoutResult(scoped_refptr<const NGLayoutResult>,
+                           wtf_size_t index);
 
   void ShrinkLayoutResults(wtf_size_t results_to_keep);
   void ClearLayoutResults();
@@ -1618,12 +1626,18 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   //
   // Also clears the "dirty" flag for the intrinsic logical widths.
   void SetIntrinsicLogicalWidthsFromNG(
-      const MinMaxSizes& sizes,
-      LayoutUnit intrinsic_logical_widths_percentage_resolution_block_size) {
-    intrinsic_logical_widths_ = sizes;
+      LayoutUnit intrinsic_logical_widths_percentage_resolution_block_size,
+      bool depends_on_percentage_block_size,
+      bool child_depends_on_percentage_block_size,
+      const MinMaxSizes* sizes) {
     intrinsic_logical_widths_percentage_resolution_block_size_ =
         intrinsic_logical_widths_percentage_resolution_block_size;
-
+    SetIntrinsicLogicalWidthsDependsOnPercentageBlockSize(
+        depends_on_percentage_block_size);
+    SetIntrinsicLogicalWidthsChildDependsOnPercentageBlockSize(
+        child_depends_on_percentage_block_size);
+    if (sizes)
+      intrinsic_logical_widths_ = *sizes;
     ClearIntrinsicLogicalWidthsDirty();
   }
 
@@ -2001,11 +2015,10 @@ inline void LayoutBox::SetInlineBoxWrapper(InlineBox* box_wrapper) {
 inline NGPaintFragment* LayoutBox::FirstInlineFragment() const {
   if (!IsInLayoutNGInlineFormattingContext())
     return nullptr;
-  // TODO(yosin): Once we replace all usage of |FirstInlineFragment()| to
-  // |NGInlineCursor|, we should change this to |DCHECK()|.
-  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
-    return nullptr;
-  return first_paint_fragment_;
+  if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
+    return first_paint_fragment_;
+  NOTREACHED();
+  return nullptr;
 }
 
 inline wtf_size_t LayoutBox::FirstInlineFragmentItemIndex() const {

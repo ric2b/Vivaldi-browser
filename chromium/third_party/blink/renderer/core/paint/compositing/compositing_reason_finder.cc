@@ -76,8 +76,8 @@ CompositingReasonFinder::PotentialCompositingReasonsFromStyle(
   DCHECK((style.HasOpacity() || layout_object.HasMask() ||
           layout_object.HasClipPath() ||
           layout_object.HasFilterInducingProperty() ||
-          layout_object.HasBackdropFilter() || style.HasBlendMode()) ==
-         layout_object.CreatesGroup());
+          layout_object.HasNonInitialBackdropFilter() ||
+          style.HasBlendMode()) == layout_object.CreatesGroup());
 
   if (style.HasMask() || style.ClipPath())
     reasons |= CompositingReason::kMaskWithCompositedDescendants;
@@ -285,9 +285,13 @@ CompositingReasons CompositingReasonFinder::CompositingReasonsForWillChange(
     reasons |= CompositingReason::kWillChangeTransform;
   if (style.HasWillChangeOpacityHint())
     reasons |= CompositingReason::kWillChangeOpacity;
+  if (style.HasWillChangeFilterHint())
+    reasons |= CompositingReason::kWillChangeFilter;
+  if (style.HasWillChangeBackdropFilterHint())
+    reasons |= CompositingReason::kWillChangeBackdropFilter;
 
-  // kWillChangeOther is needed only when neither kWillChangeTransform nor
-  // kWillChangeOpacity is set.
+  // kWillChangeOther is needed only when none of the explicit kWillChange*
+  // reasons are set.
   if (reasons == CompositingReason::kNone &&
       style.HasWillChangeCompositingHint())
     reasons |= CompositingReason::kWillChangeOther;

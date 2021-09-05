@@ -8,6 +8,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
+#include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
+#include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
+#include "chrome/browser/navigation_predictor/search_engine_preconnector.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/preconnect_manager.h"
@@ -19,6 +22,7 @@
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/search_engines/template_url_service.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/features.h"
 #include "net/dns/mock_host_resolver.h"
@@ -128,34 +132,20 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorPreconnectClientBrowserTest,
   EXPECT_EQ(2, preresolve_done_count_);
 }
 
-#if defined(OS_MACOSX)
-#define MAYBE_PreconnectNotSearchBackgroundForeground \
-  DISABLED_PreconnectNotSearchBackgroundForeground
-#else
-#define MAYBE_PreconnectNotSearchBackgroundForeground \
-  PreconnectNotSearchBackgroundForeground
-#endif
 IN_PROC_BROWSER_TEST_F(NavigationPredictorPreconnectClientBrowserTest,
-                       MAYBE_PreconnectNotSearchBackgroundForeground) {
+                       PreconnectNotSearchBackgroundForeground) {
   const GURL& url = GetTestURL("/anchors_different_area.html");
 
-  browser()->tab_strip_model()->GetActiveWebContents()->WasHidden();
-
   ui_test_utils::NavigateToURL(browser(), url);
-
-  // There should be a navigational preconnect.
-  EXPECT_EQ(1, preresolve_done_count_);
-
-  // Change to visible.
-  browser()->tab_strip_model()->GetActiveWebContents()->WasShown();
-
-  // After showing the contents, there should be a preconnect client preconnect.
+  // There should be one preconnect from navigation and one from preconnect
+  // client.
   WaitForPreresolveCount(2);
   EXPECT_EQ(2, preresolve_done_count_);
 
   browser()->tab_strip_model()->GetActiveWebContents()->WasHidden();
 
   browser()->tab_strip_model()->GetActiveWebContents()->WasShown();
+
   // After showing the contents again, there should be another preconnect client
   // preconnect.
   WaitForPreresolveCount(3);
@@ -185,11 +175,11 @@ IN_PROC_BROWSER_TEST_F(
   ui_test_utils::NavigateToURL(browser(), url);
 
   WaitForPreresolveCount(3);
-  EXPECT_EQ(3, preresolve_done_count_);
+  EXPECT_LE(3, preresolve_done_count_);
 
   // Expect another one.
   WaitForPreresolveCount(4);
-  EXPECT_EQ(4, preresolve_done_count_);
+  EXPECT_LE(4, preresolve_done_count_);
 }
 
 // Test that we preconnect after the last preconnect timed out.
@@ -306,17 +296,16 @@ class NavigationPredictorPreconnectClientBrowserTestWithSearch
  public:
   NavigationPredictorPreconnectClientBrowserTestWithSearch()
       : NavigationPredictorPreconnectClientBrowserTest() {
-    feature_list_.InitAndEnableFeature(kPreconnectToSearchTest);
+    feature_list_.InitWithFeatures(
+        {kPreconnectToSearchTest, features::kPreconnectToSearchNonGoogle}, {});
   }
 
  private:
   base::test::ScopedFeatureList feature_list_;
 };
 
-// TODO(https://crbug.com/1039813): Test fails consistently on MacOS 10.13
-// TODO(https://crbug.com/1040153): Test fails consistently on Win 7 as well.
 IN_PROC_BROWSER_TEST_F(NavigationPredictorPreconnectClientBrowserTestWithSearch,
-                       DISABLED_PreconnectSearchWithFeature) {
+                       PreconnectSearchWithFeature) {
   static const char kShortName[] = "test";
   static const char kSearchURL[] =
       "/anchors_different_area.html?q={searchTerms}";
@@ -335,6 +324,11 @@ IN_PROC_BROWSER_TEST_F(NavigationPredictorPreconnectClientBrowserTestWithSearch,
   ASSERT_TRUE(template_url);
   model->SetUserSelectedDefaultSearchProvider(template_url);
   const GURL& url = GetTestURL("/anchors_different_area.html?q=cats");
+
+  NavigationPredictorKeyedServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser()->profile()))
+      ->search_engine_preconnector()
+      ->StartPreconnecting(/*with_startup_delay=*/false);
 
   // There should be 2 DSE preconnects (2 NIKs).
   WaitForPreresolveCount(2);

@@ -34,11 +34,10 @@ PermissionRequestImpl::PermissionRequestImpl(
       content_settings_type_(content_settings_type),
       has_gesture_(has_gesture),
       permission_decided_callback_(std::move(permission_decided_callback)),
-      delete_callback_(std::move(delete_callback)),
-      is_finished_(false) {}
+      delete_callback_(std::move(delete_callback)) {}
 
 PermissionRequestImpl::~PermissionRequestImpl() {
-  DCHECK(is_finished_);
+  DCHECK(delete_callback_.is_null());
 }
 
 PermissionRequest::IconId PermissionRequestImpl::GetIconId() const {
@@ -100,6 +99,10 @@ PermissionRequest::IconId PermissionRequestImpl::GetIconId() const {
       return vector_icons::kVrHeadsetIcon;
     case ContentSettingsType::STORAGE_ACCESS:
       return vector_icons::kCookieIcon;
+    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
+      return vector_icons::kCameraPanTiltZoomIcon;
+    case ContentSettingsType::WINDOW_PLACEMENT:
+      return vector_icons::kWindowPlacementIcon;
     default:
       NOTREACHED();
       return vector_icons::kExtensionIcon;
@@ -214,6 +217,10 @@ base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
     case ContentSettingsType::MEDIASTREAM_CAMERA:
       message_id = IDS_MEDIA_CAPTURE_VIDEO_ONLY_PERMISSION_FRAGMENT;
       break;
+    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
+      message_id =
+          IDS_MEDIA_CAPTURE_CAMERA_PAN_TILT_ZOOM_ONLY_PERMISSION_FRAGMENT;
+      break;
     case ContentSettingsType::ACCESSIBILITY_EVENTS:
       message_id = IDS_ACCESSIBILITY_EVENTS_PERMISSION_FRAGMENT;
       break;
@@ -237,6 +244,9 @@ base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
           url_formatter::FormatUrlForSecurityDisplay(
               GetEmbeddingOrigin(),
               url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
+    case ContentSettingsType::WINDOW_PLACEMENT:
+      message_id = IDS_WINDOW_PLACEMENT_PERMISSION_FRAGMENT;
+      break;
     default:
       NOTREACHED();
       return base::string16();
@@ -271,7 +281,6 @@ void PermissionRequestImpl::Cancelled() {
 }
 
 void PermissionRequestImpl::RequestFinished() {
-  is_finished_ = true;
   std::move(delete_callback_).Run();
 }
 

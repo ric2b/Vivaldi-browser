@@ -28,7 +28,7 @@
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "ui/base/cursor/cursor.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 DevToolsEyeDropper::DevToolsEyeDropper(content::WebContents* web_contents,
@@ -121,8 +121,8 @@ bool DevToolsEyeDropper::HandleMouseEvent(const blink::WebMouseEvent& event) {
     return true;
 
   if (event.button == blink::WebMouseEvent::Button::kLeft &&
-      (event.GetType() == blink::WebInputEvent::kMouseDown ||
-       event.GetType() == blink::WebInputEvent::kMouseMove)) {
+      (event.GetType() == blink::WebInputEvent::Type::kMouseDown ||
+       event.GetType() == blink::WebInputEvent::Type::kMouseMove)) {
     if (last_cursor_x_ < 0 || last_cursor_x_ >= frame_.width() ||
         last_cursor_y_ < 0 || last_cursor_y_ >= frame_.height()) {
       return true;

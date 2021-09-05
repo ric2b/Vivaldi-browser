@@ -8,9 +8,9 @@
 
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
-#include "base/logging.h"
 #include "base/task/thread_pool/environment_config.h"
 #include "base/task/thread_pool/task_tracker.h"
 #include "base/task/thread_pool/worker_thread_observer.h"
@@ -220,63 +220,73 @@ void WorkerThread::ThreadMain() {
 }
 
 NOINLINE void WorkerThread::RunPooledWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunBackgroundPooledWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunSharedWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunBackgroundSharedWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunDedicatedWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunBackgroundDedicatedWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 #if defined(OS_WIN)
 NOINLINE void WorkerThread::RunSharedCOMWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunBackgroundSharedCOMWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunDedicatedCOMWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 
 NOINLINE void WorkerThread::RunBackgroundDedicatedCOMWorker() {
-  const int line_number = __LINE__;
   RunWorker();
+  // Inhibit tail calls of RunWorker and inhibit code folding.
+  const int line_number = __LINE__;
   base::debug::Alias(&line_number);
 }
 #endif  // defined(OS_WIN)

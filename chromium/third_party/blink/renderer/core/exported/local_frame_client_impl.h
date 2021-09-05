@@ -66,7 +66,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   // LocalFrameClient ----------------------------------------------
   WebContentCaptureClient* GetWebContentCaptureClient() const override;
   void DidCreateInitialEmptyDocument() override;
-  void DidCommitJavascriptUrlNavigation(DocumentLoader*) override;
+  void DidCommitDocumentReplacementNavigation(DocumentLoader*) override;
   // Notifies the WebView delegate that the JS window object has been cleared,
   // giving it a chance to bind native objects to the window before script
   // parsing begins.
@@ -116,7 +116,6 @@ class LocalFrameClientImpl final : public LocalFrameClient {
       DocumentLoader*,
       WebNavigationType,
       NavigationPolicy,
-      bool has_transient_activation,
       WebFrameLoadType,
       bool is_client_redirect,
       TriggeringEventInfo,
@@ -125,6 +124,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
       mojo::PendingRemote<mojom::blink::BlobURLToken>,
       base::TimeTicks input_start_time,
       const String& href_translate,
+      const base::Optional<WebImpression>& impression,
       WTF::Vector<network::mojom::blink::ContentSecurityPolicyPtr>
           initiator_csp,
       network::mojom::blink::CSPSourcePtr initiator_self_source,
@@ -146,6 +146,10 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DidObserveNewFeatureUsage(mojom::WebFeature) override;
   void DidObserveNewCssPropertyUsage(mojom::CSSSampleId, bool) override;
   void DidObserveLayoutShift(double score, bool after_input_or_scroll) override;
+  void DidObserveLayoutNg(uint32_t all_block_count,
+                          uint32_t ng_block_count,
+                          uint32_t all_call_count,
+                          uint32_t ng_call_count) override;
   void DidObserveLazyLoadBehavior(
       WebLocalFrameClient::LazyLoadBehavior lazy_load_behavior) override;
   bool ShouldTrackUseCounter(const KURL&) override;
@@ -199,10 +203,9 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DidChangeName(const String&) override;
   void DidChangeFramePolicy(Frame* child_frame, const FramePolicy&) override;
   void DidSetFramePolicyHeaders(
-      mojom::blink::WebSandboxFlags,
+      network::mojom::blink::WebSandboxFlags,
       const ParsedFeaturePolicy& fp_header,
       const blink::DocumentPolicy::FeatureState& dp_header) override;
-  void DidChangeFrameOwnerProperties(HTMLFrameOwnerElement*) override;
 
   std::unique_ptr<WebServiceWorkerProvider> CreateServiceWorkerProvider()
       override;
@@ -284,7 +287,6 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   Member<WebLocalFrameImpl> web_frame_;
 
   String user_agent_;
-  blink::UserAgentMetadata user_agent_metadata_;
 };
 
 template <>

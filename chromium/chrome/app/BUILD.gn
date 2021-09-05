@@ -124,9 +124,10 @@ static_library("test_support") {
     "//chrome/renderer",
     "//chrome/utility",
     "//components/gwp_asan/buildflags",
+    "//components/heap_profiling/in_process",
     "//components/nacl/common:buildflags",
     "//components/startup_metric_utils/browser",
-    "//content/public/app:both",
+    "//content/public/app",
     "//content/public/common",
     "//content/public/common:service_names",
     "//pdf",
@@ -165,6 +166,7 @@ static_library("test_support") {
     deps += [
       "//chrome/browser/chromeos",
       "//chromeos",
+      "//chromeos/memory:memory",
     ]
   }
 

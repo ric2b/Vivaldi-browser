@@ -11,12 +11,17 @@
 
 #include "base/atomicops.h"
 #include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/callback_helpers.h"
+#include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/synchronization/lock.h"
+#include "base/thread_annotations.h"
+#include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_local.h"
+#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 
 namespace base {
@@ -87,7 +92,7 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   // The first invocation of the constructor will set the global instance
   // accessible through GetInstance(). This means that only one instance can
   // exist at a time.
-  explicit HangWatcher(RepeatingClosure on_hang_closure);
+  HangWatcher();
 
   // Clears the global instance for the class.
   ~HangWatcher() override;
@@ -98,10 +103,6 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   // Returns a non-owning pointer to the global HangWatcher instance.
   static HangWatcher* GetInstance();
 
-  // Invoke base::debug::DumpWithoutCrashing() insuring that the stack frame
-  // right under it in the trace belongs to HangWatcher for easier attribution.
-  NOINLINE static void RecordHang();
-
   // Sets up the calling thread to be monitored for threads. Returns a
   // ScopedClosureRunner that unregisters the thread. This closure has to be
   // called from the registered thread before it's joined.
@@ -109,17 +110,40 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
       LOCKS_EXCLUDED(watch_state_lock_) WARN_UNUSED_RESULT;
 
   // Choose a closure to be run at the end of each call to Monitor(). Use only
-  // for testing.
+  // for testing. Reentering the HangWatcher in the closure must be done with
+  // care. It should only be done through certain testing functions because
+  // deadlocks are possible.
   void SetAfterMonitorClosureForTesting(base::RepeatingClosure closure);
+
+  // Choose a closure to be run instead of recording the hang. Used to test
+  // that certain conditions hold true at the time of recording. Use only
+  // for testing. Reentering the HangWatcher in the closure must be done with
+  // care. It should only be done through certain testing functions because
+  // deadlocks are possible.
+  void SetOnHangClosureForTesting(base::RepeatingClosure closure);
 
   // Set a monitoring period other than the default. Use only for
   // testing.
   void SetMonitoringPeriodForTesting(base::TimeDelta period);
 
+  // Choose a callback to invoke right after waiting to monitor in Wait(). Use
+  // only for testing.
+  void SetAfterWaitCallbackForTesting(
+      RepeatingCallback<void(TimeTicks)> callback);
+
   // Force the monitoring loop to resume and evaluate whether to continue.
   // This can trigger a call to Monitor() or not depending on why the
   // HangWatcher thread is sleeping. Use only for testing.
   void SignalMonitorEventForTesting();
+
+  // Call to make sure no more monitoring takes place. The
+  // function is thread-safe and can be called at anytime but won't stop
+  // monitoring that is currently taking place. Use only for testing.
+  void StopMonitoringForTesting();
+
+  // Replace the clock used when calculating time spent
+  // sleeping. Use only for testing.
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
   // Use to block until the hang is recorded. Allows the caller to halt
   // execution so it does not overshoot the hang watch target and result in a
@@ -127,17 +151,74 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   void BlockIfCaptureInProgress();
 
  private:
-  THREAD_CHECKER(thread_checker_);
+  // Use to assert that functions are called on the monitoring thread.
+  THREAD_CHECKER(hang_watcher_thread_checker_);
+
+  // Use to assert that functions are called on the constructing thread.
+  THREAD_CHECKER(constructing_thread_checker_);
+
+  // Invoke base::debug::DumpWithoutCrashing() insuring that the stack frame
+  // right under it in the trace belongs to HangWatcher for easier attribution.
+  NOINLINE static void RecordHang();
+
+  using HangWatchStates =
+      std::vector<std::unique_ptr<internal::HangWatchState>>;
+
+  // Used to save a snapshots of the state of hang watching during capture.
+  // Only the state of hung threads is retained.
+  class BASE_EXPORT WatchStateSnapShot {
+   public:
+    struct WatchStateCopy {
+      base::TimeTicks deadline;
+      base::PlatformThreadId thread_id;
+    };
+
+    // Construct the snapshot from provided data. |snapshot_time| can be
+    // different than now() to be coherent with other operations recently done
+    // on |watch_states|. If any deadline in |watch_states| is before
+    // |deadline_ignore_threshold|, the snapshot is empty.
+    WatchStateSnapShot(const HangWatchStates& watch_states,
+                       base::TimeTicks snapshot_time,
+                       base::TimeTicks deadline_ignore_threshold);
+    WatchStateSnapShot(const WatchStateSnapShot& other);
+    ~WatchStateSnapShot();
+
+    // Returns a string that contains the ids of the hung threads separated by a
+    // '|'. The size of the string is capped at debug::CrashKeySize::Size256. If
+    // no threads are hung returns an empty string.
+    std::string PrepareHungThreadListCrashKey() const;
+
+    // Return the highest deadline included in this snapshot.
+    base::TimeTicks GetHighestDeadline() const;
+
+   private:
+    base::TimeTicks snapshot_time_;
+    std::vector<WatchStateCopy> hung_watch_state_copies_;
+  };
+
+  // Return a watch state snapshot taken Now() to be inspected in tests.
+  // NO_THREAD_SAFETY_ANALYSIS is needed because the analyzer can't figure out
+  // that calls to this function done from |on_hang_closure_| are properly
+  // locked.
+  WatchStateSnapShot GrabWatchStateSnapshotForTesting() const
+      NO_THREAD_SAFETY_ANALYSIS;
 
   // Inspects the state of all registered threads to check if they are hung and
   // invokes the appropriate closure if so.
-  void Monitor();
+  void Monitor() LOCKS_EXCLUDED(watch_state_lock_);
+
+  // Record the hang and perform the necessary housekeeping before and after.
+  void CaptureHang(base::TimeTicks capture_time)
+      EXCLUSIVE_LOCKS_REQUIRED(watch_state_lock_) LOCKS_EXCLUDED(capture_lock_);
 
   // Call Run() on the HangWatcher thread.
   void Start();
 
   // Stop all monitoring and join the HangWatcher thread.
   void Stop();
+
+  // Wait until it's time to monitor.
+  void Wait();
 
   // Run the loop that periodically monitors the registered thread at a
   // set time interval.
@@ -158,7 +239,6 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   // watch list.
   void UnregisterThread() LOCKS_EXCLUDED(watch_state_lock_);
 
-  const RepeatingClosure on_hang_closure_;
   Lock watch_state_lock_;
 
   std::vector<std::unique_ptr<internal::HangWatchState>> watch_states_
@@ -166,12 +246,21 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
 
   base::DelegateSimpleThread thread_;
 
-  base::RepeatingClosure after_monitor_closure_for_testing_;
+  RepeatingClosure after_monitor_closure_for_testing_;
+  RepeatingClosure on_hang_closure_for_testing_;
+  RepeatingCallback<void(TimeTicks)> after_wait_callback_;
 
-  base::Lock capture_lock_;
+  base::Lock capture_lock_ ACQUIRED_AFTER(watch_state_lock_);
   std::atomic<bool> capture_in_progress{false};
 
+  const base::TickClock* tick_clock_;
+
+  // The time after which all deadlines in |watch_states_| need to be for a hang
+  // to be reported.
+  base::TimeTicks deadline_ignore_threshold_;
+
   FRIEND_TEST_ALL_PREFIXES(HangWatcherTest, NestedScopes);
+  FRIEND_TEST_ALL_PREFIXES(HangWatcherSnapshotTest, HungThreadIDs);
 };
 
 // Classes here are exposed in the header only for testing. They are not
@@ -205,7 +294,7 @@ class BASE_EXPORT HangWatchState {
   // store the value. To test if the deadline has expired use IsOverDeadline().
   TimeTicks GetDeadline() const;
 
-  // Atomically sets the deadline to a new value and return the previous value.
+  // Atomically sets the deadline to a new value.
   void SetDeadline(TimeTicks deadline);
 
   // Tests whether the associated thread's execution has gone over the deadline.
@@ -219,6 +308,8 @@ class BASE_EXPORT HangWatchState {
   HangWatchScope* GetCurrentHangWatchScope();
 #endif
 
+  PlatformThreadId GetThreadID() const;
+
  private:
   // The thread that creates the instance should be the class that updates
   // the deadline.
@@ -227,6 +318,8 @@ class BASE_EXPORT HangWatchState {
   // If the deadline fails to be updated before TimeTicks::Now() ever
   // reaches the value contained in it this constistutes a hang.
   std::atomic<TimeTicks> deadline_{base::TimeTicks::Max()};
+
+  const PlatformThreadId thread_id_;
 
 #if DCHECK_IS_ON()
   // Used to keep track of the current HangWatchScope and detect improper usage.

@@ -18,408 +18,451 @@ cr.define('settings', function() {
       !window.settings || !settings.defaultResourceLoaded,
       'settings_ui.js run twice. You probably have an invalid import.');
 
-  return {defaultResourceLoaded};
-});
 
-Polymer({
-  is: 'os-settings-ui',
+  Polymer({
+    is: 'os-settings-ui',
 
-  behaviors: [
-    CrContainerShadowBehavior,
-    FindShortcutBehavior,
-    // Calls currentRouteChanged() in attached(), so ensure other behaviors run
-    // their attached() first.
-    settings.RouteObserverBehavior,
-  ],
+    behaviors: [
+      CrContainerShadowBehavior,
+      FindShortcutBehavior,
+      // Calls currentRouteChanged() in attached(), so ensure other behaviors
+      // run their attached() first.
+      settings.RouteObserverBehavior,
+    ],
 
-  properties: {
+    properties: {
+      /**
+       * Preferences state.
+       */
+      prefs: Object,
+
+      /** @private */
+      advancedOpenedInMain_: {
+        type: Boolean,
+        value: false,
+        notify: true,
+        observer: 'onAdvancedOpenedInMainChanged_',
+      },
+
+      /** @private */
+      advancedOpenedInMenu_: {
+        type: Boolean,
+        value: false,
+        notify: true,
+        observer: 'onAdvancedOpenedInMenuChanged_',
+      },
+
+      /** @private {boolean} */
+      toolbarSpinnerActive_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
+       * Whether settings is in the narrow state (side nav hidden). Controlled
+       * by a binding in the os-toolbar element.
+       */
+      isNarrow: {
+        type: Boolean,
+        value: false,
+        readonly: true,
+        notify: true,
+        observer: 'onNarrowChanged_',
+      },
+
+      /**
+       * @private {!OSPageVisibility}
+       */
+      pageVisibility_: {type: Object, value: settings.osPageVisibility},
+
+      /** @private */
+      havePlayStoreApp_: Boolean,
+
+      /** @private */
+      showAndroidApps_: Boolean,
+
+      /** @private */
+      showCrostini_: Boolean,
+
+      /** @private */
+      showToolbar_: Boolean,
+
+      /** @private */
+      showNavMenu_: Boolean,
+
+      /** @private */
+      showPluginVm_: Boolean,
+
+      /** @private */
+      showReset_: Boolean,
+
+      /** @private */
+      lastSearchQuery_: {
+        type: String,
+        value: '',
+      },
+
+      /**
+       * The threshold at which the toolbar will change from normal to narrow
+       * mode, in px.
+       * @private {boolean}
+       */
+      narrowThreshold_: {
+        type: Number,
+        value: 980,
+      },
+    },
+
+    listeners: {
+      'refresh-pref': 'onRefreshPref_',
+      'user-action-setting-change': 'onSettingChange_',
+    },
+
     /**
-     * Preferences state.
+     * The route of the selected element in os-settings-menu. Stored here to
+     * defer navigation until drawer animation completes.
+     * @private {settings.Route}
      */
-    prefs: Object,
+    activeRoute_: null,
 
-    /** @private */
-    advancedOpenedInMain_: {
-      type: Boolean,
-      value: false,
-      notify: true,
-      observer: 'onAdvancedOpenedInMainChanged_',
-    },
-
-    /** @private */
-    advancedOpenedInMenu_: {
-      type: Boolean,
-      value: false,
-      notify: true,
-      observer: 'onAdvancedOpenedInMenuChanged_',
-    },
-
-    /** @private {boolean} */
-    toolbarSpinnerActive_: {
-      type: Boolean,
-      value: false,
+    /** @override */
+    created() {
+      settings.Router.getInstance().initializeRouteFromUrl();
     },
 
     /**
-     * Whether settings is in the narrow state (side nav hidden). Controlled by
-     * a binding in the os-toolbar element.
+     * @override
+     * @suppress {es5Strict} Object literals cannot contain duplicate keys in
+     * ES5 strict mode.
      */
-    isNarrow: {
-      type: Boolean,
-      observer: 'onNarrowChanged_',
-    },
+    ready() {
+      CrPolicyStrings = {
+        controlledSettingExtension:
+            loadTimeData.getString('controlledSettingExtension'),
+        controlledSettingExtensionWithoutName:
+            loadTimeData.getString('controlledSettingExtensionWithoutName'),
+        controlledSettingPolicy:
+            loadTimeData.getString('controlledSettingPolicy'),
+        controlledSettingRecommendedMatches:
+            loadTimeData.getString('controlledSettingRecommendedMatches'),
+        controlledSettingRecommendedDiffers:
+            loadTimeData.getString('controlledSettingRecommendedDiffers'),
+        controlledSettingShared:
+            loadTimeData.getString('controlledSettingShared'),
+        controlledSettingWithOwner:
+            loadTimeData.getString('controlledSettingWithOwner'),
+        controlledSettingNoOwner:
+            loadTimeData.getString('controlledSettingNoOwner'),
+        controlledSettingParent:
+            loadTimeData.getString('controlledSettingParent'),
+        controlledSettingChildRestriction:
+            loadTimeData.getString('controlledSettingChildRestriction'),
+      };
 
-    /**
-     * @private {!OSPageVisibility}
-     */
-    pageVisibility_: {type: Object, value: settings.osPageVisibility},
+      this.havePlayStoreApp_ = loadTimeData.getBoolean('havePlayStoreApp');
+      this.showAndroidApps_ = loadTimeData.getBoolean('androidAppsVisible');
+      this.showCrostini_ = loadTimeData.getBoolean('showCrostini');
+      this.showPluginVm_ = loadTimeData.getBoolean('showPluginVm');
+      this.showNavMenu_ = !loadTimeData.getBoolean('isKioskModeActive');
+      this.showToolbar_ = !loadTimeData.getBoolean('isKioskModeActive');
+      this.showReset_ = loadTimeData.getBoolean('allowPowerwash');
 
-    /** @private */
-    havePlayStoreApp_: Boolean,
+      this.addEventListener('show-container', () => {
+        this.$.container.style.visibility = 'visible';
+      });
 
-    /** @private */
-    showAndroidApps_: Boolean,
+      this.addEventListener('hide-container', () => {
+        this.$.container.style.visibility = 'hidden';
+      });
 
-    /** @private */
-    showAppManagement_: Boolean,
-
-    /** @private */
-    showApps_: Boolean,
-
-    /** @private */
-    showCrostini_: Boolean,
-
-    /** @private */
-    showPluginVm_: Boolean,
-
-    /** @private */
-    showReset_: Boolean,
-
-    /** @private */
-    lastSearchQuery_: {
-      type: String,
-      value: '',
-    },
-  },
-
-  listeners: {
-    'refresh-pref': 'onRefreshPref_',
-    'user-action-setting-change': 'onSettingChange_',
-  },
-
-  /**
-   * The route of the selected element in os-settings-menu. Stored here to defer
-   * navigation until drawer animation completes.
-   * @private {settings.Route}
-   */
-  activeRoute_: null,
-
-  /** @override */
-  created() {
-    settings.Router.getInstance().initializeRouteFromUrl();
-  },
-
-  /**
-   * @override
-   * @suppress {es5Strict} Object literals cannot contain duplicate keys in ES5
-   *     strict mode.
-   */
-  ready() {
-    // Lazy-create the drawer the first time it is opened or swiped into view.
-    listenOnce(this.$.drawer, 'cr-drawer-opening', () => {
-      this.$.drawerTemplate.if = true;
-    });
-
-    window.addEventListener('popstate', e => {
-      this.$.drawer.cancel();
-    });
-
-    CrPolicyStrings = {
-      controlledSettingExtension:
-          loadTimeData.getString('controlledSettingExtension'),
-      controlledSettingExtensionWithoutName:
-          loadTimeData.getString('controlledSettingExtensionWithoutName'),
-      controlledSettingPolicy:
-          loadTimeData.getString('controlledSettingPolicy'),
-      controlledSettingRecommendedMatches:
-          loadTimeData.getString('controlledSettingRecommendedMatches'),
-      controlledSettingRecommendedDiffers:
-          loadTimeData.getString('controlledSettingRecommendedDiffers'),
-      controlledSettingShared:
-          loadTimeData.getString('controlledSettingShared'),
-      controlledSettingWithOwner:
-          loadTimeData.getString('controlledSettingWithOwner'),
-      controlledSettingNoOwner:
-          loadTimeData.getString('controlledSettingNoOwner'),
-      controlledSettingParent:
-          loadTimeData.getString('controlledSettingParent'),
-      controlledSettingChildRestriction:
-          loadTimeData.getString('controlledSettingChildRestriction'),
-    };
-
-    this.havePlayStoreApp_ = loadTimeData.getBoolean('havePlayStoreApp');
-    this.showAppManagement_ = loadTimeData.getBoolean('showAppManagement');
-    this.showAndroidApps_ = loadTimeData.getBoolean('androidAppsVisible');
-    this.showApps_ = this.showAppManagement_ || this.showAndroidApps_;
-    this.showCrostini_ = loadTimeData.getBoolean('showCrostini');
-    this.showPluginVm_ = loadTimeData.getBoolean('showPluginVm');
-    this.showReset_ = loadTimeData.getBoolean('allowPowerwash');
-
-    this.addEventListener('show-container', () => {
-      this.$.container.style.visibility = 'visible';
-    });
-
-    this.addEventListener('hide-container', () => {
-      this.$.container.style.visibility = 'hidden';
-    });
-  },
-
-  /** @override */
-  attached() {
-    document.documentElement.classList.remove('loading');
-
-    setTimeout(function() {
-      chrome.send(
-          'metricsHandler:recordTime',
-          ['Settings.TimeUntilInteractive', window.performance.now()]);
-    });
-
-    // Preload bold Roboto so it doesn't load and flicker the first time used.
-    document.fonts.load('bold 12px Roboto');
-    settings.setGlobalScrollTarget(this.$.container);
-
-    const scrollToTop = top => new Promise(resolve => {
-      if (this.$.container.scrollTop === top) {
-        resolve();
+      // If navigation menu is not shown, do not listen to the drawer.
+      if (!this.showNavMenu_) {
         return;
       }
 
-      this.$.container.scrollTo({top: top, behavior: 'auto'});
-      const onScroll = () => {
-        this.debounce('scrollEnd', () => {
-          this.$.container.removeEventListener('scroll', onScroll);
+      this.async(() => {
+        // Lazy-create the drawer the first time it is opened or swiped into
+        // view.
+        const drawer = this.$$('#drawer');
+        assert(drawer);
+        listenOnce(drawer, 'cr-drawer-opening', () => {
+          this.$$('#drawerTemplate').if = true;
+        });
+
+        window.addEventListener('popstate', e => {
+          drawer.cancel();
+        });
+      });
+    },
+
+    /** @override */
+    attached() {
+      document.documentElement.classList.remove('loading');
+
+      setTimeout(function() {
+        chrome.send(
+            'metricsHandler:recordTime',
+            ['Settings.TimeUntilInteractive', window.performance.now()]);
+      });
+
+      // Preload bold Roboto so it doesn't load and flicker the first time used.
+      document.fonts.load('bold 12px Roboto');
+      settings.setGlobalScrollTarget(this.$.container);
+
+      const scrollToTop = top => new Promise(resolve => {
+        if (this.$.container.scrollTop === top) {
           resolve();
-        }, 75);
-      };
-      this.$.container.addEventListener('scroll', onScroll);
-    });
-    this.addEventListener('scroll-to-top', e => {
-      scrollToTop(e.detail.top).then(e.detail.callback);
-    });
-    this.addEventListener('scroll-to-bottom', e => {
-      scrollToTop(e.detail.bottom - this.$.container.clientHeight)
-          .then(e.detail.callback);
-    });
+          return;
+        }
 
-    // Window event listeners will not fire when settings first starts.
-    // Blur events before the first focus event do not matter.
-    if (document.hasFocus()) {
-      settings.recordPageFocus();
-    }
+        this.$.container.scrollTo({top: top, behavior: 'auto'});
+        const onScroll = () => {
+          this.debounce('scrollEnd', () => {
+            this.$.container.removeEventListener('scroll', onScroll);
+            resolve();
+          }, 75);
+        };
+        this.$.container.addEventListener('scroll', onScroll);
+      });
+      this.addEventListener('scroll-to-top', e => {
+        scrollToTop(e.detail.top).then(e.detail.callback);
+      });
+      this.addEventListener('scroll-to-bottom', e => {
+        scrollToTop(e.detail.bottom - this.$.container.clientHeight)
+            .then(e.detail.callback);
+      });
 
-    window.addEventListener('focus', settings.recordPageFocus);
-    window.addEventListener('blur', settings.recordPageBlur);
-  },
+      // Window event listeners will not fire when settings first starts.
+      // Blur events before the first focus event do not matter.
+      if (document.hasFocus()) {
+        settings.recordPageFocus();
+      }
 
-  /** @override */
-  detached() {
-    window.removeEventListener('focus', settings.recordPageFocus);
-    window.removeEventListener('blur', settings.recordPageBlur);
-    settings.Router.getInstance().resetRouteForTesting();
-  },
+      window.addEventListener('focus', settings.recordPageFocus);
+      window.addEventListener('blur', settings.recordPageBlur);
+    },
 
-  /**
-   * @param {!settings.Route} newRoute
-   * @param {!settings.Route} oldRoute
-   */
-  currentRouteChanged(newRoute, oldRoute) {
-    if (oldRoute && newRoute != oldRoute) {
-      // Search triggers route changes and currentRouteChanged() is called
-      // in attached() state which is extraneous for this metric.
-      settings.recordNavigation();
-    }
+    /** @override */
+    detached() {
+      window.removeEventListener('focus', settings.recordPageFocus);
+      window.removeEventListener('blur', settings.recordPageBlur);
+      settings.Router.getInstance().resetRouteForTesting();
+    },
 
-    if (newRoute.depth <= 1) {
-      // Main page uses scroll visibility to determine shadow.
-      this.enableShadowBehavior(true);
-    } else {
-      // Sub-pages always show the top-container shadow.
-      this.enableShadowBehavior(false);
-      this.showDropShadows();
-    }
+    /**
+     * @param {!settings.Route} newRoute
+     * @param {!settings.Route} oldRoute
+     */
+    currentRouteChanged(newRoute, oldRoute) {
+      if (oldRoute && newRoute != oldRoute) {
+        // Search triggers route changes and currentRouteChanged() is called
+        // in attached() state which is extraneous for this metric.
+        settings.recordNavigation();
+      }
 
-    if (loadTimeData.getBoolean('newOsSettingsSearch')) {
-      // TODO(crbug/1056909): Remove when new os settings search complete. This
-      // block prevents the old settings search code from being executed.
-      return;
-    }
+      if (newRoute.depth <= 1) {
+        // Main page uses scroll visibility to determine shadow.
+        this.enableShadowBehavior(true);
+      } else {
+        // Sub-pages always show the top-container shadow.
+        this.enableShadowBehavior(false);
+        this.showDropShadows();
+      }
 
-    const urlSearchQuery =
-        settings.Router.getInstance().getQueryParameters().get('search') || '';
-    if (urlSearchQuery == this.lastSearchQuery_) {
-      return;
-    }
+      if (loadTimeData.getBoolean('newOsSettingsSearch')) {
+        // TODO(crbug/1080777): Remove when new os settings search complete.
+        // This block prevents the old settings search code from being executed.
+        return;
+      }
 
-    this.lastSearchQuery_ = urlSearchQuery;
+      const urlSearchQuery =
+          settings.Router.getInstance().getQueryParameters().get('search') ||
+          '';
+      if (urlSearchQuery == this.lastSearchQuery_) {
+        return;
+      }
 
-    const toolbar = /** @type {!OsToolbarElement} */ (this.$$('os-toolbar'));
-    const searchField =
-        /** @type {?CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
+      this.lastSearchQuery_ = urlSearchQuery;
 
-    if (!searchField) {
-      // TODO(crbug/1056909): Remove this and surrounding code when new os
-      // settings search complete. If the search field has not been rendered
-      // yet, do not continue. crbug/1056909 changes the toolbar search field to
-      // an optional value, so the element is not attached to the DOM the first
-      // time this runs when the new OS Settings search flag is not flipped on.
-      return;
-    }
+      // If toolbar is hidden, do not update anything.
+      if (!this.showToolbar_) {
+        return;
+      }
 
-    // If the search was initiated by directly entering a search URL, need to
-    // sync the URL parameter to the textbox.
-    if (urlSearchQuery != searchField.getValue()) {
-      // Setting the search box value without triggering a 'search-changed'
-      // event, to prevent an unnecessary duplicate entry in |window.history|.
-      searchField.setValue(urlSearchQuery, true /* noEvent */);
-    }
+      const toolbar = /** @type {!OsToolbarElement} */ (this.$$('os-toolbar'));
+      const searchField =
+          /** @type {?CrToolbarSearchFieldElement} */ (
+              toolbar.getSearchField());
 
-    settings.recordSearch();
-    this.$.main.searchContents(urlSearchQuery);
-  },
+      if (!searchField) {
+        // TODO(crbug/1080777): Remove this and surrounding code when new os
+        // settings search complete. If the search field has not been rendered
+        // yet, do not continue. crbug/1056909 changes the toolbar search field
+        // to an optional value, so the element is not attached to the DOM the
+        // first time this runs when the new OS Settings search flag is not
+        // flipped on.
+        return;
+      }
 
-  // Override FindShortcutBehavior methods.
-  handleFindShortcut(modalContextOpen) {
-    if (modalContextOpen) {
-      return false;
-    }
-    this.$$('os-toolbar').getSearchField().showAndFocus();
-    return true;
-  },
+      // If the search was initiated by directly entering a search URL, need to
+      // sync the URL parameter to the textbox.
+      if (urlSearchQuery != searchField.getValue()) {
+        // Setting the search box value without triggering a 'search-changed'
+        // event, to prevent an unnecessary duplicate entry in |window.history|.
+        searchField.setValue(urlSearchQuery, true /* noEvent */);
+      }
 
-  // Override FindShortcutBehavior methods.
-  searchInputHasFocus() {
-    return this.$$('os-toolbar').getSearchField().isSearchFocused();
-  },
+      settings.recordSearch();
+      this.$.main.searchContents(urlSearchQuery);
+    },
 
-  /**
-   * @param {!CustomEvent<string>} e
-   * @private
-   */
-  onRefreshPref_(e) {
-    return /** @type {SettingsPrefsElement} */ (this.$.prefs).refresh(e.detail);
-  },
+    // Override FindShortcutBehavior methods.
+    handleFindShortcut(modalContextOpen) {
+      if (modalContextOpen || !this.showToolbar_) {
+        return false;
+      }
+      this.$$('os-toolbar').getSearchField().showAndFocus();
+      return true;
+    },
 
-  /**
-   * @private
-   */
-  onSettingChange_() {
-    settings.recordSettingChange();
-  },
+    // Override FindShortcutBehavior methods.
+    searchInputHasFocus() {
+      if (!this.showToolbar_) {
+        return;
+      }
+      return this.$$('os-toolbar').getSearchField().isSearchFocused();
+    },
 
-  /**
-   * Handles the 'search-changed' event fired from the toolbar.
-   * TODO(crbug/1056909): Remove when new settings search complete.
-   * @param {!Event} e
-   * @private
-   */
-  onSearchChanged_(e) {
-    if (loadTimeData.getBoolean('newOsSettingsSearch')) {
-      return;
-    }
-    const query = e.detail;
-    settings.Router.getInstance().navigateTo(
-        settings.routes.BASIC,
-        query.length > 0 ?
-            new URLSearchParams('search=' + encodeURIComponent(query)) :
-            undefined,
-        /* removeSearch */ true);
-  },
+    /**
+     * @param {!CustomEvent<string>} e
+     * @private
+     */
+    onRefreshPref_(e) {
+      return /** @type {SettingsPrefsElement} */ (this.$.prefs)
+          .refresh(e.detail);
+    },
 
-  /**
-   * Called when a section is selected.
-   * @param {!Event} e
-   * @private
-   */
-  onIronActivate_(e) {
-    const section = e.detail.selected;
-    const path = new URL(section).pathname;
-    const route = settings.Router.getInstance().getRouteForPath(path);
-    assert(route, 'os-settings-menu has an entry with an invalid route.');
-    this.activeRoute_ = route;
+    /**
+     * @private
+     */
+    onSettingChange_() {
+      settings.recordSettingChange();
+    },
 
-    if (this.isNarrow) {
-      // If the onIronActivate event came from the drawer, close the drawer and
-      // wait for the menu to close before navigating to |activeRoute_|.
-      this.$.drawer.close();
-      return;
-    }
-    this.navigateToActiveRoute_();
-  },
-
-  /** @private */
-  onMenuButtonTap_() {
-    this.$.drawer.toggle();
-  },
-
-
-  /**
-   * Navigates to |activeRoute_| if set. Used to delay navigation until after
-   * animations complete to ensure focus ends up in the right place.
-   * @private
-   */
-  navigateToActiveRoute_() {
-    if (this.activeRoute_) {
+    /**
+     * Handles the 'search-changed' event fired from the toolbar.
+     * TODO(crbug/1080777): Remove when new settings search complete.
+     * @param {!Event} e
+     * @private
+     */
+    onSearchChanged_(e) {
+      if (loadTimeData.getBoolean('newOsSettingsSearch')) {
+        return;
+      }
+      const query = e.detail;
       settings.Router.getInstance().navigateTo(
-          this.activeRoute_, /* dynamicParams */ null, /* removeSearch */ true);
-      this.activeRoute_ = null;
-    }
-  },
+          settings.routes.BASIC,
+          query.length > 0 ?
+              new URLSearchParams('search=' + encodeURIComponent(query)) :
+              undefined,
+          /* removeSearch */ true);
+    },
 
-  /**
-   * When this is called, The drawer animation is finished, and the dialog no
-   * longer has focus. The selected section will gain focus if one was selected.
-   * Otherwise, the drawer was closed due being canceled, and the main settings
-   * container is given focus. That way the arrow keys can be used to scroll
-   * the container, and pressing tab focuses a component in settings.
-   * @private
-   */
-  onMenuClose_() {
-    if (!this.$.drawer.wasCanceled()) {
-      // If a navigation happened, MainPageBehavior#currentRouteChanged handles
-      // focusing the corresponding section when we call settings.NavigateTo().
+    /**
+     * Called when a section is selected.
+     * @param {!Event} e
+     * @private
+     */
+    onIronActivate_(e) {
+      assert(this.showNavMenu_);
+      const section = e.detail.selected;
+      const path = new URL(section).pathname;
+      const route = settings.Router.getInstance().getRouteForPath(path);
+      assert(route, 'os-settings-menu has an entry with an invalid route.');
+      this.activeRoute_ = route;
+
+      if (this.isNarrow) {
+        // If the onIronActivate event came from the drawer, close the drawer
+        // and wait for the menu to close before navigating to |activeRoute_|.
+        this.$$('#drawer').close();
+        return;
+      }
       this.navigateToActiveRoute_();
-      return;
-    }
+    },
 
-    // Add tab index so that the container can be focused.
-    this.$.container.setAttribute('tabindex', '-1');
-    this.$.container.focus();
+    /** @private */
+    onMenuButtonTap_() {
+      if (!this.showNavMenu_) {
+        return;
+      }
+      this.$$('#drawer').toggle();
+    },
 
-    listenOnce(this.$.container, ['blur', 'pointerdown'], () => {
-      this.$.container.removeAttribute('tabindex');
-    });
-  },
+    /**
+     * Navigates to |activeRoute_| if set. Used to delay navigation until after
+     * animations complete to ensure focus ends up in the right place.
+     * @private
+     */
+    navigateToActiveRoute_() {
+      if (this.activeRoute_) {
+        settings.Router.getInstance().navigateTo(
+            this.activeRoute_, /* dynamicParams */ null,
+            /* removeSearch */ true);
+        this.activeRoute_ = null;
+      }
+    },
 
-  /** @private */
-  onAdvancedOpenedInMainChanged_() {
-    // Only sync value when opening, not closing.
-    if (this.advancedOpenedInMain_) {
-      this.advancedOpenedInMenu_ = true;
-    }
-  },
+    /**
+     * When this is called, The drawer animation is finished, and the dialog no
+     * longer has focus. The selected section will gain focus if one was
+     * selected. Otherwise, the drawer was closed due being canceled, and the
+     * main settings container is given focus. That way the arrow keys can be
+     * used to scroll the container, and pressing tab focuses a component in
+     * settings.
+     * @private
+     */
+    onMenuClose_() {
+      if (!this.$$('#drawer').wasCanceled()) {
+        // If a navigation happened, MainPageBehavior#currentRouteChanged
+        // handles focusing the corresponding section when we call
+        // settings.NavigateTo().
+        this.navigateToActiveRoute_();
+        return;
+      }
 
-  /** @private */
-  onAdvancedOpenedInMenuChanged_() {
-    // Only sync value when opening, not closing.
-    if (this.advancedOpenedInMenu_) {
-      this.advancedOpenedInMain_ = true;
-    }
-  },
+      // Add tab index so that the container can be focused.
+      this.$.container.setAttribute('tabindex', '-1');
+      this.$.container.focus();
 
-  /** @private */
-  onNarrowChanged_() {
-    if (this.$.drawer.open && !this.isNarrow) {
-      this.$.drawer.close();
-    }
-  },
+      listenOnce(this.$.container, ['blur', 'pointerdown'], () => {
+        this.$.container.removeAttribute('tabindex');
+      });
+    },
+
+    /** @private */
+    onAdvancedOpenedInMainChanged_() {
+      // Only sync value when opening, not closing.
+      if (this.advancedOpenedInMain_) {
+        this.advancedOpenedInMenu_ = true;
+      }
+    },
+
+    /** @private */
+    onAdvancedOpenedInMenuChanged_() {
+      // Only sync value when opening, not closing.
+      if (this.advancedOpenedInMenu_) {
+        this.advancedOpenedInMain_ = true;
+      }
+    },
+
+    /** @private */
+    onNarrowChanged_() {
+      if (this.showNavMenu_ && this.$$('#drawer').open && !this.isNarrow) {
+        this.$$('#drawer').close();
+      }
+    },
+  });
+
+  // #cr_define_end
+  return {defaultResourceLoaded};
 });

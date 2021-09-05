@@ -38,11 +38,16 @@
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/feature_policy/document_policy_features.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/web/web_print_page_description.h"
 #include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_tester.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/css/media_query_matcher.h"
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
@@ -82,6 +87,12 @@ using network::mojom::ContentSecurityPolicySource;
 using network::mojom::ContentSecurityPolicyType;
 
 class DocumentTest : public PageTestBase {
+ public:
+  static void SimulateHasTrustTokensAnswererConnectionError(
+      Document* document) {
+    document->HasTrustTokensAnswererConnectionError();
+  }
+
  protected:
   void TearDown() override {
     ThreadState::Current()->CollectAllGarbageForTesting();
@@ -329,6 +340,19 @@ class PrefersColorSchemeTestListener final : public MediaQueryListListener {
   bool notified_ = false;
 };
 
+bool IsDOMException(ScriptState* script_state,
+                    ScriptValue value,
+                    DOMExceptionCode code) {
+  auto* dom_exception = V8DOMException::ToImplWithTypeCheck(
+      script_state->GetIsolate(), value.V8Value());
+  if (!dom_exception)
+    return false;
+
+  // Unfortunately, it's not enough to check |dom_exception->code() == code|,
+  // as DOMException::code is only populated for the DOMExceptionCodes with
+  // "legacy code" numeric values.
+  return dom_exception->name() == DOMException(code).name();
+}
 }  // anonymous namespace
 
 TEST_F(DocumentTest, CreateRangeAdjustedToTreeScopeWithPositionInShadowTree) {
@@ -1180,9 +1204,9 @@ TEST_F(DocumentTest, FindInPageUkm) {
   EXPECT_FALSE(ukm::TestUkmRecorder::EntryHasMetric(
       entries[0], "DidHaveRenderSubtreeMatch"));
 
-  GetDocument().MarkHasFindInPageSubtreeVisibilityActiveMatch();
+  GetDocument().MarkHasFindInPageContentVisibilityActiveMatch();
   EXPECT_EQ(recorder->entries_count(), 2u);
-  GetDocument().MarkHasFindInPageSubtreeVisibilityActiveMatch();
+  GetDocument().MarkHasFindInPageContentVisibilityActiveMatch();
   EXPECT_EQ(recorder->entries_count(), 2u);
   entries = recorder->GetEntriesByName("Blink.FindInPage");
   EXPECT_EQ(entries.size(), 2u);
@@ -1209,14 +1233,185 @@ TEST_F(DocumentTest, AtPageMarginWithDeviceScaleFactor) {
   GetDocument().GetFrame()->StartPrinting(initial_page_size, initial_page_size);
   GetDocument().View()->UpdateLifecyclePhasesForPrinting();
 
-  DoubleSize page_size;
-  int margin[4];
-  GetDocument().PageSizeAndMarginsInPixels(0, page_size, margin[0], margin[1],
-                                           margin[2], margin[3]);
+  WebPrintPageDescription description;
+  GetDocument().GetPageDescription(0, &description);
 
-  for (int side_margin : margin)
-    EXPECT_EQ(50, side_margin);
-  EXPECT_EQ(DoubleSize(400, 960), page_size);
+  EXPECT_EQ(50, description.margin_top);
+  EXPECT_EQ(50, description.margin_right);
+  EXPECT_EQ(50, description.margin_bottom);
+  EXPECT_EQ(50, description.margin_left);
+  EXPECT_EQ(WebDoubleSize(400, 960), description.size);
+}
+
+TEST(Document, HandlesDisconnectDuringHasTrustToken) {
+  // Check that a Mojo handle disconnecting during hasTrustToken operation
+  // execution results in the promise getting rejected with the proper
+  // exception.
+  V8TestingScope scope(KURL("https://trusttoken.example"));
+
+  Document& document = scope.GetDocument();
+
+  auto promise =
+      document.hasTrustToken(scope.GetScriptState(), "https://issuer.example",
+                             scope.GetExceptionState());
+  DocumentTest::SimulateHasTrustTokensAnswererConnectionError(&document);
+
+  ASSERT_TRUE(promise.IsAssociatedWith(scope.GetScriptState()));
+
+  ScriptPromiseTester promise_tester(scope.GetScriptState(), promise);
+  promise_tester.WaitUntilSettled();
+  EXPECT_TRUE(promise_tester.IsRejected());
+  EXPECT_TRUE(IsDOMException(scope.GetScriptState(), promise_tester.Value(),
+                             DOMExceptionCode::kOperationError));
+}
+
+TEST(Document, RejectsHasTrustTokenCallFromNonHttpNonHttpsDocument) {
+  // Check that hasTrustToken getting called from a secure, but
+  // non-http/non-https, document results in an exception being thrown.
+  V8TestingScope scope(KURL("file:///trusttoken.txt"));
+
+  Document& document = scope.GetDocument();
+  ScriptState* script_state = scope.GetScriptState();
+  ExceptionState exception_state(script_state->GetIsolate(),
+                                 ExceptionState::kExecutionContext, "Document",
+                                 "hasTrustToken");
+
+  auto promise = document.hasTrustToken(script_state, "https://issuer.example",
+                                        exception_state);
+
+  ScriptPromiseTester promise_tester(script_state, promise);
+  promise_tester.WaitUntilSettled();
+  EXPECT_TRUE(promise_tester.IsRejected());
+  EXPECT_TRUE(IsDOMException(script_state, promise_tester.Value(),
+                             DOMExceptionCode::kNotAllowedError));
+}
+
+namespace {
+class MockHasTrustTokensAnswerer
+    : public network::mojom::blink::HasTrustTokensAnswerer {
+ public:
+  enum Outcome { kError, kTrue, kFalse };
+  explicit MockHasTrustTokensAnswerer(Outcome outcome) : outcome_(outcome) {}
+
+  void HasTrustTokens(
+      const ::scoped_refptr<const ::blink::SecurityOrigin>& issuer,
+      HasTrustTokensCallback callback) override {
+    auto result = network::mojom::blink::HasTrustTokensResult::New();
+    result->status = network::mojom::blink::TrustTokenOperationStatus::kOk;
+    switch (outcome_) {
+      case kTrue: {
+        result->has_trust_tokens = true;
+        std::move(callback).Run(std::move(result));
+        return;
+      }
+      case kFalse: {
+        result->has_trust_tokens = false;
+        std::move(callback).Run(std::move(result));
+        return;
+      }
+      case kError: {
+        result->status =
+            network::mojom::blink::TrustTokenOperationStatus::kUnknownError;
+        std::move(callback).Run(std::move(result));
+      }
+    }
+  }
+
+  void Bind(mojo::ScopedMessagePipeHandle handle) {
+    receiver_.Bind(
+        mojo::PendingReceiver<network::mojom::blink::HasTrustTokensAnswerer>(
+            std::move(handle)));
+  }
+
+ private:
+  Outcome outcome_;
+  mojo::Receiver<network::mojom::blink::HasTrustTokensAnswerer> receiver_{this};
+};
+}  // namespace
+
+TEST(Document, HasTrustTokenSuccess) {
+  V8TestingScope scope(KURL("https://secure.example"));
+
+  MockHasTrustTokensAnswerer answerer(MockHasTrustTokensAnswerer::kTrue);
+
+  Document& document = scope.GetDocument();
+  document.GetFrame()->GetBrowserInterfaceBroker().SetBinderForTesting(
+      network::mojom::blink::HasTrustTokensAnswerer::Name_,
+      WTF::BindRepeating(&MockHasTrustTokensAnswerer::Bind,
+                         WTF::Unretained(&answerer)));
+
+  ScriptState* script_state = scope.GetScriptState();
+  ExceptionState exception_state(script_state->GetIsolate(),
+                                 ExceptionState::kExecutionContext, "Document",
+                                 "hasTrustToken");
+
+  auto promise = document.hasTrustToken(script_state, "https://issuer.example",
+                                        exception_state);
+
+  ScriptPromiseTester promise_tester(script_state, promise);
+  promise_tester.WaitUntilSettled();
+  EXPECT_TRUE(promise_tester.IsFulfilled());
+  EXPECT_TRUE(promise_tester.Value().V8Value()->IsTrue());
+
+  document.GetFrame()->GetBrowserInterfaceBroker().SetBinderForTesting(
+      network::mojom::blink::HasTrustTokensAnswerer::Name_, {});
+}
+
+TEST(Document, HasTrustTokenSuccessWithFalseValue) {
+  V8TestingScope scope(KURL("https://secure.example"));
+
+  MockHasTrustTokensAnswerer answerer(MockHasTrustTokensAnswerer::kFalse);
+
+  Document& document = scope.GetDocument();
+  document.GetFrame()->GetBrowserInterfaceBroker().SetBinderForTesting(
+      network::mojom::blink::HasTrustTokensAnswerer::Name_,
+      WTF::BindRepeating(&MockHasTrustTokensAnswerer::Bind,
+                         WTF::Unretained(&answerer)));
+
+  ScriptState* script_state = scope.GetScriptState();
+  ExceptionState exception_state(script_state->GetIsolate(),
+                                 ExceptionState::kExecutionContext, "Document",
+                                 "hasTrustToken");
+
+  auto promise = document.hasTrustToken(script_state, "https://issuer.example",
+                                        exception_state);
+
+  ScriptPromiseTester promise_tester(script_state, promise);
+  promise_tester.WaitUntilSettled();
+  EXPECT_TRUE(promise_tester.IsFulfilled());
+  EXPECT_TRUE(promise_tester.Value().V8Value()->IsFalse());
+
+  document.GetFrame()->GetBrowserInterfaceBroker().SetBinderForTesting(
+      network::mojom::blink::HasTrustTokensAnswerer::Name_, {});
+}
+
+TEST(Document, HasTrustTokenOperationError) {
+  V8TestingScope scope(KURL("https://secure.example"));
+
+  MockHasTrustTokensAnswerer answerer(MockHasTrustTokensAnswerer::kError);
+
+  Document& document = scope.GetDocument();
+  document.GetFrame()->GetBrowserInterfaceBroker().SetBinderForTesting(
+      network::mojom::blink::HasTrustTokensAnswerer::Name_,
+      WTF::BindRepeating(&MockHasTrustTokensAnswerer::Bind,
+                         WTF::Unretained(&answerer)));
+
+  ScriptState* script_state = scope.GetScriptState();
+  ExceptionState exception_state(script_state->GetIsolate(),
+                                 ExceptionState::kExecutionContext, "Document",
+                                 "hasTrustToken");
+
+  auto promise = document.hasTrustToken(script_state, "https://issuer.example",
+                                        exception_state);
+
+  ScriptPromiseTester promise_tester(script_state, promise);
+  promise_tester.WaitUntilSettled();
+  EXPECT_TRUE(promise_tester.IsRejected());
+  EXPECT_TRUE(IsDOMException(script_state, promise_tester.Value(),
+                             DOMExceptionCode::kOperationError));
+
+  document.GetFrame()->GetBrowserInterfaceBroker().SetBinderForTesting(
+      network::mojom::blink::HasTrustTokensAnswerer::Name_, {});
 }
 
 /**
@@ -1236,22 +1431,6 @@ class ViewportFitDocumentTest : public DocumentTest,
     return GetDocument().GetViewportData().GetCurrentViewportFitForTests();
   }
 };
-
-// Test both meta and @viewport present but no viewport-fit.
-TEST_F(ViewportFitDocumentTest, MetaCSSViewportButNoFit) {
-  SetHtmlInnerHTML(
-      "<style>@viewport { min-width: 100px; }</style>"
-      "<meta name='viewport' content='initial-scale=1'>");
-
-  EXPECT_EQ(mojom::ViewportFit::kAuto, GetViewportFit());
-}
-
-// Test @viewport present but no viewport-fit.
-TEST_F(ViewportFitDocumentTest, CSSViewportButNoFit) {
-  SetHtmlInnerHTML("<style>@viewport { min-width: 100px; }</style>");
-
-  EXPECT_EQ(mojom::ViewportFit::kAuto, GetViewportFit());
-}
 
 // Test meta viewport present but no viewport-fit.
 TEST_F(ViewportFitDocumentTest, MetaViewportButNoFit) {
@@ -1280,8 +1459,7 @@ TEST_F(ViewportFitDocumentTest, ForceExpandIntoCutout) {
 
 // This is a test case for testing a combination of viewport-fit meta value,
 // viewport CSS value and the expected outcome.
-using ViewportTestCase =
-    std::tuple<const char*, const char*, mojom::ViewportFit>;
+using ViewportTestCase = std::tuple<const char*, mojom::ViewportFit>;
 
 class ParameterizedViewportFitDocumentTest
     : public ViewportFitDocumentTest,
@@ -1289,14 +1467,7 @@ class ParameterizedViewportFitDocumentTest
  protected:
   void LoadTestHTML() {
     const char* kMetaValue = std::get<0>(GetParam());
-    const char* kCSSValue = std::get<1>(GetParam());
     StringBuilder html;
-
-    if (kCSSValue) {
-      html.Append("<style>@viewport { viewport-fit: ");
-      html.Append(kCSSValue);
-      html.Append("; }</style>");
-    }
 
     if (kMetaValue) {
       html.Append("<meta name='viewport' content='viewport-fit=");
@@ -1311,7 +1482,7 @@ class ParameterizedViewportFitDocumentTest
 
 TEST_P(ParameterizedViewportFitDocumentTest, EffectiveViewportFit) {
   LoadTestHTML();
-  EXPECT_EQ(std::get<2>(GetParam()), GetViewportFit());
+  EXPECT_EQ(std::get<1>(GetParam()), GetViewportFit());
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1319,19 +1490,11 @@ INSTANTIATE_TEST_SUITE_P(
     ParameterizedViewportFitDocumentTest,
     testing::Values(
         // Test the default case.
-        ViewportTestCase(nullptr, nullptr, mojom::ViewportFit::kAuto),
-        // Test the different values set through CSS.
-        ViewportTestCase(nullptr, "auto", mojom::ViewportFit::kAuto),
-        ViewportTestCase(nullptr, "contain", mojom::ViewportFit::kContain),
-        ViewportTestCase(nullptr, "cover", mojom::ViewportFit::kCover),
-        ViewportTestCase(nullptr, "invalid", mojom::ViewportFit::kAuto),
+        ViewportTestCase(nullptr, mojom::ViewportFit::kAuto),
         // Test the different values set through the meta tag.
-        ViewportTestCase("auto", nullptr, mojom::ViewportFit::kAuto),
-        ViewportTestCase("contain", nullptr, mojom::ViewportFit::kContain),
-        ViewportTestCase("cover", nullptr, mojom::ViewportFit::kCover),
-        ViewportTestCase("invalid", nullptr, mojom::ViewportFit::kAuto),
-        // Test that the CSS should override the meta tag.
-        ViewportTestCase("cover", "auto", mojom::ViewportFit::kAuto),
-        ViewportTestCase("cover", "contain", mojom::ViewportFit::kContain)));
+        ViewportTestCase("auto", mojom::ViewportFit::kAuto),
+        ViewportTestCase("contain", mojom::ViewportFit::kContain),
+        ViewportTestCase("cover", mojom::ViewportFit::kCover),
+        ViewportTestCase("invalid", mojom::ViewportFit::kAuto)));
 
 }  // namespace blink

@@ -24,7 +24,6 @@ import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksReader;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -39,6 +38,9 @@ public class PartnerBrowserCustomizations {
     private static final String TAG = "PartnerCustomize";
     private static final String PROVIDER_AUTHORITY = "com.android.partnerbrowsercustomizations";
 
+    /** Default timeout in ms for reading PartnerBrowserCustomizations provider. */
+    private static final int DEFAULT_TIMEOUT_MS = 10_000;
+
     private static final int HOMEPAGE_URL_MAX_LENGTH = 1000;
     // Private homepage structure.
     @VisibleForTesting
@@ -49,7 +51,7 @@ public class PartnerBrowserCustomizations {
     static final String PARTNER_DISABLE_INCOGNITO_MODE_PATH = "disableincognitomode";
 
     private static String sProviderAuthority = PROVIDER_AUTHORITY;
-    private static boolean sIgnoreBrowserProviderSystemPackageCheck;
+    private static Boolean sIgnoreSystemPackageCheck;
 
     private static volatile PartnerBrowserCustomizations sInstance;
 
@@ -95,17 +97,34 @@ public class PartnerBrowserCustomizations {
             if (providerInfo == null) {
                 return false;
             }
+            if ((providerInfo.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+                return true;
+            }
 
-            if ((providerInfo.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0
-                    && !sIgnoreBrowserProviderSystemPackageCheck) {
-                Log.w(TAG,
-                        "Browser Customizations content provider package, "
-                                + providerInfo.packageName + ", is not a system package. "
-                                + "This could be a malicious attempt from a third party "
-                                + "app, so skip reading the browser content provider.");
+            // In prod mode (sIgnoreBrowserProviderSystemPackageCheck == null), non-system package
+            // is rejected unless Chrome Android is a local build.
+            // When sIgnoreBrowserProviderSystemPackageCheck is true, accept non-system package.
+            // When sIgnoreBrowserProviderSystemPackageCheck is false, reject non-system package.
+            if (sIgnoreSystemPackageCheck != null && sIgnoreSystemPackageCheck) {
+                return true;
+            }
+
+            Log.w(TAG,
+                    "Browser Customizations content provider package, " + providerInfo.packageName
+                            + ", is not a system package. "
+                            + "This could be a malicious attempt from a third party "
+                            + "app, so skip reading the browser content provider.");
+            if (sIgnoreSystemPackageCheck != null && !sIgnoreSystemPackageCheck) {
                 return false;
             }
-            return true;
+            if (ChromeVersionInfo.isLocalBuild()) {
+                Log.w(TAG,
+                        "This is a local build of Chrome Android, "
+                                + "so keep reading the browser content provider, "
+                                + "to make debugging customization easier.");
+                return true;
+            }
+            return false;
         }
 
         private boolean isValid() {
@@ -211,8 +230,7 @@ public class PartnerBrowserCustomizations {
     /**
      * @return Whether partner bookmarks editing is disabled by the partner.
      */
-    @VisibleForTesting
-    boolean isBookmarksEditingDisabled() {
+    public boolean isBookmarksEditingDisabled() {
         return mBookmarksEditingDisabled;
     }
 
@@ -239,7 +257,7 @@ public class PartnerBrowserCustomizations {
      */
     @VisibleForTesting
     static void ignoreBrowserProviderSystemPackageCheckForTests(boolean ignore) {
-        sIgnoreBrowserProviderSystemPackageCheck = ignore;
+        sIgnoreSystemPackageCheck = ignore;
     }
 
     @VisibleForTesting
@@ -255,17 +273,25 @@ public class PartnerBrowserCustomizations {
      * Constructs an async task that reads PartnerBrowserCustomization provider.
      *
      * @param context   The current application context.
+     */
+    public void initializeAsync(final Context context) {
+        initializeAsync(context, DEFAULT_TIMEOUT_MS);
+    }
+
+    /**
+     * Constructs an async task that reads PartnerBrowserCustomization provider.
+     *
+     * @param context   The current application context.
      * @param timeoutMs If initializing takes more than this time, cancels it. The unit is ms.
      */
-    public void initializeAsync(final Context context, long timeoutMs) {
+    @VisibleForTesting
+    void initializeAsync(final Context context, long timeoutMs) {
         mIsInitialized = false;
-        Provider provider = AppHooks.get().getCustomizationProvider();
         // Setup an initializing async task.
         final AsyncTask<Void> initializeAsyncTask = new AsyncTask<Void>() {
-            private boolean mDisablePartnerBookmarksShim;
             private boolean mHomepageUriChanged;
 
-            private void refreshHomepage() {
+            private void refreshHomepage(Provider provider) {
                 try {
                     String homepage = provider.getHomepage();
                     if (!isValidHomepage(homepage)) {
@@ -280,7 +306,7 @@ public class PartnerBrowserCustomizations {
                 }
             }
 
-            private void refreshIncognitoModeDisabled() {
+            private void refreshIncognitoModeDisabled(Provider provider) {
                 try {
                     mIncognitoModeDisabled = provider.isIncognitoModeDisabled();
                 } catch (Exception e) {
@@ -288,15 +314,9 @@ public class PartnerBrowserCustomizations {
                 }
             }
 
-            private void refreshBookmarksEditingDisabled() {
+            private void refreshBookmarksEditingDisabled(Provider provider) {
                 try {
-                    boolean disabled = provider.isBookmarksEditingDisabled();
-                    // Only need to disable it once.
-                    if (disabled != mBookmarksEditingDisabled) {
-                        assert disabled;
-                        mDisablePartnerBookmarksShim = true;
-                    }
-                    mBookmarksEditingDisabled = disabled;
+                    mBookmarksEditingDisabled = provider.isBookmarksEditingDisabled();
                 } catch (Exception e) {
                     Log.w(TAG, "Partner disable bookmarks editing read failed : ", e);
                 }
@@ -314,20 +334,17 @@ public class PartnerBrowserCustomizations {
                         return null;
                     }
 
-                    if (isCancelled()) {
-                        return null;
-                    }
-                    refreshIncognitoModeDisabled();
+                    if (isCancelled()) return null;
+                    Provider provider = AppHooks.get().getCustomizationProvider();
 
-                    if (isCancelled()) {
-                        return null;
-                    }
-                    refreshBookmarksEditingDisabled();
+                    if (isCancelled()) return null;
+                    refreshIncognitoModeDisabled(provider);
 
-                    if (isCancelled()) {
-                        return null;
-                    }
-                    refreshHomepage();
+                    if (isCancelled()) return null;
+                    refreshBookmarksEditingDisabled(provider);
+
+                    if (isCancelled()) return null;
+                    refreshHomepage(provider);
                 } catch (Exception e) {
                     Log.w(TAG, "Fetching partner customizations failed", e);
                 }
@@ -354,11 +371,6 @@ public class PartnerBrowserCustomizations {
 
                 if (mHomepageUriChanged && mListener != null) {
                     mListener.onHomepageUpdate();
-                }
-
-                // Disable partner bookmarks editing if necessary.
-                if (mDisablePartnerBookmarksShim) {
-                    PartnerBookmarksReader.disablePartnerBookmarksEditing();
                 }
             }
         };
@@ -403,6 +415,7 @@ public class PartnerBrowserCustomizations {
     public static void destroy() {
         getInstance().destroyInternal();
         sInstance = null;
+        sIgnoreSystemPackageCheck = null;
     }
 
     private void destroyInternal() {

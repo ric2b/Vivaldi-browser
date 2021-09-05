@@ -61,6 +61,7 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_preferences.h"
+#include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/host/shader_disk_cache.h"
 #include "gpu/ipc/in_process_command_buffer.h"
@@ -219,6 +220,9 @@ static const char* const kSwitchNames[] = {
     service_manager::switches::kGpuSandboxFailuresFatal,
     service_manager::switches::kDisableGpuSandbox,
     service_manager::switches::kNoSandbox,
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    switches::kDisableDevShmUsage,
+#endif
 #if defined(OS_WIN)
     switches::kDisableHighResTimer,
 #endif  // defined(OS_WIN)
@@ -235,6 +239,7 @@ static const char* const kSwitchNames[] = {
     switches::kEnableLogging,
     switches::kEnableDeJelly,
     switches::kDeJellyScreenWidth,
+    switches::kDoubleBufferCompositing,
     switches::kEnableVizDevTools,
     switches::kHeadless,
     switches::kLoggingLevel,
@@ -620,10 +625,6 @@ void GpuProcessHost::TerminateGpuProcess(const std::string& message) {
   termination_origin_ = GpuTerminationOrigin::kOzoneWaylandProxy;
   process_->TerminateOnBadMessageReceived(message);
 }
-
-void GpuProcessHost::SendGpuProcessMessage(IPC::Message* message) {
-  Send(message);
-}
 #endif  // defined(USE_OZONE)
 
 // static
@@ -686,8 +687,9 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
     in_process_ = true;
   }
 #if !defined(OS_ANDROID)
-  if (!in_process_ && base::FeatureList::IsEnabled(
-                          features::kForwardMemoryPressureEventsToGpuProcess)) {
+  if (!in_process_ && kind != GPU_PROCESS_KIND_INFO_COLLECTION &&
+      base::FeatureList::IsEnabled(
+          features::kForwardMemoryPressureEventsToGpuProcess)) {
     memory_pressure_listener_ =
         std::make_unique<base::MemoryPressureListener>(base::BindRepeating(
             &GpuProcessHost::OnMemoryPressure, base::Unretained(this)));
@@ -763,11 +765,7 @@ GpuProcessHost::~GpuProcessHost() {
         // Don't block offscreen contexts (and force page reload for webgl)
         // if this was an intentional shutdown or the OOM killer on Android
         // killed us while Chrome was in the background.
-// TODO(crbug.com/598400): Restrict this to Android for now, since other
-// platforms might fall through here for the 'exit_on_context_lost' workaround.
-#if defined(OS_ANDROID)
         block_offscreen_contexts = false;
-#endif
         message += "exited normally. Everything is okay.";
         break;
       case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
@@ -869,6 +867,8 @@ bool GpuProcessHost::Init() {
       switches::GetDeadlineToSynchronizeSurfaces();
   params.main_thread_task_runner =
       base::CreateSingleThreadTaskRunner({BrowserThread::UI});
+  params.info_collection_gpu_process =
+      kind_ == GPU_PROCESS_KIND_INFO_COLLECTION;
   gpu_host_ = std::make_unique<viz::GpuHostImpl>(
       this, std::move(viz_main_pending_remote), std::move(params));
 
@@ -913,11 +913,6 @@ bool GpuProcessHost::Send(IPC::Message* msg) {
 
 bool GpuProcessHost::OnMessageReceived(const IPC::Message& message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-#if defined(USE_OZONE)
-  ui::OzonePlatform::GetInstance()
-      ->GetGpuPlatformSupportHost()
-      ->OnMessageReceived(message);
-#endif
   return true;
 }
 
@@ -1138,6 +1133,27 @@ bool GpuProcessHost::LaunchGpuProcess() {
     cmd_line->AppendSwitch(service_manager::switches::kDisableGpuSandbox);
     cmd_line->AppendSwitchASCII(switches::kUseGL,
                                 gl::kGLImplementationDisabledName);
+
+    // Pass the current device info to the info-collection GPU process for
+    // crash key logging.
+    const gpu::GPUInfo::GPUDevice device_info = GetGPUInfo().active_gpu();
+    cmd_line->AppendSwitchASCII(
+        switches::kGpuVendorId,
+        base::StringPrintf("%u", device_info.vendor_id));
+    cmd_line->AppendSwitchASCII(
+        switches::kGpuDeviceId,
+        base::StringPrintf("%u", device_info.device_id));
+#if defined(OS_WIN)
+    cmd_line->AppendSwitchASCII(
+        switches::kGpuSubSystemId,
+        base::StringPrintf("%u", device_info.sub_sys_id));
+    cmd_line->AppendSwitchASCII(switches::kGpuRevision,
+                                base::StringPrintf("%u", device_info.revision));
+#endif
+    if (device_info.driver_version.length()) {
+      cmd_line->AppendSwitchASCII(switches::kGpuDriverVersion,
+                                  device_info.driver_version);
+    }
   }
 
   // TODO(penghuang): Replace all GPU related switches with GpuPreferences.
@@ -1251,6 +1267,14 @@ viz::mojom::GpuService* GpuProcessHost::gpu_service() {
   DCHECK(gpu_host_);
   return gpu_host_->gpu_service();
 }
+
+#if defined(OS_WIN)
+viz::mojom::InfoCollectionGpuService*
+GpuProcessHost::info_collection_gpu_service() {
+  DCHECK(gpu_host_);
+  return gpu_host_->info_collection_gpu_service();
+}
+#endif
 
 int GpuProcessHost::GetIDForTesting() const {
   return process_->GetData().id;

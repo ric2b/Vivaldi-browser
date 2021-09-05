@@ -52,18 +52,14 @@ component("chromeos") {
   sources = [
     "hugepage_text/hugepage_text.cc",
     "hugepage_text/hugepage_text.h",
-    "memory/kstaled.cc",
-    "memory/kstaled.h",
-    "memory/memory.cc",
-    "memory/memory.h",
-    "memory/swap_configuration.cc",
-    "memory/swap_configuration.h",
     "policy/weekly_time/time_utils.cc",
     "policy/weekly_time/time_utils.h",
     "policy/weekly_time/weekly_time.cc",
     "policy/weekly_time/weekly_time.h",
     "policy/weekly_time/weekly_time_interval.cc",
     "policy/weekly_time/weekly_time_interval.h",
+    "printing/cups_printer_status.cc",
+    "printing/cups_printer_status.h",
     "printing/epson_driver_matching.cc",
     "printing/epson_driver_matching.h",
     "printing/ppd_cache.cc",
@@ -75,8 +71,12 @@ component("chromeos") {
     "printing/printer_configuration.h",
     "printing/printer_translator.cc",
     "printing/printer_translator.h",
+    "printing/uri.cc",
+    "printing/uri.h",
     "printing/uri_components.cc",
     "printing/uri_components.h",
+    "printing/uri_impl.cc",
+    "printing/uri_impl.h",
     "printing/usb_printer_id.cc",
     "printing/usb_printer_id.h",
     "process_proxy/process_output_watcher.cc",
@@ -167,6 +167,7 @@ test("chromeos_unittests") {
     "//chromeos/login/auth:unit_tests",
     "//chromeos/login/login_state:unit_tests",
     "//chromeos/login/session:unit_tests",
+    "//chromeos/memory:unit_tests",
     "//chromeos/network:test_support",
     "//chromeos/network:unit_tests",
     "//chromeos/services:unit_tests",
@@ -179,6 +180,8 @@ test("chromeos_unittests") {
     "//components/policy/proto",
     "//components/prefs:test_support",
     "//components/proxy_config",
+    "//crypto",
+    "//crypto:platform",
     "//dbus:test_support",
     "//google_apis",
     "//mojo/core/embedder",
@@ -195,11 +198,15 @@ test("chromeos_unittests") {
     "policy/weekly_time/time_utils_unittest.cc",
     "policy/weekly_time/weekly_time_interval_unittest.cc",
     "policy/weekly_time/weekly_time_unittest.cc",
+    "printing/cups_printer_status_unittest.cc",
     "printing/epson_driver_matching_unittest.cc",
     "printing/ppd_cache_unittest.cc",
     "printing/ppd_line_reader_unittest.cc",
     "printing/printer_configuration_unittest.cc",
     "printing/printer_translator_unittest.cc",
+    "printing/uri_unittest.cc",
+    "printing/uri_unittest.h",
+    "printing/uri_unittest_consistency.cc",
     "printing/usb_printer_id_unittest.cc",
     "process_proxy/process_output_watcher_unittest.cc",
     "process_proxy/process_proxy_unittest.cc",
@@ -273,6 +280,13 @@ if (is_chromeos_device) {
 
       # crbug.com/1056163
       "hwsec.LoginGuest",
+
+      # crbug.com/1059426
+      "ui.ChromeCrashNotLoggedInDirect.breakpad",
+      "ui.ChromeCrashLoggedInDirect.breakpad",
+
+      # crbug.com/1073084
+      "crostini.CopyPaste.wayland_to_x11_artifact",
     ]
   }
 
@@ -306,8 +320,15 @@ fuzzer_test("ppd_line_reader_fuzzer") {
 
 fuzzer_test("printer_configuration_fuzzer") {
   sources = [ "printing/printer_configuration_fuzzer.cc" ]
+  seed_corpus = "printing/uri_fuzzer_seed_corpus"
   deps = [
     ":chromeos",
     "//base",
   ]
+}
+
+fuzzer_test("uri_fuzzer") {
+  sources = [ "printing/uri_fuzzer.cc" ]
+  seed_corpus = "printing/uri_fuzzer_seed_corpus"
+  deps = [ ":chromeos" ]
 }

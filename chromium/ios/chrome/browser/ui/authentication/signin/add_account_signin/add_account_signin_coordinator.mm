@@ -42,6 +42,8 @@ using signin_metrics::PromoAction;
 @property(nonatomic, assign) PromoAction promoAction;
 // Add account sign-in intent.
 @property(nonatomic, assign, readonly) AddAccountSigninIntent signinIntent;
+// Called when the sign-in dialog is interrupted.
+@property(nonatomic, copy) ProceduralBlock interruptCompletion;
 
 @end
 
@@ -69,12 +71,23 @@ using signin_metrics::PromoAction;
 - (void)interruptWithAction:(SigninCoordinatorInterruptAction)action
                  completion:(ProceduralBlock)completion {
   if (self.userSigninCoordinator) {
+    DCHECK(!self.identityInteractionManager);
+    // When interrupting |self.userSigninCoordinator|,
+    // |self.userSigninCoordinator.signinCompletion| is called. This callback
+    // is in charge to call |[self runCompletionCallbackWithSigninResult:
+    // identity:showAdvancedSettingsSignin:].
     [self.userSigninCoordinator interruptWithAction:action
                                          completion:completion];
     return;
   }
 
   DCHECK(self.identityInteractionManager);
+  // IdentityInteractionManager |cancelAndDismissAnimated| will trigger the call
+  // to add account completion in the AddAccountMediator, however we must also
+  // ensure that the interrupt completion is called on sign-in completion.
+  // TODO(crbug.com/1072347): Update IdentityInteractionManager dismiss API.
+  self.interruptCompletion = completion;
+  self.mediator.signinInterrupted = YES;
   switch (action) {
     case SigninCoordinatorInterruptActionNoDismiss:
       // SSO doesn't support cancel without dismiss, so to make sure the cancel
@@ -89,9 +102,6 @@ using signin_metrics::PromoAction;
       // dismissed, we need to dismiss without animation.
       [self.identityInteractionManager cancelAndDismissAnimated:NO];
       break;
-  }
-  if (completion) {
-    completion();
   }
 }
 
@@ -156,8 +166,8 @@ using signin_metrics::PromoAction;
                                                       identity:nil];
   };
 
-  self.alertCoordinator =
-      ErrorCoordinator(error, dismissAction, self.baseViewController);
+  self.alertCoordinator = ErrorCoordinator(
+      error, dismissAction, self.baseViewController, self.browser);
   [self.alertCoordinator start];
 }
 
@@ -165,7 +175,12 @@ using signin_metrics::PromoAction;
             (SigninCoordinatorResult)signinResult
                                                 identity:
                                                     (ChromeIdentity*)identity {
-  self.identityInteractionManager = nil;
+  if (!self.identityInteractionManager) {
+    // The IdentityInteractionManager callback might be called after the
+    // interrupt method. If this is the case, the AddAccountSigninCoordinator
+    // is already stopped. This call can be ignored.
+    return;
+  }
   switch (self.signinIntent) {
     case AddAccountSigninIntentReauthPrimaryAccount: {
       [self presentUserConsentWithIdentity:identity];
@@ -185,7 +200,13 @@ using signin_metrics::PromoAction;
                               identity:(ChromeIdentity*)identity {
   DCHECK(!self.alertCoordinator);
   DCHECK(!self.userSigninCoordinator);
-  [self runCompletionCallbackWithSigninResult:signinResult identity:identity];
+  self.identityInteractionManager = nil;
+  [self runCompletionCallbackWithSigninResult:signinResult
+                                     identity:identity
+                   showAdvancedSettingsSignin:NO];
+  if (self.interruptCompletion) {
+    self.interruptCompletion();
+  }
 }
 
 // Presents the user consent screen with |identity| pre-selected.
@@ -200,12 +221,14 @@ using signin_metrics::PromoAction;
                                       promoAction:self.promoAction];
 
   __weak AddAccountSigninCoordinator* weakSelf = self;
-  self.userSigninCoordinator.signinCompletion = ^(
-      SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
-    [weakSelf.userSigninCoordinator stop];
-    weakSelf.userSigninCoordinator = nil;
-    [weakSelf addAccountDoneWithSigninResult:signinResult identity:identity];
-  };
+  self.userSigninCoordinator.signinCompletion =
+      ^(SigninCoordinatorResult signinResult,
+        SigninCompletionInfo* signinCompletionInfo) {
+        [weakSelf.userSigninCoordinator stop];
+        weakSelf.userSigninCoordinator = nil;
+        [weakSelf addAccountDoneWithSigninResult:signinResult
+                                        identity:signinCompletionInfo.identity];
+      };
   [self.userSigninCoordinator start];
 }
 

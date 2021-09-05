@@ -73,6 +73,10 @@ DEFINE_UI_CLASS_PROPERTY_KEY(SkColor, kFrameActiveColorKey, kDefaultFrameColor)
 DEFINE_UI_CLASS_PROPERTY_KEY(SkColor,
                              kFrameInactiveColorKey,
                              kDefaultFrameColor)
+DEFINE_UI_CLASS_PROPERTY_KEY(bool, kFrameRestoreLookKey, false)
+DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(base::string16,
+                                   kWindowOverviewTitleKey,
+                                   nullptr)
 DEFINE_UI_CLASS_PROPERTY_KEY(WindowPinType,
                              kWindowPinTypeKey,
                              WindowPinType::kNone)

@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.notifications.settings;
 
 import android.os.Build;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
 import androidx.fragment.app.Fragment;
@@ -23,16 +22,17 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.offlinepages.prefetch.PrefetchPrefs;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
-import org.chromium.chrome.browser.settings.SettingsActivityTest;
-import org.chromium.chrome.browser.site_settings.ContentSettingsResources;
-import org.chromium.chrome.browser.site_settings.SingleCategorySettings;
-import org.chromium.chrome.browser.site_settings.SiteSettingsCategory;
-import org.chromium.chrome.browser.site_settings.WebsitePreferenceBridge;
+import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.test.ScreenShooter;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.site_settings.ContentSettingsResources;
+import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
+import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -45,6 +45,9 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 public class NotificationSettingsTest {
     @Rule
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
+    @Rule
+    public final SettingsActivityTestRule<NotificationSettings> mSettingsActivityTestRule =
+            new SettingsActivityTestRule<>(NotificationSettings.class);
     private SettingsActivity mActivity;
 
     @Rule
@@ -52,8 +55,7 @@ public class NotificationSettingsTest {
 
     @Before
     public void setUp() {
-        mActivity = SettingsActivityTest.startSettingsActivity(
-                InstrumentationRegistry.getInstrumentation(), NotificationSettings.class.getName());
+        mActivity = mSettingsActivityTestRule.startSettingsActivity();
     }
 
     // TODO(https://crbug.com/894334): Remove format suppression once formatting bug is fixed.
@@ -66,8 +68,7 @@ public class NotificationSettingsTest {
     public void testContentSuggestionsToggle() {
         // clang-format on
 
-        final PreferenceFragmentCompat fragment =
-                (PreferenceFragmentCompat) mActivity.getMainFragment();
+        final PreferenceFragmentCompat fragment = mSettingsActivityTestRule.getFragment();
         final ChromeSwitchPreference toggle = (ChromeSwitchPreference) fragment.findPreference(
                 NotificationSettings.PREF_SUGGESTIONS);
 
@@ -103,7 +104,7 @@ public class NotificationSettingsTest {
     public void testToggleDisabledWhenPrefetchingDisabled() {
         // clang-format on
 
-        PreferenceFragmentCompat fragment = (PreferenceFragmentCompat) mActivity.getMainFragment();
+        PreferenceFragmentCompat fragment = mSettingsActivityTestRule.getFragment();
         ChromeSwitchPreference toggle = (ChromeSwitchPreference) fragment.findPreference(
                 NotificationSettings.PREF_SUGGESTIONS);
 
@@ -123,8 +124,7 @@ public class NotificationSettingsTest {
         // clang-format on
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PreferenceFragmentCompat fragment =
-                    (PreferenceFragmentCompat) mActivity.getMainFragment();
+            PreferenceFragmentCompat fragment = mSettingsActivityTestRule.getFragment();
             Preference fromWebsites =
                     fragment.findPreference(NotificationSettings.PREF_FROM_WEBSITES);
 
@@ -154,17 +154,18 @@ public class NotificationSettingsTest {
     public void testWebsiteNotificationsSummary() {
         // clang-format on
 
-        final PreferenceFragmentCompat fragment =
-                (PreferenceFragmentCompat) mActivity.getMainFragment();
+        final PreferenceFragmentCompat fragment = mSettingsActivityTestRule.getFragment();
         final Preference fromWebsites =
                 fragment.findPreference(NotificationSettings.PREF_FROM_WEBSITES);
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            WebsitePreferenceBridge.setCategoryEnabled(ContentSettingsType.NOTIFICATIONS, false);
+            WebsitePreferenceBridge.setCategoryEnabled(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.NOTIFICATIONS, false);
             fragment.onResume();
             Assert.assertEquals(fromWebsites.getSummary(), getNotificationsSummary(false));
 
-            WebsitePreferenceBridge.setCategoryEnabled(ContentSettingsType.NOTIFICATIONS, true);
+            WebsitePreferenceBridge.setCategoryEnabled(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.NOTIFICATIONS, true);
             fragment.onResume();
             Assert.assertEquals(fromWebsites.getSummary(), getNotificationsSummary(true));
         });

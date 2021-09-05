@@ -32,6 +32,7 @@ class SimpleMenuModel;
 namespace ash {
 
 class AppListModel;
+class AppListNotifier;
 enum class AppListViewState;
 struct AppLaunchedMetricParams;
 class SearchModel;
@@ -46,6 +47,11 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Gets the search model associated with the view delegate. The model may be
   // owned by the delegate, or owned elsewhere (e.g. a profile keyed service).
   virtual SearchModel* GetSearchModel() = 0;
+
+  // Returns the AppListNotifier instance. The notifier is owned by the
+  // AppListClient, and may be nullptr if no client has been set for the
+  // delegate.
+  virtual AppListNotifier* GetNotifier() = 0;
 
   // Invoked to start a new Google Assistant session.
   virtual void StartAssistant() = 0;
@@ -196,6 +202,9 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // indicate not to show the view any more.
   virtual void MarkAssistantPrivacyInfoDismissed() = 0;
 
+  // Called when the app list view state is updated.
+  virtual void OnViewStateChanged(AppListViewState state) = 0;
+
   // Called when the app list view animation is completed.
   virtual void OnStateTransitionAnimationCompleted(AppListViewState state) = 0;
 
@@ -210,6 +219,9 @@ class ASH_PUBLIC_EXPORT AppListViewDelegate {
   // Gets the current shelf height (or width for side-shelf) from the
   // ShelfConfig.
   virtual int GetShelfSize() = 0;
+
+  // Returns whether tablet mode is currently enabled.
+  virtual bool IsInTabletMode() = 0;
 };
 
 }  // namespace ash

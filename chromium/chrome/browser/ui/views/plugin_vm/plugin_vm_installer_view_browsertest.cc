@@ -32,9 +32,11 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/scoped_user_manager.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/strings/grit/ui_strings.h"
 
 namespace {
 
@@ -78,7 +80,7 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
   void AllowPluginVm() {
     EnterpriseEnrollDevice();
     SetUserWithAffiliation();
-    SetPluginVmDevicePolicies();
+    SetPluginVmPolicies();
     // Set correct PluginVmImage preference value.
     SetPluginVmImagePref(embedded_test_server()->GetURL(kZipFile).spec(),
                          kZipFileHash);
@@ -90,22 +92,6 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
     base::DictionaryValue* plugin_vm_image = update.Get();
     plugin_vm_image->SetKey("url", base::Value(url));
     plugin_vm_image->SetKey("hash", base::Value(hash));
-  }
-
-  void CheckSetupNotAllowed(
-      plugin_vm::PluginVmInstaller::FailureReason reason) {
-    EXPECT_FALSE(HasAcceptButton());
-    EXPECT_TRUE(HasCancelButton());
-    EXPECT_EQ(
-        view_->GetBigMessage(),
-        l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_NOT_ALLOWED_TITLE));
-    EXPECT_EQ(
-        view_->GetMessage(),
-        l10n_util::GetStringFUTF16(
-            IDS_PLUGIN_VM_INSTALLER_NOT_ALLOWED_MESSAGE,
-            base::NumberToString16(
-                static_cast<std::underlying_type_t<
-                    plugin_vm::PluginVmInstaller::FailureReason>>(reason))));
   }
 
   void WaitForSetupToFinish() {
@@ -129,7 +115,9 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
 
   void CheckSetupIsFinishedSuccessfully() {
     EXPECT_TRUE(HasAcceptButton());
-    EXPECT_FALSE(HasCancelButton());
+    EXPECT_TRUE(HasCancelButton());
+    EXPECT_EQ(view_->GetDialogButtonLabel(ui::DIALOG_BUTTON_CANCEL),
+              l10n_util::GetStringUTF16(IDS_APP_CLOSE));
     EXPECT_EQ(view_->GetDialogButtonLabel(ui::DIALOG_BUTTON_OK),
               l10n_util::GetStringUTF16(IDS_PLUGIN_VM_INSTALLER_LAUNCH_BUTTON));
     EXPECT_EQ(
@@ -151,7 +139,11 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
                                                            "device_id");
   }
 
-  void SetPluginVmDevicePolicies() {
+  void SetPluginVmPolicies() {
+    // User polcies.
+    browser()->profile()->GetPrefs()->SetBoolean(
+        plugin_vm::prefs::kPluginVmAllowed, true);
+    // Device policies.
     scoped_testing_cros_settings_.device_settings()->Set(
         chromeos::kPluginVmAllowed, base::Value(true));
     scoped_testing_cros_settings_.device_settings()->Set(
@@ -202,6 +194,7 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   ShowUi("default");
   EXPECT_NE(nullptr, view_);
 
+  view_->AcceptDialog();
   WaitForSetupToFinish();
 
   CheckSetupIsFinishedSuccessfully();
@@ -221,6 +214,7 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   ShowUi("default");
   EXPECT_NE(nullptr, view_);
 
+  view_->AcceptDialog();
   WaitForSetupToFinish();
 
   CheckSetupFailed();
@@ -239,6 +233,7 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   ShowUi("default");
   EXPECT_NE(nullptr, view_);
 
+  view_->AcceptDialog();
   WaitForSetupToFinish();
 
   CheckSetupFailed();
@@ -258,6 +253,7 @@ IN_PROC_BROWSER_TEST_F(PluginVmInstallerViewBrowserTestWithFeatureEnabled,
   ShowUi("default");
   EXPECT_NE(nullptr, view_);
 
+  view_->AcceptDialog();
   WaitForSetupToFinish();
 
   CheckSetupFailed();
@@ -287,10 +283,22 @@ IN_PROC_BROWSER_TEST_F(
   ShowUi("default");
   EXPECT_NE(nullptr, view_);
 
-  // We do not have to wait for setup to finish since the NOT_ALLOWED state
-  // is set during dialogue construction.
-  CheckSetupNotAllowed(
-      plugin_vm::PluginVmInstaller::FailureReason::NOT_ALLOWED);
+  view_->AcceptDialog();
+
+  base::string16 app_name = l10n_util::GetStringUTF16(IDS_PLUGIN_VM_APP_NAME);
+  EXPECT_FALSE(HasAcceptButton());
+  EXPECT_TRUE(HasCancelButton());
+  EXPECT_EQ(view_->GetBigMessage(),
+            l10n_util::GetStringFUTF16(
+                IDS_PLUGIN_VM_INSTALLER_NOT_ALLOWED_TITLE, app_name));
+  EXPECT_EQ(
+      view_->GetMessage(),
+      l10n_util::GetStringFUTF16(
+          IDS_PLUGIN_VM_INSTALLER_NOT_ALLOWED_MESSAGE, app_name,
+          base::NumberToString16(
+              static_cast<std::underlying_type_t<
+                  plugin_vm::PluginVmInstaller::FailureReason>>(
+                  plugin_vm::PluginVmInstaller::FailureReason::NOT_ALLOWED))));
 
   histogram_tester_->ExpectUniqueSample(
       plugin_vm::kPluginVmSetupResultHistogram,

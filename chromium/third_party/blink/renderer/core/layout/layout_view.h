@@ -38,6 +38,7 @@ namespace blink {
 
 class LayoutQuote;
 class LocalFrameView;
+class NamedPagesMapper;
 class PaintLayerCompositor;
 class ViewFragmentationContext;
 
@@ -192,6 +193,10 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
     page_logical_height_ = height;
   }
 
+  NamedPagesMapper* GetNamedPagesMapper() const {
+    return named_pages_mapper_.get();
+  }
+
   PaintLayerCompositor* Compositor();
   bool UsesCompositing() const;
 
@@ -282,6 +287,8 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
                           TransformState&,
                           MapCoordinatesFlags) const override;
 
+  bool ShouldUsePrintingLayout() const;
+
  private:
   void MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
                           TransformState&,
@@ -299,8 +306,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 #endif
 
   void UpdateFromStyle() override;
-
-  bool ShouldUsePrintingLayout() const;
 
   int ViewLogicalWidthForBoxSizing() const {
     return ViewLogicalWidth(kIncludeScrollbars);
@@ -325,6 +330,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   LayoutState* layout_state_;
 
   std::unique_ptr<ViewFragmentationContext> fragmentation_context_;
+  std::unique_ptr<NamedPagesMapper> named_pages_mapper_;
   std::unique_ptr<PaintLayerCompositor> compositor_;
   scoped_refptr<IntervalArena> interval_arena_;
 

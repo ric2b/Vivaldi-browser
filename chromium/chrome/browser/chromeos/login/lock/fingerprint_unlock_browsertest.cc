@@ -20,6 +20,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_names.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 
@@ -61,8 +62,8 @@ class FingerprintUnlockTest : public InProcessBrowserTest {
   void EnrollFingerprint() {
     FakeBiodClient::Get()->StartEnrollSession(
         "test-user", std::string(),
-        base::BindRepeating(&FingerprintUnlockTest::OnStartSession,
-                            base::Unretained(this)));
+        base::BindOnce(&FingerprintUnlockTest::OnStartSession,
+                       base::Unretained(this)));
     if (!fingerprint_session_started_) {
       base::RunLoop run_loop;
       fingerprint_session_callback_ = run_loop.QuitClosure();

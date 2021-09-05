@@ -77,6 +77,13 @@ public class TabPersistentStore extends TabPersister {
 
     private static final String BASE_STATE_FOLDER = "tabs";
 
+    /**
+     * The prefix of the name of the file where the state is saved.  Values returned by
+     * {@link #getStateFileName(String)} must begin with this prefix.
+     */
+    @VisibleForTesting
+    static final String SAVED_STATE_FILE_PREFIX = "tab_state";
+
     /** Prevents two TabPersistentStores from saving the same file simultaneously. */
     private static final Object SAVE_LIST_LOCK = new Object();
 
@@ -141,7 +148,8 @@ public class TabPersistentStore extends TabPersister {
         public final List<Integer> ids;
         public final List<String> urls;
 
-        TabModelMetadata(int selectedIndex) {
+        @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+        public TabModelMetadata(int selectedIndex) {
             index = selectedIndex;
             ids = new ArrayList<>();
             urls = new ArrayList<>();
@@ -862,8 +870,6 @@ public class TabPersistentStore extends TabPersister {
     public static byte[] serializeMetadata(TabModelMetadata standardInfo,
             TabModelMetadata incognitoInfo, @Nullable List<TabRestoreDetails> tabsBeingRestored)
             throws IOException {
-        ThreadUtils.assertOnUiThread();
-
         int standardCount = standardInfo.ids.size();
         int incognitoCount = incognitoInfo.ids.size();
 
@@ -1425,7 +1431,6 @@ public class TabPersistentStore extends TabPersister {
         }.executeOnTaskRunner(taskRunner);
     }
 
-    @VisibleForTesting
     public void addObserver(TabPersistentStoreObserver observer) {
         mObservers.addObserver(observer);
     }
@@ -1456,7 +1461,7 @@ public class TabPersistentStore extends TabPersister {
      */
     @VisibleForTesting
     public static String getStateFileName(String uniqueId) {
-        return TabPersistencePolicy.SAVED_STATE_FILE_PREFIX + uniqueId;
+        return SAVED_STATE_FILE_PREFIX + uniqueId;
     }
 
     /**
@@ -1466,14 +1471,14 @@ public class TabPersistentStore extends TabPersister {
      */
     public static String getStateFileUniqueId(String stateFileName) {
         assert isStateFile(stateFileName);
-        return stateFileName.substring(TabPersistencePolicy.SAVED_STATE_FILE_PREFIX.length());
+        return stateFileName.substring(SAVED_STATE_FILE_PREFIX.length());
     }
 
     /**
      * @return Whether the specified filename matches the expected pattern of the tab state files.
      */
     public static boolean isStateFile(String fileName) {
-        return fileName.startsWith(TabPersistencePolicy.SAVED_STATE_FILE_PREFIX);
+        return fileName.startsWith(SAVED_STATE_FILE_PREFIX);
     }
 
     /**

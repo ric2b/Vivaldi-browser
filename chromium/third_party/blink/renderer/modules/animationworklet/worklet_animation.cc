@@ -166,7 +166,7 @@ base::Optional<base::TimeDelta> CalculateStartTime(
     base::TimeDelta current_time,
     double playback_rate,
     AnimationTimeline& timeline) {
-  base::Optional<double> timeline_current_time_ms = timeline.CurrentTime();
+  base::Optional<double> timeline_current_time_ms = timeline.currentTime();
   return base::TimeDelta::FromMillisecondsD(timeline_current_time_ms.value()) -
          (current_time / playback_rate);
 }
@@ -214,7 +214,7 @@ WorkletAnimation* WorkletAnimation::Create(
     return nullptr;
   }
 
-  Document& document = *Document::From(ExecutionContext::From(script_state));
+  Document& document = *LocalDOMWindow::From(script_state)->document();
   if (!document.GetWorkletAnimationController().IsAnimatorRegistered(
           animator_name)) {
     exception_state.ThrowDOMException(
@@ -351,20 +351,6 @@ base::Optional<double> WorkletAnimation::startTime() {
   if (!start_time_)
     return base::nullopt;
   return ToMilliseconds(start_time_.value());
-}
-
-double WorkletAnimation::currentTime(bool& is_null) {
-  base::Optional<base::TimeDelta> current_time = CurrentTime();
-  is_null = !current_time.has_value();
-  return ToMilliseconds(current_time);
-}
-
-double WorkletAnimation::startTime(bool& is_null) {
-  // The timeline may have become newly active or inactive, which then can cause
-  // the start time to change.
-  UpdateCurrentTimeIfNeeded();
-  is_null = !start_time_.has_value();
-  return ToMilliseconds(start_time_);
 }
 
 void WorkletAnimation::pause(ExceptionState& exception_state) {
@@ -644,6 +630,8 @@ bool WorkletAnimation::StartOnCompositor() {
       timeline_ ? timeline_->EnsureCompositorTimeline() : nullptr;
   if (compositor_timeline) {
     compositor_timeline->AnimationAttached(*this);
+    // Note that while we attach here but we don't detach because the
+    // |compositor_timeline| is detached in its destructor.
     if (compositor_timeline->GetAnimationTimeline()->IsScrollTimeline())
       document_->AttachCompositorTimeline(compositor_timeline);
   }
@@ -681,26 +669,11 @@ bool WorkletAnimation::UpdateOnCompositor() {
   }
 
   if (timeline_->IsScrollTimeline()) {
-    Node* scroll_source = To<ScrollTimeline>(*timeline_).ResolvedScrollSource();
-    LayoutBox* box = scroll_source ? scroll_source->GetLayoutBox() : nullptr;
+    auto& timeline = To<ScrollTimeline>(*timeline_);
+    Node* scroll_source = timeline.ResolvedScrollSource();
+    auto start_scroll_offset = timeline.GetResolvedStartScrollOffset();
+    auto end_scroll_offset = timeline.GetResolvedEndScrollOffset();
 
-    base::Optional<double> start_scroll_offset;
-    base::Optional<double> end_scroll_offset;
-    if (box) {
-      double current_offset;
-      double max_offset;
-      To<ScrollTimeline>(*timeline_)
-          .GetCurrentAndMaxOffset(box, current_offset, max_offset);
-
-      double resolved_start_scroll_offset = 0;
-      double resolved_end_scroll_offset = max_offset;
-      To<ScrollTimeline>(*timeline_)
-          .ResolveScrollStartAndEnd(box, max_offset,
-                                    resolved_start_scroll_offset,
-                                    resolved_end_scroll_offset);
-      start_scroll_offset = resolved_start_scroll_offset;
-      end_scroll_offset = resolved_end_scroll_offset;
-    }
     compositor_animation_->UpdateScrollTimeline(
         scroll_timeline_util::GetCompositorScrollElementId(scroll_source),
         start_scroll_offset, end_scroll_offset);
@@ -719,11 +692,6 @@ void WorkletAnimation::DestroyCompositorAnimation() {
     compositor_timeline->AnimationDestroyed(*this);
 
   if (compositor_animation_) {
-    if (compositor_timeline &&
-        compositor_timeline->GetAnimationTimeline()->IsScrollTimeline()) {
-      document_->DetachCompositorTimeline(compositor_timeline);
-    }
-
     compositor_animation_->SetAnimationDelegate(nullptr);
     compositor_animation_ = nullptr;
   }
@@ -766,7 +734,7 @@ base::Optional<base::TimeDelta> WorkletAnimation::InitialCurrentTime() const {
 
   base::Optional<base::TimeDelta> starting_time =
       timeline_->InitialStartTimeForAnimations();
-  base::Optional<double> current_time = timeline_->CurrentTime();
+  base::Optional<double> current_time = timeline_->currentTime();
 
   if (!starting_time || !current_time) {
     return base::nullopt;
@@ -822,19 +790,18 @@ base::Optional<base::TimeDelta> WorkletAnimation::CurrentTimeInternal() const {
   if (!IsTimelineActive())
     return base::nullopt;
 
-  bool is_null;
-  double timeline_time_ms = timeline_->currentTime(is_null);
   // Currently ScrollTimeline may return unresolved current time when:
   // - Current scroll offset is less than startScrollOffset and fill mode is
   //   none or forward.
   // OR
   // - Current scroll offset is greater than or equal to endScrollOffset and
   //   fill mode is none or backwards.
-  if (is_null)
+  base::Optional<double> timeline_time_ms = timeline_->currentTime();
+  if (!timeline_time_ms)
     return base::nullopt;
 
   base::TimeDelta timeline_time =
-      base::TimeDelta::FromMillisecondsD(timeline_time_ms);
+      base::TimeDelta::FromMillisecondsD(timeline_time_ms.value());
   DCHECK(start_time_);
   return (timeline_time - start_time_.value()) * playback_rate_;
 }

@@ -18,7 +18,7 @@
 #include "components/autofill_assistant/browser/actions/action.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/user_model.h"
-#include "components/autofill_assistant/browser/website_login_fetcher.h"
+#include "components/autofill_assistant/browser/website_login_manager.h"
 
 namespace autofill_assistant {
 class UserModel;
@@ -55,16 +55,16 @@ class CollectUserDataAction : public Action,
 
  private:
   struct LoginDetails {
-    LoginDetails(bool choose_automatically_if_no_other_options,
+    LoginDetails(bool choose_automatically_if_no_stored_login,
                  const std::string& payload);
-    LoginDetails(bool choose_automatically_if_no_other_options,
+    LoginDetails(bool choose_automatically_if_no_stored_login,
                  const std::string& payload,
-                 const WebsiteLoginFetcher::Login& login);
+                 const WebsiteLoginManager::Login& login);
     ~LoginDetails();
-    bool choose_automatically_if_no_other_options;
+    bool choose_automatically_if_no_stored_login;
     std::string payload;
     // Only for Chrome PWM login details.
-    base::Optional<WebsiteLoginFetcher::Login> login;
+    base::Optional<WebsiteLoginManager::Login> login;
   };
 
   void InternalProcessAction(ProcessActionCallback callback) override;
@@ -73,12 +73,15 @@ class CollectUserDataAction : public Action,
   void OnGetUserData(const CollectUserDataProto& collect_user_data,
                      UserData* user_data,
                      const UserModel* user_model);
-  void OnAdditionalActionTriggered(int index);
-  void OnTermsAndConditionsLinkClicked(int link);
+  void OnAdditionalActionTriggered(int index,
+                                   UserData* user_data,
+                                   const UserModel* user_model);
+  void OnTermsAndConditionsLinkClicked(int link,
+                                       UserData* user_data,
+                                       const UserModel* user_model);
 
-  void OnGetLogins(
-      const LoginDetailsProto::LoginOptionProto& login_option,
-      std::vector<WebsiteLoginFetcher::Login> logins);
+  void OnGetLogins(const LoginDetailsProto::LoginOptionProto& login_option,
+                   std::vector<WebsiteLoginManager::Login> logins);
   void ShowToUser();
   void OnShowToUser(UserData* user_data, UserData::FieldChange* field_change);
 
@@ -88,6 +91,8 @@ class CollectUserDataAction : public Action,
   // Will update |initial_card_has_billing_postal_code_|.
   bool CheckInitialAutofillDataComplete(
       autofill::PersonalDataManager* personal_data_manager);
+
+  void WriteProcessedAction(UserData* user_data, const UserModel* user_model);
 
   // Update user data with the new state from personal data manager.
   void UpdatePersonalDataManagerProfiles(

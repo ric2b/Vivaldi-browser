@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import 'chrome://settings/lazy_load.js';
-// #import {eventToPromise} from 'chrome://test/test_util.m.js';
-// #import {ExtensionControlBrowserProxyImpl, SearchEnginesBrowserProxyImpl} from 'chrome://settings/settings.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {TestExtensionControlBrowserProxy} from 'chrome://test/settings/test_extension_control_browser_proxy.m.js';
-// #import {TestSearchEnginesBrowserProxy} from 'chrome://test/settings/test_search_engines_browser_proxy.m.js';
+import 'chrome://settings/lazy_load.js';
+
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {ExtensionControlBrowserProxyImpl, SearchEnginesBrowserProxyImpl} from 'chrome://settings/settings.js';
+import {TestExtensionControlBrowserProxy} from 'chrome://test/settings/test_extension_control_browser_proxy.js';
+import {TestSearchEnginesBrowserProxy} from 'chrome://test/settings/test_search_engines_browser_proxy.m.js';
+import {eventToPromise} from 'chrome://test/test_util.m.js';
 // clang-format on
 
 /**
@@ -67,8 +69,8 @@ suite('AddSearchEngineDialogTests', function() {
   let browserProxy = null;
 
   setup(function() {
-    browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
-    settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
+    browserProxy = new TestSearchEnginesBrowserProxy();
+    SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
     dialog = document.createElement('settings-search-engine-dialog');
     document.body.appendChild(dialog);
@@ -104,7 +106,7 @@ suite('AddSearchEngineDialogTests', function() {
       const inputElement = dialog.$[inputId];
       browserProxy.resetResolver('validateSearchEngineInput');
       inputElement.fire('input');
-      return inputElement.value != '' ?
+      return inputElement.value !== '' ?
           // Expecting validation only on non-empty values.
           browserProxy.whenCalled('validateSearchEngineInput') :
           Promise.resolve();
@@ -141,7 +143,7 @@ suite('AddSearchEngineDialogTests', function() {
 
   test('DialogCloseWhenEnginesChangedModelEngineNotFound', function() {
     dialog.set('model', createSampleSearchEngine(0, 'G', false, false, false));
-    cr.webUIListenerCallback('search-engines-changed', {
+    webUIListenerCallback('search-engines-changed', {
       defaults: [],
       others: [createSampleSearchEngine(1, 'H', false, false, false)],
       extensions: [],
@@ -152,7 +154,7 @@ suite('AddSearchEngineDialogTests', function() {
   test('DialogValidateInputsWhenEnginesChanged', function() {
     dialog.set('model', createSampleSearchEngine(0, 'G', false, false, false));
     dialog.set('keyword_', 'G');
-    cr.webUIListenerCallback('search-engines-changed', {
+    webUIListenerCallback('search-engines-changed', {
       defaults: [],
       others: [createSampleSearchEngine(0, 'G', false, false, false)],
       extensions: [],
@@ -165,15 +167,15 @@ suite('SearchEngineEntryTests', function() {
   /** @type {?SettingsSearchEngineEntryElement} */
   let entry = null;
 
-  /** @type {!settings_search.TestSearchEnginesBrowserProxy} */
+  /** @type {!TestSearchEnginesBrowserProxy} */
   let browserProxy = null;
 
   /** @type {!SearchEngine} */
   const searchEngine = createSampleSearchEngine(0, 'G', true, true, true);
 
   setup(function() {
-    browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
-    settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
+    browserProxy = new TestSearchEnginesBrowserProxy();
+    SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
     entry = document.createElement('settings-search-engine-entry');
     entry.set('engine', searchEngine);
@@ -242,11 +244,10 @@ suite('SearchEngineEntryTests', function() {
     assertTrue(!!editButton);
     assertFalse(editButton.hidden);
 
-    const promise =
-        test_util.eventToPromise('edit-search-engine', entry).then(e => {
-          assertEquals(engine, e.detail.engine);
-          assertEquals(entry.$$('cr-icon-button'), e.detail.anchorElement);
-        });
+    const promise = eventToPromise('edit-search-engine', entry).then(e => {
+      assertEquals(engine, e.detail.engine);
+      assertEquals(entry.$$('cr-icon-button'), e.detail.anchorElement);
+    });
     editButton.click();
     return promise;
   });
@@ -281,11 +282,11 @@ suite('SearchEngineEntryTests', function() {
 
   test('All_Disabled', function() {
     entry.engine = createSampleSearchEngine(0, 'G', true, false, false);
-    Polymer.dom.flush();
+    flush();
     assertTrue(entry.hasAttribute('show-dots_'));
 
     entry.engine = createSampleSearchEngine(1, 'G', false, false, false);
-    Polymer.dom.flush();
+    flush();
     assertFalse(entry.hasAttribute('show-dots_'));
   });
 });
@@ -308,7 +309,7 @@ suite('SearchEnginePageTests', function() {
   };
 
   setup(function() {
-    browserProxy = new settings_search.TestSearchEnginesBrowserProxy();
+    browserProxy = new TestSearchEnginesBrowserProxy();
 
     // Purposefully pass a clone of |searchEnginesInfo| to avoid any
     // mutations on ground truth data.
@@ -317,7 +318,7 @@ suite('SearchEnginePageTests', function() {
       others: searchEnginesInfo.others.slice(),
       extensions: searchEnginesInfo.extensions.slice(),
     });
-    settings.SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
+    SearchEnginesBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
     page = document.createElement('settings-search-engines-page');
     document.body.appendChild(page);
@@ -337,7 +338,7 @@ suite('SearchEnginePageTests', function() {
 
     // Note: iron-list may create hidden children, so test the length
     // if IronList.items instead of the child nodes.
-    Polymer.dom.flush();
+    flush();
     const defaultsList = searchEnginesLists[0];
     const defaultsEntries =
         defaultsList.shadowRoot.querySelector('iron-list').items;
@@ -364,7 +365,7 @@ suite('SearchEnginePageTests', function() {
   // Test that the "no other search engines" message is shown/hidden as
   // expected.
   test('NoOtherSearchEnginesMessage', function() {
-    cr.webUIListenerCallback('search-engines-changed', {
+    webUIListenerCallback('search-engines-changed', {
       defaults: [],
       others: [],
       extensions: [],
@@ -374,7 +375,7 @@ suite('SearchEnginePageTests', function() {
     assertTrue(!!message);
     assertFalse(message.hasAttribute('hidden'));
 
-    cr.webUIListenerCallback('search-engines-changed', {
+    webUIListenerCallback('search-engines-changed', {
       defaults: [],
       others: [createSampleSearchEngine(0, 'G', false, false, false)],
       extensions: [],
@@ -390,7 +391,7 @@ suite('SearchEnginePageTests', function() {
     assertTrue(!!addSearchEngineButton);
 
     addSearchEngineButton.click();
-    Polymer.dom.flush();
+    flush();
     assertTrue(!!page.$$('settings-search-engine-dialog'));
   });
 
@@ -416,10 +417,10 @@ suite('SearchEnginePageTests', function() {
   // Tests that filtering the three search engines lists works, and that the
   // "no search results" message is shown as expected.
   test('FilterSearchEngines', function() {
-    Polymer.dom.flush();
+    flush();
 
     function getListItems(listIndex) {
-      const ironList = listIndex == 2 /* extensions */ ?
+      const ironList = listIndex === 2 /* extensions */ ?
           page.shadowRoot.querySelector('iron-list') :
           page.shadowRoot
               .querySelectorAll('settings-search-engines-list')[listIndex]
@@ -451,32 +452,32 @@ suite('SearchEnginePageTests', function() {
 
     // Search by name
     page.filter = searchEnginesInfo.defaults[0].name;
-    Polymer.dom.flush();
+    flush();
     assertSearchResults(1, 0, 0);
 
     // Search by displayName
     page.filter = searchEnginesInfo.others[0].displayName;
-    Polymer.dom.flush();
+    flush();
     assertSearchResults(0, 1, 0);
 
     // Search by keyword
     page.filter = searchEnginesInfo.others[1].keyword;
-    Polymer.dom.flush();
+    flush();
     assertSearchResults(0, 1, 0);
 
     // Search by URL
     page.filter = 'search?';
-    Polymer.dom.flush();
+    flush();
     assertSearchResults(1, 2, 0);
 
     // Test case where none of the sublists have results.
     page.filter = 'does not exist';
-    Polymer.dom.flush();
+    flush();
     assertSearchResults(0, 0, 0);
 
     // Test case where an 'extension' search engine matches.
     page.filter = 'extension';
-    Polymer.dom.flush();
+    flush();
     assertSearchResults(0, 0, 1);
   });
 });
@@ -489,7 +490,7 @@ suite('OmniboxExtensionEntryTests', function() {
 
   setup(function() {
     browserProxy = new TestExtensionControlBrowserProxy();
-    settings.ExtensionControlBrowserProxyImpl.instance_ = browserProxy;
+    ExtensionControlBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
     entry = document.createElement('settings-omnibox-extension-entry');
     entry.set('engine', createSampleOmniboxExtension());

@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">जर्मन किबोर्ड</translation>
 <translation id="1972984168337863910">फाइलका प्रतिक्रियाका प्यानलहरू विस्तृत गर्नुहोस्</translation>
 <translation id="1984603991036629094">आर्मेनियाली फोनेटिक किबोर्ड</translation>
+<translation id="1995337122023280937">फाइल रहेको स्थानमा जानुहोस्</translation>
 <translation id="2001796770603320721">ड्राइभमा व्यवस्थित गर्नुहोस्</translation>
 <translation id="2009067268969781306">ड्राइभ फर्म्याट गर्नुले यसमा भण्डार गरिएका सम्पूर्ण डेटा मेट्ने छ। यो कार्य उल्टाउन सकिँदैन।</translation>
 <translation id="2028997212275086731">RAR सङ्ग्रह</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google ड्राइभमा पुग्न सकिएन। कृपया <ph name="BEGIN_LINK" />लग आउट<ph name="END_LINK" /> गर्नुहोस् र फेरि लग इन गर्नुहोस्।</translation>
 <translation id="2649120831653069427">रेनबोफिस</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">फाइल रहेको स्थान</translation>
 <translation id="2672394958563893062">एउटा त्रुटि देखापर्‍यो। सुरुदेखि पुन: सुरु गर्न क्लिक गर्नुहोस्।</translation>
 <translation id="2676946222714718093">प्ले गर्दै</translation>
 <translation id="2735698359135166290">रोमानियाली मानक कुञ्जीपाटी</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> त्रुटिहरू।</translation>
 <translation id="3519867315646775981">ट्रान्सलिटेरेशन (shalom ← שלום)</translation>
 <translation id="3522708245912499433">पोर्टुगिज</translation>
+<translation id="3524311639100184459">चेतावनी: यी फाइलहरू अस्थायी हुन् र भण्डारण स्थान खाली गर्नका निम्ति यी फाइल स्वतः मेटाइन सक्छन्।  <ph name="BEGIN_LINK" />थप जान्नुहोस्<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">फोल्डर</translation>
 <translation id="3549797760399244642">drive.google.com मा जानुहोस् ...</translation>
 <translation id="357479282490346887">लिथुएनियन</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">कीवी</translation>
 <translation id="3966388904776714213">अडियो प्लेयर</translation>
 <translation id="4002066346123236978">शीर्षक</translation>
+<translation id="4065397611279318371"><ph name="APP_NAME" /> का एप प्रयोग गरी फाइलहरू खोल्न सर्वप्रथम ती फाइललाई सारेर <ph name="SHARED_DIRECTORY_LABEL" /> फोल्डरमा लैजानुहोस्।</translation>
 <translation id="4070370845051020638">क्यान्टोनिज इनपुट विधि</translation>
 <translation id="4072248638558688893">तामिल किबोर्ड (ध्वन्यात्मक)</translation>
 <translation id="4124935795427217608">एक सिङे घोडा</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">स्वत: मिलाउनुहोस्</translation>
 <translation id="4881695831933465202">खोल्नुहोस्</translation>
 <translation id="4886021172213954916">तामिल किबोर्ड (टाइपराइटर)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> मार्फत खोल्न सकिएन</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> ब्याकअपको लागि तयार छ</translation>
 <translation id="4924638091161556692">स्थिर</translation>
 <translation id="4935975195727477204">गाजानिया फुल</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Linux सँग आदान प्रदान गरिने कुराहरू व्यवस्थापन गर्नुहोस्</translation>
 <translation id="6808193438228982088">स्याल</translation>
 <translation id="6820687829547641339">Gzip द्वारा खाँदिएको टार सङ्ग्रह</translation>
+<translation id="6823166707458800069">यो फोल्डरमा सुरक्षित गरिएका सबै फाइलहरू स्वतः अनलाइनमा ब्याकअप गरिन्छ।</translation>
 <translation id="6825883775269213504">रसियाली</translation>
 <translation id="6827236167376090743">काउज घर नआउँदासम्म यो भिडियो चल्न जारी रहनेछ।</translation>
 <translation id="6847101934483209767">चयनबाट <ph name="ENTRY_NAME" /> हटाइयो।</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Google नक्सा</translation>
 <translation id="7419631653042041064">कातालान किबोर्ड</translation>
 <translation id="7434823369735508263">बेलायत ड्भोराक किबोर्ड</translation>
+<translation id="7447678886297481665">यो फोल्डरभित्र रहेका फाइलहरू रिड गर्न मात्र मिल्छ। केही क्रियाकलापहरू गर्न मिल्दैन।</translation>
 <translation id="7460898608667578234">युक्रेनियन</translation>
 <translation id="7474889694310679759">क्यानाडा अंग्रेजी किबोर्ड</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> फेला पर्‍यो

@@ -12,14 +12,10 @@
 
 namespace syncer {
 
-ProcessorEntityTracker::ProcessorEntityTracker(ModelType type) {
-  InitializeMetadata(type);
-}
-
 ProcessorEntityTracker::ProcessorEntityTracker(
+    const sync_pb::ModelTypeState& model_type_state,
     std::map<std::string, std::unique_ptr<sync_pb::EntityMetadata>>
-        metadata_map,
-    const sync_pb::ModelTypeState& model_type_state)
+        metadata_map)
     : model_type_state_(model_type_state) {
   DCHECK(model_type_state.initial_sync_done());
   for (auto& kv : metadata_map) {
@@ -196,11 +192,6 @@ size_t ProcessorEntityTracker::size() const {
   return entities_.size();
 }
 
-void ProcessorEntityTracker::InitializeMetadata(ModelType type) {
-  model_type_state_.mutable_progress_marker()->set_data_type_id(
-      GetSpecificsFieldNumberFromModelType(type));
-}
-
 std::vector<const ProcessorEntity*>
 ProcessorEntityTracker::IncrementSequenceNumberForAllExcept(
     const std::unordered_set<std::string>& already_updated_storage_keys) {
@@ -230,7 +221,6 @@ void ProcessorEntityTracker::UpdateOrOverrideStorageKey(
   const std::string previous_storage_key = entity->storage_key();
   DCHECK_NE(previous_storage_key, storage_key);
   if (!previous_storage_key.empty()) {
-    DCHECK(entity->metadata().is_deleted());
     ClearStorageKey(previous_storage_key);
   }
   DCHECK(storage_key_to_tag_hash_.find(previous_storage_key) ==
@@ -240,15 +230,6 @@ void ProcessorEntityTracker::UpdateOrOverrideStorageKey(
   DCHECK(storage_key_to_tag_hash_.find(storage_key) ==
          storage_key_to_tag_hash_.end());
   storage_key_to_tag_hash_[storage_key] = client_tag_hash;
-}
-
-base::Optional<ClientTagHash> ProcessorEntityTracker::GetClientTagHash(
-    const std::string& storage_key) const {
-  auto iter = storage_key_to_tag_hash_.find(storage_key);
-  if (iter != storage_key_to_tag_hash_.end()) {
-    return iter->second;
-  }
-  return base::nullopt;
 }
 
 }  // namespace syncer

@@ -4,7 +4,6 @@
 
 #include <memory>
 
-#include "base/logging.h"
 #include "base/macros.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -13,7 +12,7 @@
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/test/native_widget_factory.h"
-#include "ui/views/test/views_interactive_ui_test_base.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/desktop_aura/desktop_screen_position_client.h"
@@ -26,7 +25,7 @@
 
 namespace views {
 
-using DesktopCaptureControllerTest = ViewsInteractiveUITestBase;
+using DesktopCaptureControllerTest = test::DesktopWidgetTestInteractive;
 
 // This class provides functionality to verify whether the View instance
 // received the gesture event.
@@ -103,7 +102,7 @@ TEST_F(DesktopCaptureControllerTest, CaptureWindowInputEventTest) {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(50, 50, 650, 650);
   params.native_widget = test::CreatePlatformNativeWidgetImpl(
-      params, widget1.get(), test::kStubCapture, nullptr);
+      widget1.get(), test::kStubCapture, nullptr);
   widget1->Init(std::move(params));
   internal::RootView* root1 =
       static_cast<internal::RootView*>(widget1->GetRootView());
@@ -125,7 +124,7 @@ TEST_F(DesktopCaptureControllerTest, CaptureWindowInputEventTest) {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(50, 50, 650, 650);
   params.native_widget = test::CreatePlatformNativeWidgetImpl(
-      params, widget2.get(), test::kStubCapture, nullptr);
+      widget2.get(), test::kStubCapture, nullptr);
   widget2->Init(std::move(params));
 
   internal::RootView* root2 =

@@ -60,6 +60,16 @@ class PDFiumEngine : public PDFEngine,
   // HandleDocumentLoad().
   void SetDocumentLoaderForTesting(std::unique_ptr<DocumentLoader> loader);
 
+  using SetSelectedTextFunction = void (*)(pp::Instance* instance,
+                                           const std::string& selected_text);
+  static void OverrideSetSelectedTextFunctionForTesting(
+      SetSelectedTextFunction function);
+
+  using SetLinkUnderCursorFunction =
+      void (*)(pp::Instance* instance, const std::string& link_under_cursor);
+  static void OverrideSetLinkUnderCursorFunctionForTesting(
+      SetLinkUnderCursorFunction function);
+
   // PDFEngine implementation.
   bool New(const char* url, const char* headers) override;
   void PageOffsetUpdated(const pp::Point& page_offset) override;
@@ -150,6 +160,7 @@ class PDFiumEngine : public PDFEngine,
   void OnDocumentComplete() override;
   void OnDocumentCanceled() override;
   void KillFormFocus() override;
+  void UpdateFocus(bool has_focus) override;
   uint32_t GetLoadedByteSize() override;
   bool ReadLoadedBytes(uint32_t length, void* buffer) override;
 #if defined(PDF_ENABLE_XFA)
@@ -161,6 +172,11 @@ class PDFiumEngine : public PDFEngine,
   FPDF_AVAIL fpdf_availability() const;
   FPDF_DOCUMENT doc() const;
   FPDF_FORMHANDLE form() const;
+
+  // State transition when tabbing forward:
+  // None -> Document -> Page -> None (when focusable annotations on all pages
+  // are done).
+  enum class FocusElementType { kNone, kDocument, kPage };
 
  private:
   // This helper class is used to detect the difference in selection between
@@ -209,6 +225,7 @@ class PDFiumEngine : public PDFEngine,
   };
 
   friend class FormFillerTest;
+  friend class PDFiumEngineTabbingTest;
   friend class PDFiumFormFiller;
   friend class PDFiumTestBase;
   friend class SelectionChangeInvalidator;
@@ -512,12 +529,10 @@ class PDFiumEngine : public PDFEngine,
   // Sets whether or not left mouse button is currently being held down.
   void SetMouseLeftButtonDown(bool is_mouse_left_button_down);
 
-  // Given coordinates on |page| has a form of |form_type| which is known to be
-  // a form text area, check if it is an editable form text area.
-  bool IsPointInEditableFormTextArea(FPDF_PAGE page,
-                                     double page_x,
-                                     double page_y,
-                                     int form_type);
+  // Given an annotation which is a form of |form_type| which is known to be a
+  // form text area, check if it is an editable form text area.
+  bool IsAnnotationAnEditableFormTextArea(FPDF_ANNOTATION annot,
+                                          int form_type) const;
 
   bool PageIndexInBounds(int index) const;
   bool IsPageCharacterIndexInBounds(
@@ -569,6 +584,8 @@ class PDFiumEngine : public PDFEngine,
   // already in view.
   void ScrollIntoView(const pp::Rect& rect);
 
+  void OnFocusedAnnotationUpdated(FPDF_ANNOTATION annot, int page_index);
+
   // Fetches and populates the fields of |doc_metadata_|. To be called after the
   // document is loaded.
   void LoadDocumentMetadata();
@@ -579,6 +596,18 @@ class PDFiumEngine : public PDFEngine,
 
   // Retrieves the version of the PDF (e.g. 1.4 or 2.0) as an enum.
   PdfVersion GetDocumentVersion() const;
+
+  // This is a layer between OnKeyDown() and actual tab handling to facilitate
+  // testing.
+  bool HandleTabEvent(uint32_t modifiers);
+
+  // Helper functions to handle tab events.
+  bool HandleTabEventWithModifiers(uint32_t modifiers);
+  bool HandleTabForward(uint32_t modifiers);
+  bool HandleTabBackward(uint32_t modifiers);
+
+  void UpdateLinkUnderCursor(const std::string& target_url);
+  void SetLinkUnderCursorForAnnotation(FPDF_ANNOTATION annot, int page_index);
 
   PDFEngine::Client* const client_;
 
@@ -681,8 +710,21 @@ class PDFiumEngine : public PDFEngine,
   // Timer for touch long press detection.
   base::OneShotTimer touch_timer_;
 
-  // Holds the zero-based page index of the last page that the mouse clicked on.
-  int last_page_mouse_down_ = -1;
+  // Set to true when updating plugin focus.
+  bool updating_focus_ = false;
+
+  // The focus item type for the currently focused object.
+  FocusElementType focus_item_type_ = FocusElementType::kNone;
+
+  // Stores the last focused object's focus item type before PDF loses focus.
+  FocusElementType last_focused_item_type_ = FocusElementType::kNone;
+
+  // Stores the last focused annotation's index before PDF loses focus.
+  int last_focused_annot_index_ = -1;
+
+  // Holds the zero-based page index of the last page that had the focused
+  // object.
+  int last_focused_page_ = -1;
 
   // Holds the zero-based page index of the most visible page; refreshed by
   // calling CalculateVisiblePages()

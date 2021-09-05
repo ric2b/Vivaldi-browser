@@ -17,11 +17,11 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/settings/stats_reporting_controller.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom-forward.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/browser/extension_function.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_observer.h"
@@ -36,6 +36,7 @@ namespace extensions {
 
 class AssistantInteractionHelper;
 class WindowStateChangeObserver;
+class WindowBoundsChangeObserver;
 class EventGenerator;
 
 class AutotestPrivateInitializeEventsFunction : public ExtensionFunction {
@@ -550,7 +551,8 @@ class AutotestPrivateSetAssistantEnabledFunction
   ResponseAction Run() override;
 
   // ash::AssistantStateObserver overrides:
-  void OnAssistantStatusChanged(ash::mojom::AssistantState state) override;
+  void OnAssistantStatusChanged(
+      chromeos::assistant::AssistantStatus status) override;
 
   // Called when the Assistant service does not respond in a timely fashion. We
   // will respond with an error.
@@ -576,7 +578,8 @@ class AutotestPrivateEnableAssistantAndWaitForReadyFunction
   void SubscribeToStatusChanges();
 
   // ash::AssistantStateObserver overrides:
-  void OnAssistantStatusChanged(ash::mojom::AssistantState state) override;
+  void OnAssistantStatusChanged(
+      chromeos::assistant::AssistantStatus status) override;
 
   // A reference to keep |this| alive while waiting for the Assistant to
   // respond.
@@ -1180,6 +1183,44 @@ class AutotestPrivateGetShelfUIInfoForStateFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateGetShelfUIInfoForStateFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateSetWindowBoundsFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateSetWindowBoundsFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.setWindowBounds",
+                             AUTOTESTPRIVATE_SETWINDOWBOUNDS)
+
+ private:
+  ~AutotestPrivateSetWindowBoundsFunction() override;
+  ResponseAction Run() override;
+
+  void WindowBoundsChanged(const gfx::Rect& bounds_in_display,
+                           int64_t display_id,
+                           bool success);
+
+  std::unique_ptr<WindowBoundsChangeObserver> window_bounds_observer_;
+};
+
+class AutotestPrivateStartSmoothnessTrackingFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.startSmoothnessTracking",
+                             AUTOTESTPRIVATE_STARTSMOOTHNESSTRACKING)
+
+ private:
+  ~AutotestPrivateStartSmoothnessTrackingFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateStopSmoothnessTrackingFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.stopSmoothnessTracking",
+                             AUTOTESTPRIVATE_STOPSMOOTHNESSTRACKING)
+
+ private:
+  ~AutotestPrivateStopSmoothnessTrackingFunction() override;
   ResponseAction Run() override;
 };
 

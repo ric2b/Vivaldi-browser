@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/authentication/authentication_flow.h"
+
 // Delegate that interacts with the user sign-in coordinator.
 @protocol UserSigninViewControllerDelegate
 
@@ -29,7 +31,8 @@
 @end
 
 // View controller used to show sign-in UI.
-@interface UserSigninViewController : UIViewController
+@interface UserSigninViewController
+    : UIViewController <AuthenticationFlowDelegate>
 
 // The delegate.
 @property(nonatomic, weak) id<UserSigninViewControllerDelegate> delegate;
@@ -52,6 +55,12 @@
 // |UIInterfaceOrientationPortrait| orientation on iPhone and all other
 // orientations on iPad.
 - (NSUInteger)supportedInterfaceOrientations;
+
+// Blocks the UI (except the cancel button) when the sign-in is in progress.
+- (void)signinWillStart;
+
+// Unblocks the UI when the sign-in is done.
+- (void)signinDidStop;
 
 @end
 

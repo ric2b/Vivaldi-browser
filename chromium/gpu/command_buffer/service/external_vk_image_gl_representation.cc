@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
@@ -24,11 +23,9 @@
 #define GL_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_EXT 0x9531
 
 #define GL_HANDLE_TYPE_OPAQUE_FD_EXT 0x9586
-
-#if defined(OS_FUCHSIA)
+#define GL_HANDLE_TYPE_OPAQUE_WIN32_EXT 0x9587
 #define GL_HANDLE_TYPE_ZIRCON_VMO_ANGLE 0x93AE
 #define GL_HANDLE_TYPE_ZIRCON_EVENT_ANGLE 0x93AF
-#endif
 
 namespace gpu {
 
@@ -83,14 +80,7 @@ bool ExternalVkImageGLRepresentationShared::BeginAccess(GLenum mode) {
          mode == GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
   const bool readonly = (mode == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
 
-  if (!readonly && backing_impl()->format() == viz::ResourceFormat::BGRA_8888) {
-    NOTIMPLEMENTED()
-        << "BeginAccess write on a BGRA_8888 backing is not supported.";
-    return false;
-  }
-
   std::vector<SemaphoreHandle> handles;
-
   if (!backing_impl()->BeginAccess(readonly, &handles, true /* is_gl */))
     return false;
 
@@ -129,7 +119,7 @@ void ExternalVkImageGLRepresentationShared::EndAccess() {
   VkSemaphore semaphore = VK_NULL_HANDLE;
   SemaphoreHandle semaphore_handle;
   GLuint gl_semaphore = 0;
-  if (backing_impl()->need_sychronization()) {
+  if (backing_impl()->need_synchronization()) {
     semaphore =
         vk_implementation()->CreateExternalSemaphore(backing_impl()->device());
     if (semaphore == VK_NULL_HANDLE) {
@@ -168,7 +158,7 @@ void ExternalVkImageGLRepresentationShared::EndAccess() {
   auto result = backing_impl()->backend_texture().getVkImageInfo(&info);
   DCHECK(result);
   GLenum dst_layout = ToGLImageLayout(info.fImageLayout);
-  if (backing_impl()->need_sychronization()) {
+  if (backing_impl()->need_synchronization()) {
     api()->glSignalSemaphoreEXTFn(gl_semaphore, 0, nullptr, 1,
                                   &texture_service_id_, &dst_layout);
     api()->glDeleteSemaphoresEXTFn(1, &gl_semaphore);
@@ -203,6 +193,21 @@ GLuint ExternalVkImageGLRepresentationShared::ImportVkSemaphoreIntoGL(
                                 fd.release());
 
   return gl_semaphore;
+#elif defined(OS_WIN)
+  if (handle.vk_handle_type() !=
+      VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT) {
+    DLOG(ERROR) << "Importing semaphore handle of unexpected type:"
+                << handle.vk_handle_type();
+    return 0;
+  }
+  auto win32_handle = handle.TakeHandle();
+  gl::GLApi* api = gl::g_current_gl_context;
+  GLuint gl_semaphore;
+  api->glGenSemaphoresEXTFn(1, &gl_semaphore);
+  api->glImportSemaphoreWin32HandleEXTFn(
+      gl_semaphore, GL_HANDLE_TYPE_OPAQUE_WIN32_EXT, win32_handle.Take());
+
+  return gl_semaphore;
 #elif defined(OS_FUCHSIA)
   if (handle.vk_handle_type() !=
       VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_TEMP_ZIRCON_EVENT_BIT_FUCHSIA) {
@@ -217,9 +222,6 @@ GLuint ExternalVkImageGLRepresentationShared::ImportVkSemaphoreIntoGL(
   api->glImportSemaphoreZirconHandleANGLEFn(
       gl_semaphore, GL_HANDLE_TYPE_ZIRCON_EVENT_ANGLE, event.release());
   return gl_semaphore;
-#elif defined(OS_WIN)
-  NOTIMPLEMENTED();
-  return 0;
 #else
 #error Unsupported OS
 #endif

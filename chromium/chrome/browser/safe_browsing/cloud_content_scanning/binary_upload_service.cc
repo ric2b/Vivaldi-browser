@@ -176,6 +176,9 @@ void BinaryUploadService::OnGetInstanceID(Request* request,
     return;
   }
 
+  base::UmaHistogramTimes("SafeBrowsingBinaryUploadRequest.TimeToGetToken",
+                          base::TimeTicks::Now() - start_times_[request]);
+
   request->set_fcm_token(instance_id);
   request->GetRequestData(base::BindOnce(&BinaryUploadService::OnGetRequestData,
                                          weakptr_factory_.GetWeakPtr(),
@@ -279,10 +282,14 @@ void BinaryUploadService::OnGetResponse(Request* request,
     return;
 
   if (response.has_dlp_scan_verdict()) {
+    VLOG(1) << "Request " << request->deep_scanning_request().request_token()
+            << " finished DLP scanning";
     received_dlp_verdicts_[request].reset(response.release_dlp_scan_verdict());
   }
 
   if (response.has_malware_scan_verdict()) {
+    VLOG(1) << "Request " << request->deep_scanning_request().request_token()
+            << " finished malware scanning";
     received_malware_verdicts_[request].reset(
         response.release_malware_scan_verdict());
   }
@@ -296,6 +303,8 @@ void BinaryUploadService::MaybeFinishRequest(Request* request) {
   auto received_dlp_response = received_dlp_verdicts_.find(request);
   if (requested_dlp_scan_response &&
       received_dlp_response == received_dlp_verdicts_.end()) {
+    VLOG(1) << "Request " << request->deep_scanning_request().request_token()
+            << " is waiting for DLP scanning to complete.";
     return;
   }
 
@@ -304,6 +313,8 @@ void BinaryUploadService::MaybeFinishRequest(Request* request) {
   auto received_malware_response = received_malware_verdicts_.find(request);
   if (requested_malware_scan_response &&
       received_malware_response == received_malware_verdicts_.end()) {
+    VLOG(1) << "Request " << request->deep_scanning_request().request_token()
+            << " is waiting for malware scanning to complete.";
     return;
   }
 
@@ -341,6 +352,9 @@ void BinaryUploadService::FinishRequest(Request* request,
   WebUIInfoSingleton::GetInstance()->AddToDeepScanResponses(
       active_tokens_[request], ResultToString(result), response);
 
+  std::string instance_id =
+      request->deep_scanning_request().fcm_notification_token();
+
   request->FinishRequest(result, response);
   active_requests_.erase(request);
   active_timers_.erase(request);
@@ -355,8 +369,7 @@ void BinaryUploadService::FinishRequest(Request* request,
 
     // The BinaryFCMService will handle all recoverable errors. In case of
     // unrecoverable error, there's nothing we can do here.
-    binary_fcm_service_->UnregisterInstanceID(token_it->second,
-                                              base::DoNothing());
+    binary_fcm_service_->UnregisterInstanceID(instance_id, base::DoNothing());
   }
 
   active_tokens_.erase(token_it);
@@ -422,6 +435,10 @@ void BinaryUploadService::Request::set_filename(const std::string& filename) {
 
 void BinaryUploadService::Request::set_digest(const std::string& digest) {
   deep_scanning_request_.set_digest(digest);
+}
+
+void BinaryUploadService::Request::clear_dlp_scan_request() {
+  deep_scanning_request_.clear_dlp_scan_request();
 }
 
 void BinaryUploadService::Request::FinishRequest(
@@ -507,6 +524,11 @@ void BinaryUploadService::ResetAuthorizationData() {
 
   // Call IsAuthorized  to update |can_upload_enterprise_data_| right away.
   IsAuthorized(base::DoNothing());
+}
+
+void BinaryUploadService::Shutdown() {
+  if (binary_fcm_service_)
+    binary_fcm_service_->Shutdown();
 }
 
 void BinaryUploadService::SetAuthForTesting(bool authorized) {

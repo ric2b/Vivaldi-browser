@@ -277,8 +277,6 @@ jumbo_static_library("rest_of_sync") {
     "model/sync_error.h",
     "model/sync_error_factory.cc",
     "model/sync_error_factory.h",
-    "model/sync_merge_result.cc",
-    "model/sync_merge_result.h",
     "model/sync_metadata_store.h",
     "model/syncable_service.h",
     "model/time.h",
@@ -532,8 +530,6 @@ static_library("test_support_model") {
     "model/fake_model_type_sync_bridge.h",
     "model/fake_sync_change_processor.cc",
     "model/fake_sync_change_processor.h",
-    "model/fake_syncable_service.cc",
-    "model/fake_syncable_service.h",
     "model/mock_model_type_change_processor.cc",
     "model/mock_model_type_change_processor.h",
     "model/model_type_store_test_util.cc",
@@ -553,6 +549,19 @@ static_library("test_support_model") {
   public_deps = [ "//components/sync/base:test_support" ]
 
   deps = [ ":sync" ]
+}
+
+static_library("test_support_nigori") {
+  testonly = true
+  sources = [
+    "nigori/nigori_test_utils.cc",
+    "nigori/nigori_test_utils.h",
+  ]
+
+  deps = [
+    ":sync",
+    "//testing/gtest",
+  ]
 }
 
 source_set("unit_tests") {
@@ -632,11 +641,12 @@ source_set("unit_tests") {
     "model/sync_change_unittest.cc",
     "model/sync_data_unittest.cc",
     "model/sync_error_unittest.cc",
-    "model/sync_merge_result_unittest.cc",
     "model_impl/client_tag_based_model_type_processor_unittest.cc",
+    "model_impl/client_tag_based_remote_update_handler_unittest.cc",
     "model_impl/in_memory_metadata_change_list_unittest.cc",
     "model_impl/model_type_store_backend_unittest.cc",
     "model_impl/model_type_store_impl_unittest.cc",
+    "model_impl/processor_entity_tracker_unittest.cc",
     "model_impl/processor_entity_unittest.cc",
     "model_impl/syncable_service_based_bridge_unittest.cc",
     "nigori/cryptographer_impl_unittest.cc",
@@ -674,6 +684,7 @@ source_set("unit_tests") {
     ":sync",
     ":test_support_engine",
     ":test_support_model",
+    ":test_support_nigori",
     "//base",
     "//base/test:test_support",
     "//components/invalidation/impl",

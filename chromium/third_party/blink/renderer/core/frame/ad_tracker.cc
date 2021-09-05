@@ -10,9 +10,11 @@
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/core_probe_sink.h"
-#include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -24,8 +26,8 @@ namespace {
 
 bool IsKnownAdExecutionContext(ExecutionContext* execution_context) {
   // TODO(jkarlin): Do the same check for worker contexts.
-  if (auto* document = Document::DynamicFrom(execution_context)) {
-    LocalFrame* frame = document->GetFrame();
+  if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
+    LocalFrame* frame = window->GetFrame();
     if (frame && frame->IsAdSubframe())
       return true;
   }
@@ -51,13 +53,20 @@ AdTracker* AdTracker::FromExecutionContext(
     ExecutionContext* execution_context) {
   if (!execution_context)
     return nullptr;
-  if (auto* document = Document::DynamicFrom(execution_context)) {
-    LocalFrame* frame = document->GetFrame();
-    if (frame) {
+  if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
+    if (LocalFrame* frame = window->GetFrame()) {
       return frame->GetAdTracker();
     }
   }
   return nullptr;
+}
+
+// static
+bool AdTracker::IsAdScriptExecutingInDocument(Document* document,
+                                              StackType stack_type) {
+  AdTracker* ad_tracker =
+      document->GetFrame() ? document->GetFrame()->GetAdTracker() : nullptr;
+  return ad_tracker && ad_tracker->IsAdScriptInStack(stack_type);
 }
 
 AdTracker::AdTracker(LocalFrame* local_root)
@@ -163,14 +172,26 @@ void AdTracker::Did(const probe::CallFunction& probe) {
   DidExecuteScript();
 }
 
-bool AdTracker::CalculateIfAdSubresource(ExecutionContext* execution_context,
-                                         const ResourceRequest& request,
-                                         ResourceType resource_type,
-                                         bool known_ad) {
-  // Check if the document loading the resource is an ad or if any executing
-  // script is an ad.
-  known_ad = known_ad || IsKnownAdExecutionContext(execution_context) ||
-             IsAdScriptInStack(StackType::kBottomAndTop);
+bool AdTracker::CalculateIfAdSubresource(
+    ExecutionContext* execution_context,
+    const ResourceRequest& request,
+    ResourceType resource_type,
+    const FetchInitiatorInfo& initiator_info,
+    bool known_ad) {
+  // Check if the document loading the resource is an ad.
+  known_ad = known_ad || IsKnownAdExecutionContext(execution_context);
+
+  // We skip script checking for stylesheet-initiated resource requests as the
+  // stack may represent the cause of a style recalculation rather than the
+  // actual resources themselves. Instead, the ad bit is set according to the
+  // CSSParserContext when the request is made. See crbug.com/1051605.
+  if (initiator_info.name == fetch_initiator_type_names::kCSS ||
+      initiator_info.name == fetch_initiator_type_names::kUacss) {
+    return known_ad;
+  }
+
+  // Check if any executing script is an ad.
+  known_ad = known_ad || IsAdScriptInStack(StackType::kBottomAndTop);
 
   // If it is a script marked as an ad and it's not in an ad context, append it
   // to the known ad script set. We don't need to keep track of ad scripts in ad

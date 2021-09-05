@@ -16,6 +16,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.CalledByNativeJavaTest;
 import org.chromium.chrome.browser.UnitTestUtils;
 import org.chromium.components.payments.PayerData;
+import org.chromium.components.payments.PaymentApp;
 import org.chromium.payments.mojom.PaymentCurrencyAmount;
 import org.chromium.payments.mojom.PaymentDetailsModifier;
 import org.chromium.payments.mojom.PaymentItem;
@@ -109,15 +110,6 @@ public class AndroidPaymentAppUnitTest {
                     @Override
                     public void onInstrumentDetailsReady(
                             String methodName, String stringifiedDetails, PayerData payerData) {
-                        mPaymentMethodName = methodName;
-                        mPaymentDetails = stringifiedDetails;
-                        mInvokePaymentAppFinished = true;
-                    }
-
-                    @Override
-                    public void onInstrumentDetailsReady(String methodName,
-                            String stringifiedDetails,
-                            org.chromium.chrome.browser.payments.PayerData payerData) {
                         mPaymentMethodName = methodName;
                         mPaymentDetails = stringifiedDetails;
                         mInvokePaymentAppFinished = true;

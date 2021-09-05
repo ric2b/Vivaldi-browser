@@ -21,6 +21,7 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/test/accessibility_notification_waiter.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -33,13 +34,6 @@
 #include "base/win/atl.h"
 #include "base/win/scoped_com_initializer.h"
 #include "ui/base/win/atl_module.h"
-#endif
-
-// TODO(dmazzoni): Disabled accessibility tests on Win64. crbug.com/179717
-#if defined(OS_WIN) && defined(ARCH_CPU_X86_64)
-#define MAYBE_TableSpan DISABLED_TableSpan
-#else
-#define MAYBE_TableSpan TableSpan
 #endif
 
 namespace content {
@@ -503,68 +497,6 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   const ui::AXNode* root = tree.root();
   std::unordered_set<int> ids;
   RecursiveAssertUniqueIds(root, &ids);
-}
-
-IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest, MAYBE_TableSpan) {
-  // +---+---+---+
-  // |   1   | 2 |
-  // +---+---+---+
-  // | 3 |   4   |
-  // +---+---+---+
-
-  const char url_str[] =
-      "data:text/html,"
-      "<!doctype html>"
-      "<table border=1>"
-      " <tr>"
-      "  <td colspan=2>1</td><td>2</td>"
-      " </tr>"
-      " <tr>"
-      "  <td>3</td><td colspan=2>4</td>"
-      " </tr>"
-      "</table>";
-  GURL url(url_str);
-  EXPECT_TRUE(NavigateToURL(shell(), url));
-
-  const ui::AXTree& tree = GetAXTree();
-  const ui::AXNode* root = tree.root();
-  const ui::AXNode* table = root->GetUnignoredChildAtIndex(0);
-  EXPECT_EQ(ax::mojom::Role::kTable, table->data().role);
-  ASSERT_GE(table->GetUnignoredChildCount(), 2u);
-  EXPECT_EQ(ax::mojom::Role::kRow,
-            table->GetUnignoredChildAtIndex(0)->data().role);
-  EXPECT_EQ(ax::mojom::Role::kRow,
-            table->GetUnignoredChildAtIndex(1)->data().role);
-  EXPECT_EQ(3, GetIntAttr(table, ax::mojom::IntAttribute::kTableColumnCount));
-  EXPECT_EQ(2, GetIntAttr(table, ax::mojom::IntAttribute::kTableRowCount));
-
-  const ui::AXNode* cell1 =
-      table->GetUnignoredChildAtIndex(0)->GetUnignoredChildAtIndex(0);
-  const ui::AXNode* cell2 =
-      table->GetUnignoredChildAtIndex(0)->GetUnignoredChildAtIndex(1);
-  const ui::AXNode* cell3 =
-      table->GetUnignoredChildAtIndex(1)->GetUnignoredChildAtIndex(0);
-  const ui::AXNode* cell4 =
-      table->GetUnignoredChildAtIndex(1)->GetUnignoredChildAtIndex(1);
-
-  EXPECT_EQ(0,
-            GetIntAttr(cell1, ax::mojom::IntAttribute::kTableCellColumnIndex));
-  EXPECT_EQ(0, GetIntAttr(cell1, ax::mojom::IntAttribute::kTableCellRowIndex));
-  EXPECT_EQ(2,
-            GetIntAttr(cell1, ax::mojom::IntAttribute::kTableCellColumnSpan));
-  EXPECT_EQ(1, GetIntAttr(cell1, ax::mojom::IntAttribute::kTableCellRowSpan));
-  EXPECT_EQ(2,
-            GetIntAttr(cell2, ax::mojom::IntAttribute::kTableCellColumnIndex));
-  EXPECT_EQ(1,
-            GetIntAttr(cell2, ax::mojom::IntAttribute::kTableCellColumnSpan));
-  EXPECT_EQ(0,
-            GetIntAttr(cell3, ax::mojom::IntAttribute::kTableCellColumnIndex));
-  EXPECT_EQ(1,
-            GetIntAttr(cell3, ax::mojom::IntAttribute::kTableCellColumnSpan));
-  EXPECT_EQ(1,
-            GetIntAttr(cell4, ax::mojom::IntAttribute::kTableCellColumnIndex));
-  EXPECT_EQ(2,
-            GetIntAttr(cell4, ax::mojom::IntAttribute::kTableCellColumnSpan));
 }
 
 IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest, WritableElement) {

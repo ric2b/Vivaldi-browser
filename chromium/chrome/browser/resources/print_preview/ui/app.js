@@ -17,7 +17,7 @@ import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behav
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {CloudPrintInterface, CloudPrintInterfaceErrorEventDetail, CloudPrintInterfaceEventType} from '../cloud_print_interface.js';
-import {getCloudPrintInterface} from '../cloud_print_interface_manager.js';
+import {CloudPrintInterfaceImpl} from '../cloud_print_interface_impl.js';
 import {Destination} from '../data/destination.js';
 import {DocumentSettings} from '../data/document_info.js';
 import {Margins} from '../data/margins.js';
@@ -59,7 +59,7 @@ Polymer({
     controlsManaged_: {
       type: Boolean,
       computed: 'computeControlsManaged_(destinationsManaged_, ' +
-          'settingsManaged_)',
+          'settingsManaged_, maxSheets_)',
     },
 
     /** @private {Destination} */
@@ -109,6 +109,9 @@ Polymer({
       type: Object,
       value: null,
     },
+
+    /** @private {number} */
+    maxSheets_: Number,
   },
 
   listeners: {
@@ -340,7 +343,8 @@ Polymer({
    */
   initializeCloudPrint_(cloudPrintUrl, appKioskMode, uiLocale) {
     assert(!this.cloudPrintInterface_);
-    this.cloudPrintInterface_ = getCloudPrintInterface(
+    this.cloudPrintInterface_ = CloudPrintInterfaceImpl.getInstance();
+    this.cloudPrintInterface_.configure(
         cloudPrintUrl, assert(this.nativeLayer_), appKioskMode, uiLocale);
     this.tracker_.add(
         assert(this.cloudPrintInterface_).getEventTarget(),
@@ -357,7 +361,9 @@ Polymer({
    * @private
    */
   computeControlsManaged_() {
-    return this.destinationsManaged_ || this.settingsManaged_;
+    // If |this.maxSheets_| equals to 0, no sheets limit policy is present.
+    return this.destinationsManaged_ || this.settingsManaged_ ||
+        this.maxSheets_ > 0;
   },
 
   /** @private */
@@ -374,9 +380,7 @@ Polymer({
           this.$.model.applyStickySettings();
         }
 
-        // <if expr="chromeos">
         this.$.model.applyDestinationSpecificPolicies();
-        // </if>
 
         this.startPreviewWhenReady_ = true;
         this.$.state.transitTo(State.READY);

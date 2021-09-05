@@ -28,7 +28,9 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/defaults.h"
@@ -86,8 +88,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/favicon_status.h"
 #include "content/public/browser/host_zoom_map.h"
-#include "content/public/browser/interstitial_page.h"
-#include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
@@ -104,6 +104,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -135,7 +136,6 @@
 
 using base::ASCIIToUTF16;
 using content::HostZoomMap;
-using content::InterstitialPage;
 using content::NavigationController;
 using content::NavigationEntry;
 using content::OpenURLParams;
@@ -222,26 +222,6 @@ void RunCloseWithAppMenuCallback(Browser* browser) {
       FROM_HERE, base::BindOnce(&CloseWindowCallback, browser));
   chrome::ShowAppMenu(browser);
 }
-
-// Displays "INTERSTITIAL" while the interstitial is attached.
-// (InterstitialPage can be used in a test directly, but there would be no way
-// to visually tell if it is showing or not.)
-class TestInterstitialPage : public content::InterstitialPageDelegate {
- public:
-  TestInterstitialPage(WebContents* tab, bool new_navigation, const GURL& url) {
-    interstitial_page_ =
-        InterstitialPage::Create(tab, new_navigation, url, this);
-    interstitial_page_->Show();
-  }
-  ~TestInterstitialPage() override {}
-  void Proceed() { interstitial_page_->Proceed(); }
-  void DontProceed() { interstitial_page_->DontProceed(); }
-
-  std::string GetHTMLContents() override { return "<h1>INTERSTITIAL</h1>"; }
-
- private:
-  InterstitialPage* interstitial_page_;  // Owns us.
-};
 
 class RenderViewSizeObserver : public content::WebContentsObserver {
  public:
@@ -783,35 +763,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, SadTabCancelsSubframeDialogs) {
   // Make sure subsequent navigations work.
   GURL url2("data:text/html,foo");
   ui_test_utils::NavigateToURL(browser(), url2);
-}
-
-// Make sure modal dialogs within a guestview are closed when an interstitial
-// page is showing. See crbug.com/482380.
-IN_PROC_BROWSER_TEST_F(BrowserTest, InterstitialCancelsGuestViewDialogs) {
-  WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
-  auto* js_dialog_manager =
-      javascript_dialogs::TabModalDialogManager::FromWebContents(contents);
-  base::RunLoop dialog_wait;
-  js_dialog_manager->SetDialogShownCallbackForTesting(
-      dialog_wait.QuitClosure());
-
-  // Navigate to a PDF, which is loaded within a guestview.
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL pdf_with_dialog(embedded_test_server()->GetURL("/alert_dialog.pdf"));
-  ui_test_utils::NavigateToURL(browser(), pdf_with_dialog);
-
-  dialog_wait.Run();
-  EXPECT_TRUE(js_dialog_manager->IsShowingDialogForTesting());
-
-  TestInterstitialPage* interstitial =
-      new TestInterstitialPage(contents, false, GURL());
-  content::WaitForInterstitialAttach(contents);
-
-  // The interstitial should have closed the dialog.
-  EXPECT_TRUE(contents->ShowingInterstitialPage());
-  EXPECT_FALSE(js_dialog_manager->IsShowingDialogForTesting());
-
-  interstitial->DontProceed();
 }
 
 // Test for crbug.com/22004.  Reloading a page with a before unload handler and
@@ -1384,8 +1335,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ShouldShowLocationBar) {
 
   // Launch it in a window, as AppLauncherHandler::HandleLaunchApp() would.
   WebContents* app_window =
-      apps::LaunchService::Get(browser()->profile())
-          ->OpenApplication(apps::AppLaunchParams(
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(apps::AppLaunchParams(
               extension_app->id(),
               apps::mojom::LaunchContainer::kLaunchContainerWindow,
               WindowOpenDisposition::NEW_WINDOW,
@@ -1556,8 +1508,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OpenAppWindowLikeNtp) {
 
   // Launch it in a window, as AppLauncherHandler::HandleLaunchApp() would.
   WebContents* app_window =
-      apps::LaunchService::Get(browser()->profile())
-          ->OpenApplication(apps::AppLaunchParams(
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(apps::AppLaunchParams(
               extension_app->id(),
               apps::mojom::LaunchContainer::kLaunchContainerWindow,
               WindowOpenDisposition::NEW_WINDOW,
@@ -1686,7 +1639,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DisableMenuItemsWhenIncognitoIsForced) {
 
   // Create a new browser.
   Browser* new_browser = new Browser(Browser::CreateParams(
-      browser()->profile()->GetOffTheRecordProfile(), true));
+      browser()->profile()->GetPrimaryOTRProfile(), true));
   CommandUpdater* new_command_updater = new_browser->command_controller();
   // It should have Bookmarks & Settings commands disabled by default.
   EXPECT_FALSE(new_command_updater->IsCommandEnabled(IDC_NEW_WINDOW));
@@ -1896,93 +1849,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, PageZoom) {
   }
 
   chrome::Zoom(browser(), content::PAGE_ZOOM_RESET);
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserTest, InterstitialCommandDisable) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/empty.html"));
-  ui_test_utils::NavigateToURL(browser(), url);
-
-  CommandUpdater* command_updater = browser()->command_controller();
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_VIEW_SOURCE));
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_PRINT));
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_SAVE_PAGE));
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_DUPLICATE_TAB));
-
-  WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
-
-  TestInterstitialPage* interstitial =
-      new TestInterstitialPage(contents, false, GURL());
-  content::WaitForInterstitialAttach(contents);
-
-  EXPECT_TRUE(contents->ShowingInterstitialPage());
-
-  EXPECT_FALSE(command_updater->IsCommandEnabled(IDC_VIEW_SOURCE));
-  EXPECT_FALSE(command_updater->IsCommandEnabled(IDC_PRINT));
-  EXPECT_FALSE(command_updater->IsCommandEnabled(IDC_SAVE_PAGE));
-  EXPECT_FALSE(command_updater->IsCommandEnabled(IDC_DUPLICATE_TAB));
-
-  // Proceed and wait for interstitial to detach. This doesn't destroy
-  // |contents|.
-  interstitial->Proceed();
-  content::WaitForInterstitialDetach(contents);
-  // interstitial is deleted now.
-
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_VIEW_SOURCE));
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_PRINT));
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_SAVE_PAGE));
-  EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_DUPLICATE_TAB));
-}
-
-// Ensure that creating an interstitial page closes any JavaScript dialogs
-// that were present on the previous page.  See http://crbug.com/295695.
-IN_PROC_BROWSER_TEST_F(BrowserTest, InterstitialClosesDialogs) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL("/empty.html"));
-  ui_test_utils::NavigateToURL(browser(), url);
-
-  WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
-  auto* js_dialog_manager =
-      javascript_dialogs::TabModalDialogManager::FromWebContents(contents);
-  base::RunLoop dialog_wait;
-  js_dialog_manager->SetDialogShownCallbackForTesting(
-      dialog_wait.QuitClosure());
-  contents->GetMainFrame()->ExecuteJavaScriptForTests(
-      ASCIIToUTF16("alert('Dialog showing!');"), base::NullCallback());
-  dialog_wait.Run();
-  EXPECT_TRUE(js_dialog_manager->IsShowingDialogForTesting());
-
-  TestInterstitialPage* interstitial =
-      new TestInterstitialPage(contents, false, GURL());
-  content::WaitForInterstitialAttach(contents);
-
-  // The interstitial should have closed the dialog.
-  EXPECT_TRUE(contents->ShowingInterstitialPage());
-  EXPECT_FALSE(js_dialog_manager->IsShowingDialogForTesting());
-
-  // Don't proceed and wait for interstitial to detach. This doesn't destroy
-  // |contents|.
-  interstitial->DontProceed();
-  content::WaitForInterstitialDetach(contents);
-  // interstitial is deleted now.
-
-  // Make sure input events still work in the renderer process.
-  EXPECT_FALSE(contents->GetMainFrame()->GetProcess()->IsBlocked());
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserTest, InterstitialCloseTab) {
-  WebContents* contents = browser()->tab_strip_model()->GetActiveWebContents();
-
-  // Interstitial will delete itself when we close the tab.
-  new TestInterstitialPage(contents, false, GURL());
-  content::WaitForInterstitialAttach(contents);
-
-  EXPECT_TRUE(contents->ShowingInterstitialPage());
-
-  // Close the tab and wait for interstitial detach. This destroys |contents|.
-  content::RunTaskAndWaitForInterstitialDetach(
-      contents, base::BindOnce(&chrome::CloseTab, browser()));
-  // interstitial is deleted now.
 }
 
 // TODO(ben): this test was never enabled. It has bit-rotted since being added.
@@ -2683,31 +2549,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, CanDuplicateTab) {
 
   int active_index = browser()->tab_strip_model()->active_index();
   EXPECT_EQ(0, active_index);
-
-  EXPECT_TRUE(chrome::CanDuplicateTab(browser()));
-  EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 0));
-  EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 1));
-
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-
-  TestInterstitialPage* interstitial =
-      new TestInterstitialPage(web_contents, false, GURL());
-  content::WaitForInterstitialAttach(web_contents);
-
-  EXPECT_TRUE(web_contents->ShowingInterstitialPage());
-
-  // Verify that the "Duplicate tab" command is disabled on interstitial
-  // pages. Regression test for crbug.com/310812
-  EXPECT_FALSE(chrome::CanDuplicateTab(browser()));
-  EXPECT_FALSE(chrome::CanDuplicateTabAt(browser(), 0));
-  EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 1));
-
-  // Don't proceed and wait for interstitial to detach. This doesn't
-  // destroy |contents|.
-  interstitial->DontProceed();
-  content::WaitForInterstitialDetach(web_contents);
-  // interstitial is deleted now.
 
   EXPECT_TRUE(chrome::CanDuplicateTab(browser()));
   EXPECT_TRUE(chrome::CanDuplicateTabAt(browser(), 0));

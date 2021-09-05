@@ -5,12 +5,11 @@
 /** @fileoverview Handles Happiness Tracking Surveys for the settings pages. */
 
 // clang-format on
-// #import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
+import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
 // clang-format off
 
-cr.define('settings', function() {
   /** @interface */
-  class HatsBrowserProxy {
+  export class HatsBrowserProxy {
     /**
      * Helper function that initiates the launching of HaTS (Happiness Tracking
      * Surveys) through sending a request to HatsService, which is the entity
@@ -19,19 +18,13 @@ cr.define('settings', function() {
     tryShowSurvey() {}
   }
 
-  /** @implements {settings.HatsBrowserProxy} */
-  /* #export */ class HatsBrowserProxyImpl {
+  /** @implements {HatsBrowserProxy} */
+  export class HatsBrowserProxyImpl {
     /** @override*/
     tryShowSurvey() {
       chrome.send('tryShowHatsSurvey');
     }
   }
 
-  cr.addSingletonGetter(HatsBrowserProxyImpl);
+  addSingletonGetter(HatsBrowserProxyImpl);
 
-  // #cr_define_end
-  return {
-    HatsBrowserProxy,
-    HatsBrowserProxyImpl,
-  };
-});

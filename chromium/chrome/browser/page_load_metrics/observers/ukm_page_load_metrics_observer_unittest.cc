@@ -1333,7 +1333,8 @@ TEST_F(UkmPageLoadMetricsObserverTest, CpuTimeMetrics) {
 TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstability) {
   NavigateAndCommit(GURL(kTestUrl1));
 
-  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0);
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
+                                                              0);
   tester()->SimulateRenderDataUpdate(render_data);
 
   // Simulate hiding the tab (the report should include shifts after hide).
@@ -1382,7 +1383,8 @@ TEST_F(UkmPageLoadMetricsObserverTest,
       kLoadingBehaviorFontPreloadStartedBeforeRendering;
   tester()->SimulateMetadataUpdate(metadata, web_contents()->GetMainFrame());
 
-  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0);
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
+                                                              0);
   tester()->SimulateRenderDataUpdate(render_data);
 
   // Simulate hiding the tab (the report should include shifts after hide).
@@ -1417,7 +1419,8 @@ TEST_F(UkmPageLoadMetricsObserverTest, LayoutInstabilitySubframeAggregation) {
   NavigateAndCommit(GURL(kTestUrl1));
 
   // Simulate layout instability in the main frame.
-  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0);
+  page_load_metrics::mojom::FrameRenderDataUpdate render_data(1.0, 1.0, 0, 0, 0,
+                                                              0);
   tester()->SimulateRenderDataUpdate(render_data);
 
   RenderFrameHost* subframe =
@@ -1495,7 +1498,7 @@ TEST_F(UkmPageLoadMetricsObserverTest,
   feature_list.InitAndDisableFeature(content_settings::kImprovedCookieControls);
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kOn));
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
 
   NavigateAndCommit(GURL(kTestUrl1));
 
@@ -1521,7 +1524,7 @@ TEST_F(UkmPageLoadMetricsObserverTest, ThirdPartyCookieBlockingEnabled) {
   feature_list.InitAndEnableFeature(content_settings::kImprovedCookieControls);
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kOn));
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
 
   NavigateAndCommit(GURL(kTestUrl1));
 
@@ -1548,7 +1551,7 @@ TEST_F(UkmPageLoadMetricsObserverTest,
   feature_list.InitAndEnableFeature(content_settings::kImprovedCookieControls);
   profile()->GetPrefs()->SetInteger(
       prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kOn));
+      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
   auto cookie_settings = CookieSettingsFactory::GetForProfile(profile());
   cookie_settings->SetThirdPartyCookieSetting(GURL(kTestUrl1),
                                               CONTENT_SETTING_ALLOW);

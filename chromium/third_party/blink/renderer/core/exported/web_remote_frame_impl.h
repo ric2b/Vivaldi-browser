@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EXPORTED_WEB_REMOTE_FRAME_IMPL_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EXPORTED_WEB_REMOTE_FRAME_IMPL_H_
 
+#include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/web/web_remote_frame.h"
@@ -32,45 +33,51 @@ class CORE_EXPORT WebRemoteFrameImpl final
     : public GarbageCollected<WebRemoteFrameImpl>,
       public WebRemoteFrame {
  public:
-  static WebRemoteFrameImpl* CreateMainFrame(WebView*,
-                                             WebRemoteFrameClient*,
-                                             InterfaceRegistry*,
-                                             AssociatedInterfaceProvider*,
-                                             WebFrame* opener);
-  static WebRemoteFrameImpl* CreateForPortal(WebTreeScopeType,
-                                             WebRemoteFrameClient*,
-                                             InterfaceRegistry*,
-                                             AssociatedInterfaceProvider*,
-                                             const WebElement& portal_element);
+  static WebRemoteFrameImpl* CreateMainFrame(
+      WebView*,
+      WebRemoteFrameClient*,
+      InterfaceRegistry*,
+      AssociatedInterfaceProvider*,
+      const base::UnguessableToken& frame_token,
+      WebFrame* opener);
+  static WebRemoteFrameImpl* CreateForPortal(
+      mojom::blink::TreeScopeType,
+      WebRemoteFrameClient*,
+      InterfaceRegistry*,
+      AssociatedInterfaceProvider*,
+      const base::UnguessableToken& frame_token,
+      const WebElement& portal_element);
 
-  WebRemoteFrameImpl(WebTreeScopeType,
+  WebRemoteFrameImpl(mojom::blink::TreeScopeType,
                      WebRemoteFrameClient*,
                      InterfaceRegistry*,
-                     AssociatedInterfaceProvider*);
+                     AssociatedInterfaceProvider*,
+                     const base::UnguessableToken& frame_token);
   ~WebRemoteFrameImpl() override;
 
   // WebFrame methods:
   void Close() override;
   WebView* View() const override;
-  void StopLoading() override;
 
   // WebRemoteFrame methods:
-  WebLocalFrame* CreateLocalChild(WebTreeScopeType,
+  WebLocalFrame* CreateLocalChild(mojom::blink::TreeScopeType,
                                   const WebString& name,
                                   const FramePolicy&,
                                   WebLocalFrameClient*,
                                   blink::InterfaceRegistry*,
                                   WebFrame* previous_sibling,
                                   const WebFrameOwnerProperties&,
-                                  FrameOwnerElementType,
+                                  mojom::FrameOwnerElementType,
+                                  const base::UnguessableToken& frame_token,
                                   WebFrame* opener) override;
-  WebRemoteFrame* CreateRemoteChild(WebTreeScopeType,
+  WebRemoteFrame* CreateRemoteChild(mojom::blink::TreeScopeType,
                                     const WebString& name,
                                     const FramePolicy&,
-                                    FrameOwnerElementType,
+                                    mojom::FrameOwnerElementType,
                                     WebRemoteFrameClient*,
                                     blink::InterfaceRegistry*,
                                     AssociatedInterfaceProvider*,
+                                    const base::UnguessableToken& frame_token,
                                     WebFrame* opener) override;
   void SetCcLayer(cc::Layer*,
                   bool prevent_contents_opaque_changes,
@@ -78,7 +85,8 @@ class CORE_EXPORT WebRemoteFrameImpl final
   void SetReplicatedOrigin(
       const WebSecurityOrigin&,
       bool is_potentially_trustworthy_opaque_origin) override;
-  void SetReplicatedSandboxFlags(mojom::blink::WebSandboxFlags) override;
+  void SetReplicatedSandboxFlags(
+      network::mojom::blink::WebSandboxFlags) override;
   void SetReplicatedName(const WebString&) override;
   void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
       const ParsedFeaturePolicy& parsed_header,

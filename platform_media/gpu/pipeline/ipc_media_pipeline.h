@@ -69,7 +69,8 @@ class IPCMediaPipeline : public IPC::Listener {
 
   void OnInitialize(int64_t data_source_size,
                     bool is_data_source_streaming,
-                    const std::string& mime_type);
+                    const std::string& mime_type,
+                    base::ReadOnlySharedMemoryRegion data_source_region);
   void Initialized(bool success,
                    int bitrate,
                    const PlatformMediaTimeInfo& time_info,
@@ -81,9 +82,7 @@ class IPCMediaPipeline : public IPC::Listener {
   // The method is static so we can call the callback with an error status after
   // the week pointer to the pipeline becomes null.
   static void ReadRawData(base::WeakPtr<IPCMediaPipeline> pipeline,
-                          int64_t position,
-                          int size,
-                          ipc_data_source::ReadCB read_cb);
+                          ipc_data_source::Buffer source_buffer);
 
   void OnWillSeek();
   void OnSeek(base::TimeDelta time);

@@ -91,7 +91,8 @@ void PortalContents::OnActivateResponse(
   bool should_destroy_contents = false;
   switch (result) {
     case mojom::blink::PortalActivateResult::kPredecessorWasAdopted:
-      GetDocument().GetPage()->SetInsidePortal(true);
+      if (!GetDocument().IsContextDestroyed())
+        GetDocument().GetPage()->SetInsidePortal(true);
       FALLTHROUGH;
     case mojom::blink::PortalActivateResult::kPredecessorWillUnload:
       activate_resolver_->Resolve();
@@ -106,6 +107,10 @@ void PortalContents::OnActivateResponse(
     case mojom::blink::PortalActivateResult::kRejectedDueToPortalNotReady:
       reject(DOMExceptionCode::kInvalidStateError,
              "The portal was not yet ready or was blocked.");
+      break;
+    case mojom::blink::PortalActivateResult::kRejectedDueToErrorInPortal:
+      reject(DOMExceptionCode::kInvalidStateError,
+             "The portal is in an error state.");
       break;
     case mojom::blink::PortalActivateResult::kDisconnected:
       // Only called when |remote_portal_| is disconnected. This usually happens

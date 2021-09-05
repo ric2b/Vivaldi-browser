@@ -18,6 +18,7 @@
 #include "components/metrics/delegating_provider.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/metrics_rotation_scheduler.h"
+#include "components/ukm/ukm_entry_filter.h"
 #include "components/ukm/ukm_recorder_impl.h"
 #include "components/ukm/ukm_reporting_service.h"
 
@@ -30,12 +31,12 @@ FORWARD_DECLARE_TEST(IOSChromeMetricsServiceClientTest,
 namespace metrics {
 class MetricsServiceClient;
 class UkmBrowserTestBase;
-class UkmEGTestHelper;
 class UkmDemographicMetricsProvider;
 }
 
 namespace ukm {
 class Report;
+class UkmTestHelper;
 
 namespace debug {
 class UkmDebugDataExtractor;
@@ -97,6 +98,10 @@ class UkmService : public UkmRecorderImpl {
   virtual void RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider> provider);
 
+  // Registers the |filter| that is guaranteed to be applied to all subsequent
+  // events that are recorded via this UkmService.
+  void RegisterEventFilter(std::unique_ptr<UkmEntryFilter> filter);
+
   // Registers the names of all of the preferences used by UkmService in
   // the provided PrefRegistry.
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -110,7 +115,7 @@ class UkmService : public UkmRecorderImpl {
 
  private:
   friend ::metrics::UkmBrowserTestBase;
-  friend ::metrics::UkmEGTestHelper;
+  friend ::ukm::UkmTestHelper;
   friend ::ukm::debug::UkmDebugDataExtractor;
   friend ::ukm::UkmUtilsForTest;
   FRIEND_TEST_ALL_PREFIXES(::ChromeMetricsServiceClientTest,

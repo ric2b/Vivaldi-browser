@@ -4,7 +4,9 @@
 
 #include "extensions/browser/install/crx_install_error.h"
 
-#include "base/logging.h"
+#include <algorithm>
+
+#include "base/check_op.h"
 #include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 
 namespace extensions {

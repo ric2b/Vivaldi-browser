@@ -15,7 +15,9 @@ import androidx.browser.customtabs.CustomTabsSessionToken;
 
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.webapps.WebappExtras;
 import org.chromium.net.NetworkChangeNotifier;
 
 import javax.inject.Inject;
@@ -73,8 +75,7 @@ public class CustomTabIntentHandler {
         runWhenTabCreated(() -> {
             if (mTabProvider.getInitialTabCreationMode() != TabCreationMode.RESTORED) {
                 mHandlingStrategy.handleInitialIntent(mIntentDataProvider);
-            } else if (mIntentDataProvider.isWebappOrWebApkActivity()
-                    && !mIntentDataProvider.isWebApkActivity()
+            } else if (mIntentDataProvider.getActivityType() == ActivityType.WEBAPP
                     && NetworkChangeNotifier.isOnline()) {
                 mTabProvider.getTab().reloadIgnoringCache();
             }
@@ -91,8 +92,12 @@ public class CustomTabIntentHandler {
     public boolean onNewIntent(BrowserServicesIntentDataProvider intentDataProvider) {
         Intent intent = intentDataProvider.getIntent();
         CustomTabsSessionToken session = intentDataProvider.getSession();
-        if (!intentDataProvider.isWebappOrWebApkActivity()
-                && (session == null || !session.equals(mIntentDataProvider.getSession()))) {
+        WebappExtras webappExtras = intentDataProvider.getWebappExtras();
+        if (webappExtras != null) {
+            // Don't navigate if the purpose of the intent was to bring the webapp to the
+            // foreground.
+            if (!webappExtras.shouldForceNavigation) return false;
+        } else if (session == null || !session.equals(mIntentDataProvider.getSession())) {
             assert false : "New intent delivered into a Custom Tab with a different session";
             int flagsToRemove = Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP;
             intent.setFlags((intent.getFlags() & ~flagsToRemove) | Intent.FLAG_ACTIVITY_NEW_TASK);

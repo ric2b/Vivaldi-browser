@@ -78,6 +78,9 @@ class WebStateImpl : public WebState,
   // Notifies the observers that a navigation has started.
   void OnNavigationStarted(web::NavigationContextImpl* context);
 
+  // Notifies the observers that a navigation was redirected.
+  void OnNavigationRedirected(web::NavigationContextImpl* context);
+
   // Notifies the observers that a navigation has finished. For same-document
   // navigations notifies the observers about favicon URLs update using
   // candidates received in OnFaviconUrlUpdated.
@@ -135,13 +138,23 @@ class WebStateImpl : public WebState,
   void SetContentsMimeType(const std::string& mime_type);
 
   // Returns whether the navigation corresponding to |request| should be allowed
-  // to continue by asking its policy deciders. Defaults to true.
-  bool ShouldAllowRequest(
+  // to continue by asking its policy deciders. Defaults to
+  // PolicyDecision::Allow().
+  WebStatePolicyDecider::PolicyDecision ShouldAllowRequest(
       NSURLRequest* request,
       const WebStatePolicyDecider::RequestInfo& request_info);
-  // Returns whether the navigation corresponding to |response| should be
-  // allowed to continue by asking its policy deciders. Defaults to true.
-  bool ShouldAllowResponse(NSURLResponse* response, bool for_main_frame);
+  // Decides whether the navigation corresponding to |response| should be
+  // allowed to continue by asking its policy deciders, and calls |callback|
+  // with the decision. Defaults to PolicyDecision::Allow(). If at least one
+  // policy decider's decision is PolicyDecision::Cancel(), the final result is
+  // PolicyDecision::Cancel(). Otherwise, if at least one policy decider's
+  // decision is PolicyDecision::CancelAndDisplayError(), the final result is
+  // PolicyDecision::CancelAndDisplayError(), with the error corresponding to
+  // the first PolicyDecision::CancelAndDisplayError() result that was received.
+  void ShouldAllowResponse(
+      NSURLResponse* response,
+      bool for_main_frame,
+      base::OnceCallback<void(WebStatePolicyDecider::PolicyDecision)> callback);
 
   // Determines whether the given link with |link_url| should show a preview on
   // force touch.
@@ -156,11 +169,17 @@ class WebStateImpl : public WebState,
   void CommitPreviewingViewController(
       UIViewController* previewing_view_controller);
 
+  // Returns the UIView used to contain the WebView for sizing purposes. Can be
+  // nil.
+  UIView* GetWebViewContainer();
+
   // WebFramesManagerDelegate.
   void OnWebFrameAvailable(web::WebFrame* frame) override;
   void OnWebFrameUnavailable(web::WebFrame* frame) override;
 
   // WebState:
+  Getter CreateDefaultGetter() override;
+  OnceGetter CreateDefaultOnceGetter() override;
   WebStateDelegate* GetDelegate() override;
   void SetDelegate(WebStateDelegate* delegate) override;
   bool IsWebUsageEnabled() const override;

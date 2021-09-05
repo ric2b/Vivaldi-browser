@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 
 namespace blink {
@@ -21,24 +22,50 @@ NGFragmentItem::NGFragmentItem(const NGPhysicalTextFragment& text)
       type_(kText),
       sub_type_(static_cast<unsigned>(text.TextType())),
       style_variant_(static_cast<unsigned>(text.StyleVariant())),
-      is_generated_text_(text.IsGeneratedText()),
       is_hidden_for_paint_(text.IsHiddenForPaint()),
       text_direction_(static_cast<unsigned>(text.ResolvedDirection())),
       ink_overflow_computed_(false),
-      is_first_for_node_(text.IsFirstForNode()) {
+      is_dirty_(false),
+      is_first_for_node_(true),
+      is_last_for_node_(true) {
 #if DCHECK_IS_ON()
   if (text_.shape_result) {
     DCHECK_EQ(text_.shape_result->StartIndex(), StartOffset());
     DCHECK_EQ(text_.shape_result->EndIndex(), EndOffset());
   }
 #endif
-  if (text.TextType() == NGPhysicalTextFragment::kGeneratedText) {
+  if (text.TextType() == NGTextType::kLayoutGenerated) {
     type_ = kGeneratedText;
     // Note: Because of |text_| and |generated_text_| are in same union and
     // we initialize |text_| instead of |generated_text_|, we should construct
     // |generated_text_.text_| instead copying, |generated_text_.text = ...|.
     new (&generated_text_.text) String(text.Text().ToString());
   }
+  DCHECK(!IsFormattingContextRoot());
+}
+
+NGFragmentItem::NGFragmentItem(NGInlineItemResult&& item_result,
+                               const PhysicalSize& size)
+    : layout_object_(item_result.item->GetLayoutObject()),
+      text_({std::move(item_result.shape_result), item_result.TextOffset()}),
+      rect_({PhysicalOffset(), size}),
+      type_(kText),
+      sub_type_(static_cast<unsigned>(item_result.item->TextType())),
+      style_variant_(static_cast<unsigned>(item_result.item->StyleVariant())),
+      is_hidden_for_paint_(false),  // TODO(kojii): not supported yet.
+      text_direction_(static_cast<unsigned>(item_result.item->Direction())),
+      ink_overflow_computed_(false),
+      is_dirty_(false),
+      is_first_for_node_(true),
+      is_last_for_node_(true) {
+#if DCHECK_IS_ON()
+  if (text_.shape_result) {
+    DCHECK_EQ(text_.shape_result->StartIndex(), StartOffset());
+    DCHECK_EQ(text_.shape_result->EndIndex(), EndOffset());
+  }
+#endif
+  // TODO(kojii): Generated text not supported yet.
+  DCHECK_NE(TextType(), NGTextType::kLayoutGenerated);
   DCHECK(!IsFormattingContextRoot());
 }
 
@@ -53,7 +80,9 @@ NGFragmentItem::NGFragmentItem(const NGPhysicalLineBoxFragment& line,
       is_hidden_for_paint_(false),
       text_direction_(static_cast<unsigned>(line.BaseDirection())),
       ink_overflow_computed_(false),
-      is_first_for_node_(true) {
+      is_dirty_(false),
+      is_first_for_node_(true),
+      is_last_for_node_(true) {
   DCHECK(!IsFormattingContextRoot());
 }
 
@@ -67,7 +96,9 @@ NGFragmentItem::NGFragmentItem(const NGPhysicalBoxFragment& box,
       is_hidden_for_paint_(box.IsHiddenForPaint()),
       text_direction_(static_cast<unsigned>(resolved_direction)),
       ink_overflow_computed_(false),
-      is_first_for_node_(box.IsFirstForNode()) {
+      is_dirty_(false),
+      is_first_for_node_(true),
+      is_last_for_node_(true) {
   DCHECK_EQ(IsFormattingContextRoot(), box.IsFormattingContextRoot());
 }
 
@@ -81,11 +112,50 @@ NGFragmentItem::NGFragmentItem(const NGInlineItem& inline_item,
       is_hidden_for_paint_(false),
       text_direction_(static_cast<unsigned>(TextDirection::kLtr)),
       ink_overflow_computed_(false),
-      is_first_for_node_(true) {
+      is_dirty_(false),
+      is_first_for_node_(true),
+      is_last_for_node_(true) {
   DCHECK_EQ(inline_item.Type(), NGInlineItem::kOpenTag);
   DCHECK(layout_object_);
   DCHECK(layout_object_->IsLayoutInline());
   DCHECK(!IsFormattingContextRoot());
+}
+
+// static
+void NGFragmentItem::Create(NGLineBoxFragmentBuilder::ChildList* child_list,
+                            const String& text_content,
+                            WritingMode writing_mode) {
+  for (auto& child : *child_list) {
+    DCHECK(!child.fragment_item);
+
+    if (child.fragment) {
+      child.fragment_item = base::AdoptRef(new NGFragmentItem(*child.fragment));
+      continue;
+    }
+
+    if (child.item_result) {
+      child.fragment_item = base::AdoptRef(new NGFragmentItem(
+          std::move(*child.item_result),
+          ToPhysicalSize({child.inline_size, child.rect.size.block_size},
+                         writing_mode)));
+      continue;
+    }
+
+    if (child.layout_result) {
+      const NGPhysicalBoxFragment& fragment =
+          To<NGPhysicalBoxFragment>(child.layout_result->PhysicalFragment());
+      child.fragment_item = base::AdoptRef(
+          new NGFragmentItem(fragment, child.ResolvedDirection()));
+      continue;
+    }
+
+    if (child.inline_item) {
+      child.fragment_item = base::AdoptRef(new NGFragmentItem(
+          *child.inline_item,
+          ToPhysicalSize(child.rect.size,
+                         child.inline_item->Style()->GetWritingMode())));
+    }
+  }
 }
 
 NGFragmentItem::~NGFragmentItem() {
@@ -103,24 +173,6 @@ NGFragmentItem::~NGFragmentItem() {
       box_.~BoxItem();
       break;
   }
-}
-
-bool NGFragmentItem::IsSiblingOf(const NGFragmentItem& other) const {
-  if (!GetLayoutObject())
-    return !other.GetLayoutObject();
-  if (!other.GetLayoutObject())
-    return false;
-  if (GetLayoutObject()->Parent() == other.GetLayoutObject()->Parent())
-    return true;
-  // To traverse list marker and line box of <li> with |MoveToNextSibling()|,
-  // we think list marker and <li> are sibling.
-  // See hittesting/culled-inline-crash.html (skip list marker)
-  // See fast/events/onclick-list-marker.html (hit on list marker)
-  if (IsListMarker())
-    return GetLayoutObject()->Parent() == other.GetLayoutObject();
-  if (other.IsListMarker())
-    return other.GetLayoutObject()->Parent() == GetLayoutObject();
-  return false;
 }
 
 bool NGFragmentItem::IsInlineBox() const {
@@ -152,8 +204,13 @@ bool NGFragmentItem::IsEmptyLineBox() const {
 }
 
 bool NGFragmentItem::IsGeneratedText() const {
-  if (Type() == kText || Type() == kGeneratedText)
-    return is_generated_text_;
+  if (Type() == kGeneratedText) {
+    DCHECK_EQ(TextType(), NGTextType::kLayoutGenerated);
+    return true;
+  }
+  DCHECK_NE(TextType(), NGTextType::kLayoutGenerated);
+  if (Type() == kText)
+    return GetLayoutObject()->IsStyleGenerated();
   NOTREACHED();
   return false;
 }
@@ -172,6 +229,21 @@ bool NGFragmentItem::HasSelfPaintingLayer() const {
   if (const NGPhysicalBoxFragment* fragment = BoxFragment())
     return fragment->HasSelfPaintingLayer();
   return false;
+}
+
+void NGFragmentItem::LayoutObjectWillBeDestroyed() const {
+  const_cast<NGFragmentItem*>(this)->layout_object_ = nullptr;
+  if (const NGPhysicalBoxFragment* fragment = BoxFragment())
+    fragment->LayoutObjectWillBeDestroyed();
+}
+
+void NGFragmentItem::LayoutObjectWillBeMoved() const {
+  // When |Layoutobject| is moved out from the current IFC, we should not clear
+  // the association with it in |ClearAssociatedFragments|, because the
+  // |LayoutObject| may be moved to a different IFC and is already laid out
+  // before clearing this IFC. This happens e.g., when split inlines moves
+  // inline children into a child anonymous block.
+  const_cast<NGFragmentItem*>(this)->layout_object_ = nullptr;
 }
 
 inline const LayoutBox* NGFragmentItem::InkOverflowOwnerBox() const {
@@ -277,7 +349,17 @@ String NGFragmentItem::DebugName() const {
   if (Type() == NGFragmentItem::kText) {
     StringBuilder name;
     name.Append("NGPhysicalTextFragment '");
-    name.Append(Text(*layout_object_->ContainingBlockFlowFragment()->Items()));
+    const NGPhysicalBoxFragment* containing_fragment =
+        layout_object_->ContainingBlockFlowFragment();
+    if (containing_fragment) {
+      name.Append(Text(*containing_fragment->Items()));
+    } else {
+      // TODO(crbug.com/1061423): ContainingBlockFlowFragment() relies on
+      // CurrentFragment(), which doesn't work inside block fragmentation. Check
+      // that we're (most likely) inside block fragmentation. Otherwise, this
+      // shouldn't happen.
+      DCHECK(layout_object_->IsInsideFlowThread());
+    }
     name.Append('\'');
     return name.ToString();
   }
@@ -323,6 +405,7 @@ PhysicalRect NGFragmentItem::LocalVisualRectFor(
 PhysicalRect NGFragmentItem::RecalcInkOverflowForCursor(
     NGInlineCursor* cursor) {
   DCHECK(cursor);
+  DCHECK(!cursor->Current() || cursor->IsAtFirst());
   PhysicalRect contents_ink_overflow;
   while (*cursor) {
     const NGFragmentItem* item = cursor->CurrentItem();
@@ -374,7 +457,7 @@ void NGFragmentItem::RecalcInkOverflow(
   // overflow to be stored in |LayoutBox|.
   if (LayoutBox* owner_box = MutableInkOverflowOwnerBox()) {
     DCHECK(!HasChildren());
-    cursor->MoveToNextSibling();
+    cursor->MoveToNextSkippingChildren();
     owner_box->RecalcNormalFlowChildVisualOverflowIfNeeded();
     *self_and_contents_rect_out = owner_box->PhysicalVisualOverflowRect();
     return;
@@ -382,7 +465,7 @@ void NGFragmentItem::RecalcInkOverflow(
 
   // Re-compute descendants, then compute the contents ink overflow from them.
   NGInlineCursor descendants_cursor = cursor->CursorForDescendants();
-  cursor->MoveToNextSibling();
+  cursor->MoveToNextSkippingChildren();
   PhysicalRect contents_rect = RecalcInkOverflowForCursor(&descendants_cursor);
 
   // |contents_rect| is relative to the inline formatting context. Make it
@@ -420,8 +503,8 @@ void NGFragmentItem::RecalcInkOverflow(
   }
 }
 
-void NGFragmentItem::SetDeltaToNextForSameLayoutObject(wtf_size_t delta) {
-  DCHECK_NE(delta, 0u);
+void NGFragmentItem::SetDeltaToNextForSameLayoutObject(wtf_size_t delta) const {
+  DCHECK_NE(Type(), kLine);
   delta_to_next_for_same_layout_object_ = delta;
 }
 

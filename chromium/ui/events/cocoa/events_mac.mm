@@ -7,8 +7,9 @@
 #include <Cocoa/Cocoa.h>
 #include <stdint.h>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #import "base/mac/mac_util.h"
+#include "base/notreached.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "ui/events/base_event_utils.h"
@@ -126,7 +127,7 @@ int GetChangedMouseButtonFlagsFromNative(const PlatformEvent& native_event) {
 
 PointerDetails GetMousePointerDetailsFromNative(
     const PlatformEvent& native_event) {
-  return PointerDetails(EventPointerType::POINTER_TYPE_MOUSE);
+  return PointerDetails(EventPointerType::kMouse);
 }
 
 gfx::Vector2d GetMouseWheelOffset(const PlatformEvent& event) {
@@ -165,7 +166,7 @@ void ClearTouchIdIfReleased(const PlatformEvent& native_event) {
 PointerDetails GetTouchPointerDetailsFromNative(
     const PlatformEvent& native_event) {
   NOTIMPLEMENTED();
-  return PointerDetails(EventPointerType::POINTER_TYPE_UNKNOWN,
+  return PointerDetails(EventPointerType::kUnknown,
                         /* pointer_id*/ 0,
                         /* radius_x */ 1.0,
                         /* radius_y */ 1.0,

@@ -98,7 +98,7 @@ void VersionInfoUpdater::StartUpdate(bool is_chrome_branded) {
   }
 
   // Update device bluetooth info.
-  device::BluetoothAdapterFactory::GetAdapter(base::BindOnce(
+  device::BluetoothAdapterFactory::Get()->GetAdapter(base::BindOnce(
       &VersionInfoUpdater::OnGetAdapter, weak_pointer_factory_.GetWeakPtr()));
 
   // Get ADB sideloading status if supported on device. Otherwise, default is to
@@ -107,8 +107,9 @@ void VersionInfoUpdater::StartUpdate(bool is_chrome_branded) {
       chromeos::features::kArcAdbSideloadingFeature)) {
     chromeos::SessionManagerClient* client =
         chromeos::SessionManagerClient::Get();
-    client->QueryAdbSideload(base::Bind(&VersionInfoUpdater::OnQueryAdbSideload,
-                                        weak_pointer_factory_.GetWeakPtr()));
+    client->QueryAdbSideload(
+        base::BindOnce(&VersionInfoUpdater::OnQueryAdbSideload,
+                       weak_pointer_factory_.GetWeakPtr()));
   }
 }
 

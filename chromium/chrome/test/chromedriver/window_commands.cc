@@ -277,7 +277,7 @@ Status GetVisibleCookies(Session* session,
     cookie_dict->GetString("domain", &domain);
     std::string path;
     cookie_dict->GetString("path", &path);
-    std::string samesite = "";
+    std::string samesite;
     GetOptionalString(cookie_dict, "sameSite", &samesite);
     int64_t expiry = 0;
     double temp_double;
@@ -356,7 +356,7 @@ Status ExecuteTouchEvent(
       session, web_view, x, y, &relative_x, &relative_y);
   if (!status.IsOk())
     return status;
-  std::list<TouchEvent> events;
+  std::vector<TouchEvent> events;
   events.push_back(
       TouchEvent(type, relative_x, relative_y));
   return web_view->DispatchTouchEvents(events, false);
@@ -613,7 +613,7 @@ Status ExecuteNewWindow(Session* session,
                         const base::DictionaryValue& params,
                         std::unique_ptr<base::Value>* value,
                         Timeout* timeout) {
-  std::string type = "";
+  std::string type;
   // "type" can either be None or a string.
   auto* type_param = params.FindKey("type");
   if (!(!type_param || type_param->is_none() ||
@@ -625,7 +625,7 @@ Status ExecuteNewWindow(Session* session,
                                        ? Chrome::WindowType::kWindow
                                        : Chrome::WindowType::kTab;
 
-  std::string handle = "";
+  std::string handle;
   Status status =
       session->chrome->NewWindow(session->window, window_type, &handle);
 
@@ -885,7 +885,7 @@ Status ExecuteMouseMoveTo(Session* session,
       location.Offset(x_offset, y_offset);
   }
 
-  std::list<MouseEvent> events;
+  std::vector<MouseEvent> events;
   events.push_back(MouseEvent(kMovedMouseEventType,
                               session->pressed_mouse_button, location.x,
                               location.y, session->sticky_modifiers, 0, 0));
@@ -905,7 +905,7 @@ Status ExecuteMouseClick(Session* session,
   Status status = GetMouseButton(params, &button);
   if (status.IsError())
     return status;
-  std::list<MouseEvent> events;
+  std::vector<MouseEvent> events;
   events.push_back(
       MouseEvent(kPressedMouseEventType, button, session->mouse_position.x,
                  session->mouse_position.y, session->sticky_modifiers, 0, 1));
@@ -927,7 +927,7 @@ Status ExecuteMouseButtonDown(Session* session,
   Status status = GetMouseButton(params, &button);
   if (status.IsError())
     return status;
-  std::list<MouseEvent> events;
+  std::vector<MouseEvent> events;
   events.push_back(
       MouseEvent(kPressedMouseEventType, button, session->mouse_position.x,
                  session->mouse_position.y, session->sticky_modifiers, 0, 1));
@@ -945,7 +945,7 @@ Status ExecuteMouseButtonUp(Session* session,
   Status status = GetMouseButton(params, &button);
   if (status.IsError())
     return status;
-  std::list<MouseEvent> events;
+  std::vector<MouseEvent> events;
   events.push_back(
       MouseEvent(kReleasedMouseEventType, button, session->mouse_position.x,
                  session->mouse_position.y, session->sticky_modifiers,
@@ -964,7 +964,7 @@ Status ExecuteMouseDoubleClick(Session* session,
   Status status = GetMouseButton(params, &button);
   if (status.IsError())
     return status;
-  std::list<MouseEvent> events;
+  std::vector<MouseEvent> events;
   events.push_back(
       MouseEvent(kPressedMouseEventType, button, session->mouse_position.x,
                  session->mouse_position.y, session->sticky_modifiers, 0, 1));
@@ -1334,7 +1334,7 @@ Status ExecutePerformActions(Session* session,
     // (https://w3c.github.io/webdriver/#dfn-computing-the-tick-duration).
     // This is the duration for actions in one tick.
     int tick_duration = 0;
-    std::list<TouchEvent> dispatch_touch_events;
+    std::vector<TouchEvent> dispatch_touch_events;
     for (size_t j = 0; j < actions_list.size(); j++) {
       if (actions_list[j].size() > i) {
         const base::DictionaryValue* action = actions_list[j][i].get();
@@ -1389,7 +1389,7 @@ Status ExecutePerformActions(Session* session,
 
           if (type == "key") {
             if (action_type != "pause") {
-              std::list<KeyEvent> dispatch_key_events;
+              std::vector<KeyEvent> dispatch_key_events;
               KeyEventBuilder builder;
               Status status = ConvertKeyActionToKeyEvent(
                   action, input_state, action_type == "keyDown",
@@ -1418,7 +1418,7 @@ Status ExecutePerformActions(Session* session,
             action->GetString("pointerType", &pointer_type);
             double x = 0, y = 0;
             OriginType origin = kViewPort;
-            std::string element_id = "";
+            std::string element_id;
             if (action_type == "pointerMove") {
               action->GetDouble("x", &x);
               action->GetDouble("y", &y);
@@ -1458,7 +1458,7 @@ Status ExecutePerformActions(Session* session,
 
             if (pointer_type == "mouse" || pointer_type == "pen") {
               if (action_type != "pause") {
-                std::list<MouseEvent> dispatch_mouse_events;
+                std::vector<MouseEvent> dispatch_mouse_events;
                 int click_count = 0;
                 if (action_type == "pointerDown" ||
                     action_type == "pointerUp") {
@@ -1668,26 +1668,24 @@ Status ExecuteSendKeysToActiveElement(Session* session,
       web_view, key_list, false, &session->sticky_modifiers);
 }
 
+// TODO: Remove, applicationCache.status is deprecated in chrome
 Status ExecuteGetAppCacheStatus(Session* session,
                                 WebView* web_view,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value,
                                 Timeout* timeout) {
-  return web_view->EvaluateScript(
-      session->GetCurrentFrameId(),
-      "applicationCache.status",
-      value);
+  return web_view->EvaluateScript(session->GetCurrentFrameId(),
+                                  "applicationCache.status", false, value);
 }
 
+// TODO: Remove, not used
 Status ExecuteIsBrowserOnline(Session* session,
                               WebView* web_view,
                               const base::DictionaryValue& params,
                               std::unique_ptr<base::Value>* value,
                               Timeout* timeout) {
-  return web_view->EvaluateScript(
-      session->GetCurrentFrameId(),
-      "navigator.onLine",
-      value);
+  return web_view->EvaluateScript(session->GetCurrentFrameId(),
+                                  "navigator.onLine", false, value);
 }
 
 Status ExecuteGetStorageItem(const char* storage,
@@ -1721,10 +1719,9 @@ Status ExecuteGetStorageKeys(const char* storage,
       "  keys.push(storage.key(i));"
       "}"
       "keys";
-  return web_view->EvaluateScript(
-      session->GetCurrentFrameId(),
-      base::StringPrintf(script, storage),
-      value);
+  return web_view->EvaluateScript(session->GetCurrentFrameId(),
+                                  base::StringPrintf(script, storage), false,
+                                  value);
 }
 
 Status ExecuteSetStorageItem(const char* storage,
@@ -1773,10 +1770,9 @@ Status ExecuteClearStorage(const char* storage,
                            const base::DictionaryValue& params,
                            std::unique_ptr<base::Value>* value,
                            Timeout* timeout) {
-  return web_view->EvaluateScript(
-      session->GetCurrentFrameId(),
-      base::StringPrintf("%s.clear()", storage),
-      value);
+  return web_view->EvaluateScript(session->GetCurrentFrameId(),
+                                  base::StringPrintf("%s.clear()", storage),
+                                  false, value);
 }
 
 Status ExecuteGetStorageSize(const char* storage,
@@ -1785,10 +1781,9 @@ Status ExecuteGetStorageSize(const char* storage,
                              const base::DictionaryValue& params,
                              std::unique_ptr<base::Value>* value,
                              Timeout* timeout) {
-  return web_view->EvaluateScript(
-      session->GetCurrentFrameId(),
-      base::StringPrintf("%s.length", storage),
-      value);
+  return web_view->EvaluateScript(session->GetCurrentFrameId(),
+                                  base::StringPrintf("%s.length", storage),
+                                  false, value);
 }
 
 Status ExecuteScreenshot(Session* session,
@@ -2107,31 +2102,21 @@ Status ExecuteTakeHeapSnapshot(Session* session,
   return web_view->TakeHeapSnapshot(value);
 }
 
-// TODO(johnchen): There is no public method in Chrome or ChromeDesktopImpl to
-// get both size and position in one call. What we're doing now is kind of
-// wasteful, since both GetWindowPosition and GetWindowSize end up getting both
-// position and size, and then discard one of the two pieces.
 Status ExecuteGetWindowRect(Session* session,
                             WebView* web_view,
                             const base::DictionaryValue& params,
                             std::unique_ptr<base::Value>* value,
                             Timeout* timeout) {
-  int x, y;
-  int width, height;
-
-  Status status = session->chrome->GetWindowPosition(session->window, &x, &y);
-  if (status.IsError())
-    return status;
-  status = session->chrome->GetWindowSize(session->window, &width, &height);
-
+  Chrome::WindowRect windowRect;
+  Status status = session->chrome->GetWindowRect(session->window, &windowRect);
   if (status.IsError())
     return status;
 
   base::DictionaryValue rect;
-  rect.SetInteger("x", x);
-  rect.SetInteger("y", y);
-  rect.SetInteger("width", width);
-  rect.SetInteger("height", height);
+  rect.SetInteger("x", windowRect.x);
+  rect.SetInteger("y", windowRect.y);
+  rect.SetInteger("width", windowRect.width);
+  rect.SetInteger("height", windowRect.height);
   value->reset(rect.DeepCopy());
   return Status(kOk);
 }

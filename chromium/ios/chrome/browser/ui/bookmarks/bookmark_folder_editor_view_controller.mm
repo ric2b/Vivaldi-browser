@@ -7,13 +7,16 @@
 #include <set>
 
 #include "base/auto_reset.h"
+#include "base/check_op.h"
 #include "base/i18n/rtl.h"
-#include "base/logging.h"
 #include "base/mac/foundation_util.h"
+#include "base/notreached.h"
 
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_folder_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
@@ -64,6 +67,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 @property(nonatomic, assign) BOOL editingExistingFolder;
 @property(nonatomic, assign) bookmarks::BookmarkModel* bookmarkModel;
+@property(nonatomic, assign) Browser* browser;
 @property(nonatomic, assign) ChromeBrowserState* browserState;
 @property(nonatomic, assign) const BookmarkNode* folder;
 @property(nonatomic, strong) BookmarkFolderViewController* folderViewController;
@@ -101,6 +105,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @synthesize folder = _folder;
 @synthesize folderViewController = _folderViewController;
 @synthesize parentFolder = _parentFolder;
+@synthesize browser = _browser;
 @synthesize browserState = _browserState;
 @synthesize doneItem = _doneItem;
 @synthesize titleItem = _titleItem;
@@ -111,33 +116,40 @@ typedef NS_ENUM(NSInteger, ItemType) {
 + (instancetype)folderCreatorWithBookmarkModel:
                     (bookmarks::BookmarkModel*)bookmarkModel
                                   parentFolder:(const BookmarkNode*)parentFolder
-                                    dispatcher:(id<BrowserCommands>)dispatcher {
-  DCHECK(dispatcher);
+                                       browser:(Browser*)browser {
+  DCHECK(browser);
   BookmarkFolderEditorViewController* folderCreator =
       [[self alloc] initWithBookmarkModel:bookmarkModel];
   folderCreator.parentFolder = parentFolder;
   folderCreator.folder = NULL;
+  folderCreator.browser = browser;
   folderCreator.editingExistingFolder = NO;
-  folderCreator.dispatcher = dispatcher;
+  // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
+  // clean up.
+  folderCreator.dispatcher =
+      static_cast<id<BrowserCommands>>(browser->GetCommandDispatcher());
   return folderCreator;
 }
 
 + (instancetype)folderEditorWithBookmarkModel:
                     (bookmarks::BookmarkModel*)bookmarkModel
                                        folder:(const BookmarkNode*)folder
-                                 browserState:(ChromeBrowserState*)browserState
-                                   dispatcher:(id<BrowserCommands>)dispatcher {
+                                      browser:(Browser*)browser {
   DCHECK(folder);
   DCHECK(!bookmarkModel->is_permanent_node(folder));
-  DCHECK(browserState);
-  DCHECK(dispatcher);
+  DCHECK(browser);
   BookmarkFolderEditorViewController* folderEditor =
       [[self alloc] initWithBookmarkModel:bookmarkModel];
   folderEditor.parentFolder = folder->parent();
   folderEditor.folder = folder;
-  folderEditor.browserState = browserState;
+  folderEditor.browser = browser;
+  folderEditor.browserState =
+      browser->GetBrowserState()->GetOriginalChromeBrowserState();
   folderEditor.editingExistingFolder = YES;
-  folderEditor.dispatcher = dispatcher;
+  // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
+  // clean up.
+  folderEditor.dispatcher =
+      static_cast<id<BrowserCommands>>(browser->GetCommandDispatcher());
   return folderEditor;
 }
 
@@ -298,7 +310,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
                     editedNodes:editedNodes
                    allowsCancel:NO
                  selectedFolder:self.parentFolder
-                     dispatcher:self.dispatcher];
+                        browser:_browser];
   folderViewController.delegate = self;
   self.folderViewController = folderViewController;
 
@@ -419,6 +431,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     (UIPresentationController*)presentationController {
   self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self
+                         browser:_browser
                            title:nil
                          message:nil
                    barButtonItem:self.navigationItem.leftBarButtonItem];

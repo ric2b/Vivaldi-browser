@@ -8,6 +8,8 @@
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/test/bind_test_util.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_browsertest_base.h"
@@ -19,6 +21,8 @@
 #include "chrome/common/chrome_paths.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
+#include "components/prefs/scoped_user_pref_update.h"
+#include "content/public/test/browser_test.h"
 
 using extensions::SafeBrowsingPrivateEventRouter;
 using ::testing::_;
@@ -162,6 +166,8 @@ class MinimalFakeDeepScanningDialogDelegate
 
 constexpr char kDmToken[] = "dm_token";
 
+constexpr char kTestUrl[] = "https://google.com";
+
 }  // namespace
 
 // Tests the behavior of the dialog delegate with minimal overriding of methods.
@@ -181,6 +187,12 @@ class DeepScanningDialogDelegateBrowserTest
     SetMalwarePolicy(SEND_UPLOADS);
     SetWaitPolicy(DELAY_UPLOADS);
     SetUnsafeEventsReportingPolicy(true);
+
+    // Add the wildcard pattern to this policy since malware responses are
+    // verified for most of these tests.
+    ListPrefUpdate(g_browser_process->local_state(),
+                   prefs::kURLsToCheckForMalwareOfUploadedContent)
+        ->Append("*");
 
     client_ = std::make_unique<policy::MockCloudPolicyClient>();
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(
@@ -224,6 +236,9 @@ IN_PROC_BROWSER_TEST_F(DeepScanningDialogDelegateBrowserTest, Unauthorized) {
   data.do_malware_scan = true;
   data.text.emplace_back(base::UTF8ToUTF16("foo"));
   data.paths.emplace_back(FILE_PATH_LITERAL("/tmp/foo.doc"));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   // Nothing should be reported for unauthorized users.
   ExpectNoReport();
@@ -255,16 +270,6 @@ IN_PROC_BROWSER_TEST_F(DeepScanningDialogDelegateBrowserTest, Unauthorized) {
 IN_PROC_BROWSER_TEST_F(DeepScanningDialogDelegateBrowserTest, Files) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  // Create the files to be opened and scanned.
-  DeepScanningDialogDelegate::Data data;
-  data.do_dlp_scan = true;
-  data.do_malware_scan = true;
-  CreateFilesForTest({"ok.doc", "bad.exe"},
-                     {"ok file content", "bad file content"}, &data);
-
-  FakeBinaryUploadServiceStorage()->SetAuthorized(true);
-  FakeBinaryUploadServiceStorage()->SetShouldAutomaticallyAuthorize(true);
-
   // Set up delegate and upload service.
   EnableUploadsScanningAndReporting();
 
@@ -282,6 +287,19 @@ IN_PROC_BROWSER_TEST_F(DeepScanningDialogDelegateBrowserTest, Files) {
       DlpDeepScanningVerdict::SUCCESS);
   bad_response.mutable_malware_scan_verdict()->set_verdict(
       MalwareDeepScanningVerdict::MALWARE);
+
+  FakeBinaryUploadServiceStorage()->SetAuthorized(true);
+  FakeBinaryUploadServiceStorage()->SetShouldAutomaticallyAuthorize(true);
+
+  // Create the files to be opened and scanned.
+  DeepScanningDialogDelegate::Data data;
+  data.do_dlp_scan = true;
+  data.do_malware_scan = true;
+  CreateFilesForTest({"ok.doc", "bad.exe"},
+                     {"ok file content", "bad file content"}, &data);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   // The malware verdict means an event should be reported.
   EventReportValidator validator(client());
@@ -379,19 +397,24 @@ IN_PROC_BROWSER_TEST_P(
   data.do_dlp_scan = true;
   data.do_malware_scan = true;
   data.paths.emplace_back(test_zip);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   // The file should be reported as unscanned.
   EventReportValidator validator(client());
   validator.ExpectUnscannedFileEvent(
       /*url*/ "about:blank",
       /*filename*/ test_zip.AsUTF8Unsafe(),
-      // TODO(1061461): Check SHA256 in this test once the bug is fixed.
-      /*sha*/ "",
+      // sha256sum < chrome/test/data/safe_browsing/download_protection/\
+      // encrypted.zip |  tr '[:lower:]' '[:upper:]'
+      /*sha*/
+      "701FCEA8B2112FFAB257A8A8DFD3382ABCF047689AB028D42903E3B3AA488D9A",
       /*trigger*/ SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
       /*reason*/ "filePasswordProtected",
       /*mimetypes*/ ZipMimeTypes(),
-      // TODO(1061461): Put real size once the file contents are read.
-      /*size*/ 0);
+      // du chrome/test/data/safe_browsing/download_protection/encrypted.zip -b
+      /*size*/ 20015);
 
   // Start test.
   DeepScanningDialogDelegate::ShowForWebContents(
@@ -450,15 +473,12 @@ IN_PROC_BROWSER_TEST_P(
     Test) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  // Create the files with unsupported types.
-  DeepScanningDialogDelegate::Data data;
-  data.do_dlp_scan = true;
-  data.do_malware_scan = false;
-  CreateFilesForTest({"a.sh"}, {"file content"}, &data);
-
   // Set up delegate and upload service.
   EnableUploadsScanningAndReporting();
   SetBlockUnsupportedFileTypesPolicy(block_unsupported_file_types());
+  ListPrefUpdate(g_browser_process->local_state(),
+                 prefs::kURLsToCheckForMalwareOfUploadedContent)
+      ->Clear();
 
   DeepScanningDialogDelegate::SetFactoryForTesting(
       base::BindRepeating(&MinimalFakeDeepScanningDialogDelegate::Create));
@@ -466,18 +486,27 @@ IN_PROC_BROWSER_TEST_P(
   FakeBinaryUploadServiceStorage()->SetAuthorized(true);
   FakeBinaryUploadServiceStorage()->SetShouldAutomaticallyAuthorize(true);
 
+  // Create the files with unsupported types.
+  DeepScanningDialogDelegate::Data data;
+  data.do_dlp_scan = true;
+  data.do_malware_scan = false;
+  CreateFilesForTest({"a.sh"}, {"file content"}, &data);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
+
   // The file should be reported as unscanned.
   EventReportValidator validator(client());
   validator.ExpectUnscannedFileEvent(
       /*url*/ "about:blank",
       /*filename*/ created_file_paths()[0].AsUTF8Unsafe(),
-      // TODO(1061461): Check SHA256 in this test once the bug is fixed.
-      /*sha*/ "",
+      // printf "file content" | sha256sum |  tr '[:lower:]' '[:upper:]'
+      /*sha*/
+      "E0AC3601005DFA1864F5392AABAF7D898B1B5BAB854F1ACB4491BCD806B76B0C",
       /*trigger*/ SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
       /*reason*/ "unsupportedFileType",
       /*mimetype*/ ShellScriptMimeTypes(),
-      // TODO(1061461): Put real size once the file contents are read.
-      /*size*/ 0);
+      /*size*/ std::string("file content").size());
 
   bool called = false;
   base::RunLoop run_loop;
@@ -541,14 +570,6 @@ IN_PROC_BROWSER_TEST_P(
     Test) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  // Create the large file.
-  DeepScanningDialogDelegate::Data data;
-  data.do_dlp_scan = true;
-  data.do_malware_scan = true;
-  CreateFilesForTest(
-      {"large.doc"},
-      {std::string(BinaryUploadService::kMaxUploadSizeBytes + 1, 'a')}, &data);
-
   // Set up delegate and upload service.
   EnableUploadsScanningAndReporting();
   SetBlockLargeFileTransferPolicy(block_large_file_transfer());
@@ -558,6 +579,18 @@ IN_PROC_BROWSER_TEST_P(
 
   FakeBinaryUploadServiceStorage()->SetAuthorized(true);
   FakeBinaryUploadServiceStorage()->SetShouldAutomaticallyAuthorize(true);
+
+  // Create the large file.
+  DeepScanningDialogDelegate::Data data;
+  data.do_dlp_scan = true;
+  data.do_malware_scan = true;
+
+  CreateFilesForTest(
+      {"large.doc"},
+      {std::string(BinaryUploadService::kMaxUploadSizeBytes + 1, 'a')}, &data);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
 
   // The file should be reported as unscanned.
   EventReportValidator validator(client());
@@ -606,6 +639,118 @@ INSTANTIATE_TEST_SUITE_P(
                     BLOCK_LARGE_DOWNLOADS,
                     BLOCK_LARGE_UPLOADS,
                     BLOCK_LARGE_UPLOADS_AND_DOWNLOADS));
+
+class DeepScanningDialogDelegateDelayDeliveryUntilVerdictTest
+    : public DeepScanningDialogDelegateBrowserTest,
+      public testing::WithParamInterface<DelayDeliveryUntilVerdictValues> {
+ public:
+  using DeepScanningDialogDelegateBrowserTest::
+      DeepScanningDialogDelegateBrowserTest;
+
+  DelayDeliveryUntilVerdictValues delay_delivery_until_verdict() const {
+    return GetParam();
+  }
+
+  bool expected_result() const {
+    switch (delay_delivery_until_verdict()) {
+      case DELAY_NONE:
+      case DELAY_DOWNLOADS:
+        return true;
+      case DELAY_UPLOADS:
+      case DELAY_UPLOADS_AND_DOWNLOADS:
+        return false;
+    }
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(DeepScanningDialogDelegateDelayDeliveryUntilVerdictTest,
+                       Test) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  // Set up delegate and upload service.
+  EnableUploadsScanningAndReporting();
+  SetWaitPolicy(delay_delivery_until_verdict());
+
+  DeepScanningDialogDelegate::SetFactoryForTesting(
+      base::BindRepeating(&MinimalFakeDeepScanningDialogDelegate::Create));
+
+  FakeBinaryUploadServiceStorage()->SetAuthorized(true);
+  FakeBinaryUploadServiceStorage()->SetShouldAutomaticallyAuthorize(true);
+
+  DeepScanningClientResponse response;
+  response.mutable_malware_scan_verdict()->set_verdict(
+      MalwareDeepScanningVerdict::MALWARE);
+  response.mutable_dlp_scan_verdict()->set_status(
+      DlpDeepScanningVerdict::SUCCESS);
+  response.mutable_dlp_scan_verdict()->add_triggered_rules()->set_action(
+      DlpDeepScanningVerdict::TriggeredRule::BLOCK);
+
+  FakeBinaryUploadServiceStorage()->SetResponseForFile(
+      "foo.doc", BinaryUploadService::Result::SUCCESS, response);
+
+  // Create a file.
+  DeepScanningDialogDelegate::Data data;
+  data.do_dlp_scan = true;
+  data.do_malware_scan = true;
+
+  CreateFilesForTest({"foo.doc"}, {"foo content"}, &data);
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::FILE_ATTACHED));
+
+  // The file should be reported as malware and sensitive content.
+  EventReportValidator validator(client());
+  validator.ExpectDangerousDeepScanningResultAndSensitiveDataEvent(
+      /*url*/ "about:blank",
+      /*filename*/ created_file_paths()[0].AsUTF8Unsafe(),
+      // printf "foo content" | sha256sum  |  tr '[:lower:]' '[:upper:]'
+      /*sha*/
+      "B3A2E2EDBAA3C798B4FC267792B1641B94793DE02D870124E5CBE663750B4CFC",
+      /*threat_type*/ "DANGEROUS",
+      /*trigger*/
+      extensions::SafeBrowsingPrivateEventRouter::kTriggerFileUpload,
+      /*dlp_verdict*/ response.dlp_scan_verdict(),
+      /*mimetypes*/ DocMimeTypes(),
+      /*size*/ std::string("foo content").size());
+
+  bool called = false;
+  base::RunLoop run_loop;
+
+  // If the delivery is not delayed, put the quit closure right after the events
+  // are reported instead of when the dialog closes.
+  if (expected_result())
+    validator.SetDoneClosure(run_loop.QuitClosure());
+  else
+    SetQuitClosure(run_loop.QuitClosure());
+
+  // Start test.
+  DeepScanningDialogDelegate::ShowForWebContents(
+      browser()->tab_strip_model()->GetActiveWebContents(), std::move(data),
+      base::BindLambdaForTesting(
+          [this, &called](const DeepScanningDialogDelegate::Data& data,
+                          const DeepScanningDialogDelegate::Result& result) {
+            ASSERT_TRUE(result.text_results.empty());
+            ASSERT_EQ(result.paths_results.size(), 1u);
+            ASSERT_EQ(result.paths_results[0], expected_result());
+
+            called = true;
+          }),
+      DeepScanAccessPoint::UPLOAD);
+
+  run_loop.Run();
+  EXPECT_TRUE(called);
+
+  // Expect 1 request for authentication and 1 to scan the file in all cases.
+  ASSERT_EQ(FakeBinaryUploadServiceStorage()->requests_count(), 2);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DeepScanningDialogDelegateDelayDeliveryUntilVerdictTest,
+    DeepScanningDialogDelegateDelayDeliveryUntilVerdictTest,
+    testing::Values(DELAY_NONE,
+                    DELAY_DOWNLOADS,
+                    DELAY_UPLOADS,
+                    DELAY_UPLOADS_AND_DOWNLOADS));
 
 IN_PROC_BROWSER_TEST_F(DeepScanningDialogDelegateBrowserTest, Texts) {
   // Set up delegate and upload service.
@@ -675,6 +820,9 @@ IN_PROC_BROWSER_TEST_F(DeepScanningDialogDelegateBrowserTest, Texts) {
   data.do_malware_scan = true;
   data.text.emplace_back(base::UTF8ToUTF16("text1"));
   data.text.emplace_back(base::UTF8ToUTF16("text2"));
+  ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
+      browser()->profile(), GURL(kTestUrl), &data,
+      enterprise_connectors::AnalysisConnector::BULK_DATA_ENTRY));
 
   // Start test.
   DeepScanningDialogDelegate::ShowForWebContents(

@@ -284,4 +284,9 @@ void IPCDemuxer::OnSelectedVideoTrackChanged(
   std::move(change_completed_cb).Run(DemuxerStream::VIDEO, streams);
 }
 
+base::Optional<container_names::MediaContainerName>
+IPCDemuxer::GetContainerForMetrics() const {
+  return base::nullopt;
+}
+
 }  // namespace media

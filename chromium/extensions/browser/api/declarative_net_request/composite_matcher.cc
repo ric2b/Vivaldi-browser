@@ -5,16 +5,19 @@
 #include "extensions/browser/api/declarative_net_request/composite_matcher.h"
 
 #include <algorithm>
+#include <iterator>
 #include <set>
 #include <utility>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "extensions/browser/api/declarative_net_request/flat/extension_ruleset_generated.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/declarative_net_request/request_params.h"
 #include "extensions/browser/api/declarative_net_request/utils.h"
+#include "extensions/common/api/declarative_net_request/constants.h"
 
 namespace extensions {
 namespace declarative_net_request {
@@ -25,7 +28,7 @@ using ActionInfo = CompositeMatcher::ActionInfo;
 namespace {
 
 bool AreIDsUnique(const CompositeMatcher::MatcherList& matchers) {
-  std::set<size_t> ids;
+  std::set<RulesetID> ids;
   for (const auto& matcher : matchers) {
     bool did_insert = ids.insert(matcher->id()).second;
     if (!did_insert)
@@ -70,27 +73,41 @@ CompositeMatcher::CompositeMatcher(MatcherList matchers)
 
 CompositeMatcher::~CompositeMatcher() = default;
 
+CompositeMatcher::MatcherList CompositeMatcher::GetAndResetMatchers() {
+  MatcherList result;
+  std::swap(result, matchers_);
+  OnMatchersModified();
+  return result;
+}
+
+void CompositeMatcher::SetMatchers(MatcherList matchers) {
+  matchers_ = std::move(matchers);
+  OnMatchersModified();
+}
+
 void CompositeMatcher::AddOrUpdateRuleset(
     std::unique_ptr<RulesetMatcher> new_matcher) {
   // A linear search is ok since the number of rulesets per extension is
   // expected to be quite small.
-  auto it = std::find_if(
-      matchers_.begin(), matchers_.end(),
-      [&new_matcher](const std::unique_ptr<RulesetMatcher>& matcher) {
-        return new_matcher->id() == matcher->id();
-      });
+  base::EraseIf(matchers_,
+                [&new_matcher](const std::unique_ptr<RulesetMatcher>& matcher) {
+                  return matcher->id() == new_matcher->id();
+                });
+  matchers_.push_back(std::move(new_matcher));
 
-  if (it == matchers_.end()) {
-    matchers_.push_back(std::move(new_matcher));
-  } else {
-    // Update the matcher.
-    *it = std::move(new_matcher);
+  OnMatchersModified();
+}
+
+std::set<RulesetID> CompositeMatcher::ComputeStaticRulesetIDs() const {
+  std::set<RulesetID> result;
+  for (const std::unique_ptr<RulesetMatcher>& matcher : matchers_) {
+    if (matcher->id() == kDynamicRulesetID)
+      continue;
+
+    result.insert(matcher->id());
   }
 
-  // Clear the renderers' cache so that they take the updated rules into
-  // account.
-  ClearRendererCacheOnNavigation();
-  has_any_extra_headers_matcher_.reset();
+  return result;
 }
 
 ActionInfo CompositeMatcher::GetBeforeRequestAction(
@@ -127,31 +144,32 @@ ActionInfo CompositeMatcher::GetBeforeRequestAction(
   return ActionInfo(base::nullopt, notify_request_withheld);
 }
 
-uint8_t CompositeMatcher::GetRemoveHeadersMask(
-    const RequestParams& params,
-    uint8_t excluded_remove_headers_mask,
-    std::vector<RequestAction>* remove_headers_actions) const {
-  uint8_t mask = 0;
-  for (const auto& matcher : matchers_) {
-    // An allow rule will override lower priority remove header rules.
-    if (!params.allow_rule_cache.contains(matcher.get())) {
-      // GetBeforeRequestAction is normally called before GetRemoveHeadersMask,
-      // so this should never happen in non-test builds. There are tests that
-      // call GetRemoveHeadersMask directly, though.
-      base::Optional<RequestAction> action =
-          matcher->GetBeforeRequestAction(params);
-      params.allow_rule_cache[matcher.get()] =
-          action && action->IsAllowOrAllowAllRequests();
-    }
-    if (params.allow_rule_cache[matcher.get()])
-      return mask;
+std::vector<RequestAction> CompositeMatcher::GetModifyHeadersActions(
+    const RequestParams& params) const {
+  std::vector<RequestAction> modify_headers_actions;
 
-    mask |= matcher->GetRemoveHeadersMask(
-        params, mask | excluded_remove_headers_mask, remove_headers_actions);
+  for (const auto& matcher : matchers_) {
+    // TODO(crbug.com/947591): An allow or allowAllRequests rule should override
+    // all equal or lower priority modifyHeaders rules specified by |matcher|.
+    DCHECK(params.allow_rule_cache.contains(matcher.get()));
+    if (params.allow_rule_cache[matcher.get()])
+      return std::vector<RequestAction>();
+
+    std::vector<RequestAction> actions_for_matcher =
+        matcher->GetModifyHeadersActions(params);
+
+    modify_headers_actions.insert(
+        modify_headers_actions.end(),
+        std::make_move_iterator(actions_for_matcher.begin()),
+        std::make_move_iterator(actions_for_matcher.end()));
   }
 
-  DCHECK(!(mask & excluded_remove_headers_mask));
-  return mask;
+  // Sort |modify_headers_actions| in descending order of priority.
+  std::sort(modify_headers_actions.begin(), modify_headers_actions.end(),
+            [](const RequestAction& lhs, const RequestAction& rhs) {
+              return lhs.index_priority > rhs.index_priority;
+            });
+  return modify_headers_actions;
 }
 
 bool CompositeMatcher::HasAnyExtraHeadersMatcher() const {
@@ -173,6 +191,16 @@ void CompositeMatcher::OnRenderFrameDeleted(content::RenderFrameHost* host) {
 void CompositeMatcher::OnDidFinishNavigation(content::RenderFrameHost* host) {
   for (auto& matcher : matchers_)
     matcher->OnDidFinishNavigation(host);
+}
+
+void CompositeMatcher::OnMatchersModified() {
+  DCHECK(AreIDsUnique(matchers_));
+
+  // Clear the renderers' cache so that they take the updated rules into
+  // account.
+  ClearRendererCacheOnNavigation();
+
+  has_any_extra_headers_matcher_.reset();
 }
 
 bool CompositeMatcher::ComputeHasAnyExtraHeadersMatcher() const {

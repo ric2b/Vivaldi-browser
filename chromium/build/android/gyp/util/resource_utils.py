@@ -5,6 +5,7 @@
 import argparse
 import collections
 import contextlib
+import itertools
 import os
 import re
 import shutil
@@ -28,6 +29,7 @@ from jinja2 import Template # pylint: disable=F0401
 # //ui/android/java/src/org/chromium/base/LocalizationUtils.java
 _CHROME_TO_ANDROID_LOCALE_MAP = {
     'es-419': 'es-rUS',
+    'sr-Latn': 'b+sr+Latn',
     'fil': 'tl',
     'he': 'iw',
     'id': 'in',
@@ -91,35 +93,38 @@ def ToAndroidLocaleName(chromium_locale):
 _RE_ANDROID_LOCALE_QUALIFIER_1 = re.compile(r'^([a-z]{2,3})(\-r([A-Z]+))?$')
 
 # Starting with Android 7.0/Nougat, BCP 47 codes are supported but must
-# be prefixed with 'b+', and may include optional tags. e.g. 'b+en+US',
-# 'b+ja+Latn', 'b+ja+JP+Latn'
+# be prefixed with 'b+', and may include optional tags.
+#  e.g. 'b+en+US', 'b+ja+Latn', 'b+ja+Latn+JP'
 _RE_ANDROID_LOCALE_QUALIFIER_2 = re.compile(r'^b\+([a-z]{2,3})(\+.+)?$')
-
-# Matches an all-uppercase region name.
-_RE_ALL_UPPERCASE = re.compile(r'^[A-Z]+$')
 
 
 def ToChromiumLocaleName(android_locale):
   """Convert an Android locale name into a Chromium one."""
   lang = None
   region = None
+  script = None
   m = _RE_ANDROID_LOCALE_QUALIFIER_1.match(android_locale)
   if m:
     lang = m.group(1)
     if m.group(2):
       region = m.group(3)
-  else:
-    m = _RE_ANDROID_LOCALE_QUALIFIER_2.match(android_locale)
-    if m:
-      lang = m.group(1)
-      if m.group(2):
-        tags = m.group(2).split('+')
-        # First all-uppercase tag is a region. This deals with cases where
-        # a special tag is placed before it (e.g. 'cmn+Hant-TW')
-        for tag in tags:
-          if _RE_ALL_UPPERCASE.match(tag):
-            region = tag
-            break
+  elif _RE_ANDROID_LOCALE_QUALIFIER_2.match(android_locale):
+    # Split an Android BCP-47 locale (e.g. b+sr+Latn+RS)
+    tags = android_locale.split('+')
+
+    # The Lang tag is always the first tag.
+    lang = tags[1]
+
+    # The optional region tag is 2ALPHA or 3DIGIT tag in pos 1 or 2.
+    # The optional script tag is 4ALPHA and always in pos 1.
+    optional_tags = iter(tags[2:])
+
+    next_tag = next(optional_tags, None)
+    if next_tag and len(next_tag) == 4:
+      script = next_tag
+      next_tag = next(optional_tags, None)
+    if next_tag and len(next_tag) < 4:
+      region = next_tag
 
   if not lang:
     return None
@@ -129,6 +134,10 @@ def ToChromiumLocaleName(android_locale):
     return 'es-419'
 
   lang = _ANDROID_TO_CHROMIUM_LANGUAGE_MAP.get(lang, lang)
+
+  if script:
+    lang = '%s-%s' % (lang, script)
+
   if not region:
     return lang
 
@@ -179,8 +188,7 @@ def _GenerateGlobs(pattern):
   return pattern.replace('!', '').split(':')
 
 
-def ExtractResourceDirsFromFileList(resource_files,
-                                    ignore_pattern=AAPT_IGNORE_PATTERN):
+def DeduceResourceDirsFromFileList(resource_files):
   """Return a list of resource directories from a list of resource files."""
   # Directory list order is important, cannot use set or other data structures
   # that change order. This is because resource files of the same name in
@@ -188,15 +196,27 @@ def ExtractResourceDirsFromFileList(resource_files,
   # Thus the order must be maintained to prevent non-deterministic and possibly
   # flakey builds.
   resource_dirs = []
-  globs = _GenerateGlobs(ignore_pattern)
   for resource_path in resource_files:
-    if build_utils.MatchesGlob(os.path.basename(resource_path), globs):
-      # Ignore non-resource files like OWNERS and the like.
-      continue
     # Resources are always 1 directory deep under res/.
     res_dir = os.path.dirname(os.path.dirname(resource_path))
     if res_dir not in resource_dirs:
       resource_dirs.append(res_dir)
+
+  # Check if any resource_dirs are children of other ones. This indicates that a
+  # file was listed that is not exactly 1 directory deep under res/.
+  # E.g.:
+  # sources = ["java/res/values/foo.xml", "java/res/README.md"]
+  # ^^ This will cause "java" to be detected as resource directory.
+  for a, b in itertools.permutations(resource_dirs, 2):
+    if not os.path.relpath(a, b).startswith('..'):
+      bad_sources = (s for s in resource_files
+                     if os.path.dirname(os.path.dirname(s)) == b)
+      msg = """\
+Resource(s) found that are not in a proper directory structure:
+  {}
+All resource files must follow a structure of "$ROOT/$SUBDIR/$FILE"."""
+      raise Exception(msg.format('\n  '.join(bad_sources)))
+
   return resource_dirs
 
 
@@ -327,12 +347,12 @@ def _FixPackageIds(resource_value):
   # Resource IDs for resources belonging to regular APKs have their first byte
   # as 0x7f (package id). However with webview, since it is not a regular apk
   # but used as a shared library, aapt is passed the --shared-resources flag
-  # which changes some of the package ids to 0x00 and 0x02.  This function
-  # normalises these (0x00 and 0x02) package ids to 0x7f, which the generated
-  # code in R.java changes to the correct package id at runtime.
-  # resource_value is a string with either, a single value '0x12345678', or an
-  # array of values like '{ 0xfedcba98, 0x01234567, 0x56789abc }'
-  return re.sub(r'0x(?:00|02)', r'0x7f', resource_value)
+  # which changes some of the package ids to 0x00.  This function normalises
+  # these (0x00) package ids to 0x7f, which the generated code in R.java changes
+  # to the correct package id at runtime.  resource_value is a string with
+  # either, a single value '0x12345678', or an array of values like '{
+  # 0xfedcba98, 0x01234567, 0x56789abc }'
+  return resource_value.replace('0x00', '0x7f')
 
 
 def _GetRTxtResourceNames(r_txt_path):
@@ -388,6 +408,7 @@ class RJavaBuildOptions:
     self.resources_allowlist = None
     self.has_on_resources_loaded = False
     self.export_const_styleable = False
+    self.final_package_id = None
 
   def ExportNoResources(self):
     """Make all resource IDs final, and don't generate a method."""
@@ -430,6 +451,30 @@ class RJavaBuildOptions:
     or --app-as-shared-lib flags of 'aapt package'.
     """
     self.has_on_resources_loaded = True
+
+  def SetFinalPackageId(self, package_id):
+    """Sets a package ID to be used for resources marked final."""
+    self.final_package_id = package_id
+
+  def _MaybeRewriteRTxtPackageIds(self, r_txt_path):
+    """Rewrites package IDs in the R.txt file if necessary.
+
+    If SetFinalPackageId() was called, some of the resource IDs may have had
+    their package ID changed. This function rewrites the R.txt file to match
+    those changes.
+    """
+    if self.final_package_id is None:
+      return
+
+    entries = _ParseTextSymbolsFile(r_txt_path)
+    with open(r_txt_path, 'w') as f:
+      for entry in entries:
+        value = entry.value
+        if self._IsResourceFinal(entry):
+          value = re.sub(r'0x(?:00|7f)',
+                         '0x{:02x}'.format(self.final_package_id), value)
+        f.write('{} {} {} {}\n'.format(entry.java_type, entry.resource_type,
+                                       entry.name, value))
 
   def _IsResourceFinal(self, entry):
     """Determines whether a resource should be final or not.
@@ -491,6 +536,7 @@ def CreateRJavaFiles(srcjar_dir,
   """
   assert len(extra_res_packages) == len(extra_r_txt_files), \
          'Need one R.txt file per package'
+  rjava_build_options._MaybeRewriteRTxtPackageIds(main_r_txt_file)
 
   packages = list(extra_res_packages)
   r_txt_files = list(extra_r_txt_files)
@@ -842,6 +888,7 @@ class _ResourceBuildContext(object):
     if temp_dir:
       self.temp_dir = temp_dir
       self.remove_on_exit = not keep_files
+      os.makedirs(temp_dir)
     else:
       self.temp_dir = tempfile.mkdtemp()
       self.remove_on_exit = True

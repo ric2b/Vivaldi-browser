@@ -106,7 +106,7 @@ void ScriptExecutor::Run(const UserData* user_data,
 
   VLOG(2) << "GetActions for " << delegate_->GetCurrentURL().host();
   delegate_->GetService()->GetActions(
-      script_path_, delegate_->GetDeeplinkURL(),
+      script_path_, delegate_->GetScriptURL(),
       MergedTriggerContext(
           {delegate_->GetTriggerContext(), additional_context_.get()}),
       last_global_payload_, last_script_payload_,
@@ -155,6 +155,12 @@ void ScriptExecutor::OnNavigationStateChanged() {
     case ExpectedNavigationStep::DONE:
       // nothing to do
       break;
+  }
+
+  // Potentially terminate an ongoing prompt action.
+  if (navigation_info.ended() &&
+      current_action_data_.end_prompt_on_navigation_callback) {
+    std::move(current_action_data_.end_prompt_on_navigation_callback).Run();
   }
 }
 
@@ -207,7 +213,7 @@ std::string ScriptExecutor::GetBubbleMessage() {
 
 void ScriptExecutor::ClickOrTapElement(
     const Selector& selector,
-    ClickAction::ClickType click_type,
+    ClickType click_type,
     base::OnceCallback<void(const ClientStatus&)> callback) {
   delegate_->GetWebController()->ClickOrTapElement(selector, click_type,
                                                    std::move(callback));
@@ -236,6 +242,11 @@ void ScriptExecutor::WriteUserData(
   delegate_->WriteUserData(std::move(write_callback));
 }
 
+void ScriptExecutor::WriteUserModel(
+    base::OnceCallback<void(UserModel*)> write_callback) {
+  delegate_->WriteUserModel(std::move(write_callback));
+}
+
 void ScriptExecutor::OnGetUserData(
     base::OnceCallback<void(UserData*, const UserModel*)> callback,
     UserData* user_data,
@@ -246,17 +257,21 @@ void ScriptExecutor::OnGetUserData(
 }
 
 void ScriptExecutor::OnAdditionalActionTriggered(
-    base::OnceCallback<void(int)> callback,
-    int index) {
+    base::OnceCallback<void(int, UserData*, const UserModel*)> callback,
+    int index,
+    UserData* user_data,
+    const UserModel* user_model) {
   delegate_->EnterState(AutofillAssistantState::RUNNING);
-  std::move(callback).Run(index);
+  std::move(callback).Run(index, user_data, user_model);
 }
 
 void ScriptExecutor::OnTermsAndConditionsLinkClicked(
-    base::OnceCallback<void(int)> callback,
-    int link) {
+    base::OnceCallback<void(int, UserData*, const UserModel*)> callback,
+    int link,
+    UserData* user_data,
+    const UserModel* user_model) {
   delegate_->EnterState(AutofillAssistantState::RUNNING);
-  std::move(callback).Run(link);
+  std::move(callback).Run(link, user_data, user_model);
 }
 
 void ScriptExecutor::GetFullCard(GetFullCardCallback callback) {
@@ -284,22 +299,29 @@ void ScriptExecutor::OnGetFullCard(GetFullCardCallback callback,
 void ScriptExecutor::Prompt(
     std::unique_ptr<std::vector<UserAction>> user_actions,
     bool disable_force_expand_sheet,
+    base::OnceCallback<void()> end_on_navigation_callback,
     bool browse_mode) {
   // First communicate to the delegate that prompt actions should or should not
   // expand the sheet intitially.
   delegate_->SetExpandSheetForPromptAction(!disable_force_expand_sheet);
   if (browse_mode) {
     delegate_->EnterState(AutofillAssistantState::BROWSE);
-  } else if (delegate_->EnterState(AutofillAssistantState::PROMPT) &&
-             touchable_element_area_) {
-    // Prompt() reproduces the end-of-script appearance and behavior during
-    // script execution. This includes allowing access to touchable elements,
-    // set through a previous call to the focus action with touchable_elements
-    // set.
-    delegate_->SetTouchableElementArea(*touchable_element_area_);
+  } else if (delegate_->EnterState(AutofillAssistantState::PROMPT)) {
+    if (touchable_element_area_) {
+      // Prompt() reproduces the end-of-script appearance and behavior during
+      // script execution. This includes allowing access to touchable elements,
+      // set through a previous call to the focus action with touchable_elements
+      // set.
+      delegate_->SetTouchableElementArea(*touchable_element_area_);
 
-    // The touchable element and overlays are cleared by calling
-    // ScriptExecutor::CleanUpAfterPrompt
+      // The touchable element and overlays are cleared by calling
+      // ScriptExecutor::CleanUpAfterPrompt
+    }
+
+    if (end_on_navigation_callback) {
+      current_action_data_.end_prompt_on_navigation_callback =
+          std::move(end_on_navigation_callback);
+    }
   }
 
   if (user_actions != nullptr) {
@@ -524,16 +546,16 @@ autofill::PersonalDataManager* ScriptExecutor::GetPersonalDataManager() {
   return delegate_->GetPersonalDataManager();
 }
 
-WebsiteLoginFetcher* ScriptExecutor::GetWebsiteLoginFetcher() {
-  return delegate_->GetWebsiteLoginFetcher();
+WebsiteLoginManager* ScriptExecutor::GetWebsiteLoginManager() {
+  return delegate_->GetWebsiteLoginManager();
 }
 
 content::WebContents* ScriptExecutor::GetWebContents() {
   return delegate_->GetWebContents();
 }
 
-std::string ScriptExecutor::GetAccountEmailAddress() {
-  return delegate_->GetAccountEmailAddress();
+std::string ScriptExecutor::GetEmailAddressForAccessTokenAccount() {
+  return delegate_->GetEmailAddressForAccessTokenAccount();
 }
 
 std::string ScriptExecutor::GetLocale() {

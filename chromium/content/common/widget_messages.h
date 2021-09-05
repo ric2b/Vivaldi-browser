@@ -13,7 +13,6 @@
 #include "content/common/common_param_traits_macros.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/content_to_visible_time_reporter.h"
-#include "content/common/cursors/webcursor.h"
 #include "content/common/text_input_state.h"
 #include "content/common/visual_properties.h"
 #include "content/public/common/common_param_traits.h"
@@ -21,7 +20,6 @@
 #include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
-#include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
 #include "ui/base/ime/text_input_action.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ui_base_types.h"
@@ -163,20 +161,6 @@ IPC_MESSAGE_ROUTED1(WidgetMsg_ForceRedraw, int /* snapshot_id */)
 IPC_MESSAGE_ROUTED1(WidgetMsg_SetViewportIntersection,
                     blink::ViewportIntersectionState /* intersection_state */)
 
-// Sent to an OOPIF widget when the browser receives a FrameHostMsg_SetIsInert
-// from the target widget's embedding renderer changing its inertness. When a
-// widget is inert, it is unable to process input events.
-//
-// https://html.spec.whatwg.org/multipage/interaction.html#inert
-IPC_MESSAGE_ROUTED1(WidgetMsg_SetIsInert, bool /* inert */)
-
-// Sets the inherited effective touch action on an out-of-process iframe.
-IPC_MESSAGE_ROUTED1(WidgetMsg_SetInheritedEffectiveTouchAction, cc::TouchAction)
-
-// Toggles render throttling for an out-of-process iframe.
-IPC_MESSAGE_ROUTED2(WidgetMsg_UpdateRenderThrottlingStatus,
-                    bool /* is_throttled */,
-                    bool /* subtree_throttled */)
 
 // Sent by the browser to synchronize with the next compositor frame by
 // requesting an ACK be queued. Used only for tests.
@@ -201,32 +185,10 @@ IPC_MESSAGE_ROUTED1(WidgetHostMsg_SelectionBoundsChanged,
 // throttle these messages.
 IPC_MESSAGE_ROUTED0(WidgetHostMsg_UpdateScreenRects_ACK)
 
-// Only used for SVGs inside of <object> and not for iframes. Informs the
-// browser that hte current frame's intrinsic sizing info has changed. The
-// browser can then notify a containing frame that the frame may need to
-// trigger a new layout.
-//
-// Also see blink::mojom::RemoteFrame::IntrinsicSizingInfoOfChildChanged.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_IntrinsicSizingInfoChanged,
-                    blink::WebIntrinsicSizingInfo)
-
 // Send the tooltip text for the current mouse position to the browser.
 IPC_MESSAGE_ROUTED2(WidgetHostMsg_SetTooltipText,
                     base::string16 /* tooltip text string */,
                     base::i18n::TextDirection /* text direction hint */)
-
-// Updates the current cursor to be used by the browser for indicating the
-// location of a pointing device.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_SetCursor, content::WebCursor)
-
-// Request a non-decelerating synthetic fling animation to be latched on the
-// scroller at the start point, and whose velocity can be changed over time by
-// sending multiple AutoscrollFling gestures.  Used for features like
-// middle-click autoscroll.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_AutoscrollStart, gfx::PointF /* start */)
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_AutoscrollFling,
-                    gfx::Vector2dF /* velocity */)
-IPC_MESSAGE_ROUTED0(WidgetHostMsg_AutoscrollEnd)
 
 // Notifies the browser if the text input state has changed. Primarily useful
 // for IME as they need to know of all changes to update their interpretation
@@ -262,20 +224,5 @@ IPC_MESSAGE_ROUTED0(WidgetHostMsg_WaitForNextFrameForTests_ACK)
 // Sent once a paint happens after the first non empty layout. In other words,
 // after the frame widget has painted something.
 IPC_MESSAGE_ROUTED0(WidgetHostMsg_DidFirstVisuallyNonEmptyPaint)
-
-// Notifies whether there are JavaScript touch event handlers or not.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_HasTouchEventHandlers,
-                    bool /* has_handlers */)
-
-// Sent by a widget to the browser to request a page scale animation in the
-// main-frame's widget.
-IPC_MESSAGE_ROUTED2(WidgetHostMsg_AnimateDoubleTapZoomInMainFrame,
-                    gfx::Point /* tap point */,
-                    gfx::Rect /* rect_to_zoom */)
-
-// Sent by a widget to the browser to request a page scale animation in the
-// main-frame's widget for find-in-page zoom.
-IPC_MESSAGE_ROUTED1(WidgetHostMsg_ZoomToFindInPageRectInMainFrame,
-                    gfx::Rect /* rect_to_zoom */)
 
 #endif  //  CONTENT_COMMON_WIDGET_MESSAGES_H_

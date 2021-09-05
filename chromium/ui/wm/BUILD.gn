@@ -70,8 +70,8 @@ jumbo_component("wm") {
     "//ui/aura",
     "//ui/base",
     "//ui/base/cursor",
+    "//ui/base/cursor/mojom:cursor_type",
     "//ui/base/ime",
-    "//ui/base/mojom:cursor_type",
     "//ui/compositor",
     "//ui/compositor_extra",
     "//ui/display",
@@ -85,11 +85,6 @@ jumbo_component("wm") {
     "//ui/resources",
     "//ui/wm/public",
   ]
-
-  if (use_x11) {
-    configs += [ "//build/config/linux:x11" ]
-    deps += [ "//ui/events/devices/x11" ]
-  }
 
   if (is_chromeos) {
     sources += [
@@ -150,8 +145,8 @@ test("wm_unittests") {
     "//ui/aura:test_support",
     "//ui/base:test_support",
     "//ui/base/cursor",
+    "//ui/base/cursor/mojom:cursor_type",
     "//ui/base/ime",
-    "//ui/base/mojom:cursor_type",
     "//ui/compositor:test_support",
     "//ui/compositor_extra",
     "//ui/events:test_support",

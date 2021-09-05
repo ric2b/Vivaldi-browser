@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -29,6 +30,7 @@
 #include "content/public/common/network_service_util.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -103,6 +105,12 @@ class LoaderBrowserTest : public ContentBrowserTest,
   bool got_downloads() const { return got_downloads_; }
 
  private:
+  void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        "cors_exempt_header_list", "ExemptFoo");
+    ContentBrowserTest::SetUp();
+  }
+
   bool got_downloads_;
 };
 
@@ -1117,7 +1125,8 @@ class URLModifyingThrottle : public blink::URLLoaderThrottle {
     GURL::Replacements replacements;
     replacements.SetQueryStr("foo=bar");
     request->url = request->url.ReplaceComponents(replacements);
-    request->headers.SetHeader("Foo", "Bar");
+    request->headers.SetHeader("Foo", "BarRequest");
+    request->cors_exempt_headers.SetHeader("ExemptFoo", "ExemptBarRequest");
   }
 
   void WillRedirectRequest(
@@ -1125,11 +1134,14 @@ class URLModifyingThrottle : public blink::URLLoaderThrottle {
       const network::mojom::URLResponseHead& response_head,
       bool* defer,
       std::vector<std::string>* to_be_removed_request_headers,
-      net::HttpRequestHeaders* modified_request_headers) override {
+      net::HttpRequestHeaders* modified_request_headers,
+      net::HttpRequestHeaders* modified_cors_exempt_request_headers) override {
     if (!modify_redirect_)
       return;
 
-    modified_request_headers->SetHeader("Foo", "Bar");
+    modified_request_headers->SetHeader("Foo", "BarRedirect");
+    modified_cors_exempt_request_headers->SetHeader("ExemptFoo",
+                                                    "ExemptBarRedirect");
 
     if (modified_redirect_url_)
       return;  // Only need to do this once.
@@ -1206,7 +1218,8 @@ IN_PROC_BROWSER_TEST_F(LoaderBrowserTest, URLLoaderThrottleStartModify) {
   {
     base::AutoLock auto_lock(lock);
     ASSERT_TRUE(urls_requested.find(expected_url) != urls_requested.end());
-    ASSERT_TRUE(header_map[expected_url]["Foo"] == "Bar");
+    ASSERT_TRUE(header_map[expected_url]["Foo"] == "BarRequest");
+    ASSERT_TRUE(header_map[expected_url]["ExemptFoo"] == "ExemptBarRequest");
   }
 
   SetBrowserClientForTesting(old_content_browser_client);
@@ -1240,7 +1253,8 @@ IN_PROC_BROWSER_TEST_F(LoaderBrowserTest, URLLoaderThrottleRedirectModify) {
 
   {
     base::AutoLock auto_lock(lock);
-    ASSERT_EQ(header_map[expected_url]["Foo"], "Bar");
+    ASSERT_EQ(header_map[expected_url]["Foo"], "BarRedirect");
+    ASSERT_EQ(header_map[expected_url]["ExemptFoo"], "ExemptBarRedirect");
     ASSERT_NE(urls_requested.find(expected_url), urls_requested.end());
   }
 

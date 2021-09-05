@@ -130,7 +130,7 @@ int AXPlatformNodeBase::GetChildCount() const {
   return 0;
 }
 
-gfx::NativeViewAccessible AXPlatformNodeBase::ChildAtIndex(int index) {
+gfx::NativeViewAccessible AXPlatformNodeBase::ChildAtIndex(int index) const {
   if (delegate_)
     return delegate_->ChildAtIndex(index);
   return nullptr;
@@ -149,15 +149,16 @@ base::string16 AXPlatformNodeBase::GetNameAsString16() const {
   return base::UTF8ToUTF16(name);
 }
 
-int AXPlatformNodeBase::GetIndexInParent() {
+base::Optional<int> AXPlatformNodeBase::GetIndexInParent() {
   AXPlatformNodeBase* parent = FromNativeViewAccessible(GetParent());
   if (!parent)
-    return 0;
+    return base::nullopt;
 
   int child_count = parent->GetChildCount();
   if (child_count == 0) {
-    // |child_count| could be 0 if the node is PlatformIsLeaf.
-    return 0;
+    // |child_count| could be 0 if the parent is IsLeaf.
+    DCHECK(parent->IsLeaf());
+    return base::nullopt;
   }
 
   // Ask the delegate for the index in parent, and return it if it's plausible.
@@ -176,7 +177,9 @@ int AXPlatformNodeBase::GetIndexInParent() {
     if (parent->ChildAtIndex(i) == current)
       return i;
   }
-  return -1;
+  NOTREACHED()
+      << "Unable to find the child in the list of its parent's children.";
+  return base::nullopt;
 }
 
 // AXPlatformNode overrides.
@@ -228,27 +231,36 @@ bool AXPlatformNodeBase::IsDescendantOf(AXPlatformNode* ancestor) const {
   return parent->IsDescendantOf(ancestor);
 }
 
+AXPlatformNodeBase::AXPlatformNodeChildIterator
+AXPlatformNodeBase::AXPlatformNodeChildrenBegin() const {
+  return AXPlatformNodeChildIterator(this, GetFirstChild());
+}
+
+AXPlatformNodeBase::AXPlatformNodeChildIterator
+AXPlatformNodeBase::AXPlatformNodeChildrenEnd() const {
+  return AXPlatformNodeChildIterator(this, nullptr);
+}
 // Helpers.
 
-AXPlatformNodeBase* AXPlatformNodeBase::GetPreviousSibling() {
+AXPlatformNodeBase* AXPlatformNodeBase::GetPreviousSibling() const {
   if (!delegate_)
     return nullptr;
   return FromNativeViewAccessible(delegate_->GetPreviousSibling());
 }
 
-AXPlatformNodeBase* AXPlatformNodeBase::GetNextSibling() {
+AXPlatformNodeBase* AXPlatformNodeBase::GetNextSibling() const {
   if (!delegate_)
     return nullptr;
   return FromNativeViewAccessible(delegate_->GetNextSibling());
 }
 
-AXPlatformNodeBase* AXPlatformNodeBase::GetFirstChild() {
+AXPlatformNodeBase* AXPlatformNodeBase::GetFirstChild() const {
   if (!delegate_)
     return nullptr;
   return FromNativeViewAccessible(delegate_->GetFirstChild());
 }
 
-AXPlatformNodeBase* AXPlatformNodeBase::GetLastChild() {
+AXPlatformNodeBase* AXPlatformNodeBase::GetLastChild() const {
   if (!delegate_)
     return nullptr;
   return FromNativeViewAccessible(delegate_->GetLastChild());
@@ -539,11 +551,10 @@ base::string16 AXPlatformNodeBase::GetInnerText() const {
     return GetNameAsString16();
 
   base::string16 text;
-  // TODO(Nektar): Remove const_cast by making all tree traversal methods const.
-  AXPlatformNodeBase* child =
-      const_cast<AXPlatformNodeBase*>(this)->GetFirstChild();
-  for (; child; child = child->GetNextSibling())
-    text += child->GetInnerText();
+  for (auto child_iter = AXPlatformNodeChildrenBegin();
+       child_iter != AXPlatformNodeChildrenEnd(); ++child_iter) {
+    text += child_iter->GetInnerText();
+  }
   return text;
 }
 
@@ -1155,7 +1166,8 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
   }
 
   // Expose slider value.
-  if (GetData().IsRangeValueSupported()) {
+  if (GetData().IsRangeValueSupported() ||
+      GetData().role == ax::mojom::Role::kComboBoxMenuButton) {
     std::string value = base::UTF16ToUTF8(GetRangeValueText());
     if (!value.empty())
       AddAttributeToList("valuetext", value, attributes);
@@ -1282,18 +1294,16 @@ void AXPlatformNodeBase::UpdateComputedHypertext() const {
   // the character index of each embedded object character to the id of the
   // child object it points to.
   base::string16 hypertext;
-  // TODO(Nektar): Remove const_cast by making all tree traversal methods const.
-  AXPlatformNodeBase* child =
-      const_cast<AXPlatformNodeBase*>(this)->GetFirstChild();
-  for (; child; child = child->GetNextSibling()) {
+  for (AXPlatformNodeChildIterator child_iter = AXPlatformNodeChildrenBegin();
+       child_iter != AXPlatformNodeChildrenEnd(); ++child_iter) {
     // Similar to Firefox, we don't expose text-only objects in IA2 and ATK
     // hypertext with the embedded object character. We copy all of their text
     // instead.
-    if (child->IsTextOnlyObject()) {
-      hypertext_.hypertext += child->GetNameAsString16();
+    if (child_iter->IsTextOnlyObject()) {
+      hypertext_.hypertext += child_iter->GetNameAsString16();
     } else {
       int32_t char_offset = static_cast<int32_t>(hypertext_.hypertext.size());
-      int32_t child_unique_id = child->GetUniqueId();
+      int32_t child_unique_id = child_iter->GetUniqueId();
       int32_t index = static_cast<int32_t>(hypertext_.hyperlinks.size());
       hypertext_.hyperlink_offset_to_index[char_offset] = index;
       hypertext_.hyperlinks.push_back(child_unique_id);
@@ -1429,15 +1439,12 @@ int32_t AXPlatformNodeBase::GetHypertextOffsetFromChild(
   // cross-tree traversal is necessary.
   if (child->IsTextOnlyObject()) {
     int32_t hypertext_offset = 0;
-    int32_t index_in_parent = child->GetIndexInParent();
-    DCHECK_GE(index_in_parent, 0);
-    DCHECK_LT(index_in_parent, static_cast<int32_t>(GetChildCount()));
-    for (uint32_t i = 0; i < static_cast<uint32_t>(index_in_parent); ++i) {
-      auto* sibling = static_cast<AXPlatformNodeBase*>(
-          FromNativeViewAccessible(ChildAtIndex(i)));
-      DCHECK(sibling);
-      if (sibling->IsTextOnlyObject()) {
-        hypertext_offset += (int32_t)sibling->GetHypertext().size();
+    for (auto child_iter = AXPlatformNodeChildrenBegin();
+         child_iter != AXPlatformNodeChildrenEnd() && child_iter.get() != child;
+         ++child_iter) {
+      if (child_iter->IsTextOnlyObject()) {
+        hypertext_offset +=
+            static_cast<int32_t>(child_iter->GetHypertext().size());
       } else {
         ++hypertext_offset;
       }
@@ -1510,7 +1517,7 @@ int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
   }
 
   AXPlatformNodeBase* common_parent = this;
-  int32_t index_in_common_parent = GetIndexInParent();
+  base::Optional<int> index_in_common_parent = GetIndexInParent();
   while (common_parent && !endpoint_object->IsDescendantOf(common_parent)) {
     index_in_common_parent = common_parent->GetIndexInParent();
     common_parent = static_cast<AXPlatformNodeBase*>(
@@ -1519,7 +1526,6 @@ int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
   if (!common_parent)
     return -1;
 
-  DCHECK_GE(index_in_common_parent, 0);
   DCHECK(!(common_parent->IsTextOnlyObject()));
 
   // Case 2. Is the selection endpoint inside a descendant of this object?
@@ -1547,17 +1553,14 @@ int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
   //
   // We can safely assume that the endpoint is in another part of the tree or
   // at common parent, and that this object is a descendant of common parent.
-  int32_t endpoint_index_in_common_parent = -1;
-  for (int i = 0; i < common_parent->GetDelegate()->GetChildCount(); ++i) {
-    auto* child = static_cast<AXPlatformNodeBase*>(FromNativeViewAccessible(
-        common_parent->GetDelegate()->ChildAtIndex(i)));
-    DCHECK(child);
-    if (endpoint_object->IsDescendantOf(child)) {
-      endpoint_index_in_common_parent = child->GetIndexInParent();
+  base::Optional<int> endpoint_index_in_common_parent;
+  for (auto child_iter = common_parent->AXPlatformNodeChildrenBegin();
+       child_iter != common_parent->AXPlatformNodeChildrenEnd(); ++child_iter) {
+    if (endpoint_object->IsDescendantOf(child_iter.get())) {
+      endpoint_index_in_common_parent = child_iter->GetIndexInParent();
       break;
     }
   }
-  DCHECK_GE(endpoint_index_in_common_parent, 0);
 
   if (endpoint_index_in_common_parent < index_in_common_parent)
     return 0;
@@ -2058,6 +2061,54 @@ ui::TextAttributeList AXPlatformNodeBase::ComputeTextAttributes() const {
   return attributes;
 }
 
+int AXPlatformNodeBase::GetSelectionCount() const {
+  int max_items = GetMaxSelectableItems();
+  if (!max_items)
+    return 0;
+  return GetSelectedItems(max_items);
+}
+
+AXPlatformNodeBase* AXPlatformNodeBase::GetSelectedItem(
+    int selected_index) const {
+  DCHECK_GE(selected_index, 0);
+  int max_items = GetMaxSelectableItems();
+  if (max_items == 0)
+    return nullptr;
+  if (selected_index >= max_items)
+    return nullptr;
+
+  std::vector<AXPlatformNodeBase*> selected_children;
+  int requested_count = selected_index + 1;
+  int returned_count = GetSelectedItems(requested_count, &selected_children);
+
+  if (returned_count <= selected_index)
+    return nullptr;
+
+  DCHECK(!selected_children.empty());
+  DCHECK_LT(selected_index, static_cast<int>(selected_children.size()));
+  return selected_children[selected_index];
+}
+
+int AXPlatformNodeBase::GetSelectedItems(
+    int max_items,
+    std::vector<AXPlatformNodeBase*>* out_selected_items) const {
+  int selected_count = 0;
+  for (auto child_iter = AXPlatformNodeChildrenBegin();
+       child_iter != AXPlatformNodeChildrenEnd() && selected_count < max_items;
+       ++child_iter) {
+    if (!IsItemLike(child_iter->GetData().role)) {
+      selected_count += child_iter->GetSelectedItems(max_items - selected_count,
+                                                     out_selected_items);
+    } else if (child_iter->GetBoolAttribute(
+                   ax::mojom::BoolAttribute::kSelected)) {
+      selected_count++;
+      if (out_selected_items)
+        out_selected_items->emplace_back(child_iter.get());
+    }
+  }
+  return selected_count;
+}
+
 void AXPlatformNodeBase::SanitizeTextAttributeValue(const std::string& input,
                                                     std::string* output) const {
   DCHECK(output);
@@ -2114,6 +2165,22 @@ std::string AXPlatformNodeBase::ComputeDetailsRoles() const {
   std::vector<std::string> details_roles_vector(details_roles_set.begin(),
                                                 details_roles_set.end());
   return base::JoinString(details_roles_vector, " ");
+}
+
+int AXPlatformNodeBase::GetMaxSelectableItems() const {
+  if (!GetData().HasState(ax::mojom::State::kFocusable))
+    return 0;
+
+  if (IsLeaf())
+    return 0;
+
+  if (!IsContainerWithSelectableChildren(GetData().role))
+    return 0;
+
+  int max_items = 1;
+  if (GetData().HasState(ax::mojom::State::kMultiselectable))
+    max_items = std::numeric_limits<int>::max();
+  return max_items;
 }
 
 }  // namespace ui

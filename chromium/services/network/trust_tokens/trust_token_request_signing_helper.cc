@@ -16,6 +16,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/time/time_to_iso8601.h"
+#include "base/values.h"
 #include "components/cbor/values.h"
 #include "components/cbor/writer.h"
 #include "net/http/structured_headers.h"
@@ -30,6 +31,18 @@
 
 namespace network {
 
+namespace {
+
+void LogOutcome(const net::NetLogWithSource& log, base::StringPiece outcome) {
+  log.EndEvent(net::NetLogEventType::TRUST_TOKEN_OPERATION_BEGIN_SIGNING,
+               [outcome]() {
+                 base::Value ret(base::Value::Type::DICTIONARY);
+                 ret.SetStringKey("outcome", outcome);
+                 return ret;
+               });
+}
+
+}  // namespace
 namespace internal {
 
 // Parse the Signed-Headers input header as a Structured Headers Draft 15 list
@@ -66,7 +79,7 @@ const char* const TrustTokenRequestSigningHelper::kSignableRequestHeaders[]{
 };
 
 constexpr char
-    TrustTokenRequestSigningHelper::kCanonicalizedRequestDataUrlKey[];
+    TrustTokenRequestSigningHelper::kCanonicalizedRequestDataDestinationKey[];
 constexpr char
     TrustTokenRequestSigningHelper::kCanonicalizedRequestDataPublicKeyKey[];
 constexpr uint8_t
@@ -178,38 +191,66 @@ TrustTokenRequestSigningHelper::TrustTokenRequestSigningHelper(
     TrustTokenStore* token_store,
     Params params,
     std::unique_ptr<Signer> signer,
-    std::unique_ptr<TrustTokenRequestCanonicalizer> canonicalizer)
+    std::unique_ptr<TrustTokenRequestCanonicalizer> canonicalizer,
+    net::NetLogWithSource net_log)
     : token_store_(token_store),
-      params_(params),
+      params_(std::move(params)),
       signer_(std::move(signer)),
-      canonicalizer_(std::move(canonicalizer)) {
-  DCHECK(params_.issuer.scheme() == url::kHttpsScheme ||
-         (params_.issuer.scheme() == url::kHttpScheme &&
-          IsOriginPotentiallyTrustworthy(params_.issuer)));
-  DCHECK(params_.toplevel.scheme() == url::kHttpsScheme ||
-         (params_.toplevel.scheme() == url::kHttpScheme &&
-          IsOriginPotentiallyTrustworthy(params_.toplevel)));
-}
+      canonicalizer_(std::move(canonicalizer)),
+      net_log_(std::move(net_log)) {}
 
 TrustTokenRequestSigningHelper::~TrustTokenRequestSigningHelper() = default;
 
-Params::Params() = default;
+Params::Params(SuitableTrustTokenOrigin issuer,
+               SuitableTrustTokenOrigin toplevel,
+               std::vector<std::string> additional_headers_to_sign,
+               bool should_add_timestamp,
+               mojom::TrustTokenSignRequestData sign_request_data)
+    : issuer(std::move(issuer)),
+      toplevel(std::move(toplevel)),
+      additional_headers_to_sign(std::move(additional_headers_to_sign)),
+      should_add_timestamp(should_add_timestamp),
+      sign_request_data(sign_request_data) {}
+
+Params::Params(SuitableTrustTokenOrigin issuer,
+               SuitableTrustTokenOrigin toplevel)
+    : issuer(std::move(issuer)), toplevel(std::move(toplevel)) {}
 Params::~Params() = default;
 Params::Params(const Params&) = default;
 // The type alias causes a linter false positive.
 // NOLINTNEXTLINE(misc-unconventional-assign-operator)
 Params& Params::operator=(const Params&) = default;
+Params::Params(Params&&) = default;
+// NOLINTNEXTLINE(misc-unconventional-assign-operator)
+Params& Params::operator=(Params&&) = default;
 
 void TrustTokenRequestSigningHelper::Begin(
     net::URLRequest* request,
     base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done) {
   DCHECK(request);
-  DCHECK(request->url().SchemeIsHTTPOrHTTPS() &&
-         IsUrlPotentiallyTrustworthy(request->url()));
-  DCHECK(request->initiator() &&
-             request->initiator()->scheme() == url::kHttpsScheme ||
-         (request->initiator()->scheme() == url::kHttpScheme &&
-          IsOriginPotentiallyTrustworthy(*request->initiator())));
+  DCHECK(!request->initiator() ||
+         IsOriginPotentiallyTrustworthy(*request->initiator()))
+      << *request->initiator();
+#if DCHECK_IS_ON()
+  // Add some postcondition checking on return.
+  done = base::BindOnce(
+      [](net::URLRequest* request,
+         base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
+         mojom::TrustTokenOperationStatus result) {
+        const auto& headers = request->extra_request_headers();
+
+        std::string srr_header;
+        DCHECK(headers.GetHeader(
+            kTrustTokensRequestHeaderSecSignedRedemptionRecord, &srr_header));
+        if (srr_header.empty()) {
+          DCHECK(!headers.HasHeader(kTrustTokensRequestHeaderSecTime));
+          DCHECK(!headers.HasHeader(kTrustTokensRequestHeaderSecSignature));
+          DCHECK(!headers.HasHeader(kTrustTokensRequestHeaderSignedHeaders));
+        }
+        std::move(done).Run(result);
+      },
+      request, std::move(done));
+#endif  // DCHECK_IS_ON()
 
   // This class is responsible for adding these headers; callers should not add
   // them.
@@ -220,13 +261,21 @@ void TrustTokenRequestSigningHelper::Begin(
   DCHECK(!request->extra_request_headers().HasHeader(
       kTrustTokensRequestHeaderSecSignature));
 
+  net_log_.BeginEvent(
+      net::NetLogEventType::TRUST_TOKEN_OPERATION_BEGIN_SIGNING);
+
+  // The comments below are the steps in the "Redemption record attachment and
+  // request signing" pseudocode in https://bit.ly/trust-token-dd
+
   base::Optional<SignedTrustTokenRedemptionRecord> maybe_redemption_record =
       token_store_->RetrieveNonstaleRedemptionRecord(params_.issuer,
                                                      params_.toplevel);
 
   if (!maybe_redemption_record) {
     AttachSignedRedemptionRecordHeader(request, std::string());
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kResourceExhausted);
+
+    LogOutcome(net_log_, "No SRR for this (issuer, top-level context) pair");
+    std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
     return;
   }
 
@@ -236,13 +285,15 @@ void TrustTokenRequestSigningHelper::Begin(
 
   if (!maybe_headers_to_sign) {
     AttachSignedRedemptionRecordHeader(request, std::string());
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kInvalidArgument);
+
+    LogOutcome(net_log_,
+               "Unsignable header specified in Signed-Headers "
+               "header or additionalSignedHeaders arg");
+    std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
     return;
   }
 
-  AttachSignedRedemptionRecordHeader(
-      request, base::Base64Encode(base::as_bytes(
-                   base::make_span(maybe_redemption_record->body()))));
+  AttachSignedRedemptionRecordHeader(request, maybe_redemption_record->body());
 
   if (params_.should_add_timestamp) {
     request->SetExtraRequestHeaderByName(kTrustTokensRequestHeaderSecTime,
@@ -251,6 +302,7 @@ void TrustTokenRequestSigningHelper::Begin(
   }
 
   if (params_.sign_request_data == mojom::TrustTokenSignRequestData::kOmit) {
+    LogOutcome(net_log_, "Success (sign-request-data='omit')");
     std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
     return;
   }
@@ -263,7 +315,8 @@ void TrustTokenRequestSigningHelper::Begin(
     request->RemoveRequestHeaderByName(kTrustTokensRequestHeaderSecTime);
     request->RemoveRequestHeaderByName(kTrustTokensRequestHeaderSignedHeaders);
 
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kInternalError);
+    LogOutcome(net_log_, "Internal error generating signature");
+    std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
     return;
   }
 
@@ -274,7 +327,12 @@ void TrustTokenRequestSigningHelper::Begin(
 
   // Error serializing the header. Not expected.
   if (!maybe_signature_header) {
-    std::move(done).Run(mojom::TrustTokenOperationStatus::kInternalError);
+    AttachSignedRedemptionRecordHeader(request, std::string());
+    request->RemoveRequestHeaderByName(kTrustTokensRequestHeaderSecTime);
+    request->RemoveRequestHeaderByName(kTrustTokensRequestHeaderSignedHeaders);
+
+    LogOutcome(net_log_, "Internal error serializing signature header");
+    std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
     return;
   }
 
@@ -282,12 +340,14 @@ void TrustTokenRequestSigningHelper::Begin(
                                        *maybe_signature_header,
                                        /*overwrite=*/true);
 
+  LogOutcome(net_log_, "Success");
   std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
 }
 
-mojom::TrustTokenOperationStatus TrustTokenRequestSigningHelper::Finalize(
-    mojom::URLResponseHead* response) {
-  return mojom::TrustTokenOperationStatus::kOk;
+void TrustTokenRequestSigningHelper::Finalize(
+    mojom::URLResponseHead* response,
+    base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done) {
+  return std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
 }
 
 base::Optional<std::string>
@@ -343,8 +403,9 @@ TrustTokenRequestSigningHelper::GetSignature(
   // the semantics change across versions.)
 
   base::Optional<std::vector<uint8_t>> maybe_request_in_cbor =
-      canonicalizer_->Canonicalize(request, redemption_record.public_key(),
-                                   params_.sign_request_data);
+      canonicalizer_->Canonicalize(
+          request->url(), request->extra_request_headers(),
+          redemption_record.public_key(), params_.sign_request_data);
 
   if (!maybe_request_in_cbor)
     return base::nullopt;
@@ -356,9 +417,9 @@ TrustTokenRequestSigningHelper::GetSignature(
   signing_data.insert(signing_data.end(), maybe_request_in_cbor->begin(),
                       maybe_request_in_cbor->end());
 
-  signer_->Init(
-      base::as_bytes(base::make_span(redemption_record.signing_key())));
-  return signer_->Sign(base::make_span(signing_data));
+  base::span<const uint8_t> key_bytes =
+      base::as_bytes(base::make_span(redemption_record.signing_key()));
+  return signer_->Sign(key_bytes, base::make_span(signing_data));
 }
 
 }  // namespace network

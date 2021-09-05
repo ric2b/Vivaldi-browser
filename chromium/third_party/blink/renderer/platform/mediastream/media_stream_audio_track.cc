@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/audio_bus.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_audio_sink.h"
@@ -137,6 +137,9 @@ void MediaStreamAudioTrack::OnSetFormat(const media::AudioParameters& params) {
 
 void MediaStreamAudioTrack::OnData(const media::AudioBus& audio_bus,
                                    base::TimeTicks reference_time) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("mediastream"),
+               "MediaStreamAudioTrack::OnData");
+
   if (!received_audio_callback_) {
     // Add log message with unique this pointer id to mark the audio track as
     // alive at the first data callback.

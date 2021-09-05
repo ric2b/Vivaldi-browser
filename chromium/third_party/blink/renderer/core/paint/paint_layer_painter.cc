@@ -49,7 +49,7 @@ static ShouldRespectOverflowClipType ShouldRespectOverflowClip(
 }
 
 bool PaintLayerPainter::PaintedOutputInvisible(const ComputedStyle& style) {
-  if (style.HasBackdropFilter())
+  if (style.HasNonInitialBackdropFilter())
     return false;
 
   // Always paint when 'will-change: opacity' is present. Reduces jank for

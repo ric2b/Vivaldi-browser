@@ -80,7 +80,6 @@ test("components_unittests") {
     "//components/device_event_log:unit_tests",
     "//components/dom_distiller/core:unit_tests",
     "//components/download:unit_tests",
-    "//components/embedder_support:unit_tests",
     "//components/encrypted_messages:unit_tests",
     "//components/favicon/core:unit_tests",
     "//components/favicon_base:unit_tests",
@@ -89,11 +88,11 @@ test("components_unittests") {
     "//components/filename_generation:unit_tests",
     "//components/flags_ui:unit_tests",
     "//components/games/core:unit_tests",
-    "//components/gc:unit_tests",
     "//components/gcm_driver:unit_tests",
     "//components/gcm_driver/crypto:unit_tests",
     "//components/google/core/common:unit_tests",
     "//components/grpc_support/test:unit_tests",
+    "//components/heap_profiling/in_process:unit_tests",
     "//components/history/core/browser:unit_tests",
     "//components/history/core/common:unit_tests",
     "//components/image_fetcher/core:unit_tests",
@@ -102,7 +101,7 @@ test("components_unittests") {
     "//components/language/core/common:unit_tests",
     "//components/language_usage_metrics:unit_tests",
     "//components/leveldb_proto:unit_tests",
-    "//components/lookalikes:unit_tests",
+    "//components/lookalikes/core:unit_tests",
     "//components/metrics:unit_tests",
     "//components/navigation_metrics:unit_tests",
     "//components/net_log:unit_tests",
@@ -227,6 +226,7 @@ test("components_unittests") {
       "//components/cast_channel:unit_tests",
       "//components/certificate_transparency:unit_tests",
       "//components/content_capture/browser:unit_tests",
+      "//components/content_settings/browser:unit_tests",
       "//components/contextual_search/core:unit_tests",
       "//components/data_use_measurement/core:unit_tests",
       "//components/discardable_memory/common:unit_tests",
@@ -234,6 +234,7 @@ test("components_unittests") {
       "//components/dom_distiller/content/browser:unit_tests",
       "//components/domain_reliability:unit_tests",
       "//components/drive:unit_tests",
+      "//components/embedder_support:unit_tests",
       "//components/favicon/content:unit_tests",
       "//components/gcm_driver/instance_id:unit_tests",
       "//components/history/content/browser:unit_tests",
@@ -261,11 +262,13 @@ test("components_unittests") {
       "//components/permissions:unit_tests",
       "//components/policy/content:unit_tests",
       "//components/previews/content:unit_tests",
+      "//components/query_tiles:unit_tests",
       "//components/safe_browsing/content/password_protection:password_protection_unittest",
       "//components/safe_browsing/content/triggers:unit_tests",
       "//components/safe_browsing/content/web_ui:unit_tests",
       "//components/safe_browsing/core/common:unit_tests",
       "//components/safe_browsing/core/triggers:unit_tests",
+      "//components/safety_check:unit_tests",
       "//components/security_interstitials/content:unit_tests",
       "//components/security_state/content:unit_tests",
       "//components/services/heap_profiling:unit_tests",
@@ -278,6 +281,7 @@ test("components_unittests") {
       "//components/subresource_filter/content/common:unit_tests",
       "//components/subresource_filter/content/renderer:unit_tests",
       "//components/tracing:unit_tests",
+      "//components/translate/content/browser:unit_tests",
       "//components/translate/content/renderer:unit_tests",
       "//components/ukm/content:unit_tests",
       "//components/visitedlink/test:unit_tests",
@@ -289,7 +293,6 @@ test("components_unittests") {
       deps += [
         "//components/crash/content/browser:unit_tests",
         "//components/crash/core/app:unit_tests",
-        "//components/data_reduction_proxy/content/common:unit_tests",
         "//components/data_reduction_proxy/core/browser:unit_tests",
         "//components/data_reduction_proxy/core/common:unit_tests",
       ]
@@ -535,6 +538,12 @@ if (!is_ios && !is_fuchsia) {
       "autofill/content/renderer/form_autofill_util_browsertest.cc",
       "autofill/content/renderer/form_cache_browsertest.cc",
       "autofill/content/renderer/password_form_conversion_utils_browsertest.cc",
+      "browsing_data/content/browsing_data_helper_browsertest.h",
+      "browsing_data/content/cache_storage_helper_browsertest.cc",
+      "browsing_data/content/database_helper_browsertest.cc",
+      "browsing_data/content/indexed_db_helper_browsertest.cc",
+      "browsing_data/content/local_storage_helper_browsertest.cc",
+      "content_settings/renderer/content_settings_agent_impl_browsertest.cc",
       "dom_distiller/content/browser/distillable_page_utils_browsertest.cc",
       "dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc",
       "dom_distiller/content/browser/test/distilled_page_js_browsertest.cc",
@@ -554,7 +563,9 @@ if (!is_ios && !is_fuchsia) {
       "dom_distiller/core/javascript/",
       "security_state/content/testdata/",
       "//content/test/data/",
+      "//third_party/chaijs",
       "//third_party/dom_distiller_js/dist/test/data/",
+      "//third_party/mocha",
     ]
 
     deps = [
@@ -564,7 +575,9 @@ if (!is_ios && !is_fuchsia) {
       "//components/autofill/content/renderer",
       "//components/autofill/content/renderer:test_support",
       "//components/autofill/core/browser",
+      "//components/browsing_data/content",
       "//components/content_settings/core/common",
+      "//components/content_settings/renderer",
       "//components/dom_distiller/content/browser",
       "//components/dom_distiller/core",
       "//components/dom_distiller/core:test_support",
@@ -572,6 +585,7 @@ if (!is_ios && !is_fuchsia) {
       "//components/offline_pages/core/renovations",
       "//components/paint_preview/renderer",
       "//components/password_manager/content/browser",
+      "//components/performance_manager:browser_tests",
       "//components/security_state/content",
       "//components/security_state/core",
       "//components/strings",
@@ -656,7 +670,10 @@ if (!is_ios && !is_fuchsia) {
 
     if (enable_basic_printing) {
       sources += [ "printing/test/print_render_frame_helper_browsertest.cc" ]
-      deps += [ "//components/printing/test:test_support" ]
+      deps += [
+        "//components/printing/common:mojo_interfaces",
+        "//components/printing/test:test_support",
+      ]
     }
 
     assert_no_deps = [ "//chrome/*" ]
@@ -721,5 +738,20 @@ if (!is_ios && !is_fuchsia) {
         "//crypto",
       ]
     }
+  }
+}
+if (is_android) {
+  junit_binary("components_junit_tests") {
+    deps = [
+      "//components/autofill/android/junit:components_autofill_junit_tests",
+      "//components/background_task_scheduler:components_background_task_scheduler_junit_tests",
+      "//components/embedder_support/android:components_embedder_support_junit_tests",
+      "//components/gcm_driver/android:components_gcm_driver_junit_tests",
+      "//components/permissions/android:components_permissions_junit_tests",
+      "//components/policy/android:components_policy_junit_tests",
+      "//components/query_tiles:query_tiles_junit_tests",
+      "//components/signin/core/browser/android:components_signin_junit_tests",
+      "//components/variations/android:components_variations_junit_tests",
+    ]
   }
 }

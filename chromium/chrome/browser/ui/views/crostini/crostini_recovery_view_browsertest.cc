@@ -16,6 +16,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/crostini/crostini_browser_test_util.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_concierge_client.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 constexpr crostini::CrostiniUISurface kUiSurface =
@@ -28,6 +31,14 @@ class CrostiniRecoveryViewBrowserTest : public CrostiniDialogBrowserTest {
   CrostiniRecoveryViewBrowserTest()
       : CrostiniDialogBrowserTest(true /*register_termina*/),
         app_id_(crostini::CrostiniTestHelper::GenerateAppId(kDesktopFileId)) {}
+
+  void SetUpOnMainThread() override {
+    CrostiniDialogBrowserTest::SetUpOnMainThread();
+
+    static_cast<chromeos::FakeConciergeClient*>(
+        chromeos::DBusThreadManager::Get()->GetConciergeClient())
+        ->set_notify_vm_stopped_on_stop_vm(true);
+  }
 
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {

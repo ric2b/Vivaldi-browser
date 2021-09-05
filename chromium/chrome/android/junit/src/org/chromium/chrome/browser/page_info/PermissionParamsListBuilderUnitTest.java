@@ -10,7 +10,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -35,18 +35,22 @@ import org.robolectric.shadows.ShadowNotificationManager;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.site_settings.ContentSettingValues;
-import org.chromium.chrome.browser.site_settings.WebsitePreferenceBridge;
-import org.chromium.chrome.browser.site_settings.WebsitePreferenceBridgeJni;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.LocationSettingsTestUtil;
 import org.chromium.components.browser_ui.site_settings.SiteSettingsFeatureList;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridgeJni;
+import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.components.page_info.PageInfoView;
+import org.chromium.components.page_info.PermissionParamsListBuilder;
 import org.chromium.components.page_info.SystemSettingsActivityRequiredListener;
 import org.chromium.ui.base.AndroidPermissionDelegate;
 import org.chromium.ui.base.PermissionCallback;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -67,18 +71,24 @@ public class PermissionParamsListBuilderUnitTest {
     @Mock
     WebsitePreferenceBridge.Natives mWebsitePreferenceBridgeMock;
 
+    @Mock
+    Profile mProfileMock;
+
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        ChromePermissionParamsListBuilderDelegate.setProfileForTesting(mProfileMock);
         mocker.mock(WebsitePreferenceBridgeJni.TEST_HOOKS, mWebsitePreferenceBridgeMock);
         when(mWebsitePreferenceBridgeMock.isPermissionControlledByDSE(
-                     anyInt(), anyString(), anyBoolean()))
+                     any(BrowserContextHandle.class), anyInt(), anyString()))
                 .thenReturn(false);
+        FakePermissionDelegate.clearBlockedPermissions();
         AndroidPermissionDelegate permissionDelegate = new FakePermissionDelegate();
         mSettingsActivityRequiredListener = new FakeSystemSettingsActivityRequiredListener();
-        mPermissionParamsListBuilder = new PermissionParamsListBuilder(
-                RuntimeEnvironment.application, permissionDelegate, "https://example.com", true,
-                mSettingsActivityRequiredListener, result -> {});
+        mPermissionParamsListBuilder =
+                new PermissionParamsListBuilder(RuntimeEnvironment.application, permissionDelegate,
+                        "https://example.com", true, mSettingsActivityRequiredListener,
+                        result -> {}, new ChromePermissionParamsListBuilderDelegate());
     }
 
     @Test
@@ -125,6 +135,21 @@ public class PermissionParamsListBuilderUnitTest {
         assertEquals(1, mSettingsActivityRequiredListener.getCallCount());
         assertEquals(Settings.ACTION_LOCATION_SOURCE_SETTINGS,
                 mSettingsActivityRequiredListener.getIntentOverride().getAction());
+    }
+
+    @Test
+    public void arNotificationWhenCameraBlocked() {
+        FakePermissionDelegate.blockPermission(android.Manifest.permission.CAMERA);
+        mPermissionParamsListBuilder.addPermissionEntry(
+                "Test", ContentSettingsType.AR, ContentSettingValues.ALLOW);
+
+        List<PageInfoView.PermissionRowParams> rows =
+                mPermissionParamsListBuilder.build().permissions;
+
+        assertEquals(1, rows.size());
+        PageInfoView.PermissionRowParams permissionParams = rows.get(0);
+        assertEquals(
+                R.string.page_info_android_ar_camera_blocked, permissionParams.warningTextResource);
     }
 
     @Test
@@ -181,9 +206,19 @@ public class PermissionParamsListBuilderUnitTest {
     }
 
     private static class FakePermissionDelegate implements AndroidPermissionDelegate {
+        private static List<String> sBlockedPermissions = new ArrayList<String>();
+
+        private static void blockPermission(String permission) {
+            sBlockedPermissions.add(permission);
+        }
+
+        private static void clearBlockedPermissions() {
+            sBlockedPermissions.clear();
+        }
+
         @Override
         public boolean hasPermission(String permission) {
-            return true;
+            return !sBlockedPermissions.contains(permission);
         }
 
         @Override

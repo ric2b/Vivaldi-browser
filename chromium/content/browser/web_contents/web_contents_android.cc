@@ -24,7 +24,6 @@
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/android/java/gin_java_bridge_dispatcher_host.h"
-#include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/media/media_web_contents_observer.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -385,13 +384,6 @@ RenderWidgetHostViewAndroid*
     WebContentsAndroid::GetRenderWidgetHostViewAndroid() {
   RenderWidgetHostView* rwhv = NULL;
   rwhv = web_contents_->GetRenderWidgetHostView();
-  if (web_contents_->ShowingInterstitialPage()) {
-    rwhv = web_contents_->GetInterstitialPage()
-               ->GetMainFrame()
-               ->GetRenderViewHost()
-               ->GetWidget()
-               ->GetView();
-  }
   return static_cast<RenderWidgetHostViewAndroid*>(rwhv);
 }
 
@@ -514,6 +506,17 @@ void WebContentsAndroid::AdjustSelectionByCharacterOffset(
                                                   show_selection_menu);
 }
 
+bool WebContentsAndroid::InitializeRenderFrameForJavaScript() {
+  if (!web_contents_->GetFrameTree()
+           ->root()
+           ->render_manager()
+           ->InitializeRenderFrameForImmediateUse()) {
+    LOG(ERROR) << "Failed to initialize RenderFrame to evaluate javascript";
+    return false;
+  }
+  return true;
+}
+
 void WebContentsAndroid::EvaluateJavaScript(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -522,13 +525,8 @@ void WebContentsAndroid::EvaluateJavaScript(
   RenderViewHost* rvh = web_contents_->GetRenderViewHost();
   DCHECK(rvh);
 
-  if (!rvh->IsRenderViewLive()) {
-    if (!static_cast<WebContentsImpl*>(web_contents_)->
-        CreateRenderViewForInitialEmptyDocument()) {
-      LOG(ERROR) << "Failed to create RenderView in EvaluateJavaScript";
-      return;
-    }
-  }
+  if (!InitializeRenderFrameForJavaScript())
+    return;
 
   if (!callback) {
     // No callback requested.
@@ -555,13 +553,8 @@ void WebContentsAndroid::EvaluateJavaScriptForTests(
   RenderViewHost* rvh = web_contents_->GetRenderViewHost();
   DCHECK(rvh);
 
-  if (!rvh->IsRenderViewLive()) {
-    if (!static_cast<WebContentsImpl*>(web_contents_)->
-        CreateRenderViewForInitialEmptyDocument()) {
-      LOG(ERROR) << "Failed to create RenderView in EvaluateJavaScriptForTests";
-      return;
-    }
-  }
+  if (!InitializeRenderFrameForJavaScript())
+    return;
 
   if (!callback) {
     // No callback requested.

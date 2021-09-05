@@ -410,7 +410,6 @@ jumbo_component("gfx") {
 
   if (use_x11) {
     deps += [ "//ui/gfx/x" ]
-    configs += [ "//build/config/linux:x11" ]
   }
 }
 
@@ -452,7 +451,6 @@ jumbo_component("color_space") {
   }
   if (use_x11) {
     deps += [ "//ui/gfx/x" ]
-    configs += [ "//build/config/linux:x11" ]
   }
   defines = [ "COLOR_SPACE_IMPLEMENTATION" ]
 }
@@ -750,6 +748,7 @@ test("gfx_unittests") {
       "paint_vector_icon_unittest.cc",
       "range/range_unittest.cc",
       "selection_bound_unittest.cc",
+      "selection_model_unittest.cc",
       "sequential_id_generator_unittest.cc",
       "shadow_value_unittest.cc",
       "skbitmap_operations_unittest.cc",

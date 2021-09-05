@@ -5,13 +5,12 @@
 package org.chromium.chrome.browser.ui;
 
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContent;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -21,8 +20,7 @@ import org.chromium.ui.util.TokenHolder;
  * A class that manages activity-specific interactions with the BottomSheet component that it
  * otherwise shouldn't know about.
  */
-class BottomSheetManager extends EmptyBottomSheetObserver
-        implements Destroyable, ChromeFullscreenManager.FullscreenListener {
+class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable {
     /** A token for suppressing app modal dialogs. */
     private int mAppModalToken = TokenHolder.INVALID_TOKEN;
 
@@ -35,9 +33,6 @@ class BottomSheetManager extends EmptyBottomSheetObserver
     /** A mechanism for accessing the currently active tab. */
     private Supplier<Tab> mTabSupplier;
 
-    /** A supplier of the {@link ChromeFullscreenManager}. */
-    private Supplier<ChromeFullscreenManager> mFullscreenManager;
-
     /** A supplier of the activity's dialog manager. */
     private Supplier<ModalDialogManager> mDialogManager;
 
@@ -47,20 +42,24 @@ class BottomSheetManager extends EmptyBottomSheetObserver
     /** A delegate that provides the functionality of obscuring all tabs. */
     private TabObscuringHandler mTabObscuringHandler;
 
+    /**
+     * Used to track whether the active content has a custom scrim lifecycle. This is kept here
+     * because there are some instances where the active content is changed prior to the close event
+     * being called.
+     */
+    private boolean mContentHasCustomScrimLifecycle;
+
     public BottomSheetManager(BottomSheetController controller, Supplier<Tab> tabSupplier,
-            Supplier<ChromeFullscreenManager> fullscreenManager,
             Supplier<ModalDialogManager> dialogManager,
             Supplier<SnackbarManager> snackbarManagerSupplier,
             TabObscuringHandler obscuringDelegate) {
         mSheetController = controller;
         mTabSupplier = tabSupplier;
-        mFullscreenManager = fullscreenManager;
         mDialogManager = dialogManager;
         mSnackbarManager = snackbarManagerSupplier;
         mTabObscuringHandler = obscuringDelegate;
 
         mSheetController.addObserver(this);
-        mFullscreenManager.get().addListener(BottomSheetManager.this);
     }
 
     @Override
@@ -76,7 +75,10 @@ class BottomSheetManager extends EmptyBottomSheetObserver
         BottomSheetContent content = mSheetController.getCurrentSheetContent();
         // Content with a custom scrim lifecycle should not obscure the tab. The feature
         // is responsible for adding itself to the list of obscuring views when applicable.
-        if (content != null && content.hasCustomScrimLifecycle()) return;
+        if (content != null && content.hasCustomScrimLifecycle()) {
+            mContentHasCustomScrimLifecycle = true;
+            return;
+        }
 
         mSheetController.setIsObscuringAllTabs(mTabObscuringHandler, true);
 
@@ -92,15 +94,22 @@ class BottomSheetManager extends EmptyBottomSheetObserver
 
     @Override
     public void onSheetClosed(int reason) {
-        // This can happen if the sheet has a custom lifecycle.
-        if (mAppModalToken == TokenHolder.INVALID_TOKEN
-                && mTabModalToken == TokenHolder.INVALID_TOKEN) {
+        BottomSheetContent content = mSheetController.getCurrentSheetContent();
+        // If the content has a custom scrim, it wasn't obscuring tabs.
+        if (mContentHasCustomScrimLifecycle) {
+            mContentHasCustomScrimLifecycle = false;
             return;
         }
 
         mSheetController.setIsObscuringAllTabs(mTabObscuringHandler, false);
 
-        if (mDialogManager.get() != null) {
+        // Tokens can be invalid if the sheet has a custom lifecycle.
+        if (mDialogManager.get() != null
+                && (mAppModalToken != TokenHolder.INVALID_TOKEN
+                        || mTabModalToken != TokenHolder.INVALID_TOKEN)) {
+            // If one modal dialog token is set, the other should be as well.
+            assert mAppModalToken != TokenHolder.INVALID_TOKEN
+                    && mTabModalToken != TokenHolder.INVALID_TOKEN;
             mDialogManager.get().resumeType(ModalDialogManager.ModalDialogType.APP, mAppModalToken);
             mDialogManager.get().resumeType(ModalDialogManager.ModalDialogType.TAB, mTabModalToken);
         }
@@ -115,19 +124,7 @@ class BottomSheetManager extends EmptyBottomSheetObserver
     }
 
     @Override
-    public void onContentOffsetChanged(int offset) {}
-
-    @Override
-    public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
-            int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {}
-
-    @Override
-    public void onBottomControlsHeightChanged(
-            int bottomControlsHeight, int bottomControlsMinHeight) {}
-
-    @Override
     public void destroy() {
         mSheetController.removeObserver(this);
-        mFullscreenManager.get().removeListener(this);
     }
 }

@@ -1,0 +1,47 @@
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+#ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_COSMETIC_FILTER_H_
+#define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_COSMETIC_FILTER_H_
+
+#include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "vivaldi_mojom/components/request_filter/adblock_filter/mojom/adblock_cosmetic_filter.mojom.h"
+
+namespace content {
+class RenderFrameHost;
+}
+
+namespace adblock_filter {
+class RulesIndexManager;
+
+class CosmeticFilter : public mojom::CosmeticFilter {
+ public:
+  static void Create(content::RenderFrameHost* frame,
+                     mojo::PendingReceiver<mojom::CosmeticFilter> receiver);
+  ~CosmeticFilter() override;
+
+  void Initialize(std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount>
+                      index_managers);
+
+  // Implementing mojom::CosmeticFilter
+  void GetStyleSheet(const ::GURL& url,
+                     GetStyleSheetCallback callback) override;
+  void ShouldAllowWebRTC(const ::GURL& document_url,
+                         const std::vector<::GURL>& ice_servers,
+                         ShouldAllowWebRTCCallback callback) override;
+
+ private:
+  CosmeticFilter(int process_id, int frame_id);
+
+  int process_id_;
+  int frame_id_;
+  std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount> index_managers_;
+
+  DISALLOW_COPY_AND_ASSIGN(CosmeticFilter);
+};
+
+}  // namespace adblock_filter
+
+#endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_COSMETIC_FILTER_H_

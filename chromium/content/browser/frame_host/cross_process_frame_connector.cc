@@ -48,8 +48,15 @@ CrossProcessFrameConnector::CrossProcessFrameConnector(
     RenderFrameProxyHost* frame_proxy_in_parent_renderer)
     : FrameConnectorDelegate(IsUseZoomForDSFEnabled()),
       frame_proxy_in_parent_renderer_(frame_proxy_in_parent_renderer) {
-  current_child_frame_host()->GetRenderWidgetHost()->GetScreenInfo(
-      &screen_info_);
+  // At this point, SetView() has not been called and so the associated RenderWidgetHost doesn't
+  // have a view yet. That means calling GetScreenInfo() on the associated RenderWidgetHost will
+  // just default to the primary display, which may not be appropriate. So instead we call
+  // GetScreenInfo() on the root RenderWidgetHost, which will be guaranteed to be on the correct
+  // display. All subsequent updates to |screen_info_| ultimately come from the root, so it makes
+  // sense to do it here as well.
+  RootRenderFrameHost(current_child_frame_host())
+      ->GetRenderWidgetHost()
+      ->GetScreenInfo(&screen_info_);
 }
 
 CrossProcessFrameConnector::~CrossProcessFrameConnector() {
@@ -130,10 +137,11 @@ void CrossProcessFrameConnector::SetView(RenderWidgetHostViewChildFrame* view) {
 void CrossProcessFrameConnector::RenderProcessGone() {
   has_crashed_ = true;
 
-  FrameTreeNode* node = frame_proxy_in_parent_renderer_->frame_tree_node();
-  int process_id = node->current_frame_host()->GetProcess()->GetID();
-  for (node = node->parent(); node; node = node->parent()) {
-    if (node->current_frame_host()->GetProcess()->GetID() == process_id) {
+  RenderFrameHost* rfh =
+      frame_proxy_in_parent_renderer_->frame_tree_node()->current_frame_host();
+  int process_id = rfh->GetProcess()->GetID();
+  for (rfh = rfh->GetParent(); rfh; rfh = rfh->GetParent()) {
+    if (rfh->GetProcess()->GetID() == process_id) {
       // The crash will be already logged by the ancestor - ignore this crash in
       // the current instance of the CrossProcessFrameConnector.
       is_crash_already_logged_ = true;
@@ -151,21 +159,15 @@ void CrossProcessFrameConnector::RenderProcessGone() {
 }
 
 void CrossProcessFrameConnector::SendIntrinsicSizingInfoToParent(
-    const blink::WebIntrinsicSizingInfo& sizing_info) {
+    blink::mojom::IntrinsicSizingInfoPtr sizing_info) {
   // The width/height should not be negative since gfx::SizeF will clamp
   // negative values to zero.
-  DCHECK((sizing_info.size.width >= 0.f) && (sizing_info.size.height >= 0.f));
-  DCHECK((sizing_info.aspect_ratio.width >= 0.f) &&
-         (sizing_info.aspect_ratio.height >= 0.f));
-
-  auto info = blink::mojom::IntrinsicSizingInfo::New(
-      gfx::SizeF(sizing_info.size.width, sizing_info.size.height),
-      gfx::SizeF(sizing_info.aspect_ratio.width,
-                 sizing_info.aspect_ratio.height),
-      sizing_info.has_width, sizing_info.has_height);
-
+  DCHECK((sizing_info->size.width() >= 0.f) &&
+         (sizing_info->size.height() >= 0.f));
+  DCHECK((sizing_info->aspect_ratio.width() >= 0.f) &&
+         (sizing_info->aspect_ratio.height() >= 0.f));
   frame_proxy_in_parent_renderer_->GetAssociatedRemoteFrame()
-      ->IntrinsicSizingInfoOfChildChanged(std::move(info));
+      ->IntrinsicSizingInfoOfChildChanged(std::move(sizing_info));
 }
 
 void CrossProcessFrameConnector::UpdateCursor(const WebCursor& cursor) {
@@ -211,7 +213,7 @@ bool CrossProcessFrameConnector::TransformPointToCoordSpaceForView(
 
 void CrossProcessFrameConnector::ForwardAckedTouchpadZoomEvent(
     const blink::WebGestureEvent& event,
-    InputEventAckState ack_result) {
+    blink::mojom::InputEventResultState ack_result) {
   auto* root_view = GetRootRenderWidgetHostView();
   if (!root_view)
     return;
@@ -225,9 +227,9 @@ void CrossProcessFrameConnector::ForwardAckedTouchpadZoomEvent(
 
 bool CrossProcessFrameConnector::BubbleScrollEvent(
     const blink::WebGestureEvent& event) {
-  DCHECK(event.GetType() == blink::WebInputEvent::kGestureScrollBegin ||
-         event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
-         event.GetType() == blink::WebInputEvent::kGestureScrollEnd);
+  DCHECK(event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin ||
+         event.GetType() == blink::WebInputEvent::Type::kGestureScrollUpdate ||
+         event.GetType() == blink::WebInputEvent::Type::kGestureScrollEnd);
   auto* parent_view = GetParentRenderWidgetHostView();
 
   if (!parent_view)
@@ -434,7 +436,7 @@ void CrossProcessFrameConnector::DidUpdateVisualProperties(
 
 void CrossProcessFrameConnector::DidAckGestureEvent(
     const blink::WebGestureEvent& event,
-    InputEventAckState ack_result) {
+    blink::mojom::InputEventResultState ack_result) {
   auto* root_view = GetRootRenderWidgetHostView();
   if (!root_view)
     return;

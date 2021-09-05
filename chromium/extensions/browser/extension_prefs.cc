@@ -227,6 +227,10 @@ constexpr const char kDNRDynamicRulesetPref[] = "dnr_dynamic_ruleset";
 // Net Request API.
 constexpr const char kDNRChecksumKey[] = "checksum";
 
+// Key corresponding to the list of enabled static ruleset IDs for an extension.
+// Used for the Declarative Net Request API.
+constexpr const char kDNREnabledStaticRulesetIDs[] = "dnr_enabled_ruleset_ids";
+
 // A boolean preference that indicates whether the extension's icon should be
 // automatically badged to the matched action count for a tab. False by default.
 constexpr const char kPrefDNRUseActionCountAsBadgeText[] =
@@ -800,7 +804,11 @@ bool ExtensionPrefs::HasDisableReason(
 void ExtensionPrefs::AddDisableReason(
     const std::string& extension_id,
     disable_reason::DisableReason disable_reason) {
-  DCHECK(!DoesExtensionHaveState(extension_id, Extension::ENABLED));
+  // TODO(https://crbug.com/1073570): Extensions can be blacklisted but in
+  // enabled state. This checks the kPrefState which is the state of the
+  // extension.
+  DCHECK(!DoesExtensionHaveState(extension_id, Extension::ENABLED) ||
+         disable_reason == disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
   ModifyDisableReasons(extension_id, disable_reason, DISABLE_REASON_ADD);
 }
 
@@ -1831,21 +1839,21 @@ void ExtensionPrefs::SetNeedsSync(const std::string& extension_id,
 
 bool ExtensionPrefs::GetDNRStaticRulesetChecksum(
     const ExtensionId& extension_id,
-    int ruleset_id,
+    declarative_net_request::RulesetID ruleset_id,
     int* checksum) const {
   std::string pref =
-      JoinPrefs({kDNRStaticRulesetPref, base::NumberToString(ruleset_id),
-                 kDNRChecksumKey});
+      JoinPrefs({kDNRStaticRulesetPref,
+                 base::NumberToString(ruleset_id.value()), kDNRChecksumKey});
   return ReadPrefAsInteger(extension_id, pref, checksum);
 }
 
 void ExtensionPrefs::SetDNRStaticRulesetChecksum(
     const ExtensionId& extension_id,
-    int ruleset_id,
+    declarative_net_request::RulesetID ruleset_id,
     int checksum) {
   std::string pref =
-      JoinPrefs({kDNRStaticRulesetPref, base::NumberToString(ruleset_id),
-                 kDNRChecksumKey});
+      JoinPrefs({kDNRStaticRulesetPref,
+                 base::NumberToString(ruleset_id.value()), kDNRChecksumKey});
   UpdateExtensionPref(extension_id, pref,
                       std::make_unique<base::Value>(checksum));
 }
@@ -1863,6 +1871,36 @@ void ExtensionPrefs::SetDNRDynamicRulesetChecksum(
   std::string pref = JoinPrefs({kDNRDynamicRulesetPref, kDNRChecksumKey});
   UpdateExtensionPref(extension_id, pref,
                       std::make_unique<base::Value>(checksum));
+}
+
+base::Optional<std::set<declarative_net_request::RulesetID>>
+ExtensionPrefs::GetDNREnabledStaticRulesets(
+    const ExtensionId& extension_id) const {
+  std::set<declarative_net_request::RulesetID> ids;
+  const base::ListValue* ids_value = nullptr;
+  if (!ReadPrefAsList(extension_id, kDNREnabledStaticRulesetIDs, &ids_value))
+    return base::nullopt;
+
+  DCHECK(ids_value);
+  for (const base::Value& id_value : ids_value->GetList()) {
+    if (!id_value.is_int())
+      return base::nullopt;
+
+    ids.insert(declarative_net_request::RulesetID(id_value.GetInt()));
+  }
+
+  return ids;
+}
+
+void ExtensionPrefs::SetDNREnabledStaticRulesets(
+    const ExtensionId& extension_id,
+    const std::set<declarative_net_request::RulesetID>& ids) {
+  std::vector<base::Value> ids_list;
+  for (const auto& id : ids)
+    ids_list.push_back(base::Value(id.value()));
+
+  UpdateExtensionPref(extension_id, kDNREnabledStaticRulesetIDs,
+                      std::make_unique<base::Value>(ids_list));
 }
 
 bool ExtensionPrefs::GetDNRUseActionCountAsBadgeText(
@@ -2039,14 +2077,20 @@ void ExtensionPrefs::PopulateExtensionInfoPrefs(
   if (install_flags & kInstallFlagIsBlacklistedForMalware)
     extension_dict->SetBoolean(kPrefBlacklist, true);
 
-  if (!ruleset_checksums.empty()) {
+  // If |ruleset_checksums| is empty, explicitly remove the
+  // |kDNRStaticRulesetPref| entry to ensure any remaining old entries from the
+  // previous install are cleared up in case of an update. Else just set the
+  // entry (which will overwrite any existing value).
+  if (ruleset_checksums.empty()) {
+    extension_dict->Remove(kDNRStaticRulesetPref, nullptr /* out_value */);
+  } else {
     auto ruleset_prefs = std::make_unique<base::DictionaryValue>();
     for (const declarative_net_request::RulesetChecksum& checksum :
          ruleset_checksums) {
       auto ruleset_dict = std::make_unique<base::DictionaryValue>();
       ruleset_dict->SetIntKey(kDNRChecksumKey, checksum.checksum);
 
-      std::string id_key = base::NumberToString(checksum.ruleset_id);
+      std::string id_key = base::NumberToString(checksum.ruleset_id.value());
       DCHECK(!ruleset_prefs->FindKey(id_key));
       ruleset_prefs->SetDictionary(id_key, std::move(ruleset_dict));
     }
@@ -2054,6 +2098,10 @@ void ExtensionPrefs::PopulateExtensionInfoPrefs(
     extension_dict->SetDictionary(kDNRStaticRulesetPref,
                                   std::move(ruleset_prefs));
   }
+
+  // Clear the list of enabled static rulesets for the extension since it
+  // shouldn't persist across extension updates.
+  extension_dict->Remove(kDNREnabledStaticRulesetIDs, nullptr /* out_value */);
 
   if (util::CanWithholdPermissionsFromExtension(*extension)) {
     // If the withhold permission creation flag is present it takes precedence

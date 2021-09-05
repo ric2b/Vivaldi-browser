@@ -263,6 +263,10 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
         base::BindRepeating(&DriveInternalsWebUIHandler::OnPeriodicUpdate,
                             weak_ptr_factory_.GetWeakPtr()));
     web_ui()->RegisterMessageCallback(
+        "restartDrive",
+        base::BindRepeating(&DriveInternalsWebUIHandler::RestartDrive,
+                            weak_ptr_factory_.GetWeakPtr()));
+    web_ui()->RegisterMessageCallback(
         "resetDriveFileSystem",
         base::BindRepeating(&DriveInternalsWebUIHandler::ResetDriveFileSystem,
                             weak_ptr_factory_.GetWeakPtr()));
@@ -284,7 +288,6 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
 
     UpdateDriveRelatedPreferencesSection();
     UpdateGCacheContentsSection();
-    UpdateLocalStorageUsageSection();
     UpdatePathConfigurationsSection();
 
     UpdateConnectionStatusSection();
@@ -294,6 +297,8 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
     UpdateCacheContentsSection();
 
     UpdateInFlightOperationsSection();
+
+    UpdateDriveDebugSection();
 
     // When the drive-internals page is reloaded by the reload key, the page
     // content is recreated, but this WebUI object is not (instead, OnPageLoaded
@@ -402,8 +407,8 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
     MaybeCallJavascript("updatePathConfigurations", std::move(paths));
   }
 
-  void UpdateLocalStorageUsageSection() {
-    SetSectionEnabled("local-metadata-section", true);
+  void UpdateDriveDebugSection() {
+    SetSectionEnabled("drive-debug", true);
 
     // Propagate the amount of local free space in bytes.
     base::FilePath home_path;
@@ -547,6 +552,17 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
                         std::move(response.second));
   }
 
+  // Called when the "Restart Drive" button on the page is pressed.
+  void RestartDrive(const base::ListValue* args) {
+    AllowJavascript();
+
+    drive::DriveIntegrationService* integration_service =
+        GetIntegrationService();
+    if (integration_service) {
+      integration_service->RestartDrive();
+    }
+  }
+
   // Called when the corresponding button on the page is pressed.
   void ResetDriveFileSystem(const base::ListValue* args) {
     AllowJavascript();
@@ -555,8 +571,8 @@ class DriveInternalsWebUIHandler : public content::WebUIMessageHandler {
         GetIntegrationService();
     if (integration_service) {
       integration_service->ClearCacheAndRemountFileSystem(
-          base::Bind(&DriveInternalsWebUIHandler::ResetFinished,
-                     weak_ptr_factory_.GetWeakPtr()));
+          base::BindOnce(&DriveInternalsWebUIHandler::ResetFinished,
+                         weak_ptr_factory_.GetWeakPtr()));
     }
   }
 
@@ -632,7 +648,7 @@ class LogsZipper : public download::AllDownloadItemNotifier::Observer {
 
   void ZipLogFiles(const std::vector<base::FilePath>& files) {
     (new ZipFileCreator(
-         base::BindRepeating(&LogsZipper::OnZipDone, base::Unretained(this)),
+         base::BindOnce(&LogsZipper::OnZipDone, base::Unretained(this)),
          logs_directory_, files, zip_path_))
         ->Start(LaunchFileUtilService());
   }

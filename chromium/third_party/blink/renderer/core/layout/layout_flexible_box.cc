@@ -105,10 +105,12 @@ MinMaxSizes LayoutFlexibleBox::ComputeIntrinsicLogicalWidths() const {
   // https://bugs.webkit.org/show_bug.cgi?id=116117 and
   // https://crbug.com/240765.
   float previous_max_content_flex_fraction = -1;
+  int number_of_items = 0;
   for (LayoutBox* child = FirstChildBox(); child;
        child = child->NextSiblingBox()) {
     if (child->IsOutOfFlowPositioned())
       continue;
+    number_of_items++;
 
     LayoutUnit margin = MarginIntrinsicLogicalWidthForChild(*child);
 
@@ -141,6 +143,19 @@ MinMaxSizes LayoutFlexibleBox::ComputeIntrinsicLogicalWidths() const {
 
     previous_max_content_flex_fraction = CountIntrinsicSizeForAlgorithmChange(
         max_preferred_logical_width, child, previous_max_content_flex_fraction);
+  }
+
+  if (!IsColumnFlow() && number_of_items > 0) {
+    LayoutUnit gap_inline_size =
+        (number_of_items - 1) *
+        FlexLayoutAlgorithm::GapBetweenItems(
+            StyleRef(),
+            LogicalSize{ContentLogicalWidth(),
+                        AvailableLogicalHeightForPercentageComputation()});
+    child_sizes.max_size += gap_inline_size;
+    if (!IsMultiline()) {
+      child_sizes.min_size += gap_inline_size;
+    }
   }
 
   child_sizes.max_size = std::max(child_sizes.min_size, child_sizes.max_size);
@@ -949,7 +964,11 @@ void LayoutFlexibleBox::LayoutFlexItems(bool relayout_children,
   ChildLayoutType layout_type =
       relayout_children ? kForceLayout : kLayoutIfNeeded;
   const LayoutUnit line_break_length = MainAxisContentExtent(LayoutUnit::Max());
-  FlexLayoutAlgorithm flex_algorithm(Style(), line_break_length);
+  FlexLayoutAlgorithm flex_algorithm(
+      Style(), line_break_length,
+      LogicalSize{ContentLogicalWidth(),
+                  AvailableLogicalHeightForPercentageComputation()},
+      &GetDocument());
   order_iterator_.First();
   for (LayoutBox* child = order_iterator_.CurrentChild(); child;
        child = order_iterator_.Next()) {
@@ -1000,7 +1019,11 @@ void LayoutFlexibleBox::LayoutFlexItems(bool relayout_children,
     if (Size().Height() < min_height)
       SetLogicalHeight(min_height);
   }
-
+  if (!IsColumnFlow()) {
+    SetLogicalHeight(LogicalHeight() +
+                     flex_algorithm.gap_between_lines_ *
+                         (flex_algorithm.FlexLines().size() - 1));
+  }
   UpdateLogicalHeight();
   if (!HasOverrideLogicalHeight() && IsColumnFlow()) {
     SetIntrinsicContentLogicalHeight(
@@ -1245,31 +1268,112 @@ void LayoutFlexibleBox::SetOverrideMainAxisContentSizeForChild(FlexItem& item) {
   }
 }
 
+namespace {
+
+LayoutUnit MainAxisStaticPositionCommon(const LayoutBox& child,
+                                        LayoutBox* parent,
+                                        LayoutUnit available_space) {
+  LayoutUnit offset = FlexLayoutAlgorithm::InitialContentPositionOffset(
+      parent->StyleRef(), available_space,
+      FlexLayoutAlgorithm::ResolvedJustifyContent(parent->StyleRef()), 1);
+  if (parent->StyleRef().ResolvedIsRowReverseFlexDirection() ||
+      parent->StyleRef().ResolvedIsColumnReverseFlexDirection())
+    offset = available_space - offset;
+  return offset;
+}
+
+LayoutUnit StaticMainAxisPositionForNGPositionedChild(const LayoutBox& child,
+                                                      LayoutBox* parent) {
+  const LayoutUnit available_space =
+      FlexLayoutAlgorithm::IsHorizontalFlow(parent->StyleRef())
+          ? parent->ContentWidth() - child.Size().Width()
+          : parent->ContentHeight() - child.Size().Height();
+  return MainAxisStaticPositionCommon(child, parent, available_space);
+}
+
+LayoutUnit CrossAxisStaticPositionCommon(const LayoutBox& child,
+                                         LayoutBox* parent,
+                                         LayoutUnit available_space) {
+  return FlexItem::AlignmentOffset(
+      available_space,
+      FlexLayoutAlgorithm::AlignmentForChild(parent->StyleRef(),
+                                             child.StyleRef()),
+      LayoutUnit(), LayoutUnit(),
+      parent->StyleRef().FlexWrap() == EFlexWrap::kWrapReverse,
+      parent->StyleRef().IsDeprecatedWebkitBox());
+}
+
+LayoutUnit StaticCrossAxisPositionForNGPositionedChild(const LayoutBox& child,
+                                                       LayoutBox* parent) {
+  const LayoutUnit available_space =
+      FlexLayoutAlgorithm::IsHorizontalFlow(parent->StyleRef())
+          ? parent->ContentHeight() - child.Size().Height()
+          : parent->ContentWidth() - child.Size().Width();
+  return CrossAxisStaticPositionCommon(child, parent, available_space);
+}
+
+LayoutUnit StaticInlinePositionForNGPositionedChild(const LayoutBox& child,
+                                                    LayoutBlock* parent) {
+  const LayoutUnit start_offset = parent->StartOffsetForContent();
+  if (parent->StyleRef().IsDeprecatedWebkitBox())
+    return start_offset;
+  return start_offset +
+         (parent->StyleRef().ResolvedIsColumnFlexDirection()
+              ? StaticCrossAxisPositionForNGPositionedChild(child, parent)
+              : StaticMainAxisPositionForNGPositionedChild(child, parent));
+}
+
+LayoutUnit StaticBlockPositionForNGPositionedChild(const LayoutBox& child,
+                                                   LayoutBlock* parent) {
+  return parent->BorderAndPaddingBefore() +
+         (parent->StyleRef().ResolvedIsColumnFlexDirection()
+              ? StaticMainAxisPositionForNGPositionedChild(child, parent)
+              : StaticCrossAxisPositionForNGPositionedChild(child, parent));
+}
+
+}  // namespace
+
+bool LayoutFlexibleBox::SetStaticPositionForChildInFlexNGContainer(
+    LayoutBox& child,
+    LayoutBlock* parent) {
+  const ComputedStyle& style = parent->StyleRef();
+  bool position_changed = false;
+  PaintLayer* child_layer = child.Layer();
+  if (child.StyleRef().HasStaticInlinePosition(
+          style.IsHorizontalWritingMode())) {
+    LayoutUnit inline_position =
+        StaticInlinePositionForNGPositionedChild(child, parent);
+    if (child_layer->StaticInlinePosition() != inline_position) {
+      child_layer->SetStaticInlinePosition(inline_position);
+      position_changed = true;
+    }
+  }
+  if (child.StyleRef().HasStaticBlockPosition(
+          style.IsHorizontalWritingMode())) {
+    LayoutUnit block_position =
+        StaticBlockPositionForNGPositionedChild(child, parent);
+    if (child_layer->StaticBlockPosition() != block_position) {
+      child_layer->SetStaticBlockPosition(block_position);
+      position_changed = true;
+    }
+  }
+  return position_changed;
+}
+
 LayoutUnit LayoutFlexibleBox::StaticMainAxisPositionForPositionedChild(
     const LayoutBox& child) {
   const LayoutUnit available_space =
       MainAxisContentExtent(ContentLogicalHeight()) -
       MainAxisExtentForChild(child);
 
-  LayoutUnit offset = FlexLayoutAlgorithm::InitialContentPositionOffset(
-      StyleRef(), available_space,
-      FlexLayoutAlgorithm::ResolvedJustifyContent(StyleRef()), 1);
-  if (StyleRef().ResolvedIsRowReverseFlexDirection() ||
-      StyleRef().ResolvedIsColumnReverseFlexDirection())
-    offset = available_space - offset;
-  return offset;
+  return MainAxisStaticPositionCommon(child, this, available_space);
 }
 
 LayoutUnit LayoutFlexibleBox::StaticCrossAxisPositionForPositionedChild(
     const LayoutBox& child) {
   LayoutUnit available_space =
       CrossAxisContentExtent() - CrossAxisExtentForChild(child);
-  return FlexItem::AlignmentOffset(
-      available_space,
-      FlexLayoutAlgorithm::AlignmentForChild(StyleRef(), child.StyleRef()),
-      LayoutUnit(), LayoutUnit(),
-      StyleRef().FlexWrap() == EFlexWrap::kWrapReverse,
-      StyleRef().IsDeprecatedWebkitBox());
+  return CrossAxisStaticPositionCommon(child, this, available_space);
 }
 
 LayoutUnit LayoutFlexibleBox::StaticInlinePositionForPositionedChild(
@@ -1536,8 +1640,10 @@ void LayoutFlexibleBox::AlignFlexLines(FlexLayoutAlgorithm& algorithm) {
   Vector<FlexLine>& line_contexts = algorithm.FlexLines();
   const StyleContentAlignmentData align_content =
       FlexLayoutAlgorithm::ResolvedAlignContent(StyleRef());
-  if (align_content.GetPosition() == ContentPosition::kFlexStart)
+  if (align_content.GetPosition() == ContentPosition::kFlexStart &&
+      algorithm.gap_between_lines_ == 0) {
     return;
+  }
 
   if (IsMultiline() && !line_contexts.IsEmpty()) {
     UseCounter::Count(GetDocument(),

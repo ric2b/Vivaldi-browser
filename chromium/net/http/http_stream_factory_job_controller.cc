@@ -847,8 +847,6 @@ void HttpStreamFactory::JobController::OnAlternativeProxyJobFailed(
   DCHECK(alternative_job_->alternative_proxy_server() ==
          alternative_job_->proxy_info().proxy_server());
 
-  base::UmaHistogramSparse("Net.AlternativeProxyFailed", -net_error);
-
   // Need to mark alt proxy as broken regardless of whether the job is bound.
   // The proxy will be marked bad until the proxy retry information is cleared
   // by an event such as a network change.
@@ -1105,8 +1103,8 @@ quic::ParsedQuicVersion HttpStreamFactory::JobController::SelectQuicVersion(
   if (advertised_versions.empty())
     return supported_versions[0];
 
-  for (const quic::ParsedQuicVersion& supported : supported_versions) {
-    for (const quic::ParsedQuicVersion& advertised : advertised_versions) {
+  for (const quic::ParsedQuicVersion& advertised : advertised_versions) {
+    for (const quic::ParsedQuicVersion& supported : supported_versions) {
       if (supported == advertised) {
         DCHECK_NE(quic::UnsupportedQuicVersion(), supported);
         return supported;

@@ -109,7 +109,7 @@ enum class SlotChangeType {
   kSuppressSlotChangeEvent,
 };
 
-enum class CloneChildrenFlag { kClone, kSkip };
+enum class CloneChildrenFlag { kSkip, kClone, kCloneWithShadows };
 
 // Whether or not to force creation of a legacy layout object (i.e. disallow
 // LayoutNG).
@@ -660,7 +660,9 @@ class CORE_EXPORT Node : public EventTarget {
   bool IsChildOfV0ShadowHost() const;
   ShadowRoot* V1ShadowRootOfParent() const;
   Element* FlatTreeParentForChildDirty() const;
-  ContainerNode* GetStyleRecalcParent() const;
+  Element* GetStyleRecalcParent() const {
+    return FlatTreeParentForChildDirty();
+  }
   Element* GetReattachParent() const { return FlatTreeParentForChildDirty(); }
 
   bool IsDocumentTypeNode() const { return getNodeType() == kDocumentTypeNode; }
@@ -679,6 +681,8 @@ class CORE_EXPORT Node : public EventTarget {
 
   // Whether or not a selection can be started in this object
   virtual bool CanStartSelection() const;
+
+  void NotifyPriorityScrollAnchorStatusChanged();
 
   // ---------------------------------------------------------------------------
   // Integration with layout tree
@@ -842,7 +846,7 @@ class CORE_EXPORT Node : public EventTarget {
       ShadowTreesTreatment = kTreatShadowTreesAsDisconnected) const;
 
   const AtomicString& InterfaceName() const override;
-  ExecutionContext* GetExecutionContext() const final;
+  ExecutionContext* GetExecutionContext() const override;
 
   void RemoveAllEventListeners() override;
   void RemoveAllEventListenersRecursively();

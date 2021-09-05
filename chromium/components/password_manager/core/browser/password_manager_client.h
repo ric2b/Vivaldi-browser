@@ -47,7 +47,10 @@ namespace signin {
 class IdentityManager;
 }  // namespace signin
 
-struct CoreAccountId;
+namespace signin_metrics {
+enum class AccessPoint;
+}
+
 class GURL;
 
 #if defined(ON_FOCUS_PING_ENABLED)
@@ -73,6 +76,8 @@ enum SyncState {
   NOT_SYNCING,
   SYNCING_NORMAL_ENCRYPTION,
   SYNCING_WITH_CUSTOM_PASSPHRASE,
+  // Sync is disabled but the user is signed in and opted in to passwords
+  // account storage.
   ACCOUNT_PASSWORDS_ACTIVE_NORMAL_ENCRYPTION
 };
 
@@ -98,6 +103,8 @@ class PasswordManagerClient {
   // the presence of SSL errors on a page. |url| describes the URL to fill the
   // password for. It is not necessary the URL of the current page but can be a
   // URL of a proxy or subframe.
+  // TODO(crbug.com/1071842): This method's name is misleading as it also
+  // determines whether saving prompts should be shown.
   virtual bool IsFillingEnabled(const GURL& url) const;
 
   // Checks if manual filling fallback is enabled for the page that has |url|
@@ -109,14 +116,6 @@ class PasswordManagerClient {
   // result on the calling thread.
   virtual void PostHSTSQueryForHost(const GURL& origin,
                                     HSTSCallback callback) const;
-
-  // Checks if the Credential Manager API is allowed to run on the page. It's
-  // not allowed while prerendering and the pre-rendered WebContents will be
-  // destroyed in this case.
-  // Even if the method returns true the API may still be disabled or limited
-  // depending on the method called because IsFillingEnabled() and
-  // IsSavingAndFillingEnabled are respected.
-  virtual bool OnCredentialManagerUsed();
 
   // Informs the embedder of a password form that can be saved or updated in
   // password store if the user allows it. The embedder is not required to
@@ -137,6 +136,11 @@ class PasswordManagerClient {
   virtual bool PromptUserToSaveOrUpdatePassword(
       std::unique_ptr<PasswordFormManagerForUI> form_to_save,
       bool is_update) = 0;
+
+  // Informs the embedder that the user can move the given |form_to_move| to
+  // their account store.
+  virtual void PromptUserToMovePasswordToAccount(
+      std::unique_ptr<PasswordFormManagerForUI> form_to_move) = 0;
 
   // Informs the embedder that the onboarding experience should be shown.
   // This will also offer the ability to actually save the password.
@@ -196,9 +200,10 @@ class PasswordManagerClient {
       std::unique_ptr<autofill::PasswordForm> form) = 0;
 
   // Inform the embedder that the user signed in with a saved credential.
-  // |form| contains the form used.
+  // |submitted_manager| contains the form used and allows to move credentials.
   virtual void NotifySuccessfulLoginWithExistingPassword(
-      const autofill::PasswordForm& form) = 0;
+      std::unique_ptr<password_manager::PasswordFormManagerForUI>
+          submitted_manager) = 0;
 
   // Inform the embedder that the site called 'store()'.
   virtual void NotifyStorePasswordCalled() = 0;
@@ -237,11 +242,14 @@ class PasswordManagerClient {
                                                const GURL& origin,
                                                const base::string16& username);
 
-  // Requests a reauth for the given |account_id| and triggers the
+  // Requests a reauth for the primary account and triggers the
   // |reauth_callback| with ReauthSucceeded(true) if reauthentication succeeded.
-  virtual void TriggerReauthForAccount(
-      const CoreAccountId& account_id,
+  virtual void TriggerReauthForPrimaryAccount(
       base::OnceCallback<void(ReauthSucceeded)> reauth_callback);
+
+  // Redirects the user to a sign-in in a new tab. |access_point| is used for
+  // metrics recording and represents where the sign-in was triggered.
+  virtual void TriggerSignIn(signin_metrics::AccessPoint access_point);
 
   // Gets prefs associated with this embedder.
   virtual PrefService* GetPrefs() const = 0;
@@ -310,11 +318,14 @@ class PasswordManagerClient {
   // Returns the current best guess as to the page's display language.
   virtual std::string GetPageLanguage() const;
 
-#if defined(ON_FOCUS_PING_ENABLED)
+#if defined(ON_FOCUS_PING_ENABLED) || \
+    defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   // Return the PasswordProtectionService associated with this instance.
   virtual safe_browsing::PasswordProtectionService*
   GetPasswordProtectionService() const = 0;
+#endif
 
+#if defined(ON_FOCUS_PING_ENABLED)
   // Checks the safe browsing reputation of the webpage when the
   // user focuses on a username/password field. This is used for reporting
   // only, and won't trigger a warning.

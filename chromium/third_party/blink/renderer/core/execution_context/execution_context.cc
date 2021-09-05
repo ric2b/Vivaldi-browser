@@ -239,11 +239,13 @@ ContentSecurityPolicy* ExecutionContext::GetContentSecurityPolicy() const {
   return GetSecurityContext().GetContentSecurityPolicy();
 }
 
-mojom::blink::WebSandboxFlags ExecutionContext::GetSandboxFlags() const {
+network::mojom::blink::WebSandboxFlags ExecutionContext::GetSandboxFlags()
+    const {
   return GetSecurityContext().GetSandboxFlags();
 }
 
-bool ExecutionContext::IsSandboxed(mojom::blink::WebSandboxFlags mask) const {
+bool ExecutionContext::IsSandboxed(
+    network::mojom::blink::WebSandboxFlags mask) const {
   return GetSecurityContext().IsSandboxed(mask);
 }
 
@@ -347,9 +349,7 @@ bool ExecutionContext::IsSameAgentCluster(
 }
 
 v8::MicrotaskQueue* ExecutionContext::GetMicrotaskQueue() const {
-  // TODO(keishi): Convert to DCHECK once we assign agents everywhere.
-  if (!GetAgent())
-    return nullptr;
+  DCHECK(GetAgent());
   DCHECK(GetAgent()->event_loop());
   return GetAgent()->event_loop()->microtask_queue();
 }
@@ -393,24 +393,7 @@ void ExecutionContext::FeaturePolicyPotentialBehaviourChangeObserved(
 bool ExecutionContext::IsFeatureEnabled(
     mojom::blink::FeaturePolicyFeature feature,
     ReportOptions report_on_failure,
-    const String& message,
-    const String& source_file) const {
-  PolicyValue threshold_value =
-      PolicyValue::CreateMaxPolicyValue(GetSecurityContext()
-                                            .GetFeaturePolicy()
-                                            ->GetFeatureList()
-                                            .at(feature)
-                                            .second);
-  return IsFeatureEnabled(feature, threshold_value, report_on_failure, message,
-                          source_file);
-}
-
-bool ExecutionContext::IsFeatureEnabled(
-    mojom::blink::FeaturePolicyFeature feature,
-    PolicyValue threshold_value,
-    ReportOptions report_on_failure,
-    const String& message,
-    const String& source_file) const {
+    const String& message) const {
   if (report_on_failure == ReportOptions::kReportOnFailure) {
     // We are expecting a violation report in case the feature is disabled in
     // the context. Therefore, this qualifies as a potential violation (i.e.,
@@ -419,16 +402,14 @@ bool ExecutionContext::IsFeatureEnabled(
   }
 
   bool should_report;
-  bool enabled = GetSecurityContext().IsFeatureEnabled(feature, threshold_value,
-                                                       &should_report);
+  bool enabled = GetSecurityContext().IsFeatureEnabled(feature, &should_report);
 
   if (enabled) {
     // Report if the proposed header semantics change would have affected the
     // outcome. (https://crbug.com/937131)
     const FeaturePolicy* policy = GetSecurityContext().GetFeaturePolicy();
     url::Origin origin = GetSecurityOrigin()->ToUrlOrigin();
-    if (policy->GetProposedFeatureValueForOrigin(feature, origin) <
-        threshold_value) {
+    if (!policy->GetProposedFeatureValueForOrigin(feature, origin)) {
       // Count that there was a change in this page load.
       const_cast<ExecutionContext*>(this)->CountUse(
           WebFeature::kFeaturePolicyProposalWouldChangeBehaviour);
@@ -441,7 +422,7 @@ bool ExecutionContext::IsFeatureEnabled(
     mojom::blink::PolicyDisposition disposition =
         enabled ? mojom::blink::PolicyDisposition::kReport
                 : mojom::blink::PolicyDisposition::kEnforce;
-    ReportFeaturePolicyViolation(feature, disposition, message, source_file);
+    ReportFeaturePolicyViolation(feature, disposition, message);
   }
   return enabled;
 }

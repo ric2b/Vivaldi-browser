@@ -12,10 +12,16 @@ namespace installer {
 InstallServiceWorkItem::InstallServiceWorkItem(
     const base::string16& service_name,
     const base::string16& display_name,
-    const base::CommandLine& service_cmd_line)
+    const base::CommandLine& service_cmd_line,
+    const base::string16& registry_path,
+    const GUID& clsid,
+    const GUID& iid)
     : impl_(std::make_unique<InstallServiceWorkItemImpl>(service_name,
                                                          display_name,
-                                                         service_cmd_line)) {}
+                                                         service_cmd_line,
+                                                         registry_path,
+                                                         clsid,
+                                                         iid)) {}
 
 InstallServiceWorkItem::~InstallServiceWorkItem() = default;
 
@@ -28,10 +34,14 @@ void InstallServiceWorkItem::RollbackImpl() {
 }
 
 // static
-bool InstallServiceWorkItem::DeleteService(const base::string16& service_name) {
+bool InstallServiceWorkItem::DeleteService(const base::string16& service_name,
+                                           const base::string16& registry_path,
+                                           const GUID& clsid,
+                                           const GUID& iid) {
   return InstallServiceWorkItemImpl(
              service_name, base::string16(),
-             base::CommandLine(base::CommandLine::NO_PROGRAM))
+             base::CommandLine(base::CommandLine::NO_PROGRAM), registry_path,
+             clsid, iid)
       .DeleteServiceImpl();
 }
 

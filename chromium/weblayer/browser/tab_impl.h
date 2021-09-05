@@ -12,7 +12,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
-#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/find_in_page/find_result_observer.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -23,6 +22,7 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
+#include "weblayer/browser/browser_controls_navigation_state_handler_delegate.h"
 #endif
 
 namespace autofill {
@@ -30,15 +30,23 @@ class AutofillProvider;
 }  // namespace autofill
 
 namespace content {
+class RenderWidgetHostView;
 class WebContents;
 struct ContextMenuParams;
+struct WebPreferences;
 }
+
+namespace gfx {
+class Rect;
+class Size;
+}  // namespace gfx
 
 namespace sessions {
 class SessionTabHelperDelegate;
 }
 
 namespace weblayer {
+class BrowserControlsNavigationStateHandler;
 class BrowserImpl;
 class FullscreenDelegate;
 class NavigationControllerImpl;
@@ -46,15 +54,33 @@ class NewTabDelegate;
 class ProfileImpl;
 
 #if defined(OS_ANDROID)
-class TopControlsContainerView;
+class BrowserControlsContainerView;
 enum class ControlsVisibilityReason;
 #endif
 
 class TabImpl : public Tab,
                 public content::WebContentsDelegate,
                 public content::WebContentsObserver,
+#if defined(OS_ANDROID)
+                public BrowserControlsNavigationStateHandlerDelegate,
+#endif
                 public find_in_page::FindResultObserver {
  public:
+  enum class ScreenShotErrors {
+    kNone = 0,
+    kScaleOutOfRange,
+    kTabNotActive,
+    kWebContentsNotVisible,
+    kNoSurface,
+    kNoRenderWidgetHostView,
+    kNoWindowAndroid,
+    kEmptyViewport,
+    kHiddenByControls,
+    kScaledToEmpty,
+    kCaptureFailed,
+    kBitmapAllocationFailed,
+  };
+
   // TODO(sky): investigate a better way to not have so many ifdefs.
 #if defined(OS_ANDROID)
   TabImpl(ProfileImpl* profile,
@@ -78,6 +104,9 @@ class TabImpl : public Tab,
 
   bool has_new_tab_delegate() const { return new_tab_delegate_ != nullptr; }
 
+  // Called from Browser when this Tab is losing active status.
+  void OnLosingActive();
+
   bool IsActive();
 
   void ShowContextMenu(const content::ContextMenuParams& params);
@@ -94,13 +123,11 @@ class TabImpl : public Tab,
   // on the Java side to have the desired effect.
   static void DisableAutofillSystemIntegrationForTesting();
 
-  base::android::ScopedJavaLocalRef<jobject> GetWebContents(
+  base::android::ScopedJavaLocalRef<jobject> GetWebContents(JNIEnv* env);
+  void SetBrowserControlsContainerViews(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
-  void SetTopControlsContainerView(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& caller,
-      jlong native_top_controls_container_view);
+      jlong native_top_browser_controls_container_view,
+      jlong native_bottom_browser_controls_container_view);
   void ExecuteScript(JNIEnv* env,
                      const base::android::JavaParamRef<jstring>& script,
                      bool use_separate_isolate,
@@ -117,13 +144,21 @@ class TabImpl : public Tab,
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& autofill_provider);
 
-  void UpdateBrowserControlsState(JNIEnv* env, jint constraint);
+  void UpdateBrowserControlsState(JNIEnv* env,
+                                  jint raw_new_state,
+                                  jboolean animate);
 
   base::android::ScopedJavaLocalRef<jstring> GetGuid(JNIEnv* env);
+
+  void CaptureScreenShot(
+      JNIEnv* env,
+      jfloat scale,
+      const base::android::JavaParamRef<jobject>& value_callback);
+
+  jboolean IsRendererControllingBrowserControlsOffsets(JNIEnv* env);
 #endif
 
   ErrorPageDelegate* error_page_delegate() { return error_page_delegate_; }
-  FullscreenDelegate* fullscreen_delegate() { return fullscreen_delegate_; }
 
   // Tab:
   void SetErrorPageDelegate(ErrorPageDelegate* delegate) override;
@@ -141,7 +176,7 @@ class TabImpl : public Tab,
 #endif
 
   void WebPreferencesChanged();
-  bool GetPasswordEchoEnabled();
+  void SetWebPreferences(content::WebPreferences* prefs);
 
   // Executes |script| with a user gesture.
   void ExecuteScriptWithUserGestureForTests(const base::string16& script);
@@ -169,9 +204,17 @@ class TabImpl : public Tab,
                       std::unique_ptr<content::FileSelectListener> listener,
                       const blink::mojom::FileChooserParams& params) override;
   int GetTopControlsHeight() override;
+  int GetBottomControlsHeight() override;
   bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* web_contents) override;
   bool EmbedsFullscreenWidget() override;
+  void RequestMediaAccessPermission(
+      content::WebContents* web_contents,
+      const content::MediaStreamRequest& request,
+      content::MediaResponseCallback callback) override;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
+                                  const GURL& security_origin,
+                                  blink::mojom::MediaStreamType type) override;
   void EnterFullscreenModeForTab(
       content::WebContents* web_contents,
       const GURL& origin,
@@ -183,6 +226,7 @@ class TabImpl : public Tab,
       const content::WebContents* web_contents) override;
   void AddNewContents(content::WebContents* source,
                       std::unique_ptr<content::WebContents> new_contents,
+                      const GURL& target_url,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -199,16 +243,36 @@ class TabImpl : public Tab,
                            int version,
                            const std::vector<gfx::RectF>& rects,
                            const gfx::RectF& active_rect) override;
+
+  // Pointer arguments are outputs. Check the preconditions for capturing a
+  // screenshot and either set all outputs, or return an error code, in which
+  // case the state of output arguments is undefined.
+  ScreenShotErrors PrepareForCaptureScreenShot(
+      float scale,
+      content::RenderWidgetHostView** rwhv,
+      gfx::Rect* src_rect,
+      gfx::Size* output_size);
+
+  void UpdateBrowserControlsStateImpl(content::BrowserControlsState new_state,
+                                      content::BrowserControlsState old_state,
+                                      bool animate);
 #endif
 
   // content::WebContentsObserver:
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override;
   void RenderProcessGone(base::TerminationStatus status) override;
   void DidChangeVisibleSecurityState() override;
 
   // find_in_page::FindResultObserver:
   void OnFindResultAvailable(content::WebContents* web_contents) override;
+
+#if defined(OS_ANDROID)
+  // BrowserControlsNavigationStateHandlerDelegate:
+  void OnBrowserControlsStateStateChanged(
+      content::BrowserControlsState state) override;
+  void OnUpdateBrowserControlsStateBecauseOfProcessSwitch(
+      bool did_commit) override;
+  void OnForceBrowserControlsShown() override;
+#endif
 
   // Called from closure supplied to delegate to exit fullscreen.
   void OnExitFullscreen();
@@ -239,10 +303,17 @@ class TabImpl : public Tab,
   std::unique_ptr<NavigationControllerImpl> navigation_controller_;
   base::ObserverList<TabObserver>::Unchecked observers_;
   std::unique_ptr<i18n::LocaleChangeSubscription> locale_change_subscription_;
+
 #if defined(OS_ANDROID)
-  TopControlsContainerView* top_controls_container_view_ = nullptr;
+  BrowserControlsContainerView* top_controls_container_view_ = nullptr;
+  BrowserControlsContainerView* bottom_controls_container_view_ = nullptr;
   base::android::ScopedJavaGlobalRef<jobject> java_impl_;
-  base::OneShotTimer update_browser_controls_state_timer_;
+  std::unique_ptr<BrowserControlsNavigationStateHandler>
+      browser_controls_navigation_state_handler_;
+
+  // Last value supplied to UpdateBrowserControlsState().
+  content::BrowserControlsState current_browser_controls_state_ =
+      content::BROWSER_CONTROLS_STATE_SHOWN;
 #endif
 
   bool is_fullscreen_ = false;

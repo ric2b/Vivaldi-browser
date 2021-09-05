@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
-// #import {isMac} from 'chrome://resources/js/cr.m.js';
-// #import {UpdateStatus} from 'chrome://settings/settings.js';
+import {isMac, webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {AboutPageBrowserProxy, UpdateStatus} from 'chrome://settings/settings.js';
+import {TestBrowserProxy} from '../test_browser_proxy.m.js';
 
-/** @implements {settings.AboutPageBrowserProxy} */
-/* #export */ class TestAboutPageBrowserProxy extends TestBrowserProxy {
+/** @implements {AboutPageBrowserProxy} */
+export class TestAboutPageBrowserProxy extends TestBrowserProxy {
   constructor() {
     const methodNames = [
       'pageReady',
@@ -16,7 +16,7 @@
       'openFeedbackDialog',
     ];
 
-    if (cr.isMac) {
+    if (isMac) {
       methodNames.push('promoteUpdater');
     }
 
@@ -32,7 +32,7 @@
   }
 
   sendStatusNoInternet() {
-    cr.webUIListenerCallback('update-status-changed', {
+    webUIListenerCallback('update-status-changed', {
       progress: 0,
       status: UpdateStatus.FAILED,
       message: 'offline',
@@ -47,7 +47,7 @@
 
   /** @override */
   refreshUpdateStatus() {
-    cr.webUIListenerCallback('update-status-changed', {
+    webUIListenerCallback('update-status-changed', {
       progress: 1,
       status: this.updateStatus_,
     });
@@ -63,12 +63,52 @@
   openHelpPage() {
     this.methodCalled('openHelpPage');
   }
+
+
+  /** @override */
+  launchReleaseNotes() {}
+
+  /** @override */
+  openOsHelpPage() {}
+
+  /** @override */
+  requestUpdate() {}
+
+  /** @override */
+  requestUpdateOverCellular() {}
+
+  /** @override */
+  setChannel() {}
+
+  /** @override */
+  getChannelInfo() {}
+
+  /** @override */
+  canChangeChannel() {}
+
+  /** @override */
+  getVersionInfo() {}
+
+
+  /** @override */
+  getRegulatoryInfo() {}
+
+  /** @override */
+  getEndOfLifeInfo() {}
+
+  /** @override */
+  getEnabledReleaseNotes() {}
+
+  /** @override */
+  checkInternetConnection() {}
+
+  /** @override */
+  refreshTPMFirmwareUpdateStatus() {}
 }
 
-if (cr.isMac) {
+if (isMac) {
   /** @override */
   TestAboutPageBrowserProxy.prototype.promoteUpdater = function() {
     this.methodCalled('promoteUpdater');
   };
 }
-

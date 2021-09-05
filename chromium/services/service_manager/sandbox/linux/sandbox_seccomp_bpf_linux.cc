@@ -13,9 +13,10 @@
 #include <memory>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/macros.h"
+#include "base/notreached.h"
 #include "build/build_config.h"
 #include "sandbox/linux/bpf_dsl/bpf_dsl.h"
 #include "sandbox/linux/bpf_dsl/trap_registry.h"
@@ -44,7 +45,7 @@
 #include "services/service_manager/sandbox/linux/bpf_print_compositor_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_renderer_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_sharing_service_policy_linux.h"
-#include "services/service_manager/sandbox/linux/bpf_soda_policy_linux.h"
+#include "services/service_manager/sandbox/linux/bpf_speech_recognition_policy_linux.h"
 #include "services/service_manager/sandbox/linux/bpf_utility_policy_linux.h"
 
 #if !defined(OS_NACL_NONSFI)
@@ -179,14 +180,15 @@ std::unique_ptr<BPFBasePolicy> SandboxSeccompBPF::PolicyForSandboxType(
       return std::make_unique<AudioProcessPolicy>();
     case SandboxType::kSharingService:
       return std::make_unique<SharingServiceProcessPolicy>();
-    case SandboxType::kSoda:
-      return std::make_unique<SodaProcessPolicy>();
+    case SandboxType::kSpeechRecognition:
+      return std::make_unique<SpeechRecognitionProcessPolicy>();
 #if defined(OS_CHROMEOS)
     case SandboxType::kIme:
       return std::make_unique<ImeProcessPolicy>();
 #endif  // defined(OS_CHROMEOS)
+    case SandboxType::kZygoteIntermediateSandbox:
     case SandboxType::kNoSandbox:
-    case SandboxType::kInvalid:
+    case SandboxType::kVideoCapture:
       NOTREACHED();
       return nullptr;
   }
@@ -229,11 +231,12 @@ void SandboxSeccompBPF::RunSandboxSanityChecks(
 #endif  // defined(OS_CHROMEOS)
     case SandboxType::kAudio:
     case SandboxType::kSharingService:
-    case SandboxType::kSoda:
+    case SandboxType::kSpeechRecognition:
     case SandboxType::kNetwork:
     case SandboxType::kUtility:
     case SandboxType::kNoSandbox:
-    case SandboxType::kInvalid:
+    case SandboxType::kVideoCapture:
+    case SandboxType::kZygoteIntermediateSandbox:
       // Otherwise, no checks required.
       break;
   }

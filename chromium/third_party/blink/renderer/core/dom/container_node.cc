@@ -1047,9 +1047,11 @@ bool ContainerNode::ChildrenChangedAllChildrenRemovedNeedsList() const {
   return false;
 }
 
-void ContainerNode::CloneChildNodesFrom(const ContainerNode& node) {
+void ContainerNode::CloneChildNodesFrom(const ContainerNode& node,
+                                        CloneChildrenFlag flag) {
+  DCHECK_NE(flag, CloneChildrenFlag::kSkip);
   for (const Node& child : NodeTraversal::ChildrenOf(node))
-    AppendChild(child.Clone(GetDocument(), CloneChildrenFlag::kClone));
+    AppendChild(child.Clone(GetDocument(), flag));
 }
 
 PhysicalRect ContainerNode::BoundingBox() const {
@@ -1551,6 +1553,12 @@ RadioNodeList* ContainerNode::GetRadioNodeList(const AtomicString& name,
 }
 
 Element* ContainerNode::getElementById(const AtomicString& id) const {
+  // According to https://dom.spec.whatwg.org/#concept-id, empty IDs are
+  // treated as equivalent to the lack of an id attribute.
+  if (id.IsEmpty()) {
+    return nullptr;
+  }
+
   if (IsInTreeScope()) {
     // Fast path if we are in a tree scope: call getElementById() on tree scope
     // and check if the matching element is in our subtree.

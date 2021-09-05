@@ -85,8 +85,7 @@ public class AndroidPermissionRequester {
      * a dialog, running methods on the RequestDelegate when the user has made a decision.
      */
     public static boolean requestAndroidPermissions(final WindowAndroid windowAndroid,
-            final int[] contentSettingsTypes, final RequestDelegate delegate,
-            final PermissionsClient client) {
+            final int[] contentSettingsTypes, final RequestDelegate delegate) {
         if (windowAndroid == null) return false;
 
         final SparseArray<String[]> contentSettingsTypesToPermissionsMap =
@@ -99,11 +98,9 @@ public class AndroidPermissionRequester {
             public void onRequestPermissionsResult(String[] permissions, int[] grantResults) {
                 boolean allRequestable = true;
                 Set<Integer> deniedContentSettings = new HashSet<Integer>();
-                List<String> deniedPermissions = new ArrayList<String>();
 
                 for (int i = 0; i < grantResults.length; i++) {
                     if (grantResults[i] == PackageManager.PERMISSION_DENIED) {
-                        deniedPermissions.add(permissions[i]);
                         deniedContentSettings.add(getContentSettingType(
                                 contentSettingsTypesToPermissionsMap, permissions[i]));
 
@@ -114,8 +111,6 @@ public class AndroidPermissionRequester {
                 }
 
                 Activity activity = windowAndroid.getActivity().get();
-                client.onPermissionDenied(
-                        activity, deniedPermissions.toArray(new String[deniedPermissions.size()]));
 
                 if (allRequestable && !deniedContentSettings.isEmpty() && activity != null) {
                     int deniedStringId = -1;
@@ -135,9 +130,7 @@ public class AndroidPermissionRequester {
                                            ContentSettingsType.MEDIASTREAM_CAMERA)) {
                             deniedStringId = R.string.infobar_missing_camera_permission_text;
                         } else if (deniedContentSettings.contains(ContentSettingsType.AR)) {
-                            // TODO(https://crbug.com/1058055): Use the missing camera permission
-                            // text until we get guidance from UX team.
-                            deniedStringId = R.string.infobar_missing_camera_permission_text;
+                            deniedStringId = R.string.infobar_missing_ar_camera_permission_text;
                         }
                     }
 
@@ -148,7 +141,7 @@ public class AndroidPermissionRequester {
                     showMissingPermissionDialog(activity, deniedStringId,
                             ()
                                     -> requestAndroidPermissions(
-                                            windowAndroid, contentSettingsTypes, delegate, client),
+                                            windowAndroid, contentSettingsTypes, delegate),
                             delegate::onAndroidPermissionCanceled);
                 } else if (deniedContentSettings.isEmpty()) {
                     delegate.onAndroidPermissionAccepted();
@@ -166,7 +159,6 @@ public class AndroidPermissionRequester {
         String[] permissions =
                 permissionsToRequest.toArray(new String[permissionsToRequest.size()]);
         windowAndroid.requestPermissions(permissions, callback);
-        client.onPermissionRequested(windowAndroid.getActivity().get(), permissions);
         return true;
     }
 

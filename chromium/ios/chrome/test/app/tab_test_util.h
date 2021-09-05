@@ -19,7 +19,11 @@ namespace chrome_test_util {
 void OpenNewTab();
 
 // Simulates opening http://www.example.com/ from another application.
-void SimulateExternalAppURLOpening();
+// Returns the opened URL.
+NSURL* SimulateExternalAppURLOpening();
+
+// Simulates opening the add account sign-in flow from the web.
+void SimulateAddAccountFromWeb();
 
 // Opens a new incognito tab, and does not wait for animations to complete.
 void OpenNewIncognitoTab();

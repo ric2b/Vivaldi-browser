@@ -9,13 +9,15 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "content/public/test/browser_test.h"
 #include "ppapi/shared_impl/test_utils.h"
 
 // Disable tests under ASAN.  http://crbug.com/104832.
 // This is a bit heavy handed, but the majority of these tests fail under ASAN.
 // See bug for history.
 // Flaky on Win/Mac, http://crbug.com/1048148.
-#if defined(ADDRESS_SANITIZER) || defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(ADDRESS_SANITIZER) || defined(OS_WIN) || defined(OS_MACOSX) || \
+    defined(OS_LINUX)
 #define MAYBE_MouseLock_SucceedWhenAllowed DISABLED_MouseLock_SucceedWhenAllowed
 #else
 #define MAYBE_MouseLock_SucceedWhenAllowed MouseLock_SucceedWhenAllowed

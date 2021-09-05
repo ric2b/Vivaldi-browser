@@ -8,7 +8,6 @@
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/browser.h"
@@ -29,7 +28,9 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/download_test_observer.h"
+#include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
@@ -129,12 +130,7 @@ class BrowserActionInteractiveTest : public ExtensionApiTest {
   // window to able to be made active automatically. Returns false for platforms
   // where these conditions are not met.
   bool ShouldRunPopupTest() {
-    // TODO(justinlin): http://crbug.com/177163
-#if defined(OS_WIN) && !defined(NDEBUG)
-    return false;
-#else
     return true;
-#endif
   }
 
   void EnsurePopupActive() {
@@ -914,6 +910,7 @@ IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupInteractiveTest,
   GURL other_extension_url = other_extension().GetResourceURL("other.html");
   TestPopupNavigationViaGet(other_extension_url, EXPECTING_NAVIGATION_FAILURE);
 }
+
 IN_PROC_BROWSER_TEST_F(NavigatingExtensionPopupInteractiveTest,
                        PageInOtherExtension_Post) {
   GURL other_extension_url = other_extension().GetResourceURL("other.html");

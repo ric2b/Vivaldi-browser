@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/installable/installable_manager.h"
@@ -18,7 +19,6 @@
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/file_handler_manager.h"
 #include "chrome/browser/web_applications/components/install_bounce_metric.h"
-#include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
@@ -26,6 +26,7 @@
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "content/public/browser/browser_thread.h"
@@ -34,10 +35,8 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
-#include "base/feature_list.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/common/chrome_features.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/mojom/app.mojom.h"
 #include "components/arc/mojom/intent_helper.mojom.h"
@@ -88,6 +87,16 @@ WebAppInstallTask::~WebAppInstallTask() = default;
 
 void WebAppInstallTask::ExpectAppId(const AppId& expected_app_id) {
   expected_app_id_ = expected_app_id;
+}
+
+void WebAppInstallTask::SetInstallParams(
+    const InstallManager::InstallParams& install_params) {
+  if (!install_params.locally_installed) {
+    DCHECK(!install_params.add_to_applications_menu);
+    DCHECK(!install_params.add_to_desktop);
+    DCHECK(!install_params.add_to_quick_launch_bar);
+  }
+  install_params_ = install_params;
 }
 
 void WebAppInstallTask::LoadWebAppAndCheckInstallability(
@@ -217,42 +226,15 @@ void WebAppInstallTask::InstallWebAppWithParams(
   CheckInstallPreconditions();
 
   Observe(contents);
+  SetInstallParams(install_params);
   install_callback_ = std::move(install_callback);
   install_source_ = install_source;
-  install_params_ = install_params;
   background_installation_ = true;
 
   data_retriever_->GetWebApplicationInfo(
       web_contents(),
       base::BindOnce(&WebAppInstallTask::OnGetWebApplicationInfo,
                      base::Unretained(this), /*force_shortcut_app=*/false));
-}
-
-void WebAppInstallTask::InstallWebAppFromInfoRetrieveIcons(
-    content::WebContents* web_contents,
-    std::unique_ptr<WebApplicationInfo> web_application_info,
-    bool is_locally_installed,
-    WebappInstallSource install_source,
-    InstallManager::OnceInstallCallback callback) {
-  CheckInstallPreconditions();
-
-  Observe(web_contents);
-  install_callback_ = std::move(callback);
-  install_source_ = install_source;
-  background_installation_ = true;
-
-  std::vector<GURL> icon_urls =
-      GetValidIconUrlsToDownload(*web_application_info);
-
-  // Skip downloading the page favicons as everything in is the URL list.
-  data_retriever_->GetIcons(
-      web_contents, icon_urls, /*skip_page_fav_icons*/ true,
-      install_source_ == WebappInstallSource::SYNC
-          ? WebAppIconDownloader::Histogram::kForSync
-          : WebAppIconDownloader::Histogram::kForCreate,
-      base::BindOnce(&WebAppInstallTask::OnIconsRetrieved,
-                     base::Unretained(this), std::move(web_application_info),
-                     is_locally_installed));
 }
 
 void WebAppInstallTask::UpdateWebAppFromInfo(
@@ -456,6 +438,9 @@ void WebAppInstallTask::OnGetWebApplicationInfo(
     DCHECK(install_params_->fallback_start_url.is_valid());
     web_app_info->app_url = install_params_->fallback_start_url;
 
+    if (install_params_->fallback_app_name.has_value())
+      web_app_info->title = install_params_->fallback_app_name.value();
+
     // If `additional_search_terms` was a manifest property, it would be
     // sanitized while parsing the manifest. Since it's not, we sanitize it
     // here.
@@ -616,10 +601,38 @@ void WebAppInstallTask::OnDidCheckForIntentToPlayStore(
                      for_installable_site));
 }
 
+void WebAppInstallTask::InstallWebAppFromInfoRetrieveIcons(
+    content::WebContents* web_contents,
+    std::unique_ptr<WebApplicationInfo> web_application_info,
+    InstallFinalizer::FinalizeOptions finalize_options,
+    InstallManager::OnceInstallCallback callback) {
+  CheckInstallPreconditions();
+
+  Observe(web_contents);
+  install_callback_ = std::move(callback);
+  install_source_ = finalize_options.install_source;
+  background_installation_ = true;
+
+  std::vector<GURL> icon_urls =
+      GetValidIconUrlsToDownload(*web_application_info);
+
+  // Skip downloading the page favicons as everything in is the URL list.
+  data_retriever_->GetIcons(
+      web_contents, icon_urls, /*skip_page_fav_icons=*/true,
+      install_source_ == WebappInstallSource::SYNC
+          ? WebAppIconDownloader::Histogram::kForSync
+          : WebAppIconDownloader::Histogram::kForCreate,
+      base::BindOnce(&WebAppInstallTask::OnIconsRetrieved,
+                     base::Unretained(this), std::move(web_application_info),
+                     finalize_options));
+}
+
 void WebAppInstallTask::OnIconsRetrieved(
     std::unique_ptr<WebApplicationInfo> web_app_info,
-    bool is_locally_installed,
+    InstallFinalizer::FinalizeOptions finalize_options,
     IconsMap icons_map) {
+  DCHECK(background_installation_);
+
   if (ShouldStopInstall())
     return;
 
@@ -628,12 +641,8 @@ void WebAppInstallTask::OnIconsRetrieved(
   // Installing from sync should not change icon links.
   FilterAndResizeIconsGenerateMissing(web_app_info.get(), &icons_map);
 
-  InstallFinalizer::FinalizeOptions options;
-  options.install_source = install_source_;
-  options.locally_installed = is_locally_installed;
-
   install_finalizer_->FinalizeInstall(
-      *web_app_info, options,
+      *web_app_info, finalize_options,
       base::BindOnce(&WebAppInstallTask::OnInstallFinalized,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -708,10 +717,25 @@ void WebAppInstallTask::OnDialogCompleted(
   InstallFinalizer::FinalizeOptions finalize_options;
   finalize_options.install_source = install_source_;
   finalize_options.locally_installed = true;
-  if (install_params_ &&
-      install_params_->user_display_mode != DisplayMode::kUndefined) {
-    web_app_info_copy.open_as_window =
-        install_params_->user_display_mode != DisplayMode::kBrowser;
+  if (install_params_) {
+    finalize_options.locally_installed = install_params_->locally_installed;
+
+    if (IsChromeOs()) {
+      finalize_options.chromeos_data.emplace();
+      finalize_options.chromeos_data->show_in_launcher =
+          install_params_->add_to_applications_menu;
+      finalize_options.chromeos_data->show_in_search =
+          install_params_->add_to_search;
+      finalize_options.chromeos_data->show_in_management =
+          install_params_->add_to_management;
+      finalize_options.chromeos_data->is_disabled =
+          install_params_->is_disabled;
+    }
+
+    if (install_params_->user_display_mode != DisplayMode::kUndefined) {
+      web_app_info_copy.open_as_window =
+          install_params_->user_display_mode != DisplayMode::kBrowser;
+    }
   }
 
   install_finalizer_->FinalizeInstall(
@@ -778,6 +802,9 @@ void WebAppInstallTask::OnShortcutsCreated(
     return;
 
   bool add_to_quick_launch_bar = kAddAppsToQuickLaunchBarByDefault;
+  if (install_source_ == WebappInstallSource::SYNC)
+    add_to_quick_launch_bar = false;
+
   if (install_params_)
     add_to_quick_launch_bar = install_params_->add_to_quick_launch_bar;
 
@@ -792,16 +819,20 @@ void WebAppInstallTask::OnShortcutsCreated(
 
     if (can_reparent_tab && web_app_info->open_as_window)
       install_finalizer_->ReparentTab(app_id, shortcut_created, web_contents());
-
-    // TODO(loyso): Make revealing app shim independent from CanReparentTab.
-    if (can_reparent_tab && install_finalizer_->CanRevealAppShim())
-      install_finalizer_->RevealAppShim(app_id);
   }
 
   // Enable file handlers, if the app is locally installed.
   if (registrar_->IsLocallyInstalled(app_id))
     file_handler_manager_->EnableAndRegisterOsFileHandlers(app_id);
 
+  // TODO(https://crbug.com/1069298) - Also create App Icon Shortcuts Menu when
+  // synced apps are locally installed from the chrome://apps page.
+  if (base::FeatureList::IsEnabled(
+          features::kDesktopPWAsAppIconShortcutsMenu) &&
+      !web_app_info->shortcut_infos.empty()) {
+    shortcut_manager_->RegisterShortcutsMenuWithOs(web_app_info->shortcut_infos,
+                                                   app_id);
+  }
   CallInstallCallback(app_id, InstallResultCode::kSuccessNewInstall);
 }
 

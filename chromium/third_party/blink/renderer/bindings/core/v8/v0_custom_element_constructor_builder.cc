@@ -92,7 +92,9 @@ bool V0CustomElementConstructorBuilder::ValidateOptions(
     return false;
   }
 
-  if (options_->hasPrototype()) {
+  // TODO(crbug.com/1070871): ElementRegistrationOptions.prototype has a default
+  // value, but we check |hasPrototype()| here for backward compatibility.
+  if (options_->hasPrototype() && !options_->prototype().IsNull()) {
     DCHECK(options_->prototype().IsObject());
     prototype_ = options_->prototype().V8Value().As<v8::Object>();
   } else {
@@ -118,7 +120,7 @@ bool V0CustomElementConstructorBuilder::ValidateOptions(
 
   AtomicString local_name;
 
-  if (options_->hasExtends()) {
+  if (!options_->extends().IsNull()) {
     local_name = AtomicString(options_->extends().DeprecatedLower());
 
     if (!Document::IsValidName(local_name)) {

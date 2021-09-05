@@ -48,7 +48,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
-#include "third_party/blink/public/common/page/page_visibility_state.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_image_cache.h"
@@ -284,22 +284,66 @@ bool ThrowIfPointOutOfBounds(GpuBenchmarkingContext* context,
   return false;
 }
 
+base::Optional<gfx::Vector2dF> ToVector(const std::string& direction,
+                                        float distance) {
+  if (direction == "down") {
+    return gfx::Vector2dF(0, distance);
+  } else if (direction == "up") {
+    return gfx::Vector2dF(0, -distance);
+  } else if (direction == "right") {
+    return gfx::Vector2dF(distance, 0);
+  } else if (direction == "left") {
+    return gfx::Vector2dF(-distance, 0);
+  } else if (direction == "upleft") {
+    return gfx::Vector2dF(-distance, -distance);
+  } else if (direction == "upright") {
+    return gfx::Vector2dF(distance, -distance);
+  } else if (direction == "downleft") {
+    return gfx::Vector2dF(-distance, distance);
+  } else if (direction == "downright") {
+    return gfx::Vector2dF(distance, distance);
+  }
+  return base::nullopt;
+}
+
+int ToKeyModifiers(const base::StringPiece& key) {
+  if (key == "Alt")
+    return blink::WebInputEvent::kAltKey;
+  if (key == "Control")
+    return blink::WebInputEvent::kControlKey;
+  if (key == "Meta")
+    return blink::WebInputEvent::kMetaKey;
+  if (key == "Shift")
+    return blink::WebInputEvent::kShiftKey;
+  if (key == "CapsLock")
+    return blink::WebInputEvent::kCapsLockOn;
+  if (key == "NumLock")
+    return blink::WebInputEvent::kNumLockOn;
+  if (key == "AltGraph")
+    return blink::WebInputEvent::kAltGrKey;
+  NOTREACHED() << "invalid key modifier";
+  return 0;
+}
+
+// BeginSmoothScroll takes pixels_to_scroll_x and pixels_to_scroll_y, positive
+// pixels_to_scroll_y means scroll down, positive pixels_to_scroll_x means
+// scroll right.
 bool BeginSmoothScroll(GpuBenchmarkingContext* context,
                        gin::Arguments* args,
                        const mojo::Remote<mojom::InputInjector>& injector,
-                       float pixels_to_scroll,
+                       const gfx::Vector2dF& pixels_to_scroll,
                        v8::Local<v8::Function> callback,
                        int gesture_source_type,
-                       const std::string& direction,
                        float speed_in_pixels_s,
                        bool prevent_fling,
                        float start_x,
                        float start_y,
-                       float fling_velocity,
+                       const gfx::Vector2dF& fling_velocity,
                        bool precise_scrolling_deltas,
                        bool scroll_by_page,
                        bool cursor_visible,
-                       bool scroll_by_percentage) {
+                       bool scroll_by_percentage,
+                       int key_modifiers) {
   DCHECK(!(precise_scrolling_deltas && scroll_by_page));
   DCHECK(!(precise_scrolling_deltas && scroll_by_percentage));
   DCHECK(!(scroll_by_page && scroll_by_percentage));
@@ -312,13 +356,13 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
     // Ensure the mouse is visible and move to start position, in case it will
     // trigger any hover or mousemove effects.
     context->web_view()->SetIsActive(true);
-    blink::WebMouseEvent mouseMove(blink::WebInputEvent::kMouseMove,
+    blink::WebMouseEvent mouseMove(blink::WebInputEvent::Type::kMouseMove,
                                    blink::WebInputEvent::kNoModifiers,
                                    ui::EventTimeForNow());
     mouseMove.SetPositionInWidget(start_x, start_y);
     CHECK(context->web_view()->MainFrameWidget());
     context->web_view()->MainFrameWidget()->HandleInputEvent(
-        blink::WebCoalescedInputEvent(mouseMove));
+        blink::WebCoalescedInputEvent(mouseMove, ui::LatencyInfo()));
     context->web_view()->MainFrameWidget()->SetCursorVisibilityState(
         cursor_visible);
   }
@@ -352,45 +396,17 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
   gesture_params.anchor.SetPoint(start_x, start_y);
 
   DCHECK(gesture_source_type != SyntheticGestureParams::TOUCH_INPUT ||
-         fling_velocity == 0);
-  float distance_length = pixels_to_scroll;
-  gfx::Vector2dF distance;
-  if (direction == "down") {
-    distance.set_y(-distance_length);
-    gesture_params.fling_velocity_y = fling_velocity;
-  } else if (direction == "up") {
-    distance.set_y(distance_length);
-    gesture_params.fling_velocity_y = -fling_velocity;
-  } else if (direction == "right") {
-    distance.set_x(-distance_length);
-    gesture_params.fling_velocity_x = fling_velocity;
-  } else if (direction == "left") {
-    distance.set_x(distance_length);
-    gesture_params.fling_velocity_x = -fling_velocity;
-  } else if (direction == "upleft") {
-    distance.set_y(distance_length);
-    distance.set_x(distance_length);
-    gesture_params.fling_velocity_x = -fling_velocity;
-    gesture_params.fling_velocity_y = -fling_velocity;
-  } else if (direction == "upright") {
-    distance.set_y(distance_length);
-    distance.set_x(-distance_length);
-    gesture_params.fling_velocity_x = fling_velocity;
-    gesture_params.fling_velocity_y = -fling_velocity;
-  } else if (direction == "downleft") {
-    distance.set_y(-distance_length);
-    distance.set_x(distance_length);
-    gesture_params.fling_velocity_x = -fling_velocity;
-    gesture_params.fling_velocity_y = fling_velocity;
-  } else if (direction == "downright") {
-    distance.set_y(-distance_length);
-    distance.set_x(-distance_length);
-    gesture_params.fling_velocity_x = fling_velocity;
-    gesture_params.fling_velocity_y = fling_velocity;
-  } else {
-    return false;
-  }
-  gesture_params.distances.push_back(distance);
+         fling_velocity.IsZero());
+  // Positive pixels_to_scroll_y means scroll down, positive pixels_to_scroll_x
+  // means scroll right, but SyntheticSmoothScrollGestureParams requests
+  // Positive X/Y to scroll left/up, which is opposite. Positive
+  // fling_velocity_x and fling_velocity_y means scroll left and up, which is
+  // the same direction with SyntheticSmoothScrollGestureParams.
+  gesture_params.fling_velocity_x = fling_velocity.x();
+  gesture_params.fling_velocity_y = fling_velocity.y();
+  gesture_params.distances.push_back(-pixels_to_scroll);
+
+  gesture_params.key_modifiers = key_modifiers;
 
   injector->QueueSyntheticSmoothScroll(
       gesture_params, base::BindOnce(&OnSyntheticGestureCompleted,
@@ -579,6 +595,7 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
       .SetMethod("gestureSourceTypeSupported",
                  &GpuBenchmarking::GestureSourceTypeSupported)
       .SetMethod("smoothScrollBy", &GpuBenchmarking::SmoothScrollBy)
+      .SetMethod("smoothScrollByXY", &GpuBenchmarking::SmoothScrollByXY)
       .SetMethod("smoothDrag", &GpuBenchmarking::SmoothDrag)
       .SetMethod("swipe", &GpuBenchmarking::Swipe)
       .SetMethod("scrollBounce", &GpuBenchmarking::ScrollBounce)
@@ -601,6 +618,8 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
       .SetMethod("hasGpuChannel", &GpuBenchmarking::HasGpuChannel)
       .SetMethod("hasGpuProcess", &GpuBenchmarking::HasGpuProcess)
       .SetMethod("crashGpuProcess", &GpuBenchmarking::CrashGpuProcess)
+      .SetMethod("terminateGpuProcessNormally",
+                 &GpuBenchmarking::TerminateGpuProcessNormally)
       .SetMethod("getGpuDriverBugWorkarounds",
                  &GpuBenchmarking::GetGpuDriverBugWorkarounds)
       .SetMethod("startProfiling", &GpuBenchmarking::StartProfiling)
@@ -680,6 +699,8 @@ bool GpuBenchmarking::GestureSourceTypeSupported(int gesture_source_type) {
           gesture_source_type));
 }
 
+// TODO(lanwei): this is will be removed after this is replaced by
+// SmoothScrollByXY in telemetry/internal/actions/scroll.js.
 bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
   GpuBenchmarkingContext context(render_frame_.get());
   blink::WebRect rect = context.render_widget()->ViewRect();
@@ -695,6 +716,7 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
   bool scroll_by_page = false;
   bool cursor_visible = true;
   bool scroll_by_percentage = false;
+  std::string keys_value;
 
   if (!GetOptionalArg(args, &pixels_to_scroll) ||
       !GetOptionalArg(args, &callback) || !GetOptionalArg(args, &start_x) ||
@@ -705,7 +727,80 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
       !GetOptionalArg(args, &precise_scrolling_deltas) ||
       !GetOptionalArg(args, &scroll_by_page) ||
       !GetOptionalArg(args, &cursor_visible) ||
-      !GetOptionalArg(args, &scroll_by_percentage)) {
+      !GetOptionalArg(args, &scroll_by_percentage) ||
+      !GetOptionalArg(args, &keys_value)) {
+    return false;
+  }
+
+  // For all touch inputs, always scroll by precise deltas.
+  DCHECK(gesture_source_type != SyntheticGestureParams::TOUCH_INPUT ||
+         precise_scrolling_deltas);
+  // Scroll by page only for mouse inputs.
+  DCHECK(!scroll_by_page ||
+         gesture_source_type == SyntheticGestureParams::MOUSE_INPUT);
+  // Scroll by percentage only for mouse inputs.
+  DCHECK(!scroll_by_percentage ||
+         gesture_source_type == SyntheticGestureParams::MOUSE_INPUT);
+  // Scroll by percentage does not require speed in pixels
+  DCHECK(!scroll_by_percentage || (speed_in_pixels_s == 800));
+
+  base::Optional<gfx::Vector2dF> pixels_to_scrol_vector =
+      ToVector(direction, pixels_to_scroll);
+  if (!pixels_to_scrol_vector.has_value())
+    return false;
+  gfx::Vector2dF fling_velocity(0, 0);
+  int key_modifiers = 0;
+  std::vector<base::StringPiece> key_list = base::SplitStringPiece(
+      keys_value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  for (const base::StringPiece& key : key_list) {
+    int key_modifier = ToKeyModifiers(key);
+    if (key_modifier == 0) {
+      return false;
+    }
+    key_modifiers |= key_modifier;
+  }
+
+  EnsureRemoteInterface();
+  return BeginSmoothScroll(
+      &context, args, input_injector_, pixels_to_scrol_vector.value(), callback,
+      gesture_source_type, speed_in_pixels_s, true /* prevent_fling */, start_x,
+      start_y, fling_velocity, precise_scrolling_deltas, scroll_by_page,
+      cursor_visible, scroll_by_percentage, key_modifiers);
+}
+
+// SmoothScrollByXY does not take direction as one of the arguments, and
+// instead we pass two scroll delta values for both x and y directions, when
+// pixels_to_scroll_y is positive, it will scroll down, otherwise scroll up.
+// When pixels_to_scroll_x is positive, it will scroll right, otherwise
+// scroll left.
+bool GpuBenchmarking::SmoothScrollByXY(gin::Arguments* args) {
+  GpuBenchmarkingContext context(render_frame_.get());
+  blink::WebRect rect = context.render_widget()->ViewRect();
+
+  float pixels_to_scroll_x = 0;
+  float pixels_to_scroll_y = 0;
+  v8::Local<v8::Function> callback;
+  float start_x = rect.width / 2;
+  float start_y = rect.height / 2;
+  int gesture_source_type = SyntheticGestureParams::DEFAULT_INPUT;
+  float speed_in_pixels_s = 800;
+  bool precise_scrolling_deltas = true;
+  bool scroll_by_page = false;
+  bool cursor_visible = true;
+  bool scroll_by_percentage = false;
+  std::string keys_value;
+
+  if (!GetOptionalArg(args, &pixels_to_scroll_x) ||
+      !GetOptionalArg(args, &pixels_to_scroll_y) ||
+      !GetOptionalArg(args, &callback) || !GetOptionalArg(args, &start_x) ||
+      !GetOptionalArg(args, &start_y) ||
+      !GetOptionalArg(args, &gesture_source_type) ||
+      !GetOptionalArg(args, &speed_in_pixels_s) ||
+      !GetOptionalArg(args, &precise_scrolling_deltas) ||
+      !GetOptionalArg(args, &scroll_by_page) ||
+      !GetOptionalArg(args, &cursor_visible) ||
+      !GetOptionalArg(args, &scroll_by_percentage) ||
+      !GetOptionalArg(args, &keys_value)) {
     return false;
   }
 
@@ -719,12 +814,25 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
   DCHECK(!scroll_by_percentage ||
          gesture_source_type == SyntheticGestureParams::MOUSE_INPUT);
 
+  gfx::Vector2dF distances(pixels_to_scroll_x, pixels_to_scroll_y);
+  gfx::Vector2dF fling_velocity(0, 0);
+  int key_modifiers = 0;
+  std::vector<base::StringPiece> key_list = base::SplitStringPiece(
+      keys_value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  for (const base::StringPiece& key : key_list) {
+    int key_modifier = ToKeyModifiers(key);
+    if (key_modifier == 0) {
+      return false;
+    }
+    key_modifiers |= key_modifier;
+  }
+
   EnsureRemoteInterface();
-  return BeginSmoothScroll(&context, args, input_injector_, pixels_to_scroll,
-                           callback, gesture_source_type, direction,
-                           speed_in_pixels_s, true, start_x, start_y, 0,
-                           precise_scrolling_deltas, scroll_by_page,
-                           cursor_visible, scroll_by_percentage);
+  return BeginSmoothScroll(
+      &context, args, input_injector_, distances, callback, gesture_source_type,
+      speed_in_pixels_s, true /* prevent_fling */, start_x, start_y,
+      fling_velocity, precise_scrolling_deltas, scroll_by_page, cursor_visible,
+      scroll_by_percentage, key_modifiers);
 }
 
 bool GpuBenchmarking::SmoothDrag(gin::Arguments* args) {
@@ -751,6 +859,10 @@ bool GpuBenchmarking::SmoothDrag(gin::Arguments* args) {
                          speed_in_pixels_s);
 }
 
+// TODO(lanwei): Swipe takes pixels_to_scroll and direction. When the
+// pixels_to_scroll is positive and direction is up, it means the finger moves
+// up, but the page scrolls down, which is opposite to SmoothScrollBy. We
+// should change this to match with SmoothScrollBy or SmoothScrollByXY.
 bool GpuBenchmarking::Swipe(gin::Arguments* args) {
   GpuBenchmarkingContext context(render_frame_.get());
   blink::WebRect rect = context.render_widget()->ViewRect();
@@ -778,16 +890,27 @@ bool GpuBenchmarking::Swipe(gin::Arguments* args) {
   // needed for touchscreen swipe, because we will calculate the velocity in
   // our code.
   if (gesture_source_type == SyntheticGestureParams::TOUCHPAD_INPUT &&
-      fling_velocity == 0)
+      fling_velocity == 0) {
     fling_velocity = 1000;
+  }
+
+  base::Optional<gfx::Vector2dF> pixels_to_scrol_vector =
+      ToVector(direction, pixels_to_scroll);
+  base::Optional<gfx::Vector2dF> fling_velocity_vector =
+      ToVector(direction, fling_velocity);
+  if (!pixels_to_scrol_vector.has_value() ||
+      !fling_velocity_vector.has_value()) {
+    return false;
+  }
 
   EnsureRemoteInterface();
   return BeginSmoothScroll(
-      &context, args, input_injector_, -pixels_to_scroll, callback,
-      gesture_source_type, direction, speed_in_pixels_s, false, start_x,
-      start_y, fling_velocity, true /* precise_scrolling_deltas */,
+      &context, args, input_injector_, -pixels_to_scrol_vector.value(),
+      callback, gesture_source_type, speed_in_pixels_s,
+      false /* prevent_fling */, start_x, start_y,
+      fling_velocity_vector.value(), true /* precise_scrolling_deltas */,
       false /* scroll_by_page */, true /* cursor_visible */,
-      false /* scroll_by_percentage */);
+      false /* scroll_by_percentage */, 0 /* key_modifiers */);
 }
 
 bool GpuBenchmarking::ScrollBounce(gin::Arguments* args) {
@@ -1130,6 +1253,15 @@ void GpuBenchmarking::CrashGpuProcess() {
   if (!gpu_channel)
     return;
   gpu_channel->CrashGpuProcessForTesting();
+}
+
+// Terminates the GPU process with an exit code of 0.
+void GpuBenchmarking::TerminateGpuProcessNormally() {
+  gpu::GpuChannelHost* gpu_channel =
+      RenderThreadImpl::current()->GetGpuChannel();
+  if (!gpu_channel)
+    return;
+  gpu_channel->TerminateGpuProcessForTesting();
 }
 
 void GpuBenchmarking::GetGpuDriverBugWorkarounds(gin::Arguments* args) {

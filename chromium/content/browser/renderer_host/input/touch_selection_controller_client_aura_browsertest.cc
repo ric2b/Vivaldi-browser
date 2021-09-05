@@ -16,6 +16,7 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -264,8 +265,8 @@ class GestureEventWaiter : public RenderWidgetHost::InputEventObserver {
     }
   }
 
-  void OnInputEventAck(InputEventAckSource,
-                       InputEventAckState,
+  void OnInputEventAck(blink::mojom::InputEventResultSource,
+                       blink::mojom::InputEventResultState,
                        const blink::WebInputEvent& event) override {
     if (event.GetType() == target_event_type_) {
       gesture_event_type_ack_seen_ = true;
@@ -321,7 +322,7 @@ class TouchSelectionControllerClientAuraSiteIsolationTest
 
     GestureEventWaiter long_press_waiter(
         expected_target->GetRenderWidgetHost(),
-        blink::WebInputEvent::kGestureLongPress);
+        blink::WebInputEvent::Type::kGestureLongPress);
     SendTouch(main_view, ui::ET_TOUCH_PRESSED, point);
     // Wait until we see the out-bound LongPress on its way to the renderer, so
     // we know it's ok to send the TOUCH_RELEASED to end the sequence.
@@ -337,10 +338,11 @@ class TouchSelectionControllerClientAuraSiteIsolationTest
     // Get main frame view for event insertion.
     RenderWidgetHostViewAura* main_view = GetRenderWidgetHostViewAura();
 
-    GestureEventWaiter tap_down_waiter(expected_target->GetRenderWidgetHost(),
-                                       blink::WebInputEvent::kGestureTapDown);
+    GestureEventWaiter tap_down_waiter(
+        expected_target->GetRenderWidgetHost(),
+        blink::WebInputEvent::Type::kGestureTapDown);
     GestureEventWaiter tap_waiter(expected_target->GetRenderWidgetHost(),
-                                  blink::WebInputEvent::kGestureTap);
+                                  blink::WebInputEvent::Type::kGestureTap);
     SendTouch(main_view, ui::ET_TOUCH_PRESSED, point);
     tap_down_waiter.Wait();
     SendTouch(main_view, ui::ET_TOUCH_RELEASED, point);
@@ -359,9 +361,8 @@ class TouchSelectionControllerClientAuraSiteIsolationTest
     aura::Window* content_window = view->GetNativeView();
     aura::Window::ConvertPointToTarget(content_window, shell_window, &point);
     ui::EventSink* sink = content_window->GetHost()->event_sink();
-    ui::TouchEvent touch(
-        type, point, ui::EventTimeForNow(),
-        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+    ui::TouchEvent touch(type, point, ui::EventTimeForNow(),
+                         ui::PointerDetails(ui::EventPointerType::kTouch, 0));
     ui::EventDispatchDetails details = sink->OnEventFromSource(&touch);
     ASSERT_FALSE(details.dispatcher_destroyed);
   }
@@ -613,7 +614,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraSiteIsolationTest,
   // 1) Send touch-down.
   ui::TouchEvent touch_down(
       ui::ET_TOUCH_PRESSED, scroll_start_position, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   parent_view->OnTouchEvent(&touch_down);
   EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
             selection_controller->active_status());
@@ -625,7 +626,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraSiteIsolationTest,
   // 2) Send touch-move.
   ui::TouchEvent touch_move(
       ui::ET_TOUCH_MOVED, scroll_end_position, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   parent_view->OnTouchEvent(&touch_move);
   EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
             selection_controller->active_status());
@@ -682,9 +683,9 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraSiteIsolationTest,
   EXPECT_FALSE(ui::TouchSelectionMenuRunner::GetInstance()->IsRunning());
 
   // 3) Send touch-end.
-  ui::TouchEvent touch_up(
-      ui::ET_TOUCH_RELEASED, scroll_end_position, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+  ui::TouchEvent touch_up(ui::ET_TOUCH_RELEASED, scroll_end_position,
+                          ui::EventTimeForNow(),
+                          ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   parent_view->OnTouchEvent(&touch_up);
   EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
             selection_controller->active_status());
@@ -855,7 +856,7 @@ IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest, HiddenOnScroll) {
   // there.
   ui::TouchEvent touch_down(
       ui::ET_TOUCH_PRESSED, gfx::Point(10, 10), ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_down);
   EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
             rwhva->selection_controller()->active_status());
@@ -887,9 +888,9 @@ IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraTest, HiddenOnScroll) {
   EXPECT_FALSE(ui::TouchSelectionMenuRunner::GetInstance()->IsRunning());
 
   // Lift the finger up: the quick menu should re-appear.
-  ui::TouchEvent touch_up(
-      ui::ET_TOUCH_RELEASED, gfx::Point(10, 10), ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+  ui::TouchEvent touch_up(ui::ET_TOUCH_RELEASED, gfx::Point(10, 10),
+                          ui::EventTimeForNow(),
+                          ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_up);
   EXPECT_EQ(ui::TouchSelectionController::SELECTION_ACTIVE,
             rwhva->selection_controller()->active_status());
@@ -979,7 +980,7 @@ IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
       ui::SELECTION_HANDLE_DRAG_STARTED);
   ui::TouchEvent touch_down(
       ui::ET_TOUCH_PRESSED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_down);
   selection_controller_client()->Wait();
 
@@ -989,16 +990,16 @@ IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
   handle_point.Offset(10, 0);
   ui::TouchEvent touch_move(
       ui::ET_TOUCH_MOVED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_move);
   selection_controller_client()->Wait();
 
   // Then release.
   selection_controller_client()->InitWaitForSelectionEvent(
       ui::SELECTION_HANDLE_DRAG_STOPPED);
-  ui::TouchEvent touch_up(
-      ui::ET_TOUCH_RELEASED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+  ui::TouchEvent touch_up(ui::ET_TOUCH_RELEASED, handle_point,
+                          ui::EventTimeForNow(),
+                          ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_up);
   selection_controller_client()->Wait();
 
@@ -1057,7 +1058,7 @@ IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
       ui::INSERTION_HANDLE_DRAG_STARTED);
   ui::TouchEvent touch_down(
       ui::ET_TOUCH_PRESSED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_down);
   selection_controller_client()->Wait();
 
@@ -1067,16 +1068,16 @@ IN_PROC_BROWSER_TEST_F(TouchSelectionControllerClientAuraScaleFactorTest,
   handle_point.Offset(10, 0);
   ui::TouchEvent touch_move(
       ui::ET_TOUCH_MOVED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+      ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_move);
   selection_controller_client()->Wait();
 
   // Then release.
   selection_controller_client()->InitWaitForSelectionEvent(
       ui::INSERTION_HANDLE_DRAG_STOPPED);
-  ui::TouchEvent touch_up(
-      ui::ET_TOUCH_RELEASED, handle_point, ui::EventTimeForNow(),
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0));
+  ui::TouchEvent touch_up(ui::ET_TOUCH_RELEASED, handle_point,
+                          ui::EventTimeForNow(),
+                          ui::PointerDetails(ui::EventPointerType::kTouch, 0));
   rwhva->OnTouchEvent(&touch_up);
   selection_controller_client()->Wait();
 

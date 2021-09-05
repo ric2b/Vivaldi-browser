@@ -65,6 +65,7 @@ class ElementRareData;
 class ExceptionState;
 class FloatQuad;
 class FloatSize;
+class GetInnerHTMLOptions;
 class HTMLTemplateElement;
 class Image;
 class InputDeviceCapabilities;
@@ -113,8 +114,9 @@ enum class ElementFlags {
 };
 
 enum class ShadowRootType;
-enum class FocusDelegation;
-enum class SlotAssignmentMode;
+
+enum class SlotAssignmentMode { kManual, kAuto };
+enum class FocusDelegation { kNone, kDelegateFocus };
 
 enum class SelectionBehaviorOnFocus {
   kReset,
@@ -128,12 +130,6 @@ enum class NamedItemType {
   kName,
   kNameOrId,
   kNameOrIdWithName,
-};
-
-enum class InvisibleState {
-  kMissing,
-  kStatic,
-  kInvisible,
 };
 
 struct FocusParams {
@@ -176,6 +172,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   DEFINE_ATTRIBUTE_EVENT_LISTENER(beforecut, kBeforecut)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(beforepaste, kBeforepaste)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search, kSearch)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(beforematch, kBeforematch)
 
   bool hasAttribute(const QualifiedName&) const;
   const AtomicString& getAttribute(const QualifiedName&) const;
@@ -219,17 +216,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void SetElementAttribute(const QualifiedName&, Element*);
   base::Optional<HeapVector<Member<Element>>> GetElementArrayAttribute(
       const QualifiedName& name);
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  HeapVector<Member<Element>> GetElementArrayAttribute(  // DEPRECATED
-      const QualifiedName& name,
-      bool& is_null);
   void SetElementArrayAttribute(
       const QualifiedName&,
       const base::Optional<HeapVector<Member<Element>>>&);
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  void SetElementArrayAttribute(const QualifiedName&,  // DEPRECATED
-                                HeapVector<Member<Element>>,
-                                bool is_null);
 
   // Call this to get the value of an attribute that is known not to be the
   // style attribute or one of the SVG animatable attributes.
@@ -311,8 +300,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // return value should be cached for performance.
   AttributeCollection Attributes() const;
   // This variant will not update the potentially invalid attributes. To be used
-  // when not interested in style attribute or one of the SVG animation
-  // attributes.
+  // when not interested in style attribute or one of the SVG attributes.
   AttributeCollection AttributesWithoutUpdate() const;
 
   void scrollIntoView(ScrollIntoViewOptionsOrBoolean);
@@ -361,15 +349,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   AccessibleNode* ExistingAccessibleNode() const;
   AccessibleNode* accessibleNode();
-
-  InvisibleState Invisible() const;
-  bool HasInvisibleAttribute() const;
-
-  void DispatchActivateInvisibleEventIfNeeded();
-  bool IsInsideInvisibleSubtree() const;
-  bool IsInsideInvisibleStaticSubtree() const;
-
-  void DefaultEventHandler(Event&) override;
 
   void DidMoveToNewDocument(Document&) override;
 
@@ -565,6 +544,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // throws an exception.  Multiple shadow roots are allowed only when
   // createShadowRoot() is used without any parameters from JavaScript.
   ShadowRoot* createShadowRoot(ExceptionState&);
+
   ShadowRoot* attachShadow(const ShadowRootInit*, ExceptionState&);
 
   void AttachDeclarativeShadowRoot(HTMLTemplateElement*,
@@ -576,9 +556,10 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     return CreateShadowRootInternal();
   }
   ShadowRoot& CreateUserAgentShadowRoot();
-  ShadowRoot& AttachShadowRootInternal(ShadowRootType,
-                                       bool delegates_focus = false,
-                                       bool manual_slotting = false);
+  ShadowRoot& AttachShadowRootInternal(
+      ShadowRootType,
+      FocusDelegation focus_delegation = FocusDelegation::kNone,
+      SlotAssignmentMode slot_assignment_mode = SlotAssignmentMode::kAuto);
 
   // Returns the shadow root attached to this element if it is a shadow host.
   ShadowRoot* GetShadowRoot() const;
@@ -720,7 +701,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   String innerHTML() const;
   String outerHTML() const;
   void setInnerHTML(const String&, ExceptionState& = ASSERT_NO_EXCEPTION);
-  String getInnerHTML(bool include_shadow_roots) const;
+  String getInnerHTML(const GetInnerHTMLOptions* options) const;
   void setOuterHTML(const String&, ExceptionState& = ASSERT_NO_EXCEPTION);
 
   void setPointerCapture(PointerId poinetr_id, ExceptionState&);
@@ -866,8 +847,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsSpellCheckingEnabled() const;
 
   // FIXME: public for LayoutTreeBuilder, we shouldn't expose this though.
-  scoped_refptr<ComputedStyle> StyleForLayoutObject(
-      bool calc_invisible = false);
+  scoped_refptr<ComputedStyle> StyleForLayoutObject();
 
   bool HasID() const;
   bool HasClass() const;
@@ -896,6 +876,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   MutableCSSPropertyValueSet& EnsureMutableInlineStyle();
   void ClearMutableInlineStyleIfEmpty();
+
+  CSSPropertyValueSet* CreatePresentationAttributeStyle();
 
   void setTabIndex(int);
   int tabIndex() const;
@@ -985,6 +967,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // This method cannot be moved to LayoutObject because some focusable nodes
   // don't have layoutObjects. e.g., HTMLOptionElement.
   virtual bool IsFocusableStyle() const;
+  // Similar to above, except that it will ensure that any deferred work to
+  // create layout objects is completed (e.g. in display-locked trees).
+  bool IsFocusableStyleAfterUpdate() const;
 
   // classAttributeChanged() exists to share code between
   // parseAttribute (called via setAttribute()) and
@@ -1012,6 +997,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void HideNonce();
 
  private:
+  friend class AXObject;
+
   void ScrollLayoutBoxBy(const ScrollToOptions*);
   void ScrollLayoutBoxTo(const ScrollToOptions*);
   void ScrollFrameBy(const ScrollToOptions*);
@@ -1031,8 +1018,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsDocumentNode() const =
       delete;  // This will catch anyone doing an unnecessary check.
 
-  bool CanAttachShadowRoot() const;
   ShadowRoot& CreateShadowRootInternal();
+  bool CanAttachShadowRoot() const;
+  const char* ErrorMessageForAttachShadow() const;
 
   void StyleAttributeChanged(const AtomicString& new_style_string,
                              AttributeModificationReason);
@@ -1041,9 +1029,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   void InlineStyleChanged();
   void SetInlineStyleFromString(const AtomicString&);
-
-  void InvisibleAttributeChanged(const AtomicString& old_value,
-                                 const AtomicString& new_value);
 
   // If the only inherited changes in the parent element are independent,
   // these changes can be directly propagated to this element (the child).

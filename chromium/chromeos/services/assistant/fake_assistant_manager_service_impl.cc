@@ -55,9 +55,8 @@ AssistantManagerService::State FakeAssistantManagerServiceImpl::GetState()
   return state_;
 }
 
-AssistantSettingsManager*
-FakeAssistantManagerServiceImpl::GetAssistantSettingsManager() {
-  return &assistant_settings_manager_;
+AssistantSettings* FakeAssistantManagerServiceImpl::GetAssistantSettings() {
+  return &assistant_settings_;
 }
 
 void FakeAssistantManagerServiceImpl::AddAndFireStateObserver(
@@ -120,7 +119,12 @@ void FakeAssistantManagerServiceImpl::AddTimeToTimer(const std::string& id,
                                                      base::TimeDelta duration) {
 }
 
-void FakeAssistantManagerServiceImpl::StopAlarmTimerRinging() {}
+void FakeAssistantManagerServiceImpl::PauseTimer(const std::string& id) {}
+
+void FakeAssistantManagerServiceImpl::RemoveAlarmOrTimer(
+    const std::string& id) {}
+
+void FakeAssistantManagerServiceImpl::ResumeTimer(const std::string& id) {}
 
 void FakeAssistantManagerServiceImpl::SetStateAndInformObservers(
     State new_state) {

@@ -24,6 +24,7 @@ import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.external_intents.ExternalNavigationParams;
+import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -100,15 +101,18 @@ public class InterceptNavigationDelegateTest {
         mActivity = mActivityTestRule.getActivity();
         final Tab tab = mActivity.getActivityTab();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            InterceptNavigationDelegateImpl delegate = new InterceptNavigationDelegateImpl(tab) {
+            InterceptNavigationDelegateClientImpl client =
+                    new InterceptNavigationDelegateClientImpl(tab);
+            InterceptNavigationDelegateImpl delegate = new InterceptNavigationDelegateImpl(client) {
                 @Override
                 public boolean shouldIgnoreNavigation(NavigationParams navigationParams) {
                     mNavParamHistory.add(navigationParams);
                     return super.shouldIgnoreNavigation(navigationParams);
                 }
             };
+            client.initializeWithDelegate(delegate);
             delegate.setExternalNavigationHandler(new TestExternalNavigationHandler());
-            InterceptNavigationDelegateImpl.initDelegateForTesting(tab, delegate);
+            delegate.associateWithWebContents(tab.getWebContents());
         });
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
     }

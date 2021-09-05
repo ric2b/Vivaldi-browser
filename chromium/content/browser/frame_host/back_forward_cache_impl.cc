@@ -95,6 +95,16 @@ bool IsGeolocationSupported() {
   return geolocation_supported.Get();
 }
 
+bool IgnoresOutstandingNetworkRequestForTesting() {
+  if (!DeviceHasEnoughMemoryForBackForwardCache())
+    return false;
+  static constexpr base::FeatureParam<bool>
+      outstanding_network_request_supported(
+          &features::kBackForwardCache,
+          "ignore_outstanding_network_request_for_testing", false);
+  return outstanding_network_request_supported.Get();
+}
+
 // Ignore all features that the page is using and all DisableForRenderFrameHost
 // calls and force all pages to be cached. Should be used only for local testing
 // and debugging -- things will break when this param is used.
@@ -114,11 +124,6 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
       FeatureToBit(WebSchedulerTrackedFeature::kWebRTC) |
       FeatureToBit(WebSchedulerTrackedFeature::kContainsPlugins) |
       FeatureToBit(WebSchedulerTrackedFeature::kDedicatedWorkerOrWorklet) |
-      FeatureToBit(
-          WebSchedulerTrackedFeature::kOutstandingNetworkRequestOthers) |
-      FeatureToBit(
-          WebSchedulerTrackedFeature::kOutstandingNetworkRequestFetch) |
-      FeatureToBit(WebSchedulerTrackedFeature::kOutstandingNetworkRequestXHR) |
       FeatureToBit(
           WebSchedulerTrackedFeature::kOutstandingIndexedDBTransaction) |
       FeatureToBit(
@@ -143,7 +148,11 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
       FeatureToBit(WebSchedulerTrackedFeature::kWebHID) |
       FeatureToBit(WebSchedulerTrackedFeature::kWakeLock) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebShare) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebFileSystem);
+      FeatureToBit(WebSchedulerTrackedFeature::kWebFileSystem) |
+      FeatureToBit(WebSchedulerTrackedFeature::kAppBanner) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPrinting) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebDatabase) |
+      FeatureToBit(WebSchedulerTrackedFeature::kPictureInPicture);
 
   uint64_t result = kAlwaysDisallowedFeatures;
 
@@ -155,6 +164,15 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh) {
   if (!IsGeolocationSupported()) {
     result |= FeatureToBit(
         WebSchedulerTrackedFeature::kRequestedGeolocationPermission);
+  }
+
+  if (!IgnoresOutstandingNetworkRequestForTesting()) {
+    result |=
+        FeatureToBit(
+            WebSchedulerTrackedFeature::kOutstandingNetworkRequestOthers) |
+        FeatureToBit(
+            WebSchedulerTrackedFeature::kOutstandingNetworkRequestFetch) |
+        FeatureToBit(WebSchedulerTrackedFeature::kOutstandingNetworkRequestXHR);
   }
 
   // We do not cache documents which have cache-control: no-store header on
@@ -397,7 +415,7 @@ void BackForwardCacheImpl::StoreEntry(
   }
 #endif
 
-  entry->render_frame_host->EnterBackForwardCache();
+  entry->render_frame_host->DidEnterBackForwardCache();
   entries_.push_front(std::move(entry));
 
   size_t size_limit = cache_size_limit_for_testing_
@@ -442,7 +460,7 @@ std::unique_ptr<BackForwardCacheImpl::Entry> BackForwardCacheImpl::RestoreEntry(
   std::unique_ptr<Entry> entry = std::move(*matching_entry);
   entries_.erase(matching_entry);
   RequestRecordTimeToVisible(entry->render_frame_host.get(), navigation_start);
-  entry->render_frame_host->LeaveBackForwardCache();
+  entry->render_frame_host->WillLeaveBackForwardCache();
 
   RestoreBrowserControlsState(entry->render_frame_host.get());
 
@@ -503,7 +521,7 @@ bool BackForwardCache::EvictIfCached(GlobalFrameRoutingId id,
                                      base::StringPiece reason) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto* rfh = RenderFrameHostImpl::FromID(id);
-  if (rfh && rfh->is_in_back_forward_cache()) {
+  if (rfh && rfh->IsInBackForwardCache()) {
     BackForwardCacheCanStoreDocumentResult can_store;
     can_store.NoDueToDisableForRenderFrameHostCalled({reason.as_string()});
     rfh->EvictFromBackForwardCacheWithReasons(can_store);
@@ -519,6 +537,11 @@ void BackForwardCacheImpl::DisableForTesting(DisableForTestingReason reason) {
   // called DisableForTesting(). This is not something we currently expect tests
   // to do.
   DCHECK(entries_.empty());
+}
+
+const std::list<std::unique_ptr<BackForwardCacheImpl::Entry>>&
+BackForwardCacheImpl::GetEntries() {
+  return entries_;
 }
 
 BackForwardCacheImpl::Entry* BackForwardCacheImpl::GetEntry(

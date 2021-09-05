@@ -114,7 +114,7 @@ std::vector<SnapshotItemDetails> CollectProfileItems() {
               ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA),
       SnapshotItemDetails(
           base::FilePath(autofill::kStrikeDatabaseFileName),
-          SnapshotItemDetails::ItemType::kFile,
+          SnapshotItemDetails::ItemType::kDirectory,
           ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS |
               ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA),
       // Cookies

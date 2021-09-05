@@ -34,6 +34,27 @@
 
 namespace ash {
 
+////////////////////////////////////////////////////////////////////////////////
+// StatusAreaWidget::ScopedTrayBubbleCounter
+
+StatusAreaWidget::ScopedTrayBubbleCounter::ScopedTrayBubbleCounter(
+    StatusAreaWidget* status_area_widget)
+    : status_area_widget_(status_area_widget->weak_ptr_factory_.GetWeakPtr()) {
+  ++status_area_widget_->tray_bubble_count_;
+}
+
+StatusAreaWidget::ScopedTrayBubbleCounter::~ScopedTrayBubbleCounter() {
+  // ScopedTrayBubbleCounter may live longer than StatusAreaWidget.
+  if (!status_area_widget_)
+    return;
+
+  --status_area_widget_->tray_bubble_count_;
+  DCHECK_GE(status_area_widget_->tray_bubble_count_, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// StatusAreaWidget
+
 StatusAreaWidget::StatusAreaWidget(aura::Window* status_container, Shelf* shelf)
     : status_area_widget_delegate_(new StatusAreaWidgetDelegate(shelf)),
       shelf_(shelf) {
@@ -102,6 +123,11 @@ void StatusAreaWidget::Initialize() {
 
 StatusAreaWidget::~StatusAreaWidget() {
   Shell::Get()->session_controller()->RemoveObserver(this);
+}
+
+// static
+StatusAreaWidget* StatusAreaWidget::ForWindow(aura::Window* window) {
+  return Shelf::ForWindow(window)->status_area_widget();
 }
 
 void StatusAreaWidget::UpdateAfterLoginStatusChange(LoginStatus login_status) {
@@ -184,6 +210,12 @@ void StatusAreaWidget::UpdateLayout(bool animate) {
   const LayoutInputs new_layout_inputs = GetLayoutInputs();
   if (layout_inputs_ == new_layout_inputs)
     return;
+
+  // Do not animate size changes, as they only really occur when tray items are
+  // added and removed. See crbug.com/1067199.
+  if (layout_inputs_ &&
+      layout_inputs_->bounds.size() != new_layout_inputs.bounds.size())
+    animate = false;
 
   for (TrayBackgroundView* tray_button : tray_buttons_)
     tray_button->UpdateLayout();
@@ -352,8 +384,9 @@ bool StatusAreaWidget::ShouldShowShelf() const {
   if (unified_system_tray_->IsSliderBubbleShown())
     return false;
 
-  // All other tray bubbles will force the shelf to be visible.
-  return TrayBubbleView::IsATrayBubbleOpen();
+  // All other tray bubbles on the same display with status area widget will
+  // force the shelf to be visible.
+  return tray_bubble_count_ > 0;
 }
 
 bool StatusAreaWidget::IsMessageBubbleShown() const {
@@ -424,11 +457,13 @@ void StatusAreaWidget::AddTrayButton(TrayBackgroundView* tray_button) {
 }
 
 StatusAreaWidget::LayoutInputs StatusAreaWidget::GetLayoutInputs() const {
-  long child_visibility_bitmask = 0;
+  unsigned int child_visibility_bitmask = 0;
   DCHECK(tray_buttons_.size() <
          std::numeric_limits<decltype(child_visibility_bitmask)>::digits);
-  for (unsigned int i = 0; i < tray_buttons_.size(); ++i)
-    child_visibility_bitmask |= (tray_buttons_[i]->GetVisible() ? 1 : 0) << i;
+  for (unsigned int i = 0; i < tray_buttons_.size(); ++i) {
+    if (tray_buttons_[i]->GetVisible())
+      child_visibility_bitmask |= 1 << i;
+  }
   return {target_bounds_, CalculateCollapseState(),
           shelf_->shelf_layout_manager()->GetOpacity(),
           child_visibility_bitmask};

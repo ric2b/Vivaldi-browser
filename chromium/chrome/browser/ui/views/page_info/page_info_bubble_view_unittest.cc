@@ -9,6 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -29,6 +30,7 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_web_contents_factory.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/cert/cert_status_flags.h"
@@ -200,6 +202,10 @@ class PageInfoBubbleViewTest : public testing::Test {
     parent_window_->Init(std::move(parent_params));
 
     content::WebContents* web_contents = web_contents_helper_.web_contents();
+    content_settings::TabSpecificContentSettings::CreateForWebContents(
+        web_contents,
+        std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+            web_contents));
     api_ = std::make_unique<test::PageInfoBubbleViewTestApi>(
         parent_window_->GetNativeView(), web_contents_helper_.profile(),
         web_contents);
@@ -742,8 +748,8 @@ TEST_F(PageInfoBubbleViewTest, CertificateButtonShowsEvCertDetails) {
                                      &connection_status);
   net::SSLInfo ssl_info;
   ssl_info.connection_status = connection_status;
-  ssl_info.cert = net::X509Certificate::CreateFromBytes(
-      reinterpret_cast<const char*>(thawte_der), sizeof(thawte_der));
+  ssl_info.cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), "ev_test.pem");
   ASSERT_TRUE(ssl_info.cert);
   ssl_info.cert_status = net::CERT_STATUS_IS_EV;
 
@@ -757,6 +763,47 @@ TEST_F(PageInfoBubbleViewTest, CertificateButtonShowsEvCertDetails) {
   // name and country of incorporation.
   EXPECT_EQ(l10n_util::GetStringFUTF16(
                 IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED,
-                base::UTF8ToUTF16("Thawte Inc"), base::UTF8ToUTF16("US")),
+                base::UTF8ToUTF16("Test Org"), base::UTF8ToUTF16("US")),
+            api_->GetCertificateButtonSubtitleText());
+}
+
+// Regression test for crbug.com/1069113. Test cert includes country and state
+// but not locality.
+TEST_F(PageInfoBubbleViewTest, EvDetailsShowForCertWithStateButNoLocality) {
+  SecurityStateTabHelper::CreateForWebContents(
+      web_contents_helper_.web_contents());
+  std::unique_ptr<content::NavigationSimulator> navigation =
+      content::NavigationSimulator::CreateRendererInitiated(
+          GURL(kSecureUrl),
+          web_contents_helper_.web_contents()->GetMainFrame());
+  navigation->Start();
+  api_->CreateView();
+
+  // Set up a test SSLInfo so that Page Info sees the connection as secure and
+  // using an EV certificate.
+  uint16_t cipher_suite = 0xc02f;  // TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+  int connection_status = 0;
+  net::SSLConnectionStatusSetCipherSuite(cipher_suite, &connection_status);
+  net::SSLConnectionStatusSetVersion(net::SSL_CONNECTION_VERSION_TLS1_2,
+                                     &connection_status);
+  net::SSLInfo ssl_info;
+  ssl_info.connection_status = connection_status;
+  ssl_info.cert = net::ImportCertFromFile(net::GetTestCertsDirectory(),
+                                          "ev_test_state_only.pem");
+  ASSERT_TRUE(ssl_info.cert);
+
+  ssl_info.cert_status = net::CERT_STATUS_IS_EV;
+
+  navigation->SetSSLInfo(ssl_info);
+
+  navigation->Commit();
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_PAGE_INFO_SECURE_SUMMARY),
+            api_->GetWindowTitle());
+
+  // The certificate button subtitle should show the EV certificate organization
+  // name and country of incorporation.
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_PAGE_INFO_SECURITY_TAB_SECURE_IDENTITY_EV_VERIFIED,
+                base::UTF8ToUTF16("Test Org"), base::UTF8ToUTF16("US")),
             api_->GetCertificateButtonSubtitleText());
 }

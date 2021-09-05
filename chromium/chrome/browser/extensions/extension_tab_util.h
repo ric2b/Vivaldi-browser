@@ -200,8 +200,8 @@ class ExtensionTabUtil {
 
   // Takes |url_string| and returns a GURL which is either valid and absolute
   // or invalid. If |url_string| is not directly interpretable as a valid (it is
-  // likely a relative URL) an attempt is made to resolve it. |extension| is
-  // provided so it can be resolved relative to its extension base
+  // likely a relative URL) an attempt is made to resolve it. When |extension|
+  // is non-null, the URL is resolved relative to its extension base
   // (chrome-extension://<id>/). Using the source frame url would be more
   // correct, but because the api shipped with urls resolved relative to their
   // extension base, we decided it wasn't worth breaking existing extensions to
@@ -213,6 +213,14 @@ class ExtensionTabUtil {
   // itself, whether by simulating a crash, browser quit, thread hang, or
   // equivalent. Extensions should be prevented from navigating to such URLs.
   static bool IsKillURL(const GURL& url);
+
+  // Resolves the URL and ensures the extension is allowed to navigate to it.
+  // Returns true and sets |url| if successful. Returns false and sets |error|
+  // if an error occurs.
+  static bool PrepareURLForNavigation(const std::string& url_string,
+                                      const Extension* extension,
+                                      GURL* url,
+                                      std::string* error);
 
   // Logs if the URL of a tab that an extension is creating or navitaging to has
   // the devtools scheme.

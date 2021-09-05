@@ -2,13 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
-import 'chrome://resources/mojo/mojo/public/mojom/base/text_direction.mojom-lite.js';
-import 'chrome://resources/mojo/url/mojom/url.mojom-lite.js';
-import 'chrome://new-tab-page/skcolor.mojom-lite.js';
-import 'chrome://new-tab-page/new_tab_page.mojom-lite.js';
-
-import {BrowserProxy} from 'chrome://new-tab-page/browser_proxy.js';
+import {BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
 import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
@@ -67,4 +61,41 @@ export function createTestProxy() {
       TestBrowserProxy.fromClass(newTabPage.mojom.PageHandlerRemote);
   testProxy.setResultFor('createUntrustedIframeSrc', '');
   return testProxy;
+}
+
+/** @return {!newTabPage.mojom.Theme} */
+export function createTheme() {
+  const searchBox = {
+    bg: {value: 0xff000000},
+    icon: {value: 0xff000001},
+    iconSelected: {value: 0xff000002},
+    placeholder: {value: 0xff000003},
+    resultsBg: {value: 0xff000004},
+    resultsBgHovered: {value: 0xff000005},
+    resultsBgSelected: {value: 0xff000006},
+    resultsDim: {value: 0xff000007},
+    resultsDimSelected: {value: 0xff000008},
+    resultsText: {value: 0xff000009},
+    resultsTextSelected: {value: 0xff00000a},
+    resultsUrl: {value: 0xff00000b},
+    resultsUrlSelected: {value: 0xff00000c},
+    text: {value: 0xff00000d},
+  };
+  return {
+    type: newTabPage.mojom.ThemeType.DEFAULT,
+    info: {chromeThemeId: 0},
+    backgroundColor: {value: 0xffff0000},
+    shortcutBackgroundColor: {value: 0xff00ff00},
+    shortcutTextColor: {value: 0xff0000ff},
+    isDark: false,
+    logoColor: null,
+    backgroundImage: null,
+    backgroundImageAttribution1: '',
+    backgroundImageAttribution2: '',
+    backgroundImageAttributionUrl: null,
+    dailyRefreshCollectionId: '',
+    searchBox: searchBox,
+    shortcutUseWhiteAddIcon: false,
+    shortcutUseTitlePill: false,
+  };
 }

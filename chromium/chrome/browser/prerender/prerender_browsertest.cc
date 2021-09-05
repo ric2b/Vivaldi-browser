@@ -33,7 +33,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -72,7 +71,10 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/browsing_data/content/browsing_data_helper.h"
+#include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/pref_names.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/favicon/core/favicon_driver_observer.h"
 #include "components/nacl/common/buildflags.h"
@@ -87,6 +89,7 @@
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/safe_browsing/core/db/database_manager.h"
 #include "components/safe_browsing/core/db/util.h"
+#include "components/safe_browsing/core/features.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -104,6 +107,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/browsing_data_remover_test_util.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
@@ -233,7 +237,6 @@ bool ShouldAbortPrerenderBeforeSwap(FinalStatus status) {
     // We'll crash the renderer after it's loaded.
     case FINAL_STATUS_RENDERER_CRASHED:
     case FINAL_STATUS_CANCELLED:
-    case FINAL_STATUS_NON_EMPTY_BROWSING_INSTANCE:
       return false;
     default:
       return true;
@@ -1064,87 +1067,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   EXPECT_TRUE(IsEmptyPrerenderLinkManager());
 }
 
-
-// Checks that plugins are not loaded while a page is being preloaded, but
-// are loaded when the page is displayed.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderDelayLoadPlugin) {
-  HostContentSettingsMap* content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(
-          current_browser()->profile());
-  GURL server_root = embedded_test_server()->GetURL("/");
-  content_settings_map->SetContentSettingDefaultScope(
-      server_root, server_root, ContentSettingsType::PLUGINS, std::string(),
-      CONTENT_SETTING_ALLOW);
-
-  PrerenderTestURL("/prerender/prerender_plugin_delay_load.html",
-                   FINAL_STATUS_USED, 1);
-  NavigateToDestURL();
-
-  // Because NavigateToDestURL relies on a synchronous check, and the plugin
-  // loads asynchronously, we use a separate DidPluginLoad() test. Failure
-  // is indicated by timeout, as plugins may take arbitrarily long to load.
-  bool plugin_loaded = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      GetActiveWebContents(), "DidPluginLoad()", &plugin_loaded));
-  EXPECT_TRUE(plugin_loaded);
-}
-
-// For Plugin Power Saver, checks that plugins are not loaded while
-// a page is being preloaded, but are loaded when the page is displayed.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPluginPowerSaver) {
-  HostContentSettingsMap* content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(
-          current_browser()->profile());
-  GURL server_root = embedded_test_server()->GetURL("/");
-  content_settings_map->SetContentSettingDefaultScope(
-      server_root, server_root, ContentSettingsType::PLUGINS, std::string(),
-      CONTENT_SETTING_ALLOW);
-
-  PrerenderTestURL("/prerender/prerender_plugin_power_saver.html",
-                   FINAL_STATUS_USED, 1);
-
-  DisableJavascriptCalls();
-  NavigateToDestURL();
-  bool second_placeholder_present = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      GetActiveWebContents(), "AwaitPluginPrerollAndPlaceholder();",
-      &second_placeholder_present));
-  EXPECT_TRUE(second_placeholder_present);
-}
-
-// Checks that plugins in an iframe are not loaded while a page is
-// being preloaded, but are loaded when the page is displayed.
-#if defined(USE_AURA) && !defined(OS_WIN)
-// http://crbug.com/103496
-#define MAYBE_PrerenderIframeDelayLoadPlugin \
-  DISABLED_PrerenderIframeDelayLoadPlugin
-#elif defined(OS_MACOSX)
-// http://crbug.com/100514
-#define MAYBE_PrerenderIframeDelayLoadPlugin \
-  DISABLED_PrerenderIframeDelayLoadPlugin
-#elif defined(OS_WIN)
-// TODO(jschuh): Failing plugin tests. https://crbug.com/244653,
-// https://crbug.com/876872
-#define MAYBE_PrerenderIframeDelayLoadPlugin \
-  DISABLED_PrerenderIframeDelayLoadPlugin
-#else
-#define MAYBE_PrerenderIframeDelayLoadPlugin PrerenderIframeDelayLoadPlugin
-#endif
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       MAYBE_PrerenderIframeDelayLoadPlugin) {
-  HostContentSettingsMap* content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(
-          current_browser()->profile());
-  GURL server_root = embedded_test_server()->GetURL("/");
-  content_settings_map->SetContentSettingDefaultScope(
-      server_root, server_root, ContentSettingsType::PLUGINS, std::string(),
-      CONTENT_SETTING_ALLOW);
-
-  PrerenderTestURL("/prerender/prerender_iframe_plugin_delay_load.html",
-                   FINAL_STATUS_USED, 1);
-  NavigateToDestURL();
-}
-
 // Renders a page that contains a prerender link to a page that contains an
 // iframe with a source that requires http authentication. This should not
 // prerender successfully.
@@ -1186,19 +1108,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderNoSSLReferrer) {
 
   PrerenderTestURL(url, FINAL_STATUS_USED, 1);
   NavigateToDestURL();
-}
-
-// Checks that popups on a prerendered page cause cancellation.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderPopup) {
-  PrerenderTestURL("/prerender/prerender_popup.html",
-                   FINAL_STATUS_CREATE_NEW_WINDOW, 0);
-}
-
-// Checks that registering a protocol handler causes cancellation.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderRegisterProtocolHandler) {
-  UseHttpsSrcServer();
-  PrerenderTestURL("/prerender/prerender_register_protocol_handler.html",
-                   FINAL_STATUS_REGISTER_PROTOCOL_HANDLER, 0);
 }
 
 // Checks that renderers using excessive memory will be terminated.
@@ -1382,7 +1291,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                                WindowOpenDisposition::CURRENT_TAB, false);
 }
 
-
 // Sets up HTTPS server for prerendered page, and checks that an SSL error will
 // cancel the prerender. The prerenderer loader will be served through HTTP.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLErrorTopLevel) {
@@ -1486,53 +1394,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLClientCertIframe) {
       "/prerender/prerender_with_iframe.html", replacement_text);
   PrerenderTestURL(replacement_path,
                    FINAL_STATUS_SSL_CLIENT_CERTIFICATE_REQUESTED, 0);
-}
-
-// Ensures that we do not prerender pages with a safe browsing
-// interstitial.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSafeBrowsingTopLevel) {
-  GURL url = embedded_test_server()->GetURL("/prerender/prerender_page.html");
-  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
-      url, safe_browsing::SB_THREAT_TYPE_URL_MALWARE);
-  PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_SAFE_BROWSING,
-                   0);
-}
-
-// Ensures that server redirects to a malware page will cancel prerenders.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       PrerenderSafeBrowsingServerRedirect) {
-  GURL url = embedded_test_server()->GetURL("/prerender/prerender_page.html");
-  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
-      url, safe_browsing::SB_THREAT_TYPE_URL_MALWARE);
-  PrerenderTestURL(CreateServerRedirect("/prerender/prerender_page.html"),
-                   FINAL_STATUS_SAFE_BROWSING, 0);
-}
-
-// Ensures that we do not prerender pages which have a malware subresource.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSafeBrowsingSubresource) {
-  GURL image_url = embedded_test_server()->GetURL(kPrefetchJpeg);
-  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
-      image_url, safe_browsing::SB_THREAT_TYPE_URL_MALWARE);
-  base::StringPairs replacement_text;
-  replacement_text.push_back(
-      std::make_pair("REPLACE_WITH_IMAGE_URL", image_url.spec()));
-  std::string replacement_path = net::test_server::GetFilePathWithReplacements(
-      "/prerender/prerender_with_image.html", replacement_text);
-  PrerenderTestURL(replacement_path, FINAL_STATUS_SAFE_BROWSING, 0);
-}
-
-// Ensures that we do not prerender pages which have a malware iframe.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSafeBrowsingIframe) {
-  GURL iframe_url = embedded_test_server()->GetURL(
-      "/prerender/prerender_embedded_content.html");
-  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
-      iframe_url, safe_browsing::SB_THREAT_TYPE_URL_MALWARE);
-  base::StringPairs replacement_text;
-  replacement_text.push_back(
-      std::make_pair("REPLACE_WITH_URL", iframe_url.spec()));
-  std::string replacement_path = net::test_server::GetFilePathWithReplacements(
-      "/prerender/prerender_with_iframe.html", replacement_text);
-  PrerenderTestURL(replacement_path, FINAL_STATUS_SAFE_BROWSING, 0);
 }
 
 // Checks that the favicon is properly loaded on prerender.
@@ -1645,6 +1506,81 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLReferrerPolicy) {
                    FINAL_STATUS_USED, 1);
   NavigateToDestURL();
 }
+
+// Test interaction of Safe Browsing with prerender. Parametrized to enable
+// SafeBrowsing Delayed Warnings experiment. The experiment shouldn't delay
+// prerender page loads. Otherwise, the tests will crash or timeout.
+// The experiment only delays phishing warnings so the tests must use a phishing
+// resource.
+class PrerenderSafeBrowsingTest
+    : public PrerenderBrowserTest,
+      public testing::WithParamInterface<
+          testing::tuple<bool /* Enable delayed warnings experiment */>> {
+ public:
+  PrerenderSafeBrowsingTest() {
+    if (testing::get<0>(GetParam())) {
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/{safe_browsing::kDelayedWarnings},
+          /*disabled_features=*/{});
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Ensures that we do not prerender pages with a safe browsing
+// interstitial.
+IN_PROC_BROWSER_TEST_P(PrerenderSafeBrowsingTest, TopLevel) {
+  GURL url = embedded_test_server()->GetURL("/prerender/prerender_page.html");
+  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
+      url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
+  PrerenderTestURL("/prerender/prerender_page.html", FINAL_STATUS_SAFE_BROWSING,
+                   0);
+}
+
+// Ensures that server redirects to a malware page will cancel prerenders.
+IN_PROC_BROWSER_TEST_P(PrerenderSafeBrowsingTest, ServerRedirect) {
+  GURL url = embedded_test_server()->GetURL("/prerender/prerender_page.html");
+  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
+      url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
+  PrerenderTestURL(CreateServerRedirect("/prerender/prerender_page.html"),
+                   FINAL_STATUS_SAFE_BROWSING, 0);
+}
+
+// Ensures that we do not prerender pages which have a malware subresource.
+IN_PROC_BROWSER_TEST_P(PrerenderSafeBrowsingTest, Subresource) {
+  GURL image_url = embedded_test_server()->GetURL(kPrefetchJpeg);
+  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
+      image_url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
+  base::StringPairs replacement_text;
+  replacement_text.push_back(
+      std::make_pair("REPLACE_WITH_IMAGE_URL", image_url.spec()));
+  std::string replacement_path = net::test_server::GetFilePathWithReplacements(
+      "/prerender/prerender_with_image.html", replacement_text);
+  PrerenderTestURL(replacement_path, FINAL_STATUS_SAFE_BROWSING, 0);
+}
+
+// Ensures that we do not prerender pages which have a malware iframe.
+IN_PROC_BROWSER_TEST_P(PrerenderSafeBrowsingTest, Iframe) {
+  GURL iframe_url = embedded_test_server()->GetURL(
+      "/prerender/prerender_embedded_content.html");
+  GetFakeSafeBrowsingDatabaseManager()->SetThreatTypeForUrl(
+      iframe_url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
+  base::StringPairs replacement_text;
+  replacement_text.push_back(
+      std::make_pair("REPLACE_WITH_URL", iframe_url.spec()));
+  std::string replacement_path = net::test_server::GetFilePathWithReplacements(
+      "/prerender/prerender_with_iframe.html", replacement_text);
+  PrerenderTestURL(replacement_path, FINAL_STATUS_SAFE_BROWSING, 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(PrerenderSafeBrowsingTest,
+                         PrerenderSafeBrowsingTest,
+                         testing::Combine(testing::Values(
+                             false,
+                             true)) /* Enable delayed warnings experiment */
+);
 
 // Test interaction of the webNavigation and tabs API with prerender.
 class PrerenderBrowserTestWithExtensions : public PrerenderBrowserTest,
@@ -1844,57 +1780,15 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, HttpPost) {
   EXPECT_EQ("text=value\n", body);
 }
 
-// Prerenders a page that tries to automatically sign user in via the Credential
-// Manager API. The page should be killed.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, AutosigninInPrerenderer) {
-  // Set up a credential in the password store.
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    PasswordStoreFactory::GetInstance()->SetTestingFactory(
-        current_browser()->profile(),
-        base::BindRepeating(
-            &password_manager::BuildPasswordStore<
-                content::BrowserContext, password_manager::TestPasswordStore>));
-  }
-  scoped_refptr<password_manager::TestPasswordStore> password_store =
-      static_cast<password_manager::TestPasswordStore*>(
-          PasswordStoreFactory::GetForProfile(
-              current_browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
-              .get());
-  autofill::PasswordForm signin_form;
-  signin_form.signon_realm = embedded_test_server()->base_url().spec();
-  signin_form.password_value = base::ASCIIToUTF16("password");
-  signin_form.username_value = base::ASCIIToUTF16("user");
-  signin_form.origin = embedded_test_server()->base_url();
-  signin_form.skip_zero_click = false;
-  password_store->AddLogin(signin_form);
-  // Enable 'auto signin' for the profile.
-  password_bubble_experiment::RecordAutoSignInPromptFirstRunExperienceWasShown(
-      browser()->profile()->GetPrefs());
-
-  // Intercept the successful landing page where a signed in user ends up.
-  // It should never load as the API is suppressed.
-  GURL done_url = embedded_test_server()->GetURL("/password/done.html");
-  auto interceptor = std::make_unique<content::URLLoaderInterceptor>(
-      base::BindLambdaForTesting(
-          [&](content::URLLoaderInterceptor::RequestParams* params) {
-            EXPECT_NE(params->url_request.url, done_url);
-            return false;
-          }));
-  // Loading may finish or be interrupted. The final result is important only.
-  DisableLoadEventCheck();
-  // TestPrenderContents is always created before the Autosignin JS can run, so
-  // waiting for PrerenderContents to stop should be reliable.
-  PrerenderTestURL("/password/autosignin.html",
-                   FINAL_STATUS_CREDENTIAL_MANAGER_API, 0);
-}
-
 class PrerenderIncognitoBrowserTest : public PrerenderBrowserTest {
  public:
   void SetUpOnMainThread() override {
     Profile* normal_profile = current_browser()->profile();
     set_browser(OpenURLOffTheRecord(normal_profile, GURL("about:blank")));
     PrerenderBrowserTest::SetUpOnMainThread();
+    current_browser()->profile()->GetPrefs()->SetInteger(
+        prefs::kCookieControlsMode,
+        static_cast<int>(content_settings::CookieControlsMode::kOff));
   }
 };
 

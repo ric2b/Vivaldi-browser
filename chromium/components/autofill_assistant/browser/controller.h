@@ -100,13 +100,14 @@ class Controller : public ScriptExecutorDelegate,
   const ClientSettings& GetSettings() override;
   const GURL& GetCurrentURL() override;
   const GURL& GetDeeplinkURL() override;
+  const GURL& GetScriptURL() override;
   Service* GetService() override;
   WebController* GetWebController() override;
   const TriggerContext* GetTriggerContext() override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
-  WebsiteLoginFetcher* GetWebsiteLoginFetcher() override;
+  WebsiteLoginManager* GetWebsiteLoginManager() override;
   content::WebContents* GetWebContents() override;
-  std::string GetAccountEmailAddress() override;
+  std::string GetEmailAddressForAccessTokenAccount() override;
   std::string GetLocale() override;
 
   void SetTouchableElementArea(const ElementAreaProto& area) override;
@@ -142,8 +143,8 @@ class Controller : public ScriptExecutorDelegate,
   // states where showing the UI is optional, such as RUNNING, in tracking mode.
   void RequireUI() override;
 
-  void AddListener(ScriptExecutorDelegate::Listener* listener) override;
-  void RemoveListener(ScriptExecutorDelegate::Listener* listener) override;
+  void AddListener(NavigationListener* listener) override;
+  void RemoveListener(NavigationListener* listener) override;
 
   void SetExpandSheetForPromptAction(bool expand) override;
   void SetBrowseDomainsWhitelist(std::vector<std::string> domains) override;
@@ -152,12 +153,13 @@ class Controller : public ScriptExecutorDelegate,
   void SetCollectUserDataOptions(CollectUserDataOptions* options) override;
   void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
+  void WriteUserModel(
+      base::OnceCallback<void(UserModel*)> write_callback) override;
   void OnScriptError(const std::string& error_message,
                      Metrics::DropOutReason reason);
 
   // Overrides autofill_assistant::UiDelegate:
   AutofillAssistantState GetState() override;
-  void UpdateTouchableArea() override;
   void OnUserInteractionInsideTouchableArea() override;
   const Details* GetDetails() const override;
   const InfoBox* GetInfoBox() const override;
@@ -327,12 +329,12 @@ class Controller : public ScriptExecutorDelegate,
   AutofillAssistantState state_ = AutofillAssistantState::INACTIVE;
 
   // The URL passed to Start(). Used only as long as there's no committed URL.
-  // Note that this is the deeplink passed by a caller and reported to the
-  // backend in an initial get action request.
+  // Note that this is the deeplink passed by a caller.
   GURL deeplink_url_;
 
-  // Domain of the last URL the controller requested scripts from.
-  std::string script_domain_;
+  // The last URL the controller requested scripts from. Note that this is
+  // reported to the backend in an initial get action request.
+  GURL script_url_;
 
   // Whether a task for periodic checks is scheduled.
   bool periodic_script_check_scheduled_ = false;
@@ -407,7 +409,7 @@ class Controller : public ScriptExecutorDelegate,
 
   // Value for ScriptExecutorDelegate::HasNavigationError()
   bool navigation_error_ = false;
-  std::vector<ScriptExecutorDelegate::Listener*> listeners_;
+  base::ObserverList<NavigationListener> navigation_listeners_;
 
   // Tracks scripts and script execution. It's kept at the end, as it tend to
   // depend on everything the controller support, through script and script
@@ -441,8 +443,8 @@ class Controller : public ScriptExecutorDelegate,
   std::vector<base::OnceCallback<void()>> on_has_run_first_check_;
 
   // If set, the controller entered the STOPPED state but shutdown was delayed
-  // until the browser has left the |script_domain_| for which the decision was
-  // taken.
+  // until the browser has left the |script_url_.host()| for which the decision
+  // was taken.
   base::Optional<Metrics::DropOutReason> delayed_shutdown_reason_;
 
   EventHandler event_handler_;

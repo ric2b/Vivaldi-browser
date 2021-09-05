@@ -2080,8 +2080,7 @@ template <WeakHandlingFlag weakHandlingFlag,
           typename Allocator>
 struct WeakProcessingHashTableHelper {
   STATIC_ONLY(WeakProcessingHashTableHelper);
-  static void Process(const typename Allocator::WeakCallbackInfo&,
-                      const void*) {}
+  static void Process(const typename Allocator::LivenessBroker&, const void*) {}
 };
 
 template <typename Key,
@@ -2111,7 +2110,7 @@ struct WeakProcessingHashTableHelper<kWeakHandling,
   using ValueType = typename HashTableType::ValueType;
 
   // Used for purely weak and for weak-and-strong tables (ephemerons).
-  static void Process(const typename Allocator::WeakCallbackInfo&,
+  static void Process(const typename Allocator::LivenessBroker& info,
                       const void* parameter) {
     HashTableType* table =
         reinterpret_cast<HashTableType*>(const_cast<void*>(parameter));
@@ -2126,7 +2125,7 @@ struct WeakProcessingHashTableHelper<kWeakHandling,
          element >= table->table_; element--) {
       if (!HashTableType::IsEmptyOrDeletedBucket(*element)) {
         if (!TraceInCollectionTrait<kWeakHandling, ValueType, Traits>::IsAlive(
-                *element)) {
+                info, *element)) {
           table->RegisterModification();
           HashTableType::DeleteBucket(*element);  // Also calls the destructor.
           table->deleted_count_++;
@@ -2151,14 +2150,16 @@ std::enable_if_t<A::kIsGarbageCollected>
 HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
     Trace(VisitorDispatcher visitor) const {
   // bail out for concurrent marking
-  if (visitor->ConcurrentTracingBailOut(
-          {this, [](blink::Visitor* visitor, const void* object) {
-             reinterpret_cast<
-                 const HashTable<Key, Value, Extractor, HashFunctions, Traits,
-                                 KeyTraits, Allocator>*>(object)
-                 ->Trace(visitor);
-           }}))
-    return;
+  if (!Traits::kCanTraceConcurrently) {
+    if (visitor->DeferredTraceIfConcurrent(
+            {this, [](blink::Visitor* visitor, const void* object) {
+               reinterpret_cast<
+                   const HashTable<Key, Value, Extractor, HashFunctions, Traits,
+                                   KeyTraits, Allocator>*>(object)
+                   ->Trace(visitor);
+             }}))
+      return;
+  }
 
   static_assert(WTF::IsWeak<ValueType>::value ||
                     IsTraceableInCollectionTrait<Traits>::value,
@@ -2173,17 +2174,6 @@ HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
     // Weak HashTable. The HashTable may be held alive strongly from somewhere
     // else, e.g., an iterator.
 
-    // Only trace the backing store. Its buckets will be processed after
-    // marking. The interesting cases for marking are:
-    // - The backing is dropped using clear(): The backing can still be
-    //   compacted but empty/deleted buckets will only be destroyed once the
-    //   backing is reclaimed by the garbage collector on the next cycle.
-    // - The hash table expands/shrinks: Buckets are moved to the new backing
-    //   store and strongified, resulting in all buckets being alive. The old
-    //   backing store is marked but only contains empty/deleted buckets as all
-    //   non-empty/deleted buckets have been moved to the new backing store.
-    Allocator::template TraceHashTableBackingOnly<ValueType, HashTable>(
-        visitor, table, &table_);
     // Trace the table weakly. For marking this will result in delaying the
     // processing until the end of the atomic pause. It is safe to trace
     // weakly multiple times.
@@ -2203,6 +2193,12 @@ struct HashTableConstIteratorAdapter {
   STACK_ALLOCATED();
 
  public:
+  using iterator_category = std::bidirectional_iterator_tag;
+  using value_type = HashTableType;
+  using difference_type = ptrdiff_t;
+  using pointer = value_type*;
+  using reference = value_type&;
+
   HashTableConstIteratorAdapter() = default;
   HashTableConstIteratorAdapter(
       const typename HashTableType::const_iterator& impl)

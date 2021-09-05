@@ -196,7 +196,7 @@ def attribute_context(interface, attribute, interfaces, component_info):
         'activity_logging_world_check':
         v8_utilities.activity_logging_world_check(attribute),
         'cached_accessor_name':
-        '%s%sCachedAccessor' % (interface.name, attribute.name.capitalize()),
+        'k%s%s' % (interface.name, attribute.name.capitalize()),
         'cached_attribute_validation_method':
         cached_attribute_validation_method,
         'camel_case_name':
@@ -644,12 +644,14 @@ def setter_expression(interface, attribute, context):
         arguments.append('*impl')
     arguments.extend(extra_arguments)
     idl_type = attribute.idl_type
-    if idl_type.base_type == 'EventHandler':
-        handler_type = 'kEventHandler'
-        if attribute.name == 'onerror':
-            handler_type = 'kOnErrorEventHandler'
-        elif attribute.name == 'onbeforeunload':
+    if idl_type.base_type in ('EventHandler', 'OnBeforeUnloadEventHandler',
+                              'OnErrorEventHandler'):
+        if idl_type.base_type == 'EventHandler':
+            handler_type = 'kEventHandler'
+        elif idl_type.base_type == 'OnBeforeUnloadEventHandler':
             handler_type = 'kOnBeforeUnloadEventHandler'
+        elif idl_type.base_type == 'OnErrorEventHandler':
+            handler_type = 'kOnErrorEventHandler'
         arguments.append('JSEventHandler::CreateOrNull(' + 'v8_value, ' +
                          'JSEventHandler::HandlerType::' + handler_type + ')')
     else:
@@ -733,8 +735,6 @@ def is_writable(attribute):
 
 
 def is_data_type_property(interface, attribute):
-    if 'CachedAccessor' in attribute.extended_attributes:
-        return False
     return (is_constructor_attribute(attribute)
             or 'CrossOrigin' in attribute.extended_attributes)
 

@@ -91,6 +91,9 @@ class ManagePasswordsUIController
       override;
   void OnCredentialLeak(password_manager::CredentialLeakType leak_dialog_type,
                         const GURL& origin) override;
+  void OnShowMoveToAccountBubble(
+      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_move)
+      override;
 
   void NotifyUnsyncedCredentialsWillBeDeleted(
       const std::vector<autofill::PasswordForm>& unsynced_credentials);
@@ -137,6 +140,7 @@ class ManagePasswordsUIController
   void OnPasswordsRevealed() override;
   void SavePassword(const base::string16& username,
                     const base::string16& password) override;
+  void MovePasswordToAccountStore() override;
   void ChooseCredential(
       const autofill::PasswordForm& form,
       password_manager::CredentialType credential_type) override;
@@ -149,7 +153,6 @@ class ManagePasswordsUIController
   void OnDialogHidden() override;
   bool AuthenticateUser() override;
   void AuthenticateUserForAccountStoreOptInAndSavePassword(
-      CoreAccountId account_id,
       const base::string16& username,
       const base::string16& password) override;
   bool ArePasswordsRevealedWhenBubbleIsOpened() const override;
@@ -255,9 +258,9 @@ class ManagePasswordsUIController
 
   // Gets invoked gaia reauth flow is finished. If the reauth was successful,
   // and the |form_manager| is still the same, |username| and |password| are
-  // saved against the current origin, and sets the user to be opted in for
-  // account store. If the reauth was unsuccessful, it changes the default
-  // destination to profle store and reopens the save bubble.
+  // saved against the current origin. If the reauth was unsuccessful, it
+  // changes the default destination to profle store and reopens the save
+  // bubble.
   void AuthenticateUserForAccountStoreOptInCallback(
       const GURL& origin,
       password_manager::PasswordFormManagerForUI* form_manager,

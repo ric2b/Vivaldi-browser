@@ -65,11 +65,6 @@ void RecordDidRun(const base::FilePath& dll_path) {
   installer::UpdateDidRunState(true);
 }
 
-bool ProcessTypeUsesMainDll(const std::string& process_type) {
-  return process_type.empty() ||
-         process_type == switches::kCloudPrintServiceProcess;
-}
-
 // Indicates whether a file can be opened using the same flags that
 // ::LoadLibrary() uses to open modules.
 bool ModuleCanBeRead(const base::FilePath& file_path) {
@@ -111,20 +106,9 @@ MainDllLoader::~MainDllLoader() {
 }
 
 HMODULE MainDllLoader::Load(base::FilePath* module) {
-  const base::char16* dll_name = nullptr;
-  if (ProcessTypeUsesMainDll(process_type_)) {
-    dll_name = installer::kChromeDll;
-  } else {
-#if defined(CHROME_MULTIPLE_DLL)
-    dll_name = installer::kChromeChildDll;
-#else
-    dll_name = installer::kChromeDll;
-#endif
-  }
-
-  *module = GetModulePath(dll_name);
+  *module = GetModulePath(installer::kChromeDll);
   if (module->empty()) {
-    PLOG(ERROR) << "Cannot find module " << dll_name;
+    PLOG(ERROR) << "Cannot find module " << installer::kChromeDll;
     return nullptr;
   }
   HMODULE dll = LoadModuleWithDirectory(*module);
@@ -182,20 +166,17 @@ int MainDllLoader::Launch(HINSTANCE instance,
 }
 
 void MainDllLoader::RelaunchChromeBrowserWithNewCommandLineIfNeeded() {
-  if (!dll_)
+  // The relaunch-if-needed behavior is a NOP for processes other than the
+  // browser process, so early out here.
+  if (!dll_ || !process_type_.empty())
     return;
 
   RelaunchChromeBrowserWithNewCommandLineIfNeededFunc relaunch_function =
       reinterpret_cast<RelaunchChromeBrowserWithNewCommandLineIfNeededFunc>(
           ::GetProcAddress(dll_,
                            "RelaunchChromeBrowserWithNewCommandLineIfNeeded"));
-  if (relaunch_function) {
-    relaunch_function();
-  } else if (ProcessTypeUsesMainDll(process_type_)) {
-    LOG(DFATAL) << "Could not find exported function "
-                << "RelaunchChromeBrowserWithNewCommandLineIfNeeded "
-                << "(" << process_type_ << " process)";
-  }
+  CHECK(relaunch_function);
+  relaunch_function();
 }
 
 //=============================================================================

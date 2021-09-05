@@ -35,7 +35,7 @@ AppWebContentsHelper::AppWebContentsHelper(
 bool AppWebContentsHelper::ShouldSuppressGestureEvent(
     const blink::WebGestureEvent& event) {
   // Disable "smart zoom" (double-tap with two fingers on Mac trackpad).
-  if (event.GetType() == blink::WebInputEvent::kGestureDoubleTap)
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureDoubleTap)
     return true;
 
   if (vivaldi::IsVivaldiRunning()) {

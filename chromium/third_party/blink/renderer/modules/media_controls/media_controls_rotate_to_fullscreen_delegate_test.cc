@@ -26,7 +26,7 @@
 #include "third_party/blink/renderer/modules/device_orientation/device_orientation_controller.h"
 #include "third_party/blink/renderer/modules/device_orientation/device_orientation_data.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
-#include "third_party/blink/renderer/modules/screen_orientation/screen_orientation_controller_impl.h"
+#include "third_party/blink/renderer/modules/screen_orientation/screen_orientation_controller.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/testing/empty_web_media_player.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
@@ -54,12 +54,11 @@ class MockChromeClient : public EmptyChromeClient {
   // ChromeClient overrides:
   void InstallSupplements(LocalFrame& frame) override {
     EmptyChromeClient::InstallSupplements(frame);
-    ScreenOrientationControllerImpl::ProvideTo(frame);
-    mojo::AssociatedRemote<device::mojom::blink::ScreenOrientation>
-        screen_orientation;
+    HeapMojoAssociatedRemote<device::mojom::blink::ScreenOrientation>
+        screen_orientation(frame.DomWindow());
     ignore_result(
         screen_orientation.BindNewEndpointAndPassDedicatedReceiverForTesting());
-    ScreenOrientationControllerImpl::From(frame)
+    ScreenOrientationController::From(*frame.DomWindow())
         ->SetScreenOrientationAssociatedRemoteForTests(
             std::move(screen_orientation));
   }
@@ -211,7 +210,7 @@ void MediaControlsRotateToFullscreenDelegateTest::InitScreenAndVideo(
     // MediaControlsRotateToFullscreenDelegate's requirement that the device
     // supports the API and can provide beta and gamma values. The orientation
     // will be ignored.
-    DeviceOrientationController::From(GetDocument())
+    DeviceOrientationController::From(GetWindow())
         .SetOverride(DeviceOrientationData::Create(
             0.0 /* alpha */, 90.0 /* beta */, 0.0 /* gamma */,
             false /* absolute */));
@@ -473,7 +472,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Dispatch an null Device Orientation event, as happens when the device lacks
   // the necessary hardware to support the Device Orientation API.
-  DeviceOrientationController::From(GetDocument())
+  DeviceOrientationController::From(GetWindow())
       .SetOverride(DeviceOrientationData::Create());
   test::RunPendingTasks();
 
@@ -501,7 +500,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   // Dispatch a Device Orientation event where all values are zero, as happens
   // on poorly configured devices that lack the necessary hardware to support
   // the Device Orientation API, but don't properly expose that lack.
-  DeviceOrientationController::From(GetDocument())
+  DeviceOrientationController::From(GetWindow())
       .SetOverride(
           DeviceOrientationData::Create(0.0 /* alpha */, 0.0 /* beta */,
                                         0.0 /* gamma */, false /* absolute */));
@@ -552,9 +551,9 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailHidden) {
   EXPECT_TRUE(ObservedVisibility());
 
   // Move video offscreen.
-  GetDocument().body()->style()->setProperty(GetDocument().ToExecutionContext(),
-                                             "margin-top", "-999px", "",
-                                             ASSERT_NO_EXCEPTION);
+  GetDocument().body()->style()->setProperty(
+      GetDocument().GetExecutionContext(), "margin-top", "-999px", "",
+      ASSERT_NO_EXCEPTION);
 
   UpdateVisibilityObserver();
 

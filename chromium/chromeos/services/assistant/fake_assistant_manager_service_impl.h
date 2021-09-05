@@ -14,7 +14,7 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "chromeos/services/assistant/assistant_manager_service.h"
-#include "chromeos/services/assistant/fake_assistant_settings_manager_impl.h"
+#include "chromeos/services/assistant/fake_assistant_settings_impl.h"
 
 namespace chromeos {
 namespace assistant {
@@ -42,7 +42,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) FakeAssistantManagerServiceImpl
   void SetArcPlayStoreEnabled(bool enabled) override;
   void SetAssistantContextEnabled(bool enable) override;
   State GetState() const override;
-  AssistantSettingsManager* GetAssistantSettingsManager() override;
+  AssistantSettings* GetAssistantSettings() override;
   void AddCommunicationErrorObserver(
       CommunicationErrorObserver* observer) override {}
   void RemoveCommunicationErrorObserver(
@@ -76,7 +76,9 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) FakeAssistantManagerServiceImpl
   void NotifyEntryIntoAssistantUi(
       mojom::AssistantEntryPoint entry_point) override;
   void AddTimeToTimer(const std::string& id, base::TimeDelta duration) override;
-  void StopAlarmTimerRinging() override;
+  void PauseTimer(const std::string& id) override;
+  void RemoveAlarmOrTimer(const std::string& id) override;
+  void ResumeTimer(const std::string& id) override;
 
   // Update the state to the corresponding value, and inform the
   // |AssistantStateObserver| of the change.
@@ -98,7 +100,7 @@ class COMPONENT_EXPORT(ASSISTANT_SERVICE) FakeAssistantManagerServiceImpl
   State state_ = State::STOPPED;
   base::Optional<std::string> gaia_id_;
   base::Optional<std::string> access_token_;
-  FakeAssistantSettingsManagerImpl assistant_settings_manager_;
+  FakeAssistantSettingsImpl assistant_settings_;
   base::ObserverList<StateObserver> state_observers_;
   MediaSessionAction action_ = MediaSessionAction::kPause;
 

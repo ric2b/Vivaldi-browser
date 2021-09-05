@@ -46,6 +46,8 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/navigation_initiator.mojom-blink.h"
@@ -61,6 +63,7 @@
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
+#include "third_party/blink/renderer/core/dom/document_init.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
 #include "third_party/blink/renderer/core/events/page_transition_event.h"
@@ -127,6 +130,40 @@
 
 namespace blink {
 
+namespace {
+
+void ApplyOriginPolicy(ContentSecurityPolicy* csp,
+                       const WebOriginPolicy& origin_policy) {
+  // When this function is called. The following lines of code happen
+  // consecutively:
+  // 1) A new empty set of CSP is created.
+  // 2) CSP(s) from the HTTP response are appended.
+  // 3) CSP(s) from the OriginPolicy are appended. [HERE]
+  //
+  // As a result, at the beginning of this function, the set of CSP must not
+  // contain any OriginPolicy's CSP yet.
+  //
+  // TODO(arthursonzogni): HasPolicyFromSource(...) is used only in this DCHECK,
+  // consider removing this function.
+  DCHECK(!csp->HasPolicyFromSource(
+      network::mojom::ContentSecurityPolicySource::kOriginPolicy));
+
+  for (const auto& policy : origin_policy.content_security_policies) {
+    csp->DidReceiveHeader(
+        policy, network::mojom::ContentSecurityPolicyType::kEnforce,
+        network::mojom::ContentSecurityPolicySource::kOriginPolicy);
+  }
+
+  for (const auto& policy :
+       origin_policy.content_security_policies_report_only) {
+    csp->DidReceiveHeader(
+        policy, network::mojom::ContentSecurityPolicyType::kReport,
+        network::mojom::ContentSecurityPolicySource::kOriginPolicy);
+  }
+}
+
+}  // namespace
+
 bool IsBackForwardLoadType(WebFrameLoadType type) {
   return type == WebFrameLoadType::kBackForward;
 }
@@ -178,7 +215,7 @@ ResourceRequest FrameLoader::ResourceRequestForReload(
 FrameLoader::FrameLoader(LocalFrame* frame)
     : frame_(frame),
       progress_tracker_(MakeGarbageCollected<ProgressTracker>(frame)),
-      forced_sandbox_flags_(mojom::blink::WebSandboxFlags::kNone),
+      forced_sandbox_flags_(network::mojom::blink::WebSandboxFlags::kNone),
       dispatching_did_clear_window_object_in_main_world_(false),
       detached_(false),
       virtual_time_pauser_(
@@ -212,8 +249,7 @@ void FrameLoader::Init() {
                       : base::nullopt;
 
   DocumentLoader* new_document_loader = Client()->CreateDocumentLoader(
-      frame_, kWebNavigationTypeOther,
-      MakeGarbageCollected<ContentSecurityPolicy>(),
+      frame_, kWebNavigationTypeOther, CreateCSPForInitialEmptyDocument(),
       std::move(navigation_params), nullptr /* extra_data */);
 
   CommitDocumentLoader(new_document_loader, base::nullopt, nullptr,
@@ -539,9 +575,10 @@ bool FrameLoader::AllowRequestForThisFrame(const FrameLoadRequest& request) {
       return false;
 
     if (frame_->Owner() && ((frame_->Owner()->GetFramePolicy().sandbox_flags &
-                             mojom::blink::WebSandboxFlags::kOrigin) !=
-                            mojom::blink::WebSandboxFlags::kNone))
+                             network::mojom::blink::WebSandboxFlags::kOrigin) !=
+                            network::mojom::blink::WebSandboxFlags::kNone)) {
       return false;
+    }
   }
 
   if (!request.CanDisplay(url)) {
@@ -702,25 +739,33 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   network::mojom::blink::CSPSourcePtr initiator_self_source;
   if (origin_document && origin_document->GetContentSecurityPolicy()
                              ->ExperimentalFeaturesEnabled()) {
-    initiator_csp = origin_document->GetContentSecurityPolicy()
-                        ->ExposeForNavigationalChecks();
-    initiator_self_source = origin_document->GetContentSecurityPolicy()
-                                ->GetSelfSource()
-                                ->ExposeForNavigationalChecks();
+    ContentSecurityPolicy* origin_document_csp =
+        origin_document->GetContentSecurityPolicy();
+    CSPSource* origin_document_csp_self_source =
+        origin_document_csp->GetSelfSource();
+
+    initiator_csp = origin_document_csp->ExposeForNavigationalChecks();
+    if (origin_document_csp_self_source) {
+      initiator_self_source =
+          origin_document_csp_self_source->ExposeForNavigationalChecks();
+    }
     origin_document->NavigationInitiator().BindReceiver(
         navigation_initiator.InitWithNewPipeAndPassReceiver());
   }
 
+  // Record the document that has initiated this navigation. It will be used at
+  // navigation commit time for inheritance.
+  // TODO(arthursonzogni): This looks very fragile. It seems easy to confuse the
+  // FrameLoader by starting several navigations in a row. We should get rid of
+  // this.
+  last_origin_document_csp_ = MakeGarbageCollected<ContentSecurityPolicy>();
   if (origin_document && origin_document->GetContentSecurityPolicy()) {
-    last_origin_document_csp_ = MakeGarbageCollected<ContentSecurityPolicy>();
     last_origin_document_csp_->CopyStateFrom(
-        origin_document->GetContentSecurityPolicy());
-    last_origin_document_csp_->CopyPluginTypesFrom(
         origin_document->GetContentSecurityPolicy());
   }
 
-  // Record the latest requiredCSP value that will be used when sending this
-  // request.
+  // Record the latest requiredCSP value that will be used when loading the
+  // document at navigation commit time.
   RecordLatestRequiredCSP();
 
   // TODO(arthursonzogni): 'frame-src' check is disabled on the
@@ -763,16 +808,8 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
     return;
   }
 
-  bool has_transient_activation =
-      LocalFrame::HasTransientUserActivation(frame_);
-  // TODO(csharrison): In M71 when UserActivation v2 should ship, we can remove
-  // the check that the pages are equal, because consumption should not be
-  // shared across pages. After that, we can also get rid of consumption call
-  // in RenderFrameImpl::OpenURL.
-  if (frame_->IsMainFrame() && origin_document &&
-      frame_->GetPage() == origin_document->GetPage()) {
+  if (frame_->IsMainFrame())
     LocalFrame::ConsumeTransientUserActivation(frame_);
-  }
 
   // The main resource request gets logged here, because V8DOMActivityLogger
   // is looked up based on the current v8::Context. When the request actually
@@ -790,7 +827,8 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
 
   if (request.ClientRedirectReason() != ClientNavigationReason::kNone) {
     probe::FrameRequestedNavigation(frame_, frame_, url,
-                                    request.ClientRedirectReason());
+                                    request.ClientRedirectReason(),
+                                    request.GetNavigationPolicy());
   }
 
   const network::mojom::IPAddressSpace initiator_address_space =
@@ -800,14 +838,14 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   Client()->BeginNavigation(
       resource_request, request.GetFrameType(), origin_document,
       nullptr /* document_loader */, navigation_type,
-      request.GetNavigationPolicy(), has_transient_activation, frame_load_type,
+      request.GetNavigationPolicy(), frame_load_type,
       request.ClientRedirect() == ClientRedirectPolicy::kClientRedirect,
       request.GetTriggeringEventInfo(), request.Form(),
       request.ShouldCheckMainWorldContentSecurityPolicy(),
       request.GetBlobURLToken(), request.GetInputStartTime(),
-      request.HrefTranslate().GetString(), std::move(initiator_csp),
-      std::move(initiator_self_source), initiator_address_space,
-      std::move(navigation_initiator));
+      request.HrefTranslate().GetString(), request.Impression(),
+      std::move(initiator_csp), std::move(initiator_self_source),
+      initiator_address_space, std::move(navigation_initiator));
 }
 
 static void FillStaticResponseIfNeeded(WebNavigationParams* params,
@@ -889,7 +927,7 @@ static bool ShouldNavigate(WebNavigationParams* params, LocalFrame* frame) {
 void FrameLoader::CommitNavigation(
     std::unique_ptr<WebNavigationParams> navigation_params,
     std::unique_ptr<WebDocumentLoader::ExtraData> extra_data,
-    bool is_javascript_url) {
+    CommitReason commit_reason) {
   DCHECK(frame_->GetDocument());
   DCHECK(Client()->HasWebView());
 
@@ -944,20 +982,13 @@ void FrameLoader::CommitNavigation(
   DCHECK(!StateMachine()->CreatingInitialEmptyDocument());
   HistoryItem* previous_history_item = GetDocumentLoader()->GetHistoryItem();
 
-  bool loading_url_as_empty_document =
-      !navigation_params->is_static_data &&
-      DocumentLoader::WillLoadUrlAsEmpty(navigation_params->url);
-
-  // Check if the CSP of the response allow should block the new document from
+  // Check if the CSP of the response should block the new document from
   // committing before unloading the current document. This will allow to report
   // violations and display console messages properly.
-  ContentSecurityPolicy* content_security_policy;
-  if (!loading_url_as_empty_document) {
-    content_security_policy =
-        CreateCSP(navigation_params->url,
-                  navigation_params->response.ToResourceResponse(),
-                  navigation_params->origin_policy);
-  }
+  ContentSecurityPolicy* content_security_policy = CreateCSP(
+      navigation_params->url, navigation_params->response.ToResourceResponse(),
+      navigation_params->origin_policy, last_origin_document_csp_.Release(),
+      commit_reason);
 
   base::Optional<Document::UnloadEventTiming> unload_timing;
   FrameSwapScope frame_swap_scope(frame_owner);
@@ -991,9 +1022,7 @@ void FrameLoader::CommitNavigation(
       std::move(navigation_params), std::move(extra_data));
 
   CommitDocumentLoader(new_document_loader, unload_timing,
-                       previous_history_item,
-                       is_javascript_url ? CommitReason::kJavascriptUrl
-                                         : CommitReason::kRegular);
+                       previous_history_item, commit_reason);
 
   RestoreScrollPositionAndViewState();
 
@@ -1038,6 +1067,7 @@ void FrameLoader::StopAllLoaders() {
   if (document_loader_)
     document_loader_->StopLoading();
   CancelClientNavigation();
+  frame_->CancelFormSubmission();
   DidFinishNavigation(FrameLoader::NavigationFinishState::kSuccess);
 
   TakeObjectSnapshot();
@@ -1116,8 +1146,7 @@ void FrameLoader::CommitDocumentLoader(
   document_loader_ = document_loader;
   CHECK(document_loader_);
 
-  if (commit_reason == CommitReason::kJavascriptUrl)
-    document_loader_->SetLoadingJavaScriptUrl();
+  document_loader_->SetCommitReason(commit_reason);
 
   virtual_time_pauser_.PauseVirtualTime();
   document_loader_->StartLoading();
@@ -1155,8 +1184,9 @@ void FrameLoader::CommitDocumentLoader(
     FrameNavigationDisabler navigation_disabler(*frame_);
     if (commit_reason == CommitReason::kInitialization) {
       Client()->DidCreateInitialEmptyDocument();
-    } else if (commit_reason == CommitReason::kJavascriptUrl) {
-      Client()->DidCommitJavascriptUrlNavigation(document_loader_);
+    } else if (commit_reason == CommitReason::kJavascriptUrl ||
+               commit_reason == CommitReason::kXSLT) {
+      Client()->DidCommitDocumentReplacementNavigation(document_loader_);
     } else {
       Client()->DispatchDidCommitLoad(
           document_loader_->GetHistoryItem(),
@@ -1224,7 +1254,6 @@ String FrameLoader::UserAgent() const {
 
 base::Optional<blink::UserAgentMetadata> FrameLoader::UserAgentMetadata()
     const {
-  // TODO(mkwst): Support overrides probes for devtools support.
   return Client()->UserAgentMetadata();
 }
 
@@ -1424,11 +1453,12 @@ bool FrameLoader::ShouldReuseDefaultView(
   // be considered when deciding whether to reuse it.
   // Spec:
   // https://html.spec.whatwg.org/C/#initialise-the-document-object
-  if ((csp &&
-       (csp->GetSandboxMask() & mojom::blink::WebSandboxFlags::kOrigin) !=
-           mojom::blink::WebSandboxFlags::kNone) ||
-      ((EffectiveSandboxFlags() & mojom::blink::WebSandboxFlags::kOrigin) !=
-       mojom::blink::WebSandboxFlags::kNone)) {
+  if ((csp && (csp->GetSandboxMask() &
+               network::mojom::blink::WebSandboxFlags::kOrigin) !=
+                  network::mojom::blink::WebSandboxFlags::kNone) ||
+      ((EffectiveSandboxFlags() &
+        network::mojom::blink::WebSandboxFlags::kOrigin) !=
+       network::mojom::blink::WebSandboxFlags::kNone)) {
     return false;
   }
 
@@ -1449,6 +1479,9 @@ bool FrameLoader::CancelProvisionalLoaderForNewNavigation() {
   // For client navigations, don't send failure callbacks when simply
   // replacing client navigation with a DocumentLoader.
   ClearClientNavigation();
+
+  // Cancel pending form submissions so they don't take precedence over this.
+  frame_->CancelFormSubmission();
 
   return true;
 }
@@ -1494,6 +1527,16 @@ void FrameLoader::RunScriptsAtDocumentElementAvailable() {
   // The frame might be detached at this point.
 }
 
+void FrameLoader::ForceSandboxFlags(
+    network::mojom::blink::WebSandboxFlags flags) {
+  forced_sandbox_flags_ |= flags;
+}
+
+void FrameLoader::SetFrameOwnerSandboxFlags(
+    network::mojom::blink::WebSandboxFlags flags) {
+  frame_owner_sandbox_flags_ = flags;
+}
+
 void FrameLoader::DispatchDidClearDocumentOfWindowObject() {
   DCHECK(frame_->GetDocument());
   if (state_machine_.CreatingInitialEmptyDocument())
@@ -1529,8 +1572,9 @@ void FrameLoader::DispatchDidClearWindowObjectInMainWorld() {
   Client()->DispatchDidClearWindowObjectInMainWorld();
 }
 
-SandboxFlags FrameLoader::EffectiveSandboxFlags() const {
-  SandboxFlags flags = forced_sandbox_flags_;
+network::mojom::blink::WebSandboxFlags FrameLoader::EffectiveSandboxFlags()
+    const {
+  network::mojom::blink::WebSandboxFlags flags = forced_sandbox_flags_;
   if (frame_->Owner()) {
     // Cannot use flags in frame_owner->GetFramePolicy().sandbox_flags, because
     // frame_owner's frame policy is volatile and can be changed by javascript
@@ -1546,8 +1590,9 @@ SandboxFlags FrameLoader::EffectiveSandboxFlags() const {
   return flags;
 }
 
-SandboxFlags FrameLoader::PendingEffectiveSandboxFlags() const {
-  SandboxFlags flags = forced_sandbox_flags_;
+network::mojom::blink::WebSandboxFlags
+FrameLoader::PendingEffectiveSandboxFlags() const {
+  network::mojom::blink::WebSandboxFlags flags = forced_sandbox_flags_;
   if (FrameOwner* frame_owner = frame_->Owner())
     flags |= frame_owner->GetFramePolicy().sandbox_flags;
   // Frames need to inherit the sandbox flags of their parent frame.
@@ -1584,7 +1629,7 @@ void FrameLoader::ModifyRequestForCSP(
 
   MixedContentChecker::UpgradeInsecureRequest(
       resource_request, fetch_client_settings_object,
-      document_for_logging ? document_for_logging->ToExecutionContext()
+      document_for_logging ? document_for_logging->GetExecutionContext()
                            : nullptr,
       frame_type, frame_->GetContentSettingsClient());
 }
@@ -1692,72 +1737,124 @@ bool FrameLoader::IsClientNavigationInitialHistoryLoad() {
          client_navigation_->is_history_navigation_in_new_frame;
 }
 
+ContentSecurityPolicy* FrameLoader::CreateCSPForInitialEmptyDocument() const {
+  ContentSecurityPolicy* csp = MakeGarbageCollected<ContentSecurityPolicy>();
+
+  Frame* owner_frame = frame_->Tree().Parent() ? frame_->Tree().Parent()
+                                               : frame_->Client()->Opener();
+  if (owner_frame) {
+    ContentSecurityPolicy* owner_csp =
+        owner_frame->GetSecurityContext()->GetContentSecurityPolicy();
+    csp->CopyStateFrom(owner_csp);
+  }
+
+  return csp;
+}
+
 ContentSecurityPolicy* FrameLoader::CreateCSP(
     const KURL& url,
     const ResourceResponse& response,
-    const base::Optional<WebOriginPolicy>& origin_policy) {
-  auto* csp = MakeGarbageCollected<ContentSecurityPolicy>();
-
+    const base::Optional<WebOriginPolicy>& origin_policy,
+    ContentSecurityPolicy* initiator_csp,
+    CommitReason commit_reason) {
+  // about:srcdoc inherits CSP from its parent.
   if (url.IsAboutSrcdocURL()) {
-    // about:srcdoc always inherits CSP from its parent.
-    ContentSecurityPolicy* parent_csp = frame_->Tree()
-                                            .Parent()
-                                            ->GetSecurityContext()
-                                            ->GetContentSecurityPolicy();
-    csp->CopyStateFrom(parent_csp);
-    csp->CopyPluginTypesFrom(parent_csp);
+    ContentSecurityPolicy* csp = MakeGarbageCollected<ContentSecurityPolicy>();
+    csp->CopyStateFrom(frame_->Tree()
+                           .Parent()
+                           ->GetSecurityContext()
+                           ->GetContentSecurityPolicy());
     return csp;
   }
 
+  // Documents constructed by XSLTProcessor inherit CSP from the previous
+  // Document.
+  if (commit_reason == CommitReason::kXSLT) {
+    ContentSecurityPolicy* csp = MakeGarbageCollected<ContentSecurityPolicy>();
+    csp->CopyStateFrom(frame_->GetDocument()->GetContentSecurityPolicy());
+    return csp;
+  }
+
+  // Documents with a local-scheme inherits CSP from their navigation initiator.
+  bool is_local_scheme = url.IsEmpty() || url.ProtocolIsAbout() ||
+                         url.ProtocolIsData() || url.ProtocolIs("blob") ||
+                         url.ProtocolIs("filesystem");
+  if (is_local_scheme) {
+    if (initiator_csp)
+      return initiator_csp;
+    return MakeGarbageCollected<ContentSecurityPolicy>();
+  }
+
+  // In the main case (outside of the ones above), CSP(s) are NOT inherited.
+  // Otherwise, it would allow a malicious parent/opener to block some
+  // iframe/popup's script at a fine-grained level.
+
+  ContentSecurityPolicy* csp = MakeGarbageCollected<ContentSecurityPolicy>();
   csp->SetOverrideURLForSelf(response.CurrentRequestUrl());
 
-  if (!frame_->GetSettings()->BypassCSP()) {
-    csp->DidReceiveHeaders(ContentSecurityPolicyResponseHeaders(response));
+  if (frame_->GetSettings()->BypassCSP())
+    return csp;  // Empty CSP.
 
-    // Handle OriginPolicy. We can skip the entire block if the OP policies have
-    // already been passed down.
-    if (origin_policy.has_value() &&
-        !csp->HasPolicyFromSource(
-            network::mojom::ContentSecurityPolicySource::kOriginPolicy)) {
-      for (const auto& policy : origin_policy->content_security_policies) {
-        csp->DidReceiveHeader(
-            policy, network::mojom::ContentSecurityPolicyType::kEnforce,
-            network::mojom::ContentSecurityPolicySource::kOriginPolicy);
-      }
+  // Parse CSP from the HTTP response.
+  csp->DidReceiveHeaders(ContentSecurityPolicyResponseHeaders(response));
 
-      for (const auto& policy :
-           origin_policy->content_security_policies_report_only) {
-        csp->DidReceiveHeader(
-            policy, network::mojom::ContentSecurityPolicyType::kReport,
-            network::mojom::ContentSecurityPolicySource::kOriginPolicy);
-      }
-    }
-  }
+  // Retrieve CSP stored in the OriginPolicy.
+  if (origin_policy)
+    ApplyOriginPolicy(csp, origin_policy.value());
+
+  // Check CSP frame-ancestor:
   if (!base::FeatureList::IsEnabled(
           network::features::kOutOfBlinkFrameAncestors)) {
-    if (!csp->AllowAncestors(frame_, response.CurrentRequestUrl())) {
-      return nullptr;
-    }
+    if (!csp->AllowAncestors(frame_, response.CurrentRequestUrl()))
+      return nullptr;  // Document blocked.
   }
 
-  if (!frame_->GetSettings()->BypassCSP() && !RequiredCSP().IsEmpty()) {
-    const SecurityOrigin* parent_security_origin =
-        frame_->Tree().Parent()->GetSecurityContext()->GetSecurityOrigin();
-    if (parent_security_origin &&
-        ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
-            response, parent_security_origin)) {
-      csp->AddPolicyFromHeaderValue(
-          RequiredCSP(), network::mojom::ContentSecurityPolicyType::kEnforce,
-          network::mojom::ContentSecurityPolicySource::kHTTP);
-    } else {
-      auto* required_csp = MakeGarbageCollected<ContentSecurityPolicy>();
-      required_csp->AddPolicyFromHeaderValue(
-          RequiredCSP(), network::mojom::ContentSecurityPolicyType::kEnforce,
-          network::mojom::ContentSecurityPolicySource::kHTTP);
-      if (!required_csp->Subsumes(*csp))
-        return nullptr;
-    }
+  // Plugin inherits plugin's CSP from their navigation initiator.
+  DocumentInit::Type document_type =
+      DocumentInit::ComputeDocumentType(frame_, url, response.MimeType());
+  if (document_type == DocumentInit::Type::kPlugin) {
+    Frame* owner_frame = frame_->Tree().Parent() ? frame_->Tree().Parent()
+                                                 : frame_->Client()->Opener();
+    ContentSecurityPolicy* owner_csp =
+        owner_frame
+            ? owner_frame->GetSecurityContext()->GetContentSecurityPolicy()
+            : nullptr;
+    // TODO(andypaicu): This should always inherit the origin document's plugin
+    // types but because this could be a OOPIF document it might not have
+    // access. In this situation we fallback on using the parent/opener:
+    ContentSecurityPolicy* inherited_csp =
+        initiator_csp ? initiator_csp : owner_csp;
+    if (inherited_csp)
+      csp->CopyPluginTypesFrom(inherited_csp);
   }
+
+  // When the embedder used the 'required-csp', its embeddee must either:
+  // 1) Use the 'allow-csp' header for opting in inheriting them.
+  // 2) Ensure its own CSP subsume them, or it will be blocked.
+  //
+  // See:
+  // - https://w3c.github.io/webappsec-cspee/#required-csp-header
+  // - https://w3c.github.io/webappsec-cspee/#allow-csp-from-header
+  if (RequiredCSP().IsEmpty())
+    return csp;
+
+  const SecurityOrigin* parent_security_origin =
+      frame_->Tree().Parent()->GetSecurityContext()->GetSecurityOrigin();
+  if (parent_security_origin &&
+      ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
+          response, parent_security_origin)) {
+    csp->AddPolicyFromHeaderValue(
+        RequiredCSP(), network::mojom::ContentSecurityPolicyType::kEnforce,
+        network::mojom::ContentSecurityPolicySource::kHTTP);
+  } else {
+    auto* required_csp = MakeGarbageCollected<ContentSecurityPolicy>();
+    required_csp->AddPolicyFromHeaderValue(
+        RequiredCSP(), network::mojom::ContentSecurityPolicyType::kEnforce,
+        network::mojom::ContentSecurityPolicySource::kHTTP);
+    if (!required_csp->Subsumes(*csp))
+      return nullptr;  // Document blocked.
+  }
+
   return csp;
 }
 

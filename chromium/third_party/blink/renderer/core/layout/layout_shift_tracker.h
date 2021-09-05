@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/layout_shift_region.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
+#include "third_party/blink/renderer/core/timing/layout_shift.h"
 #include "third_party/blink/renderer/platform/geometry/region.h"
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -25,12 +26,11 @@ class WebInputEvent;
 
 // Tracks "layout shifts" from layout objects changing their visual location
 // between animation frames. See https://github.com/WICG/layout-instability.
-class CORE_EXPORT LayoutShiftTracker {
-  USING_FAST_MALLOC(LayoutShiftTracker);
-
+class CORE_EXPORT LayoutShiftTracker final
+    : public GarbageCollected<LayoutShiftTracker> {
  public:
-  LayoutShiftTracker(LocalFrameView*);
-  ~LayoutShiftTracker() {}
+  explicit LayoutShiftTracker(LocalFrameView*);
+  ~LayoutShiftTracker() = default;
   // |paint_offset_diff| is an additional amount by which the paint offset
   // shifted that is not tracked in visual rects. Visual rects are in the
   // local transform space of the LayoutObject. Any time the transform space is
@@ -60,6 +60,7 @@ class CORE_EXPORT LayoutShiftTracker {
   base::TimeTicks MostRecentInputTimestamp() {
     return most_recent_input_timestamp_;
   }
+  void Trace(Visitor* visitor);
 
   // Saves and restores visual rects on layout objects when a layout tree is
   // rebuilt by Node::ReattachLayoutTree.
@@ -100,9 +101,10 @@ class CORE_EXPORT LayoutShiftTracker {
   double SubframeWeightingFactor() const;
   void SetLayoutShiftRects(const Vector<IntRect>& int_rects);
   void UpdateInputTimestamp(base::TimeTicks timestamp);
+  LayoutShift::AttributionList CreateAttributionList() const;
+  void SubmitPerformanceEntry(double score_delta, bool input_detected) const;
 
-  // This owns us.
-  UntracedMember<LocalFrameView> frame_view_;
+  Member<LocalFrameView> frame_view_;
 
   // The document cumulative layout shift (DCLS) score for this LocalFrame,
   // unweighted, with move distance applied.
@@ -175,13 +177,11 @@ class CORE_EXPORT LayoutShiftTracker {
     bool MoreImpactfulThan(const Attribution&) const;
     int Area() const;
   };
-  static constexpr int kMaxAttributions = 5;
 
   void MaybeRecordAttribution(const Attribution&);
 
-  // Nodes that have contributed to the impact region for the current frame, for
-  // use in trace event. Only populated while tracing.
-  std::array<Attribution, kMaxAttributions> attributions_;
+  // Nodes that have contributed to the impact region for the current frame.
+  std::array<Attribution, LayoutShift::kMaxAttributions> attributions_;
 };
 
 }  // namespace blink

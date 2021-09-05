@@ -97,11 +97,9 @@ enum ModelType {
   // Custom spelling dictionary entries.
   DICTIONARY,
   // Favicon images, including both the image URL and the actual pixels.
-  // TODO(https://crbug.com/978775): Prepend DEPRECATED to the name of favicon
-  // data types.
-  FAVICON_IMAGES,
+  DEPRECATED_FAVICON_IMAGES,
   // Favicon tracking information, i.e. metadata such as last visit date.
-  FAVICON_TRACKING,
+  DEPRECATED_FAVICON_TRACKING,
   // Client-specific metadata, synced before other user types.
   DEVICE_INFO,
   // These preferences are synced before other user types and are never
@@ -260,14 +258,14 @@ constexpr ModelTypeSet ProtocolTypes() {
       BOOKMARKS, PREFERENCES, PASSWORDS, AUTOFILL_PROFILE, AUTOFILL,
       AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_METADATA, THEMES, TYPED_URLS,
       EXTENSIONS, SEARCH_ENGINES, SESSIONS, APPS, APP_SETTINGS,
-      EXTENSION_SETTINGS, HISTORY_DELETE_DIRECTIVES, DICTIONARY, FAVICON_IMAGES,
-      FAVICON_TRACKING, DEVICE_INFO, PRIORITY_PREFERENCES,
-      SUPERVISED_USER_SETTINGS, APP_LIST, SUPERVISED_USER_WHITELISTS,
-      ARC_PACKAGE, PRINTERS, READING_LIST, USER_EVENTS, NIGORI,
-      DEPRECATED_EXPERIMENTS, USER_CONSENTS, SEND_TAB_TO_SELF, SECURITY_EVENTS,
+      EXTENSION_SETTINGS, HISTORY_DELETE_DIRECTIVES, DICTIONARY,
+      DEPRECATED_FAVICON_IMAGES, DEPRECATED_FAVICON_TRACKING, DEVICE_INFO,
+      PRIORITY_PREFERENCES, SUPERVISED_USER_SETTINGS, APP_LIST,
+      SUPERVISED_USER_WHITELISTS, ARC_PACKAGE, PRINTERS, READING_LIST,
+      USER_EVENTS, NIGORI, DEPRECATED_EXPERIMENTS, USER_CONSENTS,
+      SEND_TAB_TO_SELF, SECURITY_EVENTS, WEB_APPS, WIFI_CONFIGURATIONS,
       NOTES,
-      WEB_APPS, WIFI_CONFIGURATIONS, OS_PREFERENCES, OS_PRIORITY_PREFERENCES,
-      SHARING_MESSAGE);
+      OS_PREFERENCES, OS_PRIORITY_PREFERENCES, SHARING_MESSAGE);
 }
 
 // These are the normal user-controlled types. This is to distinguish from
@@ -297,7 +295,7 @@ constexpr ModelTypeSet AlwaysEncryptedUserTypes() {
 constexpr ModelTypeSet PriorityUserTypes() {
   return ModelTypeSet(DEVICE_INFO, PRIORITY_PREFERENCES,
                       SUPERVISED_USER_SETTINGS, SUPERVISED_USER_WHITELISTS,
-                      OS_PRIORITY_PREFERENCES);
+                      OS_PRIORITY_PREFERENCES, SHARING_MESSAGE);
 }
 
 // Proxy types are placeholder types for handling implicitly enabling real
@@ -329,6 +327,7 @@ constexpr bool IsControlType(ModelType model_type) {
 }
 
 // Types that may commit data, but should never be included in a GetUpdates.
+// These are never encrypted.
 constexpr ModelTypeSet CommitOnlyTypes() {
   return ModelTypeSet(USER_EVENTS, USER_CONSENTS, SECURITY_EVENTS,
                       SHARING_MESSAGE);

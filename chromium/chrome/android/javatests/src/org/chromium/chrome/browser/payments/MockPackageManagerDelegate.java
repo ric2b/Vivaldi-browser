@@ -16,6 +16,8 @@ import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.chrome.browser.ChromeActivity;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +32,8 @@ class MockPackageManagerDelegate extends PackageManagerDelegate {
     private final Map<ResolveInfo, CharSequence> mLabels = new HashMap<>();
     private final List<ResolveInfo> mServices = new ArrayList<>();
     private final Map<ApplicationInfo, String[]> mResources = new HashMap<>();
+
+    private String mMockTwaPackage;
 
     /**
      * Simulates an installed payment app with no supported delegations.
@@ -140,6 +144,15 @@ class MockPackageManagerDelegate extends PackageManagerDelegate {
         mLabels.clear();
     }
 
+    /**
+     * Mock the current package to be a Trust Web Activity package.
+     * @param mockTwaPackage The intended package nam, not allowed to be null.
+     */
+    public void setMockTrustedWebActivity(String mockTwaPackage) {
+        assert mockTwaPackage != null;
+        mMockTwaPackage = mockTwaPackage;
+    }
+
     @Override
     public List<ResolveInfo> getActivitiesThatCanRespondToIntentWithMetaData(Intent intent) {
         return mActivities;
@@ -176,5 +189,11 @@ class MockPackageManagerDelegate extends PackageManagerDelegate {
             ApplicationInfo applicationInfo, int resourceId) {
         assert STRING_ARRAY_RESOURCE_ID == resourceId;
         return mResources.get(applicationInfo);
+    }
+
+    @Override
+    @Nullable
+    public String getTwaPackageName(ChromeActivity activity) {
+        return mMockTwaPackage != null ? mMockTwaPackage : super.getTwaPackageName(activity);
     }
 }

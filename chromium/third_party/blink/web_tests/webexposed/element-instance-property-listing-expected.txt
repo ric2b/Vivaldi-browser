@@ -70,6 +70,7 @@ namespace http://www.w3.org/1999/xhtml
     property ariaRowIndex
     property ariaRowSpan
     property ariaSelected
+    property ariaSetSize
     property ariaSort
     property ariaValueMax
     property ariaValueMin
@@ -142,7 +143,6 @@ namespace http://www.w3.org/1999/xhtml
     property insertAdjacentHTML
     property insertAdjacentText
     property insertBefore
-    property invisible
     property isConnected
     property isContentEditable
     property isDefaultNamespace
@@ -169,13 +169,13 @@ namespace http://www.w3.org/1999/xhtml
     property offsetTop
     property offsetWidth
     property onabort
-    property onactivateinvisible
     property onanimationend
     property onanimationiteration
     property onanimationstart
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforematch
     property onbeforepaste
     property onbeforexrselect
     property onblur
@@ -1279,6 +1279,7 @@ namespace http://www.w3.org/2000/svg
     property ariaRowIndex
     property ariaRowSpan
     property ariaSelected
+    property ariaSetSize
     property ariaSort
     property ariaValueMax
     property ariaValueMin
@@ -1340,7 +1341,6 @@ namespace http://www.w3.org/2000/svg
     property insertAdjacentHTML
     property insertAdjacentText
     property insertBefore
-    property invisible
     property isConnected
     property isDefaultNamespace
     property isEqualNode
@@ -1360,13 +1360,13 @@ namespace http://www.w3.org/2000/svg
     property nonce
     property normalize
     property onabort
-    property onactivateinvisible
     property onanimationend
     property onanimationiteration
     property onanimationstart
     property onauxclick
     property onbeforecopy
     property onbeforecut
+    property onbeforematch
     property onbeforepaste
     property onbeforexrselect
     property onblur

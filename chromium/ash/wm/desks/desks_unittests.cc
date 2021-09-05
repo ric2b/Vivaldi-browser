@@ -74,6 +74,7 @@
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/client_view.h"
@@ -312,7 +313,27 @@ class DesksTest : public AshTestBase,
   DISALLOW_COPY_AND_ASSIGN(DesksTest);
 };
 
-TEST_F(DesksTest, LongPressOverviewItemInClamshellModeWithOnlyOneVirtualDesk) {
+class DesksWithoutSplitViewTest : public AshTestBase {
+ public:
+  DesksWithoutSplitViewTest() = default;
+  DesksWithoutSplitViewTest(const DesksWithoutSplitViewTest&) = delete;
+  DesksWithoutSplitViewTest& operator=(const DesksWithoutSplitViewTest&) =
+      delete;
+  ~DesksWithoutSplitViewTest() override = default;
+
+  // AshTestBase:
+  void SetUp() override {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kDragToSnapInClamshellMode);
+    AshTestBase::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(DesksWithoutSplitViewTest,
+       LongPressOverviewItemInClamshellModeWithOnlyOneVirtualDesk) {
   std::unique_ptr<aura::Window> window(CreateTestWindow());
   OverviewController* overview_controller = Shell::Get()->overview_controller();
   ASSERT_TRUE(overview_controller->StartOverview());
@@ -384,12 +405,13 @@ TEST_F(DesksTest, DesksBarViewDeskCreation) {
   // new desk button is enabled.
   DCHECK(desks_bar_view);
   EXPECT_TRUE(desks_bar_view->mini_views().empty());
-  EXPECT_TRUE(desks_bar_view->new_desk_button()->GetEnabled());
+  auto* new_desk_button = desks_bar_view->new_desk_button();
+  EXPECT_TRUE(new_desk_button->GetEnabled());
 
   // Click many times on the new desk button and expect only the max number of
   // desks will be created, and the button is no longer enabled.
   const gfx::Point button_center =
-      desks_bar_view->new_desk_button()->GetBoundsInScreen().CenterPoint();
+      new_desk_button->GetBoundsInScreen().CenterPoint();
 
   auto* event_generator = GetEventGenerator();
   event_generator->MoveMouseTo(button_center);
@@ -401,7 +423,8 @@ TEST_F(DesksTest, DesksBarViewDeskCreation) {
   EXPECT_EQ(controller->desks().size(), desks_bar_view->mini_views().size());
   EXPECT_FALSE(controller->CanCreateDesks());
   EXPECT_TRUE(controller->CanRemoveDesks());
-  EXPECT_FALSE(desks_bar_view->new_desk_button()->GetEnabled());
+  EXPECT_FALSE(new_desk_button->GetEnabled());
+  EXPECT_EQ(views::Button::STATE_DISABLED, new_desk_button->state());
 
   // Hover over one of the mini_views, and expect that the close button becomes
   // visible.
@@ -421,7 +444,8 @@ TEST_F(DesksTest, DesksBarViewDeskCreation) {
   EXPECT_EQ(desks_util::kMaxNumberOfDesks - 1, controller->desks().size());
   EXPECT_EQ(controller->desks().size(), desks_bar_view->mini_views().size());
   EXPECT_TRUE(controller->CanCreateDesks());
-  EXPECT_TRUE(desks_bar_view->new_desk_button()->GetEnabled());
+  EXPECT_TRUE(new_desk_button->GetEnabled());
+  EXPECT_EQ(views::Button::STATE_NORMAL, new_desk_button->state());
 
   // Exit overview mode and re-enter. Since we have more than one pre-existing
   // desks, their mini_views should be created upon construction of the desks
@@ -441,6 +465,31 @@ TEST_F(DesksTest, DesksBarViewDeskCreation) {
   DCHECK(desks_bar_view);
   EXPECT_EQ(controller->desks().size(), desks_bar_view->mini_views().size());
   EXPECT_TRUE(desks_bar_view->new_desk_button()->GetEnabled());
+}
+
+// Test that gesture taps do not reset the button state to normal when the
+// button is disabled. https://crbug.com/1084241.
+TEST_F(DesksTest, GestureTapOnNewDeskButton) {
+  auto* overview_controller = Shell::Get()->overview_controller();
+  overview_controller->StartOverview();
+  EXPECT_TRUE(overview_controller->InOverviewSession());
+
+  const auto* overview_grid =
+      GetOverviewGridForRoot(Shell::GetPrimaryRootWindow());
+
+  const auto* desks_bar_view = overview_grid->desks_bar_view();
+  DCHECK(desks_bar_view);
+  auto* new_desk_button = desks_bar_view->new_desk_button();
+  EXPECT_TRUE(new_desk_button->GetEnabled());
+
+  // Gesture tap multiple times on the new desk button until it's disabled, and
+  // verify the button state.
+  auto* event_generator = GetEventGenerator();
+  for (size_t i = 0; i < desks_util::kMaxNumberOfDesks + 2; ++i)
+    GestureTapOnView(new_desk_button, event_generator);
+
+  EXPECT_FALSE(new_desk_button->GetEnabled());
+  EXPECT_EQ(views::Button::STATE_DISABLED, new_desk_button->state());
 }
 
 TEST_F(DesksTest, DesksBarViewScreenLayoutTest) {
@@ -1377,10 +1426,10 @@ TEST_P(DesksTest, DragWindowToNonMiniViewPoints) {
   EXPECT_EQ(target_bounds_before_drag, overview_item->target_bounds());
   EXPECT_TRUE(DoesActiveDeskContainWindow(window.get()));
 
-  // Drag it and drop it on the bottom right corner of the display. Also,
+  // Drag it and drop it on the center of the bottom of the display. Also,
   // nothing should happen.
   DragItemToPoint(overview_item,
-                  window->GetRootWindow()->GetBoundsInScreen().bottom_right(),
+                  window->GetRootWindow()->GetBoundsInScreen().bottom_center(),
                   GetEventGenerator(),
                   /*by_touch_gestures=*/GetParam());
   EXPECT_TRUE(overview_controller->InOverviewSession());

@@ -10,8 +10,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/public/cpp/ash_features.h"
-#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/network_config_service.h"
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "base/bind.h"
@@ -20,6 +18,7 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/system/sys_info.h"
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -45,6 +44,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/assistant_optin_flow_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/auto_enrollment_check_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/debug/debug_overlay_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/demo_preferences_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/demo_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/device_disabled_screen_handler.h"
@@ -129,6 +129,7 @@ constexpr char kArcPlaystoreLogoPath[] = "playstore.svg";
 constexpr char kArcSupervisionIconPath[] = "supervision_icon.png";
 constexpr char kCustomElementsHTMLPath[] = "custom_elements.html";
 constexpr char kCustomElementsJSPath[] = "custom_elements.js";
+constexpr char kDebuggerJSPath[] = "debug.js";
 constexpr char kDiscoverJSPath[] = "discover_app.js";
 constexpr char kKeyboardUtilsJSPath[] = "keyboard_utils.js";
 constexpr char kLoginJSPath[] = "login.js";
@@ -245,6 +246,20 @@ void AddFingerprintResources(content::WebUIDataSource* source) {
   source->AddBoolean("useLottieAnimationForFingerprint", is_lottie_animation);
 }
 
+void AddDebuggerResources(content::WebUIDataSource* source) {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  bool enable_debugger =
+      command_line->HasSwitch(::chromeos::switches::kShowOobeDevOverlay);
+  // TODO(crbug.com/1073095): Also enable for ChromeOS test images.
+  // Enable for ChromeOS-on-linux for developers.
+  bool test_mode = !base::SysInfo::IsRunningOnChromeOS();
+  if (enable_debugger && test_mode) {
+    source->AddResourcePath(kDebuggerJSPath, IDR_OOBE_DEBUGGER_JS);
+  } else {
+    source->AddResourcePath(kDebuggerJSPath, IDR_OOBE_DEBUGGER_STUB_JS);
+  }
+}
+
 // Default and non-shared resource definition for kOobeDisplay display type.
 // chrome://oobe/oobe
 void AddOobeDisplayTypeDefaultResources(content::WebUIDataSource* source) {
@@ -307,6 +322,8 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   AddGestureNavigationResources(source);
   AddMarketingOptInResources(source);
 
+  AddDebuggerResources(source);
+
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
   source->OverrideContentSecurityPolicyObjectSrc(
       "object-src chrome:;");
@@ -337,11 +354,6 @@ bool IsRemoraRequisitioned() {
           ->browser_policy_connector_chromeos()
           ->GetDeviceCloudPolicyManager();
   return policy_manager && policy_manager->IsRemoraRequisition();
-}
-
-void DisablePolymer2(content::URLDataSource* shared_source) {
-  if (shared_source)
-    shared_source->DisablePolymer2ForHost(chrome::kChromeUIOobeHost);
 }
 
 }  // namespace
@@ -534,6 +546,9 @@ void OobeUI::BindInterface(
 
 OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
     : ui::MojoWebUIController(web_ui, true /* enable_chrome_send */) {
+  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
+  LOG(ERROR) << "Creating new OobeUI";
+
   display_type_ = GetDisplayType(url);
 
   js_calls_container_ = std::make_unique<JSCallsContainer>();
@@ -550,6 +565,18 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   AddScreenHandler(
       std::make_unique<DiscoverScreenHandler>(js_calls_container_.get()));
 
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  bool enable_debugger =
+      command_line->HasSwitch(::chromeos::switches::kShowOobeDevOverlay);
+  // TODO(crbug.com/1073095): Also enable for ChromeOS test images.
+  // Enable for ChromeOS-on-linux for developers.
+  bool test_mode = !base::SysInfo::IsRunningOnChromeOS();
+
+  if (enable_debugger && test_mode) {
+    AddWebUIHandler(
+        std::make_unique<DebugOverlayHandler>(js_calls_container_.get()));
+  }
+
   base::DictionaryValue localized_strings;
   GetLocalizedStrings(&localized_strings);
 
@@ -563,10 +590,11 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   // TODO (https://crbug.com/739611): Remove this exception by migrating to
   // Polymer 2.
   if (base::FeatureList::IsEnabled(features::kWebUIPolymer2Exceptions)) {
-    content::URLDataSource::GetSourceForURL(
+    auto* shared_source = content::URLDataSource::GetSourceForURL(
         Profile::FromWebUI(web_ui),
-        GURL("chrome://resources/polymer/v1_0/polymer/polymer.html"),
-        base::BindOnce(DisablePolymer2));
+        GURL("chrome://resources/polymer/v1_0/polymer/polymer.html"));
+    if (shared_source)
+      shared_source->DisablePolymer2ForHost(chrome::kChromeUIOobeHost);
   }
 }
 
@@ -601,10 +629,6 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
   localized_strings->SetString("highlightStrength",
                                keyboard_driven_oobe ? "strong" : "normal");
 
-  localized_strings->SetString(
-      "showViewsLock", ash::switches::IsUsingViewsLock() ? "on" : "off");
-  localized_strings->SetString(
-      "showViewsLogin", ash::features::IsViewsLoginEnabled() ? "on" : "off");
   localized_strings->SetBoolean(
       "changePictureVideoModeEnabled",
       base::FeatureList::IsEnabled(features::kChangePictureVideoMode));
@@ -623,7 +647,13 @@ void OobeUI::AddScreenHandler(std::unique_ptr<BaseScreenHandler> handler) {
 }
 
 void OobeUI::InitializeHandlers() {
+  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
+  LOG(ERROR) << "OobeUI::InitializeHandlers";
+
   js_calls_container_->ExecuteDeferredJSCalls(web_ui());
+
+  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
+  LOG(ERROR) << "OobeUI::Marking as ready and executing callbacks";
 
   ready_ = true;
   for (size_t i = 0; i < ready_callbacks_.size(); ++i)
@@ -655,6 +685,8 @@ bool OobeUI::IsScreenInitialized(OobeScreenId screen) {
 }
 
 bool OobeUI::IsJSReady(const base::Closure& display_is_ready_callback) {
+  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
+  LOG(ERROR) << "OobeUI::IsJSReady? = " << ready_;
   if (!ready_)
     ready_callbacks_.push_back(display_is_ready_callback);
   return ready_;

@@ -5,6 +5,7 @@
 import("//chrome/common/features.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/grit/grit_rule.gni")
+import("//tools/polymer/html_to_js.gni")
 import("//tools/polymer/polymer.gni")
 import("//ui/webui/resources/tools/js_modulizer.gni")
 import("//ui/webui/webui_features.gni")
@@ -14,27 +15,6 @@ import("settings.gni")
 if (optimize_webui) {
   settings_pak_file = "settings_resources.pak"
   unpak_folder = "settings_resources.unpak"
-
-  optimize_webui("build") {
-    host = "settings"
-    html_in_files = [
-      "settings.html",
-      "lazy_load.html",
-    ]
-    html_out_files = [
-      "vulcanized.html",
-      "lazy_load.vulcanized.html",
-    ]
-    insert_in_head = "<base href=\"chrome://settings\">"
-    input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
-    js_out_files = [
-      "crisper.js",
-      "lazy_load.crisper.js",
-    ]
-    excludes = [ "chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom.html" ]
-
-    deps = [ ":unpak" ]
-  }
 
   optimize_webui("build_polymer3") {
     host = "settings"
@@ -89,42 +69,14 @@ group("closure_compile") {
     "a11y_page:closure_compile",
     "about_page:closure_compile",
     "appearance_page:closure_compile",
-    "autofill_page:closure_compile",
-    "basic_page:closure_compile",
-    "clear_browsing_data_dialog:closure_compile",
     "controls:closure_compile",
-    "downloads_page:closure_compile",
     "languages_page:closure_compile",
-    "on_startup_page:closure_compile",
     "people_page:closure_compile",
     "prefs:closure_compile",
-    "printing_page:closure_compile",
     "privacy_page:closure_compile",
-    "reset_page:closure_compile",
-    "safety_check_page:closure_compile",
     "search_engines_page:closure_compile",
-    "search_page:closure_compile",
-    "settings_main:closure_compile",
-    "settings_menu:closure_compile",
     "settings_page:closure_compile",
-    "settings_ui:closure_compile",
-    "site_settings:closure_compile",
-    "site_settings_page:closure_compile",
   ]
-
-  if (is_win) {
-    deps += [
-      "chrome_cleanup_page:closure_compile",
-      "incompatible_applications_page:closure_compile",
-    ]
-  }
-
-  if (!is_chromeos) {
-    deps += [
-      "default_browser_page:closure_compile",
-      "system_page:closure_compile",
-    ]
-  }
 
   if (is_chromeos) {
     deps += [
@@ -138,16 +90,9 @@ js_type_check("settings_resources") {
   deps = [
     ":extension_control_browser_proxy",
     ":global_scroll_target_behavior",
-    ":hats_browser_proxy",
     ":lifetime_browser_proxy",
-    ":metrics_browser_proxy",
-    ":open_window_proxy",
-    ":page_visibility",
-    ":plural_string_proxy",
-    ":route",
     ":router",
     ":search_settings",
-    ":settings_routes",
   ]
 }
 
@@ -166,37 +111,9 @@ js_library("global_scroll_target_behavior") {
   ]
 }
 
-js_library("hats_browser_proxy") {
-  deps = [ "//ui/webui/resources/js:cr" ]
-  externs_list = [ "$externs_path/chrome_send.js" ]
-}
-
 js_library("lifetime_browser_proxy") {
   deps = [ "//ui/webui/resources/js:cr" ]
   externs_list = [ "$externs_path/chrome_send.js" ]
-}
-
-js_library("metrics_browser_proxy") {
-  deps = [ "//ui/webui/resources/js:cr" ]
-  externs_list = [ "$externs_path/chrome_send.js" ]
-}
-
-js_library("open_window_proxy") {
-  deps = [ "//ui/webui/resources/js:cr" ]
-}
-
-js_library("plural_string_proxy") {
-  deps = [ "//ui/webui/resources/js:cr" ]
-}
-
-js_library("route") {
-  deps = [
-    ":page_visibility",
-    ":router",
-    ":settings_routes",
-    "//ui/webui/resources/js:cr",
-    "//ui/webui/resources/js:load_time_data",
-  ]
 }
 
 js_library("router") {
@@ -205,17 +122,6 @@ js_library("router") {
     "//ui/webui/resources/js:load_time_data",
   ]
   externs_list = [ "$externs_path/metrics_private.js" ]
-}
-
-js_library("settings_routes") {
-  deps = [ ":router" ]
-}
-
-js_library("page_visibility") {
-  deps = [
-    "//ui/webui/resources/js:cr",
-    "//ui/webui/resources/js:load_time_data",
-  ]
 }
 
 js_library("search_settings") {
@@ -271,25 +177,48 @@ group("closure_compile_module") {
       "incompatible_applications_page:closure_compile_module",
     ]
   }
+
+  if (is_chromeos) {
+    deps += [ "chromeos:closure_compile_module" ]
+  }
 }
 
 js_type_check("closure_compile_local_module") {
   is_polymer3 = true
+  closure_flags = settings_closure_flags
   deps = [
     ":extension_control_browser_proxy.m",
     ":global_scroll_target_behavior.m",
-    ":hats_browser_proxy.m",
-    ":i18n_setup.m",
+    ":hats_browser_proxy",
+    ":i18n_setup",
+    ":lazy_load",
     ":lifetime_browser_proxy.m",
-    ":metrics_browser_proxy.m",
-    ":open_window_proxy.m",
-    ":page_visibility.m",
-    ":plural_string_proxy.m",
-    ":route.m",
+    ":metrics_browser_proxy",
+    ":open_window_proxy",
+    ":page_visibility",
+    ":plural_string_proxy",
+    ":route",
     ":router.m",
     ":search_settings.m",
-    ":settings_routes.m",
-    ":site_favicon.m",
+    ":settings",
+    ":settings_routes",
+    ":site_favicon",
+  ]
+}
+
+js_library("settings") {
+  deps = [
+    ":hats_browser_proxy",
+    ":lifetime_browser_proxy.m",
+    ":metrics_browser_proxy",
+    ":open_window_proxy",
+    "about_page:about_page_browser_proxy.m",
+    "autofill_page:password_manager_proxy",
+    "people_page:sync_browser_proxy.m",
+    "privacy_page:privacy_page_browser_proxy.m",
+    "safety_check_page:safety_check_browser_proxy",
+    "search_engines_page:search_engines_browser_proxy.m",
+    "settings_ui:settings_ui",
   ]
 }
 
@@ -300,7 +229,7 @@ js_library("extension_control_browser_proxy.m") {
   externs_list = [ "$externs_path/chrome_send.js" ]
 }
 
-js_library("i18n_setup.m") {
+js_library("i18n_setup") {
   deps = [ "//ui/webui/resources/js:load_time_data.m" ]
 }
 
@@ -313,12 +242,22 @@ js_library("global_scroll_target_behavior.m") {
   extra_deps = [ ":modulize" ]
 }
 
-js_library("hats_browser_proxy.m") {
-  sources = [
-    "$root_gen_dir/chrome/browser/resources/settings/hats_browser_proxy.m.js",
-  ]
+js_library("hats_browser_proxy") {
   deps = [ "//ui/webui/resources/js:cr.m" ]
-  extra_deps = [ ":modulize" ]
+}
+
+js_library("lazy_load") {
+  deps = [
+    "autofill_page:autofill_section",
+    "autofill_page:payments_section",
+    "privacy_page:cookies_page",
+    "privacy_page:safe_browsing_browser_proxy",
+    "privacy_page:security_page",
+    "site_settings:local_data_browser_proxy",
+    "site_settings:protocol_handlers",
+    "site_settings:site_settings_prefs_browser_proxy",
+    "site_settings_page",
+  ]
 }
 
 js_library("lifetime_browser_proxy.m") {
@@ -327,44 +266,29 @@ js_library("lifetime_browser_proxy.m") {
   extra_deps = [ ":modulize" ]
 }
 
-js_library("metrics_browser_proxy.m") {
-  sources = [ "$root_gen_dir/chrome/browser/resources/settings/metrics_browser_proxy.m.js" ]
+js_library("metrics_browser_proxy") {
   deps = [ "//ui/webui/resources/js:cr.m" ]
-  extra_deps = [ ":modulize" ]
 }
 
-js_library("open_window_proxy.m") {
-  sources = [
-    "$root_gen_dir/chrome/browser/resources/settings/open_window_proxy.m.js",
-  ]
+js_library("open_window_proxy") {
   deps = [ "//ui/webui/resources/js:cr.m" ]
-  extra_deps = [ ":modulize" ]
 }
 
-js_library("page_visibility.m") {
-  sources =
-      [ "$root_gen_dir/chrome/browser/resources/settings/page_visibility.m.js" ]
+js_library("page_visibility") {
   deps = [ "//ui/webui/resources/js:load_time_data.m" ]
-  extra_deps = [ ":modulize" ]
 }
 
-js_library("plural_string_proxy.m") {
-  sources = [
-    "$root_gen_dir/chrome/browser/resources/settings/plural_string_proxy.m.js",
-  ]
+js_library("plural_string_proxy") {
   deps = [ "//ui/webui/resources/js:cr.m" ]
-  extra_deps = [ ":modulize" ]
 }
 
-js_library("route.m") {
-  sources = [ "$root_gen_dir/chrome/browser/resources/settings/route.m.js" ]
+js_library("route") {
   deps = [
-    ":page_visibility.m",
+    ":page_visibility",
     ":router.m",
-    ":settings_routes.m",
+    ":settings_routes",
     "//ui/webui/resources/js:load_time_data.m",
   ]
-  extra_deps = [ ":modulize" ]
 }
 
 js_library("router.m") {
@@ -391,72 +315,65 @@ js_library("search_settings.m") {
   extra_deps = [ ":modulize" ]
 }
 
-js_library("settings_routes.m") {
-  sources =
-      [ "$root_gen_dir/chrome/browser/resources/settings/settings_routes.m.js" ]
+js_library("settings_routes") {
   deps = [ ":router.m" ]
-  extra_deps = [ ":modulize" ]
 }
 
-js_library("site_favicon.m") {
-  sources =
-      [ "$root_gen_dir/chrome/browser/resources/settings/site_favicon.m.js" ]
+js_library("site_favicon") {
   deps = [
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/js:icon.m",
   ]
-  extra_deps = [ ":site_favicon_module" ]
 }
 
 group("polymer3_elements") {
   public_deps = [
     # Sub-folder targets
     "a11y_page:polymer3_elements",
-    "about_page:polymer3_elements",
-    "appearance_page:polymer3_elements",
-    "autofill_page:polymer3_elements",
-    "basic_page:polymer3_elements",
-    "clear_browsing_data_dialog:polymer3_elements",
+    "about_page:web_components",
+    "appearance_page:web_components",
+    "autofill_page:web_components",
+    "basic_page:web_components",
+    "clear_browsing_data_dialog:web_components",
     "controls:polymer3_elements",
-    "downloads_page:polymer3_elements",
+    "downloads_page:web_components",
     "languages_page:polymer3_elements",
-    "on_startup_page:polymer3_elements",
+    "on_startup_page:web_components",
     "people_page:polymer3_elements",
     "prefs:polymer3_elements",
-    "printing_page:polymer3_elements",
+    "printing_page:web_components",
     "privacy_page:polymer3_elements",
-    "reset_page:polymer3_elements",
-    "safety_check_page:polymer3_elements",
-    "search_engines_page:polymer3_elements",
-    "search_page:polymer3_elements",
-    "settings_main:polymer3_elements",
-    "settings_menu:polymer3_elements",
+    "reset_page:web_components",
+    "safety_check_page:web_components",
+    "search_engines_page:web_components",
+    "search_page:web_components",
+    "settings_main:web_components",
+    "settings_menu:web_components",
     "settings_page:polymer3_elements",
-    "settings_ui:polymer3_elements",
-    "site_settings:polymer3_elements",
-    "site_settings_page:polymer3_elements",
+    "settings_ui:web_components",
+    "site_settings:web_components",
+    "site_settings_page:web_components",
 
     # Local targets
-    ":ensure_lazy_loaded_module",
     ":icons_module",
     ":modulize",
     ":settings_page_css_module",
     ":settings_shared_css_module",
     ":settings_vars_css_module",
-    ":site_favicon_module",
+    ":web_components_local",
   ]
 
   if (!is_chromeos) {
     public_deps += [
-      "default_browser_page:polymer3_elements",
-      "system_page:polymer3_elements",
+      "default_browser_page:web_components",
+      "system_page:web_components",
     ]
   }
 
   if (is_win) {
     public_deps += [
-      "chrome_cleanup_page:polymer3_elements",
-      "incompatible_applications_page:polymer3_elements",
+      "chrome_cleanup_page:web_components",
+      "incompatible_applications_page:web_components",
     ]
   }
 }
@@ -485,34 +402,17 @@ polymer_modulizer("settings_vars_css") {
   html_type = "custom-style"
 }
 
-polymer_modulizer("site_favicon") {
-  js_file = "site_favicon.js"
-  html_file = "site_favicon.html"
-  html_type = "dom-module"
-  auto_imports =
-      [ "ui/webui/resources/html/icon.html|getFavicon,getFaviconForPageURL" ]
-}
-
-polymer_modulizer("ensure_lazy_loaded") {
-  js_file = "ensure_lazy_loaded.m.js"
-  html_file = "ensure_lazy_loaded.html"
-  html_type = "v3-ready"
+html_to_js("web_components_local") {
+  js_files = [ "site_favicon.js" ]
 }
 
 js_modulizer("modulize") {
   input_files = [
     "extension_control_browser_proxy.js",
     "global_scroll_target_behavior.js",
-    "hats_browser_proxy.js",
     "lifetime_browser_proxy.js",
-    "metrics_browser_proxy.js",
-    "open_window_proxy.js",
-    "plural_string_proxy.js",
-    "page_visibility.js",
-    "route.js",
     "router.js",
     "search_settings.js",
-    "settings_routes.js",
   ]
   namespace_rewrites = settings_namespace_rewrites + [
                          "cr.search_highlight_utils.createEmptySearchBubble|createEmptySearchBubble",

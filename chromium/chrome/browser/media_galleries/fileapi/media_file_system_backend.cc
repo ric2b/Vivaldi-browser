@@ -9,9 +9,10 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -112,9 +113,9 @@ void AttemptAutoMountOnUIThread(
               profile);
       // Pass the WebContentsGetter to the closure to prevent a use-after-free
       // in the case that the web_contents is destroyed before the closure runs.
-      preferences->EnsureInitialized(base::Bind(
+      preferences->EnsureInitialized(base::BindOnce(
           &OnPreferencesInit, web_contents_getter, base::RetainedRef(extension),
-          pref_id, base::Passed(&callback)));
+          pref_id, std::move(callback)));
       return;
     }
   }

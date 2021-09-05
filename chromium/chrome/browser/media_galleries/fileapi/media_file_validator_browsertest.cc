@@ -149,8 +149,7 @@ class MediaFileValidatorTest : public InProcessBrowserTest {
 
     test_file_size_ = content.size();
     base::FilePath test_file = src_path.AppendASCII(filename);
-    ASSERT_EQ(test_file_size_,
-              base::WriteFile(test_file, content.data(), test_file_size_));
+    ASSERT_TRUE(base::WriteFile(test_file, content));
 
     base::FilePath dest_path = base.AppendASCII("dest_fs");
     ASSERT_TRUE(base::CreateDirectory(dest_path));
@@ -201,7 +200,7 @@ class MediaFileValidatorTest : public InProcessBrowserTest {
                  const base::Callback<void(bool success)>& callback) {
     operation_runner()->GetMetadata(
         url, storage::FileSystemOperation::GET_METADATA_FIELD_SIZE,
-        base::Bind(&HandleCheckFileResult, expected_size, callback));
+        base::BindOnce(&HandleCheckFileResult, expected_size, callback));
   }
 
   // Helper that checks the result of |move_src_| lookup and then checks
@@ -222,12 +221,10 @@ class MediaFileValidatorTest : public InProcessBrowserTest {
   // |move_src_| to |move_dest_|.
   void OnTestFilesReady(bool expected_result, bool test_files_ready) {
     ASSERT_TRUE(test_files_ready);
-    operation_runner()->Move(move_src_,
-                             move_dest_,
-                             storage::FileSystemOperation::OPTION_NONE,
-                             base::Bind(&MediaFileValidatorTest::OnMoveResult,
-                                        base::Unretained(this),
-                                        expected_result));
+    operation_runner()->Move(
+        move_src_, move_dest_, storage::FileSystemOperation::OPTION_NONE,
+        base::BindOnce(&MediaFileValidatorTest::OnMoveResult,
+                       base::Unretained(this), expected_result));
   }
 
   // Check that the move succeeded/failed based on expectation and then

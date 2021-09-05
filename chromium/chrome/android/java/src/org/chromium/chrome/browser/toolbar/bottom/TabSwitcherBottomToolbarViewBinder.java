@@ -12,6 +12,8 @@ import org.chromium.ui.UiUtils;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * This class is responsible for pushing updates the view of the tab switcher bottom toolbar. These
  * updates are pulled from the {@link TabSwitcherBottomToolbarModel} when a notification of an
@@ -38,10 +40,17 @@ public class TabSwitcherBottomToolbarViewBinder
         if (TabSwitcherBottomToolbarModel.IS_VISIBLE == propertyKey) {
             view.setVisibility(
                     model.get(TabSwitcherBottomToolbarModel.IS_VISIBLE) ? View.VISIBLE : View.GONE);
+            // Note(david@vivaldi.com): In Vivaldi the bottom toolbar of the tab switcher is always
+            // at the top. Therefore we need to reparent here.
+            if (ChromeApplication.isVivaldi()) {
+                view.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                reparentView(view, mTopRoot);
+            }
         } else if (TabSwitcherBottomToolbarModel.PRIMARY_COLOR == propertyKey) {
             view.findViewById(R.id.bottom_toolbar_buttons)
                     .setBackgroundColor(model.get(TabSwitcherBottomToolbarModel.PRIMARY_COLOR));
         } else if (TabSwitcherBottomToolbarModel.SHOW_ON_TOP == propertyKey) {
+            if (ChromeApplication.isVivaldi()) return;
             final boolean showOnTop = model.get(TabSwitcherBottomToolbarModel.SHOW_ON_TOP);
             view.findViewById(R.id.bottom_toolbar_bottom_shadow)
                     .setVisibility(showOnTop ? View.VISIBLE : View.GONE);

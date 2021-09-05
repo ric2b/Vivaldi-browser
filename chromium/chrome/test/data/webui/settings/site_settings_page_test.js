@@ -3,14 +3,20 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {ContentSetting,defaultSettingLabel,SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-// #import {eventToPromise, isChildVisible} from 'chrome://test/test_util.m.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.m.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {ContentSetting, defaultSettingLabel, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+
+import {assertEquals, assertTrue} from '../chai_assert.js';
+import {eventToPromise, isChildVisible} from '../test_util.m.js';
+
+import {TestSiteSettingsPrefsBrowserProxy} from './test_site_settings_prefs_browser_proxy.js';
+
 // clang-format on
 
 suite('SiteSettingsPage', function() {
-  /** @type {TestSiteSettingsPrefsBrowserProxy} */
+  /** @type {?TestSiteSettingsPrefsBrowserProxy} */
   let siteSettingsBrowserProxy = null;
 
   /** @type {SettingsSiteSettingsPageElement} */
@@ -27,14 +33,13 @@ suite('SiteSettingsPage', function() {
 
   function setupPage() {
     siteSettingsBrowserProxy = new TestSiteSettingsPrefsBrowserProxy();
-    settings.SiteSettingsPrefsBrowserProxyImpl.instance_ =
-        siteSettingsBrowserProxy;
-    siteSettingsBrowserProxy.setResultFor(
-        'getCookieSettingDescription', Promise.resolve(testLabels[0]));
-    PolymerTest.clearBody();
-    page = document.createElement('settings-site-settings-page');
+    SiteSettingsPrefsBrowserProxyImpl.instance_ = siteSettingsBrowserProxy;
+    siteSettingsBrowserProxy.setCookieSettingDescription(testLabels[0]);
+    document.body.innerHTML = '';
+    page = /** @type {!SettingsSiteSettingsPageElement} */ (
+        document.createElement('settings-site-settings-page'));
     document.body.appendChild(page);
-    Polymer.dom.flush();
+    flush();
   }
 
   setup(setupPage);
@@ -45,35 +50,19 @@ suite('SiteSettingsPage', function() {
 
   test('DefaultLabels', function() {
     assertEquals(
-        'a',
-        settings.defaultSettingLabel(settings.ContentSetting.ALLOW, 'a', 'b'));
+        'a', defaultSettingLabel(ContentSetting.ALLOW, 'a', 'b', null));
     assertEquals(
-        'b',
-        settings.defaultSettingLabel(settings.ContentSetting.BLOCK, 'a', 'b'));
+        'b', defaultSettingLabel(ContentSetting.BLOCK, 'a', 'b', null));
+    assertEquals('a', defaultSettingLabel(ContentSetting.ALLOW, 'a', 'b', 'c'));
+    assertEquals('b', defaultSettingLabel(ContentSetting.BLOCK, 'a', 'b', 'c'));
     assertEquals(
-        'a',
-        settings.defaultSettingLabel(
-            settings.ContentSetting.ALLOW, 'a', 'b', 'c'));
+        'c', defaultSettingLabel(ContentSetting.SESSION_ONLY, 'a', 'b', 'c'));
     assertEquals(
-        'b',
-        settings.defaultSettingLabel(
-            settings.ContentSetting.BLOCK, 'a', 'b', 'c'));
+        'c', defaultSettingLabel(ContentSetting.DEFAULT, 'a', 'b', 'c'));
+    assertEquals('c', defaultSettingLabel(ContentSetting.ASK, 'a', 'b', 'c'));
     assertEquals(
         'c',
-        settings.defaultSettingLabel(
-            settings.ContentSetting.SESSION_ONLY, 'a', 'b', 'c'));
-    assertEquals(
-        'c',
-        settings.defaultSettingLabel(
-            settings.ContentSetting.DEFAULT, 'a', 'b', 'c'));
-    assertEquals(
-        'c',
-        settings.defaultSettingLabel(
-            settings.ContentSetting.ASK, 'a', 'b', 'c'));
-    assertEquals(
-        'c',
-        settings.defaultSettingLabel(
-            settings.ContentSetting.IMPORTANT_CONTENT, 'a', 'b', 'c'));
+        defaultSettingLabel(ContentSetting.IMPORTANT_CONTENT, 'a', 'b', 'c'));
   });
 
   test('CookiesLinkRowSublabel', async function() {
@@ -81,12 +70,14 @@ suite('SiteSettingsPage', function() {
       privacySettingsRedesignEnabled: false,
     });
     setupPage();
-    const allSettingsList = page.$$('#allSettingsList');
-    await test_util.eventToPromise(
+    const allSettingsList = /** @type {!SettingsSiteSettingsListElement} */ (
+        page.$$('#allSettingsList'));
+    await eventToPromise(
         'site-settings-list-labels-updated-for-testing', allSettingsList);
     assertEquals(
         allSettingsList.i18n('siteSettingsCookiesAllowed'),
-        allSettingsList.$$('#cookies').subLabel);
+        /** @type {!CrLinkRowElement} */
+        (allSettingsList.$$('#cookies')).subLabel);
   });
 
   test('CookiesLinkRowSublabel_Redesign', async function() {
@@ -95,11 +86,12 @@ suite('SiteSettingsPage', function() {
     });
     setupPage();
     await siteSettingsBrowserProxy.whenCalled('getCookieSettingDescription');
-    Polymer.dom.flush();
-    const cookiesLinkRow = page.$$('#basicContentList').$$('#cookies');
+    flush();
+    const cookiesLinkRow = /** @type {!CrLinkRowElement} */ (
+        page.$$('#basicContentList').$$('#cookies'));
     assertEquals(testLabels[0], cookiesLinkRow.subLabel);
 
-    cr.webUIListenerCallback('cookieSettingDescriptionChanged', testLabels[1]);
+    webUIListenerCallback('cookieSettingDescriptionChanged', testLabels[1]);
     assertEquals(testLabels[1], cookiesLinkRow.subLabel);
   });
 
@@ -108,8 +100,9 @@ suite('SiteSettingsPage', function() {
       privacySettingsRedesignEnabled: false,
     });
     setupPage();
-    assertTrue(
-        test_util.isChildVisible(page.$$('#allSettingsList'), '#protected-content'));
+    assertTrue(isChildVisible(
+        /** @type {!HTMLElement} */ (page.$$('#allSettingsList')),
+        '#protected-content'));
   });
 
   test('ProtectedContentRow_Redesign', function() {
@@ -118,8 +111,9 @@ suite('SiteSettingsPage', function() {
     });
     setupPage();
     page.$$('#expandContent').click();
-    Polymer.dom.flush();
-    assertTrue(
-        test_util.isChildVisible(page.$$('#advancedContentList'), '#protected-content'));
+    flush();
+    assertTrue(isChildVisible(
+        /** @type {!HTMLElement} */ (page.$$('#advancedContentList')),
+        '#protected-content'));
   });
 });

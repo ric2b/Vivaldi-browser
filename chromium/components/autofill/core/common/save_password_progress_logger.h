@@ -19,8 +19,6 @@ class Value;
 
 namespace autofill {
 
-struct PasswordForm;
-
 // When logging decisions made by password management code about whether to
 // offer user-entered credentials for saving or not, do use this class. It
 // offers a suite of convenience methods to format and scrub logs. The methods
@@ -70,10 +68,7 @@ class SavePasswordProgressLogger {
     STRING_FORM_FOUND_ON_PAGE,
     STRING_FORM_IS_VISIBLE,
     STRING_FORM_IS_PASSWORD,
-    STRING_FORM_IS_NOT_PASSWORD,
-    STRING_WILL_SUBMIT_FORM_METHOD,
     STRING_HTML_FORM_FOR_SUBMIT,
-    STRING_CREATED_PASSWORD_FORM,
     STRING_DID_START_PROVISIONAL_LOAD_METHOD,
     STRING_FRAME_NOT_MAIN_FRAME,
     STRING_PROVISIONALLY_SAVE_FORM_METHOD,
@@ -172,7 +167,6 @@ class SavePasswordProgressLogger {
 
   // Call these methods to log information. They sanitize the input and call
   // SendLog to pass it for display.
-  void LogPasswordForm(StringID label, const PasswordForm& form);
   void LogFormData(StringID label, const FormData& form_data);
   void LogHTMLForm(StringID label,
                    const std::string& name_or_id,

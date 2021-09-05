@@ -509,7 +509,7 @@ ServiceWorkerContextWrapper::StartingExternalRequest(
   DCHECK_CURRENTLY_ON(GetCoreThreadId());
   if (!context())
     return ServiceWorkerExternalRequestResult::kNullContext;
-  ServiceWorkerVersion* version =
+  scoped_refptr<ServiceWorkerVersion> version =
       context()->GetLiveVersion(service_worker_version_id);
   if (!version)
     return ServiceWorkerExternalRequestResult::kWorkerNotFound;
@@ -523,7 +523,7 @@ ServiceWorkerContextWrapper::FinishedExternalRequest(
   DCHECK_CURRENTLY_ON(GetCoreThreadId());
   if (!context())
     return ServiceWorkerExternalRequestResult::kNullContext;
-  ServiceWorkerVersion* version =
+  scoped_refptr<ServiceWorkerVersion> version =
       context()->GetLiveVersion(service_worker_version_id);
   if (!version)
     return ServiceWorkerExternalRequestResult::kWorkerNotFound;
@@ -922,8 +922,7 @@ ServiceWorkerContextWrapper::GetWindowClientFrameRoutingIds(
                origin, /*include_reserved_clients=*/false);
        !it->IsAtEnd(); it->Advance()) {
     ServiceWorkerContainerHost* container_host = it->GetContainerHost();
-    DCHECK_EQ(container_host->type(),
-              blink::mojom::ServiceWorkerContainerType::kForWindow);
+    DCHECK(container_host->IsContainerForWindowClient());
     frame_routing_ids->push_back(GlobalFrameRoutingId(
         container_host->process_id(), container_host->frame_id()));
   }

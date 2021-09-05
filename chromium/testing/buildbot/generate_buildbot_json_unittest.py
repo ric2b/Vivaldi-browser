@@ -6,9 +6,11 @@
 """Tests for generate_buildbot_json.py."""
 
 import argparse
+import contextlib
+import json
 import os
 import unittest
-import json
+
 import generate_buildbot_json
 
 EMPTY_PYL_FILE = """\
@@ -17,8 +19,23 @@ EMPTY_PYL_FILE = """\
 """
 
 
+@contextlib.contextmanager
+def dump_on_failure(fbb, dump=True):
+  try:
+    yield
+  except:
+    if dump:
+      for l in fbb.printed_lines:
+        print l
+    raise
+
+def override_args(fbb, **kwargs):
+  for k, v in kwargs.iteritems():
+    setattr(fbb.args, k, v)
+
 class FakeBBGen(generate_buildbot_json.BBJSONGenerator):
   def __init__(self, waterfalls, test_suites, luci_milo_cfg,
+               project_star='is_master = True',
                exceptions=EMPTY_PYL_FILE,
                mixins=EMPTY_PYL_FILE,
                gn_isolate_map=EMPTY_PYL_FILE,
@@ -27,6 +44,7 @@ class FakeBBGen(generate_buildbot_json.BBJSONGenerator):
     infra_config_dir = os.path.abspath(
         os.path.join(os.path.dirname(__file__), '..', '..',
                     'infra', 'config'))
+    project_star_path = os.path.join(infra_config_dir, 'project.star')
     luci_milo_cfg_path = os.path.join(
         infra_config_dir, 'generated', 'luci-milo.cfg')
     luci_milo_dev_cfg_path = os.path.join(
@@ -38,6 +56,7 @@ class FakeBBGen(generate_buildbot_json.BBJSONGenerator):
       'mixins.pyl': mixins,
       'gn_isolate_map.pyl': gn_isolate_map,
       'variants.pyl': variants,
+      project_star_path: project_star,
       luci_milo_cfg_path: luci_milo_cfg,
       luci_milo_dev_cfg_path: '',
     }
@@ -55,15 +74,8 @@ class FakeBBGen(generate_buildbot_json.BBJSONGenerator):
 
   # pragma pylint: disable=arguments-differ
   def check_output_file_consistency(self, verbose=False, dump=True):
-    try:
+    with dump_on_failure(self, dump=verbose and dump):
       super(FakeBBGen, self).check_output_file_consistency(verbose)
-    except generate_buildbot_json.BBGenErr:
-      if verbose and dump:
-          # Assume we want to see the difference in the waterfalls'
-          # generated output to make it easier to rebaseline the test.
-          for line in self.printed_lines:
-            print line
-      raise
 # pragma pylint: enable=arguments-differ
 
 
@@ -1209,7 +1221,7 @@ VARIATION_GTEST_OUTPUT = """\
           ]
         },
         "test": "foo_test",
-        "test_target": "//chrome/test:foo_test"
+        "test_id_prefix": "ninja://chrome/test:foo_test/"
       },
       {
         "args": [
@@ -1229,7 +1241,7 @@ VARIATION_GTEST_OUTPUT = """\
           ]
         },
         "test": "foo_test",
-        "test_target": "//chrome/test:foo_test"
+        "test_id_prefix": "ninja://chrome/test:foo_test/"
       }
     ]
   }
@@ -1552,12 +1564,12 @@ INSTRUMENTATION_TEST_DIFFERENT_NAMES_OUTPUT = """\
       {
         "name": "bar_tests",
         "test": "foo_test",
-        "test_target": "//chrome/test:foo_test"
+        "test_id_prefix": "ninja://chrome/test:foo_test/"
       },
       {
         "name": "foo_tests",
         "test": "foo_test",
-        "test_target": "//chrome/test:foo_test"
+        "test_id_prefix": "ninja://chrome/test:foo_test/"
       }
     ]
   }
@@ -1594,7 +1606,8 @@ GPU_TELEMETRY_TEST_OUTPUT = """\
             }
           ],
           "idempotent": false
-        }
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/foo_tests/"
       }
     ]
   }
@@ -1635,7 +1648,8 @@ NVIDIA_GPU_TELEMETRY_TEST_OUTPUT = """\
             }
           ],
           "idempotent": false
-        }
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/foo_tests/"
       }
     ]
   }
@@ -1676,7 +1690,8 @@ INTEL_GPU_TELEMETRY_TEST_OUTPUT = """\
             }
           ],
           "idempotent": false
-        }
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/foo_tests/"
       }
     ]
   }
@@ -1717,7 +1732,8 @@ INTEL_UHD_GPU_TELEMETRY_TEST_OUTPUT = """\
             }
           ],
           "idempotent": false
-        }
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/foo_tests/"
       }
     ]
   }
@@ -1939,7 +1955,8 @@ GPU_DIMENSIONS_WATERFALL_OUTPUT = """\
           "expiration": 120,
           "idempotent": false,
           "value": "test"
-        }
+        },
+        "test_id_prefix": "ninja://chrome/test:telemetry_gpu_integration_test/foo_test/"
       }
     ]
   }
@@ -2216,6 +2233,32 @@ GN_ISOLATE_MAP="""\
 {
   'foo_test': {
     'label': '//chrome/test:foo_test',
+    'type': 'windowed_test_launcher',
+  }
+}
+"""
+
+GPU_TELEMETRY_GN_ISOLATE_MAP="""\
+{
+  'telemetry_gpu_integration_test': {
+    'label': '//chrome/test:telemetry_gpu_integration_test',
+    'type': 'script',
+      }
+}
+"""
+GN_ISOLATE_MAP_KEY_LABEL_MISMATCH="""\
+{
+  'foo_test': {
+    'label': '//chrome/test:foo_test_tmp',
+    'type': 'windowed_test_launcher',
+  }
+}
+"""
+
+GN_ISOLATE_MAP_USING_IMPLICIT_NAME="""\
+{
+  'foo_test': {
+    'label': '//chrome/foo_test',
     'type': 'windowed_test_launcher',
   }
 }
@@ -2537,6 +2580,28 @@ class UnitTest(unittest.TestCase):
     fbb.check_output_file_consistency(verbose=True)
     self.assertFalse(fbb.printed_lines)
 
+  def test_gn_isolate_map_with_label_mismatch(self):
+    fbb = FakeBBGen(FOO_GTESTS_WATERFALL,
+                    FOO_TEST_SUITE,
+                    LUCI_MILO_CFG,
+                    gn_isolate_map=GN_ISOLATE_MAP_KEY_LABEL_MISMATCH)
+    with self.assertRaisesRegexp(generate_buildbot_json.BBGenErr,
+                                 'key name.*foo_test.*label.*'
+                                 'foo_test_tmp.*'):
+      fbb.check_input_file_consistency(verbose=True)
+    self.assertFalse(fbb.printed_lines)
+
+  def test_gn_isolate_map_using_implicit_gn_name(self):
+    fbb = FakeBBGen(FOO_GTESTS_WATERFALL,
+                    FOO_TEST_SUITE,
+                    LUCI_MILO_CFG,
+                    gn_isolate_map=GN_ISOLATE_MAP_USING_IMPLICIT_NAME)
+    with self.assertRaisesRegexp(generate_buildbot_json.BBGenErr,
+                                 'Malformed.*//chrome/foo_test.*for key.*'
+                                 'foo_test.*'):
+      fbb.check_input_file_consistency(verbose=True)
+    self.assertFalse(fbb.printed_lines)
+
   def test_noop_exception_does_nothing(self):
     fbb = FakeBBGen(COMPOSITION_GTEST_SUITE_WATERFALL,
                     GOOD_COMPOSITION_TEST_SUITES,
@@ -2696,7 +2761,8 @@ class UnitTest(unittest.TestCase):
     fbb = FakeBBGen(FOO_GPU_TELEMETRY_TEST_WATERFALL,
                     COMPOSITION_SUITE_WITH_NAME_NOT_ENDING_IN_TEST,
                     LUCI_MILO_CFG,
-                    exceptions=NO_BAR_TEST_EXCEPTIONS)
+                    exceptions=NO_BAR_TEST_EXCEPTIONS,
+                    gn_isolate_map=GPU_TELEMETRY_GN_ISOLATE_MAP)
     fbb.files['chromium.test.json'] = GPU_TELEMETRY_TEST_OUTPUT
     fbb.files['chromium.ci.json'] = GPU_TELEMETRY_TEST_OUTPUT
     fbb.check_output_file_consistency(verbose=True)
@@ -2706,7 +2772,8 @@ class UnitTest(unittest.TestCase):
     fbb = FakeBBGen(NVIDIA_GPU_TELEMETRY_TEST_WATERFALL,
                     COMPOSITION_SUITE_WITH_GPU_ARGS,
                     LUCI_MILO_CFG,
-                    exceptions=NO_BAR_TEST_EXCEPTIONS)
+                    exceptions=NO_BAR_TEST_EXCEPTIONS,
+                    gn_isolate_map=GPU_TELEMETRY_GN_ISOLATE_MAP)
     fbb.files['chromium.test.json'] = NVIDIA_GPU_TELEMETRY_TEST_OUTPUT
     fbb.files['chromium.ci.json'] = NVIDIA_GPU_TELEMETRY_TEST_OUTPUT
     fbb.check_output_file_consistency(verbose=True)
@@ -2716,7 +2783,8 @@ class UnitTest(unittest.TestCase):
     fbb = FakeBBGen(INTEL_GPU_TELEMETRY_TEST_WATERFALL,
                     COMPOSITION_SUITE_WITH_GPU_ARGS,
                     LUCI_MILO_CFG,
-                    exceptions=NO_BAR_TEST_EXCEPTIONS)
+                    exceptions=NO_BAR_TEST_EXCEPTIONS,
+                    gn_isolate_map=GPU_TELEMETRY_GN_ISOLATE_MAP)
     fbb.files['chromium.test.json'] = INTEL_GPU_TELEMETRY_TEST_OUTPUT
     fbb.files['chromium.ci.json'] = INTEL_GPU_TELEMETRY_TEST_OUTPUT
     fbb.check_output_file_consistency(verbose=True)
@@ -2726,7 +2794,8 @@ class UnitTest(unittest.TestCase):
     fbb = FakeBBGen(INTEL_UHD_GPU_TELEMETRY_TEST_WATERFALL,
                     COMPOSITION_SUITE_WITH_GPU_ARGS,
                     LUCI_MILO_CFG,
-                    exceptions=NO_BAR_TEST_EXCEPTIONS)
+                    exceptions=NO_BAR_TEST_EXCEPTIONS,
+                    gn_isolate_map=GPU_TELEMETRY_GN_ISOLATE_MAP)
     fbb.files['chromium.test.json'] = INTEL_UHD_GPU_TELEMETRY_TEST_OUTPUT
     fbb.files['chromium.ci.json'] = INTEL_UHD_GPU_TELEMETRY_TEST_OUTPUT
     fbb.check_output_file_consistency(verbose=True)
@@ -2825,8 +2894,7 @@ class UnitTest(unittest.TestCase):
                     REUSING_TEST_WITH_DIFFERENT_NAME,
                     LUCI_MILO_CFG,
                     gn_isolate_map=GN_ISOLATE_MAP)
-    fbb.args = argparse.Namespace(
-        pyl_files_dir='relative/path/', waterfall_filters=[])
+    override_args(fbb, pyl_files_dir='relative/path/', waterfall_filters=[])
     for file_name in list(fbb.files):
       if not 'luci-milo.cfg' in file_name:
         fbb.files[os.path.join('relative/path/', file_name)] = (
@@ -2844,6 +2912,13 @@ class UnitTest(unittest.TestCase):
     with self.assertRaises(generate_buildbot_json.BBGenErr):
       fbb.check_input_file_consistency(verbose=True)
     self.assertFalse(fbb.printed_lines)
+
+  def test_nonexistent_bot_does_not_raise_on_branch(self):
+    fbb = FakeBBGen(UNKNOWN_BOT_GTESTS_WATERFALL,
+                    FOO_TEST_SUITE,
+                    LUCI_MILO_CFG,
+                    project_star='is_master = False')
+    fbb.check_input_file_consistency(verbose=True)
 
   def test_waterfalls_must_be_sorted(self):
     fbb = FakeBBGen(TEST_SUITE_SORTED_WATERFALL,
@@ -3009,11 +3084,12 @@ class UnitTest(unittest.TestCase):
                     LUCI_MILO_CFG)
     fbb.files['chromium.try.json'] = SCRIPT_OUTPUT
     fbb.files['chromium.test.json'] = SCRIPT_OUTPUT
-    with self.assertRaisesRegexp(
-        generate_buildbot_json.BBGenErr,
-        'The following files have not been properly autogenerated by '
-        'generate_buildbot_json.py: chromium.try.json, chromium.test.json'):
-      fbb.check_output_file_consistency(verbose=True)
+    with dump_on_failure(fbb):
+      with self.assertRaisesRegexp(
+          generate_buildbot_json.BBGenErr,
+          'The following files have not been properly autogenerated by '
+          'generate_buildbot_json.py: chromium.try.json, chromium.test.json'):
+        fbb.check_output_file_consistency(verbose=True, dump=False)
 
   def test_bucket_check_missing_try_bucket(self):
     fbb = FakeBBGen(TRY_MISSING_WATERFALL,
@@ -3021,13 +3097,15 @@ class UnitTest(unittest.TestCase):
                     LUCI_MILO_CFG)
     fbb.files['chrome.ci.json'] = SCRIPT_OUTPUT
     fbb.files['chromium.ci.json'] = SCRIPT_OUTPUT
-    fbb.files['chrome.test.json'] =  SCRIPT_OUTPUT
-    fbb.files['chromium.test.json'] =  SCRIPT_OUTPUT
-    with self.assertRaisesRegexp(generate_buildbot_json.BBGenErr,
-        'The following files have not been properly autogenerated by '
-        'generate_buildbot_json.py: chrome.test.json, '
-        'chromium.test.json, chrome.ci.json, chromium.ci.json'):
-      fbb.check_output_file_consistency(verbose=True)
+    fbb.files['chrome.test.json'] = SCRIPT_OUTPUT
+    fbb.files['chromium.test.json'] = SCRIPT_OUTPUT
+    with dump_on_failure(fbb):
+      with self.assertRaisesRegexp(
+          generate_buildbot_json.BBGenErr,
+          'The following files have not been properly autogenerated by '
+          'generate_buildbot_json.py: chrome.test.json, '
+          'chromium.test.json, chrome.ci.json, chromium.ci.json'):
+        fbb.check_output_file_consistency(verbose=True, dump=False)
 
   def test_bucket_check_output_missing(self):
     fbb = FakeBBGen(CHROME_AND_CHROMIUM_WATERFALL,
@@ -3038,10 +3116,12 @@ class UnitTest(unittest.TestCase):
     fbb.files['chrome.ci.json'] = CHROME_NORMAL_OUTPUT
     fbb.files['chromium.test.json'] = CHROMIUM_NORMAL_OUTPUT
     fbb.files['chrome.test.json'] = CHROME_NORMAL_OUTPUT
-    with self.assertRaisesRegexp(generate_buildbot_json.BBGenErr,
-        'The following files have not been properly autogenerated by '
-        'generate_buildbot_json.py: chromium.try.json'):
-      fbb.check_output_file_consistency(verbose=True)
+    with dump_on_failure(fbb):
+      with self.assertRaisesRegexp(
+          generate_buildbot_json.BBGenErr,
+          'The following files have not been properly autogenerated by '
+          'generate_buildbot_json.py: chromium.try.json'):
+        fbb.check_output_file_consistency(verbose=True, dump=False)
 
 
 FOO_GTESTS_WATERFALL_MIXIN_WATERFALL = """\
@@ -3694,7 +3774,8 @@ class MixinTests(unittest.TestCase):
     fbb = FakeBBGen(FOO_GPU_TELEMETRY_TEST_DIMENSIONS_WATERFALL,
                     FOO_TEST_SUITE_WITH_MIXIN,
                     LUCI_MILO_CFG,
-                    mixins=SWARMING_MIXINS)
+                    mixins=SWARMING_MIXINS,
+                    gn_isolate_map=GPU_TELEMETRY_GN_ISOLATE_MAP)
     fbb.files['chromium.test.json'] = GPU_DIMENSIONS_WATERFALL_OUTPUT
     fbb.files['chromium.ci.json'] = GPU_DIMENSIONS_WATERFALL_OUTPUT
     fbb.check_output_file_consistency(verbose=True)
@@ -4210,9 +4291,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bots', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bots',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_BOTS_OUTPUT)
@@ -4222,9 +4303,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bots/blah/blah', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bots/blah/blah',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4235,9 +4316,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bots', check=False,
-                                  pyl_files_dir=None, json='result.json',
-                                  waterfall_filters = [])
+    override_args(fbb, query='bots',
+                  check=False, pyl_files_dir=None,
+                  json='result.json', waterfall_filters=[])
     fbb.query(fbb.args)
     self.assertFalse(fbb.printed_lines)
 
@@ -4246,9 +4327,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bots/tests', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bots/tests',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_BOTS_TESTS_OUTPUT)
@@ -4258,9 +4339,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bots/tdfjdk', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bots/tdfjdk',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4271,9 +4352,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bot/Fake Android K Tester',
-                                  check=False, pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bot/Fake Android K Tester',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.maxDiff = None
@@ -4284,9 +4365,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bot/bot1', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bot/bot1',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4297,9 +4378,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bot/Fake Android K Tester/blah/blah',
-                                  check=False, pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bot/Fake Android K Tester/blah/blah',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4310,9 +4391,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bot/Fake Android K Tester/blahs',
-                                  check=False, pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bot/Fake Android K Tester/blahs',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4323,9 +4404,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='bot/Fake Android L Tester/tests',
-                                  check=False, pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='bot/Fake Android L Tester/tests',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_BOT_TESTS_OUTPUT)
@@ -4335,9 +4416,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='tests',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TESTS_OUTPUT)
@@ -4347,9 +4428,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests/blah/blah', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='tests/blah/blah',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4360,9 +4441,9 @@ class QueryTests(unittest.TestCase):
                     TEST_SUITE_WITH_PARAMS,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests/--jobs=1&--verbose', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='tests/--jobs=1&--verbose',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TESTS_MULTIPLE_PARAMS_OUTPUT)
@@ -4372,9 +4453,9 @@ class QueryTests(unittest.TestCase):
                     TEST_SUITE_WITH_PARAMS,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests/device_os?', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='tests/device_os?',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4385,9 +4466,9 @@ class QueryTests(unittest.TestCase):
                     TEST_SUITE_WITH_PARAMS,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests/device_os:NMF26U',
-                                  check=False, pyl_files_dir=None,
-                                  json=None, waterfall_filters = [])
+    override_args(fbb, query='tests/device_os:NMF26U',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TESTS_DIMENSION_PARAMS_OUTPUT)
@@ -4397,9 +4478,9 @@ class QueryTests(unittest.TestCase):
                     TEST_SUITE_WITH_PARAMS,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests/hard_timeout:1000',
-                                  check=False, pyl_files_dir=None,
-                                  json=None, waterfall_filters = [])
+    override_args(fbb, query='tests/hard_timeout:1000',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TESTS_SWARMING_PARAMS_OUTPUT)
@@ -4409,9 +4490,9 @@ class QueryTests(unittest.TestCase):
                     TEST_SUITE_WITH_PARAMS,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests/should_retry_with_patch:true',
-                                  check=False, pyl_files_dir=None,
-                                  json=None, waterfall_filters = [])
+    override_args(fbb, query='tests/should_retry_with_patch:true',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TESTS_PARAMS_OUTPUT)
@@ -4421,9 +4502,9 @@ class QueryTests(unittest.TestCase):
                     TEST_SUITE_WITH_PARAMS,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='tests/should_retry_with_patch:false',
-                                  check=False, pyl_files_dir=None,
-                                  json=None, waterfall_filters = [])
+    override_args(fbb, query='tests/should_retry_with_patch:false',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TESTS_PARAMS_FALSE_OUTPUT)
@@ -4433,9 +4514,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='test/foo_test', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='test/foo_test',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TEST_OUTPUT)
@@ -4445,9 +4526,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='test/foo_foo', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='test/foo_foo',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4458,9 +4539,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='test/foo_tests/foo/foo', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='test/foo_tests/foo/foo',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4471,9 +4552,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='test/foo_test/bots', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='test/foo_test/bots',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TEST_BOTS_OUTPUT)
@@ -4483,9 +4564,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='test/foo_test/bots', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='test/foo_test/bots',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TEST_BOTS_ISOLATED_SCRIPTS_OUTPUT)
@@ -4495,9 +4576,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='test/foo_tests/foo', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='test/foo_tests/foo',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)
@@ -4508,9 +4589,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='test/bar_tests/bots', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='test/bar_tests/bots',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     fbb.query(fbb.args)
     query_json = json.loads("".join(fbb.printed_lines))
     self.assertEqual(query_json, TEST_QUERY_TEST_BOTS_NO_BOTS_OUTPUT)
@@ -4520,9 +4601,9 @@ class QueryTests(unittest.TestCase):
                     GOOD_COMPOSITION_TEST_SUITES,
                     LUCI_MILO_CFG,
                     mixins=SWARMING_MIXINS_SORTED)
-    fbb.args = argparse.Namespace(query='foo', check=False,
-                                  pyl_files_dir=None, json=None,
-                                  waterfall_filters = [])
+    override_args(fbb, query='foo',
+                  check=False, pyl_files_dir=None,
+                  json=None, waterfall_filters=[])
     with self.assertRaises(SystemExit) as cm:
       fbb.query(fbb.args)
       self.assertEqual(cm.exception.code, 1)

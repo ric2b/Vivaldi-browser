@@ -13,7 +13,6 @@
 namespace syncer {
 
 constexpr char FakeSyncEngine::kTestBirthday[];
-constexpr char FakeSyncEngine::kTestKeystoreKey[];
 
 FakeSyncEngine::FakeSyncEngine() {}
 FakeSyncEngine::~FakeSyncEngine() {}
@@ -21,10 +20,10 @@ FakeSyncEngine::~FakeSyncEngine() {}
 void FakeSyncEngine::Initialize(InitParams params) {
   bool success = !fail_initial_download_;
   initialized_ = success;
-  params.host->OnEngineInitialized(
-      ModelTypeSet(), WeakHandle<JsBackend>(),
-      WeakHandle<DataTypeDebugInfoListener>(), kTestBirthday,
-      /*bag_of_chips=*/"", kTestKeystoreKey, success);
+  params.host->OnEngineInitialized(ModelTypeSet(), WeakHandle<JsBackend>(),
+                                   WeakHandle<DataTypeDebugInfoListener>(),
+                                   kTestBirthday,
+                                   /*bag_of_chips=*/"", success);
 }
 
 bool FakeSyncEngine::IsInitialized() const {
@@ -57,24 +56,17 @@ void FakeSyncEngine::Shutdown(ShutdownReason reason) {}
 
 void FakeSyncEngine::ConfigureDataTypes(ConfigureParams params) {}
 
-void FakeSyncEngine::RegisterDirectoryDataType(ModelType type,
-                                               ModelSafeGroup group) {}
-
-void FakeSyncEngine::UnregisterDirectoryDataType(ModelType type) {}
-
 void FakeSyncEngine::EnableEncryptEverything() {}
-
-void FakeSyncEngine::ActivateDirectoryDataType(
-    ModelType type,
-    ModelSafeGroup group,
-    ChangeProcessor* change_processor) {}
-void FakeSyncEngine::DeactivateDirectoryDataType(ModelType type) {}
 
 void FakeSyncEngine::ActivateNonBlockingDataType(
     ModelType type,
     std::unique_ptr<DataTypeActivationResponse> activation_response) {}
 
 void FakeSyncEngine::DeactivateNonBlockingDataType(ModelType type) {}
+
+void FakeSyncEngine::ActivateProxyDataType(ModelType type) {}
+
+void FakeSyncEngine::DeactivateProxyDataType(ModelType type) {}
 
 UserShare* FakeSyncEngine::GetUserShare() const {
   return nullptr;

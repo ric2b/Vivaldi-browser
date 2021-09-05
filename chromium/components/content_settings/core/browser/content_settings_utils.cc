@@ -8,13 +8,12 @@
 
 #include <vector>
 
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
-#include "url/origin.h"
 
 namespace {
 
@@ -164,12 +163,18 @@ bool IsMorePermissive(ContentSetting a, ContentSetting b) {
   return true;
 }
 
-bool OriginCanBeForceAllowed(const url::Origin& origin) {
-  const auto& scheme = origin.scheme();
-  return scheme == content_settings::kChromeDevToolsScheme ||
-         scheme == content_settings::kExtensionScheme ||
-         scheme == content_settings::kChromeUIScheme ||
-         scheme == content_settings::kChromeUIUntrustedScheme;
+// Currently only SessionModel::Durable constraints need to be persistent
+// as they are only bounded by time and can persist through multiple browser
+// sessions.
+bool IsConstraintPersistent(const ContentSettingConstraints& constraints) {
+  return constraints.session_model == SessionModel::Durable;
+}
+
+// Convenience helper to calculate the expiration time of a constraint given a
+// desired |duration|
+base::Time GetConstraintExpiration(const base::TimeDelta duration) {
+  DCHECK(!duration.is_zero());
+  return base::Time::Now() + duration;
 }
 
 }  // namespace content_settings

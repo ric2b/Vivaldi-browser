@@ -5,8 +5,8 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_command_encoder.h"
 
 #include "third_party/blink/renderer/bindings/modules/v8/double_sequence_or_gpu_color_dict.h"
-#include "third_party/blink/renderer/bindings/modules/v8/unsigned_long_sequence_or_gpu_extent_3d_dict.h"
-#include "third_party/blink/renderer/bindings/modules/v8/unsigned_long_sequence_or_gpu_origin_3d_dict.h"
+#include "third_party/blink/renderer/bindings/modules/v8/unsigned_long_enforce_range_sequence_or_gpu_extent_3d_dict.h"
+#include "third_party/blink/renderer/bindings/modules/v8/unsigned_long_enforce_range_sequence_or_gpu_origin_3d_dict.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_buffer_copy_view.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_command_buffer_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_command_encoder_descriptor.h"
@@ -108,16 +108,42 @@ WGPURenderPassDepthStencilAttachmentDescriptor AsDawnType(
   return dawn_desc;
 }
 
-WGPUBufferCopyView AsDawnType(const GPUBufferCopyView* webgpu_view) {
+base::Optional<WGPUBufferCopyView> AsDawnType(
+    const GPUBufferCopyView* webgpu_view,
+    GPUDevice* device,
+    ExceptionState& exception_state) {
   DCHECK(webgpu_view);
   DCHECK(webgpu_view->buffer());
 
-  WGPUBufferCopyView dawn_view;
+  WGPUBufferCopyView dawn_view = {};
   dawn_view.nextInChain = nullptr;
   dawn_view.buffer = webgpu_view->buffer()->GetHandle();
   dawn_view.offset = webgpu_view->offset();
-  dawn_view.rowPitch = webgpu_view->rowPitch();
-  dawn_view.imageHeight = webgpu_view->imageHeight();
+
+  if (webgpu_view->hasRowPitch()) {
+    device->AddConsoleWarning(
+        "GPUBufferCopyView.rowPitch is deprecated: renamed to bytesPerRow");
+  }
+  if (webgpu_view->hasBytesPerRow()) {
+    dawn_view.bytesPerRow = webgpu_view->bytesPerRow();
+  } else {
+    if (!webgpu_view->hasRowPitch()) {
+      exception_state.ThrowTypeError(
+          "required member bytesPerRow is undefined.");
+      return base::nullopt;
+    }
+    dawn_view.bytesPerRow = webgpu_view->rowPitch();
+  }
+
+  // Note: in this case we check for the deprecated member first, because it is
+  // required, while the new member is optional.
+  if (webgpu_view->hasImageHeight()) {
+    device->AddConsoleWarning(
+        "GPUBufferCopyView.imageHeight is deprecated: renamed to rowsPerImage");
+    dawn_view.rowsPerImage = webgpu_view->imageHeight();
+  } else {
+    dawn_view.rowsPerImage = webgpu_view->rowsPerImage();
+  }
 
   return dawn_view;
 }
@@ -244,25 +270,29 @@ void GPUCommandEncoder::copyBufferToBuffer(GPUBuffer* src,
 void GPUCommandEncoder::copyBufferToTexture(
     GPUBufferCopyView* source,
     GPUTextureCopyView* destination,
-    UnsignedLongSequenceOrGPUExtent3DDict& copy_size,
+    UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& copy_size,
     ExceptionState& exception_state) {
   if (!ValidateCopySize(copy_size, exception_state) ||
       !ValidateTextureCopyView(destination, exception_state)) {
     return;
   }
 
-  WGPUBufferCopyView dawn_source = AsDawnType(source);
+  base::Optional<WGPUBufferCopyView> dawn_source =
+      AsDawnType(source, device_, exception_state);
+  if (!dawn_source) {
+    return;
+  }
   WGPUTextureCopyView dawn_destination = AsDawnType(destination);
   WGPUExtent3D dawn_copy_size = AsDawnType(&copy_size);
 
   GetProcs().commandEncoderCopyBufferToTexture(
-      GetHandle(), &dawn_source, &dawn_destination, &dawn_copy_size);
+      GetHandle(), &*dawn_source, &dawn_destination, &dawn_copy_size);
 }
 
 void GPUCommandEncoder::copyTextureToBuffer(
     GPUTextureCopyView* source,
     GPUBufferCopyView* destination,
-    UnsignedLongSequenceOrGPUExtent3DDict& copy_size,
+    UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& copy_size,
     ExceptionState& exception_state) {
   if (!ValidateCopySize(copy_size, exception_state) ||
       !ValidateTextureCopyView(source, exception_state)) {
@@ -270,17 +300,21 @@ void GPUCommandEncoder::copyTextureToBuffer(
   }
 
   WGPUTextureCopyView dawn_source = AsDawnType(source);
-  WGPUBufferCopyView dawn_destination = AsDawnType(destination);
+  base::Optional<WGPUBufferCopyView> dawn_destination =
+      AsDawnType(destination, device_, exception_state);
+  if (!dawn_destination) {
+    return;
+  }
   WGPUExtent3D dawn_copy_size = AsDawnType(&copy_size);
 
   GetProcs().commandEncoderCopyTextureToBuffer(
-      GetHandle(), &dawn_source, &dawn_destination, &dawn_copy_size);
+      GetHandle(), &dawn_source, &*dawn_destination, &dawn_copy_size);
 }
 
 void GPUCommandEncoder::copyTextureToTexture(
     GPUTextureCopyView* source,
     GPUTextureCopyView* destination,
-    UnsignedLongSequenceOrGPUExtent3DDict& copy_size,
+    UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& copy_size,
     ExceptionState& exception_state) {
   if (!ValidateCopySize(copy_size, exception_state) ||
       !ValidateTextureCopyView(source, exception_state) ||

@@ -18,10 +18,10 @@ namespace media {
 
 using ErrorCB = base::RepeatingCallback<void(PipelineStatus)>;
 using EndedCB = base::RepeatingClosure;
-using DurationChangedCB = base::RepeatingClosure;
 using BufferingStateChangedCB =
     base::RepeatingCallback<void(BufferingState, BufferingStateChangeReason)>;
 using VideoNaturalSizeChangedCB = base::RepeatingClosure;
+using TimeUpdateCB = base::RepeatingClosure;
 
 // Implements IMFMediaEngineNotify required by IMFMediaEngine
 // (https://docs.microsoft.com/en-us/windows/win32/api/mfmediaengine/nn-mfmediaengine-imfmediaengine).
@@ -38,9 +38,9 @@ class MediaEngineNotifyImpl
   HRESULT RuntimeClassInitialize(
       ErrorCB error_cb,
       EndedCB ended_cb,
-      DurationChangedCB duration_changed_cb,
       BufferingStateChangedCB buffering_state_changed_cb,
-      VideoNaturalSizeChangedCB video_natural_size_changed_cb);
+      VideoNaturalSizeChangedCB video_natural_size_changed_cb,
+      TimeUpdateCB time_update_cb);
 
   // IMFMediaEngineNotify implementation.
   IFACEMETHODIMP EventNotify(DWORD event_code,
@@ -55,9 +55,9 @@ class MediaEngineNotifyImpl
   // e.g. using BindToCurrentLoop().
   ErrorCB error_cb_;
   EndedCB ended_cb_;
-  DurationChangedCB duration_changed_cb_;
   BufferingStateChangedCB buffering_state_changed_cb_;
   VideoNaturalSizeChangedCB video_natural_size_changed_cb_;
+  TimeUpdateCB time_update_cb_;
 
   // EventNotify is invoked from MF threadpool thread where the callbacks are
   // called.

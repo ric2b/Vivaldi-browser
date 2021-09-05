@@ -10,9 +10,6 @@ import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Point;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -38,6 +35,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileAccountManagementMetrics;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
 import org.chromium.chrome.browser.signin.SignOutDialogFragment;
@@ -50,8 +48,10 @@ import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
+import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.GAIAServiceType;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SignoutReason;
 
 import java.util.List;
@@ -112,18 +112,8 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
 
         SigninUtils.logEvent(ProfileAccountManagementMetrics.VIEW, mGaiaServiceType);
 
-        int avatarImageSize = getResources().getDimensionPixelSize(R.dimen.user_picture_size);
-        ProfileDataCache.BadgeConfig badgeConfig = null;
-        if (mProfile.isChild()) {
-            Bitmap badge =
-                    BitmapFactory.decodeResource(getResources(), R.drawable.ic_account_child_20dp);
-            int badgePositionX = getResources().getDimensionPixelOffset(R.dimen.badge_position_x);
-            int badgePositionY = getResources().getDimensionPixelOffset(R.dimen.badge_position_y);
-            int badgeBorderSize = getResources().getDimensionPixelSize(R.dimen.badge_border_size);
-            badgeConfig = new ProfileDataCache.BadgeConfig(
-                    badge, new Point(badgePositionX, badgePositionY), badgeBorderSize);
-        }
-        mProfileDataCache = new ProfileDataCache(getActivity(), avatarImageSize, badgeConfig);
+        mProfileDataCache = ProfileDataCache.createProfileDataCache(
+                getActivity(), mProfile.isChild() ? R.drawable.ic_account_child_20dp : 0);
     }
 
     @Override
@@ -149,8 +139,9 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         super.onResume();
         IdentityServicesProvider.get().getSigninManager().addSignInStateObserver(this);
         mProfileDataCache.addObserver(this);
-        mProfileDataCache.update(
-                AccountManagerFacadeProvider.getInstance().tryGetGoogleAccountNames());
+        List<String> accountNames = AccountUtils.toAccountNames(
+                AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts());
+        mProfileDataCache.update(accountNames);
         update();
     }
 
@@ -168,7 +159,8 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
         if (getPreferenceScreen() != null) getPreferenceScreen().removeAll();
 
         mSignedInAccountName = CoreAccountInfo.getEmailFrom(
-                IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo());
+                IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
+                        ConsentLevel.SYNC));
         if (mSignedInAccountName == null) {
             // The AccountManagementFragment can only be shown when the user is signed in. If the
             // user is signed out, exit the fragment.
@@ -413,7 +405,8 @@ public class AccountManagementFragment extends PreferenceFragmentCompat
     public static void openAccountManagementScreen(@GAIAServiceType int serviceType) {
         Bundle arguments = new Bundle();
         arguments.putInt(SHOW_GAIA_SERVICE_TYPE_EXTRA, serviceType);
-        SettingsLauncher.getInstance().launchSettingsPage(
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        settingsLauncher.launchSettingsActivity(
                 ContextUtils.getApplicationContext(), AccountManagementFragment.class, arguments);
     }
 

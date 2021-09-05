@@ -31,9 +31,7 @@ MEDIA_EXPORT extern const char kFailAudioStreamCreation[];
 
 MEDIA_EXPORT extern const char kVideoThreads[];
 
-// TODO(crbug.com/867146): remove these switches.
-MEDIA_EXPORT extern const char kEnableMediaSuspend[];
-MEDIA_EXPORT extern const char kDisableMediaSuspend[];
+MEDIA_EXPORT extern const char kDisableBackgroundMediaSuspend[];
 
 MEDIA_EXPORT extern const char kReportVp9AsAnUnsupportedMimeType[];
 
@@ -52,7 +50,6 @@ MEDIA_EXPORT extern const char kWaveOutBuffers[];
 #if defined(OS_FUCHSIA)
 MEDIA_EXPORT extern const char kEnableProtectedVideoBuffers[];
 MEDIA_EXPORT extern const char kForceProtectedVideoOutputBuffers[];
-MEDIA_EXPORT extern const char kEnableFuchsiaAudioConsumer[];
 #endif
 
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
@@ -159,12 +156,12 @@ MEDIA_EXPORT extern const base::Feature kRecordMediaEngagementScores;
 MEDIA_EXPORT extern const base::Feature kRecordWebAudioEngagement;
 MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
 MEDIA_EXPORT extern const base::Feature kRevokeMediaSourceObjectURLOnAttach;
+MEDIA_EXPORT extern const base::Feature kSuspendMutedAudio;
 MEDIA_EXPORT extern const base::Feature kSpecCompliantCanPlayThrough;
 MEDIA_EXPORT extern const base::Feature kUnifiedAutoplay;
 MEDIA_EXPORT extern const base::Feature kUseAndroidOverlayAggressively;
 MEDIA_EXPORT extern const base::Feature kUseFakeDeviceForMediaStream;
 MEDIA_EXPORT extern const base::Feature kUseMediaHistoryStore;
-MEDIA_EXPORT extern const base::Feature kUseMicrotaskForVideoRAF;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
 MEDIA_EXPORT extern const base::Feature kUseR16Texture;
 MEDIA_EXPORT extern const base::Feature kVaapiH264AMDEncoder;
@@ -172,6 +169,7 @@ MEDIA_EXPORT extern const base::Feature kVaapiLowPowerEncoder;
 MEDIA_EXPORT extern const base::Feature kVaapiVP8Encoder;
 MEDIA_EXPORT extern const base::Feature kVaapiVP9Encoder;
 MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
+MEDIA_EXPORT extern const base::Feature kWakeLockOptimisationHiddenMuted;
 MEDIA_EXPORT extern const base::Feature kWidevineAv1;
 MEDIA_EXPORT extern const base::Feature kWidevineAv1ForceSupportForTesting;
 
@@ -195,10 +193,11 @@ MEDIA_EXPORT extern const base::Feature kUsePooledSharedImageVideoProvider;
 
 #if defined(OS_WIN)
 MEDIA_EXPORT extern const base::Feature kDelayCopyNV12Textures;
-MEDIA_EXPORT extern const base::Feature kMediaFoundationH264Encoding;
+MEDIA_EXPORT extern const base::Feature kDirectShowGetPhotoState;
+MEDIA_EXPORT extern const base::Feature kMediaFoundationAsyncH264Encoding;
+MEDIA_EXPORT extern const base::Feature kMediaFoundationAV1Decoding;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationVideoCapture;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationVP8Decoding;
-MEDIA_EXPORT extern const base::Feature kDirectShowGetPhotoState;
 #endif  // defined(OS_WIN)
 
 // Based on a |command_line| and the current platform, returns the effective

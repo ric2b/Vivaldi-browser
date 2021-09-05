@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 #include "chrome/browser/ui/views/feature_promos/feature_promo_bubble_view.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/theme_provider.h"
 #include "ui/events/event_utils.h"
@@ -93,9 +94,10 @@ ContentSettingImageView::~ContentSettingImageView() {
 void ContentSettingImageView::Update() {
   content::WebContents* web_contents =
       delegate_->GetContentSettingWebContents();
-  // Note: We explicitly want to call this even if |web_contents| is NULL, so we
-  // get hidden properly while the user is editing the omnibox.
-  content_setting_image_model_->Update(web_contents);
+
+  // Calling Update() with a nullptr WebContents will hide the image.
+  content_setting_image_model_->Update(
+      delegate_->ShouldHideContentSettingImage() ? nullptr : web_contents);
   SetTooltipText(content_setting_image_model_->get_tooltip());
 
   if (!content_setting_image_model_->is_visible()) {

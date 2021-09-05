@@ -59,7 +59,7 @@ CSSInterpolationTypesMap::CSSInterpolationTypesMap(
     const Document& document)
     : registry_(registry) {
   allow_all_animations_ = document.IsFeatureEnabled(
-      blink::mojom::blink::FeaturePolicyFeature::kLayoutAnimations);
+      blink::mojom::blink::DocumentPolicyFeature::kLayoutAnimations);
 }
 
 static const PropertyRegistration* GetRegistration(
@@ -368,10 +368,7 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
 }
 
 size_t CSSInterpolationTypesMap::Version() const {
-  // Property registrations are never removed so the number of registered
-  // custom properties is equivalent to how many changes there have been to the
-  // property registry.
-  return registry_ ? registry_->RegistrationCount() : 0;
+  return registry_ ? registry_->Version() : 0;
 }
 
 static std::unique_ptr<CSSInterpolationType>

@@ -17,27 +17,45 @@
 
 namespace calendar {
 
-  // Bit flags determing which fields should be updated in the
-// UpdateAccount method
-  enum UpdateAccountFields {
-    ACCOUNT_NAME = 1 << 0,
-    ACCOUNT_URL = 1 << 2,
-  };
+enum AccountType {
+  ACCOUNT_TYPE_LOCAL = 0,
+  ACCOUNT_TYPE_VIVALDINET = 1,
+  ACCOUNT_TYPE_GOOGLE = 2,
+  ACCOUNT_TYPE_CALDAV = 3,
+  ACCOUNT_TYPE_ICAL = 4
+};
 
+// Bit flags determing which fields should be updated in the
+// UpdateAccount method
+enum UpdateAccountFields {
+  ACCOUNT_NAME = 1 << 0,
+  ACCOUNT_URL = 1 << 1,
+  ACCOUNT_USERNAME = 1 << 2,
+  ACCOUNT_TYPE = 1 << 3,
+  ACCOUNT_INTERVAL = 1 << 4,
+};
 
 // AccountRow
 // Holds all information associated with calendar account row.
 class AccountRow {
  public:
-   AccountRow() { type = 2; }
+  AccountRow();
   ~AccountRow() = default;
+  AccountRow(const AccountRow& account);
 
   AccountID id;
   base::string16 name;
   GURL url;
-  int type;  // 1 = Local account. // 2 = Server account.
-             // Only one local account is allowed.
-             // The local account is created automatically
+  base::string16 username;
+  int account_type;  // The type of account.
+                     // 0: Local.
+                     // 1: Vivaldi.net calendar.
+                     // 2: Google Calendar.
+                     // 3: CalDAV.
+                     // 4: Read only iCal.
+                     // The local account is created automatically.
+                     // Only one local account is permitted.
+  int interval;
   int updateFields;
 };
 
@@ -49,7 +67,6 @@ class CreateAccountResult {
   bool success;
   std::string message;
   AccountRow createdRow;
-
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CreateAccountResult);

@@ -48,6 +48,10 @@ extern const char kHostOverrideBlessNonce[];
 extern const char kThrottlerRequestCountListPrefName[];
 // The pref name for the request throttler's last request time.
 extern const char kThrottlerLastRequestTime[];
+// The pref name for storing |DebugStreamData|.
+extern const char kDebugStreamData[];
+// The pref name for storing the request schedule.
+extern const char kRequestSchedule[];
 
 }  // namespace prefs
 

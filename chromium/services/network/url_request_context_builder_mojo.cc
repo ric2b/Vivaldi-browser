@@ -4,7 +4,7 @@
 
 #include "services/network/url_request_context_builder_mojo.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "build/build_config.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/pac_file_fetcher_impl.h"
@@ -13,7 +13,7 @@
 #include "services/network/proxy_service_mojo.h"
 #include "services/network/public/cpp/features.h"
 #if defined(OS_WIN)
-#include "net/proxy_resolution/dhcp_pac_file_fetcher_win.h"
+#include "net/proxy_resolution/win/dhcp_pac_file_fetcher_win.h"
 #elif defined(OS_CHROMEOS)
 #include "services/network/dhcp_pac_file_fetcher_mojo.h"
 #endif
@@ -57,7 +57,8 @@ URLRequestContextBuilderMojo::CreateProxyResolutionService(
     net::URLRequestContext* url_request_context,
     net::HostResolver* host_resolver,
     net::NetworkDelegate* network_delegate,
-    net::NetLog* net_log) {
+    net::NetLog* net_log,
+    bool pac_quick_check_enabled) {
   DCHECK(url_request_context);
   DCHECK(host_resolver);
 
@@ -71,12 +72,12 @@ URLRequestContextBuilderMojo::CreateProxyResolutionService(
         std::move(mojo_proxy_resolver_factory_),
         std::move(proxy_config_service), std::move(pac_file_fetcher),
         std::move(dhcp_pac_file_fetcher), host_resolver, net_log,
-        network_delegate);
+        pac_quick_check_enabled, network_delegate);
   }
 
   return net::URLRequestContextBuilder::CreateProxyResolutionService(
       std::move(proxy_config_service), url_request_context, host_resolver,
-      network_delegate, net_log);
+      network_delegate, net_log, pac_quick_check_enabled);
 }
 
 }  // namespace network

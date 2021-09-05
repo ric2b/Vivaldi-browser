@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "components/performance_manager/graph/process_node_impl.h"
@@ -31,7 +31,7 @@ RenderProcessUserData::RenderProcessUserData(
     : host_(render_process_host) {
   host_->AddObserver(this);
   process_node_ = PerformanceManagerImpl::CreateProcessNode(
-      RenderProcessHostProxy(host_->GetID()));
+      content::PROCESS_TYPE_RENDERER, RenderProcessHostProxy(host_->GetID()));
 }
 
 RenderProcessUserData::~RenderProcessUserData() {

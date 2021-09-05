@@ -11,9 +11,9 @@
 #include "components/feed/core/proto/v2/store.pb.h"
 #include "components/feed/core/v2/feed_store.h"
 #include "components/feed/core/v2/proto_util.h"
-#include "components/feed/core/v2/public/feed_stream_api.h"
+#include "components/feed/core/v2/protocol_translator.h"
 #include "components/feed/core/v2/scheduling.h"
-#include "components/feed/core/v2/stream_model_update_request.h"
+#include "components/feed/core/v2/types.h"
 
 namespace feed {
 
@@ -24,13 +24,13 @@ LoadStreamFromStoreTask::Result& LoadStreamFromStoreTask::Result::operator=(
     Result&&) = default;
 
 LoadStreamFromStoreTask::LoadStreamFromStoreTask(
+    LoadType load_type,
     FeedStore* store,
     const base::Clock* clock,
-    UserClass user_class,
     base::OnceCallback<void(Result)> callback)
-    : store_(store),
+    : load_type_(load_type),
+      store_(store),
       clock_(clock),
-      user_class_(user_class),
       result_callback_(std::move(callback)),
       update_request_(std::make_unique<StreamModelUpdateRequest>()) {}
 
@@ -47,6 +47,13 @@ void LoadStreamFromStoreTask::LoadStreamDone(
     Complete(LoadStreamStatus::kFailedWithStoreError);
     return;
   }
+  pending_actions_ = std::move(result.pending_actions);
+
+  if (load_type_ == LoadType::kPendingActionsOnly) {
+    Complete(LoadStreamStatus::kLoadedFromStore);
+    return;
+  }
+
   if (result.stream_structures.empty()) {
     Complete(LoadStreamStatus::kNoStreamDataInStore);
     return;
@@ -57,7 +64,7 @@ void LoadStreamFromStoreTask::LoadStreamDone(
     if (content_age < base::TimeDelta()) {
       Complete(LoadStreamStatus::kDataInStoreIsStaleTimestampInFuture);
       return;
-    } else if (ShouldWaitForNewContent(user_class_, true, content_age)) {
+    } else if (ShouldWaitForNewContent(true, content_age)) {
       Complete(LoadStreamStatus::kDataInStoreIsStale);
       return;
     }
@@ -117,8 +124,12 @@ void LoadStreamFromStoreTask::LoadContentDone(
 void LoadStreamFromStoreTask::Complete(LoadStreamStatus status) {
   Result task_result;
   task_result.status = status;
-  if (status == LoadStreamStatus::kLoadedFromStore) {
+  task_result.pending_actions = std::move(pending_actions_);
+  if (status == LoadStreamStatus::kLoadedFromStore &&
+      load_type_ == LoadType::kFullLoad) {
     task_result.update_request = std::move(update_request_);
+  } else {
+    task_result.consistency_token = consistency_token_;
   }
   std::move(result_callback_).Run(std::move(task_result));
   TaskComplete();

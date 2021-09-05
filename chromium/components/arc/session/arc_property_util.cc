@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/logging.h"
 #include "base/process/launch.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -41,11 +42,8 @@ constexpr char kPAIRegionsPropertyName[] = "pai-regions";
 constexpr int kAndroidMaxPropertyLength = 91;
 
 // The following 4 functions as well as the constants above are the _exact_ copy
-// of the ones in platform2/arc/setup/arc_setup_util.cc. Do not modify the
-// implementation directly here. Instead, modify it in platform2 with proper
-// unit tests, then roll the change into Chromium.
-// TODO(yusukes): Once we stop expanding the properties in arc-setup for the
-// container, remove the code in platform2/arc/setup/.
+// of the ones in platform2/arc/setup/arc_setup_util.cc. After modifying code in
+// Chromium, make sure to reflect the changes to the platform2 side.
 
 bool FindProperty(const std::string& line_prefix_to_find,
                   std::string* out_prop,
@@ -216,6 +214,25 @@ bool ExpandPropertyContents(const std::string& content,
   return true;
 }
 
+bool ExpandPropertyFile(const base::FilePath& input,
+                        const base::FilePath& output,
+                        CrosConfig* config) {
+  std::string content;
+  std::string expanded;
+  if (!base::ReadFileToString(input, &content)) {
+    PLOG(ERROR) << "Failed to read " << input;
+    return false;
+  }
+  if (!ExpandPropertyContents(content, config, &expanded))
+    return false;
+  if (base::WriteFile(output, expanded.data(), expanded.size()) !=
+      static_cast<int>(expanded.size())) {
+    PLOG(ERROR) << "Failed to write to " << output;
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 CrosConfig::CrosConfig() {
@@ -267,36 +284,25 @@ bool TruncateAndroidPropertyForTesting(const std::string& line,
   return TruncateAndroidProperty(line, truncated);
 }
 
-bool ExpandPropertyFile(const base::FilePath& input,
-                        const base::FilePath& output,
-                        CrosConfig* config) {
-  std::string content;
-  std::string expanded;
-  if (!base::ReadFileToString(input, &content)) {
-    PLOG(ERROR) << "Failed to read " << input;
-    return false;
-  }
-  if (!ExpandPropertyContents(content, config, &expanded))
-    return false;
-  if (base::WriteFile(output, expanded.data(), expanded.size()) !=
-      static_cast<int>(expanded.size())) {
-    PLOG(ERROR) << "Failed to write to " << output;
-    return false;
-  }
-  return true;
+bool ExpandPropertyFileForTesting(const base::FilePath& input,
+                                  const base::FilePath& output,
+                                  CrosConfig* config) {
+  return ExpandPropertyFile(input, output, config);
 }
 
 bool ExpandPropertyFiles(const base::FilePath& source_path,
                          const base::FilePath& dest_path) {
   CrosConfig config;
-  for (const char* file : {"default.prop", "build.prop"}) {
+  for (const char* file : {"default.prop", "build.prop", "vendor_build.prop"}) {
     if (!ExpandPropertyFile(source_path.Append(file), dest_path.Append(file),
                             &config)) {
       LOG(ERROR) << "Failed to expand " << source_path.Append(file);
       return false;
     }
   }
-  return true;
+  // Use the same permissions as stock Android for /vendor/build.prop.
+  return base::SetPosixFilePermissions(dest_path.Append("vendor_build.prop"),
+                                       0600);
 }
 
 }  // namespace arc

@@ -39,6 +39,7 @@
 #include "base/compiler_specific.h"
 #include "build/build_config.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/gc_info.h"
 #include "third_party/blink/renderer/platform/heap/heap_buildflags.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
@@ -135,6 +136,7 @@ constexpr uint8_t kReuseForbiddenZapValue = 0x2c;
 class NormalPageArena;
 class PageMemory;
 class BaseArena;
+class ThreadHeap;
 
 // HeapObjectHeader is a 32-bit object that has the following layout:
 //
@@ -203,6 +205,7 @@ class PLATFORM_EXPORT HeapObjectHeader {
   enum class AccessMode : uint8_t { kNonAtomic, kAtomic };
 
   static HeapObjectHeader* FromPayload(const void*);
+  static inline HeapObjectHeader* FromTraceDescriptor(const TraceDescriptor&);
   template <AccessMode = AccessMode::kNonAtomic>
   static HeapObjectHeader* FromInnerAddress(const void*);
 
@@ -499,6 +502,18 @@ class BasePage {
   virtual void VerifyMarking() = 0;
 
  private:
+  void SynchronizedLoad() {
+#if defined(THREAD_SANITIZER)
+    WTF::AsAtomicPtr(&page_type_)->load(std::memory_order_acquire);
+#endif
+  }
+  void SynchronizedStore() {
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+#if defined(THREAD_SANITIZER)
+    WTF::AsAtomicPtr(&page_type_)->store(page_type_, std::memory_order_release);
+#endif
+  }
+
   PageMemory* const storage_;
   BaseArena* const arena_;
   ThreadState* const thread_state_;
@@ -511,6 +526,7 @@ class BasePage {
   PageType page_type_;
 
   friend class BaseArena;
+  friend class ThreadHeap;
 };
 
 class PageStack : Vector<BasePage*> {
@@ -992,6 +1008,9 @@ class PLATFORM_EXPORT BaseArena {
   // Pages that have been swept and need to be removed from the heap.
   PageStackThreadSafe swept_unfinalized_empty_pages_;
 
+ protected:
+  void SynchronizedStore(BasePage* page) { page->SynchronizedStore(); }
+
  private:
   virtual Address LazySweepPages(size_t, size_t gc_info_index) = 0;
 
@@ -1125,6 +1144,16 @@ inline HeapObjectHeader* HeapObjectHeader::FromPayload(const void* payload) {
   HeapObjectHeader* header =
       reinterpret_cast<HeapObjectHeader*>(addr - sizeof(HeapObjectHeader));
   return header;
+}
+
+// static
+HeapObjectHeader* HeapObjectHeader::FromTraceDescriptor(
+    const TraceDescriptor& desc) {
+  static_assert(!BlinkGC::kNotFullyConstructedObject,
+                "Expecting kNotFullyConstructedObject == nullptr");
+  return desc.base_object_payload
+             ? HeapObjectHeader::FromPayload(desc.base_object_payload)
+             : nullptr;
 }
 
 template <HeapObjectHeader::AccessMode mode>
@@ -1360,8 +1389,13 @@ NO_SANITIZE_ADDRESS inline HeapObjectHeader::HeapObjectHeader(
   DCHECK_LT(gc_info_index, GCInfoTable::kMaxIndex);
   DCHECK_LT(size, kNonLargeObjectPageSizeMax);
   DCHECK_EQ(0u, size & kAllocationMask);
-  encoded_high_ =
-      static_cast<uint16_t>(gc_info_index << kHeaderGCInfoIndexShift);
+  // Relaxed memory order is enough as in construction is created/synchronized
+  // as follows:
+  // - Page allocator gets zeroed page and uses page initialization fence.
+  // - Sweeper zeroes memory and synchronizes via global lock.
+  internal::AsUnsanitizedAtomic(&encoded_high_)
+      ->store(static_cast<uint16_t>(gc_info_index << kHeaderGCInfoIndexShift),
+              std::memory_order_relaxed);
   encoded_low_ = internal::EncodeSize(size);
   DCHECK(IsInConstruction());
 }

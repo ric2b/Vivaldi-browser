@@ -37,8 +37,8 @@
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/util/type_safety/pass_key.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/web/web_input_method_controller.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
@@ -84,39 +84,28 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   ~WebFrameWidgetImpl() override;
 
   // WebWidget functions:
-  void Close() override;
+  void Close(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
+             base::OnceCallback<void()> cleanup_task) override;
   WebSize Size() override;
   void Resize(const WebSize&) override;
   void DidEnterFullscreen() override;
   void DidExitFullscreen() override;
-  void DidBeginFrame() override;
-  void BeginUpdateLayers() override;
-  void EndUpdateLayers() override;
-  void BeginCommitCompositorFrame() override;
-  void EndCommitCompositorFrame(base::TimeTicks commit_start_time) override;
-  void RecordStartOfFrameMetrics() override;
-  void RecordEndOfFrameMetrics(
-      base::TimeTicks,
-      cc::ActiveFrameSequenceTrackers trackers) override;
-  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
-      override;
   void UpdateLifecycle(WebLifecycleUpdate requested_update,
                        DocumentUpdateReason reason) override;
   void ThemeChanged() override;
-  WebHitTestResult HitTestResultAt(const gfx::Point&) override;
+  WebHitTestResult HitTestResultAt(const gfx::PointF&) override;
   WebInputEventResult DispatchBufferedTouchEvents() override;
   WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&) override;
   void SetCursorVisibilityState(bool is_visible) override;
-  void OnFallbackCursorModeToggled(bool is_on) override;
 
   void MouseCaptureLost() override;
   void SetFocus(bool enable) override;
   bool SelectionBounds(WebRect& anchor, WebRect& focus) const override;
   void SetRemoteViewportIntersection(const ViewportIntersectionState&) override;
-  void SetIsInert(bool) override;
-  void SetInheritedEffectiveTouchAction(TouchAction) override;
-  void UpdateRenderThrottlingStatus(bool is_throttled,
-                                    bool subtree_throttled) override;
+  void SetIsInertForSubFrame(bool) override;
+  void SetInheritedEffectiveTouchActionForSubFrame(TouchAction) override;
+  void UpdateRenderThrottlingStatusForSubFrame(bool is_throttled,
+                                               bool subtree_throttled) override;
   WebURL GetURLForDebugTrace() override;
 
   // WebFrameWidget implementation.
@@ -133,9 +122,10 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
 
   // WebFrameWidgetBase overrides:
   bool ForSubframe() const override { return true; }
-  void IntrinsicSizingInfoChanged(const IntrinsicSizingInfo&) override;
+  void IntrinsicSizingInfoChanged(
+      mojom::blink::IntrinsicSizingInfoPtr) override;
   void DidCreateLocalRootView() override;
-  HitTestResult CoreHitTestResultAt(const gfx::Point&) override;
+  HitTestResult CoreHitTestResultAt(const gfx::PointF&) override;
   void ZoomToFindInPageRect(const WebRect& rect_in_root_frame) override;
 
   // FrameWidget overrides:
@@ -144,6 +134,17 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
   // WidgetBaseClient overrides:
   void BeginMainFrame(base::TimeTicks last_frame_time) override;
   void SetSuppressFrameRequestsWorkaroundFor704763Only(bool) final;
+  void RecordStartOfFrameMetrics() override;
+  void RecordEndOfFrameMetrics(
+      base::TimeTicks,
+      cc::ActiveFrameSequenceTrackers trackers) override;
+  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
+      override;
+  void BeginUpdateLayers() override;
+  void EndUpdateLayers() override;
+  void BeginCommitCompositorFrame() override;
+  void EndCommitCompositorFrame(base::TimeTicks commit_start_time) override;
+  void DidBeginMainFrame() override;
 
   void UpdateMainFrameLayoutSize();
 
@@ -157,7 +158,7 @@ class WebFrameWidgetImpl final : public WebFrameWidgetBase,
 
   // Perform a hit test for a point relative to the root frame of the page.
   HitTestResult HitTestResultForRootFramePos(
-      const PhysicalOffset& pos_in_root_frame);
+      const FloatPoint& pos_in_root_frame);
 
   void UpdateLayerTreeViewport();
 

@@ -12,7 +12,6 @@
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
-#include "google_apis/gaia/core_account_id.h"
 
 namespace autofill {
 struct PasswordForm;
@@ -104,6 +103,10 @@ class PasswordsModelDelegate {
   virtual void SavePassword(const base::string16& username,
                             const base::string16& password) = 0;
 
+  // Called from the dialog controller when a user confirms moving the recently
+  // used credential to their account store.
+  virtual void MovePasswordToAccountStore() = 0;
+
   // Called from the dialog controller when the user chooses a credential.
   // Controller can be destroyed inside the method.
   virtual void ChooseCredential(
@@ -137,7 +140,6 @@ class PasswordsModelDelegate {
   // reauth, it saves the password if it's still relevant. Otherwise, it changes
   // the default destination to local and reopens the save bubble.
   virtual void AuthenticateUserForAccountStoreOptInAndSavePassword(
-      CoreAccountId account_id,
       const base::string16& username,
       const base::string16& password) = 0;
 

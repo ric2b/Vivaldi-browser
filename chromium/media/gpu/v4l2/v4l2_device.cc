@@ -47,6 +47,10 @@ namespace {
 // Maximum number of requests that can be created.
 constexpr size_t kMaxNumRequests = 32;
 
+gfx::Rect V4L2RectToGfxRect(const v4l2_rect& rect) {
+  return gfx::Rect(rect.left, rect.top, rect.width, rect.height);
+}
+
 }  // namespace
 
 V4L2ExtCtrl::V4L2ExtCtrl(uint32_t id) {
@@ -236,9 +240,9 @@ scoped_refptr<VideoFrame> V4L2Buffer::GetVideoFrame() {
   // We can create the VideoFrame only when using MMAP buffers.
   if (v4l2_buffer_.memory != V4L2_MEMORY_MMAP) {
     VLOGF(1) << "Cannot create video frame from non-MMAP buffer";
-    // video_frame_ should be null since that's its default value.
-    DCHECK_EQ(video_frame_, nullptr);
-    return video_frame_;
+    // Allow NOTREACHED() on invalid argument because this is an internal
+    // method.
+    NOTREACHED();
   }
 
   // Create the video frame instance if requiring it for the first time.
@@ -881,6 +885,58 @@ base::Optional<struct v4l2_format> V4L2Queue::SetFormat(uint32_t fourcc,
   return current_format_;
 }
 
+std::pair<base::Optional<struct v4l2_format>, int> V4L2Queue::GetFormat() {
+  struct v4l2_format format;
+  memset(&format, 0, sizeof(format));
+  format.type = type_;
+  if (device_->Ioctl(VIDIOC_G_FMT, &format) != 0) {
+    VPQLOGF(2) << "Failed to get format";
+    return std::make_pair(base::nullopt, errno);
+  }
+
+  return std::make_pair(format, 0);
+}
+
+base::Optional<gfx::Rect> V4L2Queue::GetVisibleRect() {
+  // Some drivers prior to 4.13 only accept the non-MPLANE variant when using
+  // VIDIOC_G_SELECTION. This block can be removed once we stop supporting
+  // kernels < 4.13.
+  // For details, see the note at
+  // https://www.kernel.org/doc/html/latest/media/uapi/v4l/vidioc-g-selection.html
+  enum v4l2_buf_type compose_type;
+  switch (type_) {
+    case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
+      compose_type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+      break;
+    case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
+      compose_type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+      break;
+    default:
+      compose_type = type_;
+      break;
+  }
+
+  struct v4l2_selection selection = {};
+  selection.type = compose_type;
+  selection.target = V4L2_SEL_TGT_COMPOSE;
+  if (device_->Ioctl(VIDIOC_G_SELECTION, &selection) == 0) {
+    DVQLOGF(3) << "VIDIOC_G_SELECTION is supported";
+    return V4L2RectToGfxRect(selection.r);
+  }
+
+  // TODO(acourbot) using VIDIOC_G_CROP is considered legacy and can be
+  // removed once no active devices use it anymore.
+  DVQLOGF(3) << "Fallback to VIDIOC_G_CROP";
+  struct v4l2_crop crop = {};
+  crop.type = type_;
+  if (device_->Ioctl(VIDIOC_G_CROP, &crop) == 0) {
+    return V4L2RectToGfxRect(crop.c);
+  }
+
+  VQLOGF(1) << "Failed to get visible rect";
+  return base::nullopt;
+}
+
 size_t V4L2Queue::AllocateBuffers(size_t count, enum v4l2_memory memory) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!free_buffers_);
@@ -906,13 +962,12 @@ size_t V4L2Queue::AllocateBuffers(size_t count, enum v4l2_memory memory) {
   // This should not be required, but Tegra's VIDIOC_QUERYBUF will fail on
   // output buffers if the number of specified planes does not exactly match the
   // format.
-  struct v4l2_format format = {.type = type_};
-  int ret = device_->Ioctl(VIDIOC_G_FMT, &format);
-  if (ret) {
-    VPQLOGF(1) << "VIDIOC_G_FMT failed";
+  base::Optional<v4l2_format> format = GetFormat().first;
+  if (!format) {
+    VQLOGF(1) << "Cannot get format.";
     return 0;
   }
-  planes_count_ = format.fmt.pix_mp.num_planes;
+  planes_count_ = format->fmt.pix_mp.num_planes;
   DCHECK_LE(planes_count_, static_cast<size_t>(VIDEO_MAX_PLANES));
 
   struct v4l2_requestbuffers reqbufs = {};
@@ -921,7 +976,7 @@ size_t V4L2Queue::AllocateBuffers(size_t count, enum v4l2_memory memory) {
   reqbufs.memory = memory;
   DVQLOGF(3) << "Requesting " << count << " buffers.";
 
-  ret = device_->Ioctl(VIDIOC_REQBUFS, &reqbufs);
+  int ret = device_->Ioctl(VIDIOC_REQBUFS, &reqbufs);
   if (ret) {
     VPQLOGF(1) << "VIDIOC_REQBUFS failed";
     return 0;
@@ -934,7 +989,7 @@ size_t V4L2Queue::AllocateBuffers(size_t count, enum v4l2_memory memory) {
 
   // Now query all buffer information.
   for (size_t i = 0; i < reqbufs.count; i++) {
-    auto buffer = V4L2Buffer::Create(device_, type_, memory_, format, i);
+    auto buffer = V4L2Buffer::Create(device_, type_, memory_, *format, i);
 
     if (!buffer) {
       DeallocateBuffers();
@@ -1936,6 +1991,18 @@ void V4L2Device::SchedulePoll() {
   device_poller_->SchedulePoll();
 }
 
+base::Optional<struct v4l2_event> V4L2Device::DequeueEvent() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
+  struct v4l2_event event = {};
+
+  if (Ioctl(VIDIOC_DQEVENT, &event) != 0) {
+    VPLOGF(3) << "Failed to dequeue event";
+    return base::nullopt;
+  }
+
+  return event;
+}
+
 V4L2RequestsQueue* V4L2Device::GetRequestsQueue() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
 
@@ -1978,6 +2045,23 @@ bool V4L2Device::SetExtCtrls(uint32_t ctrl_class,
   ext_ctrls.count = ctrls.size();
   ext_ctrls.controls = &ctrls[0].ctrl;
   return Ioctl(VIDIOC_S_EXT_CTRLS, &ext_ctrls) == 0;
+}
+
+base::Optional<struct v4l2_ext_control> V4L2Device::GetCtrl(uint32_t ctrl_id) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
+  struct v4l2_ext_control ctrl = {};
+  struct v4l2_ext_controls ext_ctrls = {};
+
+  ctrl.id = ctrl_id;
+  ext_ctrls.controls = &ctrl;
+  ext_ctrls.count = 1;
+
+  if (Ioctl(VIDIOC_G_EXT_CTRLS, &ext_ctrls) != 0) {
+    VPLOGF(3) << "Failed to get control";
+    return base::nullopt;
+  }
+
+  return ctrl;
 }
 
 class V4L2Request {

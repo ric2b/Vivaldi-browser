@@ -25,13 +25,30 @@ export class ChromeHelper {
   }
 
   /**
+   * Starts tablet mode monitor monitoring tablet mode state of device.
+   * @param {function(boolean)} onChange Callback called each time when tablet
+   *     mode state of device changes with boolean parameter indecating whether
+   *     device is entering tablet mode.
+   * @return {!Promise<boolean>} Resolved to initial state of whether device is
+   *     is in tablet mode.
+   */
+  async initTabletModeMonitor(onChange) {
+    const monitorCallbackRouter =
+        new chromeosCamera.mojom.TabletModeMonitorCallbackRouter();
+    monitorCallbackRouter.update.addListener(onChange);
+
+    return (await this.remote_.setTabletMonitor(
+                monitorCallbackRouter.$.bindNewPipeAndPassRemote()))
+        .isTabletMode;
+  }
+
+  /**
    * Checks if the device is under tablet mode currently.
    * @return {!Promise<boolean>}
    */
   async isTabletMode() {
-    return await this.remote_.isTabletMode().then(({isTabletMode}) => {
-      return isTabletMode;
-    });
+    const {isTabletMode} = await this.remote_.isTabletMode();
+    return isTabletMode;
   }
 
   /**

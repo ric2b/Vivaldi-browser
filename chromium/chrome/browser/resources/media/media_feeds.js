@@ -16,12 +16,23 @@ function whenFeedTableIsPopulatedForTest() {
   return mediaFeedItemsPageIsPopulatedResolver.promise;
 }
 
+const mediaFeedsConfigTableIsPopulatedResolver = new PromiseResolver();
+function whenConfigTableIsPopulatedForTest() {
+  return mediaFeedsConfigTableIsPopulatedResolver.promise;
+}
+
+const mediaFeedsConfigTableIsUpdatedResolver = new PromiseResolver();
+function whenConfigTableIsUpdatedForTest() {
+  return mediaFeedsConfigTableIsUpdatedResolver.promise;
+}
+
 (function() {
 
 let delegate = null;
 let feedsTable = null;
 let feedItemsTable = null;
 let store = null;
+let configTableBody = null;
 
 /** @implements {cr.ui.MediaDataTableDelegate} */
 class MediaFeedsTableDelegate {
@@ -41,14 +52,20 @@ class MediaFeedsTableDelegate {
       td.appendChild(a);
 
       a.addEventListener('click', () => {
-        store.getItemsForMediaFeed(dataRow.id).then(response => {
-          feedItemsTable.setData(response.items);
+        showFeedContents(dataRow);
+      });
 
-          // Show the feed items section.
-          $('current-feed').textContent = dataRow.url.url;
-          $('feed-content').style.display = 'block';
+      td.appendChild(document.createElement('br'));
 
-          mediaFeedItemsPageIsPopulatedResolver.resolve();
+      const fetchFeed = document.createElement('a');
+      fetchFeed.href = '#feed-content';
+      fetchFeed.textContent = 'Fetch Feed';
+      td.appendChild(fetchFeed);
+
+      fetchFeed.addEventListener('click', () => {
+        store.fetchMediaFeed(dataRow.id).then(response => {
+          updateFeedsTable();
+          showFeedContents(dataRow);
         });
       });
     }
@@ -62,7 +79,8 @@ class MediaFeedsTableDelegate {
       td.textContent = data.url;
     } else if (
         key === 'lastDiscoveryTime' || key === 'lastFetchTime' ||
-        key === 'cacheExpiryTime' || key === 'datePublished') {
+        key === 'lastFetchTimeNotCacheHit' || key === 'datePublished' ||
+        key === 'lastDisplayTime') {
       // Format a mojo time.
       td.textContent =
           convertMojoTimeToJS(/** @type {mojoBase.mojom.Time} */ (data))
@@ -102,6 +120,7 @@ class MediaFeedsTableDelegate {
           contentTypes.length === 0 ? 'None' : contentTypes.join(',');
     } else if (key === 'logos' || key === 'images') {
       // Format an array of mojo media images.
+      // TODO(crbug.com/1074478): Display the image content attributes.
       data.forEach((image) => {
         const a = document.createElement('a');
         a.href = image.src.url;
@@ -109,6 +128,19 @@ class MediaFeedsTableDelegate {
         a.target = '_blank';
         td.appendChild(a);
         td.appendChild(document.createElement('br'));
+
+        const contentAttributes = [];
+        if (image.contentAttributes && image.contentAttributes.length !== 0) {
+          const p = document.createElement('p');
+          const contentAttributes = [];
+
+          image.contentAttributes.forEach((contentAttribute) => {
+            contentAttributes.push(formatContentAttribute(contentAttribute));
+          });
+
+          p.textContent = 'ContentAttributes=' + contentAttributes.join(', ');
+          td.appendChild(p);
+        }
       });
     } else if (key == 'type') {
       // Format a MediaFeedItemType.
@@ -155,7 +187,7 @@ class MediaFeedsTableDelegate {
           td.textContent = 'Unsafe';
           break;
       }
-    } else if (key == 'startTime') {
+    } else if (key == 'startTime' || key == 'duration') {
       // Format a start time.
       td.textContent =
           timeDeltaToSeconds(/** @type {mojoBase.mojom.TimeDelta} */ (data));
@@ -206,30 +238,20 @@ class MediaFeedsTableDelegate {
       // Format an array of strings.
       td.textContent = data.join(', ');
     } else if (key == 'live') {
-      // Format LiveDetails.
-      td.textContent = 'Live';
-
-      if (data.startTime) {
-        td.textContent += ' ' +
-            'StartTime=' +
-            convertMojoTimeToJS(
-                /** @type {mojoBase.mojom.Time} */ (data.startTime))
-                .toLocaleString();
-      }
-
-      if (data.endTime) {
-        td.textContent += ' ' +
-            'EndTime=' +
-            convertMojoTimeToJS(
-                /** @type {mojoBase.mojom.Time} */ (data.endTime))
-                .toLocaleString();
-      }
+      td.textContent =
+          formatLiveDetails(/** @type {mediaFeeds.mojom.LiveDetails} */ (data));
     } else if (key == 'tvEpisode') {
       // Format a TV Episode.
       td.textContent = data.name + ' EpisodeNumber=' + data.episodeNumber +
           ' SeasonNumber=' + data.seasonNumber + ' ' +
           formatIdentifiers(/** @type {Array<mediaFeeds.mojom.Identifier>} */ (
-              data.identifiers));
+              data.identifiers))  + ' DurationSecs=' +
+              timeDeltaToSeconds(data.duration);
+      if (data.live) {
+        td.textContent +=
+            ' LiveDetails=' + formatLiveDetails(
+            /** @type {mediaFeeds.mojom.LiveDetails} */ (data.live));
+      }
     } else if (key == 'playNextCandidate') {
       // Format a Play Next Candidate.
       td.textContent = data.name + ' EpisodeNumber=' + data.episodeNumber +
@@ -249,6 +271,48 @@ class MediaFeedsTableDelegate {
       // Format identifiers.
       td.textContent = formatIdentifiers(
           /** @type {Array<mediaFeeds.mojom.Identifier>} */ (data));
+    } else if (key === 'lastFetchItemCount') {
+      // Format the fetch item count.
+      td.textContent =
+          data + ' (' + dataRow.lastFetchSafeItemCount + ' confirmed as safe)';
+    } else if (key == 'resetReason') {
+      // Format a ResetReason.
+      switch (parseInt(data, 10)) {
+        case mediaFeeds.mojom.ResetReason.kNone:
+          td.textContent = 'None';
+          break;
+        case mediaFeeds.mojom.ResetReason.kCookies:
+          td.textContent = 'Cookies';
+          break;
+        case mediaFeeds.mojom.ResetReason.kVisit:
+          td.textContent = 'Visit';
+          break;
+        case mediaFeeds.mojom.ResetReason.kCache:
+          td.textContent = 'Cache';
+          break;
+      }
+    } else if (key === 'associatedOrigins') {
+      // Format the array of origins.
+      const origins = [];
+
+      data.forEach((origin) => {
+        const {scheme, host, port} = origin;
+        origins.push(new URL(`${scheme}://${host}:${port}`).origin);
+      });
+
+      td.textContent = origins.join(', ');
+    } else if (key === 'userIdentifier') {
+      if (data) {
+        td.textContent = 'Name=' + data.name;
+
+        if (data.email) {
+          td.textContent += ' Email=' + data.email;
+        }
+
+        if (data.image) {
+          td.textContent += ' Image=' + data.image.src.url;
+        }
+      }
     } else {
       td.textContent = data;
     }
@@ -273,11 +337,13 @@ class MediaFeedsTableDelegate {
         sortKey === 'userStatus' || sortKey === 'lastFetchResult' ||
         sortKey === 'fetchFailedCount' || sortKey === 'lastFetchItemCount' ||
         sortKey === 'lastFetchPlayNextCount' ||
-        sortKey === 'lastFetchContentTypes' || sortKey === 'safeSearchResult') {
+        sortKey === 'lastFetchContentTypes' || sortKey === 'safeSearchResult' ||
+        sortKey === 'type') {
       return val1 > val2 ? 1 : -1;
     } else if (
         sortKey === 'lastDiscoveryTime' || sortKey === 'lastFetchTime' ||
-        sortKey === 'cacheExpiryTime') {
+        sortKey === 'lastFetchTimeNotCacheHit' ||
+        sortKey === 'lastDisplayTime') {
       return val1.internalValue > val2.internalValue ? 1 : -1;
     }
 
@@ -325,6 +391,69 @@ function formatIdentifiers(mojoIdentifiers) {
 }
 
 /**
+ * Formats a LiveDetails struct for display.
+ * @param {mediaFeeds.mojom.LiveDetails} mojoLiveDetails
+ * @returns {string}
+ */
+function formatLiveDetails(mojoLiveDetails) {
+  let textContent = 'Live';
+
+  if (mojoLiveDetails.startTime) {
+    textContent += ' ' +
+        'StartTime=' +
+        convertMojoTimeToJS(
+            /** @type {mojoBase.mojom.Time} */ (mojoLiveDetails.startTime))
+            .toLocaleString();
+  }
+
+  if (mojoLiveDetails.endTime) {
+    textContent += ' ' +
+        'EndTime=' +
+        convertMojoTimeToJS(
+            /** @type {mojoBase.mojom.Time} */ (mojoLiveDetails.endTime))
+            .toLocaleString();
+  }
+
+  return textContent;
+}
+
+/**
+ * Formats a single ContentAttribute for display.
+ * @param {mediaFeeds.mojom.ContentAttribute} contentAttribute
+ * @returns {string}
+ */
+function formatContentAttribute(contentAttribute) {
+  switch (parseInt(contentAttribute, 10)) {
+    case mediaFeeds.mojom.ContentAttribute.kIconic:
+      return 'Iconic';
+    case mediaFeeds.mojom.ContentAttribute.kSceneStill:
+      return 'SceneStill';
+    case mediaFeeds.mojom.ContentAttribute.kPoster:
+      return 'Poster';
+    case mediaFeeds.mojom.ContentAttribute.kBackground:
+      return 'Background';
+    case mediaFeeds.mojom.ContentAttribute.kForDarkBackground:
+      return 'ForDarkBackground';
+    case mediaFeeds.mojom.ContentAttribute.kForLightBackground:
+      return 'ForLightBackground';
+    case mediaFeeds.mojom.ContentAttribute.kCentered:
+      return 'Centered';
+    case mediaFeeds.mojom.ContentAttribute.kRightCentered:
+      return 'RightCentered';
+    case mediaFeeds.mojom.ContentAttribute.kLeftCentered:
+      return 'LeftCentered';
+    case mediaFeeds.mojom.ContentAttribute.kHasTransparentBackground:
+      return 'HasTransparentBackground';
+    case mediaFeeds.mojom.ContentAttribute.kHasTitle:
+      return 'HasTitle';
+    case mediaFeeds.mojom.ContentAttribute.kNoTitle:
+      return 'NoTitle';
+    default:
+      return 'Unknown';
+  }
+}
+
+/**
  * Parses utf16 coded string.
  * @param {?mojoBase.mojom.String16} arr
  * @return {string}
@@ -362,6 +491,92 @@ function convertMojoTimeToJS(mojoTime) {
 }
 
 /**
+ * Creates a single row in the config table.
+ * @param {string} name The name of the config setting.
+ * @param {string} value The value of the config setting.
+ * @return {!Node}
+ */
+function createConfigRow(name, value) {
+  const tr = document.createElement('tr');
+
+  const nameCell = document.createElement('td');
+  nameCell.textContent = name;
+  tr.appendChild(nameCell);
+
+  const valueCell = document.createElement('td');
+  valueCell.textContent = value;
+  tr.appendChild(valueCell);
+
+  return tr;
+}
+
+/**
+ * Creates a single row in the config table with a toggle button.
+ * @param {string} name The name of the config setting.
+ * @param {string} value The value of the config setting.
+ * @param {Function} clickAction The function to be called to toggle the row.
+ * @return {!Node}
+ */
+function createConfigRowWithToggle(name, value, clickAction) {
+  const tr = document.createElement('tr');
+
+  const nameCell = document.createElement('td');
+  nameCell.textContent = name;
+  tr.appendChild(nameCell);
+
+  const valueCell = document.createElement('td');
+  tr.appendChild(valueCell);
+
+  const a = document.createElement('a');
+  a.href = '#';
+  a.textContent = value + ' (Toggle)';
+  a.addEventListener('click', clickAction);
+  valueCell.appendChild(a);
+
+  return tr;
+}
+
+/**
+ * Regenerates the config table.
+ * @param {!mediaFeeds.mojom.DebugInformation} info The debug info
+ */
+function renderConfigTable(info) {
+  configTableBody.innerHTML = '';
+
+  configTableBody.appendChild(createConfigRow(
+      'Safe Search Enabled (value)',
+      formatFeatureFlag(info.safeSearchFeatureEnabled)));
+
+  configTableBody.appendChild(createConfigRowWithToggle(
+      'Safe Search Enabled (pref)', formatFeatureFlag(info.safeSearchPrefValue),
+      () => {
+        store.setSafeSearchEnabledPref(!info.safeSearchPrefValue).then(() => {
+          updateConfigTable().then(
+              () => mediaFeedsConfigTableIsUpdatedResolver.resolve());
+        });
+      }));
+}
+
+/**
+ * Retrieve debug info and render the config table.
+ */
+function updateConfigTable() {
+  return store.getDebugInformation().then(response => {
+    renderConfigTable(response.info);
+    mediaFeedsConfigTableIsPopulatedResolver.resolve();
+  });
+}
+
+/**
+ * Converts a boolean into a string value.
+ * @param {boolean} value The value of the config setting.
+ * @return {string}
+ */
+function formatFeatureFlag(value) {
+  return value ? 'Enabled' : 'Disabled';
+}
+
+/**
  * Retrieve feed info and render the feed table.
  */
 function updateFeedsTable() {
@@ -371,8 +586,27 @@ function updateFeedsTable() {
   });
 }
 
+/**
+ * Retrieve feed items and render the feed contents table.
+ * @param {Object} dataRow
+ */
+function showFeedContents(dataRow) {
+  store.getItemsForMediaFeed(dataRow.id).then(response => {
+    feedItemsTable.setData(response.items);
+
+    // Show the feed items section.
+    $('current-feed').textContent = dataRow.url.url;
+    $('feed-content').style.display = 'block';
+
+    mediaFeedItemsPageIsPopulatedResolver.resolve();
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   store = mediaFeeds.mojom.MediaFeedsStore.getRemote();
+
+  configTableBody = $('config-table-body');
+  updateConfigTable();
 
   delegate = new MediaFeedsTableDelegate();
   feedsTable = new cr.ui.MediaDataTable($('feeds-table'), delegate);

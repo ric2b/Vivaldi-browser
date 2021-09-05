@@ -66,14 +66,30 @@ permissions::PermissionManager::PermissionContextMap CreatePermissionContexts(
           browser_context,
           std::make_unique<GeolocationPermissionContextDelegate>());
 
+#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   permission_contexts[ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER] =
       std::make_unique<SafePermissionContext>(
           browser_context, ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
           blink::mojom::FeaturePolicyFeature::kEncryptedMedia);
+#endif
+
+  permission_contexts[ContentSettingsType::MEDIASTREAM_MIC] =
+      std::make_unique<SafePermissionContext>(
+          browser_context, ContentSettingsType::MEDIASTREAM_MIC,
+          blink::mojom::FeaturePolicyFeature::kMicrophone);
+  permission_contexts[ContentSettingsType::MEDIASTREAM_CAMERA] =
+      std::make_unique<SafePermissionContext>(
+          browser_context, ContentSettingsType::MEDIASTREAM_CAMERA,
+          blink::mojom::FeaturePolicyFeature::kCamera);
 
   // For now, all requests are denied. As features are added, their permission
   // contexts can be added here instead of DeniedPermissionContext.
   for (content::PermissionType type : content::GetAllPermissionTypes()) {
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+    // PROTECTED_MEDIA_IDENTIFIER is only supported on Android/ChromeOS.
+    if (type == content::PermissionType::PROTECTED_MEDIA_IDENTIFIER)
+      continue;
+#endif
     ContentSettingsType content_settings_type =
         permissions::PermissionManager::PermissionTypeToContentSetting(type);
     if (permission_contexts.find(content_settings_type) ==

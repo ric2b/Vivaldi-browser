@@ -12,13 +12,14 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -511,9 +512,7 @@ SniffingResult CrossOriginReadBlocking::SniffForJSON(base::StringPiece data) {
       case kRightQuoteState:
         if (c == ':')
           return kYes;
-        else
-          return kNo;
-        break;
+        return kNo;
     }
   }
   return kMaybe;
@@ -892,18 +891,14 @@ CrossOriginReadBlocking::ResponseAnalyzer::ShouldBlockBasedOnHeaders(
     case MimeType::kPlain:
       if (HasNoSniff(response))
         return kBlock;
-      else
-        return kNeedToSniffMore;
-      break;
+      return kNeedToSniffMore;
 
     case MimeType::kOthers:
       // Stylesheets shouldn't be sniffed for JSON parser breakers - see
       // https://crbug.com/809259.
       if (base::LowerCaseEqualsASCII(response.mime_type, "text/css"))
         return kAllow;
-      else
-        return kNeedToSniffMore;
-      break;
+      return kNeedToSniffMore;
 
     case MimeType::kInvalidMimeType:
     case MimeType::kNeverSniffed:  // Handled much earlier.
@@ -988,7 +983,6 @@ CrossOriginReadBlocking::ResponseAnalyzer::GetMimeTypeBucket(
     case MimeType::kNeverSniffed:
     case MimeType::kPlain:
       return kProtected;
-      break;
     case MimeType::kOthers:
       break;
     case MimeType::kInvalidMimeType:
@@ -1185,7 +1179,7 @@ void CrossOriginReadBlocking::ResponseAnalyzer::LogAllowedResponse() {
         "SiteIsolation.XSD.Browser.AllowedByCorbButNotCors.ContentScript",
         is_cors_blocking_expected_);
 
-    // Ask the browser process to log Rappor and UKM metrics.
+    // Ask the browser process to log a UKM event.
     if (network_service_client_ && is_cors_blocking_expected_) {
       network_service_client_->LogCrossOriginFetchFromContentScript3(
           isolated_world_origin_->host());

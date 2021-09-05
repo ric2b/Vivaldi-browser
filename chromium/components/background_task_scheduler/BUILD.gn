@@ -18,11 +18,10 @@ if (is_android) {
 }
 
 group("background_task_scheduler") {
-  public_deps = [ ":public" ]
-
-  if (is_android) {
-    deps = [ ":factory" ]
-  }
+  public_deps = [
+    ":factory",
+    ":public",
+  ]
 }
 
 static_library("public") {
@@ -39,23 +38,23 @@ static_library("public") {
   public_deps = [
     "//base",
     "//components/keyed_service/core",
-    "//content/public/browser",
   ]
 }
 
-if (is_android) {
-  static_library("factory") {
-    sources = [
-      "background_task_scheduler_factory.cc",
-      "background_task_scheduler_factory.h",
-    ]
+static_library("factory") {
+  sources = [
+    "background_task_scheduler_factory.cc",
+    "background_task_scheduler_factory.h",
+  ]
 
-    deps = [
-      ":public",
-      "internal:native_task",
-    ]
+  deps = [ ":public" ]
+
+  if (is_android) {
+    deps += [ "internal:native_task" ]
   }
+}
 
+if (is_android) {
   # This is shared between WebView and Chrome. We do not want to add GCM
   # related permissions for WebView while still wanting to avoid collision
   # between WebView and Chrome.
@@ -99,7 +98,10 @@ if (is_android) {
     ]
   }
 
-  junit_binary("components_background_task_scheduler_junit_tests") {
+  java_library("components_background_task_scheduler_junit_tests") {
+    # Platform checks are broken for Robolectric. See https://crbug.com/1071638.
+    bypass_platform_checks = true
+    testonly = true
     sources = [
       "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskGcmTaskServiceTest.java",
       "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskJobServiceTest.java",

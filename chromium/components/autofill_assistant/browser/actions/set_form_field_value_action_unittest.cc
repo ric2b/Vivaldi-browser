@@ -11,7 +11,7 @@
 #include "base/test/mock_callback.h"
 #include "components/autofill_assistant/browser/actions/mock_action_delegate.h"
 #include "components/autofill_assistant/browser/client_status.h"
-#include "components/autofill_assistant/browser/mock_website_login_fetcher.h"
+#include "components/autofill_assistant/browser/mock_website_login_manager.h"
 #include "components/autofill_assistant/browser/string_conversions_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -20,8 +20,6 @@ const char kFakeUrl[] = "https://www.example.com";
 const char kFakeSelector[] = "#some_selector";
 const char kFakeUsername[] = "user@example.com";
 const char kFakePassword[] = "example_password";
-const char kGeneratedPassword[] = "m-W2b-_.7Fu9A.A";
-const char kMemoryKeyForGeneratedPassword[] = "memory-key-for-generation";
 }  // namespace
 
 namespace autofill_assistant {
@@ -46,23 +44,21 @@ class SetFormFieldValueActionTest : public testing::Test {
     ON_CALL(mock_action_delegate_, WriteUserData)
         .WillByDefault(
             RunOnceCallback<0>(&user_data_, /* field_change = */ nullptr));
-    ON_CALL(mock_action_delegate_, GetWebsiteLoginFetcher)
-        .WillByDefault(Return(&mock_website_login_fetcher_));
+    ON_CALL(mock_action_delegate_, GetWebsiteLoginManager)
+        .WillByDefault(Return(&mock_website_login_manager_));
     ON_CALL(mock_action_delegate_, OnShortWaitForElement(_, _))
         .WillByDefault(RunOnceCallback<1>(OkClientStatus()));
     ON_CALL(mock_action_delegate_, OnSetFieldValue(_, _, _, _, _))
         .WillByDefault(RunOnceCallback<4>(OkClientStatus()));
 
-    ON_CALL(mock_website_login_fetcher_, OnGetLoginsForUrl(_, _))
+    ON_CALL(mock_website_login_manager_, OnGetLoginsForUrl(_, _))
         .WillByDefault(
-            RunOnceCallback<1>(std::vector<WebsiteLoginFetcher::Login>{
-                WebsiteLoginFetcher::Login(GURL(kFakeUrl), kFakeUsername)}));
-    ON_CALL(mock_website_login_fetcher_, OnGetPasswordForLogin(_, _))
+            RunOnceCallback<1>(std::vector<WebsiteLoginManager::Login>{
+                WebsiteLoginManager::Login(GURL(kFakeUrl), kFakeUsername)}));
+    ON_CALL(mock_website_login_manager_, OnGetPasswordForLogin(_, _))
         .WillByDefault(RunOnceCallback<1>(true, kFakePassword));
-    ON_CALL(mock_website_login_fetcher_, GetGeneratedPassword())
-        .WillByDefault(Return(kGeneratedPassword));
     user_data_.selected_login_ =
-        base::make_optional<WebsiteLoginFetcher::Login>(GURL(kFakeUrl),
+        base::make_optional<WebsiteLoginManager::Login>(GURL(kFakeUrl),
                                                         kFakeUsername);
     fake_selector_ = Selector({kFakeSelector}).MustBeVisible();
   }
@@ -70,7 +66,7 @@ class SetFormFieldValueActionTest : public testing::Test {
  protected:
   Selector fake_selector_;
   MockActionDelegate mock_action_delegate_;
-  MockWebsiteLoginFetcher mock_website_login_fetcher_;
+  MockWebsiteLoginManager mock_website_login_manager_;
   base::MockCallback<Action::ProcessActionCallback> callback_;
   ActionProto proto_;
   SetFormFieldValueProto* set_form_field_proto_;
@@ -102,7 +98,7 @@ TEST_F(SetFormFieldValueActionTest, RequestedPasswordButNoLoginInClientMemory) {
 }
 
 TEST_F(SetFormFieldValueActionTest, RequestedPasswordButPasswordNotAvailable) {
-  ON_CALL(mock_website_login_fetcher_, OnGetPasswordForLogin(_, _))
+  ON_CALL(mock_website_login_manager_, OnGetPasswordForLogin(_, _))
       .WillByDefault(RunOnceCallback<1>(false, std::string()));
   auto* value = set_form_field_proto_->add_value();
   value->set_use_password(true);
@@ -152,27 +148,6 @@ TEST_F(SetFormFieldValueActionTest, PasswordToFill) {
       callback_,
       Run(Pointee(Property(&ProcessedActionProto::status, ACTION_APPLIED))));
   action.ProcessAction(callback_.Get());
-}
-
-TEST_F(SetFormFieldValueActionTest, GeneratedPassword) {
-  auto* value = set_form_field_proto_->add_value();
-  value->mutable_generate_password()->set_memory_key(
-      kMemoryKeyForGeneratedPassword);
-  SetFormFieldValueAction action(&mock_action_delegate_, proto_);
-  ON_CALL(mock_action_delegate_, OnGetFieldValue(_, _))
-      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), kGeneratedPassword));
-  EXPECT_CALL(mock_action_delegate_,
-              OnSetFieldValue(fake_selector_, kGeneratedPassword, _, _, _))
-      .WillOnce(RunOnceCallback<4>(OkClientStatus()));
-
-  EXPECT_CALL(
-      callback_,
-      Run(Pointee(Property(&ProcessedActionProto::status, ACTION_APPLIED))));
-  action.ProcessAction(callback_.Get());
-  EXPECT_EQ(kGeneratedPassword,
-            user_data_.additional_values_[kMemoryKeyForGeneratedPassword]
-                .strings()
-                .values(0));
 }
 
 TEST_F(SetFormFieldValueActionTest, Keycode) {

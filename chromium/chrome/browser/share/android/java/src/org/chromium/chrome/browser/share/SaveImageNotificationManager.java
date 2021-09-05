@@ -14,19 +14,20 @@ import android.net.Uri;
 import androidx.core.app.NotificationCompat;
 
 import org.chromium.base.IntentUtils;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
-import org.chromium.chrome.browser.notifications.ChromeNotificationBuilder;
 import org.chromium.chrome.browser.notifications.NotificationBuilderFactory;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
 import org.chromium.chrome.browser.notifications.NotificationIntentInterceptor;
-import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
-import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
-import org.chromium.chrome.browser.notifications.NotificationMetadata;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
-import org.chromium.chrome.browser.notifications.PendingIntentProvider;
-import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
+import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
+import org.chromium.components.browser_ui.notifications.ChromeNotificationBuilder;
+import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
+import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
+import org.chromium.components.browser_ui.notifications.NotificationMetadata;
+import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
 
 /**
  * Manages save image related notifications for Android.
@@ -61,8 +62,10 @@ public class SaveImageNotificationManager {
                             uri, uri, Intent.normalizeMimeType(MIME_TYPE), true);
                     IntentHandler.startActivityForTrustedIntent(viewIntent);
                     close(context, id);
+                    RecordUserAction.record("SharingQRCode.SuccessNotificationTapped");
                     break;
                 case NotificationIntentInterceptor.IntentType.DELETE_INTENT:
+                    RecordUserAction.record("SharingQRCode.FailureNotificationTapped");
                     close(context, id);
             }
         }
@@ -73,11 +76,12 @@ public class SaveImageNotificationManager {
      *
      * @param context The Context to use for accessing notification manager.
      * @param uri The Uri of the notification to show.
-     * @param notificationTitle The title of the notification.
      */
-    public static void showSuccessNotification(Context context, Uri uri, String notificationTitle) {
+    public static void showSuccessNotification(Context context, Uri uri) {
+        String notificationTitle =
+                context.getResources().getString(R.string.qr_code_successful_download_title);
         String notificationText =
-                context.getResources().getString(R.string.download_notification_completed);
+                context.getResources().getString(R.string.qr_code_successful_download_text);
         int iconId = R.drawable.offline_pin;
         showNotification(context, uri, notificationTitle, notificationText, iconId,
                 NotificationIntentInterceptor.IntentType.CONTENT_INTENT);
@@ -88,11 +92,12 @@ public class SaveImageNotificationManager {
      *
      * @param context The Context to use for accessing notification manager.
      * @param uri The Uri of the notification to hide.
-     * @param notificationTitle The title of the notification.
      */
-    public static void showFailureNotification(Context context, Uri uri, String notificationTitle) {
+    public static void showFailureNotification(Context context, Uri uri) {
+        String notificationTitle =
+                context.getResources().getString(R.string.qr_code_failed_download_title);
         String notificationText =
-                context.getResources().getString(R.string.download_notification_failed);
+                context.getResources().getString(R.string.qr_code_failed_download_text);
         int iconId = android.R.drawable.stat_sys_download_done;
         showNotification(context, uri, notificationTitle, notificationText, iconId,
                 NotificationIntentInterceptor.IntentType.DELETE_INTENT);
@@ -122,8 +127,8 @@ public class SaveImageNotificationManager {
         // Build the notification.
         ChromeNotificationBuilder builder =
                 NotificationBuilderFactory
-                        .createChromeNotificationBuilder(true, ChannelDefinitions.ChannelId.SHARING,
-                                null,
+                        .createChromeNotificationBuilder(true,
+                                ChromeChannelDefinitions.ChannelId.SHARING, null,
                                 new NotificationMetadata(
                                         NotificationUmaTracker.SystemNotificationType
                                                 .SHARE_SAVE_IMAGE,

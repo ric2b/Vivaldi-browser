@@ -106,15 +106,16 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // Add a layout result. This involves appending the fragment and its relative
   // offset to the builder, but also keeping track of out-of-flow positioned
   // descendants, propagating fragmentainer breaks, and more.
-  void AddResult(const NGLayoutResult&,
-                 const LogicalOffset,
-                 const LayoutInline* = nullptr);
+  void AddResult(const NGLayoutResult&, const LogicalOffset);
 
   void AddBreakToken(scoped_refptr<const NGBreakToken>);
 
   void AddOutOfFlowLegacyCandidate(NGBlockNode,
                                    const NGLogicalStaticPosition&,
                                    const LayoutInline* inline_container);
+
+  // Specify whether this will be the first fragment generated for the node.
+  void SetIsFirstForNode(bool is_first) { is_first_for_node_ = is_first; }
 
   // Set how much of the block-size we've used so far for this box. This will be
   // the sum of the block-size of all previous fragments PLUS the one we're
@@ -278,6 +279,11 @@ class CORE_EXPORT NGBoxFragmentBuilder final
               NGBaselineAlgorithmType::kInlineBlock);
     last_baseline_ = baseline;
   }
+  base::Optional<LayoutUnit> LastBaseline() const { return last_baseline_; }
+
+  // The inline block baseline is at the block end margin edge under some
+  // circumstances. This function updates |LastBaseline| in such cases.
+  void SetLastBaselineToBlockEndMarginEdgeIfNeeded();
 
   // The |NGFragmentItemsBuilder| for the inline formatting context of this box.
   NGFragmentItemsBuilder* ItemsBuilder() { return items_builder_; }
@@ -340,6 +346,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_fieldset_container_ = false;
   bool is_initial_block_size_indefinite_ = false;
   bool is_inline_formatting_context_;
+  bool is_first_for_node_ = true;
   bool did_break_;
   bool has_forced_break_ = false;
   bool is_new_fc_ = false;

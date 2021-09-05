@@ -94,24 +94,17 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsAXNodeObject() const final;
 
   // Check object role or purpose.
-  bool IsAnchor() const final;
   bool IsControllingVideoElement() const;
   bool IsMultiline() const override;
   bool IsEditable() const override { return IsNativeTextControl(); }
   bool ComputeIsEditableRoot() const override;
   bool IsFieldset() const final;
-  bool IsHeading() const final;
   bool IsHovered() const final;
-  bool IsImage() const final;
   bool IsImageButton() const;
   bool IsInputImage() const final;
-  bool IsLink() const override;
   bool IsInPageLinkTarget() const override;
-  bool IsMenu() const final;
-  bool IsMenuButton() const final;
-  bool IsMeter() const final;
   bool IsMultiSelectable() const override;
-  bool IsNativeImage() const;
+  bool IsNativeImage() const final;
   bool IsNativeTextControl() const final;
   bool IsNonNativeTextControl() const final;
   bool IsOffScreen() const override;
@@ -122,7 +115,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsSpinButton() const override;
   bool IsNativeSlider() const override;
   bool IsNativeSpinButton() const override;
-  bool IsMoveableSplitter() const override;
 
   // Check object state.
   bool IsClickable() const final;
@@ -159,6 +151,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   KURL Url() const override;
   AXObject* ChooserPopup() const override;
   String StringValue() const override;
+  String TextFromDescendants(AXObjectSet& visited,
+                             bool recursive) const override;
 
   // ARIA attributes.
   ax::mojom::Role AriaRoleAttribute() const final;
@@ -251,8 +245,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   Member<Node> node_;
 
   bool IsNativeCheckboxInMixedState() const;
-  String TextFromDescendants(AXObjectSet& visited,
-                             bool recursive) const override;
   String NativeTextAlternative(AXObjectSet& visited,
                                ax::mojom::NameFrom&,
                                AXRelatedObjectVector*,

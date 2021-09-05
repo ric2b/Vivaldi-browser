@@ -44,7 +44,6 @@
 #include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/frame/sandbox_flags.h"
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/popup_menu.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
@@ -201,7 +200,7 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                      const FrameLoadRequest&,
                      const AtomicString& frame_name,
                      const WebWindowFeatures&,
-                     mojom::blink::WebSandboxFlags,
+                     network::mojom::blink::WebSandboxFlags,
                      const FeaturePolicy::FeatureState&,
                      const SessionStorageNamespaceId&);
   virtual void Show(NavigationPolicy) = 0;
@@ -484,15 +483,6 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
       WTF::CrossThreadOnceFunction<void(WebSwapResult, base::TimeTicks)>;
   virtual void NotifySwapTime(LocalFrame& frame, ReportTimeCallback callback) {}
 
-  virtual void FallbackCursorModeLockCursor(LocalFrame* frame,
-                                            bool left,
-                                            bool right,
-                                            bool up,
-                                            bool down) = 0;
-
-  virtual void FallbackCursorModeSetCursorVisibility(LocalFrame* frame,
-                                                     bool visible) = 0;
-
   // Enable or disable BeginMainFrameNotExpected signals from the compositor of
   // the local root of |frame|. These signals would be consumed by the blink
   // scheduler.
@@ -509,6 +499,12 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   }
 
   virtual void DocumentDetached(Document&) {}
+
+  // Return the user's zoom factor which is different from the typical usage
+  // of "zoom factor" in blink (e.g., |LocalFrame::PageZoomFactor()|) which
+  // includes CSS zoom and the device scale factor (if use-zoom-for-dsf is
+  // enabled). This only includes the zoom initiated by the user (ctrl +/-).
+  virtual double UserZoomFactor() const { return 1; }
 
  protected:
   ChromeClient() = default;
@@ -528,7 +524,7 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                      const FrameLoadRequest&,
                                      const AtomicString& frame_name,
                                      const WebWindowFeatures&,
-                                     mojom::blink::WebSandboxFlags,
+                                     network::mojom::blink::WebSandboxFlags,
                                      const FeaturePolicy::FeatureState&,
                                      const SessionStorageNamespaceId&) = 0;
 

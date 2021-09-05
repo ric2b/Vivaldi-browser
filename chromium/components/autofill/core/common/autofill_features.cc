@@ -25,6 +25,13 @@ namespace features {
 const base::Feature kAutofillAddressNormalizer{
     "AutofillAddressNormalizer", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Controls if a full country name instead of a country code in a field with a
+// type derived from HTML_TYPE_COUNTRY_CODE can be used to set the profile
+// country.
+const base::Feature kAutofillAllowHtmlTypeCountryCodesWithFullNames{
+    "AutofillAllowHtmlTypeCountryCodesWithFullNames",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether autofill activates on non-HTTP(S) pages. Useful for
 // automated with data URLS in cases where it's too difficult to use the
 // embedded test server. Generally avoid using.
@@ -83,6 +90,14 @@ const base::Feature kAutofillEnforceMinRequiredFieldsForQuery{
 const base::Feature kAutofillEnforceMinRequiredFieldsForUpload{
     "AutofillEnforceMinRequiredFieldsForUpload",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Autofill uses the local heuristic such that address forms are only filled if
+// at least 3 fields are fillable according to local heuristics. Unfortunately,
+// the criterion for fillability is only that the field type is unknown. So many
+// field types that we don't fill (search term, price, ...) count towards that
+// counter, effectively reducing the threshold for some forms.
+const base::Feature kAutofillFixFillableFieldTypes{
+    "AutofillFixFillableFieldTypes", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, autofill suggestions are displayed in the keyboard accessory
 // instead of the regular popup.
@@ -190,12 +205,35 @@ const base::Feature kAutofillUploadThrottling{"AutofillUploadThrottling",
 
 // Controls whether to use the API or use the legacy server.
 const base::Feature kAutofillUseApi{"AutofillUseApi",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether suggestions' labels use the improved label disambiguation
 // format.
 const base::Feature kAutofillUseImprovedLabelDisambiguation{
     "AutofillUseImprovedLabelDisambiguation",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether to use the combined heuristic and the autocomplete section
+// implementation for section splitting or not. See https://crbug.com/1076175.
+const base::Feature kAutofillUseNewSectioningMethod{
+    "AutofillUseNewSectioningMethod", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// TODO(crbug.com/1075604): Remove once launched.
+// Controls whether the page language is used as a fall-back locale to translate
+// the country name when a profile is imported from a form.
+const base::Feature kAutofillUsePageLanguageToTranslateCountryNames{
+    "AutofillUsePageLanguageToTranslateCountryNames",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether to use the |ParseCityStateCountryZipCode| or not for
+// predicting the heuristic type.
+// |ParseCityStateCountryZipCode| is intended to prevent the misclassification
+// of the country field into |ADDRESS_HOME_STATE| while determining the
+// heuristic type. The misclassification happens sometimes because the regular
+// expression for |ADDRESS_HOME_STATE| contains the term "region" which is also
+// used for country selectors.
+const base::Feature kAutofillUseParseCityStateCountryZipCodeInHeuristic{
+    "AutofillUseParseCityStateCountryZipCodeInHeuristic",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether or not autofill utilizes the country code from the Chrome

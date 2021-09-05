@@ -32,12 +32,6 @@ const base::Feature kAdSamplerTriggerFeature{"SafeBrowsingAdSamplerTrigger",
 const base::Feature kCaptureInlineJavascriptForGoogleAds{
     "CaptureInlineJavascriptForGoogleAds", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kCaptureSafetyNetId{"SafeBrowsingCaptureSafetyNetId",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kCommittedSBInterstitials{
-    "SafeBrowsingCommittedInterstitials", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kContentComplianceEnabled{
     "SafeBrowsingContentComplianceEnabled", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -53,27 +47,13 @@ const base::Feature kEnhancedProtection{"SafeBrowsingEnhancedProtection",
 const base::Feature kMalwareScanEnabled{"SafeBrowsingMalwareScanEnabled",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable saved password protection by default only on desktop.
-#if BUILDFLAG(FULL_SAFE_BROWSING)
 const base::Feature kPasswordProtectionForSavedPasswords{
     "SafeBrowsingPasswordProtectionForSavedPasswords",
     base::FEATURE_ENABLED_BY_DEFAULT};
-#else
-const base::Feature kPasswordProtectionForSavedPasswords{
-    "SafeBrowsingPasswordProtectionForSavedPasswords",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 
-// Enable saved password protection with domains by default only on desktop.
-#if BUILDFLAG(FULL_SAFE_BROWSING)
 const base::Feature kPasswordProtectionShowDomainsForSavedPasswords{
     "SafeBrowsingPasswordProtectionShowDomainsForSavedPasswords",
     base::FEATURE_ENABLED_BY_DEFAULT};
-#else
-const base::Feature kPasswordProtectionShowDomainsForSavedPasswords{
-    "SafeBrowsingPasswordProtectionShowDomainsForSavedPasswords",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 const base::Feature kPasswordProtectionForSignedInUsers{
@@ -145,8 +125,6 @@ constexpr struct {
     {&kAdRedirectTriggerFeature, true},
     {&kAdSamplerTriggerFeature, false},
     {&kCaptureInlineJavascriptForGoogleAds, true},
-    {&kCaptureSafetyNetId, true},
-    {&kCommittedSBInterstitials, true},
     {&kContentComplianceEnabled, true},
     {&kDelayedWarnings, true},
     {&kDownloadRequestWithToken, true},

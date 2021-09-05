@@ -9,6 +9,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key_subtle.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_common.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
@@ -24,8 +25,11 @@ class PrefService;
 namespace chromeos {
 namespace cert_provisioning {
 
+class CertProvisioningInvalidator;
+
 using CertProvisioningWorkerCallback =
-    base::OnceCallback<void(bool is_success)>;
+    base::OnceCallback<void(const CertProfile& profile,
+                            CertProvisioningWorkerState state)>;
 
 class CertProvisioningWorker;
 
@@ -34,12 +38,23 @@ class CertProvisioningWorkerFactory {
   virtual ~CertProvisioningWorkerFactory() = default;
 
   static CertProvisioningWorkerFactory* Get();
+
   virtual std::unique_ptr<CertProvisioningWorker> Create(
       CertScope cert_scope,
       Profile* profile,
       PrefService* pref_service,
       const CertProfile& cert_profile,
       policy::CloudPolicyClient* cloud_policy_client,
+      std::unique_ptr<CertProvisioningInvalidator> invalidator,
+      CertProvisioningWorkerCallback callback);
+
+  virtual std::unique_ptr<CertProvisioningWorker> Deserialize(
+      CertScope cert_scope,
+      Profile* profile,
+      PrefService* pref_service,
+      const base::Value& saved_worker,
+      policy::CloudPolicyClient* cloud_policy_client,
+      std::unique_ptr<CertProvisioningInvalidator> invalidator,
       CertProvisioningWorkerCallback callback);
 
   // Doesn't take ownership.
@@ -49,21 +64,9 @@ class CertProvisioningWorkerFactory {
   static CertProvisioningWorkerFactory* test_factory_;
 };
 
-// These values are used in serialization and should be changed carefully.
-enum class CertProvisioningWorkerState {
-  kInitState = 0,
-  kKeypairGenerated = 1,
-  kStartCsrResponseReceived = 2,
-  kVaChallengeFinished = 3,
-  kKeyRegistered = 4,
-  kSignCsrFinished = 5,
-  kFinishCsrResponseReceived = 6,
-  kDownloadCertResponseReceived = 7,
-  kSucceed = 8,
-  kFailed = 9,
-  kMaxValue = kFailed,
-};
-
+// This class is a part of certificate provisioning feature.  It takes a
+// certificate profile, generates a key pair, communicates with DM Server to
+// create a CSR for it and request a certificate, and imports it.
 class CertProvisioningWorker {
  public:
   CertProvisioningWorker() = default;
@@ -73,33 +76,57 @@ class CertProvisioningWorker {
 
   // Continue provisioning a certificate.
   virtual void DoStep() = 0;
+  // Sets worker's state to one of final ones. That triggers corresponding
+  // clean ups (deletes serialized state, keys, and so on) and returns |state|
+  // via callback.
+  virtual void Stop(CertProvisioningWorkerState state) = 0;
+  // Make worker pause all activity and wait for DoStep.
+  virtual void Pause() = 0;
   // Returns true, if the worker is waiting for some future event. |DoStep| can
   // be called to try continue right now.
   virtual bool IsWaiting() const = 0;
+  // Returns CertProfile that this worker is working on.
+  virtual const CertProfile& GetCertProfile() const = 0;
+  // Returns public key or an empty string if the key is not created yet.
+  virtual const std::string& GetPublicKey() const = 0;
+  // Returns current state.
+  virtual CertProvisioningWorkerState GetState() const = 0;
+  // Returns state that was before the current one. Especially helpful on failed
+  // workers.
+  virtual CertProvisioningWorkerState GetPreviousState() const = 0;
+  // Returns the time when this worker has been last updated.
+  virtual base::Time GetLastUpdateTime() const = 0;
 };
 
 class CertProvisioningWorkerImpl : public CertProvisioningWorker {
  public:
-  CertProvisioningWorkerImpl(CertScope cert_scope,
-                             Profile* profile,
-                             PrefService* pref_service,
-                             const CertProfile& cert_profile,
-                             policy::CloudPolicyClient* cloud_policy_client,
-                             CertProvisioningWorkerCallback callback);
+  CertProvisioningWorkerImpl(
+      CertScope cert_scope,
+      Profile* profile,
+      PrefService* pref_service,
+      const CertProfile& cert_profile,
+      policy::CloudPolicyClient* cloud_policy_client,
+      std::unique_ptr<CertProvisioningInvalidator> invalidator,
+      CertProvisioningWorkerCallback callback);
   ~CertProvisioningWorkerImpl() override;
 
   // CertProvisioningWorker
   void DoStep() override;
+  void Stop(CertProvisioningWorkerState state) override;
+  void Pause() override;
   bool IsWaiting() const override;
-
-  // For testing.
-  CertProvisioningWorkerState GetState() const;
+  const CertProfile& GetCertProfile() const override;
+  const std::string& GetPublicKey() const override;
+  CertProvisioningWorkerState GetState() const override;
+  CertProvisioningWorkerState GetPreviousState() const override;
+  base::Time GetLastUpdateTime() const override;
 
  private:
   friend class CertProvisioningSerializer;
 
   void GenerateKey();
-  void OnGenerateKeyDone(const attestation::TpmChallengeKeyResult& result);
+  void OnGenerateKeyDone(base::TimeTicks start_time,
+                         const attestation::TpmChallengeKeyResult& result);
 
   void StartCsr();
   void OnStartCsrDone(policy::DeviceManagementStatus status,
@@ -112,13 +139,18 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
 
   void BuildVaChallengeResponse();
   void OnBuildVaChallengeResponseDone(
+      base::TimeTicks start_time,
       const attestation::TpmChallengeKeyResult& result);
 
   void RegisterKey();
   void OnRegisterKeyDone(const attestation::TpmChallengeKeyResult& result);
 
+  void MarkKey();
+  void OnMarkKeyDone(const std::string& error_message);
+
   void SignCsr();
-  void OnSignCsrDone(const std::string& signature,
+  void OnSignCsrDone(base::TimeTicks start_time,
+                     const std::string& signature,
                      const std::string& error_message);
 
   void FinishCsr();
@@ -133,20 +165,40 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
       base::Optional<int64_t> try_later,
       const std::string& pem_encoded_certificate);
 
-  void ImportCert();
+  void ImportCert(const std::string& pem_encoded_certificate);
   void OnImportCertDone(const std::string& error_message);
 
   void ScheduleNextStep(base::TimeDelta delay);
   void CancelScheduledTasks();
 
-  // TODO: implement when invalidations are supported for cert provisioning.
-  void RegisterForInvalidationTopic(const std::string& invalidation_topic) {}
+  enum class ContinueReason { kTimeout, kInvalidation };
+  void OnShouldContinue(ContinueReason reason);
+
+  // Registers for |invalidation_topic_| that allows to receive notification
+  // when server side is ready to continue provisioning process.
+  void RegisterForInvalidationTopic();
+  // Should be called only when provisioning process is finished (successfully
+  // or not). Should not be called when the worker is destroyed, but will be
+  // deserialized back later.
+  void UnregisterFromInvalidationTopic();
 
   // If it is called with kSucceed or kFailed, it will call the |callback_|. The
   // worker can be destroyed in callback and should not use any member fields
   // after that.
   void UpdateState(CertProvisioningWorkerState state);
-  bool IsFinished() const;
+
+  // Serializes the worker or deletes serialized state accroding to the current
+  // state. Some states are considered unrecoverable, some can be reached again
+  // from previous ones.
+  void HandleSerialization();
+  // Handles recreation of some internal objects after deserialization. Intended
+  // to be called from CertProvisioningDeserializer.
+  void InitAfterDeserialization();
+
+  void CleanUpAndRunCallback();
+  void OnDeleteVaKeyDone(base::Optional<bool> delete_result);
+  void OnRemoveKeyDone(const std::string& error_message);
+  void OnCleanUpDone();
 
   // Returns true if there are no errors and the flow can be continued.
   bool ProcessResponseErrors(
@@ -163,24 +215,43 @@ class CertProvisioningWorkerImpl : public CertProvisioningWorker {
   // This field should be updated only via |UpdateState| function. It will
   // trigger update of the serialized data.
   CertProvisioningWorkerState state_ = CertProvisioningWorkerState::kInitState;
+  // State that was before the current one. Useful for debugging and cleaning
+  // on failure.
+  CertProvisioningWorkerState prev_state_ = state_;
+  // Time when this worker has been last updated.
+  base::Time last_update_time_;
+
   bool is_waiting_ = false;
-  // Currently it is used only for DM Server DM_STATUS_TEMPORARY_UNAVAILABLE
-  // error. For all other errors the worker just gives up.
+  // Used for an UMA metric to track situation when the worker did not receive
+  // an invalidation for a completed server side task.
+  bool is_continued_without_invalidation_for_uma_ = false;
+  // Calculates retry timeout for network related failures.
   net::BackoffEntry request_backoff_;
 
   std::string public_key_;
   std::string invalidation_topic_;
+
+  // These variables may not contain valid values after
+  // kFinishCsrResponseReceived state because of deserialization (and they don't
+  // need to).
   std::string csr_;
   std::string va_challenge_;
   std::string va_challenge_response_;
   base::Optional<platform_keys::HashAlgorithm> hashing_algorithm_;
   std::string signature_;
-  std::string pem_encoded_certificate_;
+
+  // IMPORTANT:
+  // Increment this when you add/change any member in CertProvisioningWorkerImpl
+  // that affects serialization (and update all functions that fail to compile
+  // because of it).
+  static constexpr int kVersion = 1;
 
   platform_keys::PlatformKeysService* platform_keys_service_ = nullptr;
   std::unique_ptr<attestation::TpmChallengeKeySubtle>
       tpm_challenge_key_subtle_impl_;
   policy::CloudPolicyClient* cloud_policy_client_ = nullptr;
+
+  std::unique_ptr<CertProvisioningInvalidator> invalidator_;
 
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<CertProvisioningWorkerImpl> weak_factory_{this};

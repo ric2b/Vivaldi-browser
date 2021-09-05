@@ -165,12 +165,13 @@ void MenuContentGetFunction::SendResponse(Menu_Model* model,
                                           const std::string& named_menu) {
   Menu_Node* menu = model ? model->GetMenu(named_menu) : nullptr;
   if (!menu) {
-    Respond(NoArguments());
+    Respond(Error("Menu model not available"));
   } else {
     vivaldi::menu_content::Role role =
         vivaldi::menu_content::ParseRole(menu->role());
     if (role == vivaldi::menu_content::ROLE_NONE) {
-      Respond(NoArguments());
+      Respond(Error("Unknown menu role"));
+      return;
     }
 
     // We want the children of the menu node

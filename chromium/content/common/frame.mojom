@@ -18,6 +18,7 @@ import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
 import "mojo/public/mojom/base/values.mojom";
 import "services/network/public/mojom/content_security_policy.mojom";
+import "services/network/public/mojom/web_sandbox_flags.mojom";
 import "services/network/public/mojom/url_loader.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
 import "services/network/public/mojom/url_response_head.mojom";
@@ -179,7 +180,10 @@ interface FrameNavigationControl {
   // Request for the renderer to execute JavaScript in the frame's context.
   //
   // |javascript| is the string containing the JavaScript to be executed in the
-  // target frame's context.
+  // target frame's context. Note that this uses BigString16 rather than
+  // String16 as this is used in contexts, like DevTools, where the contents of
+  // the JavaScript script is user-provided, and therefore we can't guarantee
+  // the size of the script.
   //
   // |wants_result| is true if the result of this execution is required by the
   // caller. If it is false, a reply is still required by Mojo, but a null value
@@ -189,14 +193,14 @@ interface FrameNavigationControl {
   // order with other navigation-related messages. Fix this and move this to a
   // non-navigate-related interface if possible.
   JavaScriptExecuteRequest(
-      mojo_base.mojom.String16 javascript,
+      mojo_base.mojom.BigString16 javascript,
       bool wants_result) => (mojo_base.mojom.Value result);
 
   // ONLY FOR TESTS: Same as above but this can optionally trigger a fake user
   // activation notification to test functionalities that are gated by user
   // activation.
   JavaScriptExecuteRequestForTests(
-      mojo_base.mojom.String16 javascript,
+      mojo_base.mojom.BigString16 javascript,
       bool wants_result,
       bool has_user_gesture,
       int32 world_id)
@@ -205,24 +209,9 @@ interface FrameNavigationControl {
   // Same as JavaScriptExecuteRequest above except the script is run in the
   // isolated world specified by the fourth parameter.
   JavaScriptExecuteRequestInIsolatedWorld(
-      mojo_base.mojom.String16 javascript,
+      mojo_base.mojom.BigString16 javascript,
       bool wants_result,
       int32 world_id) => (mojo_base.mojom.Value result);
-
-  // Posts a message from a frame in another process to the current renderer.
-  // |source_routing_id| is the routing ID of the source frame in the source
-  // process when sent to the browser. The browser replaces it with the routing
-  // ID of the equivalent frame proxy in the destination process.
-  // |source_origin| is the origin of the source frame when the message was
-  // sent, and |target_origin| specifies what the origin of the target frame
-  // must be for the message to be dispatched. An empty string allows the
-  // message to be dispatched to any origin.
-  // |message| is the encoded data, and any extra properties such as
-  // transferred ports or blobs.
-  PostMessageEvent(int32 source_routing_id,
-                   mojo_base.mojom.String16 source_origin,
-                   mojo_base.mojom.String16 target_origin,
-                   blink.mojom.TransferableMessage message);
 
   // Forwards a message from a portal's host to the main frame in the portal's
   // guest contents.
@@ -243,6 +232,15 @@ interface FrameNavigationControl {
       pending_associated_receiver<blink.mojom.PortalClient> portal_client,
       blink.mojom.TransferableMessage data)
       => (blink.mojom.PortalActivateResult result);
+
+  // Requests that a provisional RenderFrame swap itself into the frame tree,
+  // replacing the RenderFrameProxy that it is associated with. This is used
+  // with remote-to-local frame navigations when the RenderFrameProxy
+  // corresponds to a non-live (crashed) frame. In that case, the browser
+  // process will send this message as part of an early commit to stop showing
+  // the sad iframe without waiting for the provisional RenderFrame's navigation
+  // to commit.
+  SwapIn();
 };
 
 // Implemented by the frame (e.g. renderer processes).
@@ -325,6 +323,9 @@ struct CreateNewWindowReply {
   // The ID of the main frame hosted in the view.
   int32 main_frame_route_id;
 
+  // The unique identifier of the RenderFrameHost
+  mojo_base.mojom.UnguessableToken main_frame_frame_token;
+
   // The ID of the widget for the main frame.
   int32 main_frame_widget_route_id;
 
@@ -370,26 +371,36 @@ interface FrameHost {
 
   // Sent by the renderer process to request the creation of a new portal.
   // |portal| is the pipe to be used for the Portal object, |client| is the pipe
-  // used to communicate back with the caller. Returns |proxy_routing_id|, which
-  // is the routing id of the RenderFrameProxy, |initial_replicated_state|, the
-  // replicated state associated with that RenderFrameProxy, and |portal_token|,
-  // which is the unique identifier for the portal.
+  // used to communicate back with the caller. Returns:
+  // |proxy_routing_id| - the routing id of the RenderFrameProxy
+  // |initial_replicated_state| - the replicated state associated with that
+  //                              RenderFrameProxy
+  // |portal_token| - the unique identifier for the portal
+  // |frame_token| - the unique identifier of the RenderFrameProxy
+  // |devtools_frame_token| - the unique identifier of the frame node in the
+  //                          frame tree
   [Sync] CreatePortal(
       pending_associated_receiver<blink.mojom.Portal> portal,
       pending_associated_remote<blink.mojom.PortalClient> client)
       => (int32 proxy_routing_id,
           FrameReplicationState initial_replicated_state,
           mojo_base.mojom.UnguessableToken portal_token,
+          mojo_base.mojom.UnguessableToken frame_token,
           mojo_base.mojom.UnguessableToken devtools_frame_token);
 
   // Requests that this frame adopts the portal identified by |portal_token|.
-  // Returns |proxy_routing_id|, which is the routing id of the portal's
-  // RenderFrameProxy, |replicated_state|, the replicated state associated with
-  // that RFP, and the |devtools_frame_token|.
+  // Returns:
+  // |proxy_routing_id| - the routing id of the portal's RenderFrameProxy
+  // |replicated_state| - the replicated state associated with that
+  //                      RenderFrameProxy
+  // |frame_token| - the unique identifier of the RenderFrameProxy
+  // |devtools_frame_token| - the unique identifier of the frame node in the
+  //                          frame tree
   [Sync] AdoptPortal(mojo_base.mojom.UnguessableToken portal_token)
       => (int32 proxy_routing_id,
           viz.mojom.FrameSinkId frame_sink_id,
           FrameReplicationState replicated_state,
+          mojo_base.mojom.UnguessableToken frame_token,
           mojo_base.mojom.UnguessableToken devtools_frame_token);
 
 
@@ -473,7 +484,7 @@ interface FrameHost {
   // |feature_policy_header| is a list of an origin whitelist for each feature
   // in the policy.
   DidSetFramePolicyHeaders(
-      blink.mojom.WebSandboxFlags sandbox_flags,
+      network.mojom.WebSandboxFlags sandbox_flags,
       array<blink.mojom.ParsedFeaturePolicyDeclaration> feature_policy_header,
       map<blink.mojom.DocumentPolicyFeature, blink.mojom.PolicyValue>
         document_policy_header);

@@ -10,7 +10,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/feature_policy/feature_policy_helper.h"
+#include "third_party/blink/renderer/core/feature_policy/policy_helper.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -92,16 +92,6 @@ class CORE_EXPORT FeaturePolicyParser {
       Vector<String>* messages,
       const FeatureNameMap& feature_names,
       FeaturePolicyParserDelegate* delegate = nullptr);
-
-  // Used for LLVM fuzzer test
-  static void ParseValueForFuzzer(mojom::PolicyValueType, const String&);
-
- private:
-  static PolicyValue GetFallbackValueForFeature(
-      mojom::blink::FeaturePolicyFeature feature);
-  static PolicyValue ParseValueForType(mojom::PolicyValueType feature_type,
-                                       const String& value_string,
-                                       bool* ok);
 };
 // Returns true iff any declaration in the policy is for the given feature.
 CORE_EXPORT bool IsFeatureDeclared(mojom::blink::FeaturePolicyFeature,

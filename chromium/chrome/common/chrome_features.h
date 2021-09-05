@@ -29,6 +29,8 @@ namespace features {
 #if defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kAddToHomescreenMessaging;
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kAndroidDarkSearch;
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
@@ -106,6 +108,10 @@ COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kCrostiniForceClose;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kCrostiniArcSideload;
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kCryptohomeDistributedModel;
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kCryptohomeUserDataAuth;
 COMPONENT_EXPORT(CHROME_FEATURES) extern const base::Feature kPluginVm;
 COMPONENT_EXPORT(CHROME_FEATURES) extern const base::Feature kPrintServerUi;
 COMPONENT_EXPORT(CHROME_FEATURES) extern const base::Feature kTerminalSystemApp;
@@ -122,9 +128,6 @@ COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDesktopCaptureTabSharingInfobar;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kDesktopMinimalUI;
-
-COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDesktopPWAsWithoutExtensions;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -134,10 +137,13 @@ COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDesktopPWAsLocalUpdating;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kDesktopPWAsLocalUpdatingThrottlePersistence;
+extern const base::Feature kDesktopPWAsTabStrip;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kDesktopPWAsTabStrip;
+extern const base::Feature kDesktopPWAsTabStripLinkCapturing;
+
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kDesktopPWAsAppIconShortcutsMenu;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDesktopPWAsUnifiedUiController;
@@ -147,6 +153,11 @@ extern const base::Feature kDesktopPWAsUnifiedLaunch;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDesktopPWAsSharedStoreService;
+
+#if !defined(OS_ANDROID)
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kDefaultWebAppInstallation;
+#endif
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDnsOverHttps;
@@ -159,9 +170,6 @@ extern const base::FeatureParam<bool> kDnsOverHttpsShowUiParam;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::FeatureParam<std::string>
     kDnsOverHttpsDisabledProvidersParam;
-
-COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kDnsHttpssvc;
 
 #if defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -228,6 +236,9 @@ extern const base::Feature kHappinessTrackingSurveysForDesktopSettings;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kHappinessTrackingSurveysForDesktopSettingsPrivacy;
+
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kHappinessTrackingSurveysForDesktopMigration;
 #endif
 
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -254,8 +265,8 @@ extern const base::Feature kInstallableAmbientBadgeInfoBar;
 
 #if !defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kIntentPicker;
-#endif
+extern const base::Feature kIntentPickerPWAPersistence;
+#endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -341,14 +352,14 @@ extern const base::Feature kPrerenderFallbackToPreconnect;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kPrivacySettingsRedesign;
 
+#if defined(OS_ANDROID)
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kSafetyCheckAndroid;
+#endif
+
 #if BUILDFLAG(ENABLE_PLUGINS)
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kFlashDeprecationWarning;
-#endif
-
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kCloudPrinterHandler;
 #endif
 
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -397,9 +408,6 @@ extern const base::Feature kSysInternals;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kSystemWebApps;
 
-COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kAppManagement;
-
 #if !defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES) extern const base::Feature kTabMetricsLogging;
 #endif
@@ -420,12 +428,10 @@ COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kHeavyAdIntervention;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kHeavyAdPrivacyMitigations;
+extern const base::Feature kHeavyAdInterventionWarning;
 
-#if defined(OS_CHROMEOS)
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kUseFtlSignalingForCrdHostDelegate;
-#endif
+extern const base::Feature kHeavyAdPrivacyMitigations;
 
 #if defined(OS_CHROMEOS)
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -446,6 +452,12 @@ extern const base::Feature kQuickUnlockPinSignin;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kOobeMarketingScreen;
+
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kOobeMarketingDoubleOptInCountriesSupported;
+
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kOobeMarketingAdditionalCountriesSupported;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kQuickUnlockFingerprint;

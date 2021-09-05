@@ -28,6 +28,7 @@
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/datasource/vivaldi_data_source_api.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "browser/vivaldi_default_bookmarks.h"
@@ -288,7 +289,8 @@ BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
+ExtensionFunction::ResponseValue
+BookmarksPrivateEmptyTrashFunction::RunOnReady() {
   namespace Results = vivaldi::bookmarks_private::EmptyTrash::Results;
 
   bool success = false;
@@ -308,8 +310,7 @@ bool BookmarksPrivateEmptyTrashFunction::RunOnReady() {
     }
     success = true;
   }
-  SetResultList(Results::Create(success));
-  return true;
+  return ArgumentList(Results::Create(success));
 }
 
 ExtensionFunction::ResponseAction
@@ -335,22 +336,24 @@ void BookmarksPrivateUpdatePartnersFunction::OnUpdatePartnersResult(
   Respond(ArgumentList(Results::Create(ok, no_version)));
 }
 
-bool BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
+ExtensionFunction::ResponseValue
+BookmarksPrivateIsCustomThumbnailFunction::RunOnReady() {
   using vivaldi::bookmarks_private::IsCustomThumbnail::Params;
   namespace Results = vivaldi::bookmarks_private::IsCustomThumbnail::Results;
 
   std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params);
+  if (!params)
+    BadMessage();
 
-  const BookmarkNode* node = GetBookmarkNodeFromId(params->bookmark_id);
+  std::string error;
+  const BookmarkNode* node = GetBookmarkNodeFromId(params->bookmark_id, &error);
   if (!node)
-    return false;
+    return Error(error);
 
   std::string url = vivaldi_bookmark_kit::GetThumbnail(node);
   bool is_custom_thumbnail =
       !url.empty() && !VivaldiDataSourcesAPI::IsBookmarkCapureUrl(url);
-  SetResultList(Results::Create(is_custom_thumbnail));
-  return true;
+  return ArgumentList(Results::Create(is_custom_thumbnail));
 }
 
 }  // namespace extensions

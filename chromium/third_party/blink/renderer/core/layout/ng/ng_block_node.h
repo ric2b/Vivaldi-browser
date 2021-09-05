@@ -21,9 +21,10 @@ class NGEarlyBreak;
 class NGLayoutResult;
 class NGPhysicalBoxFragment;
 class NGPhysicalContainerFragment;
-struct MinMaxSizes;
 struct NGBoxStrut;
 struct NGLayoutAlgorithmParams;
+
+enum class MathScriptType;
 
 // Represents a node to be laid out.
 class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
@@ -43,7 +44,8 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   // If layout is dirty, it will perform layout using the previous constraint
   // space used to generate the |NGLayoutResult|.
   // Otherwise it will simply return the previous layout result generated.
-  scoped_refptr<const NGLayoutResult> SimplifiedLayout();
+  scoped_refptr<const NGLayoutResult> SimplifiedLayout(
+      const NGPhysicalFragment& previous_fragment);
 
   // This method is just for use within the |NGOutOfFlowLayoutPart|.
   //
@@ -80,9 +82,9 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   // The constraint space is also used to perform layout when this block's
   // writing mode is orthogonal to its parent's, in which case the constraint
   // space is not optional.
-  MinMaxSizes ComputeMinMaxSizes(WritingMode container_writing_mode,
-                                 const MinMaxSizesInput&,
-                                 const NGConstraintSpace* = nullptr);
+  MinMaxSizesResult ComputeMinMaxSizes(WritingMode container_writing_mode,
+                                       const MinMaxSizesInput&,
+                                       const NGConstraintSpace* = nullptr);
 
   MinMaxSizes ComputeMinMaxSizesFromLegacy(const MinMaxSizesInput&) const;
 
@@ -95,7 +97,8 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   // This will only be the case if there is actual inline content. Empty nodes
   // or nodes consisting purely of block-level, floats, and/or out-of-flow
   // positioned children will return false.
-  bool IsInlineFormattingContextRoot() const;
+  bool IsInlineFormattingContextRoot(
+      NGLayoutInputNode* first_child_out = nullptr) const;
 
   bool IsInlineLevel() const;
   bool IsAtomicInlineLevel() const;
@@ -121,13 +124,13 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
     return (IsDocumentElement() || IsBody());
   }
 
-  // CSS defines certain cases to synthesize inline block baselines from box.
-  // See comments in UseLogicalBottomMarginEdgeForInlineBlockBaseline().
-  bool UseLogicalBottomMarginEdgeForInlineBlockBaseline() const;
-
   // Returns true if the custom layout node is in its loaded state (all script
   // for the web-developer defined layout is ready).
   bool IsCustomLayoutLoaded() const;
+
+  // Get script type for scripts (msub, msup, msubsup, munder, mover and
+  // munderover).
+  MathScriptType ScriptType() const;
 
   // Layout an atomic inline; e.g., inline block.
   scoped_refptr<const NGLayoutResult> LayoutAtomicInline(
@@ -144,6 +147,12 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   // Write back resolved margins to legacy.
   void StoreMargins(const NGConstraintSpace&, const NGBoxStrut& margins);
   void StoreMargins(const NGPhysicalBoxStrut& margins);
+
+  // Add a column layout result to a list. Columns are essentially
+  // LayoutObject-less, but we still need to keep the fragments generated
+  // somewhere.
+  void AddColumnResult(scoped_refptr<const NGLayoutResult>,
+                       const NGBlockBreakToken* incoming_break_token);
 
   static bool CanUseNewLayout(const LayoutBox&);
   bool CanUseNewLayout() const;
@@ -174,8 +183,8 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
       const NGConstraintSpace&,
       const NGLayoutResult&,
       const NGBlockBreakToken* previous_break_token);
-  void CopyFragmentDataToLayoutBoxForInlineChildren(
-      const NGPhysicalBoxFragment& container);
+  void CopyFragmentItemsToLayoutBox(const NGPhysicalBoxFragment& container,
+                                    const NGFragmentItems& items);
   void CopyFragmentDataToLayoutBoxForInlineChildren(
       const NGPhysicalContainerFragment& container,
       LayoutUnit initial_container_width,

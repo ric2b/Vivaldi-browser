@@ -30,7 +30,7 @@ class VivaldiRenderViewObserver : public content::RenderViewObserver {
   void OnGetAccessKeysForPage();
   void OnAccessKeyAction(std::string access_key);
   void OnScrollPage(std::string scroll_type, int scroll_amount);
-  void OnActivateElementFromPoint(int x, int y);
+  void OnActivateElementFromPoint(int x, int y, int modifiers);
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiRenderViewObserver);
 };

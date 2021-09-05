@@ -773,7 +773,7 @@ void TraceEventDataSource::StartTracingInternal(
     auto task_runner = base::GetRecordActionTaskRunner();
     if (task_runner) {
       task_runner->PostTask(
-          FROM_HERE, base::Bind([]() {
+          FROM_HERE, base::BindOnce([]() {
             base::AddActionCallback(
                 TraceEventDataSource::GetInstance()->user_action_callback_);
           }));
@@ -851,7 +851,7 @@ void TraceEventDataSource::StopTracing(
   auto task_runner = base::GetRecordActionTaskRunner();
   if (task_runner) {
     task_runner->PostTask(
-        FROM_HERE, base::Bind([]() {
+        FROM_HERE, base::BindOnce([]() {
           base::RemoveActionCallback(
               TraceEventDataSource::GetInstance()->user_action_callback_);
         }));
@@ -949,7 +949,7 @@ void TraceEventDataSource::OnAddTraceEvent(
     TraceEvent* trace_event,
     bool thread_will_flush,
     base::trace_event::TraceEventHandle* handle) {
-  OnAddTraceEvent(trace_event, thread_will_flush, handle,
+  OnAddTraceEvent(trace_event, thread_will_flush, handle, perfetto::Track(),
                   [](perfetto::EventContext) {});
 }
 
@@ -1056,13 +1056,12 @@ void TraceEventDataSource::ReturnTraceWriter(
   // synchronously, which can trigger a call to TaskRunnerHandle::Get()).
   auto* trace_writer_raw = trace_writer.release();
   ANNOTATE_LEAKING_OBJECT_PTR(trace_writer_raw);
-  PerfettoTracedProcess::GetTaskRunner()->GetOrCreateTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          // Pass writer as raw pointer so that we leak it if task posting fails
-          // (during shutdown).
-          [](perfetto::TraceWriter* trace_writer) { delete trace_writer; },
-          trace_writer_raw));
+  // Use PostTask() on PerfettoTaskRunner to ensure we comply with
+  // base::ScopedDeferTaskPosting.
+  PerfettoTracedProcess::GetTaskRunner()->PostTask(
+      // Capture writer as raw pointer so that we leak it if task posting
+      // fails (during shutdown).
+      [trace_writer_raw]() { delete trace_writer_raw; });
 }
 
 void TraceEventDataSource::EmitTrackDescriptor() {

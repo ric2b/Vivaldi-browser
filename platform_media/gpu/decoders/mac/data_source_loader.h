@@ -10,17 +10,13 @@
 
 #include "platform_media/common/feature_toggles.h"
 
+#include "base/memory/scoped_refptr.h"
+
 #import <AVFoundation/AVFoundation.h>
-
-#include "base/mac/scoped_nsobject.h"
-#include "base/mac/scoped_dispatch_object.h"
-#include "base/memory/ref_counted.h"
-
-#include "platform_media/gpu/data_source/ipc_data_source.h"
 
 namespace media {
 class DataRequestHandler;
-}  // namespace media
+}  // namesoace media
 
 /**
  * "The AVAssetResourceLoaderDelegate protocol defines a method that lets your
@@ -31,27 +27,10 @@ class DataRequestHandler;
 
 @interface DataSourceLoader : NSObject<AVAssetResourceLoaderDelegate> {
  @private
-  base::ScopedDispatchObject<dispatch_queue_t> dispatch_queue_;
-  base::scoped_nsobject<NSString> contentType_;
   scoped_refptr<media::DataRequestHandler> handler_;
-  base::scoped_nsobject<AVURLAsset> url_asset_;
-  int64_t dataSize_;
-  bool isStreaming_;
 }
-- (id)initWithDataSource:(ipc_data_source::Reader)data_source
-          withSourceInfo:(ipc_data_source::Info)sourceInfo
-       withDispatchQueue:(dispatch_queue_t)dispatch_queue;
 
-- (AVAsset*)asset;
-
-// This must be called from the main thread.
-- (void)stop;
-
-// This must be called from the main thread.
-- (void)suspend;
-
-// This must be called from the main thread.
-- (void)resume;
+- (id)initWithHandler:(const scoped_refptr<media::DataRequestHandler>&)handler;
 
 // Asks the delegate if it wants to load the requested resource.
 - (BOOL)resourceLoader:(AVAssetResourceLoader*)resourceLoader

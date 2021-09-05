@@ -9,9 +9,10 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/containers/flat_map.h"
-#include "base/logging.h"
 #include "base/memory/ref_counted.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
@@ -183,6 +184,10 @@ bool WinWebAuthnApiAuthenticator::IsWinNativeApiAuthenticator() const {
   return true;
 }
 
+bool WinWebAuthnApiAuthenticator::SupportsCredProtectExtension() const {
+  return win_api_->Version() >= WEBAUTHN_API_VERSION_2;
+}
+
 const base::Optional<AuthenticatorSupportedOptions>&
 WinWebAuthnApiAuthenticator::Options() const {
   // The request can potentially be fulfilled by any device that Windows
@@ -195,10 +200,6 @@ WinWebAuthnApiAuthenticator::Options() const {
 
 base::WeakPtr<FidoAuthenticator> WinWebAuthnApiAuthenticator::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
-}
-
-bool WinWebAuthnApiAuthenticator::SupportsCredProtectExtension() const {
-  return win_api_->Version() >= WEBAUTHN_API_VERSION_2;
 }
 
 bool WinWebAuthnApiAuthenticator::ShowsPrivacyNotice() const {

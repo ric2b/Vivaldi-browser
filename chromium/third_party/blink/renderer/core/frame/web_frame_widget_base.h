@@ -13,10 +13,11 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_device.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
@@ -44,7 +45,6 @@ class PaintWorkletPaintDispatcher;
 class WebLocalFrameImpl;
 class WebViewImpl;
 class WidgetBase;
-struct IntrinsicSizingInfo;
 
 class CORE_EXPORT WebFrameWidgetBase
     : public GarbageCollected<WebFrameWidgetBase>,
@@ -76,7 +76,12 @@ class CORE_EXPORT WebFrameWidgetBase
   void BindLocalRoot(WebLocalFrame&);
 
   virtual bool ForSubframe() const = 0;
-  virtual void IntrinsicSizingInfoChanged(const IntrinsicSizingInfo&) {}
+  virtual void IntrinsicSizingInfoChanged(
+      mojom::blink::IntrinsicSizingInfoPtr) {}
+
+  void AutoscrollStart(const gfx::PointF& position);
+  void AutoscrollFling(const gfx::Vector2dF& position);
+  void AutoscrollEnd();
 
   // Creates or returns cached mutator dispatcher. This usually requires a
   // round trip to the compositor. The returned WeakPtr must only be
@@ -91,7 +96,7 @@ class CORE_EXPORT WebFrameWidgetBase
   base::WeakPtr<PaintWorkletPaintDispatcher> EnsureCompositorPaintDispatcher(
       scoped_refptr<base::SingleThreadTaskRunner>* paint_task_runner);
 
-  virtual HitTestResult CoreHitTestResultAt(const gfx::Point&) = 0;
+  virtual HitTestResult CoreHitTestResultAt(const gfx::PointF&) = 0;
 
   // FrameWidget implementation.
   WebWidgetClient* Client() const final { return client_; }
@@ -111,9 +116,9 @@ class CORE_EXPORT WebFrameWidgetBase
                                   cc::EventListenerProperties) final;
   cc::EventListenerProperties EventListenerProperties(
       cc::EventListenerClass) const final;
+  mojom::blink::DisplayMode DisplayMode() const override;
 
   // WebFrameWidget implementation.
-  void Close() override;
   WebLocalFrame* LocalRoot() const override;
   WebDragOperation DragTargetDragEnter(const WebDragData&,
                                        const gfx::PointF& point_in_viewport,
@@ -140,12 +145,13 @@ class CORE_EXPORT WebFrameWidgetBase
       cc::ElementId scroll_latched_element_id) override;
 
   WebLocalFrame* FocusedWebLocalFrameInWidget() const override;
-  void SetCompositorHosts(cc::LayerTreeHost*, cc::AnimationHost*) override;
   void ApplyViewportChangesForTesting(
       const ApplyViewportChangesArgs& args) override;
   void NotifySwapAndPresentationTime(
       WebReportTimeCallback swap_callback,
       WebReportTimeCallback presentation_callback) override;
+  scheduler::WebRenderWidgetSchedulingState* RendererWidgetSchedulingState()
+      override;
 
   // Called when a drag-n-drop operation should begin.
   void StartDragging(network::mojom::ReferrerPolicy,
@@ -159,22 +165,52 @@ class CORE_EXPORT WebFrameWidgetBase
   static bool IgnoreInputEvents() { return ignore_input_events_; }
 
   // WebWidget methods.
+  cc::LayerTreeHost* InitializeCompositing(
+      cc::TaskGraphRunner* task_graph_runner,
+      const cc::LayerTreeSettings& settings,
+      std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory) override;
+  void Close(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
+             base::OnceCallback<void()> cleanup_task) override;
   void DidAcquirePointerLock() override;
   void DidNotAcquirePointerLock() override;
   void DidLosePointerLock() override;
   void ShowContextMenu(WebMenuSourceType) override;
-  void BeginFrame(base::TimeTicks frame_time) final;
   void SetCompositorVisible(bool visible) override;
-  void UpdateVisualState() override;
-  void WillBeginCompositorFrame() final;
+  void SetDisplayMode(mojom::blink::DisplayMode) override;
+  void SetCursor(const ui::Cursor& cursor) override;
 
   // WidgetBaseClient methods.
   void DispatchRafAlignedInput(base::TimeTicks frame_time) override;
   void RecordTimeToFirstActivePaint(base::TimeDelta duration) override;
+  void EndCommitCompositorFrame(base::TimeTicks commit_start_time) override;
+  void DidCommitAndDrawCompositorFrame() override;
+  void OnDeferMainFrameUpdatesChanged(bool defer) override;
+  void OnDeferCommitsChanged(bool defer) override;
+  void RequestNewLayerTreeFrameSink(
+      LayerTreeFrameSinkCallback callback) override;
+  void DidCompletePageScaleAnimation() override;
+  void DidBeginMainFrame() override;
+  void WillBeginMainFrame() override;
 
   // mojom::blink::FrameWidget methods.
   void DragSourceSystemDragEnded() override;
   void SetBackgroundOpaque(bool opaque) override;
+
+  // Sets the inherited effective touch action on an out-of-process iframe.
+  void SetInheritedEffectiveTouchActionForSubFrame(
+      WebTouchAction touch_action) override {}
+
+  // Toggles render throttling for an out-of-process iframe. Local frames are
+  // throttled based on their visibility in the viewport, but remote frames
+  // have to have throttling information propagated from parent to child
+  // across processes.
+  void UpdateRenderThrottlingStatusForSubFrame(
+      bool is_throttled,
+      bool subtree_throttled) override {}
+
+  // Sets the inert bit on an out-of-process iframe, causing it to ignore
+  // input.
+  void SetIsInertForSubFrame(bool inert) override {}
 
   // Called when the FrameView for this Widget's local root is created.
   virtual void DidCreateLocalRootView() {}
@@ -265,6 +301,9 @@ class CORE_EXPORT WebFrameWidgetBase
   // the page is shutting down, but will be valid at all other times.
   Page* GetPage() const;
 
+  const mojo::AssociatedRemote<mojom::blink::FrameWidgetHost>&
+  GetAssociatedFrameWidgetHost() const;
+
   // Helper function to process events while pointer locked.
   void PointerLockMouseEvent(const WebCoalescedInputEvent&);
 
@@ -296,6 +335,8 @@ class CORE_EXPORT WebFrameWidgetBase
   void CancelDrag();
   void RequestAnimationAfterDelayTimerFired(TimerBase*);
 
+  static bool ignore_input_events_;
+
   WebWidgetClient* client_;
 
   // WebFrameWidget is associated with a subtree of the frame tree,
@@ -303,7 +344,7 @@ class CORE_EXPORT WebFrameWidgetBase
   // points to the root of that subtree.
   Member<WebLocalFrameImpl> local_root_;
 
-  static bool ignore_input_events_;
+  mojom::blink::DisplayMode display_mode_;
 
   // This is owned by the LayerTreeHostImpl, and should only be used on the
   // compositor thread, so we keep the TaskRunner where you post tasks to
@@ -325,7 +366,12 @@ class CORE_EXPORT WebFrameWidgetBase
   mojo::AssociatedRemote<mojom::blink::FrameWidgetHost> frame_widget_host_;
   mojo::AssociatedReceiver<mojom::blink::FrameWidget> receiver_;
 
+  // Different consumers in the browser process makes different assumptions, so
+  // must always send the first IPC regardless of value.
+  base::Optional<bool> has_touch_handlers_;
+
   friend class WebViewImpl;
+  friend class ReportTimeSwapPromise;
 };
 
 template <>

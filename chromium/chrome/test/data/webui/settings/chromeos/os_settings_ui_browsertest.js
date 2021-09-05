@@ -7,10 +7,21 @@ const BROWSER_SETTINGS_PATH = '../';
 
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 
+GEN('#include "content/public/test/browser_test.h"');
+
 // Only run in release builds because we frequently see test timeouts in debug.
 // We suspect this is because the settings page loads slowly in debug.
 // https://crbug.com/1003483
 GEN('#if defined(NDEBUG)');
+
+/**
+ * Checks whether a given element is visible to the user.
+ * @param {!Element} element
+ * @returns {boolean}
+ */
+function isVisible(element) {
+  return !!(element && element.getBoundingClientRect().width > 0);
+}
 
 // Test fixture for the top-level OS settings UI.
 // eslint-disable-next-line no-var
@@ -37,13 +48,14 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
     suiteSetup(() => {
       testing.Test.disableAnimationsAndTransitions();
       ui = assert(document.querySelector('os-settings-ui'));
-      ui.$.drawerTemplate.restamp = true;
+      Polymer.dom.flush();
+      ui.$$('#drawerTemplate').restamp = true;
     });
 
     setup(() => {
       userActionRecorder = new settings.FakeUserActionRecorder();
       settings.setUserActionRecorderForTesting(userActionRecorder);
-      ui.$.drawerTemplate.if = false;
+      ui.$$('#drawerTemplate').if = false;
       Polymer.dom.flush();
     });
 
@@ -68,16 +80,16 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
 
     test('showing menu in toolbar is dependent on narrow mode', () => {
       const toolbar = assert(ui.$$('os-toolbar'));
-      toolbar.narrow = true;
+      ui.isNarrow = true;
       assertTrue(toolbar.showMenu);
 
-      toolbar.narrow = false;
+      ui.isNarrow = false;
       assertFalse(toolbar.showMenu);
     });
 
     test('app drawer', async () => {
       assertEquals(null, ui.$$('cr-drawer os-settings-menu'));
-      const drawer = ui.$.drawer;
+      const drawer = ui.$$('#drawer');
       assertFalse(drawer.open);
 
       drawer.openDrawer();
@@ -96,16 +108,16 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
     });
 
     test('app drawer closes when exiting narrow mode', async () => {
-      const drawer = ui.$.drawer;
+      const drawer = ui.$$('#drawer');
       const toolbar = ui.$$('os-toolbar');
 
       // Mimic narrow mode and open the drawer.
-      toolbar.narrow = true;
+      ui.isNarrow = true;
       drawer.openDrawer();
       Polymer.dom.flush();
       await test_util.eventToPromise('cr-drawer-opened', drawer);
 
-      toolbar.narrow = false;
+      ui.isNarrow = false;
       Polymer.dom.flush();
       await test_util.eventToPromise('close', drawer);
       assertFalse(drawer.open);
@@ -132,7 +144,7 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       assertTrue(floatingMenu.advancedOpened);
       assertTrue(main.advancedToggleExpanded);
 
-      ui.$.drawerTemplate.if = true;
+      ui.$$('#drawerTemplate').if = true;
       Polymer.dom.flush();
 
       const drawerMenu = ui.$$('cr-drawer os-settings-menu');
@@ -240,7 +252,7 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       assertEquals(
           urlParams.toString(),
           settings.Router.getInstance().getQueryParameters().toString());
-      settingsMenu.$.people.click();
+      settingsMenu.$.osPeople.click();
       assertEquals(
           '', settings.Router.getInstance().getQueryParameters().toString());
     });
@@ -279,6 +291,22 @@ TEST_F('OSSettingsUIBrowserTest', 'AllJsTests', () => {
       assertEquals(userActionRecorder.searchCount, 0);
       searchField.setValue('GOOGLE');
       assertEquals(userActionRecorder.searchCount, 1);
+    });
+
+    test('toolbar and nav menu are hidden in kiosk mode', function() {
+      loadTimeData.overrideValues({
+        isKioskModeActive: true,
+      });
+
+      settings.Router.getInstance().resetRouteForTesting();
+      ui = document.createElement('os-settings-ui');
+      document.body.appendChild(ui);
+      Polymer.dom.flush();
+
+      // Toolbar should be hidden.
+      assertFalse(isVisible(ui.$$('os-toolbar')));
+      // All navigation settings menus should be hidden.
+      assertFalse(isVisible(ui.$$('os-settings-menu')));
     });
   });
 

@@ -17,6 +17,10 @@ namespace {
 
 using FrameNodeImplTest = GraphTestHarness;
 
+const FrameNode* ToPublic(FrameNodeImpl* frame_node) {
+  return frame_node;
+}
+
 }  // namespace
 
 TEST_F(FrameNodeImplTest, SafeDowncast) {
@@ -55,10 +59,12 @@ TEST_F(FrameNodeImplTest, AddFrameHierarchyBasic) {
 }
 
 TEST_F(FrameNodeImplTest, GetFrameNodeById) {
-  RenderProcessHostProxy render_process_proxy_a(42);
-  RenderProcessHostProxy render_process_proxy_b(43);
-  auto process_a = CreateNode<ProcessNodeImpl>(render_process_proxy_a);
-  auto process_b = CreateNode<ProcessNodeImpl>(render_process_proxy_b);
+  auto process_a =
+      CreateNode<ProcessNodeImpl>(content::PROCESS_TYPE_RENDERER,
+                                  RenderProcessHostProxy::CreateForTesting(42));
+  auto process_b =
+      CreateNode<ProcessNodeImpl>(content::PROCESS_TYPE_RENDERER,
+                                  RenderProcessHostProxy::CreateForTesting(43));
   auto page = CreateNode<PageNodeImpl>();
   auto frame_a1 = CreateFrameNodeAutoId(process_a.get(), page.get());
   auto frame_a2 = CreateFrameNodeAutoId(process_a.get(), page.get());
@@ -133,10 +139,11 @@ class LenientMockObserver : public FrameNodeImpl::Observer {
   MOCK_METHOD1(OnIsAdFrameChanged, void(const FrameNode*));
   MOCK_METHOD1(OnFrameIsHoldingWebLockChanged, void(const FrameNode*));
   MOCK_METHOD1(OnFrameIsHoldingIndexedDBLockChanged, void(const FrameNode*));
-  MOCK_METHOD1(OnNonPersistentNotificationCreated, void(const FrameNode*));
   MOCK_METHOD2(OnPriorityAndReasonChanged,
                void(const FrameNode*, const PriorityAndReason& previous_value));
   MOCK_METHOD1(OnHadFormInteractionChanged, void(const FrameNode*));
+  MOCK_METHOD1(OnNonPersistentNotificationCreated, void(const FrameNode*));
+  MOCK_METHOD2(OnFirstContentfulPaint, void(const FrameNode*, base::TimeDelta));
 
   void SetCreatedFrameNode(const FrameNode* frame_node) {
     created_frame_node_ = frame_node;
@@ -336,6 +343,21 @@ TEST_F(FrameNodeImplTest, FormInteractions) {
   graph()->RemoveFrameNodeObserver(&obs);
 }
 
+TEST_F(FrameNodeImplTest, FirstContentfulPaint) {
+  auto process = CreateNode<ProcessNodeImpl>();
+  auto page = CreateNode<PageNodeImpl>();
+  auto frame_node = CreateFrameNodeAutoId(process.get(), page.get());
+
+  MockObserver obs;
+  graph()->AddFrameNodeObserver(&obs);
+
+  base::TimeDelta fcp = base::TimeDelta::FromMilliseconds(1364);
+  EXPECT_CALL(obs, OnFirstContentfulPaint(frame_node.get(), fcp));
+  frame_node->OnFirstContentfulPaint(fcp);
+
+  graph()->RemoveFrameNodeObserver(&obs);
+}
+
 TEST_F(FrameNodeImplTest, PublicInterface) {
   auto process = CreateNode<ProcessNodeImpl>();
   auto page = CreateNode<PageNodeImpl>();
@@ -382,6 +404,38 @@ TEST_F(FrameNodeImplTest, PublicInterface) {
             public_frame_node->IsHoldingIndexedDBLock());
   EXPECT_EQ(frame_node->had_form_interaction(),
             public_frame_node->HadFormInteraction());
+}
+
+TEST_F(FrameNodeImplTest, VisitChildFrameNodes) {
+  auto process = CreateNode<ProcessNodeImpl>();
+  auto page = CreateNode<PageNodeImpl>();
+  auto frame1 = CreateFrameNodeAutoId(process.get(), page.get());
+  auto frame2 = CreateFrameNodeAutoId(process.get(), page.get(), frame1.get());
+  auto frame3 = CreateFrameNodeAutoId(process.get(), page.get(), frame1.get());
+
+  std::set<const FrameNode*> visited;
+  EXPECT_TRUE(
+      ToPublic(frame1.get())
+          ->VisitChildFrameNodes(base::BindRepeating(
+              [](std::set<const FrameNode*>* visited, const FrameNode* frame) {
+                EXPECT_TRUE(visited->insert(frame).second);
+                return true;
+              },
+              base::Unretained(&visited))));
+  EXPECT_THAT(visited, testing::UnorderedElementsAre(ToPublic(frame2.get()),
+                                                     ToPublic(frame3.get())));
+
+  // Do an aborted visit.
+  visited.clear();
+  EXPECT_FALSE(
+      ToPublic(frame1.get())
+          ->VisitChildFrameNodes(base::BindRepeating(
+              [](std::set<const FrameNode*>* visited, const FrameNode* frame) {
+                EXPECT_TRUE(visited->insert(frame).second);
+                return false;
+              },
+              base::Unretained(&visited))));
+  EXPECT_EQ(1u, visited.size());
 }
 
 }  // namespace performance_manager

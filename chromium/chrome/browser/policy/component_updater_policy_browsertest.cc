@@ -17,6 +17,7 @@
 #include "components/update_client/update_client.h"
 #include "components/update_client/update_client_errors.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/test/browser_test.h"
 #include "url/gurl.h"
 
 namespace policy {
@@ -139,6 +140,7 @@ update_client::CrxComponent ComponentUpdaterPolicyTest::MakeCrxComponent(
     void Install(const base::FilePath& unpack_path,
                  const std::string& public_key,
                  std::unique_ptr<InstallParams> /*install_params*/,
+                 ProgressCallback /*progress_callback*/,
                  Callback callback) override {
       DoInstall(unpack_path, public_key, std::move(callback));
     }

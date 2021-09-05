@@ -14,7 +14,7 @@ if (!is_android && !is_mac) {
 }
 
 if (is_win) {
-  update_target("//chrome:main_dll") {
+  update_target("//chrome:chrome_dll") {
     deps += [
       "//vivaldi/browser",
     ]
@@ -51,7 +51,7 @@ if (is_android) {
   }
 }
 
-update_template_instance("//chrome/browser:browser") {
+update_target("//chrome/browser:browser") {
   public_deps += [
     "//vivaldi/browser",
   ]
@@ -60,7 +60,7 @@ update_template_instance("//chrome/browser:browser") {
   ]
 }
 
-update_template_instance("//chrome/browser/ui:ui") {
+update_target("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",
     "//vivaldi/browser",
@@ -84,4 +84,10 @@ update_target("//content/browser:browser") {
     public_deps += [ "//ui/events/keycodes:x11" ]
   }
   public_deps += [ "//vivaldi/browser:clipboard" ]
+}
+
+update_target("//chrome/browser/safe_browsing:safe_browsing") {
+  deps += [
+    "//chrome/browser:ntp_background_proto",
+  ]
 }

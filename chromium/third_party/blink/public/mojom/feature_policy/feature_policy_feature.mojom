@@ -62,11 +62,8 @@ enum FeaturePolicyFeature {
   // TODO(ekaramad): kLazyLoad is deprecated; remove.
   // Used to enforce lazyloading for a frame and any nested <iframe> or image.
   kLazyLoad = 29,
-  // Restricts the usage of layout-causing animations in a document.
-  kLayoutAnimations = 30,
   // Controls access to Screen Wake Lock
   kScreenWakeLock = 31,
-
   // These are the defined sandbox features implemented as policy-controlled
   // features.
   kTopNavigation = 33,
@@ -120,7 +117,7 @@ enum FeaturePolicyFeature {
   kWebXr = 66,
 
   // Web Authentication (https://w3c.github.io/webauthn/#sctn-iframe-guidance)
-  kPublicKeyCredentials = 67,
+  kPublicKeyCredentialsGet = 67,
 
   // Controls use of Clipboard API.
   kClipboard = 68,
@@ -131,11 +128,17 @@ enum FeaturePolicyFeature {
   // Storage Access API
   kStorageAccessAPI = 70,
 
-  // Yet Another Client Hint
+  // Client Hint for the full browser version.
   kClientHintUAFullVersion = 71,
 
   // Trust Token API redemption and request signing operations
   kTrustTokenRedemption = 72,
+
+  // Controls use of Conversion Measurement API
+  kConversionMeasurement = 73,
+
+  // Client Hint for UA platform version.
+  kClientHintUAPlatformVersion = 74,
 
   // Don't change assigned numbers of any item, and don't reuse removed slots.
   // Add new features at the end of the enum.

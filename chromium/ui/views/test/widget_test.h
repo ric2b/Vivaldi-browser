@@ -11,6 +11,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/test/views_test_base.h"
@@ -62,7 +63,6 @@ class WidgetTest : public ViewsTestBase {
   // still provide one.
   Widget* CreateTopLevelNativeWidget();
   Widget* CreateChildNativeWidgetWithParent(Widget* parent);
-  Widget* CreateChildNativeWidget();
 
   View* GetMousePressedHandler(internal::RootView* root_view);
 
@@ -129,6 +129,18 @@ class DesktopWidgetTest : public WidgetTest {
   DISALLOW_COPY_AND_ASSIGN(DesktopWidgetTest);
 };
 
+class DesktopWidgetTestInteractive : public DesktopWidgetTest {
+ public:
+  DesktopWidgetTestInteractive();
+  ~DesktopWidgetTestInteractive() override;
+
+  // DesktopWidgetTest
+  void SetUp() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DesktopWidgetTestInteractive);
+};
+
 // A helper WidgetDelegate for tests that require hooks into WidgetDelegate
 // calls, and removes some of the boilerplate for initializing a Widget. Calls
 // Widget::CloseNow() when destroyed if it hasn't already been done.
@@ -164,7 +176,6 @@ class TestDesktopWidgetDelegate : public WidgetDelegate {
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;
   View* GetContentsView() override;
-  bool ShouldAdvanceFocusToTopLevelWidget() const override;
   bool OnCloseRequested(Widget::ClosedReason close_reason) override;
 
  private:
@@ -260,6 +271,29 @@ class WidgetDestroyedWaiter : public WidgetObserver {
   base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WidgetDestroyedWaiter);
+};
+
+// Helper class to wait for a Widget to become visible. This will add a failure
+// to the currently-running test if the widget is destroyed before becoming
+// visible.
+class WidgetVisibleWaiter : public WidgetObserver {
+ public:
+  explicit WidgetVisibleWaiter(Widget* widget);
+  WidgetVisibleWaiter(const WidgetVisibleWaiter&) = delete;
+  WidgetVisibleWaiter& operator=(const WidgetVisibleWaiter&) = delete;
+  ~WidgetVisibleWaiter() override;
+
+  // Waits for the widget to become visible.
+  void Wait();
+
+ private:
+  // WidgetObserver:
+  void OnWidgetVisibilityChanged(Widget* widget, bool visible) override;
+  void OnWidgetDestroying(Widget* widget) override;
+
+  Widget* const widget_;
+  base::RunLoop run_loop_;
+  ScopedObserver<Widget, WidgetObserver> widget_observer_{this};
 };
 
 }  // namespace test

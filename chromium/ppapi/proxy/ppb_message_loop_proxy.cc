@@ -10,8 +10,8 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check.h"
 #include "base/compiler_specific.h"
-#include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/ppb_message_loop.h"
@@ -135,8 +135,8 @@ int32_t MessageLoopResource::PostWork(PP_CompletionCallback callback,
   if (destroyed_)
     return PP_ERROR_FAILED;
   PostClosure(FROM_HERE,
-              base::Bind(callback.func, callback.user_data,
-                         static_cast<int32_t>(PP_OK)),
+              base::BindOnce(callback.func, callback.user_data,
+                             static_cast<int32_t>(PP_OK)),
               delay_ms);
   return PP_OK;
 }
@@ -151,8 +151,9 @@ int32_t MessageLoopResource::PostQuit(PP_Bool should_destroy) {
   if (IsCurrent() && nested_invocations_ > 0) {
     run_loop_->QuitWhenIdle();
   } else {
-    PostClosure(FROM_HERE, base::Bind(&MessageLoopResource::QuitRunLoopWhenIdle,
-                                      Unretained(this)),
+    PostClosure(FROM_HERE,
+                base::BindOnce(&MessageLoopResource::QuitRunLoopWhenIdle,
+                               Unretained(this)),
                 0);
   }
   return PP_OK;

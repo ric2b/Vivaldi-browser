@@ -4,7 +4,7 @@
 
 #include "ash/system/palette/tools/metalayer_mode.h"
 
-#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/public/cpp/toast_data.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
@@ -106,8 +106,7 @@ void MetalayerMode::OnTouchEvent(ui::TouchEvent* event) {
   if (enabled())
     return;
 
-  if (event->pointer_details().pointer_type !=
-      ui::EventPointerType::POINTER_TYPE_PEN)
+  if (event->pointer_details().pointer_type != ui::EventPointerType::kPen)
     return;
 
   if (event->type() == ui::ET_TOUCH_RELEASED) {
@@ -163,8 +162,9 @@ void MetalayerMode::OnGestureEvent(ui::GestureEvent* event) {
   }
 }
 
-void MetalayerMode::OnAssistantStatusChanged(mojom::AssistantState state) {
-  assistant_state_ = state;
+void MetalayerMode::OnAssistantStatusChanged(
+    chromeos::assistant::AssistantStatus status) {
+  assistant_status_ = status;
   UpdateState();
 }
 
@@ -179,7 +179,7 @@ void MetalayerMode::OnAssistantContextEnabled(bool enabled) {
 }
 
 void MetalayerMode::OnAssistantFeatureAllowedChanged(
-    mojom::AssistantAllowedState state) {
+    chromeos::assistant::AssistantAllowedState state) {
   assistant_allowed_state_ = state;
   UpdateState();
 }

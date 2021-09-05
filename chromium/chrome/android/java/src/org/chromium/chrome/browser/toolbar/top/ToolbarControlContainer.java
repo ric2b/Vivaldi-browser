@@ -35,7 +35,7 @@ import org.chromium.ui.base.DeviceFormFactor;
  * Layout for the browser controls (omnibox, menu, tab strip, etc..).
  */
 public class ToolbarControlContainer extends OptimizedFrameLayout implements ControlContainer {
-    private final float mTabStripHeight;
+    private float mTabStripHeight;
 
     private Toolbar mToolbar;
     private ToolbarViewResourceFrameLayout mToolbarContainer;
@@ -53,12 +53,6 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
      */
     public ToolbarControlContainer(Context context, AttributeSet attrs) {
         super(context, attrs);
-		// Note(david@vivaldi.com): Initialize with the correct height.
-        if (ChromeApplication.isVivaldi()
-                && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context))
-            mTabStripHeight =
-                    context.getResources().getDimension(R.dimen.tab_strip_height_phone_with_tabs);
-        else
         mTabStripHeight = context.getResources().getDimension(R.dimen.tab_strip_height);
         mSwipeRecognizer = new SwipeRecognizerImpl(context);
     }
@@ -317,5 +311,9 @@ public class ToolbarControlContainer extends OptimizedFrameLayout implements Con
             }
             return true;
         }
+    }
+
+    public void setTabStripHeight(int height) {
+        mTabStripHeight = height;
     }
 }

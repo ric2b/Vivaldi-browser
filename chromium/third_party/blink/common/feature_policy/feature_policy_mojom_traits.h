@@ -12,7 +12,6 @@
 #include "third_party/blink/common/feature_policy/policy_value_mojom_traits.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
-#include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-shared.h"
 #include "url/mojom/origin_mojom_traits.h"
 
@@ -27,15 +26,15 @@ class BLINK_COMMON_EXPORT
       const blink::ParsedFeaturePolicyDeclaration& policy) {
     return policy.feature;
   }
-  static const std::map<url::Origin, blink::PolicyValue>& values(
+  static const std::vector<url::Origin>& allowed_origins(
       const blink::ParsedFeaturePolicyDeclaration& policy) {
-    return policy.values;
+    return policy.allowed_origins;
   }
-  static const blink::PolicyValue& fallback_value(
+  static bool fallback_value(
       const blink::ParsedFeaturePolicyDeclaration& policy) {
     return policy.fallback_value;
   }
-  static const blink::PolicyValue& opaque_value(
+  static bool opaque_value(
       const blink::ParsedFeaturePolicyDeclaration& policy) {
     return policy.opaque_value;
   }

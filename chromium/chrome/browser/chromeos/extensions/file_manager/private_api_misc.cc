@@ -51,6 +51,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes_util.h"
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chrome/common/extensions/api/manifest_types.h"
 #include "chrome/common/pref_names.h"
@@ -316,8 +317,8 @@ FileManagerPrivateInternalZipSelectionFunction::Run() {
   }
 
   (new ZipFileCreator(
-       base::Bind(&FileManagerPrivateInternalZipSelectionFunction::OnZipDone,
-                  this),
+       base::BindOnce(
+           &FileManagerPrivateInternalZipSelectionFunction::OnZipDone, this),
        src_dir, src_relative_paths, dest_file))
       ->Start(LaunchFileUtilService());
   return RespondLater();
@@ -477,7 +478,7 @@ FileManagerPrivateOpenSettingsSubpageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* profile = ProfileManager::GetActiveUserProfile();
-  if (chrome::IsOSSettingsSubPage(params->sub_page)) {
+  if (chromeos::settings::IsOSSettingsSubPage(params->sub_page)) {
     chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
         profile, params->sub_page);
   } else {
@@ -509,8 +510,8 @@ FileManagerPrivateInternalGetMimeTypeFunction::Run() {
 
   app_file_handler_util::GetMimeTypeForLocalPath(
       chrome_details.GetProfile(), file_system_url.path(),
-      base::Bind(&FileManagerPrivateInternalGetMimeTypeFunction::OnGetMimeType,
-                 this));
+      base::BindOnce(
+          &FileManagerPrivateInternalGetMimeTypeFunction::OnGetMimeType, this));
 
   return RespondLater();
 }

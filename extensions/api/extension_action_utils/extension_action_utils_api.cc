@@ -16,9 +16,7 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/context_menus/context_menus_api_helpers.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
-#include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -31,7 +29,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/extensions/api/context_menus.h"
 #include "chrome/common/extensions/api/commands/commands_handler.h"
-#include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -45,7 +42,9 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/image_loader.h"
+#include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_util.h"
+#include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/manifest_constants.h"
@@ -79,17 +78,27 @@ std::string SkColorToRGBAString(SkColor color) {
 std::string GetShortcutTextForExtensionAction(
     ExtensionAction* action,
     content::BrowserContext* browser_context) {
-  bool active = false;
-  extensions::Command browser_action;
-  extensions::CommandService *command_service = extensions::CommandService::Get(
-      browser_context);
-  command_service->GetBrowserActionCommand(action->extension_id(),
-          extensions::CommandService::ALL,
-          &browser_action,
-          &active);
-  ui::Accelerator accelerator = browser_action.accelerator();
-  return ::vivaldi::ShortcutText(accelerator.key_code(),
-                                 accelerator.modifiers(), 0);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  const Extension* extension =
+    extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
+        action->extension_id(),
+        extensions::ExtensionRegistry::ENABLED);
+  extensions::CommandService* command_service =
+      extensions::CommandService::Get(browser_context);
+
+  const Command* requested_command =
+      CommandsInfo::GetBrowserActionCommand(extension);
+  if (!requested_command) {
+    return std::string();
+  }
+
+  Command saved_command = command_service->FindCommandByName(
+      action->extension_id(), requested_command->command_name());
+  const ui::Accelerator shortcut_assigned = saved_command.accelerator();
+
+  return ::vivaldi::ShortcutText(shortcut_assigned.key_code(),
+                                 shortcut_assigned.modifiers(), 0);
 }
 
 // Encodes the passed bitmap as a PNG represented as a dataurl.
@@ -358,6 +367,7 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
     web_contents = current_webcontents_;
   }
 
+  int32_t window_id = 0;
   Browser* browser =
       web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
   if (browser) {
@@ -365,6 +375,7 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
     tab_id =
         sessions::SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents())
             .id();
+    window_id = browser->session_id().id();
   }
 
   vivaldi::extension_action_utils::ExtensionInfo info;
@@ -387,7 +398,7 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
 
   ::vivaldi::BroadcastEvent(
       vivaldi::extension_action_utils::OnUpdated::kEventName,
-      vivaldi::extension_action_utils::OnUpdated::Create(info),
+      vivaldi::extension_action_utils::OnUpdated::Create(info, window_id),
       browser_context);
 }
 

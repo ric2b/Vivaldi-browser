@@ -55,7 +55,7 @@
 #include "third_party/blink/renderer/core/css/css_invalid_variable_value.h"
 #include "third_party/blink/renderer/core/css/css_keyframe_shorthand_value.h"
 #include "third_party/blink/renderer/core/css/css_layout_function_value.h"
-#include "third_party/blink/renderer/core/css/css_light_dark_color_pair.h"
+#include "third_party/blink/renderer/core/css/css_light_dark_value_pair.h"
 #include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_paint_value.h"
@@ -65,6 +65,7 @@
 #include "third_party/blink/renderer/core/css/css_quad_value.h"
 #include "third_party/blink/renderer/core/css/css_ray_value.h"
 #include "third_party/blink/renderer/core/css/css_reflect_value.h"
+#include "third_party/blink/renderer/core/css/css_revert_value.h"
 #include "third_party/blink/renderer/core/css/css_shadow_value.h"
 #include "third_party/blink/renderer/core/css/css_string_value.h"
 #include "third_party/blink/renderer/core/css/css_timing_function_value.h"
@@ -212,6 +213,8 @@ bool CSSValue::operator==(const CSSValue& other) const {
         return CompareCSSValues<CSSInitialValue>(*this, other);
       case kUnsetClass:
         return CompareCSSValues<cssvalue::CSSUnsetValue>(*this, other);
+      case kRevertClass:
+        return CompareCSSValues<cssvalue::CSSRevertValue>(*this, other);
       case kGridAutoRepeatClass:
         return CompareCSSValues<cssvalue::CSSGridAutoRepeatValue>(*this, other);
       case kGridIntegerRepeatClass:
@@ -270,8 +273,8 @@ bool CSSValue::operator==(const CSSValue& other) const {
                                                                        other);
       case kInvalidVariableValueClass:
         return CompareCSSValues<CSSInvalidVariableValue>(*this, other);
-      case kLightDarkColorPairClass:
-        return CompareCSSValues<CSSLightDarkColorPair>(*this, other);
+      case kLightDarkValuePairClass:
+        return CompareCSSValues<CSSLightDarkValuePair>(*this, other);
     }
     NOTREACHED();
     return false;
@@ -331,6 +334,8 @@ String CSSValue::CssText() const {
       return To<CSSInheritedValue>(this)->CustomCSSText();
     case kUnsetClass:
       return To<cssvalue::CSSUnsetValue>(this)->CustomCSSText();
+    case kRevertClass:
+      return To<cssvalue::CSSRevertValue>(this)->CustomCSSText();
     case kInitialClass:
       return To<CSSInitialValue>(this)->CustomCSSText();
     case kGridAutoRepeatClass:
@@ -386,8 +391,8 @@ String CSSValue::CssText() const {
       return To<cssvalue::CSSPendingSubstitutionValue>(this)->CustomCSSText();
     case kInvalidVariableValueClass:
       return To<CSSInvalidVariableValue>(this)->CustomCSSText();
-    case kLightDarkColorPairClass:
-      return To<CSSLightDarkColorPair>(this)->CustomCSSText();
+    case kLightDarkValuePairClass:
+      return To<CSSLightDarkValuePair>(this)->CustomCSSText();
   }
   NOTREACHED();
   return String();
@@ -475,6 +480,9 @@ void CSSValue::FinalizeGarbageCollectedObject() {
     case kUnsetClass:
       To<cssvalue::CSSUnsetValue>(this)->~CSSUnsetValue();
       return;
+    case kRevertClass:
+      To<cssvalue::CSSRevertValue>(this)->~CSSRevertValue();
+      return;
     case kGridAutoRepeatClass:
       To<cssvalue::CSSGridAutoRepeatValue>(this)->~CSSGridAutoRepeatValue();
       return;
@@ -559,8 +567,8 @@ void CSSValue::FinalizeGarbageCollectedObject() {
     case kInvalidVariableValueClass:
       To<CSSInvalidVariableValue>(this)->~CSSInvalidVariableValue();
       return;
-    case kLightDarkColorPairClass:
-      To<CSSLightDarkColorPair>(this)->~CSSLightDarkColorPair();
+    case kLightDarkValuePairClass:
+      To<CSSLightDarkValuePair>(this)->~CSSLightDarkValuePair();
       return;
   }
   NOTREACHED();
@@ -648,6 +656,9 @@ void CSSValue::Trace(Visitor* visitor) {
     case kUnsetClass:
       To<cssvalue::CSSUnsetValue>(this)->TraceAfterDispatch(visitor);
       return;
+    case kRevertClass:
+      To<cssvalue::CSSRevertValue>(this)->TraceAfterDispatch(visitor);
+      return;
     case kGridAutoRepeatClass:
       To<cssvalue::CSSGridAutoRepeatValue>(this)->TraceAfterDispatch(visitor);
       return;
@@ -732,8 +743,8 @@ void CSSValue::Trace(Visitor* visitor) {
     case kInvalidVariableValueClass:
       To<CSSInvalidVariableValue>(this)->TraceAfterDispatch(visitor);
       return;
-    case kLightDarkColorPairClass:
-      To<CSSLightDarkColorPair>(this)->TraceAfterDispatch(visitor);
+    case kLightDarkValuePairClass:
+      To<CSSLightDarkValuePair>(this)->TraceAfterDispatch(visitor);
       return;
   }
   NOTREACHED();

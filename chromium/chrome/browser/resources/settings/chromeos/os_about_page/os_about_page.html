@@ -63,7 +63,7 @@
       }
 
       iron-icon[icon='settings:check-circle'] {
-        fill: var(--cros-default-button-color);
+        fill: var(--cros-default-icon-color-prominent);
       }
 
       iron-icon[icon='cr:error'] {
@@ -210,7 +210,9 @@
           </div>
         </div>
 <if expr="_google_chrome">
-        <div class="secondary">$i18nRaw{aboutProductTos}</div>
+        <div class="secondary">
+          <a href="$i18n{aboutTermsURL}">$i18n{aboutProductTos}</a>
+        </div>
 </if>
       </div>
       <div class="settings-box padded block" id="regulatoryInfo"

@@ -80,7 +80,6 @@ Layer::Inputs::Inputs(int layer_id)
       contents_opaque(false),
       is_drawable(false),
       double_sided(true),
-      is_scrollbar(false),
       has_will_change_transform_hint(false),
       background_color(0) {}
 
@@ -1018,12 +1017,8 @@ void Layer::SetScrollable(const gfx::Size& bounds) {
   SetNeedsCommit();
 }
 
-void Layer::SetIsScrollbar(bool is_scrollbar) {
-  if (inputs_.is_scrollbar == is_scrollbar)
-    return;
-
-  inputs_.is_scrollbar = is_scrollbar;
-  SetNeedsCommit();
+bool Layer::IsScrollbarLayerForTesting() const {
+  return false;
 }
 
 void Layer::SetUserScrollable(bool horizontal, bool vertical) {
@@ -1113,16 +1108,6 @@ void Layer::SetForceRenderSurfaceForTesting(bool force) {
   force_render_surface_for_testing_ = force;
   SetPropertyTreesNeedRebuild();
   SetNeedsCommit();
-}
-
-void Layer::SetDoubleSided(bool double_sided) {
-  DCHECK(IsPropertyChangeAllowed());
-  if (inputs_.double_sided == double_sided)
-    return;
-  inputs_.double_sided = double_sided;
-  SetNeedsCommit();
-  SetPropertyTreesNeedRebuild();
-  SetSubtreePropertyChanged();
 }
 
 void Layer::SetTransformTreeIndex(int index) {
@@ -1244,13 +1229,14 @@ std::string Layer::ToString() const {
       "  name: %s\n"
       "  Bounds: %s\n"
       "  ElementId: %s\n"
+      "  HitTestable: %d\n"
       "  OffsetToTransformParent: %s\n"
       "  clip_tree_index: %d\n"
       "  effect_tree_index: %d\n"
       "  scroll_tree_index: %d\n"
       "  transform_tree_index: %d\n",
       id(), DebugName().c_str(), bounds().ToString().c_str(),
-      element_id().ToString().c_str(),
+      element_id().ToString().c_str(), HitTestable(),
       offset_to_transform_parent().ToString().c_str(), clip_tree_index(),
       effect_tree_index(), scroll_tree_index(), transform_tree_index());
 }
@@ -1341,8 +1327,6 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetShouldCheckBackfaceVisibility(should_check_backface_visibility_);
 
   layer->UpdateScrollable();
-
-  layer->set_is_scrollbar(inputs_.is_scrollbar);
 
   // The property trees must be safe to access because they will be used below
   // to call |SetScrollOffsetClobberActiveValue|.

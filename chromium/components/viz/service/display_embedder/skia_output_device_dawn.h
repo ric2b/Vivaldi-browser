@@ -5,11 +5,10 @@
 #ifndef COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_DEVICE_DAWN_H_
 #define COMPONENTS_VIZ_SERVICE_DISPLAY_EMBEDDER_SKIA_OUTPUT_DEVICE_DAWN_H_
 
-#include <dawn/dawn_wsi.h>
-#include <dawn/webgpu.h>
-#include <dawn_native/DawnNative.h>
-
 #include "components/viz/service/display_embedder/skia_output_device.h"
+#include "third_party/dawn/src/include/dawn/dawn_wsi.h"
+#include "third_party/dawn/src/include/dawn/webgpu.h"
+#include "third_party/dawn/src/include/dawn_native/DawnNative.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
@@ -51,6 +50,7 @@ class SkiaOutputDeviceDawn : public SkiaOutputDevice {
   wgpu::SwapChain swap_chain_;
   wgpu::Texture texture_;
   sk_sp<SkSurface> sk_surface_;
+  std::unique_ptr<gfx::VSyncProvider> vsync_provider_;
 
   gfx::Size size_;
   sk_sp<SkColorSpace> sk_color_space_;

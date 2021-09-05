@@ -160,7 +160,7 @@ To adjust your search term, long press to select. To refine your search, slide t
         Close all private tabs
       </message>
       <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_TRACKER_SHIELD" desc="Content description for the tracker shield button.">
-        Block trackers
+        Content blocker
       </message>
       <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_MODEL_SELECTOR" desc="Content description for the model selector button.">
         Toggle normal/private tabs
@@ -196,6 +196,12 @@ To adjust your search term, long press to select. To refine your search, slide t
         <ph name="APP_NAME">
           %1$s<ex>Vivaldi</ex>
         </ph> storage
+      </message>
+      <message name="IDS_ANDROID_PERMISSION_OFF" desc="Text at the top of the Website list, explaining to the user that a permission, such as the location service, is turned off. Contains a link to the settings menu to change it.">
+        Turn on permission for Vivaldi in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
+      </message>
+      <message name="IDS_ANDROID_PERMISSION_OFF_PLURAL" desc="Text at the top of the Website list, explaining to the user that multiple permissions, such as the location service, are turned off. Contains a link to the settings menu to change it.">
+        Turn on permissions for Vivaldi in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
     </messages>
   </release>

@@ -42,6 +42,7 @@
 
 #if defined(OS_WIN)
 #include "media/gpu/windows/d3d11_video_decoder.h"
+#include "ui/gl/direct_composition_surface_win.h"
 #include "ui/gl/gl_angle_util_win.h"
 #endif  // defined(OS_WIN)
 
@@ -117,18 +118,18 @@ GpuMojoMediaClient::GpuMojoMediaClient(
     scoped_refptr<base::SingleThreadTaskRunner> gpu_task_runner,
     base::WeakPtr<MediaGpuChannelManager> media_gpu_channel_manager,
     gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-    AndroidOverlayMojoFactoryCB android_overlay_factory_cb,
-    CdmProxyFactoryCB cdm_proxy_factory_cb)
+    AndroidOverlayMojoFactoryCB android_overlay_factory_cb)
     : gpu_preferences_(gpu_preferences),
       gpu_workarounds_(gpu_workarounds),
       gpu_feature_info_(gpu_feature_info),
       gpu_task_runner_(std::move(gpu_task_runner)),
       media_gpu_channel_manager_(std::move(media_gpu_channel_manager)),
-      android_overlay_factory_cb_(std::move(android_overlay_factory_cb)),
+      android_overlay_factory_cb_(std::move(android_overlay_factory_cb))
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-      gpu_memory_buffer_factory_(gpu_memory_buffer_factory),
+      ,
+      gpu_memory_buffer_factory_(gpu_memory_buffer_factory)
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-      cdm_proxy_factory_cb_(std::move(cdm_proxy_factory_cb)) {
+{
 }
 
 GpuMojoMediaClient::~GpuMojoMediaClient() = default;
@@ -240,8 +241,8 @@ std::unique_ptr<VideoDecoder> GpuMojoMediaClient::CreateVideoDecoder(
       // ignored.  If we can tell that here, then VideoFrameFactory can use it
       // as a signal about whether it's supposed to get YCbCrInfo rather than
       // requiring the provider to set |is_vulkan| in the ImageRecord.
-      auto ycbcr_helper =
-          YCbCrHelper::Create(gpu_task_runner_, std::move(get_stub_cb));
+      auto frame_info_helper =
+          FrameInfoHelper::Create(gpu_task_runner_, std::move(get_stub_cb));
       video_decoder = std::make_unique<MediaCodecVideoDecoder>(
           gpu_preferences_, gpu_feature_info_, media_log->Clone(),
           DeviceInfo::GetInstance(),
@@ -252,7 +253,7 @@ std::unique_ptr<VideoDecoder> GpuMojoMediaClient::CreateVideoDecoder(
           std::make_unique<VideoFrameFactoryImpl>(
               gpu_task_runner_, gpu_preferences_, std::move(image_provider),
               MaybeRenderEarlyManager::Create(gpu_task_runner_),
-              std::move(ycbcr_helper)));
+              std::move(frame_info_helper)));
 
 #elif BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
       if (IsNewAcceleratedVideoDecoderUsed(gpu_preferences_)) {
@@ -309,7 +310,8 @@ std::unique_ptr<VideoDecoder> GpuMojoMediaClient::CreateVideoDecoder(
                                 media_gpu_channel_manager_,
                                 command_buffer_id->channel_token,
                                 command_buffer_id->route_id),
-            GetD3D11DeviceCallback(), *d3d11_supported_configs_);
+            GetD3D11DeviceCallback(), *d3d11_supported_configs_,
+            gl::DirectCompositionSurfaceWin::IsHDRSupported());
       }
 #endif  // defined(OS_WIN)
   break;
@@ -320,7 +322,7 @@ std::unique_ptr<VideoDecoder> GpuMojoMediaClient::CreateVideoDecoder(
 }
 
 std::unique_ptr<CdmFactory> GpuMojoMediaClient::CreateCdmFactory(
-    service_manager::mojom::InterfaceProvider* interface_provider) {
+    mojom::FrameInterfaceFactory* interface_provider) {
 #if defined(OS_ANDROID)
   return std::make_unique<AndroidCdmFactory>(
       base::BindRepeating(&CreateProvisionFetcher, interface_provider),
@@ -329,15 +331,5 @@ std::unique_ptr<CdmFactory> GpuMojoMediaClient::CreateCdmFactory(
   return nullptr;
 #endif  // defined(OS_ANDROID)
 }
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-std::unique_ptr<CdmProxy> GpuMojoMediaClient::CreateCdmProxy(
-    const base::Token& cdm_guid) {
-  if (cdm_proxy_factory_cb_)
-    return cdm_proxy_factory_cb_.Run(cdm_guid);
-
-  return nullptr;
-}
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 }  // namespace media

@@ -114,16 +114,22 @@ class ProfileImpl : public Profile {
   base::Time GetCreationTime() const override;
   bool IsOffTheRecord() override;
   bool IsOffTheRecord() const override;
+  const OTRProfileID& GetOTRProfileID() const override;
   base::FilePath GetPath() const override;
-  Profile* GetOffTheRecordProfile() override;
-  void DestroyOffTheRecordProfile() override;
-  bool HasOffTheRecordProfile() override;
+  // TODO(https://crbug.com/1033903): Remove the default value.
+  Profile* GetOffTheRecordProfile(
+      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  std::vector<Profile*> GetAllOffTheRecordProfiles() override;
+  void DestroyOffTheRecordProfile(Profile* otr_profile) override;
+  // TODO(https://crbug.com/1033903): Remove the default value.
+  bool HasOffTheRecordProfile(
+      const OTRProfileID& otr_profile_id = OTRProfileID::PrimaryID()) override;
+  bool HasAnyOffTheRecordProfile() override;
   Profile* GetOriginalProfile() override;
   const Profile* GetOriginalProfile() const override;
   bool IsSupervised() const override;
   bool IsChild() const override;
   bool IsLegacySupervised() const override;
-  bool IsIndependentOffTheRecordProfile() override;
   bool AllowsBrowserWindows() const override;
   ExtensionSpecialStoragePolicy* GetExtensionSpecialStoragePolicy() override;
   PrefService* GetPrefs() override;
@@ -284,7 +290,7 @@ class ProfileImpl : public Profile {
   base::OneShotTimer create_session_service_timer_;
 #endif
 
-  std::unique_ptr<Profile> off_the_record_profile_;
+  std::map<OTRProfileID, std::unique_ptr<Profile>> otr_profiles_;
 
   // See GetStartTime for details.
   base::Time start_time_;

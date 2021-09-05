@@ -97,8 +97,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
     virtual void DidRemoveAllEventListeners(LocalDOMWindow*) = 0;
   };
 
-  static Document* CreateDocument(const DocumentInit&, bool force_xhtml);
-
   static LocalDOMWindow* From(const ScriptState*);
 
   explicit LocalDOMWindow(LocalFrame&);
@@ -119,10 +117,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   const KURL& BaseURL() const final;
   KURL CompleteURL(const String&) const final;
   void DisableEval(const String& error_message) final;
-  LocalDOMWindow* ExecutingWindow() const final {
-    // TODO(crbug.com/1029822): This const_cast is gross.
-    return const_cast<LocalDOMWindow*>(this);
-  }
   String UserAgent() const final;
   HttpsState GetHttpsState() const final;
   ResourceFetcher* Fetcher() const final;
@@ -130,6 +124,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   const SecurityContext& GetSecurityContext() const final;
   bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) final;
   void ExceptionThrown(ErrorEvent*) final;
+  void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr) final;
   EventTarget* ErrorEventTarget() final { return this; }
   String OutgoingReferrer() const final;
   network::mojom::ReferrerPolicy GetReferrerPolicy() const final;
@@ -145,10 +140,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void ReportFeaturePolicyViolation(
       mojom::blink::FeaturePolicyFeature,
       mojom::blink::PolicyDisposition,
-      const String& message = g_empty_string,
-      // If source_file is set to empty string,
-      // current JS file would be used as source_file instead.
-      const String& source_file = g_empty_string) const final;
+      const String& message = g_empty_string) const final;
   void ReportDocumentPolicyViolation(
       mojom::blink::DocumentPolicyFeature,
       mojom::blink::PolicyDisposition,
@@ -163,7 +155,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void CountUse(mojom::WebFeature feature) final;
   void CountDeprecation(mojom::WebFeature feature) final;
 
-  Document* InstallNewDocument(const DocumentInit&, bool force_xhtml);
+  Document* InstallNewDocument(const DocumentInit&);
 
   // EventTarget overrides:
   ExecutionContext* GetExecutionContext() const override;
@@ -361,6 +353,10 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   TrustedTypePolicyFactory* trustedTypes() const;
 
+  // Returns true if this window is cross-site to the main frame. Defaults to
+  // false in a detached window.
+  bool IsCrossSiteSubframe() const;
+
   void DispatchPersistedPageshowEvent(base::TimeTicks navigation_start);
 
   void DispatchPagehideEvent(PageTransitionEventPersistence persistence) {
@@ -368,6 +364,14 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
         *PageTransitionEvent::Create(event_type_names::kPagehide, persistence),
         document_.Get());
   }
+
+  InputMethodController& GetInputMethodController() const {
+    return *input_method_controller_;
+  }
+  TextSuggestionController& GetTextSuggestionController() const {
+    return *text_suggestion_controller_;
+  }
+  SpellChecker& GetSpellChecker() const { return *spell_checker_; }
 
  protected:
   // EventTarget overrides.
@@ -442,6 +446,15 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // TODO(altimin): We should be able to remove it after we complete
   // frame:document lifetime refactoring.
   std::unique_ptr<FrameOrWorkerScheduler> detached_scheduler_;
+
+  Member<InputMethodController> input_method_controller_;
+  Member<SpellChecker> spell_checker_;
+  Member<TextSuggestionController> text_suggestion_controller_;
+
+  // Tracks which features have already been potentially violated in this
+  // document. This helps to count them only once per page load.
+  // We don't use std::bitset to avoid to include feature_policy.mojom-blink.h.
+  mutable Vector<bool> potentially_violated_features_;
 };
 
 template <>

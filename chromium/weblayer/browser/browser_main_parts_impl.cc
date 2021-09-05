@@ -12,7 +12,9 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/captive_portal/core/buildflags.h"
+#include "components/prefs/pref_service.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
+#include "components/translate/core/browser/translate_download_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -22,10 +24,14 @@
 #include "services/service_manager/embedder/result_codes.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "weblayer/browser/browser_process.h"
+#include "weblayer/browser/cookie_settings_factory.h"
 #include "weblayer/browser/feature_list_creator.h"
 #include "weblayer/browser/host_content_settings_map_factory.h"
+#include "weblayer/browser/i18n_util.h"
 #include "weblayer/browser/permissions/weblayer_permissions_client.h"
 #include "weblayer/browser/stateful_ssl_host_state_delegate_factory.h"
+#include "weblayer/browser/translate_accept_languages_factory.h"
+#include "weblayer/browser/translate_ranker_factory.h"
 #include "weblayer/browser/webui/web_ui_controller_factory.h"
 #include "weblayer/public/main.h"
 
@@ -62,13 +68,15 @@ namespace {
 // Instantiates all weblayer KeyedService factories, which is
 // especially important for services that should be created at profile
 // creation time as compared to lazily on first access.
-static void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
-  StatefulSSLHostStateDelegateFactory::GetInstance();
-  HostContentSettingsMapFactory::GetInstance();
-
+void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   CaptivePortalServiceFactory::GetInstance();
 #endif
+  HostContentSettingsMapFactory::GetInstance();
+  StatefulSSLHostStateDelegateFactory::GetInstance();
+  CookieSettingsFactory::GetInstance();
+  TranslateAcceptLanguagesFactory::GetInstance();
+  TranslateRankerFactory::GetInstance();
 }
 
 void StopMessageLoop(base::OnceClosure quit_closure) {
@@ -84,8 +92,11 @@ void StopMessageLoop(base::OnceClosure quit_closure) {
 
 BrowserMainPartsImpl::BrowserMainPartsImpl(
     MainParams* params,
-    const content::MainFunctionParams& main_function_params)
-    : params_(params), main_function_params_(main_function_params) {}
+    const content::MainFunctionParams& main_function_params,
+    std::unique_ptr<PrefService> local_state)
+    : params_(params),
+      main_function_params_(main_function_params),
+      local_state_(std::move(local_state)) {}
 
 BrowserMainPartsImpl::~BrowserMainPartsImpl() = default;
 
@@ -109,14 +120,10 @@ void BrowserMainPartsImpl::PreMainMessageLoopStart() {
 #if defined(USE_AURA) && defined(USE_X11)
   ui::TouchFactory::SetTouchDeviceListFromCommandLine();
 #endif
-
-#if defined(OS_ANDROID)
-  startup_metric_utils::RecordApplicationStartTime(GetApplicationStartTime());
-#endif
 }
 
 int BrowserMainPartsImpl::PreEarlyInitialization() {
-  browser_process_ = std::make_unique<BrowserProcess>();
+  browser_process_ = std::make_unique<BrowserProcess>(std::move(local_state_));
 
 #if defined(USE_X11)
   ui::SetDefaultX11ErrorHandlers();
@@ -128,6 +135,13 @@ int BrowserMainPartsImpl::PreEarlyInitialization() {
   net::NetworkChangeNotifier::SetFactory(
       new net::NetworkChangeNotifierFactoryAndroid());
 #endif
+
+  translate::TranslateDownloadManager* download_manager =
+      translate::TranslateDownloadManager::GetInstance();
+  download_manager->set_url_loader_factory(
+      BrowserProcess::GetInstance()->GetSharedURLLoaderFactory());
+  download_manager->set_application_locale(i18n::GetApplicationLocale());
+
   return service_manager::RESULT_CODE_NORMAL_EXIT;
 }
 
@@ -146,6 +160,8 @@ void BrowserMainPartsImpl::PreMainMessageLoopRun() {
   content::WebUIControllerFactory::RegisterFactory(
       WebUIControllerFactory::GetInstance());
 
+  BrowserProcess::GetInstance()->PreMainMessageLoopRun();
+
   if (main_function_params_.ui_task) {
     std::move(*main_function_params_.ui_task).Run();
     delete main_function_params_.ui_task;
@@ -153,9 +169,17 @@ void BrowserMainPartsImpl::PreMainMessageLoopRun() {
   }
 
 #if defined(OS_ANDROID)
-  // Record collected startup metrics.
+  // On Android, retrieve the application start time from Java and record it. On
+  // other platforms, the application start time was already recorded in the
+  // constructor of ContentMainDelegateImpl.
+  startup_metric_utils::RecordApplicationStartTime(GetApplicationStartTime());
+#endif  // defined(OS_ANDROID)
+  // Record the time at which the main message loop starts. Must be recorded
+  // after application start time (see startup_metric_utils.h).
   startup_metric_utils::RecordBrowserMainMessageLoopStart(
       base::TimeTicks::Now(), /* is_first_run */ false);
+
+#if defined(OS_ANDROID)
   memory_metrics_logger_ = std::make_unique<metrics::MemoryMetricsLogger>();
 
   // Set the global singleton app modal dialog factory.

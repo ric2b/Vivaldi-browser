@@ -27,7 +27,7 @@ typedef struct {
   int expected_value;
 } ClientHostModelFeaturesTestCase;
 
-TEST(OptimizationGuideNavigationDataTest, RecordMetricsNoDataNoCommit) {
+TEST(OptimizationGuideNavigationDataTest, RecordMetricsNoData) {
   base::test::TaskEnvironment env;
 
   base::HistogramTester histogram_tester;
@@ -42,10 +42,6 @@ TEST(OptimizationGuideNavigationDataTest, RecordMetricsNoDataNoCommit) {
       histogram_tester.GetAllHistogramsRecorded(),
       Not(AnyOf(
           HasSubstr("OptimizationGuide.ApplyDecision"),
-          HasSubstr("OptimizationGuide.HintCache"),
-          HasSubstr(
-              "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch"),
-          HasSubstr("OptimizationGuide.Hints."),
           HasSubstr("OptimizationGuide.TargetDecision"))));
 
   // Make sure no UKM recorded.
@@ -54,528 +50,56 @@ TEST(OptimizationGuideNavigationDataTest, RecordMetricsNoDataNoCommit) {
   EXPECT_TRUE(entries.empty());
 }
 
-TEST(OptimizationGuideNavigationDataTest, RecordMetricsNoDataHasCommit) {
-  base::test::TaskEnvironment env;
-
-  base::HistogramTester histogram_tester;
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_committed(true);
-  data.reset();
-
-  // Make sure no UMA recorded.
-  EXPECT_THAT(histogram_tester.GetAllHistogramsRecorded(),
-              Not(AnyOf(HasSubstr("OptimizationGuide.Hints."),
-                        HasSubstr("OptimizationGuide.HintCache"))));
-  // Make sure no UKM recorded.
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_TRUE(entries.empty());
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsCoveredByFetchButNoHintLoadAttempted) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_was_host_covered_by_fetch_at_navigation_start(true);
-  data.reset();
-
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch.AtCommit",
-      0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", 0);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheNoHostMatchBeforeCommit) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(false);
-  data->set_was_host_covered_by_fetch_at_navigation_start(true);
-  data.reset();
-
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", 0);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheNoHostMatchBeforeCommitAlsoNotCoveredByFetch) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(false);
-  data->set_was_host_covered_by_fetch_at_navigation_start(false);
-  data.reset();
-
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", false, 1);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "AtCommit",
-      0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", 0);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheNoHintButCoveredByFetchAtCommit) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(false);
-  data->set_has_hint_after_commit(false);
-  data->set_was_host_covered_by_fetch_at_navigation_start(false);
-  data->set_was_host_covered_by_fetch_at_commit(true);
-  data->set_has_committed(true);
-  data.reset();
-
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "AtCommit",
-      true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", false, 1);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", 0);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheNoHintAtCommit) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_after_commit(false);
-  data->set_has_committed(true);
-  data.reset();
-
-  // This probably wouldn't actually happen in practice but make sure optional
-  // check works for before commit.
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", 0);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "AtCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", false, 1);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", 0);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheHasHintButNotLoadedAtCommit) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_after_commit(true);
-  data->set_has_committed(true);
-  data.reset();
-
-  // This probably wouldn't actually happen in practice but make sure optional
-  // check works for before commit.
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", 0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      0);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", 0);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "AtCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", false, 1);
-  histogram_tester.ExpectTotalCount(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", 0);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheHasPageHintAtCommit) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(true);
-  data->set_was_host_covered_by_fetch_at_navigation_start(false);
-  data->set_has_hint_after_commit(true);
-  data->set_serialized_hint_version_string("abc");
-  data->set_page_hint(std::make_unique<optimization_guide::proto::PageHint>());
-  data->set_has_committed(true);
-  data.reset();
-
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "AtCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", true, 1);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheHasHintButPageHintNotSetAtCommit) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(true);
-  data->set_has_hint_after_commit(true);
-  data->set_serialized_hint_version_string("abc");
-  data->set_has_committed(true);
-  data.reset();
-
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "AtCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", false, 1);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCacheHasHintButNoPageHintAtCommit) {
-  base::HistogramTester histogram_tester;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(true);
-  data->set_has_hint_after_commit(true);
-  data->set_serialized_hint_version_string("abc");
-  data->set_page_hint(nullptr);
-  data->set_has_committed(true);
-  data.reset();
-
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.BeforeCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "BeforeCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.BeforeCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintsFetcher.NavigationHostCoveredByFetch."
-      "AtCommit",
-      false, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.Hints.NavigationHostCoverage.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HasHint.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.HostMatch.AtCommit", true, 1);
-  histogram_tester.ExpectUniqueSample(
-      "OptimizationGuide.HintCache.PageMatch.AtCommit", false, 1);
-}
-
-TEST(OptimizationGuideNavigationDataTest, RecordMetricsBadHintVersion) {
+TEST(OptimizationGuideNavigtaionDataTest,
+     RecordMetricsRegisteredOptimizationTypes) {
   base::test::TaskEnvironment env;
 
   ukm::TestAutoSetUkmRecorder ukm_recorder;
 
   std::unique_ptr<OptimizationGuideNavigationData> data =
       std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_serialized_hint_version_string("123");
+  data->set_registered_optimization_types(
+      {optimization_guide::proto::NOSCRIPT,
+       optimization_guide::proto::RESOURCE_LOADING});
   data.reset();
 
-  // Make sure no UKM recorded.
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_TRUE(entries.empty());
-}
-
-TEST(OptimizationGuideNavigationDataTest, RecordMetricsEmptyHintVersion) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_serialized_hint_version_string("");
-  data.reset();
-
-  // Make sure no UKM recorded.
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_TRUE(entries.empty());
-}
-
-TEST(OptimizationGuideNavigationDataTest, RecordMetricsZeroTimestampOrSource) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  optimization_guide::proto::Version hint_version;
-  hint_version.mutable_generation_timestamp()->set_seconds(0);
-  hint_version.set_hint_source(optimization_guide::proto::HINT_SOURCE_UNKNOWN);
-  std::string hint_version_string;
-  hint_version.SerializeToString(&hint_version_string);
-  base::Base64Encode(hint_version_string, &hint_version_string);
-  data->set_serialized_hint_version_string(hint_version_string);
-  data.reset();
-
-  // Make sure UKM not recorded for all empty values.
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_TRUE(entries.empty());
-}
-
-TEST(OptimizationGuideNavigationDataTest, RecordMetricsGoodHintVersion) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  optimization_guide::proto::Version hint_version;
-  hint_version.mutable_generation_timestamp()->set_seconds(234);
-  hint_version.set_hint_source(
-      optimization_guide::proto::HINT_SOURCE_OPTIMIZATION_GUIDE_SERVICE);
-  std::string hint_version_string;
-  hint_version.SerializeToString(&hint_version_string);
-  base::Base64Encode(hint_version_string, &hint_version_string);
-  data->set_serialized_hint_version_string(hint_version_string);
-  data.reset();
-
-  // Make sure version is serialized properly and UKM is recorded.
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::OptimizationGuide::kEntryName);
   EXPECT_EQ(1u, entries.size());
   auto* entry = entries[0];
+  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
+      entry,
+      ukm::builders::OptimizationGuide::kRegisteredOptimizationTypesName));
+  // The bitmask should be 110 since NOSCRIPT=1 and RESOURCE_LOADING=2.
   ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kHintSourceName,
-      static_cast<int>(
-          optimization_guide::proto::HINT_SOURCE_OPTIMIZATION_GUIDE_SERVICE));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName,
-      234);
+      entry, ukm::builders::OptimizationGuide::kRegisteredOptimizationTypesName,
+      6);
 }
 
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintVersionWithUnknownSource) {
+TEST(OptimizationGuideNavigtaionDataTest,
+     RecordMetricsRegisteredOptimizationTargets) {
   base::test::TaskEnvironment env;
 
   ukm::TestAutoSetUkmRecorder ukm_recorder;
 
   std::unique_ptr<OptimizationGuideNavigationData> data =
       std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  optimization_guide::proto::Version hint_version;
-  hint_version.mutable_generation_timestamp()->set_seconds(234);
-  hint_version.set_hint_source(optimization_guide::proto::HINT_SOURCE_UNKNOWN);
-  std::string hint_version_string;
-  hint_version.SerializeToString(&hint_version_string);
-  base::Base64Encode(hint_version_string, &hint_version_string);
-  data->set_serialized_hint_version_string(hint_version_string);
+  data->set_registered_optimization_targets(
+      {optimization_guide::proto::OPTIMIZATION_TARGET_UNKNOWN,
+       optimization_guide::proto::OPTIMIZATION_TARGET_PAINFUL_PAGE_LOAD});
   data.reset();
 
-  // Make sure version is serialized properly and UKM is only recorded for
-  // non-empty values.
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::OptimizationGuide::kEntryName);
   EXPECT_EQ(1u, entries.size());
   auto* entry = entries[0];
-  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kHintSourceName));
+  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
+      entry,
+      ukm::builders::OptimizationGuide::kRegisteredOptimizationTargetsName));
+  // The bitmask should be 11 since UNKNOWN=0 and PAINFUL_PAGE_LOAD=1.
   ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName,
-      234);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintVersionWithNoSource) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  optimization_guide::proto::Version hint_version;
-  hint_version.mutable_generation_timestamp()->set_seconds(234);
-  std::string hint_version_string;
-  hint_version.SerializeToString(&hint_version_string);
-  base::Base64Encode(hint_version_string, &hint_version_string);
-  data->set_serialized_hint_version_string(hint_version_string);
-  data.reset();
-
-  // Make sure version is serialized properly and UKM is recorded.
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kHintSourceName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName,
-      234);
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintVersionWithZeroTimestamp) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  optimization_guide::proto::Version hint_version;
-  hint_version.mutable_generation_timestamp()->set_seconds(0);
-  hint_version.set_hint_source(
-      optimization_guide::proto::HINT_SOURCE_OPTIMIZATION_GUIDE_SERVICE);
-  std::string hint_version_string;
-  hint_version.SerializeToString(&hint_version_string);
-  base::Base64Encode(hint_version_string, &hint_version_string);
-  data->set_serialized_hint_version_string(hint_version_string);
-  data.reset();
-
-  // Make sure version is serialized properly and UKM is only recorded for
-  // non-empty values.
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kHintSourceName,
-      static_cast<int>(
-          optimization_guide::proto::HINT_SOURCE_OPTIMIZATION_GUIDE_SERVICE));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintVersionWithNoTimestamp) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  optimization_guide::proto::Version hint_version;
-  hint_version.set_hint_source(
-      optimization_guide::proto::HINT_SOURCE_OPTIMIZATION_GUIDE_SERVICE);
-  std::string hint_version_string;
-  hint_version.SerializeToString(&hint_version_string);
-  base::Base64Encode(hint_version_string, &hint_version_string);
-  data->set_serialized_hint_version_string(hint_version_string);
-  data.reset();
-
-  // Make sure version is serialized properly and UKM is recorded.
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_FALSE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kHintGenerationTimestampName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kHintSourceName,
-      static_cast<int>(
-          optimization_guide::proto::HINT_SOURCE_OPTIMIZATION_GUIDE_SERVICE));
+      entry,
+      ukm::builders::OptimizationGuide::kRegisteredOptimizationTargetsName, 3);
 }
 
 TEST(OptimizationGuideNavigationDataTest,
@@ -664,14 +188,16 @@ TEST(OptimizationGuideNavigationDataTest,
 }
 
 TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageHasHintBeforeCommitNoFetch) {
+     RecordMetricsFetchAttemptStatusForNavigation) {
   base::test::TaskEnvironment env;
 
   ukm::TestAutoSetUkmRecorder ukm_recorder;
 
   std::unique_ptr<OptimizationGuideNavigationData> data =
       std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(true);
+  data->set_hints_fetch_attempt_status(
+      optimization_guide::RaceNavigationFetchAttemptStatus::
+          kRaceNavigationFetchHost);
   data.reset();
 
   auto entries = ukm_recorder.GetEntriesByName(
@@ -679,186 +205,13 @@ TEST(OptimizationGuideNavigationDataTest,
   EXPECT_EQ(1u, entries.size());
   auto* entry = entries[0];
   EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
+      entry, ukm::builders::OptimizationGuide::
+                 kNavigationHintsFetchAttemptStatusName));
   ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(
-          optimization_guide::NavigationHostCoveredStatus::kCovered));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageHasHintAfterCommitNoFetch) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_after_commit(true);
-  data->set_has_committed(true);
-  data.reset();
-
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(
-          optimization_guide::NavigationHostCoveredStatus::kCovered));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageNoHintHasFetchBeforeCommit) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(false);
-  data->set_was_host_covered_by_fetch_at_navigation_start(true);
-  data.reset();
-
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(
-          optimization_guide::NavigationHostCoveredStatus::kCovered));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageNoHintHasFetchAtCommit) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_after_commit(false);
-  data->set_was_host_covered_by_fetch_at_commit(true);
-  data->set_has_committed(true);
-  data.reset();
-
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(
-          optimization_guide::NavigationHostCoveredStatus::kCovered));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageNoHintOrFetchBeforeCommitAndNoFetchAttempted) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(false);
-  data->set_was_host_covered_by_fetch_at_navigation_start(false);
-  data->set_has_committed(true);
-  data.reset();
-
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(
-          optimization_guide::NavigationHostCoveredStatus::kFetchNotAttempted));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageNoHintOrFetchAtCommitAndNoFetchAttempted) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_after_commit(false);
-  data->set_was_host_covered_by_fetch_at_commit(false);
-  data->set_has_committed(true);
-  data.reset();
-
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(
-          optimization_guide::NavigationHostCoveredStatus::kFetchNotAttempted));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageNoHintOrFetchBeforeCommitButFetchAttempted) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_before_commit(false);
-  data->set_was_host_covered_by_fetch_at_navigation_start(false);
-  data->set_was_hint_for_host_attempted_to_be_fetched(true);
-  data->set_has_committed(true);
-  data.reset();
-
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(optimization_guide::NavigationHostCoveredStatus::
-                           kFetchNotSuccessful));
-}
-
-TEST(OptimizationGuideNavigationDataTest,
-     RecordMetricsHintCoverageNoHintOrFetchAtCommitButFetchAttempted) {
-  base::test::TaskEnvironment env;
-
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
-  std::unique_ptr<OptimizationGuideNavigationData> data =
-      std::make_unique<OptimizationGuideNavigationData>(/*navigation_id=*/3);
-  data->set_has_hint_after_commit(false);
-  data->set_was_host_covered_by_fetch_at_commit(false);
-  data->set_was_hint_for_host_attempted_to_be_fetched(true);
-  data->set_has_committed(true);
-  data.reset();
-
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::OptimizationGuide::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  auto* entry = entries[0];
-  EXPECT_TRUE(ukm_recorder.EntryHasMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName));
-  ukm_recorder.ExpectEntryMetric(
-      entry, ukm::builders::OptimizationGuide::kNavigationHostCoveredName,
-      static_cast<int>(optimization_guide::NavigationHostCoveredStatus::
-                           kFetchNotSuccessful));
+      entry,
+      ukm::builders::OptimizationGuide::kNavigationHintsFetchAttemptStatusName,
+      static_cast<int>(optimization_guide::RaceNavigationFetchAttemptStatus::
+                           kRaceNavigationFetchHost));
 }
 
 TEST(OptimizationGuideNavigationDataTest,

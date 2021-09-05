@@ -92,7 +92,9 @@ class ChromeBrowsingDataRemoverDelegate
         DATA_TYPE_WEB_APP_DATA |
 #endif
         DATA_TYPE_SITE_USAGE_DATA | DATA_TYPE_DURABLE_PERMISSION |
-        DATA_TYPE_EXTERNAL_PROTOCOL_DATA | DATA_TYPE_ISOLATED_ORIGINS,
+        DATA_TYPE_EXTERNAL_PROTOCOL_DATA | DATA_TYPE_ISOLATED_ORIGINS |
+        content::BrowsingDataRemover::DATA_TYPE_TRUST_TOKENS |
+        content::BrowsingDataRemover::DATA_TYPE_CONVERSIONS,
 
     // Datatypes protected by Important Sites.
     IMPORTANT_SITES_DATA_TYPES =
@@ -229,7 +231,8 @@ class ChromeBrowsingDataRemoverDelegate
     kFieldInfo = 33,
     kCompromisedCredentials = 34,
     kUserDataSnapshot = 35,
-    kMaxValue = kUserDataSnapshot,
+    kMediaFeeds = 36,
+    kMaxValue = kMediaFeeds,
   };
 
   // Called by CreateTaskCompletionClosure().

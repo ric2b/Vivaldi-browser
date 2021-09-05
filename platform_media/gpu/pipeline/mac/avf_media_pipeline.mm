@@ -95,18 +95,17 @@ AVFMediaPipeline::~AVFMediaPipeline() {
           << " ~AVFMediaPipeline()";
 }
 
-void AVFMediaPipeline::Initialize(ipc_data_source::Reader source_reader,
-                                  ipc_data_source::Info source_info,
+void AVFMediaPipeline::Initialize( ipc_data_source::Info source_info,
                                   InitializeCB initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "AVFMediaPipeline::Initialize", this);
   media_decoder_client_.reset(new MediaDecoderClient(this));
   media_decoder_.reset(new AVFMediaDecoder(media_decoder_client_.get()));
-  media_decoder_->Initialize(std::move(source_reader), std::move(source_info),
+  media_decoder_->Initialize(
+      std::move(source_info),
       base::Bind(&AVFMediaPipeline::MediaDecoderInitialized,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 std::move(initialize_cb)));
+                 weak_ptr_factory_.GetWeakPtr(), std::move(initialize_cb)));
 }
 
 void AVFMediaPipeline::ReadMediaData(IPCDecodingBuffer buffer) {

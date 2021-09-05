@@ -5,12 +5,12 @@
 package org.chromium.weblayer;
 
 import android.os.RemoteException;
-import android.support.v4.app.Fragment;
 import android.view.View;
 import android.webkit.ValueCallback;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.IBrowser;
@@ -211,6 +211,25 @@ public class Browser {
         ThreadCheck.ensureOnUiThread();
         try {
             mImpl.setTopView(ObjectWrapper.wrap(view));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Sets the View shown at the bottom of the browser. A value of null removes the view.
+     *
+     * @param view The new bottom-view.
+     *
+     * @since 84
+     */
+    public void setBottomView(@Nullable View view) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.setBottomView(ObjectWrapper.wrap(view));
         } catch (RemoteException e) {
             throw new APICallException(e);
         }

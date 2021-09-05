@@ -131,8 +131,6 @@ class ProfileSyncService : public SyncService,
   bool RequiresClientUpgrade() const override;
   std::unique_ptr<SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
-  std::unique_ptr<crypto::ECPrivateKey> GetExperimentalAuthenticationKey()
-      const override;
   bool IsSetupInProgress() const override;
   ModelTypeSet GetRegisteredDataTypes() const override;
   ModelTypeSet GetPreferredDataTypes() const override;
@@ -177,10 +175,8 @@ class ProfileSyncService : public SyncService,
       const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
       const std::string& birthday,
       const std::string& bag_of_chips,
-      const std::string& last_keystore_key,
       bool success) override;
-  void OnSyncCycleCompleted(const SyncCycleSnapshot& snapshot,
-                            const std::string& last_keystore_key) override;
+  void OnSyncCycleCompleted(const SyncCycleSnapshot& snapshot) override;
   void OnProtocolEvent(const ProtocolEvent& event) override;
   void OnDirectoryTypeCommitCounterUpdated(
       ModelType type,
@@ -270,10 +266,6 @@ class ProfileSyncService : public SyncService,
   SyncEncryptionHandler::Observer* GetEncryptionObserverForTest();
 
   SyncClient* GetSyncClientForTest();
-
-  // Combines GAIA ID, sync birthday and keystore key with '|' sepearator to
-  // generate a secret. Returns empty string if keystore key is not available.
-  std::string GetExperimentalAuthenticationSecretForTest() const;
 
   static std::string GenerateCacheGUIDForTest();
 
@@ -385,6 +377,9 @@ class ProfileSyncService : public SyncService,
   // Called by SyncServiceCrypto when a passphrase is required or accepted.
   void ReconfigureDueToPassphrase(ConfigureReason reason);
 
+  // Called by SyncServiceCrypto when its required user action changes.
+  void OnRequiredUserActionChanged();
+
   std::string GetExperimentalAuthenticationSecret() const;
 
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
@@ -455,11 +450,6 @@ class ProfileSyncService : public SyncService,
   // OnEngineInitialized().
   bool is_first_time_sync_configure_;
 
-  // Last known keystore key, populated after engine initialization.
-  // TODO(crbug.com/1012226): Remove |last_keystore_key_| when VAPID migration
-  // is over.
-  std::string last_keystore_key_;
-
   // Number of UIs currently configuring the Sync service. When this number
   // is decremented back to zero, Sync setup is marked no longer in progress.
   int outstanding_setup_in_progress_handles_ = 0;
@@ -528,6 +518,11 @@ class ProfileSyncService : public SyncService,
   // Used by StopAndClear() to remember that clearing of data is needed (as
   // sync is stopped after a callback from |user_settings_|).
   bool is_stopping_and_clearing_;
+
+  // Used for UMA to determine whether TrustedVaultErrorShownOnStartup
+  // histogram needs to recorded. Set to false iff histogram was already
+  // recorded or trusted vault passphrase type wasn't used on startup.
+  bool should_record_trusted_vault_error_shown_on_startup_;
 
   // This weak factory invalidates its issued pointers when Sync is disabled.
   base::WeakPtrFactory<ProfileSyncService> sync_enabled_weak_factory_{this};

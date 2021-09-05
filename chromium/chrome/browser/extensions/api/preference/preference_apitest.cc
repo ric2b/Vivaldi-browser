@@ -32,6 +32,7 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/test/browser_test.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -145,13 +146,7 @@ class ExtensionPreferenceApiTest : public extensions::ExtensionApiTest {
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 };
 
-// http://crbug.com/177163
-#if defined(OS_WIN) && !defined(NDEBUG)
-#define MAYBE_Standard DISABLED_Standard
-#else
-#define MAYBE_Standard Standard
-#endif
-IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, MAYBE_Standard) {
+IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, Standard) {
   PrefService* prefs = profile_->GetPrefs();
   prefs->SetBoolean(embedder_support::kAlternateErrorPagesEnabled, false);
   prefs->SetBoolean(autofill::prefs::kAutofillEnabledDeprecated, false);
@@ -216,8 +211,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, PersistentIncognito) {
   EXPECT_FALSE(prefs->GetBoolean(prefs::kBlockThirdPartyCookies));
 }
 
-// Flakily times out: http://crbug.com/106144
-IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, DISABLED_IncognitoDisabled) {
+IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, IncognitoDisabled) {
   EXPECT_FALSE(RunExtensionTest("preference/persistent_incognito"));
 }
 
@@ -557,7 +551,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionPreferenceApiTest, ThirdPartyCookiesAllowed) {
                                     /* expected_controlled */ true);
   VerifyPrefValueAndControlledState(
       prefs::kCookieControlsMode,
-      base::Value(static_cast<int>(content_settings::CookieControlsMode::kOn)),
+      base::Value(static_cast<int>(
+          content_settings::CookieControlsMode::kBlockThirdParty)),
       /* expected_controlled */ true);
   listener_false.Reply("ok");
 

@@ -18,9 +18,7 @@
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_mutable_config_values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_util.h"
@@ -90,14 +88,8 @@ DataReductionProxyService::DataReductionProxyService(
   DCHECK(network_quality_tracker_);
   DCHECK(network_connection_tracker_);
 
-  DataReductionProxyMutableConfigValues* raw_mutable_config = nullptr;
-  std::unique_ptr<DataReductionProxyMutableConfigValues> mutable_config =
-      std::make_unique<DataReductionProxyMutableConfigValues>();
-  raw_mutable_config = mutable_config.get();
-  config_ =
-      std::make_unique<DataReductionProxyConfig>(std::move(mutable_config));
-  request_options_ = std::make_unique<DataReductionProxyRequestOptions>(
-      client_, config_.get());
+  request_options_ =
+      std::make_unique<DataReductionProxyRequestOptions>(client_);
   request_options_->Init();
   // It is safe to use base::Unretained here, since it gets executed
   // synchronously on the UI thread, and |this| outlives the caller (since the
@@ -109,21 +101,14 @@ DataReductionProxyService::DataReductionProxyService(
   // It is safe to use base::Unretained here, since it gets executed
   // synchronously on the UI thread, and |this| outlives the caller (since the
   // caller is owned by |this|.
-  if (!params::IsIncludedInHoldbackFieldTrial() ||
-      previews::params::IsLitePageServerPreviewsEnabled() ||
-      params::ForceEnableClientConfigServiceForAllDataSaverUsers()) {
+  if (params::ForceEnableClientConfigServiceForAllDataSaverUsers()) {
     config_client_ = std::make_unique<DataReductionProxyConfigServiceClient>(
-        GetBackoffPolicy(), request_options_.get(), raw_mutable_config,
-        config_.get(), this, network_connection_tracker_,
+        GetBackoffPolicy(), request_options_.get(), this,
+        network_connection_tracker_,
         base::BindRepeating(&DataReductionProxyService::StoreSerializedConfig,
                             base::Unretained(this)));
   }
 
-
-  // It is safe to use base::Unretained here, since it gets executed
-  // synchronously on the UI thread, and |this| outlives the caller (since the
-  // caller is owned by |this|.
-  config_->Initialize(url_loader_factory_, user_agent);
   if (config_client_)
     config_client_->Initialize(url_loader_factory_);
 
@@ -264,7 +249,7 @@ void DataReductionProxyService::SetStringPref(const std::string& pref_path,
 
 void DataReductionProxyService::SetProxyPrefs(bool enabled, bool at_startup) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  config_->SetProxyConfig(enabled, at_startup);
+
   if (config_client_) {
     config_client_->SetEnabled(enabled);
     if (enabled)
@@ -277,7 +262,6 @@ void DataReductionProxyService::SetProxyPrefs(bool enabled, bool at_startup) {
       client->ClearBadProxiesCache();
   }
 }
-
 
 net::EffectiveConnectionType
 DataReductionProxyService::GetEffectiveConnectionType() const {
@@ -402,28 +386,22 @@ void DataReductionProxyService::OnServicesDataUse(int32_t service_hash_code,
 void DataReductionProxyService::StoreSerializedConfig(
     const std::string& serialized_config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!params::IsIncludedInHoldbackFieldTrial() ||
-         previews::params::IsLitePageServerPreviewsEnabled() ||
-         params::ForceEnableClientConfigServiceForAllDataSaverUsers());
-
+  DCHECK(params::ForceEnableClientConfigServiceForAllDataSaverUsers());
   SetStringPref(prefs::kDataReductionProxyConfig, serialized_config);
   SetInt64Pref(prefs::kDataReductionProxyLastConfigRetrievalTime,
                (base::Time::Now() - base::Time()).InMicroseconds());
 }
 
 void DataReductionProxyService::SetDependenciesForTesting(
-    std::unique_ptr<DataReductionProxyConfig> config,
     std::unique_ptr<DataReductionProxyRequestOptions> request_options,
     std::unique_ptr<DataReductionProxyConfigServiceClient> config_client) {
-  config_ = std::move(config);
-  config_->Initialize(url_loader_factory_, std::string());
-
   request_options_ = std::move(request_options);
   request_options_->SetUpdateHeaderCallback(
       base::BindRepeating(&DataReductionProxyService::UpdateProxyRequestHeaders,
                           base::Unretained(this)));
 
   config_client_ = std::move(config_client);
+
   if (config_client_)
     config_client_->Initialize(url_loader_factory_);
 }

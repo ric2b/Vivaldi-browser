@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
+#include "third_party/blink/renderer/core/inspector/inspector_issue_storage.h"
 #include "third_party/blink/renderer/core/inspector/inspector_task_runner.h"
 #include "third_party/blink/renderer/core/inspector/worker_devtools_params.h"
 #include "third_party/blink/renderer/core/inspector/worker_inspector_controller.h"
@@ -570,6 +571,7 @@ void WorkerThread::InitializeOnWorkerThread(
     const KURL url_for_debugger = global_scope_creation_params->script_url;
 
     console_message_storage_ = MakeGarbageCollected<ConsoleMessageStorage>();
+    inspector_issue_storage_ = MakeGarbageCollected<InspectorIssueStorage>();
     global_scope_ =
         CreateWorkerGlobalScope(std::move(global_scope_creation_params));
     worker_reporting_proxy_.DidCreateWorkerGlobalScope(GlobalScope());
@@ -623,12 +625,6 @@ void WorkerThread::EvaluateClassicScriptOnWorkerThread(
     String source_code,
     std::unique_ptr<Vector<uint8_t>> cached_meta_data,
     const v8_inspector::V8StackTraceId& stack_id) {
-  // TODO(crbug.com/930618): Remove this check after we identified the cause
-  // of the crash.
-  {
-    MutexLocker lock(mutex_);
-    CHECK_EQ(ThreadState::kRunning, thread_state_);
-  }
   WorkerGlobalScope* global_scope = To<WorkerGlobalScope>(GlobalScope());
   CHECK(global_scope);
   global_scope->EvaluateClassicScript(script_url, std::move(source_code),
@@ -734,6 +730,7 @@ void WorkerThread::PerformShutdownOnWorkerThread() {
   global_scope_ = nullptr;
 
   console_message_storage_.Clear();
+  inspector_issue_storage_.Clear();
 
   if (IsOwningBackingThread())
     GetWorkerBackingThread().ShutdownOnBackingThread();

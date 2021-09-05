@@ -258,6 +258,11 @@ void PaymentRequestBrowserTestBase::OnProcessingSpinnerHidden() {
     event_waiter_->OnEvent(DialogEvent::PROCESSING_SPINNER_HIDDEN);
 }
 
+void PaymentRequestBrowserTestBase::OnPaymentHandlerWindowOpened() {
+  if (event_waiter_)
+    event_waiter_->OnEvent(DialogEvent::PAYMENT_HANDLER_WINDOW_OPENED);
+}
+
 void PaymentRequestBrowserTestBase::InvokePaymentRequestUI() {
   ResetEventWaiterForDialogOpened();
 
@@ -680,6 +685,12 @@ void PaymentRequestBrowserTestBase::RetryPaymentRequest(
   WaitForObservedEvent();
 }
 
+bool PaymentRequestBrowserTestBase::IsViewVisible(DialogViewID view_id) const {
+  views::View* view =
+      delegate_->dialog_view()->GetViewByID(static_cast<int>(view_id));
+  return view != nullptr && view->GetVisible();
+}
+
 base::string16 PaymentRequestBrowserTestBase::GetEditorTextfieldValue(
     autofill::ServerFieldType type) {
   ValidatingTextfield* textfield =
@@ -917,6 +928,9 @@ std::ostream& operator<<(
       break;
     case DialogEvent::PROCESSING_SPINNER_HIDDEN:
       out << "PROCESSING_SPINNER_HIDDEN";
+      break;
+    case DialogEvent::PAYMENT_HANDLER_WINDOW_OPENED:
+      out << "PAYMENT_HANDLER_WINDOW_OPENED";
       break;
   }
   return out;

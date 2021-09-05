@@ -34,8 +34,10 @@ using CompositingReasons = uint64_t;
   V(VideoOverlay)                                                             \
   V(WillChangeTransform)                                                      \
   V(WillChangeOpacity)                                                        \
-  /* This flag is needed only when neither kWillChangeTransform nor           \
-     kWillChangeOpacity is set */                                             \
+  V(WillChangeFilter)                                                         \
+  V(WillChangeBackdropFilter)                                                 \
+  /* This flag is needed only when none of the explicit kWillChange* reasons  \
+     are set. */                                                              \
   V(WillChangeOther)                                                          \
   V(BackdropFilter)                                                           \
   V(RootScroller)                                                             \
@@ -118,8 +120,8 @@ class PLATFORM_EXPORT CompositingReason {
 
     kComboAllDirectStyleDeterminedReasons =
         k3DTransform | kBackfaceVisibilityHidden | kComboActiveAnimation |
-        kWillChangeTransform | kWillChangeOpacity | kWillChangeOther |
-        kBackdropFilter,
+        kWillChangeTransform | kWillChangeOpacity | kWillChangeFilter |
+        kWillChangeOther | kBackdropFilter | kWillChangeBackdropFilter,
 
     kComboAllDirectNonStyleDeterminedReasons =
         kVideo | kCanvas | kPlugin | kIFrame | kOverflowScrollingParent |
@@ -157,10 +159,11 @@ class PLATFORM_EXPORT CompositingReason {
         kActiveTransformAnimation,
     kDirectReasonsForScrollTranslationProperty =
         kRootScroller | kOverflowScrolling,
-    kDirectReasonsForEffectProperty = kActiveOpacityAnimation |
-                                      kWillChangeOpacity | kBackdropFilter |
-                                      kActiveBackdropFilterAnimation,
-    kDirectReasonsForFilterProperty = kActiveFilterAnimation,
+    kDirectReasonsForEffectProperty =
+        kActiveOpacityAnimation | kWillChangeOpacity | kBackdropFilter |
+        kWillChangeBackdropFilter | kActiveBackdropFilterAnimation,
+    kDirectReasonsForFilterProperty =
+        kActiveFilterAnimation | kWillChangeFilter,
   };
 };
 

@@ -23,10 +23,10 @@ NotesAttachmentDataClassHandler::~NotesAttachmentDataClassHandler() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
-bool NotesAttachmentDataClassHandler::GetData(
+void NotesAttachmentDataClassHandler::GetData(
     const std::string& data_id,
     content::URLDataSource::GotDataCallback callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // data_id should be noteId/attachmentChecksum|attachmentsize
   std::string note_id, checksum, size;
@@ -56,5 +56,4 @@ bool NotesAttachmentDataClassHandler::GetData(
     };
   }
   std::move(callback).Run(std::move(data));
-  return true;
 }

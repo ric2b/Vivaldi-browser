@@ -53,10 +53,11 @@ jumbo_static_library("common") {
     "password_form_generation_data.h",
     "password_generation_util.cc",
     "password_generation_util.h",
+    "renderer_id.h",
     "save_password_progress_logger.cc",
     "save_password_progress_logger.h",
-    "signatures_util.cc",
-    "signatures_util.h",
+    "signatures.cc",
+    "signatures.h",
   ]
 
   deps = [
@@ -91,7 +92,6 @@ source_set("unit_tests") {
     "form_field_data_unittest.cc",
     "gaia_id_hash_unittest.cc",
     "logging/log_buffer_unittest.cc",
-    "password_form_fill_data_unittest.cc",
     "save_password_progress_logger_unittest.cc",
   ]
 

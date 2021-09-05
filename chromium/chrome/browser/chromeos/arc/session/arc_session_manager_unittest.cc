@@ -8,12 +8,13 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/macros.h"
+#include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
@@ -324,9 +325,10 @@ TEST_F(ArcSessionManagerTest, BaseWorkflow) {
   arc_session_manager()->OnTermsOfServiceNegotiatedForTesting(true);
   ASSERT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
             arc_session_manager()->state());
+  EXPECT_TRUE(arc_session_manager()->sign_in_start_time().is_null());
   arc_session_manager()->StartArcForTesting();
 
-  EXPECT_TRUE(arc_session_manager()->sign_in_start_time().is_null());
+  EXPECT_FALSE(arc_session_manager()->sign_in_start_time().is_null());
   EXPECT_FALSE(arc_session_manager()->arc_start_time().is_null());
 
   ASSERT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
@@ -508,7 +510,9 @@ TEST_F(ArcSessionManagerTest, Provisioning_Success) {
   arc_session_manager()->OnTermsOfServiceNegotiatedForTesting(true);
   ASSERT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
             arc_session_manager()->state());
+  EXPECT_TRUE(arc_session_manager()->sign_in_start_time().is_null());
   arc_session_manager()->StartArcForTesting();
+  EXPECT_FALSE(arc_session_manager()->sign_in_start_time().is_null());
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
 
   // Here, provisining is not yet completed, so kArcSignedIn should be false.
@@ -520,7 +524,6 @@ TEST_F(ArcSessionManagerTest, Provisioning_Success) {
   arc_session_manager()->OnProvisioningFinished(ProvisioningResult::SUCCESS);
   EXPECT_TRUE(prefs->GetBoolean(prefs::kArcSignedIn));
   EXPECT_EQ(ArcSessionManager::State::ACTIVE, arc_session_manager()->state());
-  EXPECT_TRUE(arc_session_manager()->sign_in_start_time().is_null());
   EXPECT_TRUE(arc_session_manager()->IsPlaystoreLaunchRequestedForTesting());
 }
 
@@ -1277,12 +1280,9 @@ class ArcSessionOobeOptInNegotiatorTest
  protected:
   bool IsManagedUser() { return GetParam(); }
 
-  void ReportResult(bool accepted) {
+  void ReportAccepted() {
     for (auto& observer : observer_list_) {
-      if (accepted)
-        observer.OnAccept(false);
-      else
-        observer.OnSkip();
+      observer.OnAccept(false);
     }
     base::RunLoop().RunUntilIdle();
   }
@@ -1344,30 +1344,9 @@ TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsAccepted) {
   view()->Show();
   EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
-  ReportResult(true);
+  ReportAccepted();
   EXPECT_EQ(ArcSessionManager::State::CHECKING_ANDROID_MANAGEMENT,
             arc_session_manager()->state());
-}
-
-TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsRejected) {
-  view()->Show();
-  EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
-            arc_session_manager()->state());
-  ReportResult(false);
-  if (!IsManagedUser()) {
-    // ArcPlayStoreEnabledPreferenceHandler is not running, so the state should
-    // be kept as is
-    EXPECT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
-              arc_session_manager()->state());
-    EXPECT_FALSE(IsArcPlayStoreEnabledForProfile(profile()));
-  } else {
-    // For managed case we handle closing outside of
-    // ArcPlayStoreEnabledPreferenceHandler. So it session turns to STOPPED.
-    EXPECT_EQ(ArcSessionManager::State::STOPPED,
-              arc_session_manager()->state());
-    // Managed user's preference should not be overwritten.
-    EXPECT_TRUE(IsArcPlayStoreEnabledForProfile(profile()));
-  }
 }
 
 TEST_P(ArcSessionOobeOptInNegotiatorTest, OobeTermsViewDestroyed) {

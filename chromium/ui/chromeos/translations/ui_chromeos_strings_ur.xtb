@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">جرمن کی بورڈ</translation>
 <translation id="1972984168337863910">فائلز کے تاثرات کے پینلز کو پھیلائیں</translation>
 <translation id="1984603991036629094">آرمینیائی فونیٹک کی بورڈ</translation>
+<translation id="1995337122023280937">فائل کے مقام پر جائیں</translation>
 <translation id="2001796770603320721">‏Drive میں نظم کریں</translation>
 <translation id="2009067268969781306">ڈرائیو کو فارمیٹ کرنے سے اس پر اسٹور کردہ تمام ڈیٹا حذف ہو جائے گا۔ اس کارروائی کو کالعدم نہیں کیا جا سکتا۔</translation>
 <translation id="2028997212275086731">‏RAR آرکائیو</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">‏Google Drive تک رسائی حاصل نہیں ہو سکی۔ براہ کرم <ph name="BEGIN_LINK" />لاگ آؤٹ کریں<ph name="END_LINK" /> اور دوبارہ لاگ ان کریں۔</translation>
 <translation id="2649120831653069427">رینبو فش</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">فائل کا مقام</translation>
 <translation id="2672394958563893062">ایک خرابی پیش آگئی۔ ابتدا سے دوبارہ شروع کرنے کیلئے کلک کریں۔</translation>
 <translation id="2676946222714718093">اس پر چل رہا ہے</translation>
 <translation id="2735698359135166290">رومانیائی معیاری کی بورڈ</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> خرابیاں۔</translation>
 <translation id="3519867315646775981">‏نقل حرفی (shalom ← שלום)</translation>
 <translation id="3522708245912499433">پُرتگالی</translation>
+<translation id="3524311639100184459">احتیاط: یہ فائلز عارضی ہیں اور ڈسک میں جگہ خالی کرنے کیلئے انہیں خودکار طور پر حذف کیا جا سکتا ہے۔  <ph name="BEGIN_LINK" />مزید جانیں<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">فولڈر</translation>
 <translation id="3549797760399244642">‏drive.google.com پر جائیں…</translation>
 <translation id="357479282490346887">لتھُواینین</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">کیوی</translation>
 <translation id="3966388904776714213">آڈیو پلیئر</translation>
 <translation id="4002066346123236978">عنوان</translation>
+<translation id="4065397611279318371"><ph name="APP_NAME" /> ایپس کے ساتھ فائلز کھولنے کے لیے، پہلے انہیں <ph name="SHARED_DIRECTORY_LABEL" /> کے فولڈر میں منتقل کریں۔</translation>
 <translation id="4070370845051020638">کینٹونیز کا اندراج کا طریقہ</translation>
 <translation id="4072248638558688893">تامل کی بورڈ (فونیٹک)</translation>
 <translation id="4124935795427217608">یونیکارن</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">خودکار اصلاح</translation>
 <translation id="4881695831933465202">کھولیں</translation>
 <translation id="4886021172213954916">تمل کی بورڈ (ٹائپ رائٹر)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> کے ساتھ کھولنے سے قاصر</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> بیک اپ لینے کیلئے تیار</translation>
 <translation id="4924638091161556692">مقررہ</translation>
 <translation id="4935975195727477204">گزانیہ پھول</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">‏Linux کے اشتراک کا نظم کریں</translation>
 <translation id="6808193438228982088">لومڑی</translation>
 <translation id="6820687829547641339">‏Gzip کمپریس کردہ tar آرکائیو</translation>
+<translation id="6823166707458800069">اس فولڈر میں محفوظ کردہ سبھی فائلوں کا خودکار طور پر آن لائن بیک اپ لیا جاتا ہے۔</translation>
 <translation id="6825883775269213504">روسی</translation>
 <translation id="6827236167376090743">یہ ویڈیو بہت دیر تک چلتی رہے گی۔</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> کو انتخاب سے ہٹا دیا گیا۔</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">‏Google نقشہ</translation>
 <translation id="7419631653042041064">کیٹلان کی بورڈ</translation>
 <translation id="7434823369735508263">‏UK ڈوراک کی بورڈ</translation>
+<translation id="7447678886297481665">اس فولڈر میں موجود فائلز صرف پڑھنے کے لیے ہیں۔ کچھ سرگرمیاں تعاون یافتہ نہیں ہیں۔</translation>
 <translation id="7460898608667578234">يُوکرينی</translation>
 <translation id="7474889694310679759">کینیڈین انگریزی کی بورڈ</translation>
 <translation id="7489215562877293245">‏<ph name="FILE_COUNT" /> ملیں

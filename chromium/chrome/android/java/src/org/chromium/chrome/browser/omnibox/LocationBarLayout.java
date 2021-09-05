@@ -22,6 +22,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -33,6 +34,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.WindowDelegate;
@@ -52,28 +54,33 @@ import org.chromium.chrome.browser.omnibox.status.StatusViewCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorFactory;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionListEmbedder;
+import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdown;
 import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
+import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
-import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.util.ColorUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
@@ -138,14 +145,15 @@ public class LocationBarLayout extends FrameLayout
     private final class UrlBarKeyListener implements OnKeyListener {
         @Override
         public boolean onKey(View v, int keyCode, KeyEvent event) {
+            boolean isRtl = v.getLayoutDirection() == LAYOUT_DIRECTION_RTL;
             if (mAutocompleteCoordinator.handleKeyEvent(keyCode, event)) {
                 return true;
             } else if (keyCode == KeyEvent.KEYCODE_BACK) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                if (KeyNavigationUtil.isActionDown(event) && event.getRepeatCount() == 0) {
                     // Tell the framework to start tracking this event.
                     getKeyDispatcherState().startTracking(event, this);
                     return true;
-                } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                } else if (KeyNavigationUtil.isActionUp(event)) {
                     getKeyDispatcherState().handleUpEvent(event);
                     if (event.isTracking() && !event.isCanceled()) {
                         backKeyPressed();
@@ -153,10 +161,17 @@ public class LocationBarLayout extends FrameLayout
                     }
                 }
             } else if (keyCode == KeyEvent.KEYCODE_ESCAPE) {
-                if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                if (KeyNavigationUtil.isActionDown(event) && event.getRepeatCount() == 0) {
                     revertChanges();
                     return true;
                 }
+            } else if ((!isRtl && KeyNavigationUtil.isGoRight(event))
+                    || (isRtl && KeyNavigationUtil.isGoLeft(event))) {
+                // Ensures URL bar doesn't lose focus, when RIGHT or LEFT (RTL) key is pressed while
+                // the cursor is positioned at the end of the text.
+                TextView tv = (TextView) v;
+                return tv.getSelectionStart() == tv.getSelectionEnd()
+                        && tv.getSelectionEnd() == tv.getText().length();
             }
             return false;
         }
@@ -188,7 +203,7 @@ public class LocationBarLayout extends FrameLayout
         mUrlCoordinator = new UrlBarCoordinator((UrlBar) mUrlBar);
         mUrlCoordinator.setDelegate(this);
 
-        OmniboxSuggestionListEmbedder embedder = new OmniboxSuggestionListEmbedder() {
+        OmniboxSuggestionsDropdown.Embedder embedder = new OmniboxSuggestionsDropdown.Embedder() {
             @Override
             public boolean isTablet() {
                 return mIsTablet;
@@ -223,9 +238,11 @@ public class LocationBarLayout extends FrameLayout
 
     @Override
     public void destroy() {
-        removeUrlFocusChangeListener(mAutocompleteCoordinator);
-        mAutocompleteCoordinator.destroy();
-        mAutocompleteCoordinator = null;
+        if (mAutocompleteCoordinator != null) {
+            removeUrlFocusChangeListener(mAutocompleteCoordinator);
+            mAutocompleteCoordinator.destroy();
+            mAutocompleteCoordinator = null;
+        }
 
         if (mAssistantVoiceSearchService != null) {
             mAssistantVoiceSearchService.destroy();
@@ -289,13 +306,19 @@ public class LocationBarLayout extends FrameLayout
 
     @Override
     public void initializeControls(WindowDelegate windowDelegate, WindowAndroid windowAndroid,
-            ActivityTabProvider provider) {
+            ActivityTabProvider activityTabProvider,
+            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            Supplier<ShareDelegate> shareDelegateSupplier,
+            IncognitoStateProvider incognitoStateProvider) {
         mWindowDelegate = windowDelegate;
         mWindowAndroid = windowAndroid;
 
         mUrlCoordinator.setWindowDelegate(windowDelegate);
         mAutocompleteCoordinator.setWindowAndroid(windowAndroid);
-        mAutocompleteCoordinator.setActivityTabProvider(provider);
+        mAutocompleteCoordinator.setActivityTabProvider(activityTabProvider);
+        mAutocompleteCoordinator.setShareDelegateSupplier(shareDelegateSupplier);
+        mStatusViewCoordinator.setIncognitoStateProvider(incognitoStateProvider);
+        mStatusViewCoordinator.setModalDialogManagerSupplier(modalDialogManagerSupplier);
     }
 
     /**
@@ -752,17 +775,11 @@ public class LocationBarLayout extends FrameLayout
         // When we restore tabs, we focus the selected tab so the URL of the page shows.
     }
 
-    /**
-     * Performs a search query on the current {@link Tab}.  This calls
-     * {@link TemplateUrlService#getUrlForSearchQuery(String)} to get a url based on {@code query}
-     * and loads that url in the current {@link Tab}.
-     * @param query The {@link String} that represents the text query that should be searched for.
-     */
-    @VisibleForTesting
-    public void performSearchQueryForTest(String query) {
+    @Override
+    public void performSearchQuery(String query, List<String> searchParams) {
         if (TextUtils.isEmpty(query)) return;
 
-        String queryUrl = TemplateUrlServiceFactory.get().getUrlForSearchQuery(query);
+        String queryUrl = TemplateUrlServiceFactory.get().getUrlForSearchQuery(query, searchParams);
 
         if (!TextUtils.isEmpty(queryUrl)) {
             loadUrl(queryUrl, PageTransition.GENERATED, 0);
@@ -919,6 +936,7 @@ public class LocationBarLayout extends FrameLayout
     public void setOmniboxEditingText(String text) {
         mUrlCoordinator.setUrlBarData(UrlBarData.forNonUrlText(text), UrlBar.ScrollType.NO_SCROLL,
                 UrlBarCoordinator.SelectionState.SELECT_END);
+        updateButtonVisibility();
     }
 
     @Override
@@ -932,13 +950,21 @@ public class LocationBarLayout extends FrameLayout
      */
     @Override
     public void loadUrl(String url, @PageTransition int transition, long inputStart) {
+        loadUrlWithPostData(url, transition, inputStart, null, null);
+    }
+
+    @Override
+    public void loadUrlWithPostData(String url, @PageTransition int transition, long inputStart,
+            @Nullable String postDataType, @Nullable byte[] postData) {
         Tab currentTab = getCurrentTab();
 
         // The code of the rest of this class ensures that this can't be called until the native
         // side is initialized
         assert mNativeInitialized : "Loading URL before native side initialized";
 
-        if (ReturnToChromeExperimentsUtil.willHandleLoadUrlFromStartSurface(url, transition)) {
+        // TODO(crbug.com/1085812): Should be taking a fulll loaded LoadUrlParams.
+        if (ReturnToChromeExperimentsUtil.willHandleLoadUrlWithPostDataFromStartSurface(
+                    url, transition, postDataType, postData)) {
             return;
         }
 
@@ -959,6 +985,24 @@ public class LocationBarLayout extends FrameLayout
             loadUrlParams.setTransitionType(transition | PageTransition.FROM_ADDRESS_BAR);
             if (inputStart != 0) {
                 loadUrlParams.setInputStartTimestamp(inputStart);
+            }
+
+            if (!TextUtils.isEmpty(postDataType)) {
+                StringBuilder headers = new StringBuilder();
+                String prevHeader = loadUrlParams.getVerbatimHeaders();
+                if (prevHeader != null && !prevHeader.isEmpty()) {
+                    headers.append(prevHeader);
+                    headers.append("\r\n");
+                }
+                loadUrlParams.setExtraHeaders(new HashMap<String, String>() {
+                    { put("Content-Type", postDataType); }
+                });
+                headers.append(loadUrlParams.getExtraHttpRequestHeadersString());
+                loadUrlParams.setVerbatimHeaders(headers.toString());
+            }
+
+            if (postData != null && postData.length != 0) {
+                loadUrlParams.setPostData(ResourceRequestBody.createFromBytes(postData));
             }
 
             currentTab.loadUrl(loadUrlParams);
@@ -1148,8 +1192,11 @@ public class LocationBarLayout extends FrameLayout
         if (!ChromeApplication.isVivaldi())  // Vivaldi: Do not display incognito badge.
         mStatusViewCoordinator.setIncognitoBadgeVisibility(
                 mToolbarDataProvider.isIncognito() && !mIsTablet);
-        mAutocompleteCoordinator.updateVisualsForState(
-                useDarkColors, mToolbarDataProvider.isIncognito());
+
+        if (mAutocompleteCoordinator != null) {
+            mAutocompleteCoordinator.updateVisualsForState(
+                    useDarkColors, mToolbarDataProvider.isIncognito());
+        }
     }
 
     @Override

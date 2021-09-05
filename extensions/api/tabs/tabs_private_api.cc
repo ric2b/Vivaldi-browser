@@ -306,7 +306,7 @@ void TabsPrivateAPIPrivate::TabChangedAt(content::WebContents* web_contents,
   ::vivaldi::BroadcastEvent(
     tabs_private::OnMediaStateChanged::kEventName,
     tabs_private::OnMediaStateChanged::Create(
-      tabId, windowId, states[0]),
+      tabId, windowId, states),
     web_contents->GetBrowserContext());
 }
 
@@ -344,7 +344,7 @@ void TabsPrivateAPI::SendKeyboardShortcutEvent(
       key_code == ui::VKEY_MENU) {
     return;
   }
-  if (event.GetType() == blink::WebInputEvent::kKeyUp)
+  if (event.GetType() == blink::WebInputEvent::Type::kKeyUp)
     return;
 
   std::string shortcut_text = ::vivaldi::ShortcutTextFromEvent(event);
@@ -356,7 +356,7 @@ void TabsPrivateAPI::SendKeyboardShortcutEvent(
                                          "Meta+Shift+V", "Esc"};
   bool is_exception = std::find(exceptions.begin(), exceptions.end(),
                                 shortcut_text) != exceptions.end();
-  if (event.GetType() == blink::WebInputEvent::kRawKeyDown || is_exception) {
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown || is_exception) {
     ::vivaldi::BroadcastEvent(
         tabs_private::OnKeyboardShortcut::kEventName,
         tabs_private::OnKeyboardShortcut::Create(shortcut_text, is_auto_repeat),
@@ -389,13 +389,13 @@ bool IsLoneAltKeyPressed(int modifiers) {
 bool IsGestureMouseMove(const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using blink::WebMouseEvent;
-  DCHECK(mouse_event.GetType() == WebInputEvent::kMouseMove);
+  DCHECK(mouse_event.GetType() == WebInputEvent::Type::kMouseMove);
   return (mouse_event.button == WebMouseEvent::Button::kRight &&
           !(mouse_event.GetModifiers() & WebInputEvent::kLeftButtonDown));
 }
 
 bool IsGestureAltMouseMove(const blink::WebMouseEvent& mouse_event) {
-  DCHECK(mouse_event.GetType() == blink::WebInputEvent::kMouseMove);
+  DCHECK(mouse_event.GetType() == blink::WebInputEvent::Type::kMouseMove);
   return IsLoneAltKeyPressed(mouse_event.GetModifiers());
 }
 
@@ -441,7 +441,7 @@ constexpr float MOUSE_GESTURE_THRESHOLD = 5.0f;
 bool HandleMouseGestureMove(const blink::WebMouseEvent& mouse_event,
                             content::WebContents* web_contents,
                             MouseGestures& mouse_gestures) {
-  DCHECK(mouse_event.GetType() == blink::WebInputEvent::kMouseMove);
+  DCHECK(mouse_event.GetType() == blink::WebInputEvent::Type::kMouseMove);
   float x = mouse_event.PositionInScreen().x();
   float y = mouse_event.PositionInScreen().y();
   bool eat_event = false;
@@ -557,7 +557,7 @@ bool CheckMouseGesture(TabsPrivateAPIPrivate* priv,
   switch (mouse_event.GetType()) {
     default:
       break;
-    case WebInputEvent::kMouseDown: {
+    case WebInputEvent::Type::kMouseDown: {
       if (!priv->mouse_gestures_) {
         if (mouse_event.button == WebMouseEvent::Button::kRight &&
             !(mouse_event.GetModifiers() & WebInputEvent::kLeftButtonDown)) {
@@ -566,7 +566,7 @@ bool CheckMouseGesture(TabsPrivateAPIPrivate* priv,
       }
       break;
     }
-    case WebInputEvent::kMouseMove: {
+    case WebInputEvent::Type::kMouseMove: {
       if (!priv->mouse_gestures_) {
         bool gesture = false;
         bool with_alt = false;
@@ -599,7 +599,7 @@ bool CheckMouseGesture(TabsPrivateAPIPrivate* priv,
       priv->mouse_gestures_.reset();
       break;
     }
-    case WebInputEvent::kMouseUp: {
+    case WebInputEvent::Type::kMouseUp: {
       eat_event = FinishMouseOrWheelGesture(
           priv, web_contents->GetBrowserContext(), false);
       break;
@@ -615,7 +615,7 @@ bool CheckRockerGesture(TabsPrivateAPIPrivate* priv,
   using blink::WebMouseEvent;
 
   bool eat_event = false;
-  if (mouse_event.GetType() == WebInputEvent::kMouseDown) {
+  if (mouse_event.GetType() == WebInputEvent::Type::kMouseDown) {
     enum { ROCKER_NONE, ROCKER_LEFT, ROCKER_RIGHT } rocker_action = ROCKER_NONE;
     if (mouse_event.button == WebMouseEvent::Button::kLeft) {
       if (mouse_event.GetModifiers() & WebInputEvent::kRightButtonDown) {
@@ -662,7 +662,7 @@ bool CheckRockerGesture(TabsPrivateAPIPrivate* priv,
             web_contents->GetBrowserContext());
       }
     }
-  } else if (mouse_event.GetType() == WebInputEvent::kMouseUp) {
+  } else if (mouse_event.GetType() == WebInputEvent::Type::kMouseUp) {
     if (priv->rocker_gestures_.eat_next_left_mouseup) {
       if (mouse_event.button == WebMouseEvent::Button::kLeft) {
         priv->rocker_gestures_.eat_next_left_mouseup = false;
@@ -702,10 +702,11 @@ void CheckWebviewClick(TabsPrivateAPIPrivate* priv,
   using blink::WebInputEvent;
   using Button = blink::WebPointerProperties::Button;
   WebInputEvent::Type type = mouse_event.GetType();
-  if (type != WebInputEvent::kMouseDown && type != WebInputEvent::kMouseUp)
+  if (type != WebInputEvent::Type::kMouseDown &&
+      type != WebInputEvent::Type::kMouseUp)
     return;
 
-  bool mousedown = (type == WebInputEvent::kMouseDown);
+  bool mousedown = (type == WebInputEvent::Type::kMouseDown);
   int button = 0;
   if (mouse_event.button == Button::kMiddle) {
     button = 1;
@@ -727,9 +728,9 @@ bool VivaldiEventHooksImpl::HandleKeyboardEvent(
     const content::NativeWebKeyboardEvent& event) {
   bool down = false;
   bool after_gesture = false;
-  if (event.GetType() == blink::WebInputEvent::kRawKeyDown) {
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) {
     down = true;
-  } else if (event.GetType() == blink::WebInputEvent::kKeyUp) {
+  } else if (event.GetType() == blink::WebInputEvent::Type::kKeyUp) {
     // Check for Alt aka Menu release
     if (event.windows_key_code == blink::VKEY_MENU) {
       TabsPrivateAPIPrivate* priv = GetTabsAPIPriv();
@@ -976,7 +977,6 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo() {
   info.enable_plugins.reset(new bool(enable_plugins()));
   info.mime_type.reset(new std::string(contents_mime_type()));
   info.mute_tab.reset(new bool(mute()));
-  info.has_before_unload_handler.reset(new bool(NeedToFireBeforeUnload()));
   int id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
 
   ::vivaldi::BroadcastEvent(tabs_private::OnTabUpdated::kEventName,
@@ -1462,8 +1462,6 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
   info.show_images.reset(new bool(tab_api->show_images()));
   info.load_from_cache_only.reset(new bool(tab_api->load_from_cache_only()));
   info.enable_plugins.reset(new bool(tab_api->enable_plugins()));
-  info.has_before_unload_handler.reset(
-      new bool(tab_api->NeedToFireBeforeUnload()));
   return RespondNow(ArgumentList(Results::Create(info)));
 }
 
@@ -1658,6 +1656,7 @@ TabsPrivateActivateElementFromPointFunction::Run() {
 
   int x = params->x;
   int y = params->y;
+  int modifiers = params->modifiers;
 
   std::string error;
   content::RenderViewHost* rvh =
@@ -1665,10 +1664,25 @@ TabsPrivateActivateElementFromPointFunction::Run() {
   if (!rvh)
     return RespondNow(Error(error));
 
-  rvh->Send(
-      new VivaldiViewMsg_ActivateElementFromPoint(rvh->GetRoutingID(), x, y));
+  rvh->Send(new VivaldiViewMsg_ActivateElementFromPoint(rvh->GetRoutingID(),
+                                                        x, y, modifiers));
 
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateHasBeforeUnloadOrUnloadFunction::Run() {
+  using tabs_private::HasBeforeUnloadOrUnload::Params;
+  namespace Results = tabs_private::HasBeforeUnloadOrUnload::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  content::WebContents* contents =
+      ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
+          params->tab_id, browser_context(), nullptr);
+  return RespondNow(ArgumentList(
+      Results::Create(contents && contents->NeedToFireBeforeUnloadOrUnload())));
 }
 
 }  // namespace extensions

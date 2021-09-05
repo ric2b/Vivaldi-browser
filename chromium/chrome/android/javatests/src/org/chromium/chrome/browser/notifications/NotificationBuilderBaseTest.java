@@ -18,8 +18,10 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
-import org.chromium.chrome.browser.ui.favicon.RoundedIconGenerator;
+import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
+import org.chromium.components.browser_ui.notifications.ChromeNotification;
+import org.chromium.components.browser_ui.notifications.NotificationMetadata;
+import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.test.NativeLibraryTestRule;
 
@@ -27,8 +29,8 @@ import org.chromium.content_public.browser.test.NativeLibraryTestRule;
  * Instrumentation unit tests for NotificationBuilderBase.
  *
  * Extends NativeLibraryTestBase so that {@link UrlUtilities#getDomainAndRegistry} can access
- * native GetDomainAndRegistry, when called by {@link RoundedIconGenerator#getIconTextForUrl} during
- * testEnsureNormalizedIconBehavior().
+ * native GetDomainAndRegistry, when called by {@link RoundedIconGenerator#getIconTextForUrl}
+ * during testEnsureNormalizedIconBehavior().
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 public class NotificationBuilderBaseTest {
@@ -71,7 +73,7 @@ public class NotificationBuilderBaseTest {
                 return null;
             }
         };
-        notificationBuilder.setChannelId(ChannelDefinitions.ChannelId.BROWSER);
+        notificationBuilder.setChannelId(ChromeChannelDefinitions.ChannelId.BROWSER);
         Bitmap fromNullIcon = notificationBuilder.ensureNormalizedIcon(null, origin);
         Assert.assertNotNull(fromNullIcon);
         Assert.assertEquals(largeIconWidthPx, fromNullIcon.getWidth());

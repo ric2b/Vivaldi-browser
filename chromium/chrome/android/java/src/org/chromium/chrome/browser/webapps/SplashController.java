@@ -25,6 +25,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.TwaFinishHandler;
 import org.chromium.chrome.browser.compositor.CompositorView;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
+import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
+import org.chromium.chrome.browser.customtabs.CustomTabOrientationController;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar.CustomTabTabObserver;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
@@ -69,18 +72,6 @@ public class SplashController
             mView.post(() -> mView.getViewTreeObserver().removeOnDrawListener(this));
         }
     };
-
-    // SplashHidesReason defined in tools/metrics/histograms/enums.xml.
-    @IntDef({SplashHidesReason.PAINT, SplashHidesReason.LOAD_FINISHED,
-            SplashHidesReason.LOAD_FAILED, SplashHidesReason.CRASH})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface SplashHidesReason {
-        int PAINT = 0;
-        int LOAD_FINISHED = 1;
-        int LOAD_FAILED = 2;
-        int CRASH = 3;
-        int NUM_ENTRIES = 4;
-    }
 
     @IntDef({TranslucencyRemoval.NONE, TranslucencyRemoval.ON_SPLASH_SHOWN,
             TranslucencyRemoval.ON_SPLASH_HIDDEN})
@@ -131,7 +122,8 @@ public class SplashController
     @Inject
     public SplashController(ChromeActivity<?> activity,
             ActivityLifecycleDispatcher lifecycleDispatcher,
-            TabObserverRegistrar tabObserverRegistrar, TwaFinishHandler finishHandler) {
+            TabObserverRegistrar tabObserverRegistrar,
+            CustomTabOrientationController orientationController, TwaFinishHandler finishHandler) {
         mActivity = activity;
         mLifecycleDispatcher = lifecycleDispatcher;
         mTabObserverRegistrar = tabObserverRegistrar;
@@ -139,15 +131,19 @@ public class SplashController
         mTranslucencyRemovalStrategy = TranslucencyRemoval.NONE;
         mFinishHandler = finishHandler;
 
+        boolean isWindowInitiallyTranslucent =
+                BaseCustomTabActivity.isWindowInitiallyTranslucent(activity);
+        mTranslucencyRemovalStrategy =
+                computeTranslucencyRemovalStrategy(isWindowInitiallyTranslucent);
+
+        orientationController.delayOrientationRequestsIfNeeded(this, isWindowInitiallyTranslucent);
+
         mLifecycleDispatcher.register(this);
         mTabObserverRegistrar.registerActivityTabObserver(this);
     }
 
-    public void setConfig(SplashDelegate delegate, boolean isWindowInitiallyTranslucent,
-            long splashHideAnimationDurationMs) {
+    public void setConfig(SplashDelegate delegate, long splashHideAnimationDurationMs) {
         mDelegate = delegate;
-        mTranslucencyRemovalStrategy =
-                computeTranslucencyRemovalStrategy(isWindowInitiallyTranslucent);
         mSplashHideAnimationDurationMs = splashHideAnimationDurationMs;
         if (mDidPreInflationStartup) {
             showSplash();
@@ -165,10 +161,6 @@ public class SplashController
             mParentView.removeView(mSplashView);
         }
         mParentView.addView(mSplashView);
-    }
-
-    public boolean isSplashShowing() {
-        return mSplashView != null;
     }
 
     @VisibleForTesting
@@ -191,7 +183,8 @@ public class SplashController
 
     @Override
     public void onPostInflationStartup() {
-        if (mTranslucencyRemovalStrategy == TranslucencyRemoval.ON_SPLASH_SHOWN) {
+        if (mTranslucencyRemovalStrategy == TranslucencyRemoval.ON_SPLASH_SHOWN
+                && !mWasSplashHideAnimationStarted) {
             // In rare cases I see toolbar flickering. TODO(pshmakov): investigate why.
             mActivity.findViewById(R.id.coordinator).setVisibility(View.INVISIBLE);
         }
@@ -207,27 +200,34 @@ public class SplashController
     @Override
     public void didFirstVisuallyNonEmptyPaint(Tab tab) {
         if (canHideSplashScreen()) {
-            hideSplash(tab, SplashHidesReason.PAINT);
+            hideSplash(tab, false /* loadFailed */);
+        }
+    }
+
+    @Override
+    public void onDidAttachInterstitialPage(Tab tab) {
+        if (canHideSplashScreen()) {
+            hideSplash(tab, true /* loadFailed */);
         }
     }
 
     @Override
     public void onPageLoadFinished(Tab tab, String url) {
         if (canHideSplashScreen()) {
-            hideSplash(tab, SplashHidesReason.LOAD_FINISHED);
+            hideSplash(tab, false /* loadFailed */);
         }
     }
 
     @Override
     public void onPageLoadFailed(Tab tab, int errorCode) {
         if (canHideSplashScreen()) {
-            hideSplash(tab, SplashHidesReason.LOAD_FAILED);
+            hideSplash(tab, true /* loadFailed */);
         }
     }
 
     @Override
     public void onCrash(Tab tab) {
-        hideSplash(tab, SplashHidesReason.CRASH);
+        hideSplash(tab, true /* loadFailed */);
     }
 
     private void showSplash() {
@@ -289,7 +289,9 @@ public class SplashController
     }
 
     /** Hides the splash screen. */
-    private void hideSplash(final Tab tab, final @SplashHidesReason int reason) {
+    private void hideSplash(final Tab tab, boolean loadFailed) {
+        if (mActivity.isActivityFinishingOrDestroyed()) return;
+
         if (mTranslucencyRemovalStrategy == TranslucencyRemoval.ON_SPLASH_HIDDEN
                 && !mRemovedTranslucency) {
             removeTranslucency();
@@ -305,15 +307,16 @@ public class SplashController
             mParentView.invalidate();
         }
 
-        if (reason == SplashHidesReason.LOAD_FAILED || reason == SplashHidesReason.CRASH) {
-            animateHideSplash(tab, reason);
+        CompositorViewHolder compositorViewHolder = mActivity.getCompositorViewHolder();
+        if (loadFailed || compositorViewHolder == null) {
+            animateHideSplash(tab);
             return;
         }
         // Delay hiding the splash screen till the compositor has finished drawing the next frame.
         // Without this callback we were seeing a short flash of white between the splash screen and
         // the web content (crbug.com/734500).
-        CompositorView compositorView = mActivity.getCompositorViewHolder().getCompositorView();
-        compositorView.surfaceRedrawNeededAsync(() -> { animateHideSplash(tab, reason); });
+        CompositorView compositorView = compositorViewHolder.getCompositorView();
+        compositorView.surfaceRedrawNeededAsync(() -> { animateHideSplash(tab); });
     }
 
     private void removeTranslucency() {
@@ -334,7 +337,7 @@ public class SplashController
         notifyTranslucencyRemoved();
     }
 
-    private void animateHideSplash(final Tab tab, final @SplashHidesReason int reason) {
+    private void animateHideSplash(final Tab tab) {
         if (mWasSplashHideAnimationStarted) return;
 
         mWasSplashHideAnimationStarted = true;
@@ -343,26 +346,29 @@ public class SplashController
         recordTraceEventsStartedHidingSplash();
 
         // Show browser UI in case we hid it in onPostInflationStartup().
-        mActivity.findViewById(R.id.coordinator).setVisibility(View.VISIBLE);
+        View coordinatorView = mActivity.findViewById(R.id.coordinator);
+        if (coordinatorView != null) {
+            coordinatorView.setVisibility(View.VISIBLE);
+        }
 
         if (mSplashHideAnimationDurationMs == 0) {
-            hideSplashNow(tab, reason);
+            hideSplashNow(tab);
             return;
         }
         mFadeOutAnimator = mSplashView.animate()
                                    .alpha(0f)
                                    .setDuration(mSplashHideAnimationDurationMs)
-                                   .withEndAction(() -> { hideSplashNow(tab, reason); });
+                                   .withEndAction(() -> { hideSplashNow(tab); });
     }
 
-    private void hideSplashNow(Tab tab, @SplashHidesReason int reason) {
+    private void hideSplashNow(Tab tab) {
         mParentView.removeView(mSplashView);
 
         long splashHiddenTimestamp = SystemClock.elapsedRealtime();
         recordTraceEventsFinishedHidingSplash();
 
         assert mSplashShownTimestamp != 0;
-        mDelegate.onSplashHidden(tab, reason, mSplashShownTimestamp, splashHiddenTimestamp);
+        mDelegate.onSplashHidden(tab, mSplashShownTimestamp, splashHiddenTimestamp);
         notifySplashscreenHidden(mSplashShownTimestamp, splashHiddenTimestamp);
 
         mFinishHandler.setShouldAttemptFinishingTask(false);

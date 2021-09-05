@@ -236,8 +236,8 @@ TEST_F(BrowserCommandControllerTest, AvatarMenuAlwaysEnabledInIncognitoMode) {
   std::unique_ptr<TestingProfile> original_profile = normal_builder.Build();
 
   // Create a new browser based on the off the record profile.
-  Browser::CreateParams profile_params(
-      original_profile->GetOffTheRecordProfile(), true);
+  Browser::CreateParams profile_params(original_profile->GetPrimaryOTRProfile(),
+                                       true);
   std::unique_ptr<Browser> otr_browser(
       CreateBrowserWithTestWindowForParams(&profile_params));
 
@@ -280,8 +280,6 @@ class FullscreenTestBrowserWindow : public TestBrowserWindow,
   // Exclusive access interface:
   Profile* GetProfile() override;
   content::WebContents* GetActiveWebContents() override;
-  void HideDownloadShelf() override {}
-  void UnhideDownloadShelf() override {}
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
       ExclusiveAccessBubbleType bubble_type,
@@ -382,7 +380,7 @@ TEST_F(BrowserCommandControllerFullscreenTest,
     // clang-format on
   };
   const content::NativeWebKeyboardEvent key_event(
-      blink::WebInputEvent::kUndefined, 0,
+      blink::WebInputEvent::Type::kUndefined, 0,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   // Defaults for a tabbed browser.
   for (size_t i = 0; i < base::size(commands); i++) {
@@ -484,13 +482,12 @@ TEST_F(BrowserCommandControllerTest, OptionsConsistency) {
 TEST_F(BrowserCommandControllerTest, IncognitoModeOnSigninAllowedPrefChange) {
   // Set up a profile with an off the record profile.
   std::unique_ptr<TestingProfile> profile1 = TestingProfile::Builder().Build();
-  Profile* profile2 = profile1->GetOffTheRecordProfile();
+  Profile* profile2 = profile1->GetPrimaryOTRProfile();
 
   EXPECT_EQ(profile2->GetOriginalProfile(), profile1.get());
 
   // Create a new browser based on the off the record profile.
-  Browser::CreateParams profile_params(profile1->GetOffTheRecordProfile(),
-                                       true);
+  Browser::CreateParams profile_params(profile1->GetPrimaryOTRProfile(), true);
   std::unique_ptr<Browser> browser2(
       CreateBrowserWithTestWindowForParams(&profile_params));
 

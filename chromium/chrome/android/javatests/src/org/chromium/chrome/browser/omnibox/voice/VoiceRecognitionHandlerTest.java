@@ -40,8 +40,8 @@ import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.On
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorImpl;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionListEmbedder;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteResult;
+import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdown;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler.VoiceInteractionSource;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler.VoiceResult;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -89,7 +89,7 @@ public class VoiceRecognitionHandlerTest {
             new OnSuggestionsReceivedListener() {
                 @Override
                 public void onSuggestionsReceived(
-                        List<OmniboxSuggestion> suggestions, String inlineAutocompleteText) {}
+                        AutocompleteResult autocompleteResult, String inlineAutocompleteText) {}
             };
 
     /**
@@ -277,9 +277,9 @@ public class VoiceRecognitionHandlerTest {
      */
     private class TestAutocompleteCoordinatorImpl extends AutocompleteCoordinatorImpl {
         public TestAutocompleteCoordinatorImpl(ViewGroup parent, AutocompleteDelegate delegate,
-                OmniboxSuggestionListEmbedder listEmbedder,
+                OmniboxSuggestionsDropdown.Embedder dropdownEmbedder,
                 UrlBarEditingTextStateProvider urlBarEditingTextProvider) {
-            super(parent, delegate, listEmbedder, urlBarEditingTextProvider);
+            super(parent, delegate, dropdownEmbedder, urlBarEditingTextProvider);
         }
 
         @Override

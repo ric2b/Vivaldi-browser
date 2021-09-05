@@ -101,6 +101,10 @@ std::string GetPermissionRequestString(PermissionRequestType type) {
       return "AR";
     case PermissionRequestType::PERMISSION_STORAGE_ACCESS:
       return "StorageAccess";
+    case PermissionRequestType::PERMISSION_CAMERA_PAN_TILT_ZOOM:
+      return "CameraPanTiltZoom";
+    case PermissionRequestType::PERMISSION_WINDOW_PLACEMENT:
+      return "WindowPlacement";
     default:
       NOTREACHED();
       return "";
@@ -340,9 +344,9 @@ void PermissionUmaUtil::PermissionPromptResolved(
                            web_contents->GetBrowserContext());
 
     std::string priorDismissPrefix =
-        "Permissions.Prompt." + action_string + ".PriorDismissCount.";
+        "Permissions.Prompt." + action_string + ".PriorDismissCount2.";
     std::string priorIgnorePrefix =
-        "Permissions.Prompt." + action_string + ".PriorIgnoreCount.";
+        "Permissions.Prompt." + action_string + ".PriorIgnoreCount2.";
     RecordPermissionPromptPriorCount(
         permission, priorDismissPrefix,
         autoblocker->GetDismissCount(requesting_origin, permission));
@@ -551,6 +555,14 @@ void PermissionUmaUtil::RecordPermissionAction(
     case ContentSettingsType::STORAGE_ACCESS:
       base::UmaHistogramEnumeration("Permissions.Action.StorageAccess", action,
                                     PermissionAction::NUM);
+      break;
+    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
+      base::UmaHistogramEnumeration("Permissions.Action.CameraPanTiltZoom",
+                                    action, PermissionAction::NUM);
+      break;
+    case ContentSettingsType::WINDOW_PLACEMENT:
+      base::UmaHistogramEnumeration("Permissions.Action.WindowPlacement",
+                                    action, PermissionAction::NUM);
       break;
     // The user is not prompted for these permissions, thus there is no
     // permission action recorded for them.

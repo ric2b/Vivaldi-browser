@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ui/views/widget/desktop_aura/x11_topmost_window_finder.h"
+#include "ui/platform_window/x11/x11_topmost_window_finder.h"
 
 #include <stddef.h>
 
@@ -14,13 +14,14 @@
 #include "third_party/skia/include/core/SkRect.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/x/test/x11_property_change_waiter.h"
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_path.h"
-#include "ui/views/test/views_interactive_ui_test_base.h"
-#include "ui/views/test/x11_property_change_waiter.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
+#include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
 #include "ui/views/widget/widget.h"
 
 namespace views {
@@ -28,15 +29,15 @@ namespace views {
 namespace {
 
 // Waits till |window| is minimized.
-class MinimizeWaiter : public X11PropertyChangeWaiter {
+class MinimizeWaiter : public ui::X11PropertyChangeWaiter {
  public:
   explicit MinimizeWaiter(XID window)
-      : X11PropertyChangeWaiter(window, "_NET_WM_STATE") {}
+      : ui::X11PropertyChangeWaiter(window, "_NET_WM_STATE") {}
 
   ~MinimizeWaiter() override = default;
 
  private:
-  // X11PropertyChangeWaiter:
+  // ui::X11PropertyChangeWaiter:
   bool ShouldKeepOnWaiting(XEvent* event) override {
     std::vector<Atom> wm_states;
     if (ui::GetAtomArrayProperty(xwindow(), "_NET_WM_STATE", &wm_states)) {
@@ -50,11 +51,11 @@ class MinimizeWaiter : public X11PropertyChangeWaiter {
 
 // Waits till |_NET_CLIENT_LIST_STACKING| is updated to include
 // |expected_windows|.
-class StackingClientListWaiter : public X11PropertyChangeWaiter {
+class StackingClientListWaiter : public ui::X11PropertyChangeWaiter {
  public:
   StackingClientListWaiter(XID* expected_windows, size_t count)
-      : X11PropertyChangeWaiter(ui::GetX11RootWindow(),
-                                "_NET_CLIENT_LIST_STACKING"),
+      : ui::X11PropertyChangeWaiter(ui::GetX11RootWindow(),
+                                    "_NET_CLIENT_LIST_STACKING"),
         expected_windows_(expected_windows, expected_windows + count) {}
 
   ~StackingClientListWaiter() override = default;
@@ -66,11 +67,11 @@ class StackingClientListWaiter : public X11PropertyChangeWaiter {
     if (!ShouldKeepOnWaiting(nullptr))
       return;
 
-    X11PropertyChangeWaiter::Wait();
+    ui::X11PropertyChangeWaiter::Wait();
   }
 
  private:
-  // X11PropertyChangeWaiter:
+  // ui::X11PropertyChangeWaiter:
   bool ShouldKeepOnWaiting(XEvent* event) override {
     std::vector<XID> stack;
     ui::GetXWindowStack(ui::GetX11RootWindow(), &stack);
@@ -86,11 +87,23 @@ class StackingClientListWaiter : public X11PropertyChangeWaiter {
 
 }  // namespace
 
-class X11TopmostWindowFinderTest : public ViewsInteractiveUITestBase {
+class X11TopmostWindowFinderTest : public test::DesktopWidgetTestInteractive {
  public:
   X11TopmostWindowFinderTest() = default;
-
   ~X11TopmostWindowFinderTest() override = default;
+
+  // DesktopWidgetTestInteractive
+  void SetUp() override {
+    // Make X11 synchronous for our display connection. This does not force the
+    // window manager to behave synchronously.
+    XSynchronize(xdisplay(), x11::True);
+    DesktopWidgetTestInteractive::SetUp();
+  }
+
+  void TearDown() override {
+    XSynchronize(xdisplay(), x11::False);
+    DesktopWidgetTestInteractive::TearDown();
+  }
 
   // Creates and shows a Widget with |bounds|. The caller takes ownership of
   // the returned widget.
@@ -135,16 +148,19 @@ class X11TopmostWindowFinderTest : public ViewsInteractiveUITestBase {
 
   // Returns the topmost X window at the passed in screen position.
   XID FindTopmostXWindowAt(int screen_x, int screen_y) {
-    X11TopmostWindowFinder finder;
+    ui::X11TopmostWindowFinder finder;
     return finder.FindWindowAt(gfx::Point(screen_x, screen_y));
   }
 
   // Returns the topmost aura::Window at the passed in screen position. Returns
   // NULL if the topmost window does not have an associated aura::Window.
   aura::Window* FindTopmostLocalProcessWindowAt(int screen_x, int screen_y) {
-    X11TopmostWindowFinder finder;
-    return finder.FindLocalProcessWindowAt(gfx::Point(screen_x, screen_y),
-                                           std::set<aura::Window*>());
+    ui::X11TopmostWindowFinder finder;
+    auto widget =
+        finder.FindLocalProcessWindowAt(gfx::Point(screen_x, screen_y), {});
+    return widget ? DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
+                        static_cast<gfx::AcceleratedWidget>(widget))
+                  : nullptr;
   }
 
   // Returns the topmost aura::Window at the passed in screen position ignoring
@@ -154,25 +170,14 @@ class X11TopmostWindowFinderTest : public ViewsInteractiveUITestBase {
       int screen_x,
       int screen_y,
       aura::Window* ignore_window) {
-    std::set<aura::Window*> ignore;
-    ignore.insert(ignore_window);
-    X11TopmostWindowFinder finder;
-    return finder.FindLocalProcessWindowAt(gfx::Point(screen_x, screen_y),
-                                           ignore);
-  }
-
-  // ViewsInteractiveUITestBase:
-  void SetUp() override {
-    ViewsInteractiveUITestBase::SetUp();
-
-    // Make X11 synchronous for our display connection. This does not force the
-    // window manager to behave synchronously.
-    XSynchronize(xdisplay(), x11::True);
-  }
-
-  void TearDown() override {
-    XSynchronize(xdisplay(), x11::False);
-    ViewsInteractiveUITestBase::TearDown();
+    std::set<gfx::AcceleratedWidget> ignore;
+    ignore.insert(ignore_window->GetHost()->GetAcceleratedWidget());
+    ui::X11TopmostWindowFinder finder;
+    auto widget =
+        finder.FindLocalProcessWindowAt(gfx::Point(screen_x, screen_y), ignore);
+    return widget ? DesktopWindowTreeHostPlatform::GetContentWindowForWidget(
+                        static_cast<gfx::AcceleratedWidget>(widget))
+                  : nullptr;
   }
 
  private:

@@ -30,7 +30,6 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -43,7 +42,6 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -141,7 +139,6 @@ public class TabGridDialogMediatorUnitTest {
 
     @Before
     public void setUp() {
-        RecordHistogram.setDisabledForTests(true);
 
         MockitoAnnotations.initMocks(this);
 
@@ -198,11 +195,6 @@ public class TabGridDialogMediatorUnitTest {
                 mTabModelSelector, mTabCreatorManager, mTabSwitcherResetHandler,
                 mAnimationSourceViewProvider, mShareDelegateSupplier, "");
         mMediator.initWithNative(mTabSelectionEditorController, mTabGroupTitleEditor);
-    }
-
-    @After
-    public void tearDown() {
-        RecordHistogram.setDisabledForTests(false);
     }
 
     @Test
@@ -433,6 +425,7 @@ public class TabGridDialogMediatorUnitTest {
         // Mock that the animation source view is not null.
         mModel.set(TabGridPanelProperties.ANIMATION_SOURCE_VIEW, mView);
 
+        doReturn(true).when(mTabGroupModelFilter).isTabModelRestored();
         mTabModelObserverCaptor.getValue().didAddTab(
                 newTab, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
 
@@ -920,6 +913,29 @@ public class TabGridDialogMediatorUnitTest {
         // Dialog title should be updated with stored title.
         assertThat(
                 mModel.get(TabGridPanelProperties.HEADER_TITLE), equalTo(CUSTOMIZED_DIALOG_TITLE));
+    }
+
+    @Test
+    public void showDialog_FromStrip_SetupAnimation() {
+        // For strip we don't play zoom-in/zoom-out for show/hide dialog, and thus
+        // the animationParamsProvider is null.
+        mMediator = new TabGridDialogMediator(mContext, mDialogController, mModel,
+                mTabModelSelector, mTabCreatorManager, mTabSwitcherResetHandler, null,
+                mShareDelegateSupplier, "");
+        mMediator.initWithNative(mTabSelectionEditorController, mTabGroupTitleEditor);
+        // Mock that the dialog is hidden and animation source view is set to some mock view for
+        // testing purpose.
+        mModel.set(TabGridPanelProperties.IS_DIALOG_VISIBLE, false);
+        mModel.set(TabGridPanelProperties.ANIMATION_SOURCE_VIEW, mock(View.class));
+        // Mock that tab1 and tab2 are in a group.
+        List<Tab> tabgroup = new ArrayList<>(Arrays.asList(mTab1, mTab2));
+        createTabGroup(tabgroup, TAB1_ID);
+
+        mMediator.onReset(tabgroup);
+
+        assertThat(mModel.get(TabGridPanelProperties.IS_DIALOG_VISIBLE), equalTo(true));
+        // Animation source view should be set to null so that dialog will setup basic animation.
+        assertThat(mModel.get(TabGridPanelProperties.ANIMATION_SOURCE_VIEW), equalTo(null));
     }
 
     @Test

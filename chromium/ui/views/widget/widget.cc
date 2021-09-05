@@ -8,9 +8,10 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/check_op.h"
 #include "base/containers/adapters.h"
-#include "base/logging.h"
 #include "base/macros.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/base/cursor/cursor.h"
@@ -92,19 +93,18 @@ bool Widget::g_disable_activation_change_handling_ = false;
 // WidgetDelegate is supplied.
 class DefaultWidgetDelegate : public WidgetDelegate {
  public:
-  explicit DefaultWidgetDelegate(Widget* widget) : widget_(widget) {}
+  explicit DefaultWidgetDelegate(Widget* widget) : widget_(widget) {
+    // In most situations where a Widget is used without a delegate the Widget
+    // is used as a container, so that we want focus to advance to the top-level
+    // widget. A good example of this is the find bar.
+    SetFocusTraversesOut(true);
+  }
   ~DefaultWidgetDelegate() override = default;
 
   // WidgetDelegate:
   void DeleteDelegate() override { delete this; }
   Widget* GetWidget() override { return widget_; }
   const Widget* GetWidget() const override { return widget_; }
-  bool ShouldAdvanceFocusToTopLevelWidget() const override {
-    // In most situations where a Widget is used without a delegate the Widget
-    // is used as a container, so that we want focus to advance to the top-level
-    // widget. A good example of this is the find bar.
-    return true;
-  }
 
  private:
   Widget* widget_;
@@ -162,10 +162,8 @@ ui::ZOrderLevel Widget::InitParams::EffectiveZOrderLevel() const {
   switch (type) {
     case TYPE_MENU:
       return ui::ZOrderLevel::kFloatingWindow;
-      break;
     case TYPE_DRAG:
       return ui::ZOrderLevel::kFloatingUIElement;
-      break;
     default:
       return ui::ZOrderLevel::kNormal;
   }
@@ -769,7 +767,7 @@ bool Widget::IsVisible() const {
 const ui::ThemeProvider* Widget::GetThemeProvider() const {
   const Widget* root_widget = GetTopLevelWidget();
   return (root_widget && root_widget != this) ? root_widget->GetThemeProvider()
-                                              : &default_theme_provider_;
+                                              : nullptr;
 }
 
 FocusManager* Widget::GetFocusManager() {

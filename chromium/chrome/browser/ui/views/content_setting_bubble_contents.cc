@@ -99,13 +99,13 @@ class MediaMenuBlock : public views::View {
     views::ColumnSet* column_set = layout->AddColumnSet(kColumnSetId);
     column_set->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
                           views::GridLayout::kFixedSize,
-                          views::GridLayout::USE_PREF, 0, 0);
+                          views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
     column_set->AddPaddingColumn(
         views::GridLayout::kFixedSize,
         provider->GetDistanceMetric(
             views::DISTANCE_RELATED_CONTROL_HORIZONTAL));
     column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
-                          views::GridLayout::FIXED, 0, 0);
+                          views::GridLayout::ColumnSize::kFixed, 0, 0);
 
     bool first_row = true;
     for (auto i = media.cbegin(); i != media.cend(); ++i) {
@@ -307,15 +307,16 @@ void ContentSettingBubbleContents::ListItemContainer::ResetLayout() {
   views::ColumnSet* item_list_column_set = layout->AddColumnSet(0);
   item_list_column_set->AddColumn(
       views::GridLayout::LEADING, views::GridLayout::FILL,
-      views::GridLayout::kFixedSize, views::GridLayout::USE_PREF, 0, 0);
+      views::GridLayout::kFixedSize,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   const int related_control_horizontal_spacing =
       ChromeLayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
   item_list_column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
                                          related_control_horizontal_spacing);
-  item_list_column_set->AddColumn(views::GridLayout::LEADING,
-                                  views::GridLayout::FILL, 1.0,
-                                  views::GridLayout::USE_PREF, 0, 0);
+  item_list_column_set->AddColumn(
+      views::GridLayout::LEADING, views::GridLayout::FILL, 1.0,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   auto* scroll_view = views::ScrollView::GetScrollViewForContents(this);
   // When this function is called from the constructor, the view has not yet
   // been placed into a ScrollView.
@@ -381,14 +382,25 @@ ContentSettingBubbleContents::ContentSettingBubbleContents(
   DCHECK(content_setting_bubble_model_);
   const base::string16& done_text =
       content_setting_bubble_model_->bubble_content().done_button_text;
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
-  DialogDelegate::SetButtonLabel(
-      ui::DIALOG_BUTTON_OK,
-      done_text.empty() ? l10n_util::GetStringUTF16(IDS_DONE) : done_text);
-  DialogDelegate::SetExtraView(CreateHelpAndManageView());
-  DialogDelegate::SetAcceptCallback(
+  const base::string16& cancel_text =
+      content_setting_bubble_model_->bubble_content().cancel_button_text;
+  SetButtons(cancel_text.empty()
+                 ? ui::DIALOG_BUTTON_OK
+                 : (ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
+  SetButtonLabel(ui::DIALOG_BUTTON_OK, done_text.empty()
+                                           ? l10n_util::GetStringUTF16(IDS_DONE)
+                                           : done_text);
+  SetExtraView(CreateHelpAndManageView());
+  SetAcceptCallback(
       base::BindOnce(&ContentSettingBubbleModel::OnDoneButtonClicked,
                      base::Unretained(content_setting_bubble_model_.get())));
+
+  if (!cancel_text.empty()) {
+    SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, cancel_text);
+    SetCancelCallback(
+        base::BindOnce(&ContentSettingBubbleModel::OnCancelButtonClicked,
+                       base::Unretained(content_setting_bubble_model_.get())));
+  }
 }
 
 ContentSettingBubbleContents::~ContentSettingBubbleContents() {
@@ -588,8 +600,7 @@ ContentSettingBubbleContents::CreateHelpAndManageView() {
     base::string16 title = bubble_content.manage_text;
     if (title.empty())
       title = l10n_util::GetStringUTF16(IDS_MANAGE);
-    auto manage_button =
-        views::MdTextButton::CreateSecondaryUiButton(this, title);
+    auto manage_button = views::MdTextButton::Create(this, title);
     manage_button->SetMinSize(gfx::Size(
         layout->GetDistanceMetric(views::DISTANCE_DIALOG_BUTTON_MINIMUM_WIDTH),
         0));

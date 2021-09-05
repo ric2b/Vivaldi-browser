@@ -22,6 +22,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_navigation_url_loader_delegate.h"
+#include "ipc/ipc_message.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
@@ -57,6 +58,7 @@ class NavigationURLLoaderTest : public testing::Test {
       NavigationURLLoaderDelegate* delegate) {
     mojom::BeginNavigationParamsPtr begin_params =
         mojom::BeginNavigationParams::New(
+            MSG_ROUTING_NONE /* initiator_routing_id */,
             std::string() /* headers */, net::LOAD_NORMAL,
             false /* skip_service_worker */,
             blink::mojom::RequestContextType::LOCATION,
@@ -68,8 +70,8 @@ class NavigationURLLoaderTest : public testing::Test {
             std::string() /* searchable_form_encoding */,
             GURL() /* client_side_redirect_url */,
             base::nullopt /* devtools_initiator_info */,
-            false /* attach_same_site_cookies */,
-            nullptr /* trust_token_params */);
+            false /* force_ignore_site_for_cookies */,
+            nullptr /* trust_token_params */, base::nullopt /* impression */);
     auto common_params = CreateCommonNavigationParams();
     common_params->url = url;
     common_params->initiator_origin = url::Origin::Create(url);
@@ -78,21 +80,22 @@ class NavigationURLLoaderTest : public testing::Test {
     std::unique_ptr<NavigationRequestInfo> request_info(
         new NavigationRequestInfo(
             std::move(common_params), std::move(begin_params),
-            net::SiteForCookies::FromUrl(url),
-            net::NetworkIsolationKey(origin, origin), true /* is_main_frame */,
-            false /* parent_is_main_frame */, false /* are_ancestors_secure */,
-            -1 /* frame_tree_node_id */, false /* is_for_guests_only */,
-            false /* report_raw_headers */, false /* is_prerendering */,
-            false /* upgrade_if_insecure */,
+            net::IsolationInfo::Create(
+                net::IsolationInfo::RedirectMode::kUpdateTopFrame, origin,
+                origin, net::SiteForCookies::FromUrl(url)),
+            true /* is_main_frame */, false /* parent_is_main_frame */,
+            false /* are_ancestors_secure */, -1 /* frame_tree_node_id */,
+            false /* is_for_guests_only */, false /* report_raw_headers */,
+            false /* is_prerendering */, false /* upgrade_if_insecure */,
             nullptr /* blob_url_loader_factory */,
             base::UnguessableToken::Create() /* devtools_navigation_token */,
             base::UnguessableToken::Create() /* devtools_frame_token */,
-            false /* obey_origin_policy */));
+            false /* obey_origin_policy */, {} /* cors_exempt_headers */));
     return NavigationURLLoader::Create(
         browser_context_.get(),
         BrowserContext::GetDefaultStoragePartition(browser_context_.get()),
         std::move(request_info), nullptr, nullptr, nullptr, nullptr, delegate,
-        false);
+        false, mojo::NullRemote());
   }
 
  protected:

@@ -7,12 +7,9 @@
 #include <jni.h>
 #include <cstdint>
 
-#include "android_webview/browser/lifecycle/aw_contents_lifecycle_notifier.h"
 #include "android_webview/browser/metrics/aw_stability_metrics_provider.h"
 #include "android_webview/browser_jni_headers/AwMetricsServiceClient_jni.h"
-#include "android_webview/common/aw_features.h"
 #include "base/android/jni_android.h"
-#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -45,70 +42,32 @@ const int kBetaDevCanarySampledInRatePerMille = 990;
 // consulting with the privacy team.
 const int kPackageNameLimitRatePerMille = 100;
 
-// Normally kMetricsReportingEnabledTimestamp would be set by the
-// MetricsStateManager. However, it assumes kMetricsClientID and
-// kMetricsReportingEnabledTimestamp are always set together. Because WebView
-// previously persisted kMetricsClientID but not
-// kMetricsReportingEnabledTimestamp, we violated this invariant, and need to
-// manually set this pref to correct things.
-//
-// TODO(https://crbug.com/995544): remove this (and its call site) when the
-// kMetricsReportingEnabledTimestamp pref has been persisted for one or two
-// milestones.
-void SetReportingEnabledDateIfNotSet(PrefService* prefs) {
-  if (prefs->HasPrefPath(metrics::prefs::kMetricsReportingEnabledTimestamp))
-    return;
-  // Arbitrarily, backfill the date with 2014-01-01 00:00:00.000 UTC. This date
-  // is within the range of dates the backend will accept.
-  base::Time backfill_date =
-      base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta::FromDays(150845));
-  prefs->SetInt64(metrics::prefs::kMetricsReportingEnabledTimestamp,
-                  backfill_date.ToTimeT());
-}
-
-// Queries the system for the app's first install time and uses this in the
-// kInstallDate pref. Must be called before created a MetricsStateManager.
-// TODO(https://crbug.com/1012025): remove this when the kInstallDate pref has
-// been persisted for one or two milestones.
-void PopulateSystemInstallDateIfNecessary(PrefService* prefs) {
-  int64_t install_date = prefs->GetInt64(metrics::prefs::kInstallDate);
-  if (install_date > 0) {
-    // kInstallDate appears to be valid (common case). Finish early as an
-    // optimization to avoid a JNI call below.
-    base::UmaHistogramEnumeration("Android.WebView.Metrics.BackfillInstallDate",
-                                  BackfillInstallDate::kValidInstallDatePref);
-    return;
-  }
-
-  JNIEnv* env = base::android::AttachCurrentThread();
-  int64_t system_install_date =
-      Java_AwMetricsServiceClient_getAppInstallTime(env);
-  if (system_install_date < 0) {
-    // Could not figure out install date from the system. Let the
-    // MetricsStateManager set this pref to its best guess for a reasonable
-    // time.
-    base::UmaHistogramEnumeration(
-        "Android.WebView.Metrics.BackfillInstallDate",
-        BackfillInstallDate::kCouldNotGetPackageManagerInstallDate);
-    return;
-  }
-
-  base::UmaHistogramEnumeration(
-      "Android.WebView.Metrics.BackfillInstallDate",
-      BackfillInstallDate::kPersistedPackageManagerInstallDate);
-  prefs->SetInt64(metrics::prefs::kInstallDate, system_install_date);
-}
+AwMetricsServiceClient* g_aw_metrics_service_client = nullptr;
 
 }  // namespace
 
+AwMetricsServiceClient::Delegate::Delegate() = default;
+AwMetricsServiceClient::Delegate::~Delegate() = default;
+
 // static
 AwMetricsServiceClient* AwMetricsServiceClient::GetInstance() {
-  static base::NoDestructor<AwMetricsServiceClient> client;
-  client->EnsureOnValidSequence();
-  return client.get();
+  DCHECK(g_aw_metrics_service_client);
+  g_aw_metrics_service_client->EnsureOnValidSequence();
+  return g_aw_metrics_service_client;
 }
 
-AwMetricsServiceClient::AwMetricsServiceClient() = default;
+void AwMetricsServiceClient::SetInstance(
+    std::unique_ptr<AwMetricsServiceClient> aw_metrics_service_client) {
+  DCHECK(!g_aw_metrics_service_client);
+  DCHECK(aw_metrics_service_client);
+  g_aw_metrics_service_client = aw_metrics_service_client.release();
+  g_aw_metrics_service_client->EnsureOnValidSequence();
+}
+
+AwMetricsServiceClient::AwMetricsServiceClient(
+    std::unique_ptr<Delegate> delegate)
+    : delegate_(std::move(delegate)) {}
+
 AwMetricsServiceClient::~AwMetricsServiceClient() = default;
 
 int32_t AwMetricsServiceClient::GetProduct() {
@@ -126,21 +85,14 @@ int AwMetricsServiceClient::GetSampleRatePerMille() {
   return kBetaDevCanarySampledInRatePerMille;
 }
 
-void AwMetricsServiceClient::InitInternal() {
-  PopulateSystemInstallDateIfNecessary(pref_service());
+void AwMetricsServiceClient::OnMetricsStart() {
+  delegate_->AddWebViewAppStateObserver(this);
 }
 
-void AwMetricsServiceClient::OnMetricsStart() {
-  AwContentsLifecycleNotifier::GetInstance().AddObserver(this);
-  SetReportingEnabledDateIfNotSet(pref_service());
-}
+void AwMetricsServiceClient::OnMetricsNotStarted() {}
 
 int AwMetricsServiceClient::GetPackageNameLimitRatePerMille() {
   return kPackageNameLimitRatePerMille;
-}
-
-bool AwMetricsServiceClient::ShouldWakeMetricsService() {
-  return base::FeatureList::IsEnabled(features::kWebViewWakeMetricsService);
 }
 
 void AwMetricsServiceClient::OnAppStateChanged(
@@ -152,8 +104,7 @@ void AwMetricsServiceClient::OnAppStateChanged(
   // - consolidates the other states other than kForeground into background.
   // - avoids the duplicated notification.
   if (state == WebViewAppStateObserver::State::kDestroyed &&
-      !AwContentsLifecycleNotifier::GetInstance()
-           .has_aw_contents_ever_created()) {
+      !delegate_->HasAwContentsEverCreated()) {
     return;
   }
 
@@ -175,11 +126,10 @@ void AwMetricsServiceClient::OnAppStateChanged(
 
 void AwMetricsServiceClient::RegisterAdditionalMetricsProviders(
     metrics::MetricsService* service) {
-  if (base::FeatureList::IsEnabled(features::kWebViewWakeMetricsService)) {
-    service->RegisterMetricsProvider(
-        std::make_unique<android_webview::AwStabilityMetricsProvider>(
-            pref_service()));
-  }
+  service->RegisterMetricsProvider(
+      std::make_unique<android_webview::AwStabilityMetricsProvider>(
+          pref_service()));
+  delegate_->RegisterAdditionalMetricsProviders(service);
 }
 
 // static

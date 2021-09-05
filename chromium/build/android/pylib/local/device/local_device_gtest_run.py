@@ -7,6 +7,7 @@ import itertools
 import logging
 import os
 import posixpath
+import subprocess
 import shutil
 import time
 
@@ -265,14 +266,7 @@ class _ApkDelegate(object):
               device, device_coverage_dir,
               os.path.join(self._coverage_dir, str(self._coverage_index)))
 
-      # TODO(jbudorick): Remove this after resolving crbug.com/726880
-      if device.PathExists(stdout_file.name):
-        logging.info('%s size on device: %s', stdout_file.name,
-                     device.StatPath(stdout_file.name).get('st_size', 0))
-        return device.ReadFile(stdout_file.name).splitlines()
-      else:
-        logging.info('%s does not exist?', stdout_file.name)
-        return []
+      return device.ReadFile(stdout_file.name).splitlines()
 
   def PullAppFiles(self, device, files, directory):
     device_dir = device.GetApplicationDataDirectory(self._package)
@@ -432,6 +426,21 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         tool = self.GetTool(dev)
         tool.CopyFiles(dev)
         tool.SetupEnvironment()
+
+        try:
+          # See https://crbug.com/1030827.
+          # This is a hack that may break in the future. We're relying on the
+          # fact that adb doesn't use ipv6 for it's server, and so doesn't
+          # listen on ipv6, but ssh remote forwarding does. 5037 is the port
+          # number adb uses for its server.
+          if "[::1]:5037" in subprocess.check_output(
+              "ss -o state listening 'sport = 5037'", shell=True):
+            logging.error(
+                'Test Server cannot be started with a remote-forwarded adb '
+                'server. Continuing anyways, but some tests may fail.')
+            return
+        except subprocess.CalledProcessError:
+          pass
 
         self._servers[str(dev)] = []
         if self.TestPackage() in _SUITE_REQUIRES_TEST_SERVER_SPAWNER:

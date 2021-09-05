@@ -46,6 +46,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/browsertest_util.h"
@@ -793,9 +794,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
       extension->id());
   util::SetIsIncognitoEnabled(extension->id(),
                               profile()->GetOffTheRecordProfile(), true);
-  const Extension* loaded_extension = observer.WaitForExtensionLoaded();
-  EXPECT_EQ(OK, CanConnectAndSendMessagesToFrame(incognito_frame,
-                                                 loaded_extension, nullptr));
+  scoped_refptr<const Extension> loaded_extension =
+      observer.WaitForExtensionLoaded();
+  EXPECT_EQ(OK, CanConnectAndSendMessagesToFrame(
+                    incognito_frame, loaded_extension.get(), nullptr));
 
   // No alert is shown for extensions since they support being enabled in
   // incognito mode.
@@ -971,9 +973,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
       extension->id());
   util::SetIsIncognitoEnabled(extension->id(),
                               profile()->GetOffTheRecordProfile(), true);
-  const Extension* loaded_extension = observer.WaitForExtensionLoaded();
-  EXPECT_EQ(OK, CanConnectAndSendMessagesToFrame(incognito_frame,
-                                                 loaded_extension, nullptr));
+  scoped_refptr<const Extension> loaded_extension =
+      observer.WaitForExtensionLoaded();
+  EXPECT_EQ(OK, CanConnectAndSendMessagesToFrame(
+                    incognito_frame, loaded_extension.get(), nullptr));
 
   // No alert is shown for extensions which support being enabled in incognito
   // mode.

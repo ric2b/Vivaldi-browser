@@ -19,19 +19,19 @@
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/common/url_constants.h"
+#include "components/google/core/common/google_util.h"
 #include "components/permissions/features.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "extensions/common/constants.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/origin.h"
-#include "url/url_util.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/android/chrome_jni_headers/ChromePermissionsClient_jni.h"
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/permissions/grouped_permission_infobar_delegate_android.h"
+#include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
 #else
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
@@ -103,13 +103,14 @@ void ChromePermissionsClient::AreSitesImportant(
           Profile::FromBrowserContext(browser_context), kMaxImportantSites);
 
   for (auto& entry : *origins) {
-    const std::string host = entry.first.host();
+    const url::Origin& origin = entry.first;
+    const std::string& host = origin.host();
     std::string registerable_domain =
-        url::HostIsIPAddress(host)
-            ? host
-            : net::registry_controlled_domains::GetDomainAndRegistry(
-                  host,
-                  net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+        net::registry_controlled_domains::GetDomainAndRegistry(
+            origin,
+            net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+    if (registerable_domain.empty())
+      registerable_domain = host;  // IP address or internal hostname.
     auto important_domain_search =
         [&registerable_domain](
             const ImportantSitesUtil::ImportantDomainInfo& item) {
@@ -120,6 +121,20 @@ void ChromePermissionsClient::AreSitesImportant(
                      important_domain_search) != important_domains.end();
   }
 }
+
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+// Some Google-affiliated domains are not allowed to delete cookies for
+// supervised accounts.
+bool ChromePermissionsClient::IsCookieDeletionDisabled(
+    content::BrowserContext* browser_context,
+    const GURL& origin) {
+  if (!Profile::FromBrowserContext(browser_context)->IsChild())
+    return false;
+
+  return google_util::IsYoutubeDomainUrl(origin, google_util::ALLOW_SUBDOMAIN,
+                                         google_util::ALLOW_NON_STANDARD_PORTS);
+}
+#endif
 
 void ChromePermissionsClient::GetUkmSourceId(
     content::BrowserContext* browser_context,
@@ -204,7 +219,9 @@ base::Optional<GURL> ChromePermissionsClient::OverrideCanonicalOrigin(
   if (embedding_origin.GetOrigin() ==
       GURL(chrome::kChromeUINewTabURL).GetOrigin()) {
     if (requesting_origin.GetOrigin() ==
-        GURL(chrome::kChromeSearchLocalNtpUrl).GetOrigin()) {
+            GURL(chrome::kChromeSearchLocalNtpUrl).GetOrigin() ||
+        requesting_origin.GetOrigin() ==
+            GURL(chrome::kChromeUINewTabPageURL).GetOrigin()) {
       return GURL(UIThreadSearchTermsData().GoogleBaseURLValue()).GetOrigin();
     }
     return requesting_origin;
@@ -267,9 +284,12 @@ infobars::InfoBar* ChromePermissionsClient::MaybeCreateInfoBar(
   return nullptr;
 }
 
-base::android::ScopedJavaLocalRef<jobject>
-ChromePermissionsClient::GetJavaObject() {
-  return Java_ChromePermissionsClient_get(base::android::AttachCurrentThread());
+void ChromePermissionsClient::RepromptForAndroidPermissions(
+    content::WebContents* web_contents,
+    const std::vector<ContentSettingsType>& content_settings_types,
+    PermissionsUpdatedCallback callback) {
+  PermissionUpdateInfoBarDelegate::Create(web_contents, content_settings_types,
+                                          std::move(callback));
 }
 
 int ChromePermissionsClient::MapToJavaDrawableId(int resource_id) {

@@ -28,6 +28,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
 import org.chromium.chrome.browser.document.ChromeIntentUtil;
 import org.chromium.chrome.browser.document.DocumentWebContentsDelegate;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
@@ -40,9 +41,9 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -68,8 +69,8 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         mActivity = activity;
         tab.addObserver(new EmptyTabObserver() {
             @Override
-            public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {
-                if (!isAttached) mActivity = null;
+            public void onActivityAttachmentChanged(Tab tab, @Nullable WindowAndroid window) {
+                if (window == null) mActivity = null;
             }
 
             @Override
@@ -156,7 +157,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
         if (success) {
             if (disposition == WindowOpenDisposition.NEW_FOREGROUND_TAB) {
-                if (TabModelSelector.from(mTab)
+                if (mActivity.getTabModelSelector()
                                 .getTabModelFilterProvider()
                                 .getCurrentTabModelFilter()
                                 .getRelatedTabList(mTab.getId())
@@ -301,32 +302,32 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
 
     @Override
     public int getTopControlsHeight() {
-        FullscreenManager manager = getFullscreenManager();
-        return manager != null ? manager.getTopControlsHeight() : 0;
+        BrowserControlsStateProvider provider = getFullscreenManager();
+        return provider != null ? provider.getTopControlsHeight() : 0;
     }
 
     @Override
     public int getTopControlsMinHeight() {
-        FullscreenManager manager = getFullscreenManager();
-        return manager != null ? manager.getTopControlsMinHeight() : 0;
+        BrowserControlsStateProvider provider = getFullscreenManager();
+        return provider != null ? provider.getTopControlsMinHeight() : 0;
     }
 
     @Override
     public int getBottomControlsHeight() {
-        FullscreenManager manager = getFullscreenManager();
-        return manager != null ? manager.getBottomControlsHeight() : 0;
+        BrowserControlsStateProvider provider = getFullscreenManager();
+        return provider != null ? provider.getBottomControlsHeight() : 0;
     }
 
     @Override
     public int getBottomControlsMinHeight() {
-        FullscreenManager manager = getFullscreenManager();
-        return manager != null ? manager.getBottomControlsMinHeight() : 0;
+        BrowserControlsStateProvider provider = getFullscreenManager();
+        return provider != null ? provider.getBottomControlsMinHeight() : 0;
     }
 
     @Override
     public boolean shouldAnimateBrowserControlsHeightChanges() {
-        FullscreenManager manager = getFullscreenManager();
-        return manager != null && manager.shouldAnimateBrowserControlsHeightChanges();
+        BrowserControlsStateProvider provider = getFullscreenManager();
+        return provider != null && provider.shouldAnimateBrowserControlsHeightChanges();
     }
 
     @Override

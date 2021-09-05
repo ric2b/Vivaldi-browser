@@ -23,6 +23,7 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/trace_uploader.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -201,7 +202,7 @@ class TracingControllerTest : public ContentBrowserTest {
 
     {
       base::RunLoop run_loop;
-      TracingController::CompletionCallback callback = base::BindRepeating(
+      TracingController::CompletionCallback callback = base::BindOnce(
           &TracingControllerTest::StopTracingStringDoneCallbackTest,
           base::Unretained(this), run_loop.QuitClosure());
       bool result = controller->StopTracing(
@@ -235,7 +236,7 @@ class TracingControllerTest : public ContentBrowserTest {
 
     {
       base::RunLoop run_loop;
-      TracingController::CompletionCallback callback = base::BindRepeating(
+      TracingController::CompletionCallback callback = base::BindOnce(
           &TracingControllerTest::StopTracingStringDoneCallbackTest,
           base::Unretained(this), run_loop.QuitClosure());
 
@@ -465,7 +466,7 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest,
       TraceConfig(),
       TracingController::StartTracingDoneCallback()));
   EXPECT_TRUE(controller->StopTracing(
-      TracingControllerImpl::CreateCallbackEndpoint(base::BindRepeating(
+      TracingControllerImpl::CreateCallbackEndpoint(base::BindOnce(
           [](base::OnceClosure quit_closure,
              std::unique_ptr<std::string> trace_str) {
             std::move(quit_closure).Run();

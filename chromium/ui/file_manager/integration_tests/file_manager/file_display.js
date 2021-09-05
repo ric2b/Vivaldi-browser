@@ -308,7 +308,7 @@ testcase.fileDisplayUsbPartitionSort = async () => {
   await remoteCall.callRemoteTestUtil(
       'fakeMouseClick', appId, ['.table-header-cell:nth-of-type(4)']);
   const iconSortedAsc = (await isFilesNg(appId)) ?
-      '.table-header-cell .sorted [iron-icon="files16:arrow_down_small"]' :
+      '.table-header-cell .sorted [iron-icon="files16:arrow_up_small"]' :
       '.table-header-sort-image-asc';
   await remoteCall.waitForElement(appId, iconSortedAsc);
 
@@ -325,7 +325,7 @@ testcase.fileDisplayUsbPartitionSort = async () => {
   await remoteCall.callRemoteTestUtil(
       'fakeMouseClick', appId, ['.table-header-cell:nth-of-type(4)']);
   const iconSortedDesc = (await isFilesNg(appId)) ?
-      '.table-header-cell .sorted [iron-icon="files16:arrow_up_small"]' :
+      '.table-header-cell .sorted [iron-icon="files16:arrow_down_small"]' :
       '.table-header-sort-image-desc';
   await remoteCall.waitForElement(appId, iconSortedDesc);
 
@@ -565,19 +565,19 @@ testcase.fileDisplayWithoutDrive = async () => {
 
   // Wait for the loading indicator blink to finish.
   await remoteCall.waitForElement(
-      appId, '#list-container paper-progress[hidden]');
+      appId, '#list-container .loading-indicator[hidden]');
 
   // Navigate to the fake Google Drive.
   await remoteCall.callRemoteTestUtil(
       'fakeMouseClick', appId, ['[root-type-icon=\'drive\']']);
   await remoteCall.waitUntilCurrentDirectoryIsChanged(appId, '/Google Drive');
 
-  // The fake Google Drive should be empty.
+  // Check: the fake Google Drive should be empty.
   await remoteCall.waitForFiles(appId, []);
 
-  // The loading indicator should be visible and remain visible forever.
+  // Check: the loading indicator should be visible.
   await remoteCall.waitForElement(
-      appId, '#list-container paper-progress:not([hidden])');
+      appId, '#list-container .loading-indicator:not([hidden])');
 };
 
 /**
@@ -874,8 +874,38 @@ testcase.fileDisplayCheckNoReadOnlyIconOnLinuxFiles = async () => {
 
   // Click on Linux files.
   await remoteCall.callRemoteTestUtil('fakeMouseClick', appId, [fakeRoot]);
-  await remoteCall.waitForElement(appId, 'paper-progress:not([hidden])');
 
-  // Make sure read-only indicator on toolbar is NOT visible.
+  // Check: the loading indicator should be visible.
+  await remoteCall.waitForElement(
+      appId, '#list-container .loading-indicator:not([hidden])');
+
+  // Check: the toolbar read-only indicator should not be visible.
   await remoteCall.waitForElement(appId, '#read-only-indicator[hidden]');
+};
+
+/**
+ * Tests that a failure opening one window won't block opening other windows.
+ */
+testcase.fileDisplayStartupError = async () => {
+  // Fake chrome.app.window.create to return undefined.
+  const fakeData = {
+    'chrome.app.window.create': ['static_fake', [undefined]],
+  };
+  await remoteCall.callRemoteTestUtil('backgroundFake', null, [fakeData]);
+
+  // Check: opening a Files app window should fail and return null.
+  const failedAppId = await openNewWindow(RootPath.DOWNLOADS);
+  chrome.test.assertEq(null, failedAppId);
+
+  // Remove fakes.
+  const removedCount =
+      await remoteCall.callRemoteTestUtil('removeAllBackgroundFakes', null, []);
+  chrome.test.assertEq(1, removedCount);
+
+  // Check: opening a Files app window should succeed.
+  const appId = await openNewWindow(RootPath.DOWNLOADS);
+  chrome.test.assertTrue(null !== appId);
+
+  // The failed attempt logs the error.
+  return IGNORE_APP_ERRORS;
 };

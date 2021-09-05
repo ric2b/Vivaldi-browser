@@ -13,10 +13,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
+#include "content/public/browser/dedicated_worker_id.h"
 #include "content/public/browser/dedicated_worker_service.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/service_worker_context_observer.h"
+#include "content/public/browser/shared_worker_id.h"
 #include "content/public/browser/shared_worker_service.h"
 
 namespace performance_manager {
@@ -150,8 +152,9 @@ class WorkerWatcher : public content::DedicatedWorkerService::Observer,
 #if DCHECK_IS_ON()
   // Keeps track of how many OnClientRemoved() calls are expected for an
   // existing worker. This happens when OnBeforeFrameNodeRemoved() is invoked
-  // before OnClientRemoved().
-  base::flat_map<WorkerNodeImpl*, int> clients_to_remove_;
+  // before OnClientRemoved(), or when it wasn't possible to initially attach
+  // a client frame node to a worker.
+  base::flat_map<WorkerNodeImpl*, int> detached_frame_count_per_worker_;
 #endif  // DCHECK_IS_ON()
 
   DISALLOW_COPY_AND_ASSIGN(WorkerWatcher);

@@ -27,7 +27,6 @@
 #include "media/mojo/mojom/interface_factory.mojom.h"
 #include "media/mojo/mojom/media_service.mojom.h"
 #include "media/mojo/mojom/renderer.mojom.h"
-#include "media/mojo/services/media_interface_provider.h"
 #include "media/mojo/services/media_service_factory.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -37,11 +36,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-#include "media/cdm/cdm_paths.h"  // nogncheck
-#include "media/mojo/mojom/cdm_proxy.mojom.h"
-#endif
 
 namespace media {
 
@@ -66,28 +60,6 @@ const char kInvalidKeySystem[] = "invalid.key.system";
 #endif
 
 const char kSecurityOrigin[] = "https://foo.com";
-
-// Returns a trivial encrypted DecoderBuffer.
-scoped_refptr<DecoderBuffer> CreateEncryptedBuffer() {
-  scoped_refptr<DecoderBuffer> encrypted_buffer(new DecoderBuffer(100));
-  encrypted_buffer->set_decrypt_config(
-      DecryptConfig::CreateCencConfig("dummy_key_id", "0123456789ABCDEF", {}));
-  return encrypted_buffer;
-}
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-class MockCdmProxyClient : public mojom::CdmProxyClient {
- public:
-  MockCdmProxyClient() = default;
-  ~MockCdmProxyClient() override = default;
-
-  // mojom::CdmProxyClient implementation.
-  MOCK_METHOD0(NotifyHardwareReset, void());
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockCdmProxyClient);
-};
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 class MockRendererClient : public mojom::RendererClient {
  public:
@@ -127,20 +99,13 @@ ACTION_P(QuitLoop, run_loop) {
 class MediaServiceTest : public testing::Test {
  public:
   MediaServiceTest()
-      :
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-        cdm_proxy_client_receiver_(&cdm_proxy_client_),
-#endif
-        renderer_client_receiver_(&renderer_client_),
-        video_stream_(DemuxerStream::VIDEO) {
-  }
+      : renderer_client_receiver_(&renderer_client_),
+        video_stream_(DemuxerStream::VIDEO) {}
   ~MediaServiceTest() override = default;
 
   void SetUp() override {
-    mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
-        host_interfaces;
-    auto provider = std::make_unique<MediaInterfaceProvider>(
-        host_interfaces.InitWithNewPipeAndPassReceiver());
+    mojo::PendingRemote<mojom::FrameInterfaceFactory> frame_interfaces;
+    ignore_result(frame_interfaces.InitWithNewPipeAndPassReceiver());
 
     media_service_impl_ = CreateMediaServiceForTesting(
         media_service_.BindNewPipeAndPassReceiver());
@@ -150,7 +115,7 @@ class MediaServiceTest : public testing::Test {
                             base::Unretained(this)));
     media_service_->CreateInterfaceFactory(
         interface_factory_.BindNewPipeAndPassReceiver(),
-        std::move(host_interfaces));
+        std::move(frame_interfaces));
   }
 
   MOCK_METHOD3(OnCdmInitialized,
@@ -180,58 +145,6 @@ class MediaServiceTest : public testing::Test {
                                     base::Unretained(this)));
     run_loop.Run();
     return cdm_id;
-  }
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-  MOCK_METHOD4(OnCdmProxyInitialized,
-               void(CdmProxy::Status status,
-                    CdmProxy::Protocol protocol,
-                    uint32_t crypto_session_id,
-                    int cdm_id));
-
-  // Returns the CDM ID associated with the CdmProxy.
-  int InitializeCdmProxy(const base::Token& cdm_guid) {
-    base::RunLoop run_loop;
-    interface_factory_->CreateCdmProxy(cdm_guid,
-                                       cdm_proxy_.BindNewPipeAndPassReceiver());
-
-    mojo::PendingAssociatedRemote<mojom::CdmProxyClient> client_remote;
-    cdm_proxy_client_receiver_.Bind(
-        client_remote.InitWithNewEndpointAndPassReceiver());
-    int cdm_id = CdmContext::kInvalidCdmId;
-
-    EXPECT_CALL(*this, OnCdmProxyInitialized(CdmProxy::Status::kOk, _, _, _))
-        .WillOnce(DoAll(SaveArg<3>(&cdm_id), QuitLoop(&run_loop)));
-    cdm_proxy_->Initialize(
-        std::move(client_remote),
-        base::BindOnce(&MediaServiceTest::OnCdmProxyInitialized,
-                       base::Unretained(this)));
-    run_loop.Run();
-    return cdm_id;
-  }
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
-
-  MOCK_METHOD2(OnDecrypted,
-               void(Decryptor::Status, scoped_refptr<DecoderBuffer>));
-
-  void CreateDecryptor(int cdm_id, bool expected_result) {
-    base::RunLoop run_loop;
-    mojo::PendingRemote<mojom::Decryptor> decryptor_remote;
-    interface_factory_->CreateDecryptor(
-        cdm_id, decryptor_remote.InitWithNewPipeAndPassReceiver());
-    MojoDecryptor mojo_decryptor(std::move(decryptor_remote));
-
-    // In the success case, there's no decryption key to decrypt the buffer so
-    // we would expect no-key.
-    auto expected_status =
-        expected_result ? Decryptor::kNoKey : Decryptor::kError;
-
-    EXPECT_CALL(*this, OnDecrypted(expected_status, _))
-        .WillOnce(QuitLoop(&run_loop));
-    mojo_decryptor.Decrypt(
-        Decryptor::kVideo, CreateEncryptedBuffer(),
-        base::BindOnce(&MediaServiceTest::OnDecrypted, base::Unretained(this)));
-    run_loop.Run();
   }
 
   MOCK_METHOD1(OnRendererInitialized, void(bool));
@@ -276,12 +189,6 @@ class MediaServiceTest : public testing::Test {
 
   std::unique_ptr<MediaService> media_service_impl_;
 
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-  mojo::Remote<mojom::CdmProxy> cdm_proxy_;
-  NiceMock<MockCdmProxyClient> cdm_proxy_client_;
-  mojo::AssociatedReceiver<mojom::CdmProxyClient> cdm_proxy_client_receiver_;
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
-
   NiceMock<MockRendererClient> renderer_client_;
   mojo::AssociatedReceiver<mojom::RendererClient> renderer_client_receiver_;
 
@@ -311,11 +218,6 @@ TEST_F(MediaServiceTest, InitializeCdm_Success) {
 TEST_F(MediaServiceTest, InitializeCdm_InvalidKeySystem) {
   InitializeCdm(kInvalidKeySystem, false);
 }
-
-TEST_F(MediaServiceTest, Decryptor_WithCdm) {
-  int cdm_id = InitializeCdm(kClearKeyKeySystem, true);
-  CreateDecryptor(cdm_id, true);
-}
 #endif  // BUILDFLAG(ENABLE_MOJO_CDM) && !defined(OS_ANDROID)
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
@@ -323,43 +225,6 @@ TEST_F(MediaServiceTest, InitializeRenderer) {
   InitializeRenderer(TestVideoConfig::Normal(), true);
 }
 #endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-TEST_F(MediaServiceTest, CdmProxy) {
-  InitializeCdmProxy(kClearKeyCdmGuid);
-}
-
-TEST_F(MediaServiceTest, Decryptor_WithCdmProxy) {
-  int cdm_id = InitializeCdmProxy(kClearKeyCdmGuid);
-  CreateDecryptor(cdm_id, true);
-}
-
-TEST_F(MediaServiceTest, Decryptor_WrongCdmId) {
-  int cdm_id = InitializeCdmProxy(kClearKeyCdmGuid);
-  CreateDecryptor(cdm_id + 1, false);
-}
-
-TEST_F(MediaServiceTest, CdmProxyPreventsIdling) {
-  InitializeCdmProxy(kClearKeyCdmGuid);
-
-  // Disconnecting InterfaceFactory should not terminate the MediaService since
-  // there is still a CdmProxy hosted.
-  interface_factory_.reset();
-  cdm_proxy_.FlushForTesting();
-
-  // Disconnecting CdmProxy will cause the service to idle since no other
-  // connections should be active.
-  base::RunLoop run_loop;
-  EXPECT_CALL(*this, OnMediaServiceIdle()).WillOnce(QuitLoop(&run_loop));
-  cdm_proxy_.reset();
-  run_loop.Run();
-}
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
-
-TEST_F(MediaServiceTest, Decryptor_WithoutCdmOrCdmProxy) {
-  // Creating decryptor without creating CDM or CdmProxy.
-  CreateDecryptor(1, false);
-}
 
 TEST_F(MediaServiceTest, InterfaceFactoryPreventsIdling) {
   // The service should not idle during this operation.

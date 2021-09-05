@@ -3,24 +3,16 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {getSearchManager} from 'chrome://settings/settings.js';
-// #import {Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {getSearchManager} from 'chrome://settings/settings.js';
+
 // clang-format on
 
 suite('SearchSettingsTest', function() {
   let searchManager;
 
-  suiteSetup(function() {
-    // Import <settings-section> manually if not already imported
-    // (happens when |optimize_webui| is false).
-    if (customElements.get('settings-section') === undefined) {
-      return PolymerTest.importHtml(
-          'chrome://settings/settings_page/settings_section.html');
-    }
-  });
-
   setup(function() {
-    searchManager = settings.getSearchManager();
+    searchManager = getSearchManager();
     PolymerTest.clearBody();
   });
 

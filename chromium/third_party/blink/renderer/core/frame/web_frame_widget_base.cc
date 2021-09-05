@@ -12,7 +12,9 @@
 #include "base/time/time.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/swap_promise.h"
+#include "cc/trees/ukm_manager.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/scheduler/web_render_widget_scheduling_state.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -96,12 +98,15 @@ void WebFrameWidgetBase::BindLocalRoot(WebLocalFrame& local_root) {
           &WebFrameWidgetBase::RequestAnimationAfterDelayTimerFired));
 }
 
-void WebFrameWidgetBase::Close() {
+void WebFrameWidgetBase::Close(
+    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
+    base::OnceCallback<void()> cleanup_task) {
   mutator_dispatcher_ = nullptr;
   local_root_->SetFrameWidget(nullptr);
   local_root_ = nullptr;
   client_ = nullptr;
   request_animation_after_delay_timer_.reset();
+  widget_base_->Shutdown(std::move(cleanup_runner), std::move(cleanup_task));
   widget_base_.reset();
   receiver_.reset();
 }
@@ -252,7 +257,7 @@ void WebFrameWidgetBase::DragSourceEndedAt(const gfx::PointF& point_in_viewport,
           FloatPoint(point_in_viewport)));
 
   WebMouseEvent fake_mouse_move(
-      WebInputEvent::kMouseMove, point_in_root_frame, screen_point,
+      WebInputEvent::Type::kMouseMove, point_in_root_frame, screen_point,
       WebPointerProperties::Button::kLeft, 0, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now());
   fake_mouse_move.SetFrameScale(1);
@@ -368,6 +373,11 @@ Page* WebFrameWidgetBase::GetPage() const {
   return View()->GetPage();
 }
 
+const mojo::AssociatedRemote<mojom::blink::FrameWidgetHost>&
+WebFrameWidgetBase::GetAssociatedFrameWidgetHost() const {
+  return frame_widget_host_;
+}
+
 void WebFrameWidgetBase::DidAcquirePointerLock() {
   GetPage()->GetPointerLockController().DidAcquirePointerLock();
 
@@ -436,6 +446,40 @@ void WebFrameWidgetBase::RequestBeginMainFrameNotExpected(bool request) {
   widget_base_->LayerTreeHost()->RequestBeginMainFrameNotExpected(request);
 }
 
+void WebFrameWidgetBase::EndCommitCompositorFrame(
+    base::TimeTicks commit_start_time) {
+  Client()->DidCommitCompositorFrame(commit_start_time);
+}
+
+void WebFrameWidgetBase::DidCommitAndDrawCompositorFrame() {
+  Client()->DidCommitAndDrawCompositorFrame();
+}
+
+void WebFrameWidgetBase::OnDeferMainFrameUpdatesChanged(bool defer) {
+  Client()->OnDeferMainFrameUpdatesChanged(defer);
+}
+
+void WebFrameWidgetBase::OnDeferCommitsChanged(bool defer) {
+  Client()->OnDeferCommitsChanged(defer);
+}
+
+void WebFrameWidgetBase::RequestNewLayerTreeFrameSink(
+    LayerTreeFrameSinkCallback callback) {
+  Client()->RequestNewLayerTreeFrameSink(std::move(callback));
+}
+
+void WebFrameWidgetBase::DidCompletePageScaleAnimation() {
+  Client()->DidCompletePageScaleAnimation();
+}
+
+void WebFrameWidgetBase::DidBeginMainFrame() {
+  Client()->DidBeginMainFrame();
+}
+
+void WebFrameWidgetBase::WillBeginMainFrame() {
+  Client()->WillBeginMainFrame();
+}
+
 int WebFrameWidgetBase::GetLayerTreeId() {
   if (!View()->does_composite())
     return 0;
@@ -451,12 +495,36 @@ void WebFrameWidgetBase::SetEventListenerProperties(
     cc::EventListenerProperties listener_properties) {
   widget_base_->LayerTreeHost()->SetEventListenerProperties(
       listener_class, listener_properties);
+
+  if (listener_class == cc::EventListenerClass::kTouchStartOrMove ||
+      listener_class == cc::EventListenerClass::kTouchEndOrCancel) {
+    bool has_touch_handlers =
+        EventListenerProperties(cc::EventListenerClass::kTouchStartOrMove) !=
+            cc::EventListenerProperties::kNone ||
+        EventListenerProperties(cc::EventListenerClass::kTouchEndOrCancel) !=
+            cc::EventListenerProperties::kNone;
+    if (!has_touch_handlers_ || *has_touch_handlers_ != has_touch_handlers) {
+      has_touch_handlers_ = has_touch_handlers;
+
+      // Can be NULL when running tests.
+      if (auto* scheduler_state = widget_base_->RendererWidgetSchedulingState())
+        scheduler_state->SetHasTouchHandler(has_touch_handlers);
+      frame_widget_host_->SetHasTouchEventHandlers(has_touch_handlers);
+    }
+  } else if (listener_class == cc::EventListenerClass::kPointerRawUpdate) {
+    client_->SetHasPointerRawUpdateEventHandlers(
+        listener_properties != cc::EventListenerProperties::kNone);
+  }
 }
 
 cc::EventListenerProperties WebFrameWidgetBase::EventListenerProperties(
     cc::EventListenerClass listener_class) const {
   return widget_base_->LayerTreeHost()->event_listener_properties(
       listener_class);
+}
+
+mojom::blink::DisplayMode WebFrameWidgetBase::DisplayMode() const {
+  return display_mode_;
 }
 
 void WebFrameWidgetBase::StartDeferringCommits(base::TimeDelta timeout) {
@@ -514,7 +582,7 @@ void WebFrameWidgetBase::PointerLockMouseEvent(
 
   AtomicString event_type;
   switch (input_event.GetType()) {
-    case WebInputEvent::kMouseDown:
+    case WebInputEvent::Type::kMouseDown:
       event_type = event_type_names::kMousedown;
       if (!GetPage() || !GetPage()->GetPointerLockController().GetElement())
         break;
@@ -524,10 +592,10 @@ void WebFrameWidgetBase::PointerLockMouseEvent(
                                            ->GetDocument()
                                            .GetFrame());
       break;
-    case WebInputEvent::kMouseUp:
+    case WebInputEvent::Type::kMouseUp:
       event_type = event_type_names::kMouseup;
       break;
-    case WebInputEvent::kMouseMove:
+    case WebInputEvent::Type::kMouseMove:
       event_type = event_type_names::kMousemove;
       break;
     default:
@@ -581,32 +649,24 @@ WebLocalFrame* WebFrameWidgetBase::FocusedWebLocalFrameInWidget() const {
   return WebLocalFrameImpl::FromFrame(FocusedLocalFrameInWidget());
 }
 
-void WebFrameWidgetBase::SetCompositorHosts(cc::LayerTreeHost* layer_tree_host,
-                                            cc::AnimationHost* animation_host) {
-  widget_base_->SetCompositorHosts(layer_tree_host, animation_host);
+cc::LayerTreeHost* WebFrameWidgetBase::InitializeCompositing(
+    cc::TaskGraphRunner* task_graph_runner,
+    const cc::LayerTreeSettings& settings,
+    std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory) {
+  widget_base_->InitializeCompositing(task_graph_runner, settings,
+                                      std::move(ukm_recorder_factory));
   GetPage()->AnimationHostInitialized(*AnimationHost(),
                                       GetLocalFrameViewForAnimationScrolling());
+  return widget_base_->LayerTreeHost();
 }
 
 void WebFrameWidgetBase::SetCompositorVisible(bool visible) {
   widget_base_->SetCompositorVisible(visible);
 }
 
-void WebFrameWidgetBase::UpdateVisualState() {
-  widget_base_->UpdateVisualState();
-}
-
 void WebFrameWidgetBase::RecordTimeToFirstActivePaint(
     base::TimeDelta duration) {
   Client()->RecordTimeToFirstActivePaint(duration);
-}
-
-void WebFrameWidgetBase::BeginFrame(base::TimeTicks frame_time) {
-  widget_base_->BeginMainFrame(frame_time);
-}
-
-void WebFrameWidgetBase::WillBeginCompositorFrame() {
-  widget_base_->WillBeginCompositorFrame();
 }
 
 void WebFrameWidgetBase::DispatchRafAlignedInput(base::TimeTicks frame_time) {
@@ -626,10 +686,32 @@ void WebFrameWidgetBase::DispatchRafAlignedInput(base::TimeTicks frame_time) {
 
 void WebFrameWidgetBase::ApplyViewportChangesForTesting(
     const ApplyViewportChangesArgs& args) {
-  // TODO(dtapuska): Temporarily just call ApplyViewportChanges.
-  // ApplyViewportChanges will eventually be removed when compositing moves into
-  // |widget_base_|.
-  ApplyViewportChanges(args);
+  widget_base_->ApplyViewportChanges(args);
+}
+
+void WebFrameWidgetBase::SetDisplayMode(mojom::blink::DisplayMode mode) {
+  if (mode != display_mode_) {
+    display_mode_ = mode;
+    LocalFrame* frame = LocalRootImpl()->GetFrame();
+    frame->MediaQueryAffectingValueChangedForLocalSubtree(
+        MediaValueChange::kOther);
+  }
+}
+
+void WebFrameWidgetBase::SetCursor(const ui::Cursor& cursor) {
+  widget_base_->SetCursor(cursor);
+}
+
+void WebFrameWidgetBase::AutoscrollStart(const gfx::PointF& position) {
+  GetAssociatedFrameWidgetHost()->AutoscrollStart(std::move(position));
+}
+
+void WebFrameWidgetBase::AutoscrollFling(const gfx::Vector2dF& velocity) {
+  GetAssociatedFrameWidgetHost()->AutoscrollFling(std::move(velocity));
+}
+
+void WebFrameWidgetBase::AutoscrollEnd() {
+  GetAssociatedFrameWidgetHost()->AutoscrollEnd();
 }
 
 void WebFrameWidgetBase::RequestAnimationAfterDelay(
@@ -761,8 +843,8 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
       int frame_token) {
     // If the widget was collected or the widget wasn't collected yet, but
     // it was closed don't schedule a presentation callback.
-    if (widget && widget->Client()) {
-      widget->Client()->AddPresentationCallback(
+    if (widget && widget->widget_base_) {
+      widget->widget_base_->AddPresentationCallback(
           frame_token,
           WTF::Bind(&RunCallbackAfterPresentation,
                     std::move(presentation_time_callback), swap_time));
@@ -830,6 +912,11 @@ void WebFrameWidgetBase::NotifySwapAndPresentationTime(
               ->GetTaskRunnerProvider()
               ->MainThreadTaskRunner(),
           this));
+}
+
+scheduler::WebRenderWidgetSchedulingState*
+WebFrameWidgetBase::RendererWidgetSchedulingState() {
+  return widget_base_->RendererWidgetSchedulingState();
 }
 
 }  // namespace blink

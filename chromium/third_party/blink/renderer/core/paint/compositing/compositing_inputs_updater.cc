@@ -50,9 +50,10 @@ void CompositingInputsUpdater::Update() {
   PaintLayer* layer =
       compositing_inputs_root_ ? compositing_inputs_root_ : root_layer_;
 
-  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(
+  // We don't need to do anything if the layer is under a locked display lock
+  // that prevents updates.
+  if (DisplayLockUtilities::LockedAncestorPreventingPrePaint(
           layer->GetLayoutObject())) {
-    compositing_inputs_root_ = nullptr;
     return;
   }
 
@@ -116,13 +117,13 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
       // root layer, we are no longer viewport constrained.
       if (previous_overflow_layer && previous_overflow_layer->IsRootLayer()) {
         layout_object.View()->GetFrameView()->RemoveViewportConstrainedObject(
-            layout_object);
+            layout_object, LocalFrameView::ViewportConstrainedType::kSticky);
       }
     }
 
     if (info.last_overflow_clip_layer->IsRootLayer()) {
       layout_object.View()->GetFrameView()->AddViewportConstrainedObject(
-          layout_object);
+          layout_object, LocalFrameView::ViewportConstrainedType::kSticky);
     }
     layout_object.UpdateStickyPositionConstraints();
 
@@ -175,13 +176,14 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
           DisplayLockLifecycleTarget::kChildren);
 
   bool should_recurse = (layer->ChildNeedsCompositingInputsUpdate() ||
-                         update_type == kForceUpdate) &&
-                        !recursion_blocked_by_display_lock;
+                         update_type == kForceUpdate);
 
   layer->SetDescendantHasDirectOrScrollingCompositingReason(false);
   bool descendant_has_direct_compositing_reason = false;
-  for (PaintLayer* child = layer->FirstChild(); child;
-       child = child->NextSibling()) {
+
+  auto* first_child =
+      recursion_blocked_by_display_lock ? nullptr : layer->FirstChild();
+  for (PaintLayer* child = first_child; child; child = child->NextSibling()) {
     if (should_recurse)
       UpdateSelfAndDescendantsRecursively(child, update_type, info);
     descendant_has_direct_compositing_reason |=
@@ -466,7 +468,6 @@ void CompositingInputsUpdater::UpdateAncestorDependentCompositingInputs(
   if (info.needs_reparent_scroll && layout_object.StyleRef().IsStacked())
     properties.scroll_parent = info.scrolling_ancestor;
 
-  properties.is_under_position_sticky = info.is_under_position_sticky;
   properties.nearest_contained_layout_layer =
       info.nearest_contained_layout_layer;
 

@@ -163,6 +163,28 @@ class TerminalPrivateAckOutputFunction : public ExtensionFunction {
   void AckOutputOnRegistryTaskRunner(const std::string& terminal_id);
 };
 
+class TerminalPrivateOpenWindowFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.openWindow",
+                             TERMINALPRIVATE_OPENWINDOW)
+
+ protected:
+  ~TerminalPrivateOpenWindowFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class TerminalPrivateOpenOptionsPageFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.openOptionsPage",
+                             TERMINALPRIVATE_OPENOPTIONSPAGE)
+
+ protected:
+  ~TerminalPrivateOpenOptionsPageFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
+};
+
 // TODO(crbug.com/1019021): Remove this function after M-83.
 // Be sure to first remove the callsite in the terminal system app.
 class TerminalPrivateGetCroshSettingsFunction : public ExtensionFunction {

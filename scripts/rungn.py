@@ -24,8 +24,6 @@ if is_windows:
     check_win_python.CheckPythonInstall()
   except:
     pass
-
-  os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
 elif is_linux:
   # Add path for downloaded clang
   os.environ["PATH"] = os.pathsep.join([
@@ -84,10 +82,12 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
   except:
     pass
   bootstrap_env = dict(os.environ)
-  for x in ["VIVALDI_SIGNING_KEY", "VIVALDI_SIGN_EXECUTABLE", "GN_DEFINES"]:
+
+  for x in ["GN_DEFINES"]:
     if x in bootstrap_env:
       del bootstrap_env[x]
   if is_windows:
+    bootstrap_env["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
     def setup_toolchain():
       # Copied from Chromium
       def CallPythonScopeScript(command, **kwargs):
@@ -103,7 +103,8 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
           [sys.executable,
             os.path.join(sourcedir, "chromium", "build", "vs_toolchain.py"),
           "get_toolchain_dir"],
-          cwd=sourcedir)
+          cwd=sourcedir,
+          env=bootstrap_env)
       try:
         os.makedirs(gn_releasedir)
       except:
@@ -119,7 +120,8 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
            "x64",
            "environment.x64",
           ],
-          cwd=gn_releasedir)
+          cwd=gn_releasedir,
+          env=bootstrap_env)
       # End copied from Chromium
       return windows_x64_toolchain
     windows_x64_toolchain = setup_toolchain()

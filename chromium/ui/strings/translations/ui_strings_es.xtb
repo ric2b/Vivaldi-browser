@@ -196,7 +196,7 @@
 <translation id="7365057348334984696">{MINUTES,plural, =1{Hace 1 min}other{Hace # min}}</translation>
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{Queda 1 minuto}other{Quedan # minutos}}</translation>
-<translation id="7430878839542012341">¿Quieres eliminar esta búsqueda de tu historial?</translation>
+<translation id="7430878839542012341">¿Eliminar esta búsqueda de tu historial?</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
 <translation id="7507604095951736240">Emoji</translation>
 <translation id="7658239707568436148">Cancelar</translation>

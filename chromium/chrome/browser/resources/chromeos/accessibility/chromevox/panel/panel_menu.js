@@ -463,14 +463,14 @@ PanelSearchMenu = class extends PanelMenu {
 
     // Create the search bar.
     this.searchBar = document.createElement('input');
-    this.searchBar.setAttribute('id', 'search-bar');
+    this.searchBar.setAttribute('id', 'menus-search-bar');
     this.searchBar.setAttribute('type', 'search');
     this.searchBar.setAttribute('aria-controls', 'search-results');
     this.searchBar.setAttribute('aria-activedescendant', '');
     this.searchBar.setAttribute(
-        'placeholder', Msgs.getMsg('search_chromevox_menus'));
+        'placeholder', Msgs.getMsg('search_chromevox_menus_placeholder'));
     this.searchBar.setAttribute(
-        'aria-label', Msgs.getMsg('search_chromevox_menus'));
+        'aria-description', Msgs.getMsg('search_chromevox_menus_description'));
     this.searchBar.setAttribute('role', 'searchbox');
 
     // Add the search bar above the menu.
@@ -528,9 +528,14 @@ PanelSearchMenu = class extends PanelMenu {
       menuItemTitle, menuItemShortcut, menuItemBraille, gesture, callback,
       opt_id) {
     this.searchResultCounter_ += 1;
-    return PanelMenu.prototype.addMenuItem.call(
+    const item = PanelMenu.prototype.addMenuItem.call(
         this, menuItemTitle, menuItemShortcut, menuItemBraille, gesture,
         callback, 'result-number-' + this.searchResultCounter_.toString());
+    // Ensure that item styling is updated on mouse hovers.
+    item.element.addEventListener('mouseover', (event) => {
+      this.resetItemAtActiveIndex();
+    }, true);
+    return item;
   }
 
   /** @override */

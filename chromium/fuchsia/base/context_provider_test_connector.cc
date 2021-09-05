@@ -14,13 +14,12 @@
 
 #include "base/fuchsia/default_context.h"
 #include "base/fuchsia/fuchsia_logging.h"
-#include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "fuchsia/base/release_channel.h"
 
 namespace cr_fuchsia {
 
-fuchsia::web::ContextProviderPtr ConnectContextProvider(
+fidl::InterfaceHandle<fuchsia::io::Directory> StartWebEngineForTests(
     fidl::InterfaceRequest<fuchsia::sys::ComponentController>
         component_controller_request,
     const base::CommandLine& command_line) {
@@ -49,12 +48,16 @@ fuchsia::web::ContextProviderPtr ConnectContextProvider(
   launcher->CreateComponent(std::move(launch_info),
                             std::move(component_controller_request));
 
-  sys::ServiceDirectory web_engine_service_dir(
-      std::move(web_engine_services_dir));
+  return web_engine_services_dir;
+}
 
-  fuchsia::web::ContextProviderPtr context_provider;
-  web_engine_service_dir.Connect(context_provider.NewRequest());
-  return context_provider;
+fuchsia::web::ContextProviderPtr ConnectContextProvider(
+    fidl::InterfaceRequest<fuchsia::sys::ComponentController>
+        component_controller_request,
+    const base::CommandLine& command_line) {
+  sys::ServiceDirectory web_engine_service_dir(StartWebEngineForTests(
+      std::move(component_controller_request), command_line));
+  return web_engine_service_dir.Connect<fuchsia::web::ContextProvider>();
 }
 
 }  // namespace cr_fuchsia

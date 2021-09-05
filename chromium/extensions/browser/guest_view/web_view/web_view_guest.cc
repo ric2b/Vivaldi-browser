@@ -73,8 +73,8 @@
 #include "url/url_constants.h"
 
 #include "app/vivaldi_apptools.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/browser_about_handler.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -84,9 +84,12 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
+#include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -95,11 +98,9 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/vivaldi_browser_window.h"
-
-#include "content/browser/frame_host/navigation_controller_impl.h"
-#include "components/prefs/pref_service.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using vivaldi::IsVivaldiApp;
@@ -931,12 +932,10 @@ void WebViewGuest::CreateNewGuestWebViewWindow(
   // when creating the webcontents.
   create_params.SetString(webview::kNewURL, params.url.spec());
 
-  guest_manager->CreateGuest(WebViewGuest::Type,
-                             embedder_web_contents(),
-                             create_params,
-                             base::Bind(&WebViewGuest::NewGuestWebViewCallback,
-                                        weak_ptr_factory_.GetWeakPtr(),
-                                        params));
+  guest_manager->CreateGuest(
+      WebViewGuest::Type, embedder_web_contents(), create_params,
+      base::BindOnce(&WebViewGuest::NewGuestWebViewCallback,
+                     weak_ptr_factory_.GetWeakPtr(), params));
 }
 
 void WebViewGuest::NewGuestWebViewCallback(const content::OpenURLParams& params,
@@ -1418,7 +1417,7 @@ void WebViewGuest::NavigateGuest(const std::string& src,
   // content scripts will be ready.
   if (force_navigation) {
     SignalWhenReady(
-        base::Bind(&WebViewGuest::LoadURLWithParams,
+        base::BindOnce(&WebViewGuest::LoadURLWithParams,
                    weak_ptr_factory_.GetWeakPtr(), url,
                    referrer ? *referrer : content::Referrer(),
                    transition_type, force_navigation, params));
@@ -1446,7 +1445,7 @@ bool WebViewGuest::HandleKeyboardShortcuts(
     ExitFullscreenModeForTab(web_contents());
   }
 
-  if (event.GetType() != blink::WebInputEvent::kRawKeyDown)
+  if (event.GetType() != blink::WebInputEvent::Type::kRawKeyDown)
     return false;
 
   // If the user hits the escape key without any modifiers then unlock the
@@ -1682,6 +1681,7 @@ bool WebViewGuest::LoadDataWithBaseURL(const std::string& data_url,
 
 void WebViewGuest::AddNewContents(WebContents* source,
                                   std::unique_ptr<WebContents> new_contents,
+                                  const GURL& target_url,
                                   WindowOpenDisposition disposition,
                                   const gfx::Rect& initial_rect,
                                   bool user_gesture,
@@ -1803,8 +1803,8 @@ void WebViewGuest::EnterFullscreenModeForTab(
   request_info.SetString(webview::kOrigin, origin.spec());
   web_view_permission_helper_->RequestPermission(
       WEB_VIEW_PERMISSION_TYPE_FULLSCREEN, request_info,
-      base::Bind(&WebViewGuest::OnFullscreenPermissionDecided,
-                 weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&WebViewGuest::OnFullscreenPermissionDecided,
+                     weak_ptr_factory_.GetWeakPtr()),
       false /* allowed_by_default */);
 
   // TODO(lazyboy): Right now the guest immediately goes fullscreen within its
@@ -1832,7 +1832,7 @@ void WebViewGuest::RequestToLockMouse(WebContents* web_contents,
                                       bool last_unlocked_by_target) {
   web_view_permission_helper_->RequestPointerLockPermission(
       user_gesture, last_unlocked_by_target,
-      base::Bind(
+      base::BindOnce(
           base::IgnoreResult(&WebContents::GotLockMousePermissionResponse),
           base::Unretained(web_contents)));
 }
@@ -1985,13 +1985,12 @@ void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
                          WindowOpenDispositionToString(disposition));
   request_info.SetBoolean(guest_view::kUserGesture, user_gesture);
 
-  web_view_permission_helper_->
-      RequestPermission(WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW,
-                        request_info,
-                        base::Bind(&WebViewGuest::OnWebViewNewWindowResponse,
-                                   weak_ptr_factory_.GetWeakPtr(),
-                                   guest->guest_instance_id()),
-                                   false /* allowed_by_default */);
+  web_view_permission_helper_->RequestPermission(
+      WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW, request_info,
+      base::BindOnce(&WebViewGuest::OnWebViewNewWindowResponse,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     guest->guest_instance_id()),
+      false /* allowed_by_default */);
 }
 
 GURL WebViewGuest::ResolveURL(const std::string& src) {

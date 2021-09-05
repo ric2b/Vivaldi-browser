@@ -3,6 +3,7 @@
 <translationbundle lang="fr-CA">
 <translation id="1005230401424685968">AAAA</translation>
 <translation id="1016495303386450659">Élément mis à jour</translation>
+<translation id="1044891598689252897">Les sites fonctionneront normalement</translation>
 <translation id="1047726139967079566">Ajouter cette page aux favoris...</translation>
 <translation id="1049743911850919806">Navigation privée</translation>
 <translation id="1063454504051558093">Utiliser un autre mot de passe…</translation>
@@ -47,10 +48,12 @@
 <translation id="145015347812617860"><ph name="COUNT" /> éléments</translation>
 <translation id="1491277525950327607">Touchez deux fois pour activer ou désactiver le paramètre</translation>
 <translation id="1509486075633541495">Connexion au site Web</translation>
+<translation id="1509960214886564027">Des fonctionnalités sur de nombreux sites risquent de ne pas fonctionner</translation>
 <translation id="152234381334907219">Jamais enregistrés</translation>
 <translation id="1540800554400757039">Ligne adresse 1</translation>
 <translation id="1545749641540134597">Scannez le code QR</translation>
 <translation id="1552525382687785070">La synchronisation est désactivée par votre administrateur</translation>
+<translation id="1554477036522844996">Nouvelle fenêtre</translation>
 <translation id="1580783302095112590">Courriel envoyé.</translation>
 <translation id="1582732959743469162">Cette opération entraînera l'arrêt de la progression de votre téléchargement en cours.</translation>
 <translation id="1605658421715042784">Copier l'image</translation>
@@ -95,12 +98,15 @@
 <translation id="213900355088104901">Pour naviguer de manière anonyme, ouvrez un onglet de navigation privée</translation>
 <translation id="2139867232736819575">Rechercher le texte que vous avez copié</translation>
 <translation id="2149973817440762519">Modifier le favori</translation>
+<translation id="2175927920773552910">Code QR</translation>
 <translation id="2179182049312275900">Vous pouvez activer la synchronisation à tout moment dans les paramètres.</translation>
 <translation id="2198757192731523470">Google peut utiliser votre historique pour personnaliser la recherche, les annonces et d'autres services Google.</translation>
 <translation id="2218443599109088993">Zoom arrière</translation>
 <translation id="2230173723195178503">Page Web chargée</translation>
 <translation id="2239626343334228536">Effacement des données de navigation en cours…</translation>
+<translation id="2245545499420671379">Bloquer les témoins tiers en navigation privée</translation>
 <translation id="2257567812274161158">La synchronisation ne fonctionne pas.</translation>
+<translation id="225943865679747347">Code d'erreur : <ph name="ERROR_CODE" /></translation>
 <translation id="2267753748892043616">Ajouter un compte</translation>
 <translation id="2268044343513325586">Affiner</translation>
 <translation id="2273327106802955778">Menu Plus</translation>
@@ -111,11 +117,12 @@
 <translation id="2359043044084662842">Traduire</translation>
 <translation id="2359808026110333948">Continuer</translation>
 <translation id="2360196772093551345">Voir la version pour appareil mobile</translation>
+<translation id="2379896346847637748">Ouvrir dans une nouvelle fenêtre</translation>
 <translation id="2381405137052800939">Paramètres de base</translation>
 <translation id="2386793615875593361">1 sélectionné</translation>
+<translation id="2421004566762153674">Blocage des témoins tiers</translation>
 <translation id="2421044535038393232">Continuer à modifier</translation>
 <translation id="2435457462613246316">Affich. mot de passe</translation>
-<translation id="2481538920734869610">AJOUTER UN COMPTE</translation>
 <translation id="2497852260688568942">La synchronisation est désactivée par votre administrateur</translation>
 <translation id="2500374554657206846">Options d'enregistrement des mots de passe</translation>
 <translation id="2523363575747517183">Ce site Web a tenté plusieurs fois d'ouvrir une autre application.</translation>
@@ -152,6 +159,7 @@
 <translation id="285960592395650245">Réessayer téléchargement</translation>
 <translation id="2870560284913253234">Site</translation>
 <translation id="2871695793448672541">Masqué, mot de passe</translation>
+<translation id="2876369937070532032">Envoie des URL de certaines pages que vous visitez à Google, lorsque votre sécurité pourrait être compromise</translation>
 <translation id="288655811176831528">Fermer l'onglet</translation>
 <translation id="2898963176829412617">Nouveau dossier...</translation>
 <translation id="2916171785467530738">Saisie semi-automatique des recherches et des URL</translation>
@@ -171,6 +179,7 @@
 <translation id="3161291298470460782">Cette action vous déconnectera, désactivera la synchronisation et effacera toutes les données de Chrome sur cet appareil. Vos données synchronisées resteront dans votre compte Google.</translation>
 <translation id="3175081911749765310">Servic Web</translation>
 <translation id="3178650076442119961">Actif aujourd'hui</translation>
+<translation id="3181954750937456830">Navigation sécurisée (vous protège, vous et votre appareil, des sites dangereux)</translation>
 <translation id="3207960819495026254">Favori</translation>
 <translation id="3224641773458703735">Pour exporter vos mots de passe, vous devez d'abord définir un mot de passe sur votre appareil.</translation>
 <translation id="3240426699337459095">Lien copié</translation>
@@ -193,7 +202,6 @@
 <translation id="3469166899695866866">Arrêter le téléchargement?</translation>
 <translation id="3470502288861289375">Copie en cours…</translation>
 <translation id="3474624961160222204">Contin. comme <ph name="NAME" /></translation>
-<translation id="3474649192738347024">Formulaires remplis.</translation>
 <translation id="3478058380795961209">Mois d'expir.</translation>
 <translation id="3482959374254649722">Synchronisation de vos onglets en cours…</translation>
 <translation id="3484946776651937681">Ouvrir dans le dossier Téléchargement</translation>
@@ -305,7 +313,6 @@ Pour modifier ce paramètre, <ph name="BEGIN_LINK" />réinitialisez la synchroni
 <translation id="4979397965658815378">Connectez-vous à votre compte Google pour synchroniser vos favoris, vos mots de passe, votre historique et vos autres paramètres sur tous vos appareils</translation>
 <translation id="5005498671520578047">Copier mot de passe</translation>
 <translation id="5010803260590204777">Ouvrez un onglet de navigation privée pour naviguer sur le Web en secret.</translation>
-<translation id="5039020240289137291">Bloquer les témoins tiers</translation>
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5059136629401106827">OK</translation>
 <translation id="5062321486222145940">Installer Google Disque</translation>
@@ -418,12 +425,14 @@ La fonction de transfert doit également être activée dans la section Généra
 
 Vos données ont été chiffrées avec votre phrase de passe le <ph name="TIME" />. Veuillez l'entrer pour commencer la synchronisation.</translation>
 <translation id="6418346271604475326">Prép. du PDF</translation>
+<translation id="6426067060178468363">Autoriser les témoins</translation>
 <translation id="6434591244308415567">Une erreur s'est produite. Réessayez plus tard.</translation>
 <translation id="6445051938772793705">Pays</translation>
 <translation id="6445981559479772097">Message envoyé</translation>
 <translation id="6447842834002726250">Témoins</translation>
 <translation id="6464071786529933911">Ouvrir ds nv ong nav priv</translation>
 <translation id="6476800141292307438">Traduction de la page en <ph name="LANGUAGE" /> en cours… Les options sont affichées dans le bas de l'écran.</translation>
+<translation id="648164694371393720">Erreur d'authentification</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> éléments supprimés</translation>
 <translation id="6561262006871132942">Zoom avant</translation>
 <translation id="6610002944194042868">Options de traduction</translation>
@@ -431,6 +440,7 @@ Vos données ont été chiffrées avec votre phrase de passe le <ph name="TIME" 
 <translation id="6638511529934826365">Zoomer sur le texte…</translation>
 <translation id="6642362222295953972">Passer à l'onglet déjà ouvert</translation>
 <translation id="6643016212128521049">Effacer</translation>
+<translation id="6645899968535965230">Code QR : <ph name="PAGE_TITLE" /></translation>
 <translation id="6656103420185847513">Modifier le dossier</translation>
 <translation id="6657585470893396449">Mot de passe</translation>
 <translation id="6668619169535738264">Modifier le favori</translation>
@@ -476,11 +486,11 @@ Vos données ont été chiffrées avec votre phrase de passe le <ph name="TIME" 
 <translation id="7136892417564438900">La caméra est indisponible</translation>
 <translation id="7159472599653637159">Dem. site appareils mobiles</translation>
 <translation id="7173114856073700355">Ouvrir les paramètres</translation>
+<translation id="7189598951263744875">Partager…</translation>
 <translation id="7192050974311852563">Commencer la journalisation</translation>
 <translation id="7203585745079012652">Réponses vocales</translation>
 <translation id="7265758999917665941">Jamais pour ce site</translation>
 <translation id="7272437679830969316">Impossible de vérifier votre identité. Le mot de passe n'a pas été copié.</translation>
-<translation id="7285236536143823449">OUI, J'ACCEPTE</translation>
 <translation id="7291368939935408496">Préparation des mots de passe en cours…</translation>
 <translation id="7293171162284876153">Pour démarrer la synchronisation, activez l'option « Synchroniser vos données Chrome ».</translation>
 <translation id="7336264872878993241"><ph name="PERCENT" /> pour cent téléchargé(s)</translation>
@@ -496,6 +506,7 @@ Vos données ont été chiffrées avec votre phrase de passe le <ph name="TIME" 
 <translation id="7460314822154045102">Utiliser l'appareil photo</translation>
 <translation id="7464701184726199289">Les données synchronisées seront supprimées de tous les appareils. Les paramètres de site sauvegardés ne seront pas supprimés et peuvent donner des indications sur vos habitudes de navigation. <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
 <translation id="7472734401283673885">Nom d'entreprise</translation>
+<translation id="7473891865547856676">Non merci</translation>
 <translation id="7481312909269577407">Suivant</translation>
 <translation id="750493650310597496">0 sélectionné</translation>
 <translation id="7514365320538308">Télécharger</translation>
@@ -513,11 +524,12 @@ Vos données ont été chiffrées avec votre phrase de passe le <ph name="TIME" 
 
 Comme votre compte est géré par <ph name="HOSTED_DOMAIN" />, vos données Chrome seront supprimées de cet appareil lorsque vous vous déconnecterez. Vos données synchronisées resteront dans votre compte Google.</translation>
 <translation id="7772032839648071052">Confirmer la phrase de passe</translation>
+<translation id="7778472311864276518">Supprimer le compte de cet appareil</translation>
 <translation id="7781011649027948662">Traduire la page?</translation>
 <translation id="7781829728241885113">Hier</translation>
 <translation id="778855399387580014">Lancez une recherche dans un nouvel onglet Chrome.</translation>
 <translation id="7791543448312431591">Ajouter</translation>
-<translation id="780301667611848630">Non merci</translation>
+<translation id="7828557259026017104">Les témoins sont des fichiers créés par les sites Web que vous visitez. Les sites les utilisent pour mémoriser vos préférences. Les témoins tiers sont ceux que créent d'autres sites. Ces sites possèdent certains types de contenu, comme des annonces et des images, que vous voyez sur les pages que vous visitez.</translation>
 <translation id="7840771868269352570">Les éléments sélectionnés seront supprimés.</translation>
 <translation id="7856733331829174190">Échec du téléchargement</translation>
 <translation id="7859704718976024901">Historique de navigation</translation>
@@ -530,6 +542,7 @@ Comme votre compte est géré par <ph name="HOSTED_DOMAIN" />, vos données Chro
 <translation id="7961015016161918242">Jamais</translation>
 <translation id="7971521879845308059">Bloq fen contex</translation>
 <translation id="7982789257301363584">Réseau</translation>
+<translation id="7993619969781047893">Des fonctionnalités sur certains sites risquent de ne pas fonctionner</translation>
 <translation id="800361585186029508">Ouvre les URL entrées dans Google Chrome.</translation>
 <translation id="8007420562015504427">Recherche en mode de navigation privée</translation>
 <translation id="8019783059653722575">Ceci vous permet d'enregistrer et de téléverser des photos.</translation>
@@ -542,6 +555,7 @@ Comme votre compte est géré par <ph name="HOSTED_DOMAIN" />, vos données Chro
 <translation id="8076014560081431679">Les paramètres de site sauvegardés ne seront pas supprimés et peuvent donner des indications sur vos habitudes de navigation. <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
 <translation id="8114753159095730575">Le téléchargement du fichier est disponible. Options présentées vers le bas de l’écran.</translation>
 <translation id="8131740175452115882">Confirmer</translation>
+<translation id="8174524257672181687">Bloquer tous les témoins (non recommandé)</translation>
 <translation id="8197543752516192074">Traduire la page</translation>
 <translation id="8205564605687841303">Annuler</translation>
 <translation id="8225985093977202398">Images/fich. en cache</translation>
@@ -587,6 +601,7 @@ Comme votre compte est géré par <ph name="HOSTED_DOMAIN" />, vos données Chro
 <translation id="8870413625673593573">Éléments récemment fermés</translation>
 <translation id="8881801611828450202">Rechercher cette image avec <ph name="SEARCH_ENGINE" /></translation>
 <translation id="8909135823018751308">Partager...</translation>
+<translation id="8917490105272468696">Oui, j'accepte</translation>
 <translation id="895541991026785598">Signaler un problème</translation>
 <translation id="8976382372951310360">Aide</translation>
 <translation id="8981454092730389528">Commandes d'activité Google</translation>

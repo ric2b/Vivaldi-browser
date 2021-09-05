@@ -509,8 +509,10 @@ const CGFloat kSpinnerButtonPadding = 18;
 #pragma mark - SettingsControllerProtocol callbacks
 
 - (void)reportDismissalUserAction {
-  // Sync Passphrase Settings screen does not have Done button.
-  NOTREACHED();
+  // Sync Passphrase Settings screen can be closed when being presented from
+  // an infobar.
+  base::RecordAction(
+      base::UserMetricsAction("MobileSyncPassphraseSettingsClose"));
 }
 
 - (void)settingsWillBeDismissed {

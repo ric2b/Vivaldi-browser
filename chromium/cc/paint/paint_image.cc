@@ -152,6 +152,8 @@ void PaintImage::CreateSkImage() {
         SkImage::MakeFromGenerator(std::make_unique<SkiaPaintImageGenerator>(
             paint_image_generator_, kDefaultFrameIndex,
             kDefaultGeneratorClientId));
+  } else if (texture_backing_) {
+    cached_sk_image_ = texture_backing_->GetAcceleratedSkImage();
   }
 
   if (!subset_rect_.IsEmpty() && cached_sk_image_) {
@@ -276,6 +278,14 @@ SkColorType PaintImage::GetColorType() const {
   if (GetSkImage())
     return GetSkImage()->colorType();
   return kUnknown_SkColorType;
+}
+
+SkAlphaType PaintImage::GetAlphaType() const {
+  if (paint_image_generator_)
+    return paint_image_generator_->GetSkImageInfo().alphaType();
+  if (GetSkImage())
+    return GetSkImage()->alphaType();
+  return kUnknown_SkAlphaType;
 }
 
 int PaintImage::width() const {

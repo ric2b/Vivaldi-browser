@@ -50,13 +50,11 @@ class HistoryUiFaviconRequestHandlerImpl
       const GURL& page_url,
       int desired_size_in_pixel,
       favicon_base::FaviconRawBitmapCallback callback,
-      HistoryUiFaviconRequestOrigin request_origin_for_uma,
-      const GURL& icon_url_for_uma) override;
+      HistoryUiFaviconRequestOrigin request_origin_for_uma) override;
   void GetFaviconImageForPageURL(
       const GURL& page_url,
       favicon_base::FaviconImageCallback callback,
-      HistoryUiFaviconRequestOrigin request_origin_for_uma,
-      const GURL& icon_url_for_uma) override;
+      HistoryUiFaviconRequestOrigin request_origin_for_uma) override;
 
  private:
   // Called after the first attempt to retrieve the icon bitmap from local
@@ -68,7 +66,6 @@ class HistoryUiFaviconRequestHandlerImpl
       int desired_size_in_pixel,
       favicon_base::FaviconRawBitmapCallback response_callback,
       HistoryUiFaviconRequestOrigin origin_for_uma,
-      const GURL& icon_url_for_uma,
       base::Time request_start_time_for_uma,
       const favicon_base::FaviconRawBitmapResult& bitmap_result);
 
@@ -80,7 +77,6 @@ class HistoryUiFaviconRequestHandlerImpl
       const GURL& page_url,
       favicon_base::FaviconImageCallback response_callback,
       HistoryUiFaviconRequestOrigin origin_for_uma,
-      const GURL& icon_url_for_uma,
       base::Time request_start_time_for_uma,
       const favicon_base::FaviconImageResult& image_result);
 
@@ -92,19 +88,15 @@ class HistoryUiFaviconRequestHandlerImpl
                                base::OnceClosure empty_response_callback,
                                base::OnceClosure local_lookup_callback,
                                HistoryUiFaviconRequestOrigin origin_for_uma,
-                               const GURL& icon_url_for_uma,
                                base::Time request_start_time_for_uma);
 
   // Called once the request to the favicon server has finished. If the request
   // succeeded, |local_lookup_callback| is called to effectively retrieve the
-  // icon, otherwise |empty_response_callback| is called. If |group_to_clear|
-  // is non-empty, records the size of the associated group as UMA and clears
-  // it, simulating the execution of its array of waiting callbacks.
+  // icon, otherwise |empty_response_callback| is called.
   void OnGoogleServerDataAvailable(
       base::OnceClosure empty_response_callback,
       base::OnceClosure local_lookup_callback,
       HistoryUiFaviconRequestOrigin origin_for_uma,
-      const GURL& group_to_clear,
       base::Time request_start_time_for_uma,
       favicon_base::GoogleFaviconServerRequestStatus status);
 
@@ -113,11 +105,6 @@ class HistoryUiFaviconRequestHandlerImpl
   LargeIconService* const large_icon_service_;
 
   CanSendHistoryDataGetter const can_send_history_data_getter_;
-
-  // Map from a group identifier to the number of callbacks in that group which
-  // would be waiting for execution. Used for recording metrics for the possible
-  // benefit of grouping.
-  std::map<GURL, int> group_callbacks_count_;
 
   // Needed for using FaviconService.
   base::CancelableTaskTracker cancelable_task_tracker_;

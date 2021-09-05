@@ -131,6 +131,9 @@ const char kArcScale[] = "arc-scale";
 // If it is not set, then ARC is started in default mode.
 const char kArcStartMode[] = "arc-start-mode";
 
+// Sets ARC Terms Of Service hostname url for testing.
+const char kArcTosHostForTests[] = "arc-tos-host-for-tests";
+
 // If this flag is present then the device had ARC M available and gets ARC N
 // when updating.
 // TODO(pmarko): Remove this when we assess that it's not necessary anymore:
@@ -393,6 +396,11 @@ const char kIgnoreUserProfileMappingForTests[] =
 // chrome://flags
 const char kKernelnextRestrictVMs[] = "kernelnext-restrict-vms";
 
+// If this switch is set, then ash-chrome will exec the lacros-chrome binary
+// from the indicated path rather than from component updater. Note that the
+// path should be to a directory that contains a binary named 'chrome'.
+const char kLacrosChromePath[] = "lacros-chrome-path";
+
 // Enables Chrome-as-a-login-manager behavior.
 const char kLoginManager[] = "login-manager";
 
@@ -426,6 +434,9 @@ const char kNoteTakingAppIds[] = "note-taking-app-ids";
 // chromeos::kScreenNames in oobe_screen.cc. Supported screens are:
 //   user-image
 const char kOobeForceShowScreen[] = "oobe-force-show-screen";
+
+// Allows the eula url to be overridden for tests.
+const char kOobeEulaUrlForTests[] = "oobe-eula-url-for-tests";
 
 // Indicates that the first user run flow (sequence of OOBE screens after the
 // first user login) should show tablet mode centric screens, even if the device
@@ -494,6 +505,13 @@ const char kRegulatoryLabelDir[] = "regulatory-label-dir";
 // This makes it easier to test layout logic.
 const char kShowLoginDevOverlay[] = "show-login-dev-overlay";
 
+// Enables OOBE UI Debugger for ease of navigation between screens during manual
+// testing. Limited to ChromeOS-on-linux and test images only.
+const char kShowOobeDevOverlay[] = "show-oobe-dev-overlay";
+
+// Specifies directory for screenshots taken with OOBE UI Debugger.
+const char kOobeScreenshotDirectory[] = "oobe-screenshot-dir";
+
 // Enables testing for encryption migration UI.
 const char kTestEncryptionMigrationUI[] = "test-encryption-migration-ui";
 
@@ -521,10 +539,6 @@ const char kUnfilteredBluetoothDevices[] = "unfiltered-bluetooth-devices";
 // uses of this flag.
 const char kWaitForInitialPolicyFetchForTest[] =
     "wait-for-initial-policy-fetch-for-test";
-
-// Enables wake on wifi packet feature, which wakes the device on the receipt
-// of network packets from whitelisted sources.
-const char kWakeOnWifiPacket[] = "wake-on-wifi-packet";
 
 // Prevents any CPU restrictions being set on the ARC container. Only meant to
 // be used by tests as some tests may time out if the ARC container is

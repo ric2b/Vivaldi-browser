@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.customtabs;
 
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.os.Build;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
@@ -24,7 +23,6 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
@@ -86,8 +84,7 @@ public class CustomTabTaskDescriptionHelper implements NativeInitObserver, Destr
     @Override
     public void onFinishNativeInitialization() {
         WebappExtras webappExtras = mIntentDataProvider.getWebappExtras();
-        boolean canUpdate = (webappExtras != null
-                || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && usesSeparateTask()));
+        boolean canUpdate = (webappExtras != null || usesSeparateTask());
         if (!canUpdate) return;
 
         mDefaultThemeColor = ApiCompatibilityUtils.getColor(
@@ -180,8 +177,8 @@ public class CustomTabTaskDescriptionHelper implements NativeInitObserver, Destr
                 }
 
                 private boolean hasSecurityWarningOrError(Tab tab) {
-                    boolean isContentDangerous = SecurityStateModel.isContentDangerous(
-                            tab.getWebContents(), ChromeSecurityStateModelDelegate.getInstance());
+                    boolean isContentDangerous =
+                            SecurityStateModel.isContentDangerous(tab.getWebContents());
                     return isContentDangerous;
                 }
             };

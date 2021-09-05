@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//chrome/common/features.gni")
 import("//components/nacl/features.gni")
@@ -14,7 +13,7 @@ import("//rlz/buildflags/buildflags.gni")
 
 assert(enable_extensions)
 
-jumbo_static_library("extensions") {
+static_library("extensions") {
   sources = [
     # TODO These references to files in //chrome/browser/ should either be
     # moved to the browser target or the files moved to this directory.
@@ -117,8 +116,8 @@ jumbo_static_library("extensions") {
     "api/debugger/debugger_api.h",
     "api/debugger/debugger_api_constants.cc",
     "api/debugger/debugger_api_constants.h",
-    "api/debugger/extension_dev_tools_infobar.cc",
-    "api/debugger/extension_dev_tools_infobar.h",
+    "api/debugger/extension_dev_tools_infobar_delegate.cc",
+    "api/debugger/extension_dev_tools_infobar_delegate.h",
     "api/declarative_content/chrome_content_rules_registry.cc",
     "api/declarative_content/chrome_content_rules_registry.h",
     "api/declarative_content/content_action.cc",
@@ -458,8 +457,6 @@ jumbo_static_library("extensions") {
     "chrome_extension_cookies.h",
     "chrome_extension_cookies_factory.cc",
     "chrome_extension_cookies_factory.h",
-    "chrome_extension_function.cc",
-    "chrome_extension_function.h",
     "chrome_extension_function_details.cc",
     "chrome_extension_function_details.h",
     "chrome_extension_host_delegate.cc",
@@ -507,8 +504,6 @@ jumbo_static_library("extensions") {
     "error_console/error_console_factory.h",
     "event_router_forwarder.cc",
     "event_router_forwarder.h",
-    "extension_action.cc",
-    "extension_action.h",
     "extension_action_icon_factory.cc",
     "extension_action_icon_factory.h",
     "extension_action_manager.cc",
@@ -791,23 +786,27 @@ jumbo_static_library("extensions") {
     "//chrome/app/theme:chrome_unscaled_resources",
     "//chrome/app/theme:theme_resources",
     "//chrome/app/vector_icons",
+    "//chrome/browser:ntp_background_proto",
     "//chrome/browser:theme_properties",
     "//chrome/browser/devtools",
     "//chrome/browser/engagement:mojo_bindings",
     "//chrome/browser/image_decoder",
     "//chrome/browser/media/router",
     "//chrome/browser/media/router/discovery",
+    "//chrome/browser/resource_coordinator:intervention_policy_database_proto",
     "//chrome/browser/resource_coordinator:mojo_bindings",
     "//chrome/browser/safe_browsing",
     "//chrome/browser/web_applications/components",
     "//chrome/browser/web_applications/extensions",
     "//chrome/common/extensions/api:extensions_features",
     "//chrome/common/safe_browsing:proto",
+    "//chrome/services/app_service/public/mojom",
     "//chrome/services/removable_storage_writer/public/mojom",
     "//components/autofill/content/browser",
     "//components/bookmarks/browser",
     "//components/bookmarks/managed",
     "//components/browser_sync",
+    "//components/browsing_data/content",
     "//components/browsing_data/core",
     "//components/content_settings/core/browser",
     "//components/cookie_config:cookie_config",
@@ -866,6 +865,8 @@ jumbo_static_library("extensions") {
     "//components/sync_preferences",
     "//components/sync_sessions",
     "//components/translate/content/browser",
+    "//components/translate/core/browser",
+    "//components/translate/core/common",
     "//components/undo",
     "//components/unified_consent",
     "//components/update_client",
@@ -1004,6 +1005,7 @@ jumbo_static_library("extensions") {
       "//ash/public/cpp",
       "//chrome/browser/chromeos/crostini:crostini_installer_types_mojom",
       "//chrome/browser/resources/chromeos/camera:chrome_camera_app",
+      "//chrome/browser/ui/webui/settings/chromeos/constants:mojom",
       "//chromeos",
       "//chromeos/attestation",
       "//chromeos/components/proximity_auth",
@@ -1016,7 +1018,7 @@ jumbo_static_library("extensions") {
       "//chromeos/login/auth",
       "//chromeos/login/login_state",
       "//chromeos/network",
-      "//chromeos/services/assistant/public/cpp:prefs",
+      "//chromeos/services/assistant/public/cpp",
       "//chromeos/services/ime/public/mojom",
       "//chromeos/services/machine_learning/public/cpp",
       "//chromeos/services/machine_learning/public/mojom",
@@ -1107,7 +1109,6 @@ jumbo_static_library("extensions") {
     }
 
     if (use_x11) {
-      configs += [ "//build/config/linux:x11" ]
       deps += [
         "//ui/events:events_base",
         "//ui/events/platform",

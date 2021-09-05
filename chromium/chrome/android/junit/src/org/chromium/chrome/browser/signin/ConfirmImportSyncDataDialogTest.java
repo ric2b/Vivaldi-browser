@@ -15,7 +15,6 @@ import androidx.fragment.app.FragmentManager;
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -24,7 +23,6 @@ import org.robolectric.shadows.ShadowAlertDialog;
 import org.robolectric.shadows.ShadowToast;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.DisableNativeTestRule;
 import org.chromium.chrome.R;
 
 /** Tests for {@link ConfirmImportSyncDataDialog}. */
@@ -32,8 +30,6 @@ import org.chromium.chrome.R;
 public class ConfirmImportSyncDataDialogTest {
     private static final String TEST_DOMAIN = "test.domain.example.com";
 
-    @Rule
-    public final DisableNativeTestRule mDisableNative = new DisableNativeTestRule();
 
     @Mock
     private ConfirmImportSyncDataDialog.Listener mMockListener;
@@ -78,12 +74,12 @@ public class ConfirmImportSyncDataDialogTest {
     }
 
     @Test
-    public void testListenerCancelledWhenDialogDismissed() {
+    public void testListenerOnCancelNotCalledWhenDialogDismissed() {
         getConfirmImportSyncDataDialog();
         Assert.assertEquals(1, mFragmentManager.getFragments().size());
         mStateMachineDelegate.dismissAllDialogs();
         Assert.assertEquals(0, mFragmentManager.getFragments().size());
-        verify(mMockListener).onCancel();
+        verify(mMockListener, never()).onCancel();
     }
 
     @Test

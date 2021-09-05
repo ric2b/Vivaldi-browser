@@ -5,9 +5,11 @@
 #include "components/autofill/core/browser/payments/full_card_request.h"
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
@@ -18,13 +20,6 @@
 
 namespace autofill {
 namespace payments {
-
-bool FullCardRequest::UIDelegate::ShouldOfferFidoAuth() const {
-  // This will always be false for Desktop since FIDO authentication is offered
-  // as a separate prompt after the CVC prompt. On Android, however, this may be
-  // overridden.
-  return false;
-}
 
 FullCardRequest::FullCardRequest(RiskDataLoader* risk_data_loader,
                                  payments::PaymentsClient* payments_client,
@@ -148,6 +143,17 @@ void FullCardRequest::OnUnmaskPromptAccepted(
   }
 
   request_->user_response = user_response;
+#if defined(OS_ANDROID)
+  if (ui_delegate_) {
+    // An opt-in request to Payments must be included either if the user chose
+    // to opt-in through the CVC prompt or if the UI delegate indicates that the
+    // user previously chose to opt-in through the settings page.
+    request_->user_response.enable_fido_auth =
+        user_response.enable_fido_auth ||
+        ui_delegate_->UserOptedInToFidoFromSettingsPageOnMobile();
+  }
+#endif
+
   if (!request_->risk_data.empty())
     SendUnmaskCardRequest();
 }
@@ -160,7 +166,13 @@ void FullCardRequest::OnUnmaskPromptClosed() {
 }
 
 bool FullCardRequest::ShouldOfferFidoAuth() const {
+  // FIDO opt-in is only handled from card unmask on mobile. Desktop platforms
+  // provide a separate opt-in bubble.
+#if defined(OS_ANDROID)
   return ui_delegate_ && ui_delegate_->ShouldOfferFidoAuth();
+#else
+  return false;
+#endif
 }
 
 void FullCardRequest::OnDidGetUnmaskRiskData(const std::string& risk_data) {
@@ -228,8 +240,10 @@ void FullCardRequest::OnDidGetRealPan(
       unmask_response_details_ = response_details;
 
       const base::string16 cvc =
-          base::FeatureList::IsEnabled(
-              features::kAutofillAlwaysReturnCloudTokenizedCard) &&
+          (base::FeatureList::IsEnabled(
+               features::kAutofillEnableGoogleIssuedCard) ||
+           base::FeatureList::IsEnabled(
+               features::kAutofillAlwaysReturnCloudTokenizedCard)) &&
                   !response_details.dcvv.empty()
               ? base::UTF8ToUTF16(response_details.dcvv)
               : request_->user_response.cvc;

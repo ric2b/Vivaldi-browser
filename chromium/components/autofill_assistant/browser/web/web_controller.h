@@ -33,6 +33,7 @@
 namespace autofill {
 class AutofillProfile;
 class CreditCard;
+class ContentAutofillDriver;
 struct FormData;
 struct FormFieldData;
 }  // namespace autofill
@@ -76,7 +77,7 @@ class WebController {
   // |selector| and return the result through callback.
   virtual void ClickOrTapElement(
       const Selector& selector,
-      ClickAction::ClickType click_type,
+      ClickType click_type,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Fill the address form given by |selector| with the given address
@@ -233,14 +234,33 @@ class WebController {
     base::string16 cvc;
   };
 
+  // RAII object that sets the action state to "running" when the object is
+  // allocated and to "not running" when it gets deallocated.
+  class ScopedAssistantActionStateRunning {
+   public:
+    explicit ScopedAssistantActionStateRunning(
+        autofill::ContentAutofillDriver* content_autofill_driver);
+    ~ScopedAssistantActionStateRunning();
+
+    ScopedAssistantActionStateRunning(
+        const ScopedAssistantActionStateRunning&) = delete;
+    ScopedAssistantActionStateRunning& operator=(
+        const ScopedAssistantActionStateRunning&) = delete;
+
+   private:
+    void SetAssistantActionState(bool running);
+
+    autofill::ContentAutofillDriver* content_autofill_driver_;
+  };
+
   void OnFindElementForClickOrTap(
       base::OnceCallback<void(const ClientStatus&)> callback,
-      ClickAction::ClickType click_type,
+      ClickType click_type,
       const ClientStatus& status,
       std::unique_ptr<ElementFinder::Result> result);
   void OnWaitDocumentToBecomeInteractiveForClickOrTap(
       base::OnceCallback<void(const ClientStatus&)> callback,
-      ClickAction::ClickType click_type,
+      ClickType click_type,
       std::unique_ptr<ElementFinder::Result> target_element,
       bool result);
   void OnFindElementForTap(
@@ -249,21 +269,21 @@ class WebController {
       std::unique_ptr<ElementFinder::Result> result);
   void ClickOrTapElement(
       std::unique_ptr<ElementFinder::Result> target_element,
-      ClickAction::ClickType click_type,
+      ClickType click_type,
       base::OnceCallback<void(const ClientStatus&)> callback);
   void OnClickJS(base::OnceCallback<void(const ClientStatus&)> callback,
                  const DevtoolsClient::ReplyStatus& reply_status,
                  std::unique_ptr<runtime::CallFunctionOnResult> result);
   void OnScrollIntoView(std::unique_ptr<ElementFinder::Result> target_element,
                         base::OnceCallback<void(const ClientStatus&)> callback,
-                        ClickAction::ClickType click_type,
+                        ClickType click_type,
                         const DevtoolsClient::ReplyStatus& reply_status,
                         std::unique_ptr<runtime::CallFunctionOnResult> result);
   void TapOrClickOnCoordinates(
       ElementPositionGetter* getter_to_release,
       base::OnceCallback<void(const ClientStatus&)> callback,
       const std::string& node_frame_id,
-      ClickAction::ClickType click_type,
+      ClickType click_type,
       bool has_coordinates,
       int x,
       int y);
@@ -507,6 +527,21 @@ class WebController {
           callback,
       const ClientStatus& status,
       std::unique_ptr<ElementFinder::Result> element);
+
+  // Wrapper for calling the |callback| after re-enabling the keyboard by
+  // setting the assistant action state to "not running".
+  void RetainAssistantActionRunningStateAndExecuteCallback(
+      std::unique_ptr<ScopedAssistantActionStateRunning> scoped_state,
+      base::OnceCallback<void(const ClientStatus&)> callback,
+      const ClientStatus& client_status);
+  // Disables the keyboard by setting the assistant action state to "running"
+  // and wraps the |callback| such that the keyboard is re-enabled before
+  // calling it. Uses the |RenderFrameHost| of the |ElementFinder::Result| to
+  // extract the appropriate |ContentAutofillDriver|.
+  base::OnceCallback<void(const ClientStatus&)>
+  GetAssistantActionRunningStateRetainingCallback(
+      ElementFinder::Result* element_result,
+      base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Weak pointer is fine here since it must outlive this web controller, which
   // is guaranteed by the owner of this object.

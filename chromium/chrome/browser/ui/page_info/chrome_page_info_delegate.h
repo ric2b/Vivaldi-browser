@@ -6,29 +6,27 @@
 #define CHROME_BROWSER_UI_PAGE_INFO_CHROME_PAGE_INFO_DELEGATE_H_
 
 #include "build/build_config.h"
-#include "chrome/browser/content_settings/local_shared_objects_container.h"
 #include "components/page_info/page_info_delegate.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "url/gurl.h"
 
+class Profile;
+class StatefulSSLHostStateDelegate;
+
+namespace content_settings {
+class TabSpecificContentSettings;
+}
+
 namespace permissions {
 class ChooserContextBase;
-}
+class PermissionDecisionAutoBlocker;
+}  // namespace permissions
 
 namespace safe_browsing {
 class PasswordProtectionService;
 class ChromePasswordProtectionService;
 }  // namespace safe_browsing
-
-class Profile;
-
-namespace permissions {
-class PermissionDecisionAutoBlocker;
-}  // namespace permissions
-
-class StatefulSSLHostStateDelegate;
-class TabSpecificContentSettings;
 
 class ChromePageInfoDelegate : public PageInfoDelegate {
  public:
@@ -42,12 +40,6 @@ class ChromePageInfoDelegate : public PageInfoDelegate {
   // PageInfoDelegate implementation
   permissions::ChooserContextBase* GetChooserContext(
       ContentSettingsType type) override;
-  bool HasContentSettingChangedViaPageInfo(ContentSettingsType type) override;
-  void ContentSettingChangedViaPageInfo(ContentSettingsType type) override;
-  int GetFirstPartyAllowedCookiesCount(const GURL& site_url) override;
-  int GetFirstPartyBlockedCookiesCount(const GURL& site_url) override;
-  int GetThirdPartyAllowedCookiesCount(const GURL& site_url) override;
-  int GetThirdPartyBlockedCookiesCount(const GURL& site_url) override;
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   safe_browsing::PasswordProtectionService* GetPasswordProtectionService()
       const override;
@@ -71,11 +63,14 @@ class ChromePageInfoDelegate : public PageInfoDelegate {
   bool IsContentDisplayedInVrHeadset() override;
   security_state::SecurityLevel GetSecurityLevel() override;
   security_state::VisibleSecurityState GetVisibleSecurityState() override;
+  std::unique_ptr<content_settings::TabSpecificContentSettings::Delegate>
+  GetTabSpecificContentSettingsDelegate() override;
+
+#if defined(OS_ANDROID)
+  const base::string16 GetClientApplicationName() override;
+#endif
 
  private:
-  TabSpecificContentSettings* GetTabSpecificContentSettings() const;
-  const LocalSharedObjectsContainer& GetAllowedObjects(const GURL& site_url);
-  const LocalSharedObjectsContainer& GetBlockedObjects(const GURL& site_url);
   Profile* GetProfile() const;
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   safe_browsing::ChromePasswordProtectionService*

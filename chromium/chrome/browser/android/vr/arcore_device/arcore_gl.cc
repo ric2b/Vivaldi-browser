@@ -438,10 +438,6 @@ void ArCoreGl::GetFrameData(
   frame_data->pose = std::move(pose);
   frame_data->time_delta = now - base::TimeTicks();
 
-  if (options && options->include_plane_data) {
-    frame_data->detected_planes_data = arcore_->GetDetectedPlanesData();
-  }
-
   fps_meter_.AddFrame(now);
   TRACE_COUNTER1("gpu", "WebXR FPS", fps_meter_.GetFPS());
 
@@ -788,41 +784,28 @@ void ArCoreGl::UnsubscribeFromHitTest(uint64_t subscription_id) {
   arcore_->UnsubscribeFromHitTest(subscription_id);
 }
 
-void ArCoreGl::CreateAnchor(mojom::PosePtr anchor_pose,
-                            CreateAnchorCallback callback) {
+void ArCoreGl::CreateAnchor(
+    mojom::XRNativeOriginInformationPtr native_origin_information,
+    mojom::PosePtr native_origin_from_anchor,
+    CreateAnchorCallback callback) {
   DVLOG(2) << __func__;
 
-  DCHECK(anchor_pose);
+  DCHECK(native_origin_information);
+  DCHECK(native_origin_from_anchor);
 
-  base::Optional<uint64_t> maybe_anchor_id =
-      arcore_->CreateAnchor(*anchor_pose);
-
-  if (maybe_anchor_id) {
-    std::move(callback).Run(device::mojom::CreateAnchorResult::SUCCESS,
-                            *maybe_anchor_id);
-  } else {
-    std::move(callback).Run(device::mojom::CreateAnchorResult::FAILURE, 0);
-  }
+  arcore_->CreateAnchor(*native_origin_information, *native_origin_from_anchor,
+                        std::move(callback));
 }
 
-void ArCoreGl::CreatePlaneAnchor(mojom::PosePtr anchor_pose,
+void ArCoreGl::CreatePlaneAnchor(mojom::PosePtr plane_from_anchor,
                                  uint64_t plane_id,
                                  CreatePlaneAnchorCallback callback) {
   DVLOG(2) << __func__ << ": plane_id=" << plane_id;
 
-  DCHECK(anchor_pose);
+  DCHECK(plane_from_anchor);
 
-  base::Optional<uint64_t> maybe_anchor_id =
-      arcore_->CreateAnchor(*anchor_pose, plane_id);
-
-  if (maybe_anchor_id) {
-    DVLOG(3) << __func__ << ": succeeded!";
-    std::move(callback).Run(device::mojom::CreateAnchorResult::SUCCESS,
-                            *maybe_anchor_id);
-  } else {
-    DVLOG(2) << __func__ << ": failed!";
-    std::move(callback).Run(device::mojom::CreateAnchorResult::FAILURE, 0);
-  }
+  arcore_->CreatePlaneAttachedAnchor(*plane_from_anchor, plane_id,
+                                     std::move(callback));
 }
 
 void ArCoreGl::DetachAnchor(uint64_t anchor_id) {
@@ -857,17 +840,31 @@ void ArCoreGl::ProcessFrame(
   if (frame_data->pose) {
     frame_data->input_state = GetInputSourceStates();
 
+    // TODO(https://crbug.com/1071224): Simplify code by introducing a
+    // device::Pose class that would handle conversions from pose to transform &
+    // vice versa.
+    gfx::Transform mojo_from_viewer =
+        mojo::ConvertTo<gfx::Transform>(frame_data->pose);
+
     // Get results for hit test subscriptions.
     frame_data->hit_test_subscription_results =
-        arcore_->GetHitTestSubscriptionResults(
-            mojo::ConvertTo<gfx::Transform>(frame_data->pose),
-            frame_data->input_state);
+        arcore_->GetHitTestSubscriptionResults(mojo_from_viewer,
+                                               *frame_data->input_state);
+
+    arcore_->ProcessAnchorCreationRequests(
+        mojo_from_viewer, *frame_data->input_state,
+        frame_data->time_delta + base::TimeTicks());
   }
 
   // Get anchors data, including anchors created this frame.
   frame_data->anchors_data = arcore_->GetAnchorsData();
 
-  // Get lighting estimation data
+  // Get planes data if it was requested.
+  if (options && options->include_plane_data) {
+    frame_data->detected_planes_data = arcore_->GetDetectedPlanesData();
+  }
+
+  // Get lighting estimation data if it was requested.
   if (options && options->include_lighting_estimation_data) {
     frame_data->light_estimation_data = arcore_->GetLightEstimationData();
   }
@@ -983,9 +980,9 @@ std::vector<mojom::XRInputSourceStatePtr> ArCoreGl::GetInputSourceStates() {
     // be projected onto the projection matrix near plane. See also
     // third_party/blink/renderer/modules/xr/xr_view.cc's UnprojectPointer.
     const float x_normalized =
-        screen_last_touch.x() / transfer_size_.width() * 2.f - 1.f;
+        screen_last_touch.x() / camera_image_size_.width() * 2.f - 1.f;
     const float y_normalized =
-        (1.f - screen_last_touch.y() / transfer_size_.height()) * 2.f - 1.f;
+        (1.f - screen_last_touch.y() / camera_image_size_.height()) * 2.f - 1.f;
     gfx::Point3F touch_point(x_normalized, y_normalized, -1.f);
     DVLOG(3) << __func__ << ": touch_point=" << touch_point.ToString();
     inverse_projection_.TransformPoint(&touch_point);

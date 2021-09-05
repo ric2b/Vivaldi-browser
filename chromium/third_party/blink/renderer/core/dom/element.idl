@@ -97,7 +97,7 @@ callback ScrollStateCallback = void (ScrollState scrollState);
     [CEReactions, CustomElementCallbacks, RaisesException] void insertAdjacentHTML(DOMString position, HTMLString text);
 
     // Declarative Shadow DOM getInnerHTML() function.
-    [RuntimeEnabled=DeclarativeShadowDOM, RuntimeCallStatsCounter=ElementGetInnerHTML] HTMLString getInnerHTML(boolean includeShadowRoots);
+    [RuntimeEnabled=DeclarativeShadowDOM, RuntimeCallStatsCounter=ElementGetInnerHTML] HTMLString getInnerHTML(optional GetInnerHTMLOptions options = {});
 
     // Pointer Lock
     // https://w3c.github.io/pointerlock/#extensions-to-the-element-interface
@@ -143,13 +143,12 @@ callback ScrollStateCallback = void (ScrollState scrollState);
     // Accessibility Object Model
     [RuntimeEnabled=AccessibilityObjectModel] readonly attribute AccessibleNode? accessibleNode;
 
-    [RuntimeEnabled=InvisibleDOM, CEReactions, CustomElementCallbacks, Reflect, ReflectOnly=("static","invisible"), ReflectEmpty="invisible", ReflectInvalid="invisible"] attribute DOMString invisible;
-
     // Event handler attributes
     attribute EventHandler onbeforecopy;
     attribute EventHandler onbeforecut;
     attribute EventHandler onbeforepaste;
     attribute EventHandler onsearch;
+    [RuntimeEnabled=BeforeMatchEvent] attribute EventHandler onbeforematch;
 
     // Element Timing
     [Affects=Nothing, CEReactions, Reflect=elementtiming] attribute DOMString elementTiming;

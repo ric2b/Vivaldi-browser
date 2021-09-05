@@ -4,13 +4,14 @@
 
 #include "net/reporting/reporting_header_parser.h"
 
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/json/json_reader.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -241,9 +242,11 @@ void ReportingHeaderParser::RecordHeaderDiscardedForJsonTooBig() {
 }
 
 // static
-void ReportingHeaderParser::ParseHeader(ReportingContext* context,
-                                        const GURL& url,
-                                        std::unique_ptr<base::Value> value) {
+void ReportingHeaderParser::ParseHeader(
+    ReportingContext* context,
+    const NetworkIsolationKey& network_isolation_key,
+    const GURL& url,
+    std::unique_ptr<base::Value> value) {
   DCHECK(url.SchemeIsCryptographic());
 
   const base::ListValue* group_list = nullptr;
@@ -254,7 +257,6 @@ void ReportingHeaderParser::ParseHeader(ReportingContext* context,
   ReportingCache* cache = context->cache();
 
   url::Origin origin = url::Origin::Create(url);
-  NetworkIsolationKey network_isolation_key = NetworkIsolationKey::Todo();
 
   std::vector<ReportingEndpointGroup> parsed_header;
 
@@ -279,8 +281,8 @@ void ReportingHeaderParser::ParseHeader(ReportingContext* context,
     return;
   }
 
-  // TODO(chlily): Pass NIK to cache.
-  cache->OnParsedHeader(origin, std::move(parsed_header));
+  cache->OnParsedHeader(network_isolation_key, origin,
+                        std::move(parsed_header));
   RecordHeaderOutcome(HeaderOutcome::PARSED);
 }
 

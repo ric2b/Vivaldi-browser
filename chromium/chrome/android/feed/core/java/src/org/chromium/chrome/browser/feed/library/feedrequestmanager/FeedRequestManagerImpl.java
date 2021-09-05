@@ -11,6 +11,7 @@ import android.util.DisplayMetrics;
 import com.google.protobuf.ByteString;
 
 import org.chromium.base.Consumer;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.feed.library.api.host.config.ApplicationInfo;
 import org.chromium.chrome.browser.feed.library.api.host.config.Configuration;
 import org.chromium.chrome.browser.feed.library.api.host.config.Configuration.ConfigKey;
@@ -54,6 +55,7 @@ import org.chromium.components.feed.core.proto.wire.FeedActionQueryDataProto.Fee
 import org.chromium.components.feed.core.proto.wire.FeedActionQueryDataProto.FeedActionQueryDataItem;
 import org.chromium.components.feed.core.proto.wire.FeedQueryProto.FeedQuery;
 import org.chromium.components.feed.core.proto.wire.FeedRequestProto.FeedRequest;
+import org.chromium.components.feed.core.proto.wire.FeedResponseProto.FeedResponse;
 import org.chromium.components.feed.core.proto.wire.RequestProto.Request;
 import org.chromium.components.feed.core.proto.wire.RequestProto.Request.RequestVersion;
 import org.chromium.components.feed.core.proto.wire.ResponseProto.Response;
@@ -240,7 +242,8 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
                 if (!requestBuilder.hasPageToken()) {
                     mScheduler.onRequestError(input.getResponseCode());
                 }
-                consumer.accept(Result.failure());
+                mMainThreadRunner.execute(
+                        "FeedRequestManagerImpl consumer", () -> consumer.accept(Result.failure()));
                 return;
             }
             handleResponseBytes(input.getResponseBody(), consumer);
@@ -260,12 +263,21 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
                         mExtensionRegistry.getExtensionRegistry());
             } catch (IOException e) {
                 Logger.e(TAG, e, "Response parse failed");
-                consumer.accept(Result.failure());
+                mMainThreadRunner.execute(
+                        "FeedRequestManagerImpl consumer", () -> consumer.accept(Result.failure()));
                 return;
             }
+            logServerCapabilities(response);
             mMainThreadRunner.execute("FeedRequestManagerImpl consumer",
                     () -> consumer.accept(mProtocolAdapter.createModel(response)));
         });
+    }
+
+    private static void logServerCapabilities(Response response) {
+        FeedResponse feedResponse = response.getExtension(FeedResponse.feedResponse);
+        List<Capability> capabilities = feedResponse.getServerCapabilitiesList();
+        RecordHistogram.recordBooleanHistogram("ContentSuggestions.Feed.NoticeCardFulfilled",
+                capabilities.contains(Capability.REPORT_FEED_USER_ACTIONS_NOTICE_CARD));
     }
 
     private static final class RequestBuilder {
@@ -370,6 +382,9 @@ public final class FeedRequestManagerImpl implements FeedRequestManager {
 
             if (ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)) {
                 feedRequestBuilder.addClientCapability(Capability.CLICK_ACTION);
+                feedRequestBuilder.addClientCapability(Capability.VIEW_ACTION);
+                feedRequestBuilder.addClientCapability(
+                        Capability.REPORT_FEED_USER_ACTIONS_NOTICE_CARD);
             }
 
             feedRequestBuilder.addClientCapability(Capability.BASE_UI);

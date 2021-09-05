@@ -44,5 +44,9 @@ const char kCloudPolicyOverridesPlatformPolicy[] = "policy.cloud_override";
 const char kNativeWindowOcclusionEnabled[] =
     "policy.native_window_occlusion_enabled";
 
+// Boolean policy preference to disable the User-Agent Client Hints feature.
+const char kUserAgentClientHintsEnabled[] =
+    "policy.user_agent_client_hints_enabled";
+
 }  // namespace policy_prefs
 }  // namespace policy

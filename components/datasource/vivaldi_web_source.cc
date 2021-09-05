@@ -96,11 +96,3 @@ std::string VivaldiWebSource::GetMimeType(const std::string&) {
 bool VivaldiWebSource::AllowCaching() {
   return false;
 }
-
-bool VivaldiWebSource::ShouldServiceRequest(
-    const GURL& url,
-    content::ResourceContext* resource_context,
-    int render_process_id) {
-  return URLDataSource::ShouldServiceRequest(url, resource_context,
-                                             render_process_id);
-}

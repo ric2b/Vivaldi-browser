@@ -44,6 +44,13 @@ void TestPaymentsClient::GetUnmaskDetails(
     std::move(callback).Run(AutofillClient::SUCCESS, unmask_details_);
 }
 
+void TestPaymentsClient::UnmaskCard(
+    const UnmaskRequestDetails& unmask_request,
+    base::OnceCallback<void(AutofillClient::PaymentsRpcResult,
+                            UnmaskResponseDetails&)> callback) {
+  unmask_request_ = &unmask_request;
+}
+
 void TestPaymentsClient::GetUploadDetails(
     const std::vector<AutofillProfile>& addresses,
     const int detected_values,
@@ -166,7 +173,6 @@ std::unique_ptr<base::Value> TestPaymentsClient::LegalMessage() {
                                          "     } ]"
                                          "  } ]"
                                          "}"));
-    return std::unique_ptr<base::Value>(base::JSONReader::ReadDeprecated("{}"));
   } else {
     return std::unique_ptr<base::Value>(base::JSONReader::ReadDeprecated(
         "{"

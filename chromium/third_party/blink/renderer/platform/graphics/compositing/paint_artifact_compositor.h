@@ -144,9 +144,15 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   //
   // Populates |animation_element_ids| with the CompositorElementId of all
   // animations for which we saw a paint chunk and created a layer.
+  // |scroll_translation_nodes| is the complete set of scroll nodes, including
+  // noncomposited nodes, and is used for Scroll Unification to generate scroll
+  // nodes for noncomposited scrollers to complete the compositor's scroll
+  // property tree.
   void Update(scoped_refptr<const PaintArtifact>,
               const ViewportProperties& viewport_properties,
-              const Settings& settings);
+              const Settings& settings,
+              const Vector<const TransformPaintPropertyNode*>&
+                  scroll_translation_nodes);
 
   bool DirectlyUpdateCompositedOpacityValue(const EffectPaintPropertyNode&);
   bool DirectlyUpdateScrollOffsetTransform(const TransformPaintPropertyNode&);
@@ -261,6 +267,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
     FloatRect VisualRectForOverlapTesting() const;
 
+    bool MayDrawContent(const PaintArtifact&) const;
+
     // The rects are in the space of property_tree_state.
     FloatRect bounds;
     FloatRect rect_known_to_be_opaque;
@@ -303,7 +311,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
                      const EffectPaintPropertyNode&,
                      Vector<PaintChunk>::const_iterator& chunk_cursor);
   static bool MightOverlap(const PendingLayer&, const PendingLayer&);
-  bool DecompositeEffect(const EffectPaintPropertyNode& unaliased_parent_effect,
+  bool DecompositeEffect(const PaintArtifact&,
+                         const EffectPaintPropertyNode& unaliased_parent_effect,
                          wtf_size_t first_layer_in_parent_group_index,
                          const EffectPaintPropertyNode& unaliased_effect,
                          wtf_size_t layer_index);
@@ -314,7 +323,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
       const PendingLayer&,
       Vector<std::unique_ptr<ContentLayerClientImpl>>&
           new_content_layer_clients,
-      Vector<scoped_refptr<cc::Layer>>& new_scroll_hit_test_layers);
+      Vector<scoped_refptr<cc::Layer>>& new_scroll_hit_test_layers,
+      Vector<scoped_refptr<cc::ScrollbarLayerBase>>& new_scrollbar_layers);
 
   bool PropertyTreeStateChanged(const PropertyTreeState&) const;
 
@@ -384,6 +394,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   Vector<SynthesizedClipEntry> synthesized_clip_cache_;
 
   Vector<scoped_refptr<cc::Layer>> scroll_hit_test_layers_;
+  Vector<scoped_refptr<cc::ScrollbarLayerBase>> scrollbar_layers_;
 
   Vector<PendingLayer, 0> pending_layers_;
 

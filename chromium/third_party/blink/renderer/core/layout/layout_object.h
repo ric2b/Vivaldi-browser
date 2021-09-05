@@ -389,9 +389,15 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   LayoutBox* EnclosingScrollableBox() const;
 
   // Returns the root of the inline formatting context |this| belongs to. |this|
-  // must be |IsInline()|. The root is the object that holds |NGPaintFragment|
-  // if it's in LayoutNG context.
+  // must be |IsInline()|. The root is the object that holds |NGInlineNodeData|
+  // and the root |NGPaintFragment| if it's in LayoutNG context. See also
+  // |ContainingFragmentainer()|.
   LayoutBlockFlow* RootInlineFormattingContext() const;
+
+  // Returns the |LayoutBlockFlow| that has |NGFragmentItems| for |this|. This
+  // is usually the same as |RootInlineFormattingContext()|, but it is the child
+  // of that when the IFC has multicol applied. TODO(crbug.com/1076470)
+  LayoutBlockFlow* FragmentItemsContainer() const;
 
   // Returns the containing block flow if it's a LayoutNGBlockFlow, or nullptr
   // otherwise. Note that the semantics is different from |EnclosingBox| for
@@ -545,6 +551,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
            ShouldApplySizeContainment();
   }
 
+  void NotifyPriorityScrollAnchorStatusChanged();
+
  private:
   //////////////////////////////////////////
   // Helper functions. Dangerous to use!
@@ -669,6 +677,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsLayoutTableCol() const {
     return IsOfType(kLayoutObjectLayoutTableCol);
   }
+  bool IsLayoutNGTableCol() const {
+    return IsOfType(kLayoutObjectLayoutNGTableCol);
+  }
   bool IsListItem() const { return IsOfType(kLayoutObjectListItem); }
   bool IsMathML() const { return IsOfType(kLayoutObjectMathML); }
   bool IsMathMLRoot() const { return IsOfType(kLayoutObjectMathMLRoot); }
@@ -707,6 +718,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool IsTable() const { return IsOfType(kLayoutObjectTable); }
   bool IsTableCaption() const { return IsOfType(kLayoutObjectTableCaption); }
   bool IsTableCell() const { return IsOfType(kLayoutObjectTableCell); }
+  bool IsTableCellLegacy() const {
+    return IsOfType(kLayoutObjectTableCellLegacy);
+  }
   bool IsTableRow() const { return IsOfType(kLayoutObjectTableRow); }
   bool IsTableSection() const { return IsOfType(kLayoutObjectTableSection); }
   bool IsTextArea() const { return IsOfType(kLayoutObjectTextArea); }
@@ -765,6 +779,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   static inline bool IsAfterContent(const LayoutObject* obj) {
     return obj && obj->IsAfterContent();
   }
+
+  // Returns true if the text is generated (from, e.g., list marker,
+  // pseudo-element, ...) instead of from a DOM text node. See
+  // |NGTextType::kLayoutGenerated| for the other type of generated text.
+  bool IsStyleGenerated() const;
 
   bool HasCounterNodeMap() const { return bitfields_.HasCounterNodeMap(); }
   void SetHasCounterNodeMap(bool has_counter_node_map) {
@@ -1074,6 +1093,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool NeedsCollectInlines() const { return bitfields_.NeedsCollectInlines(); }
 
+  bool MaybeHasPercentHeightDescendant() const {
+    return bitfields_.MaybeHasPercentHeightDescendant();
+  }
+  void SetMaybeHasPercentHeightDescendant() {
+    bitfields_.SetMaybeHasPercentHeightDescendant(true);
+  }
+
   // Return true if the min/max intrinsic logical widths aren't up-to-date.
   // Note that for objects that *don't* need to calculate intrinsic logical
   // widths (e.g. if inline-size is a fixed value, and no other inline lengths
@@ -1082,6 +1108,19 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // calculated).
   bool IntrinsicLogicalWidthsDirty() const {
     return bitfields_.IntrinsicLogicalWidthsDirty();
+  }
+
+  bool IntrinsicLogicalWidthsDependsOnPercentageBlockSize() const {
+    return bitfields_.IntrinsicLogicalWidthsDependsOnPercentageBlockSize();
+  }
+  void SetIntrinsicLogicalWidthsDependsOnPercentageBlockSize(bool b) {
+    bitfields_.SetIntrinsicLogicalWidthsDependsOnPercentageBlockSize(b);
+  }
+  bool IntrinsicLogicalWidthsChildDependsOnPercentageBlockSize() const {
+    return bitfields_.IntrinsicLogicalWidthsChildDependsOnPercentageBlockSize();
+  }
+  void SetIntrinsicLogicalWidthsChildDependsOnPercentageBlockSize(bool b) {
+    bitfields_.SetIntrinsicLogicalWidthsChildDependsOnPercentageBlockSize(b);
   }
 
   bool NeedsLayoutOverflowRecalc() const {
@@ -1125,14 +1164,16 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool HasHiddenBackface() const {
     return StyleRef().BackfaceVisibility() == EBackfaceVisibility::kHidden;
   }
-  bool HasBackdropFilter() const { return StyleRef().HasBackdropFilter(); }
+  bool HasNonInitialBackdropFilter() const {
+    return StyleRef().HasNonInitialBackdropFilter();
+  }
 
   // Returns |true| if any property that renders using filter operations is
   // used (including, but not limited to, 'filter' and 'box-reflect').
   // Not calling style()->hasFilterInducingProperty because some objects force
   // to ignore reflection style (e.g. LayoutInline).
   bool HasFilterInducingProperty() const {
-    return StyleRef().HasFilter() || HasReflection();
+    return StyleRef().HasNonInitialFilter() || HasReflection();
   }
 
   bool HasShapeOutside() const { return StyleRef().ShapeOutside(); }
@@ -1313,6 +1354,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // Returns true if style would make this object a fixed container.
   // This value gets cached by bitfields_.can_contain_fixed_position_objects_.
+  // TODO(pdr): Should this function be unified with
+  // ComputedStyle::CanContainFixedPositionObjects?
   bool ComputeIsFixedContainer(const ComputedStyle* style) const;
 
   virtual LayoutObject* HoverAncestor() const { return Parent(); }
@@ -1359,9 +1402,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     SetIntrinsicLogicalWidthsDirty();
   }
 
+  // Returns false when certain font changes (e.g., font-face rule changes, web
+  // font loaded, etc) have occurred, in which case |this| needs relayout.
+  bool IsFontFallbackValid() const;
+
   // Traverses subtree, and marks all layout objects as need relayout, repaint
   // and preferred width recalc. Also invalidates shaping on all text nodes.
-  // TODO(crbug.com/441925): Try to partially invalidate layout on font updates.
   virtual void InvalidateSubtreeLayoutForFontUpdates();
 
   void InvalidateIntersectionObserverCachedRects();
@@ -2058,7 +2104,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   bool CreatesGroup() const {
     return StyleRef().HasOpacity() || HasMask() || HasClipPath() ||
-           HasFilterInducingProperty() || HasBackdropFilter() ||
+           HasFilterInducingProperty() || HasNonInitialBackdropFilter() ||
            StyleRef().HasBlendMode();
   }
 
@@ -2525,7 +2571,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool BeingDestroyed() const { return bitfields_.BeingDestroyed(); }
 
   DisplayLockContext* GetDisplayLockContext() const {
-    if (!RuntimeEnabledFeatures::CSSSubtreeVisibilityEnabled())
+    if (!RuntimeEnabledFeatures::CSSContentVisibilityEnabled())
       return nullptr;
     auto* element = DynamicTo<Element>(GetNode());
     if (!element)
@@ -2546,6 +2592,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectFrameSet,
     kLayoutObjectInsideListMarker,
     kLayoutObjectLayoutTableCol,
+    kLayoutObjectLayoutNGTableCol,
     kLayoutObjectListItem,
     kLayoutObjectMathML,
     kLayoutObjectMathMLRoot,
@@ -2553,6 +2600,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectNGBlockFlow,
     kLayoutObjectNGFieldset,
     kLayoutObjectNGFlexibleBox,
+    kLayoutObjectNGGrid,
     kLayoutObjectNGMixin,
     kLayoutObjectNGListItem,
     kLayoutObjectNGInsideListMarker,
@@ -2585,6 +2633,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectTable,
     kLayoutObjectTableCaption,
     kLayoutObjectTableCell,
+    kLayoutObjectTableCellLegacy,
     kLayoutObjectTableRow,
     kLayoutObjectTableSection,
     kLayoutObjectTextArea,
@@ -2875,7 +2924,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           self_needs_layout_overflow_recalc_(false),
           child_needs_layout_overflow_recalc_(false),
           intrinsic_logical_widths_dirty_(false),
+          intrinsic_logical_widths_depends_on_percentage_block_size_(true),
+          intrinsic_logical_widths_child_depends_on_percentage_block_size_(
+              true),
           needs_collect_inlines_(false),
+          maybe_has_percent_height_descendant_(false),
           should_check_for_paint_invalidation_(true),
           subtree_should_check_for_paint_invalidation_(false),
           should_delay_full_paint_invalidation_(false),
@@ -2990,10 +3043,30 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     ADD_BOOLEAN_BITFIELD(intrinsic_logical_widths_dirty_,
                          IntrinsicLogicalWidthsDirty);
 
+    // This boolean indicates if the cached intrinsic logical widths may depend
+    // on the input %-block-size given by the parent.
+    ADD_BOOLEAN_BITFIELD(
+        intrinsic_logical_widths_depends_on_percentage_block_size_,
+        IntrinsicLogicalWidthsDependsOnPercentageBlockSize);
+
+    // This boolean indicates if a *child* of this node may depend on the input
+    // %-block-size given by the parent. Must always be true for legacy layout
+    // roots.
+    ADD_BOOLEAN_BITFIELD(
+        intrinsic_logical_widths_child_depends_on_percentage_block_size_,
+        IntrinsicLogicalWidthsChildDependsOnPercentageBlockSize);
+
     // This flag is set on inline container boxes that need to run the
     // Pre-layout phase in LayoutNG. See NGInlineNode::CollectInlines().
     // Also maybe set to inline boxes to optimize the propagation.
     ADD_BOOLEAN_BITFIELD(needs_collect_inlines_, NeedsCollectInlines);
+
+    // This boolean tracks if a containing-block potentially has a percentage
+    // height descentant within its subtree. A relayout may be required if a
+    // %-block-size or definiteness changes. This flag is only set, and never
+    // cleared.
+    ADD_BOOLEAN_BITFIELD(maybe_has_percent_height_descendant_,
+                         MaybeHasPercentHeightDescendant);
 
     // Paint related dirty bits.
     ADD_BOOLEAN_BITFIELD(should_check_for_paint_invalidation_,
@@ -3374,10 +3447,6 @@ inline bool LayoutObject::CanTraversePhysicalFragments() const {
   // will not attempt to add support for them here.
   if (PaintFragment())
     return false;
-  // We don't support fragmentation traversal inside block fragmentation just
-  // yet.
-  if (IsInsideFlowThread())
-    return false;
   // The NG paint system currently doesn't support table-cells.
   if (IsTableCell())
     return false;
@@ -3490,7 +3559,11 @@ inline void LayoutObject::SetIsInLayoutNGInlineFormattingContext(
   if (IsInLayoutNGInlineFormattingContext() == new_value)
     return;
   InLayoutNGInlineFormattingContextWillChange(new_value);
+  // The association cache for inline fragments is in union. Make sure the
+  // cache is cleared before and after changing this flag.
+  DCHECK(!HasInlineFragments());
   bitfields_.SetIsInLayoutNGInlineFormattingContext(new_value);
+  DCHECK(!HasInlineFragments());
 }
 
 inline void LayoutObject::SetHasBoxDecorationBackground(bool b) {

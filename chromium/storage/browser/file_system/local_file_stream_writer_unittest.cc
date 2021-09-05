@@ -13,7 +13,6 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
@@ -55,7 +54,7 @@ class LocalFileStreamWriterTest : public testing::Test {
   base::FilePath CreateFileWithContent(const std::string& name,
                                        const std::string& data) {
     base::FilePath path = Path(name);
-    base::WriteFile(path, data.c_str(), data.size());
+    base::WriteFile(path, data);
     return path;
   }
 

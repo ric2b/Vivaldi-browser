@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.drawable.RoundedBitmapDrawable;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.ui.base.ViewUtils;
 
 /**
@@ -22,8 +23,8 @@ public class FaviconUtils {
     /**
      * Creates a {@link RoundedIconGenerator} to generate circular {@link Bitmap}s of favicons.
      * @param resources The {@link Resources} for accessing color and dimen resources.
-     * @return A {@link RoundedIconGenerator} that uses the default circle icon style. Intended for
-     *         monograms, e.g. a circle with character(s) in the center.
+     * @return A {@link RoundedIconGenerator} that uses the default circle icon style. Intended
+     *         for monograms, e.g. a circle with character(s) in the center.
      */
     public static RoundedIconGenerator createCircularIconGenerator(Resources resources) {
         int displayedIconSize = resources.getDimensionPixelSize(R.dimen.circular_monogram_size);
@@ -37,8 +38,9 @@ public class FaviconUtils {
      * Creates a {@link RoundedIconGenerator} to generate rounded rectangular {@link Bitmap}s of
      * favicons.
      * @param resources The {@link Resources} for accessing color and dimen resources.
-     * @return A {@link RoundedIconGenerator} that uses the default rounded rectangle icon style.
-     *         Intended for monograms, e.g. a rounded rectangle with character(s) in the center.
+     * @return A {@link RoundedIconGenerator} that uses the default rounded rectangle icon
+     *         style. Intended for monograms, e.g. a rounded rectangle with character(s) in the
+     *         center.
      */
     public static RoundedIconGenerator createRoundedRectangleIconGenerator(Resources resources) {
         int displayedIconSize = resources.getDimensionPixelSize(R.dimen.default_favicon_size);
@@ -69,9 +71,9 @@ public class FaviconUtils {
      *         generated.
      * @param url Url to generate a monogram. Used only if {@code icon} is null.
      * @param fallbackColor Color to generate a monogram. Used only if {@code icon} is null.
-     * @param iconGenerator RoundedIconGenerator to generate a monogram. Used only if {@code icon}
-     *         is null. Side effect: {@link RoundedIconGenerator#setBackgroundColor(int)} will be
-     *         called.
+     * @param iconGenerator RoundedIconGenerator to generate a monogram. Used only if {@code
+     *         icon} is null. Side effect: {@link RoundedIconGenerator#setBackgroundColor(int)}
+     *         will be called.
      * @param resources {@link Resources} to create a {@link BitmapDrawable}.
      * @param iconSize Width and height of the returned icon in px.
      * @return A {@link Drawable} to be displayed as the favicon.
@@ -95,8 +97,8 @@ public class FaviconUtils {
      * @param icon {@link Bitmap} with the icon to display. If null, a fallback monogram will be
      *         generated.
      * @param url Url to generate a monogram. Used only if {@code icon} is null.
-     * @param iconGenerator RoundedIconGenerator to generate a monogram. Used only if {@code icon}
-     *         is null.
+     * @param iconGenerator RoundedIconGenerator to generate a monogram. Used only if {@code
+     *         icon} is null.
      * @param defaultFaviconHelper Helper to generate default favicons.
      * @param resources {@link Resources} to create a {@link BitmapDrawable}.
      * @param iconSize Width and height of the returned icon.

@@ -11,10 +11,11 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "ui/accessibility/accessibility_switches.h"
@@ -567,14 +568,8 @@ struct AXTreeUpdateState {
   const AXTree& tree;
 };
 
-struct AXTree::NodeSetSizePosInSetInfo {
-  NodeSetSizePosInSetInfo() = default;
-  ~NodeSetSizePosInSetInfo() = default;
-
-  int32_t pos_in_set = 0;
-  int32_t set_size = 0;
-  base::Optional<int> lowest_hierarchical_level;
-};
+AXTree::NodeSetSizePosInSetInfo::NodeSetSizePosInSetInfo() = default;
+AXTree::NodeSetSizePosInSetInfo::~NodeSetSizePosInSetInfo() = default;
 
 struct AXTree::OrderedSetContent {
   explicit OrderedSetContent(const AXNode* ordered_set = nullptr)

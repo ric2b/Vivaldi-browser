@@ -32,10 +32,10 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_H_
 
 #include "base/time/time.h"
-#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
-#include "third_party/blink/public/common/page/page_visibility_state.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
+#include "third_party/blink/public/mojom/page/page.mojom-shared.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
+#include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -100,12 +100,14 @@ class WebView {
   // their output.
   // |page_handle| is only set for views that are part of a WebContents' frame
   // tree.
+  // TODO(yuzus): Remove |is_hidden| and start using |PageVisibilityState|.
   BLINK_EXPORT static WebView* Create(
       WebViewClient*,
       bool is_hidden,
       bool compositing_enabled,
       WebView* opener,
-      mojo::ScopedInterfaceEndpointHandle page_handle);
+      CrossVariantMojoAssociatedReceiver<mojom::PageBroadcastInterfaceBase>
+          page_handle);
 
   // Destroys the WebView.
   virtual void Close() = 0;
@@ -144,9 +146,6 @@ class WebView {
   virtual bool IsActive() const = 0;
   virtual void SetIsActive(bool) = 0;
 
-  // Allows disabling domain relaxation.
-  virtual void SetDomainRelaxationForbidden(bool, const WebString& scheme) = 0;
-
   // Allows setting the state of the various bars exposed via BarProp
   // properties on the window object. The size related fields of
   // WebWindowFeatures are ignored.
@@ -165,9 +164,6 @@ class WebView {
   virtual WebLocalFrame* FocusedFrame() = 0;
   virtual void SetFocusedFrame(WebFrame*) = 0;
 
-  // Focus the first (last if reverse is true) focusable node.
-  virtual void SetInitialFocus(bool reverse) = 0;
-
   // Smooth scroll the root layer to |targetX|, |targetY| in |duration|.
   virtual void SmoothScroll(int target_x,
                             int target_y,
@@ -176,13 +172,6 @@ class WebView {
   // Advance the focus of the WebView forward to the next element or to the
   // previous element in the tab sequence (if reverse is true).
   virtual void AdvanceFocus(bool reverse) {}
-
-  // Advance the focus from the frame |from| to the next in sequence
-  // (determined by mojom::FocusType) focusable element in frame |to|. Used when
-  // focus needs to advance to/from a cross-process frame.
-  virtual void AdvanceFocusAcrossFrames(mojom::FocusType,
-                                        WebRemoteFrame* from,
-                                        WebLocalFrame* to) {}
 
   // Changes the zoom and scroll for zooming into an editable element
   // with bounds |element_bounds_in_document| and caret bounds
@@ -278,9 +267,6 @@ class WebView {
 
   // Indicates that view's preferred size changes will be sent to the browser.
   virtual void EnablePreferredSizeChangedMode() = 0;
-
-  // Sets the display mode of the web app.
-  virtual void SetDisplayMode(blink::mojom::DisplayMode) = 0;
 
   // Sets the ratio as computed by computePageScaleConstraints.
   // TODO(oshima): Remove this once the device scale factor implementation is
@@ -425,14 +411,9 @@ class WebView {
   // Visibility -----------------------------------------------------------
 
   // Sets the visibility of the WebView.
-  virtual void SetVisibilityState(PageVisibilityState visibility_state,
+  virtual void SetVisibilityState(mojom::PageVisibilityState visibility_state,
                                   bool is_initial_state) = 0;
-  virtual PageVisibilityState GetVisibilityState() = 0;
-
-  // FrameOverlay ----------------------------------------------------------
-
-  // Overlay this WebView with a solid color.
-  virtual void SetMainFrameOverlayColor(SkColor) = 0;
+  virtual mojom::PageVisibilityState GetVisibilityState() = 0;
 
   // Page Importance Signals ----------------------------------------------
 
@@ -456,16 +437,6 @@ class WebView {
   // Unhooks eviction, resumes a page and dispatches a pageshow event.
   virtual void RestorePageFromBackForwardCache(
       base::TimeTicks navigation_start) = 0;
-
-  // Testing functionality for TestRunner ---------------------------------
-
-  // Force the webgl context to fail so that webglcontextcreationerror
-  // event gets generated/tested.
-  virtual void ForceNextWebGLContextCreationToFail() = 0;
-
-  // Force the drawing buffer used by webgl contexts to fail so that the webgl
-  // context's ability to deal with that failure gracefully can be tested.
-  virtual void ForceNextDrawingBufferCreationToFail() = 0;
 
   // Autoplay configuration -----------------------------------------------
 

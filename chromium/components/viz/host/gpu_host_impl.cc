@@ -103,6 +103,16 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
       viz_main_(std::move(viz_main)),
       params_(std::move(params)),
       host_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()) {
+  // Create a special GPU info collection service if the GPU process is used for
+  // info collection only.
+#if defined(OS_WIN)
+  if (params.info_collection_gpu_process) {
+    viz_main_->CreateInfoCollectionGpuService(
+        info_collection_gpu_service_remote_.BindNewPipeAndPassReceiver());
+    return;
+  }
+#endif
+
   DCHECK(delegate_);
 
   mojo::PendingRemote<discardable_memory::mojom::DiscardableSharedMemoryManager>
@@ -277,6 +287,14 @@ mojom::GpuService* GpuHostImpl::gpu_service() {
   return gpu_service_remote_.get();
 }
 
+#if defined(OS_WIN)
+mojom::InfoCollectionGpuService* GpuHostImpl::info_collection_gpu_service() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(info_collection_gpu_service_remote_.is_bound());
+  return info_collection_gpu_service_remote_.get();
+}
+#endif
+
 #if defined(USE_OZONE)
 
 void GpuHostImpl::InitOzone() {
@@ -287,36 +305,17 @@ void GpuHostImpl::InitOzone() {
   // The Ozone/Wayland requires mojo communication to be established to be
   // functional with a separate gpu process. Thus, using the PlatformProperties,
   // check if there is such a requirement.
-  if (features::IsOzoneDrmMojo() ||
-      ui::OzonePlatform::GetInstance()->GetPlatformProperties().requires_mojo) {
-    // TODO(rjkroege): Remove the legacy IPC code paths when no longer
-    // necessary. https://crbug.com/806092
-    auto interface_binder = base::BindRepeating(&GpuHostImpl::BindInterface,
-                                                weak_ptr_factory_.GetWeakPtr());
-    auto terminate_callback = base::BindOnce(&GpuHostImpl::TerminateGpuProcess,
-                                             weak_ptr_factory_.GetWeakPtr());
+  auto interface_binder = base::BindRepeating(&GpuHostImpl::BindInterface,
+                                              weak_ptr_factory_.GetWeakPtr());
+  auto terminate_callback = base::BindOnce(&GpuHostImpl::TerminateGpuProcess,
+                                           weak_ptr_factory_.GetWeakPtr());
 
-    ui::OzonePlatform::GetInstance()
-        ->GetGpuPlatformSupportHost()
-        ->OnGpuServiceLaunched(params_.restart_id,
-                               params_.main_thread_task_runner,
-                               host_thread_task_runner_, interface_binder,
-                               std::move(terminate_callback));
-  } else {
-    auto send_callback = base::BindRepeating(
-        [](base::WeakPtr<GpuHostImpl> host, IPC::Message* message) {
-          if (host)
-            host->delegate_->SendGpuProcessMessage(message);
-          else
-            delete message;
-        },
-        weak_ptr_factory_.GetWeakPtr());
-    ui::OzonePlatform::GetInstance()
-        ->GetGpuPlatformSupportHost()
-        ->OnGpuProcessLaunched(params_.restart_id,
-                               params_.main_thread_task_runner,
-                               host_thread_task_runner_, send_callback);
-  }
+  ui::OzonePlatform::GetInstance()
+      ->GetGpuPlatformSupportHost()
+      ->OnGpuServiceLaunched(params_.restart_id,
+                             params_.main_thread_task_runner,
+                             host_thread_task_runner_, interface_binder,
+                             std::move(terminate_callback));
 }
 
 void GpuHostImpl::TerminateGpuProcess(const std::string& message) {
@@ -483,16 +482,7 @@ void GpuHostImpl::DidLoseContext(bool offscreen,
   TRACE_EVENT2("gpu", "GpuHostImpl::DidLoseContext", "reason", reason, "url",
                active_url.possibly_invalid_spec());
 
-  if (!offscreen || active_url.is_empty()) {
-    // Assume that the loss of the compositor's or accelerated canvas'
-    // context is a serious event and blame the loss on all live
-    // offscreen contexts. This more robustly handles situations where
-    // the GPU process may not actually detect the context loss in the
-    // offscreen context. However, situations have been seen where the
-    // compositor's context can be lost due to driver bugs (as of this
-    // writing, on Android), so allow that possibility.
-    if (!dont_disable_webgl_when_compositor_context_lost_)
-      BlockLiveOffscreenContexts();
+  if (active_url.is_empty()) {
     return;
   }
 

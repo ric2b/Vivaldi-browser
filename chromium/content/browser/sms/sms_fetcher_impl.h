@@ -29,11 +29,17 @@ class CONTENT_EXPORT SmsFetcherImpl : public content::SmsFetcher,
                                       public base::SupportsUserData::Data,
                                       public SmsProvider::Observer {
  public:
-  SmsFetcherImpl(BrowserContext* context,
-                 std::unique_ptr<SmsProvider> provider);
+  SmsFetcherImpl(BrowserContext* context, SmsProvider* provider);
   ~SmsFetcherImpl() override;
 
+  // Called by devices that do not have telephony capabilities and exclusively
+  // listen for SMSes received on other devices.
   void Subscribe(const url::Origin& origin, Subscriber* subscriber) override;
+  // Called by |SmsService| to fetch SMSes retrieved by the SmsProvider from the
+  // requested device.
+  void Subscribe(const url::Origin& origin,
+                 Subscriber* subscriber,
+                 RenderFrameHost* rfh) override;
   void Unsubscribe(const url::Origin& origin, Subscriber* subscriber) override;
 
   // content::SmsProvider::Observer:
@@ -41,9 +47,6 @@ class CONTENT_EXPORT SmsFetcherImpl : public content::SmsFetcher,
                  const std::string& one_time_code) override;
 
   bool HasSubscribers() override;
-  bool CanReceiveSms() override;
-
-  void SetSmsProviderForTesting(std::unique_ptr<SmsProvider> provider);
 
  private:
   void OnRemote(base::Optional<std::string> sms);
@@ -54,7 +57,9 @@ class CONTENT_EXPORT SmsFetcherImpl : public content::SmsFetcher,
   // the BrowserContext itself.
   BrowserContext* context_;
 
-  std::unique_ptr<SmsProvider> provider_;
+  // |provider_| is safe because all instances of SmsProvider are owned
+  // by the BrowserMainLoop, which outlive instances of this class.
+  SmsProvider* const provider_;
 
   SmsQueue subscribers_;
 

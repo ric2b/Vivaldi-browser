@@ -19,6 +19,7 @@
 #include "components/dom_distiller/content/browser/distillable_page_utils.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -82,7 +83,10 @@ class TestOption : public InProcessBrowserTest {
   }
 
   void SetUpOnMainThread() override {
-    ASSERT_TRUE(embedded_test_server()->Start());
+    https_server_ = std::make_unique<net::EmbeddedTestServer>(
+        net::EmbeddedTestServer::TYPE_HTTPS);
+    https_server_->ServeFilesFromSourceDirectory(GetChromeTestDataDir());
+    ASSERT_TRUE(https_server_->Start());
     web_contents_ = browser()->tab_strip_model()->GetActiveWebContents();
     AddObserver(web_contents_, &holder_);
   }
@@ -92,7 +96,7 @@ class TestOption : public InProcessBrowserTest {
 
     GURL article_url(url);
     if (base::StartsWith(url, "/", base::CompareCase::SENSITIVE)) {
-      article_url = embedded_test_server()->GetURL(url);
+      article_url = https_server()->GetURL(url);
     }
 
     // This blocks until the navigation has completely finished.
@@ -114,9 +118,14 @@ class TestOption : public InProcessBrowserTest {
         FROM_HERE, run_loop_->QuitClosure(), delta);
   }
 
+  net::test_server::EmbeddedTestServer* https_server() {
+    return https_server_.get();
+  }
+
   std::unique_ptr<base::RunLoop> run_loop_;
   MockObserver holder_;
   content::WebContents* web_contents_ = nullptr;
+  std::unique_ptr<net::test_server::EmbeddedTestServer> https_server_;
 };
 
 MATCHER(IsDistillable,

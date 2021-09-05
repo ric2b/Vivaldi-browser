@@ -131,6 +131,10 @@ void GPUBuffer::setSubData(uint64_t dst_byte_offset,
                            uint64_t src_byte_offset,
                            uint64_t byte_length,
                            ExceptionState& exception_state) {
+  device_->AddConsoleWarning(
+      "GPUBuffer.setSubData is deprecated: use createBufferMapped "
+      "(with copyBufferToBuffer if needed) "
+      "(but note the design/spec of this API is still in flux)");
   const uint8_t* src_base =
       reinterpret_cast<const uint8_t*>(src.BaseAddressMaybeOnStack());
   size_t src_byte_length = src.ByteLengthAsSizeT();
@@ -256,7 +260,11 @@ void GPUBuffer::DetachArrayBufferForCurrentMapping(ScriptState* script_state) {
 
   // Detach the array buffer by transferring the contents out and dropping them.
   ArrayBufferContents contents;
-  DCHECK(mapped_buffer->Transfer(isolate, contents));
+  bool did_detach = mapped_buffer->Transfer(isolate, contents);
+
+  // |did_detach| would be false if the buffer were already detached.
+  DCHECK(did_detach);
+  DCHECK(mapped_buffer->IsDetached());
 }
 
 }  // namespace blink

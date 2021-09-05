@@ -7,7 +7,6 @@
 #include <string>
 
 #include "chrome/browser/extensions/api/history/history_api.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "db/vivaldi_history_database.h"
 #include "extensions/schema/history_private.h"

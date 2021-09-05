@@ -10,11 +10,12 @@
 #include <string>
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/lazy_instance.h"
-#include "base/logging.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notreached.h"
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/platform_thread.h"
@@ -357,8 +358,7 @@ void AddStartupEventsForTelemetry() {
 }
 
 bool ShouldLogStartupHistogram() {
-  return !WasMainWindowStartupInterrupted() &&
-         !g_process_creation_ticks.is_null();
+  return !WasMainWindowStartupInterrupted();
 }
 
 }  // namespace
@@ -401,6 +401,8 @@ void RecordMessageLoopStartTicks(base::TimeTicks ticks) {
 
 void RecordBrowserMainMessageLoopStart(base::TimeTicks ticks,
                                        bool is_first_run) {
+  DCHECK(!g_application_start_ticks.is_null());
+
   RecordMessageLoopStartTicks(ticks);
 
   // Keep RecordHardFaultHistogram() near the top of this method (as much as
@@ -409,17 +411,15 @@ void RecordBrowserMainMessageLoopStart(base::TimeTicks ticks,
   RecordHardFaultHistogram();
 
   // Record timing of the browser message-loop start time.
-  if (!g_process_creation_ticks.is_null()) {
-    if (is_first_run) {
-      UmaHistogramWithTraceAndTemperature(
-          &base::UmaHistogramLongTimes100,
-          "Startup.BrowserMessageLoopStartTime.FirstRun",
-          g_process_creation_ticks, ticks);
-    } else {
-      UmaHistogramWithTraceAndTemperature(&base::UmaHistogramLongTimes100,
-                                          "Startup.BrowserMessageLoopStartTime",
-                                          g_process_creation_ticks, ticks);
-    }
+  if (is_first_run) {
+    UmaHistogramWithTraceAndTemperature(
+        &base::UmaHistogramLongTimes100,
+        "Startup.BrowserMessageLoopStartTime.FirstRun",
+        g_application_start_ticks, ticks);
+  } else {
+    UmaHistogramWithTraceAndTemperature(&base::UmaHistogramLongTimes100,
+                                        "Startup.BrowserMessageLoopStartTime",
+                                        g_application_start_ticks, ticks);
   }
 
   AddStartupEventsForTelemetry();
@@ -429,14 +429,12 @@ void RecordBrowserMainMessageLoopStart(base::TimeTicks ticks,
       !g_browser_window_display_ticks.is_null()) {
     UmaHistogramWithTraceAndTemperature(
         &base::UmaHistogramLongTimes, "Startup.BrowserWindowDisplay",
-        g_process_creation_ticks, g_browser_window_display_ticks);
+        g_application_start_ticks, g_browser_window_display_ticks);
   }
 
-  // Record timings between process creation, the main() in the executable being
-  // reached and the main() in the shared library being reached.
-  if (!g_process_creation_ticks.is_null() &&
-      !g_application_start_ticks.is_null()) {
-    // Process create to application start.
+  // Process creation to application start. See comment above
+  // RecordApplicationStart().
+  if (!g_process_creation_ticks.is_null()) {
     UmaHistogramWithTraceAndTemperature(
         &base::UmaHistogramLongTimes,
         "Startup.LoadTime.ProcessCreateToApplicationStart",
@@ -470,17 +468,23 @@ void RecordBrowserWindowDisplay(base::TimeTicks ticks) {
 void RecordFirstWebContentsNonEmptyPaint(
     base::TimeTicks now,
     base::TimeTicks render_process_host_init_time) {
+  DCHECK(!g_application_start_ticks.is_null());
+
+#if DCHECK_IS_ON()
   static bool is_first_call = true;
-  if (!is_first_call || now.is_null())
-    return;
+  DCHECK(is_first_call);
   is_first_call = false;
+#endif  // DCHECK_IS_ON()
 
   if (!ShouldLogStartupHistogram())
     return;
 
-  UmaHistogramAndTraceWithTemperatureAndMaxPressure(
-      &base::UmaHistogramLongTimes100,
-      "Startup.FirstWebContents.NonEmptyPaint2", g_process_creation_ticks, now);
+  if (!g_process_creation_ticks.is_null()) {
+    UmaHistogramAndTraceWithTemperatureAndMaxPressure(
+        &base::UmaHistogramLongTimes100,
+        "Startup.FirstWebContents.NonEmptyPaint2", g_process_creation_ticks,
+        now);
+  }
   UmaHistogramAndTraceWithTemperatureAndMaxPressure(
       &base::UmaHistogramLongTimes100,
       "Startup.FirstWebContents.NonEmptyPaint3", g_application_start_ticks,
@@ -497,34 +501,44 @@ void RecordFirstWebContentsNonEmptyPaint(
 }
 
 void RecordFirstWebContentsMainNavigationStart(base::TimeTicks ticks) {
+  DCHECK(!g_application_start_ticks.is_null());
+
+#if DCHECK_IS_ON()
   static bool is_first_call = true;
-  if (!is_first_call || ticks.is_null())
-    return;
+  DCHECK(is_first_call);
   is_first_call = false;
+#endif  // DCHECK_IS_ON()
+
   if (!ShouldLogStartupHistogram())
     return;
 
   UmaHistogramWithTraceAndTemperature(
       &base::UmaHistogramLongTimes100,
-      "Startup.FirstWebContents.MainNavigationStart", g_process_creation_ticks,
+      "Startup.FirstWebContents.MainNavigationStart", g_application_start_ticks,
       ticks);
 }
 
 void RecordFirstWebContentsMainNavigationFinished(base::TimeTicks ticks) {
+  DCHECK(!g_application_start_ticks.is_null());
+
+#if DCHECK_IS_ON()
   static bool is_first_call = true;
-  if (!is_first_call || ticks.is_null())
-    return;
+  DCHECK(is_first_call);
   is_first_call = false;
+#endif  // DCHECK_IS_ON()
+
   if (!ShouldLogStartupHistogram())
     return;
 
   UmaHistogramWithTraceAndTemperature(
       &base::UmaHistogramLongTimes100,
       "Startup.FirstWebContents.MainNavigationFinished",
-      g_process_creation_ticks, ticks);
+      g_application_start_ticks, ticks);
 }
 
 void RecordBrowserWindowFirstPaint(base::TimeTicks ticks) {
+  DCHECK(!g_application_start_ticks.is_null());
+
   static bool is_first_call = true;
   if (!is_first_call || ticks.is_null())
     return;
@@ -534,11 +548,13 @@ void RecordBrowserWindowFirstPaint(base::TimeTicks ticks) {
 
   UmaHistogramWithTraceAndTemperature(&base::UmaHistogramLongTimes100,
                                       "Startup.BrowserWindow.FirstPaint",
-                                      g_process_creation_ticks, ticks);
+                                      g_application_start_ticks, ticks);
 }
 
 void RecordBrowserWindowFirstPaintCompositingEnded(
     const base::TimeTicks ticks) {
+  DCHECK(!g_application_start_ticks.is_null());
+
   static bool is_first_call = true;
   if (!is_first_call || ticks.is_null())
     return;
@@ -549,7 +565,7 @@ void RecordBrowserWindowFirstPaintCompositingEnded(
   UmaHistogramWithTraceAndTemperature(
       &base::UmaHistogramLongTimes100,
       "Startup.BrowserWindow.FirstPaint.CompositingEnded",
-      g_process_creation_ticks, ticks);
+      g_application_start_ticks, ticks);
 }
 
 base::TimeTicks MainEntryPointTicks() {
@@ -557,6 +573,8 @@ base::TimeTicks MainEntryPointTicks() {
 }
 
 void RecordWebFooterDidFirstVisuallyNonEmptyPaint(base::TimeTicks ticks) {
+  DCHECK(!g_application_start_ticks.is_null());
+
   static bool is_first_call = true;
   if (!is_first_call || ticks.is_null())
     return;
@@ -567,10 +585,12 @@ void RecordWebFooterDidFirstVisuallyNonEmptyPaint(base::TimeTicks ticks) {
   UmaHistogramWithTraceAndTemperature(
       &base::UmaHistogramMediumTimes,
       "Startup.WebFooterExperiment.DidFirstVisuallyNonEmptyPaint",
-      g_process_creation_ticks, ticks);
+      g_application_start_ticks, ticks);
 }
 
 void RecordWebFooterCreation(base::TimeTicks ticks) {
+  DCHECK(!g_application_start_ticks.is_null());
+
   static bool is_first_call = true;
   if (!is_first_call || ticks.is_null())
     return;
@@ -580,8 +600,8 @@ void RecordWebFooterCreation(base::TimeTicks ticks) {
 
   UmaHistogramWithTraceAndTemperature(
       &base::UmaHistogramMediumTimes,
-      "Startup.WebFooterExperiment.WebFooterCreation", g_process_creation_ticks,
-      ticks);
+      "Startup.WebFooterExperiment.WebFooterCreation",
+      g_application_start_ticks, ticks);
 }
 
 void OnMemoryPressureBeforeFirstNonEmptyPaint(

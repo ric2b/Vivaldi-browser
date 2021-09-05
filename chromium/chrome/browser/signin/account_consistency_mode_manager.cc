@@ -99,10 +99,6 @@ void AccountConsistencyModeManager::RegisterProfilePrefs(
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   registry->RegisterBooleanPref(kDiceMigrationCompletePref, false);
 #endif
-#if defined(OS_CHROMEOS)
-  registry->RegisterBooleanPref(prefs::kAccountConsistencyMirrorRequired,
-                                false);
-#endif
   registry->RegisterBooleanPref(prefs::kSigninAllowedOnNextStartup, true);
 }
 
@@ -186,9 +182,7 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
 #endif
 
 #if defined(OS_CHROMEOS)
-  return (chromeos::IsAccountManagerAvailable(profile) ||
-          profile->GetPrefs()->GetBoolean(
-              prefs::kAccountConsistencyMirrorRequired))
+  return chromeos::IsAccountManagerAvailable(profile)
              ? AccountConsistencyMethod::kMirror
              : AccountConsistencyMethod::kDisabled;
 #endif
@@ -203,8 +197,14 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
   bool can_enable_dice_for_build = ignore_missing_oauth_client_for_testing_ ||
                                    google_apis::HasOAuthClientConfigured();
   if (!can_enable_dice_for_build) {
-    LOG(WARNING) << "Desktop Identity Consistency cannot be enabled as no "
-                    "OAuth client ID and client secret have been configured.";
+    // Only log this once.
+    static bool logged_warning = []() {
+      LOG(WARNING) << "Desktop Identity Consistency cannot be enabled as no "
+                      "OAuth client ID and client secret have been configured.";
+      return true;
+    }();
+    ALLOW_UNUSED_LOCAL(logged_warning);
+
     return AccountConsistencyMethod::kDisabled;
   }
 

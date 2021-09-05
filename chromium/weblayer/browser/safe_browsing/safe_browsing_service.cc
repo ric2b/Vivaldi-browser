@@ -59,9 +59,9 @@ void MaybeCreateSafeBrowsing(
 }  // namespace
 
 SafeBrowsingService::SafeBrowsingService(const std::string& user_agent)
-    : user_agent_(user_agent) {}
+    : user_agent_(user_agent), safe_browsing_disabled_(false) {}
 
-SafeBrowsingService::~SafeBrowsingService() {}
+SafeBrowsingService::~SafeBrowsingService() = default;
 
 void SafeBrowsingService::Initialize() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -122,7 +122,8 @@ SafeBrowsingService::GetSafeBrowsingUrlCheckerDelegate() {
 
   if (!safe_browsing_url_checker_delegate_) {
     safe_browsing_url_checker_delegate_ = new UrlCheckerDelegateImpl(
-        GetSafeBrowsingDBManager(), GetSafeBrowsingUIManager());
+        GetSafeBrowsingDBManager(), GetSafeBrowsingUIManager(),
+        safe_browsing_disabled_);
   }
 
   return safe_browsing_url_checker_delegate_;
@@ -198,6 +199,40 @@ void SafeBrowsingService::AddInterface(
               &SafeBrowsingService::GetSafeBrowsingUrlCheckerDelegate,
               base::Unretained(this))),
       base::CreateSingleThreadTaskRunner({content::BrowserThread::UI}));
+}
+
+void SafeBrowsingService::StopDBManager() {
+  base::PostTask(FROM_HERE, {content::BrowserThread::IO},
+                 base::BindOnce(&SafeBrowsingService::StopDBManagerOnIOThread,
+                                base::Unretained(this)));
+}
+
+void SafeBrowsingService::StopDBManagerOnIOThread() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  if (safe_browsing_db_manager_) {
+    safe_browsing_db_manager_->StopOnIOThread(true /*shutdown*/);
+    safe_browsing_db_manager_.reset();
+  }
+}
+
+void SafeBrowsingService::SetSafeBrowsingDisabled(bool disabled) {
+  content::GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&SafeBrowsingService::SetSafeBrowsingDisabledOnIOThread,
+                     base::Unretained(this), disabled));
+}
+
+void SafeBrowsingService::SetSafeBrowsingDisabledOnIOThread(bool disabled) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  if (safe_browsing_disabled_ != disabled) {
+    safe_browsing_disabled_ = disabled;
+    // If there is no safe_browsing_url_checker_delegate_ yet the opt_out
+    // setting will be set later during its creation.
+    if (safe_browsing_url_checker_delegate_) {
+      safe_browsing_url_checker_delegate_->SetSafeBrowsingDisabled(disabled);
+    }
+  }
 }
 
 }  // namespace weblayer

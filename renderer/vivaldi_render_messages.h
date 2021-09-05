@@ -90,6 +90,6 @@ IPC_MESSAGE_ROUTED0(VivaldiViewMsg_GetScrollPosition)
 
 IPC_MESSAGE_ROUTED2(VivaldiViewHostMsg_GetScrollPosition_ACK, int, int)
 
-IPC_MESSAGE_ROUTED2(VivaldiViewMsg_ActivateElementFromPoint, int, int)
+IPC_MESSAGE_ROUTED3(VivaldiViewMsg_ActivateElementFromPoint, int, int, int)
 
 #endif // RENDER_VIVALDI_RENDER_MESSAGES_H_

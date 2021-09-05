@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/aura/aura_window_properties.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_id.h"
-#include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/widget/widget.h"
@@ -64,6 +64,13 @@ void FireLocationChangesRecursively(aura::Window* window,
 
   for (auto* child : window->children())
     FireLocationChangesRecursively(child, cache);
+}
+
+std::string GetWindowName(aura::Window* window) {
+  std::string class_name = window->GetName();
+  if (class_name.empty())
+    class_name = "aura::Window";
+  return class_name;
 }
 
 }  // namespace
@@ -136,15 +143,16 @@ void AXWindowObjWrapper::Serialize(ui::AXNodeData* out_node_data) {
                                       *child_ax_tree_id_ptr);
   }
 
-  std::string class_name = window_->GetName();
-  if (class_name.empty())
-    class_name = "aura::Window";
   out_node_data->AddStringAttribute(ax::mojom::StringAttribute::kClassName,
-                                    class_name);
+                                    GetWindowName(window_));
 }
 
 int32_t AXWindowObjWrapper::GetUniqueId() const {
   return unique_id_.Get();
+}
+
+std::string AXWindowObjWrapper::ToString() const {
+  return GetWindowName(window_);
 }
 
 void AXWindowObjWrapper::OnWindowDestroyed(aura::Window* window) {

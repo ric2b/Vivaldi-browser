@@ -118,6 +118,12 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
   DCHECK(context_);
   DCHECK(origin_access_list_);
   DCHECK_NE(mojom::kInvalidProcessId, process_id_);
+  if (params->automatically_assign_isolation_info) {
+    DCHECK(params->isolation_info.IsEmpty());
+    // Only the browser process is currently permitted to use automatically
+    // assigned IsolationInfo, to prevent cross-site information leaks.
+    DCHECK_EQ(mojom::kBrowserProcessId, process_id_);
+  }
   factory_bound_origin_access_list_ = std::make_unique<OriginAccessList>();
   if (params->factory_bound_access_patterns) {
     factory_bound_origin_access_list_->SetAllowListForOrigin(
@@ -174,7 +180,7 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   debug::ScopedRequestCrashKeys request_crash_keys(resource_request);
 
-  if (!IsSane(context_, resource_request, options)) {
+  if (!IsValidRequest(resource_request, options)) {
     mojo::Remote<mojom::URLLoaderClient>(std::move(client))
         ->OnComplete(URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
     return;
@@ -194,7 +200,9 @@ void CorsURLLoaderFactory::CreateLoaderAndStart(
             factory_override_->ShouldSkipCorsEnabledSchemeCheck(),
         std::move(client), traffic_annotation, inner_url_loader_factory,
         origin_access_list_, factory_bound_origin_access_list_.get(),
-        context_->cors_preflight_controller());
+        context_->cors_preflight_controller(),
+        context_->cors_exempt_header_list(),
+        GetAllowAnyCorsExemptHeaderForBrowser());
     auto* raw_loader = loader.get();
     OnLoaderCreated(std::move(loader));
     raw_loader->Start();
@@ -223,9 +231,24 @@ void CorsURLLoaderFactory::DeleteIfNeeded() {
     context_->DestroyURLLoaderFactory(this);
 }
 
-bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
-                                  const ResourceRequest& request,
-                                  uint32_t options) {
+// static
+bool CorsURLLoaderFactory::IsValidCorsExemptHeaders(
+    const base::flat_set<std::string>& allowed_exempt_headers,
+    const net::HttpRequestHeaders& headers) {
+  for (const auto& header : headers.GetHeaderVector()) {
+    if (allowed_exempt_headers.find(header.key) !=
+        allowed_exempt_headers.end()) {
+      continue;
+    }
+    LOG(WARNING) << "|cors_exempt_headers| contains unexpected key: "
+                 << header.value;
+    return false;
+  }
+  return true;
+}
+
+bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
+                                          uint32_t options) {
   // CORS needs a proper origin (including a unique opaque origin). If the
   // request doesn't have one, CORS cannot work.
   if (!request.request_initiator &&
@@ -245,13 +268,21 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
     return false;
   }
 
+  if (request.obey_origin_policy &&
+      (!request.trusted_params ||
+       request.trusted_params->isolation_info.IsEmpty())) {
+    mojo::ReportBadMessage(
+        "Origin policy only allowed on trusted requests with IsolationInfo");
+    return false;
+  }
+
   // Reject request if the restricted prefetch load flag is set but the
   // request's NetworkIsolationKey is not present. This is because the
   // restricted prefetch flag is only used when the browser sets the request's
   // NetworkIsolationKey to correctly cache-partition the resource.
   bool request_network_isolation_key_present =
       request.trusted_params &&
-      !request.trusted_params->network_isolation_key.IsEmpty();
+      !request.trusted_params->isolation_info.IsEmpty();
   if (request.load_flags & net::LOAD_RESTRICTED_PREFETCH &&
       !request_network_isolation_key_present) {
     mojo::ReportBadMessage(
@@ -315,26 +346,15 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
 
     case InitiatorLockCompatibility::kIncorrectLock:
       // Requests from the renderer need to always specify a correct initiator.
-      //
-      // TODO(lukasza): https://crbug.com/920634: Report bad message and return
-      // false below.
       NOTREACHED();
+      // TODO(lukasza): https://crbug.com/920634: Return false below.
       break;
   }
 
-  if (context) {
-    net::HttpRequestHeaders::Iterator header_iterator(
-        request.cors_exempt_headers);
-    const auto& allowed_exempt_headers = context->cors_exempt_header_list();
-    while (header_iterator.GetNext()) {
-      if (allowed_exempt_headers.find(header_iterator.name()) !=
-          allowed_exempt_headers.end()) {
-        continue;
-      }
-      LOG(WARNING) << "|cors_exempt_headers| contains unexpected key: "
-                   << header_iterator.name();
-      return false;
-    }
+  if (context_ && !GetAllowAnyCorsExemptHeaderForBrowser() &&
+      !IsValidCorsExemptHeaders(*context_->cors_exempt_header_list(),
+                                request.cors_exempt_headers)) {
+    return false;
   }
 
   if (!AreRequestHeadersSafe(request.headers) ||
@@ -404,6 +424,11 @@ CorsURLLoaderFactory::VerifyRequestInitiatorLockWithPluginCheck(
   }
 
   return result;
+}
+
+bool CorsURLLoaderFactory::GetAllowAnyCorsExemptHeaderForBrowser() const {
+  return context_ && process_id_ == mojom::kBrowserProcessId &&
+         context_->allow_any_cors_exempt_header_for_browser();
 }
 
 }  // namespace cors

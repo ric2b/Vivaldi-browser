@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "weblayer/browser/i18n_util.h"
+#include "weblayer/browser/profile_disk_operations.h"
 #include "weblayer/public/profile.h"
 
 #if defined(OS_ANDROID)
@@ -34,6 +35,10 @@ class ProfileImpl : public Profile {
   // |context| must not be null.
   static base::FilePath GetCachePath(content::BrowserContext* context);
 
+  static std::unique_ptr<ProfileImpl> DestroyAndDeleteDataFromDisk(
+      std::unique_ptr<ProfileImpl> profile,
+      base::OnceClosure done_callback);
+
   explicit ProfileImpl(const std::string& name);
   ~ProfileImpl() override;
 
@@ -49,11 +54,10 @@ class ProfileImpl : public Profile {
   void DownloadsInitialized();
 
   // Path data is stored at, empty if off-the-record.
-  const base::FilePath& data_path() const { return data_path_; }
+  const base::FilePath& data_path() const { return info_.data_path; }
   DownloadDelegate* download_delegate() { return download_delegate_; }
 
   // Profile implementation:
-  bool DeleteDataFromDisk(base::OnceClosure done_callback) override;
   void ClearBrowsingData(const std::vector<BrowsingDataType>& data_types,
                          base::Time from_time,
                          base::Time to_time,
@@ -61,13 +65,17 @@ class ProfileImpl : public Profile {
   void SetDownloadDirectory(const base::FilePath& directory) override;
   void SetDownloadDelegate(DownloadDelegate* delegate) override;
   CookieManager* GetCookieManager() override;
+  void SetBooleanSetting(SettingType type, bool value) override;
+  bool GetBooleanSetting(SettingType type) override;
 
 #if defined(OS_ANDROID)
   ProfileImpl(JNIEnv* env,
               const base::android::JavaParamRef<jstring>& path,
               const base::android::JavaParamRef<jobject>& java_profile);
 
-  jboolean DeleteDataFromDisk(
+  jint GetNumBrowserImpl(JNIEnv* env);
+  jlong GetBrowserContext(JNIEnv* env);
+  void DestroyAndDeleteDataFromDisk(
       JNIEnv* env,
       const base::android::JavaRef<jobject>& j_completion_callback);
   void ClearBrowsingData(
@@ -81,6 +89,8 @@ class ProfileImpl : public Profile {
       const base::android::JavaParamRef<jstring>& directory);
   jlong GetCookieManager(JNIEnv* env);
   void EnsureBrowserContextInitialized(JNIEnv* env);
+  void SetBooleanSetting(JNIEnv* env, jint j_type, jboolean j_value);
+  jboolean GetBooleanSetting(JNIEnv* env, jint j_type);
 #endif
 
   void IncrementBrowserImplCount();
@@ -94,14 +104,18 @@ class ProfileImpl : public Profile {
  private:
   class DataClearer;
 
+  static void OnProfileMarked(std::unique_ptr<ProfileImpl> profile,
+                              base::OnceClosure done_callback);
+  static void NukeDataAfterRemovingData(std::unique_ptr<ProfileImpl> profile,
+                                        base::OnceClosure done_callback);
+  static void DoNukeData(std::unique_ptr<ProfileImpl> profile,
+                         base::OnceClosure done_callback);
   void ClearRendererCache();
 
   // Callback when the system locale has been updated.
   void OnLocaleChanged();
 
-  const std::string name_;
-
-  base::FilePath data_path_;
+  ProfileInfo info_;
 
   std::unique_ptr<BrowserContextImpl> browser_context_;
 
@@ -114,6 +128,8 @@ class ProfileImpl : public Profile {
   std::unique_ptr<CookieManagerImpl> cookie_manager_;
 
   size_t num_browser_impl_ = 0u;
+
+  bool basic_safe_browsing_enabled_ = true;
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaGlobalRef<jobject> java_profile_;

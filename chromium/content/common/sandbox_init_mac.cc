@@ -5,9 +5,9 @@
 #include "content/public/common/sandbox_init.h"
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_info_collector.h"
@@ -115,7 +115,7 @@ bool GetSandboxTypeFromCommandLine(service_manager::SandboxType* sandbox_type) {
     return false;
   }
 
-  return *sandbox_type != service_manager::SandboxType::kInvalid;
+  return true;
 }
 
 }  // namespace
@@ -128,7 +128,7 @@ bool InitializeSandbox(service_manager::SandboxType sandbox_type) {
 
 bool InitializeSandbox(base::OnceClosure post_warmup_hook) {
   service_manager::SandboxType sandbox_type =
-      service_manager::SandboxType::kInvalid;
+      service_manager::SandboxType::kNoSandbox;
   return !GetSandboxTypeFromCommandLine(&sandbox_type) ||
          service_manager::Sandbox::Initialize(
              sandbox_type, MaybeWrapWithGPUSandboxHook(

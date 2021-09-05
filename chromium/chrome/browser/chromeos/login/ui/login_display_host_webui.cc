@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "ash/accessibility/focus_ring_controller.h"
-#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/login_screen_model.h"
@@ -27,6 +26,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -74,6 +74,7 @@
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "chromeos/constants/chromeos_constants.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/login/login_state/login_state.h"
@@ -176,8 +177,7 @@ bool IsOobeComplete() {
 // Returns true if signin (not oobe) should be displayed.
 bool ShouldShowSigninScreen(chromeos::OobeScreenId first_screen) {
   return (first_screen == chromeos::OobeScreen::SCREEN_UNKNOWN &&
-          IsOobeComplete()) ||
-         first_screen == chromeos::OobeScreen::SCREEN_SPECIAL_LOGIN;
+          IsOobeComplete());
 }
 
 void MaybeShowDeviceDisabledScreen() {
@@ -194,6 +194,19 @@ void MaybeShowDeviceDisabledScreen() {
       DeviceDisabledScreenView::kScreenId);
 }
 
+void MaybeShutdownLoginDisplayHostWebUI() {
+  if (!LoginDisplayHost::default_host())
+    return;
+  if (!LoginDisplayHost::default_host()->GetOobeUI())
+    return;
+  if (LoginDisplayHost::default_host()->GetOobeUI()->display_type() !=
+      OobeUI::kOobeDisplay) {
+    return;
+  }
+  LoginDisplayHost::default_host()->FinalizeImmediately();
+  CHECK(!LoginDisplayHost::default_host());
+}
+
 // ShowLoginWizard is split into two parts. This function is sometimes called
 // from TriggerShowLoginWizardFinish() directly, and sometimes from
 // OnLanguageSwitchedCallback()
@@ -202,6 +215,11 @@ void ShowLoginWizardFinish(
     chromeos::OobeScreenId first_screen,
     const chromeos::StartupCustomizationDocument* startup_manifest) {
   TRACE_EVENT0("chromeos", "ShowLoginWizard::ShowLoginWizardFinish");
+
+  if (ShouldShowSigninScreen(first_screen)) {
+    // Shutdown WebUI host to replace with the Mojo one.
+    MaybeShutdownLoginDisplayHostWebUI();
+  }
 
   // TODO(crbug.com/781402): Move LoginDisplayHost creation out of
   // LoginDisplayHostWebUI, it is not specific to a particular implementation.
@@ -212,8 +230,7 @@ void ShowLoginWizardFinish(
   if (chromeos::LoginDisplayHost::default_host()) {
     // Tests may have already allocated an instance for us to use.
     display_host = chromeos::LoginDisplayHost::default_host();
-  } else if (ash::features::IsViewsLoginEnabled() &&
-             ShouldShowSigninScreen(first_screen)) {
+  } else if (ShouldShowSigninScreen(first_screen)) {
     display_host = new chromeos::LoginDisplayHostMojo();
   } else {
     display_host = new chromeos::LoginDisplayHostWebUI();
@@ -563,12 +580,16 @@ void LoginDisplayHostWebUI::StartWizard(OobeScreenId first_screen) {
     LoadURL(GURL(kOobeURL));
 
   DVLOG(1) << "Starting wizard, first_screen: " << first_screen;
-  // Create and show the wizard.
-  wizard_controller_ = std::make_unique<WizardController>();
-
   oobe_progress_bar_visible_ = !StartupUtils::IsDeviceRegistered();
   SetOobeProgressBarVisible(oobe_progress_bar_visible_);
-  wizard_controller_->Init(first_screen);
+
+  // Create and show the wizard.
+  if (features::IsOobeScreensPriorityEnabled() && wizard_controller_) {
+    wizard_controller_->AdvanceToScreen(first_screen);
+  } else {
+    wizard_controller_ = std::make_unique<WizardController>();
+    wizard_controller_->Init(first_screen);
+  }
 }
 
 WizardController* LoginDisplayHostWebUI::GetWizardController() {
@@ -1078,7 +1099,7 @@ void ShowLoginWizard(OobeScreenId first_screen) {
           switches::kNaturalScrollDefault));
 
   auto session_state = session_manager::SessionState::OOBE;
-  if (IsOobeComplete() || first_screen == OobeScreen::SCREEN_SPECIAL_LOGIN)
+  if (IsOobeComplete())
     session_state = session_manager::SessionState::LOGIN_PRIMARY;
   session_manager::SessionManager::Get()->SetSessionState(session_state);
 
@@ -1181,6 +1202,40 @@ void ShowLoginWizard(OobeScreenId first_screen) {
   StartupUtils::SetInitialLocale(locale);
 
   TriggerShowLoginWizardFinish(locale, std::move(data));
+}
+
+class WebUIToViewsSwitchMetricsReporter : public content::NotificationObserver {
+ public:
+  WebUIToViewsSwitchMetricsReporter() {
+    registrar_.Add(this, chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
+                   content::NotificationService::AllSources());
+  }
+
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override {
+    DCHECK_EQ(LoginDisplayHost::default_host()->GetOobeUI()->display_type(),
+              OobeUI::kGaiaSigninDisplay);
+    UMA_HISTOGRAM_TIMES("OOBE.WebUIToViewsSwitch.Duration", timer_.Elapsed());
+    registrar_.Remove(this, chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
+                      content::NotificationService::AllSources());
+    base::SequencedTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+  }
+
+ private:
+  content::NotificationRegistrar registrar_;
+  base::ElapsedTimer timer_;
+};
+
+void SwitchWebUItoMojo() {
+  DCHECK_EQ(LoginDisplayHost::default_host()->GetOobeUI()->display_type(),
+            OobeUI::kOobeDisplay);
+
+  // The object deletes itself.
+  new WebUIToViewsSwitchMetricsReporter();
+
+  // This replaces WebUI host with the Mojo (views) host.
+  ShowLoginWizard(OobeScreen::SCREEN_UNKNOWN);
 }
 
 }  // namespace chromeos

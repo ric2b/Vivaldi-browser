@@ -34,8 +34,6 @@ base::Optional<int> AppListPage::GetSearchBoxTop(
   return base::nullopt;
 }
 
-void AppListPage::UpdateOpacityForState(AppListState state) {}
-
 void AppListPage::UpdatePageBoundsForState(AppListState state,
                                            const gfx::Rect& contents_bounds,
                                            const gfx::Rect& search_box_bounds) {
@@ -55,8 +53,16 @@ views::View* AppListPage::GetLastFocusableView() {
   return nullptr;
 }
 
-bool AppListPage::ShouldShowSearchBox() const {
-  return true;
+void AppListPage::AnimateOpacity(float current_progress,
+                                 AppListViewState target_view_state,
+                                 const OpacityAnimator& animator) {
+  animator.Run(this, target_view_state != AppListViewState::kClosed);
+}
+
+void AppListPage::AnimateYPosition(AppListViewState target_view_state,
+                                   const TransformAnimator& animator,
+                                   float default_offset) {
+  animator.Run(default_offset, layer(), this);
 }
 
 gfx::Rect AppListPage::GetAboveContentsOffscreenBounds(

@@ -27,12 +27,12 @@
 #include "content/common/content_to_visible_time_reporter.h"
 #include "content/public/browser/render_frame_metadata_provider.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/common/input_event_ack_state.h"
 #include "content/public/common/screen_info.h"
 #include "content/public/common/widget_type.h"
 #include "services/viz/public/mojom/hit_test/hit_test_region_list.mojom.h"
 #include "third_party/blink/public/common/screen_orientation/web_screen_orientation_type.h"
-#include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
+#include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-forward.h"
+#include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/accessibility/ax_tree_id_registry.h"
 #include "ui/base/ime/text_input_mode.h"
@@ -144,7 +144,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
       const cc::RenderFrameMetadata& metadata) override;
 
   virtual void UpdateIntrinsicSizingInfo(
-      const blink::WebIntrinsicSizingInfo& sizing_info);
+      blink::mojom::IntrinsicSizingInfoPtr sizing_info);
 
   static void CopyMainAndPopupFromSurface(
       base::WeakPtr<RenderWidgetHostImpl> main_host,
@@ -227,28 +227,18 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // the view a chance to perform in-process event filtering or processing.
   // Return values of |NOT_CONSUMED| or |UNKNOWN| will result in |input_event|
   // being forwarded.
-  virtual InputEventAckState FilterInputEvent(
+  virtual blink::mojom::InputEventResultState FilterInputEvent(
       const blink::WebInputEvent& input_event);
 
   virtual void WheelEventAck(const blink::WebMouseWheelEvent& event,
-                             InputEventAckState ack_result);
+                             blink::mojom::InputEventResultState ack_result);
 
   virtual void GestureEventAck(const blink::WebGestureEvent& event,
-                               InputEventAckState ack_result);
+                               blink::mojom::InputEventResultState ack_result);
 
-  virtual void ChildDidAckGestureEvent(const blink::WebGestureEvent& event,
-                                       InputEventAckState ack_result);
-
-  // When key event is not uncosumed in render, browser may want to consume it.
-  virtual bool OnUnconsumedKeyboardEventAck(
-      const NativeWebKeyboardEventWithLatencyInfo& event);
-
-  // Call platform APIs for Fallback Cursor Mode.
-  virtual void FallbackCursorModeLockCursor(bool left,
-                                            bool right,
-                                            bool up,
-                                            bool down);
-  virtual void FallbackCursorModeSetCursorVisibility(bool visible);
+  virtual void ChildDidAckGestureEvent(
+      const blink::WebGestureEvent& event,
+      blink::mojom::InputEventResultState ack_result);
 
   // Create a platform specific SyntheticGestureTarget implementation that will
   // be used to inject synthetic input events.
@@ -287,8 +277,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
   // or ignored (when |ack_result| is CONSUMED).
   // |touch|'s coordinates are in the coordinate space of the view to which it
   // was targeted.
-  virtual void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
-                                      InputEventAckState ack_result);
+  virtual void ProcessAckedTouchEvent(
+      const TouchEventWithLatencyInfo& touch,
+      blink::mojom::InputEventResultState ack_result);
 
   virtual void DidOverscroll(const ui::DidOverscrollParams& params) {}
 
@@ -559,15 +550,16 @@ class CONTENT_EXPORT RenderWidgetHostViewBase
 
   // Stops flinging if a GSU event with momentum phase is sent to the renderer
   // but not consumed.
-  virtual void StopFlingingIfNecessary(const blink::WebGestureEvent& event,
-                                       InputEventAckState ack_result);
+  virtual void StopFlingingIfNecessary(
+      const blink::WebGestureEvent& event,
+      blink::mojom::InputEventResultState ack_result);
 
   // If |event| is a touchpad pinch or double tap event for which we've sent a
   // synthetic wheel event, forward the |event| to the renderer, subject to
   // |ack_result| which is the ACK result of the synthetic wheel.
   virtual void ForwardTouchpadZoomEventIfNecessary(
       const blink::WebGestureEvent& event,
-      InputEventAckState ack_result);
+      blink::mojom::InputEventResultState ack_result);
 
   virtual bool HasFallbackSurface() const;
 

@@ -8,6 +8,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -43,6 +44,17 @@ enum class UnmaskAuthFlowType {
   kCvcThenFido = 3,
   // WebAuthn prompt failed and fell back to CVC prompt.
   kCvcFallbackFromFido = 4,
+};
+
+struct CachedServerCardInfo {
+ public:
+  // An unmasked CreditCard.
+  CreditCard card;
+
+  base::string16 cvc;
+
+  // Number of times this card was accessed from the cache.
+  int cache_uses = 0;
 };
 
 // Manages logic for accessing credit cards either stored locally or stored
@@ -110,6 +122,11 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
   // TODO(crbug/949269): Add a rate limiter to counter spam clicking.
   void OnSettingsPageFIDOAuthToggled(bool opt_in);
 
+  // Caches CreditCard and corresponding CVC for unmasked card so that
+  // card info can later be filled without attempting to auth again.
+  // TODO(crbug/1069929): Add browsertests for this.
+  void CacheUnmaskedCardInfo(const CreditCard& card, const base::string16& cvc);
+
   CreditCardCVCAuthenticator* GetOrCreateCVCAuthenticator();
 
 #if !defined(OS_IOS)
@@ -117,6 +134,8 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
 #endif
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(CreditCardAccessManagerBrowserTest,
+                           NavigateFromPage_UnmaskedCardCacheResets);
   friend class AutofillAssistantTest;
   friend class AutofillManagerTest;
   friend class AutofillMetricsTest;
@@ -128,6 +147,9 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
     fido_authenticator_ = std::move(fido_authenticator);
   }
 #endif
+
+  // Returns whether or not unmasked card cache is empty. Exposed for testing.
+  bool UnmaskedCardCacheIsEmpty();
 
   // Returns false if all suggested cards are local cards, otherwise true.
   bool ServerCardsAvailable();
@@ -159,7 +181,10 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
   void OnCVCAuthenticationComplete(
       const CreditCardCVCAuthenticator::CVCAuthenticationResponse& response)
       override;
+#if defined(OS_ANDROID)
   bool ShouldOfferFidoAuth() const override;
+  bool UserOptedInToFidoFromSettingsPageOnMobile() const override;
+#endif
 
 #if !defined(OS_IOS)
   // CreditCardFIDOAuthenticator::Requester:
@@ -298,6 +323,10 @@ class CreditCardAccessManager : public CreditCardCVCAuthenticator::Requester,
 
   // The object attempting to access a card.
   base::WeakPtr<Accessor> accessor_;
+
+  // Cached data of cards which have been unmasked. This is cleared upon page
+  // navigation. Map key is the card's server_id.
+  std::unordered_map<std::string, CachedServerCardInfo> unmasked_card_cache_;
 
   base::WeakPtrFactory<CreditCardAccessManager> weak_ptr_factory_{this};
 

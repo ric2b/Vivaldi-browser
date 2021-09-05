@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "extensions/browser/crx_file_info.h"
 #include "extensions/browser/updater/manifest_fetch_data.h"
+#include "extensions/browser/updater/safe_manifest_parser.h"
 #include "extensions/common/extension_id.h"
 
 class GURL;
@@ -143,7 +144,7 @@ class ExtensionDownloaderDelegate {
   };
 
   // Contains the error codes when Force installed extension fail to install
-  // with error CRX_FETCH_FAILED or MANIFEST_FETCH_FAILED.
+  // with error CRX_FETCH_FAILED, MANIFEST_FETCH_FAILED or MANIFEST_INVALID.
   struct FailureData {
     FailureData();
     FailureData(const FailureData& other);
@@ -151,14 +152,20 @@ class ExtensionDownloaderDelegate {
     FailureData(const int net_error_code,
                 const base::Optional<int> response,
                 const int fetch_attempts);
+    explicit FailureData(ManifestInvalidError manifest_invalid_error);
     ~FailureData();
 
-    // Network error code in case of CRX_FETCH_FAILED.
-    const int network_error_code;
-    // Response code in case of CRX_FETCH_FAILED.
+    // Network error code in case of CRX_FETCH_FAILED or MANIFEST_FETCH_FAILED.
+    const base::Optional<int> network_error_code;
+    // Response code in case of CRX_FETCH_FAILED or MANIFEST_FETCH_FAILED.
     const base::Optional<int> response_code;
-    // Number of fetch attempts made in case of CRX_FETCH_FAILED.
-    const int fetch_tries;
+    // Number of fetch attempts made in case of CRX_FETCH_FAILED or
+    // MANIFEST_FETCH_FAILED.
+    const base::Optional<int> fetch_tries;
+    // Type of error occurred when fetched manifest was invalid. This includes
+    // errors occurred while parsing the update manifest and the errors in the
+    // internal details of the parsed manifest.
+    const base::Optional<ManifestInvalidError> manifest_invalid_error;
   };
 
   // A callback that is called to indicate if ExtensionDownloader should ignore
@@ -190,6 +197,13 @@ class ExtensionDownloaderDelegate {
       const ExtensionId& id,
       CacheStatus cache_status);
 
+  // Invoked after the fetched manifest update results are parsed successfully,
+  // |status| contains information about the status of update check as returned
+  // by the update server.
+  virtual void OnExtensionManifestUpdateCheckStatusReceived(
+      const ExtensionId& id,
+      const std::string& status);
+
   // Invoked if the extension couldn't be downloaded. |error| contains the
   // failure reason.
   virtual void OnExtensionDownloadFailed(const ExtensionId& id,
@@ -215,7 +229,6 @@ class ExtensionDownloaderDelegate {
   virtual void OnExtensionDownloadFinished(const CRXFileInfo& file,
                                            bool file_ownership_passed,
                                            const GURL& download_url,
-                                           const std::string& version,
                                            const PingResult& ping_result,
                                            const std::set<int>& request_ids,
                                            const InstallCallback& callback) = 0;

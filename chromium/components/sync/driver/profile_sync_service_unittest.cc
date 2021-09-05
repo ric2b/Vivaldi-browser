@@ -21,6 +21,7 @@
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/base/user_demographics.h"
 #include "components/sync/base/user_selectable_type.h"
@@ -36,7 +37,6 @@
 #include "components/sync/engine/fake_sync_engine.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/version_info/version_info_values.h"
-#include "crypto/ec_private_key.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/user_demographics.pb.h"
@@ -71,6 +71,7 @@ class FakeDataTypeManager : public DataTypeManager {
   void Configure(ModelTypeSet desired_types,
                  const ConfigureContext& context) override {
     state_ = CONFIGURED;
+    desired_types_ = desired_types;
     DCHECK(!configure_called_.is_null());
     configure_called_.Run(context.reason);
   }
@@ -79,13 +80,14 @@ class FakeDataTypeManager : public DataTypeManager {
   void ResetDataTypeErrors() override {}
   void PurgeForMigration(ModelTypeSet undesired_types) override {}
   void Stop(ShutdownReason reason) override {}
-  ModelTypeSet GetActiveDataTypes() const override { return ModelTypeSet(); }
+  ModelTypeSet GetActiveDataTypes() const override { return desired_types_; }
   bool IsNigoriEnabled() const override { return true; }
   State state() const override { return state_; }
 
  private:
   ConfigureCalled configure_called_;
   State state_;
+  ModelTypeSet desired_types_;
 };
 
 ACTION_P(ReturnNewFakeDataTypeManager, configure_called) {
@@ -177,8 +179,11 @@ class ProfileSyncServiceTest : public ::testing::Test {
   void CreateService(ProfileSyncService::StartBehavior behavior) {
     DCHECK(!service_);
 
+    // Include a regular controller and a transport-mode controller.
     DataTypeController::TypeVector controllers;
     controllers.push_back(std::make_unique<FakeDataTypeController>(BOOKMARKS));
+    controllers.push_back(
+        std::make_unique<FakeDataTypeController>(SUPERVISED_USER_SETTINGS));
 
     std::unique_ptr<SyncClientMock> sync_client =
         profile_sync_service_bundle_.CreateSyncClientMock();
@@ -199,8 +204,11 @@ class ProfileSyncServiceTest : public ::testing::Test {
   void CreateServiceWithLocalSyncBackend() {
     DCHECK(!service_);
 
+    // Include a regular controller and a transport-mode controller.
     DataTypeController::TypeVector controllers;
     controllers.push_back(std::make_unique<FakeDataTypeController>(BOOKMARKS));
+    controllers.push_back(
+        std::make_unique<FakeDataTypeController>(SUPERVISED_USER_SETTINGS));
 
     std::unique_ptr<SyncClientMock> sync_client =
         profile_sync_service_bundle_.CreateSyncClientMock();
@@ -419,6 +427,27 @@ TEST_F(ProfileSyncServiceTest, NeedsConfirmation) {
   // The local sync data shouldn't be cleared.
   EXPECT_EQ(kTestCacheGuid, sync_prefs.GetCacheGuid());
   EXPECT_EQ(kLastSyncedTime, sync_prefs.GetLastSyncedTime());
+}
+
+TEST_F(ProfileSyncServiceTest, ModelTypesForTransportMode) {
+  CreateService(ProfileSyncService::AUTO_START);
+  SignIn();
+  InitializeForNthSync();
+
+  // Disable sync-the-feature.
+  service()->GetUserSettings()->SetSyncRequested(false);
+  ASSERT_FALSE(service()->IsSyncFeatureActive());
+  ASSERT_FALSE(service()->IsSyncFeatureEnabled());
+
+  // Sync-the-transport is still active.
+  ASSERT_EQ(SyncService::TransportState::ACTIVE,
+            service()->GetTransportState());
+
+  // ModelTypes for sync-the-feature are not configured.
+  EXPECT_FALSE(service()->GetActiveDataTypes().Has(BOOKMARKS));
+
+  // ModelTypes for sync-the-transport are configured.
+  EXPECT_TRUE(service()->GetActiveDataTypes().Has(SUPERVISED_USER_SETTINGS));
 }
 
 // Verify that the SetSetupInProgress function call updates state
@@ -1499,54 +1528,6 @@ TEST_F(ProfileSyncServiceTest,
   EXPECT_TRUE(HasBirthYearDemographic(prefs()));
   EXPECT_TRUE(HasGenderDemographic(prefs()));
   EXPECT_TRUE(HasBirthYearOffset(prefs()));
-}
-
-TEST_F(ProfileSyncServiceTest, GetExperimentalAuthenticationKey) {
-  const std::vector<uint8_t> kExpectedPrivateKeyInfo = {
-      0x30, 0x81, 0x87, 0x02, 0x01, 0x00, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86,
-      0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d,
-      0x03, 0x01, 0x07, 0x04, 0x6d, 0x30, 0x6b, 0x02, 0x01, 0x01, 0x04, 0x20,
-      0xae, 0xf3, 0x15, 0x62, 0x31, 0x99, 0x3f, 0xe2, 0x96, 0xd4, 0xe6, 0x9c,
-      0x33, 0x25, 0x38, 0x58, 0x97, 0xcc, 0x40, 0x0d, 0xab, 0xbf, 0x2b, 0xb7,
-      0xd4, 0xcd, 0x79, 0xb9, 0x1f, 0x95, 0x19, 0x66, 0xa1, 0x44, 0x03, 0x42,
-      0x00, 0x04, 0x5e, 0xf4, 0x5d, 0x00, 0xaa, 0xea, 0xc9, 0x33, 0xed, 0xcd,
-      0xe5, 0xaf, 0xe6, 0x42, 0xef, 0x2b, 0xd2, 0xe0, 0xd6, 0x74, 0x5c, 0x90,
-      0x45, 0xad, 0x3f, 0x60, 0xfd, 0xc1, 0xcd, 0x09, 0x0a, 0x9a, 0xda, 0x3d,
-      0xf8, 0x18, 0xc6, 0x16, 0x46, 0x79, 0x53, 0x75, 0x92, 0xf2, 0x77, 0xcc,
-      0x38, 0x65, 0xa1, 0xcc, 0x79, 0xb3, 0x06, 0xd9, 0x9c, 0xb6, 0x8b, 0x96,
-      0x33, 0x88, 0x09, 0xc4, 0x07, 0x44};
-
-  SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
-  InitializeForNthSync();
-  ASSERT_EQ(SyncService::TransportState::ACTIVE,
-            service()->GetTransportState());
-
-  const std::string kSeparator("|");
-  const std::string kGaiaId = signin::GetTestGaiaIdForEmail(kTestUser);
-  const std::string expected_secret =
-      kGaiaId + kSeparator + FakeSyncEngine::kTestBirthday + kSeparator +
-      FakeSyncEngine::kTestKeystoreKey;
-
-  EXPECT_EQ(expected_secret,
-            service()->GetExperimentalAuthenticationSecretForTest());
-
-  std::unique_ptr<crypto::ECPrivateKey> actual_key =
-      service()->GetExperimentalAuthenticationKey();
-  ASSERT_TRUE(actual_key);
-  std::vector<uint8_t> actual_private_key;
-  EXPECT_TRUE(actual_key->ExportPrivateKey(&actual_private_key));
-  EXPECT_EQ(kExpectedPrivateKeyInfo, actual_private_key);
-}
-
-TEST_F(ProfileSyncServiceTest, GetExperimentalAuthenticationKeyLocalSync) {
-  CreateServiceWithLocalSyncBackend();
-  InitializeForNthSync();
-  EXPECT_EQ(SyncService::TransportState::ACTIVE,
-            service()->GetTransportState());
-
-  EXPECT_TRUE(service()->GetExperimentalAuthenticationSecretForTest().empty());
-  EXPECT_FALSE(service()->GetExperimentalAuthenticationKey());
 }
 
 TEST_F(ProfileSyncServiceTest, GenerateCacheGUID) {

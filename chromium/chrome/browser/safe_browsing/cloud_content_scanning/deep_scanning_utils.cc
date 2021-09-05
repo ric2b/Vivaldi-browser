@@ -129,21 +129,24 @@ void MaybeReportDeepScanningVerdict(Profile* profile,
   }
 }
 
-void ReportSensitiveDataWarningBypass(Profile* profile,
-                                      const GURL& url,
-                                      const std::string& file_name,
-                                      const std::string& download_digest_sha256,
-                                      const std::string& mime_type,
-                                      const std::string& trigger,
-                                      const int64_t content_size) {
+void ReportSensitiveDataWarningBypass(
+    Profile* profile,
+    const GURL& url,
+    const std::string& file_name,
+    const std::string& download_digest_sha256,
+    const std::string& mime_type,
+    const std::string& trigger,
+    const int64_t content_size,
+    const safe_browsing::DlpDeepScanningVerdict& verdict) {
   DCHECK(std::all_of(download_digest_sha256.begin(),
                      download_digest_sha256.end(), [](const char& c) {
                        return (c >= '0' && c <= '9') ||
                               (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f');
                      }));
   extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
-      ->OnSensitiveDataWarningBypassed(url, file_name, download_digest_sha256,
-                                       mime_type, trigger, content_size);
+      ->OnSensitiveDataWarningBypassed(verdict, url, file_name,
+                                       download_digest_sha256, mime_type,
+                                       trigger, content_size);
 }
 
 std::string DeepScanAccessPointToString(DeepScanAccessPoint access_point) {
@@ -173,11 +176,22 @@ void RecordDeepScanMetrics(DeepScanAccessPoint access_point,
                                  ? response.dlp_scan_verdict().status() ==
                                        DlpDeepScanningVerdict::SUCCESS
                                  : true;
-  bool malware_verdict_success =
-      response.has_malware_scan_verdict()
-          ? response.malware_scan_verdict().verdict() !=
-                MalwareDeepScanningVerdict::VERDICT_UNSPECIFIED
-          : true;
+
+  bool malware_verdict_success = true;
+  if (response.has_malware_scan_verdict()) {
+    switch (response.malware_scan_verdict().verdict()) {
+      case MalwareDeepScanningVerdict::VERDICT_UNSPECIFIED:
+      case MalwareDeepScanningVerdict::SCAN_FAILURE:
+        malware_verdict_success = false;
+        break;
+      case MalwareDeepScanningVerdict::MALWARE:
+      case MalwareDeepScanningVerdict::UWS:
+      case MalwareDeepScanningVerdict::CLEAN:
+        malware_verdict_success = true;
+        break;
+    }
+  }
+
   bool success = dlp_verdict_success && malware_verdict_success;
   std::string result_value = BinaryUploadServiceResultToString(result, success);
 
@@ -219,21 +233,22 @@ void RecordDeepScanMetrics(DeepScanAccessPoint access_point,
       50);
 }
 
-std::array<const base::FilePath::CharType*, 21> SupportedDlpFileTypes() {
+std::array<const base::FilePath::CharType*, 24> SupportedDlpFileTypes() {
   // Keep sorted for efficient access.
-  static constexpr const std::array<const base::FilePath::CharType*, 21>
+  static constexpr const std::array<const base::FilePath::CharType*, 24>
       kSupportedDLPFileTypes = {
-          FILE_PATH_LITERAL(".7z"),   FILE_PATH_LITERAL(".bzip"),
-          FILE_PATH_LITERAL(".cab"),  FILE_PATH_LITERAL(".doc"),
+          FILE_PATH_LITERAL(".7z"),   FILE_PATH_LITERAL(".bz2"),
+          FILE_PATH_LITERAL(".bzip"), FILE_PATH_LITERAL(".cab"),
+          FILE_PATH_LITERAL(".csv"),  FILE_PATH_LITERAL(".doc"),
           FILE_PATH_LITERAL(".docx"), FILE_PATH_LITERAL(".eps"),
-          FILE_PATH_LITERAL(".gzip"), FILE_PATH_LITERAL(".odt"),
-          FILE_PATH_LITERAL(".pdf"),  FILE_PATH_LITERAL(".ppt"),
-          FILE_PATH_LITERAL(".pptx"), FILE_PATH_LITERAL(".ps"),
-          FILE_PATH_LITERAL(".rar"),  FILE_PATH_LITERAL(".rtf"),
-          FILE_PATH_LITERAL(".tar"),  FILE_PATH_LITERAL(".txt"),
-          FILE_PATH_LITERAL(".wpd"),  FILE_PATH_LITERAL(".xls"),
-          FILE_PATH_LITERAL(".xlsx"), FILE_PATH_LITERAL(".xps"),
-          FILE_PATH_LITERAL(".zip")};
+          FILE_PATH_LITERAL(".gz"),   FILE_PATH_LITERAL(".gzip"),
+          FILE_PATH_LITERAL(".odt"),  FILE_PATH_LITERAL(".pdf"),
+          FILE_PATH_LITERAL(".ppt"),  FILE_PATH_LITERAL(".pptx"),
+          FILE_PATH_LITERAL(".ps"),   FILE_PATH_LITERAL(".rar"),
+          FILE_PATH_LITERAL(".rtf"),  FILE_PATH_LITERAL(".tar"),
+          FILE_PATH_LITERAL(".txt"),  FILE_PATH_LITERAL(".wpd"),
+          FILE_PATH_LITERAL(".xls"),  FILE_PATH_LITERAL(".xlsx"),
+          FILE_PATH_LITERAL(".xps"),  FILE_PATH_LITERAL(".zip")};
   // TODO: Replace this DCHECK with a static assert once std::is_sorted is
   // constexpr in C++20.
   DCHECK(std::is_sorted(
@@ -244,27 +259,14 @@ std::array<const base::FilePath::CharType*, 21> SupportedDlpFileTypes() {
   return kSupportedDLPFileTypes;
 }
 
-bool FileTypeSupported(bool for_malware_scan,
-                       bool for_dlp_scan,
-                       const base::FilePath& path) {
-  // At least one of the booleans needs to be true.
-  DCHECK(for_malware_scan || for_dlp_scan);
-
-  // Accept any file type for malware scans.
-  if (for_malware_scan)
-    return true;
-
+bool FileTypeSupportedForDlp(const base::FilePath& path) {
   // Accept any file type in the supported list for DLP scans.
-  if (for_dlp_scan) {
-    base::FilePath::StringType extension(path.FinalExtension());
-    std::transform(extension.begin(), extension.end(), extension.begin(),
-                   tolower);
+  base::FilePath::StringType extension(path.FinalExtension());
+  std::transform(extension.begin(), extension.end(), extension.begin(),
+                 tolower);
 
-    auto dlp_types = SupportedDlpFileTypes();
-    return std::binary_search(dlp_types.begin(), dlp_types.end(), extension);
-  }
-
-  return false;
+  auto dlp_types = SupportedDlpFileTypes();
+  return std::binary_search(dlp_types.begin(), dlp_types.end(), extension);
 }
 
 DeepScanningClientResponse SimpleDeepScanningClientResponseForTesting(

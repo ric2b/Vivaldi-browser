@@ -47,9 +47,10 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/result_codes.h"
+#include "ipc/ipc_message.h"
+#include "mojo/public/c/system/types.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
-#include "net/http/http_response_info.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
@@ -212,15 +213,6 @@ constexpr base::TimeDelta ServiceWorkerVersion::kStartNewWorkerTimeout;
 constexpr base::TimeDelta ServiceWorkerVersion::kStopWorkerTimeout;
 
 ServiceWorkerVersion::MainScriptResponse::MainScriptResponse(
-    const net::HttpResponseInfo& http_info) {
-  response_time = http_info.response_time;
-  if (http_info.headers)
-    http_info.headers->GetLastModifiedValue(&last_modified);
-  headers = http_info.headers;
-  ssl_info = http_info.ssl_info;
-}
-
-ServiceWorkerVersion::MainScriptResponse::MainScriptResponse(
     const network::mojom::URLResponseHead& response_head) {
   response_time = response_head.response_time;
   if (response_head.headers)
@@ -376,10 +368,6 @@ void ServiceWorkerVersion::SetStatus(Status status) {
   } else if (status == REDUNDANT) {
     embedded_worker_->OnWorkerVersionDoomed();
 
-    // TODO(crbug.com/951571): Remove this once we figured out the cause of
-    // invalid controller status.
-    redundant_state_callstack_ = base::debug::StackTrace();
-
     // Tell the storage system that this worker's script resources can now be
     // deleted.
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources;
@@ -402,11 +390,8 @@ ServiceWorkerVersionInfo ServiceWorkerVersion::GetInfo() {
       embedded_worker()->worker_devtools_agent_route_id());
   for (const auto& controllee : controllee_map_) {
     ServiceWorkerContainerHost* container_host = controllee.second;
-    info.clients.insert(std::make_pair(
-        container_host->client_uuid(),
-        ServiceWorkerClientInfo(
-            container_host->process_id(), container_host->frame_id(),
-            container_host->web_contents_getter(), container_host->type())));
+    info.clients.emplace(container_host->client_uuid(),
+                         container_host->GetServiceWorkerClientInfo());
   }
 
   info.script_response_time = script_response_time_for_devtools_;
@@ -789,13 +774,9 @@ void ServiceWorkerVersion::AddControllee(
 
   // Notify observers asynchronously for consistency with RemoveControllee.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &ServiceWorkerVersion::NotifyControlleeAdded,
-          weak_factory_.GetWeakPtr(), uuid,
-          ServiceWorkerClientInfo(
-              container_host->process_id(), container_host->frame_id(),
-              container_host->web_contents_getter(), container_host->type())));
+      FROM_HERE, base::BindOnce(&ServiceWorkerVersion::NotifyControlleeAdded,
+                                weak_factory_.GetWeakPtr(), uuid,
+                                container_host->GetServiceWorkerClientInfo()));
 }
 
 void ServiceWorkerVersion::RemoveControllee(const std::string& client_uuid) {
@@ -1024,7 +1005,8 @@ void ServiceWorkerVersion::InitializeGlobalScope(
           ->CreateServiceWorkerRegistrationObjectInfo(std::move(registration)),
       provider_host_->container_host()->CreateServiceWorkerObjectInfoToSend(
           this),
-      fetch_handler_existence_, std::move(subresource_loader_factories));
+      fetch_handler_existence_, std::move(subresource_loader_factories),
+      std::move(reporting_observer_receiver_));
 }
 
 void ServiceWorkerVersion::SetValidOriginTrialTokens(
@@ -1473,8 +1455,7 @@ void ServiceWorkerVersion::FocusClient(const std::string& client_uuid,
     receiver_.reset();
     return;
   }
-  if (container_host->client_type() !=
-      blink::mojom::ServiceWorkerClientType::kWindow) {
+  if (!container_host->IsContainerForWindowClient()) {
     // focus() should be called only for WindowClient.
     mojo::ReportBadMessage(
         "Received WindowClient#focus() request for a non-window client.");
@@ -1528,8 +1509,7 @@ void ServiceWorkerVersion::NavigateClient(const std::string& client_uuid,
     receiver_.reset();
     return;
   }
-  if (container_host->client_type() !=
-      blink::mojom::ServiceWorkerClientType::kWindow) {
+  if (!container_host->IsContainerForWindowClient()) {
     // navigate() should be called only for WindowClient.
     mojo::ReportBadMessage(
         "Received WindowClient#navigate() request for a non-window client.");
@@ -2258,9 +2238,11 @@ void ServiceWorkerVersion::CleanUpExternalRequest(
 
 void ServiceWorkerVersion::OnNoWorkInBrowser() {
   DCHECK(!HasWorkInBrowser());
-  if (worker_is_idle_on_renderer_) {
-    for (auto& observer : observers_)
-      observer.OnNoWork(this);
+  if (context_ && worker_is_idle_on_renderer_) {
+    ServiceWorkerRegistration* registration =
+        context_->GetLiveRegistration(registration_id());
+    if (registration)
+      registration->OnNoWork(this);
   }
 }
 
@@ -2280,7 +2262,7 @@ bool ServiceWorkerVersion::IsStartWorkerAllowed() const {
   if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
     if (!GetContentClient()->browser()->AllowServiceWorkerOnUI(
             scope_, scope_, url::Origin::Create(scope_), script_url_,
-            context_->wrapper()->browser_context(), base::NullCallback())) {
+            context_->wrapper()->browser_context())) {
       return false;
     }
   } else {
@@ -2288,7 +2270,7 @@ bool ServiceWorkerVersion::IsStartWorkerAllowed() const {
     if ((context_->wrapper()->resource_context() &&
          !GetContentClient()->browser()->AllowServiceWorkerOnIO(
              scope_, scope_, url::Origin::Create(scope_), script_url_,
-             context_->wrapper()->resource_context(), base::NullCallback()))) {
+             context_->wrapper()->resource_context()))) {
       return false;
     }
   }
@@ -2299,22 +2281,20 @@ bool ServiceWorkerVersion::IsStartWorkerAllowed() const {
 void ServiceWorkerVersion::NotifyControlleeAdded(
     const std::string& uuid,
     const ServiceWorkerClientInfo& info) {
-  for (auto& observer : observers_)
-    observer.OnControlleeAdded(this, uuid, info);
+  if (context_)
+    context_->OnControlleeAdded(this, uuid, info);
 }
 
 void ServiceWorkerVersion::NotifyControlleeRemoved(const std::string& uuid) {
-  // The observers can destroy |this|, so protect it first.
-  // TODO(falken): Make OnNoControllees an explicit call to our registration
-  // instead of an observer callback, if it has dangerous side-effects like
-  // destroying the caller.
+  if (!context_)
+    return;
+
+  // The OnNoControllees() can destroy |this|, so protect it first.
   auto protect = base::WrapRefCounted(this);
-  for (auto& observer : observers_)
-    observer.OnControlleeRemoved(this, uuid);
+  context_->OnControlleeRemoved(this, uuid);
   if (!HasControllee()) {
     RestartTick(&no_controllees_time_);
-    for (auto& observer : observers_)
-      observer.OnNoControllees(this);
+    context_->OnNoControllees(this);
   }
 }
 

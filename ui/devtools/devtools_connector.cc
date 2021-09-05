@@ -205,19 +205,23 @@ void DevtoolsConnectorItem::ActivateContents(content::WebContents* contents) {
   // guest view does not need notification, WebContents gets it above.
 }
 
-void DevtoolsConnectorItem::AddNewContents(content::WebContents* source,
-                                           std::unique_ptr<content::WebContents> new_contents,
-                                           WindowOpenDisposition disposition,
-                                           const gfx::Rect& initial_rect,
-                                           bool user_gesture,
-                                           bool* was_blocked) {
+void DevtoolsConnectorItem::AddNewContents(
+    content::WebContents* source,
+    std::unique_ptr<content::WebContents> new_contents,
+    const GURL& target_url,
+    WindowOpenDisposition disposition,
+    const gfx::Rect& initial_rect,
+    bool user_gesture,
+    bool* was_blocked) {
   if (devtools_delegate_) {
-    devtools_delegate_->AddNewContents(source, std::move(new_contents), disposition,
-                                       initial_rect, user_gesture, was_blocked);
+    devtools_delegate_->AddNewContents(source, std::move(new_contents),
+                                       target_url, disposition, initial_rect,
+                                       user_gesture, was_blocked);
   }
   if (guest_delegate_) {
-    guest_delegate_->AddNewContents(source, std::move(new_contents), disposition,
-                                    initial_rect, user_gesture, was_blocked);
+    guest_delegate_->AddNewContents(source, std::move(new_contents), target_url,
+                                    disposition, initial_rect, user_gesture,
+                                    was_blocked);
   }
 }
 
@@ -317,7 +321,7 @@ bool DevtoolsConnectorItem::HandleKeyboardEvent(
   const int modifier_mask =
       blink::WebInputEvent::kShiftKey | blink::WebInputEvent::kControlKey;
   if (devtools_docking_state_ == "undocked" &&
-      (event.GetType() == blink::WebInputEvent::kRawKeyDown) &&
+      (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) &&
       ((event.GetModifiers() & modifier_mask) == modifier_mask)) {
     if (event.windows_key_code == ui::VKEY_I) {
       DevToolsWindow::OpenDevToolsWindow(source);

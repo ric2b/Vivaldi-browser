@@ -6,12 +6,15 @@ package org.chromium.chrome.browser.share.clipboard;
 
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.CLIPBOARD_SHARED_URI;
 
+import android.content.Context;
 import android.net.Uri;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.chromium.base.Callback;
+import org.chromium.chrome.browser.share.ShareImageFileUtils;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.ui.base.Clipboard;
 
@@ -19,6 +22,13 @@ import org.chromium.ui.base.Clipboard;
  * Implementation class for {@link Clipboard.ImageFileProvider}.
  */
 public class ClipboardImageFileProvider implements Clipboard.ImageFileProvider {
+    @Override
+    public void storeImageAndGenerateUri(
+            Context context, byte[] imageData, String fileExtension, Callback<Uri> callback) {
+        ShareImageFileUtils.generateTemporaryUriFromData(
+                context, imageData, fileExtension, callback);
+    }
+
     @Override
     public void storeLastCopiedImageUri(@NonNull Uri uri) {
         SharedPreferencesManager.getInstance().writeString(CLIPBOARD_SHARED_URI, uri.toString());

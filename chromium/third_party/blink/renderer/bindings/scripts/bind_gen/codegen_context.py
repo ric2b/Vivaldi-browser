@@ -71,6 +71,7 @@ class CodeGenContext(object):
             "constructor_group": None,
             "dict_member": None,
             "exposed_construct": None,
+            "is_named_constructor": False,
             "legacy_window_alias": None,
             "operation": None,
             "operation_group": None,
@@ -94,7 +95,7 @@ class CodeGenContext(object):
 
             # Type of V8 callback function which implements IDL attribute,
             # IDL operation, etc.
-            "v8_callback_type": cls.V8_FUNCTION_CALLBACK
+            "v8_callback_type": cls.V8_FUNCTION_CALLBACK,
         }
 
         # List of computational attribute names
@@ -244,6 +245,14 @@ class CodeGenContext(object):
         return self.return_type.unwrap().is_union
 
     @property
+    def is_return_type_promise_type(self):
+        if self.attribute:
+            return self.attribute.idl_type.unwrap().is_promise
+        if self.operation_group:
+            return self.operation_group[0].return_type.unwrap().is_promise
+        return False
+
+    @property
     def may_throw_exception(self):
         if not self.member_like:
             return False
@@ -262,13 +271,12 @@ class CodeGenContext(object):
 
     @property
     def property_(self):
-        if self.stringifier:
-            return _StringifierProperty(self.stringifier)
-
         return (self.attribute or self.constant or self.constructor_group
                 or self.dict_member
                 or (self.legacy_window_alias or self.exposed_construct)
-                or self.operation_group or self._indexed_or_named_property)
+                or self.operation_group
+                or (self.stringifier and self.stringifier.operation)
+                or self._indexed_or_named_property)
 
     @property
     def return_type(self):
@@ -287,47 +295,3 @@ class CodeGenContext(object):
 
 
 CodeGenContext.init()
-
-
-class _PropertyBase(object):
-    def __init__(self, identifier, extended_attributes, owner, debug_info):
-        assert isinstance(identifier, web_idl.Identifier)
-        assert identifier
-        assert isinstance(extended_attributes, web_idl.ExtendedAttributes)
-        assert isinstance(debug_info, web_idl.DebugInfo)
-
-        self._identifier = identifier
-        self._extended_attributes = extended_attributes
-        self._owner = owner
-        self._debug_info = debug_info
-
-    @property
-    def identifier(self):
-        return self._identifier
-
-    @property
-    def extended_attributes(self):
-        return self._extended_attributes
-
-    @property
-    def owner(self):
-        return self._owner
-
-    @property
-    def debug_info(self):
-        return self._debug_info
-
-
-class _StringifierProperty(_PropertyBase):
-    def __init__(self, stringifier):
-        if stringifier.attribute:
-            extended_attributes = stringifier.attribute.extended_attributes
-        else:
-            extended_attributes = stringifier.operation.extended_attributes
-
-        _PropertyBase.__init__(
-            self,
-            identifier=web_idl.Identifier("toString"),
-            extended_attributes=extended_attributes,
-            owner=stringifier.owner,
-            debug_info=stringifier.debug_info)

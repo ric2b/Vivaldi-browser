@@ -71,10 +71,8 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
@@ -106,7 +104,7 @@ import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabTestUtils;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.test.ScreenShooter;
 import org.chromium.chrome.browser.toolbar.top.CustomTabToolbar;
@@ -895,7 +893,7 @@ public class CustomTabActivityTest {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             assertEquals(expectedColor,
                     mCustomTabActivityTestRule.getActivity().getWindow().getStatusBarColor());
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+        } else {
             assertEquals(ColorUtils.getDarkenedColorForStatusBar(expectedColor),
                     mCustomTabActivityTestRule.getActivity().getWindow().getStatusBarColor());
         }
@@ -953,7 +951,8 @@ public class CustomTabActivityTest {
     @RetryOnFailure
     public void testMultipleActionButtons() throws TimeoutException {
         Bitmap expectedIcon1 = createVectorDrawableBitmap(R.drawable.ic_content_copy_black, 48, 48);
-        Bitmap expectedIcon2 = createVectorDrawableBitmap(R.drawable.ic_music_note_36dp, 48, 48);
+        Bitmap expectedIcon2 =
+                createVectorDrawableBitmap(R.drawable.ic_email_googblue_36dp, 48, 48);
         Intent intent = createMinimalCustomTabIntent();
 
         // Mark the intent as trusted so it can show more than one action button.
@@ -1102,7 +1101,7 @@ public class CustomTabActivityTest {
                         R.layout.web_notification);
         remoteViews.setTextViewText(R.id.title, "Kittens!");
         remoteViews.setTextViewText(R.id.body, "So fluffy");
-        remoteViews.setImageViewResource(R.id.icon, R.drawable.ic_music_note_36dp);
+        remoteViews.setImageViewResource(R.id.icon, R.drawable.ic_email_googblue_36dp);
         intent.putExtra(CustomTabsIntent.EXTRA_REMOTEVIEWS, remoteViews);
         intent.putExtra(CustomTabsIntent.EXTRA_REMOTEVIEWS_VIEW_IDS, new int[] {R.id.icon});
         PendingIntent pi2 = PendingIntent.getBroadcast(
@@ -1168,7 +1167,7 @@ public class CustomTabActivityTest {
 
         final CallbackHelper openTabHelper = new CallbackHelper();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            tabSelector.getModel(false).addObserver(new EmptyTabModelObserver() {
+            tabSelector.getModel(false).addObserver(new TabModelObserver() {
                 @Override
                 public void didAddTab(
                         Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
@@ -1299,7 +1298,6 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     @RetryOnFailure
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // Details in https://crbug.com/709681.
     public void testPageLoadMetricsAreSent() throws Exception {
         checkPageLoadMetrics(true);
     }
@@ -1602,7 +1600,6 @@ public class CustomTabActivityTest {
     @SmallTest
     @RetryOnFailure
     @DisabledTest(message = "https://crbug.com/692025")
-    @MinAndroidSdkLevel(Build.VERSION_CODES.LOLLIPOP) // Details in https://crbug.com/709681.
     public void testPostMessageReceivedFromPageWithLateRequest() throws Exception {
         final CallbackHelper messageChannelHelper = new CallbackHelper();
         final CallbackHelper onPostMessageHelper = new CallbackHelper();
@@ -2291,24 +2288,7 @@ public class CustomTabActivityTest {
 
     @Test
     @SmallTest
-    @DisableIf.Build(sdk_is_greater_than = 20)
-    public void testLaunchCustomTabWithColorSchemeDark_Kitkat() {
-        Intent intent = createMinimalCustomTabIntent();
-        addColorSchemeToIntent(intent, CustomTabsIntent.COLOR_SCHEME_DARK);
-
-        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
-
-        final CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
-
-        Assert.assertNotNull(cctActivity.getNightModeStateProvider());
-        Assert.assertFalse("Night mode should be disabled on K with dark color scheme set.",
-                cctActivity.getNightModeStateProvider().isInNightMode());
-    }
-
-    @Test
-    @SmallTest
-    @DisableIf.Build(sdk_is_less_than = 21)
-    public void testLaunchCustomTabWithColorSchemeDark_PostKitkat() {
+    public void testLaunchCustomTabWithColorSchemeDark() {
         Intent intent = createMinimalCustomTabIntent();
         addColorSchemeToIntent(intent, CustomTabsIntent.COLOR_SCHEME_DARK);
 

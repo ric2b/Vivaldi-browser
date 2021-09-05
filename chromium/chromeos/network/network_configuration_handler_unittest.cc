@@ -95,6 +95,11 @@ class TestNetworkConfigurationObserver : public NetworkConfigurationObserver {
   TestNetworkConfigurationObserver() = default;
 
   // NetworkConfigurationObserver
+  void OnConfigurationCreated(const std::string& service_path,
+                              const std::string& guid) override {
+    created_configurations_[service_path] = guid;
+  }
+
   void OnBeforeConfigurationRemoved(const std::string& service_path,
                                     const std::string& guid) override {
     ASSERT_EQ(before_remove_configurations_.end(),
@@ -115,6 +120,11 @@ class TestNetworkConfigurationObserver : public NetworkConfigurationObserver {
     updated_configurations_[service_path] = guid;
   }
 
+  bool HasCreatedConfiguration(const std::string& service_path) {
+    return created_configurations_.find(service_path) !=
+           created_configurations_.end();
+  }
+
   bool HasCalledBeforeRemoveConfiguration(const std::string& service_path) {
     return before_remove_configurations_.find(service_path) !=
            before_remove_configurations_.end();
@@ -131,6 +141,7 @@ class TestNetworkConfigurationObserver : public NetworkConfigurationObserver {
   }
 
  private:
+  std::map<std::string, std::string> created_configurations_;
   std::map<std::string, std::string> before_remove_configurations_;
   std::map<std::string, std::string> removed_configurations_;
   std::map<std::string, std::string> updated_configurations_;
@@ -356,7 +367,7 @@ TEST_F(NetworkConfigurationHandlerTest, GetProperties) {
   base::DictionaryValue result;
   network_configuration_handler_->GetShillProperties(
       kServicePath,
-      base::Bind(&CopyProperties, &success, &service_path, &result),
+      base::BindOnce(&CopyProperties, &success, &service_path, &result),
       base::Bind(&ErrorCallback));
   base::RunLoop().RunUntilIdle();
 
@@ -388,7 +399,7 @@ TEST_F(NetworkConfigurationHandlerTest, GetProperties_TetherNetwork) {
   network_configuration_handler_->GetShillProperties(
       // Tether networks use service path and GUID interchangeably.
       kTetherGuid,
-      base::Bind(&CopyProperties, &success, &service_path, &result),
+      base::BindOnce(&CopyProperties, &success, &service_path, &result),
       base::Bind(&ErrorCallback));
   base::RunLoop().RunUntilIdle();
 
@@ -573,13 +584,13 @@ TEST_F(NetworkConfigurationHandlerTest,
 TEST_F(NetworkConfigurationHandlerTest, StubSetAndClearProperties) {
   // TODO(stevenjb): Remove dependency on default Stub service.
   const std::string service_path("/service/wifi1");
-  const std::string test_identity("test_identity");
+  const std::string test_check_portal("auto");
   const std::string test_passphrase("test_passphrase");
 
   // Set Properties
   base::DictionaryValue properties_to_set;
-  properties_to_set.SetKey(shill::kIdentityProperty,
-                           base::Value(test_identity));
+  properties_to_set.SetKey(shill::kCheckPortalProperty,
+                           base::Value(test_check_portal));
   properties_to_set.SetKey(shill::kPassphraseProperty,
                            base::Value(test_passphrase));
   network_configuration_handler_->SetShillProperties(
@@ -591,19 +602,19 @@ TEST_F(NetworkConfigurationHandlerTest, StubSetAndClearProperties) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ("SetProperties", success_callback_name_);
-  std::string identity, passphrase;
-  EXPECT_TRUE(GetServiceStringProperty(service_path, shill::kIdentityProperty,
-                                       &identity));
+  std::string check_portal, passphrase;
+  EXPECT_TRUE(GetServiceStringProperty(
+                  service_path, shill::kCheckPortalProperty, &check_portal));
   EXPECT_TRUE(GetServiceStringProperty(service_path, shill::kPassphraseProperty,
                                        &passphrase));
-  EXPECT_EQ(test_identity, identity);
+  EXPECT_EQ(test_check_portal, check_portal);
   EXPECT_EQ(test_passphrase, passphrase);
   EXPECT_EQ(1, network_state_handler_observer_->PropertyUpdatesForService(
                    service_path));
 
   // Clear Properties
   std::vector<std::string> properties_to_clear;
-  properties_to_clear.push_back(shill::kIdentityProperty);
+  properties_to_clear.push_back(shill::kCheckPortalProperty);
   properties_to_clear.push_back(shill::kPassphraseProperty);
   network_configuration_handler_->ClearShillProperties(
       service_path, properties_to_clear,
@@ -613,10 +624,10 @@ TEST_F(NetworkConfigurationHandlerTest, StubSetAndClearProperties) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ("ClearProperties", success_callback_name_);
-  EXPECT_FALSE(GetServiceStringProperty(service_path, shill::kIdentityProperty,
-                                        &identity));
-  EXPECT_FALSE(GetServiceStringProperty(service_path, shill::kIdentityProperty,
-                                        &passphrase));
+  EXPECT_FALSE(GetServiceStringProperty(
+                   service_path, shill::kCheckPortalProperty, &check_portal));
+  EXPECT_FALSE(GetServiceStringProperty(
+                   service_path, shill::kPassphraseProperty, &passphrase));
   EXPECT_EQ(2, network_state_handler_observer_->PropertyUpdatesForService(
                    service_path));
 }
@@ -642,8 +653,8 @@ TEST_F(NetworkConfigurationHandlerTest, StubGetNameFromWifiHex) {
   // Get Properties
   network_configuration_handler_->GetShillProperties(
       service_path,
-      base::Bind(&NetworkConfigurationHandlerTest::GetPropertiesCallback,
-                 base::Unretained(this)),
+      base::BindOnce(&NetworkConfigurationHandlerTest::GetPropertiesCallback,
+                     base::Unretained(this)),
       base::Bind(&ErrorCallback));
   base::RunLoop().RunUntilIdle();
 
@@ -669,6 +680,22 @@ TEST_F(NetworkConfigurationHandlerTest, StubCreateConfiguration) {
   EXPECT_TRUE(GetServiceStringProperty(
       create_service_path_, shill::kProfileProperty, &actual_profile));
   EXPECT_EQ(NetworkProfileHandler::GetSharedProfilePath(), actual_profile);
+}
+
+TEST_F(NetworkConfigurationHandlerTest, NetworkConfigurationObserver_Added) {
+  const std::string service_path("/service/test_wifi");
+
+  auto network_configuration_observer =
+      std::make_unique<TestNetworkConfigurationObserver>();
+  network_configuration_handler_->AddObserver(
+      network_configuration_observer.get());
+  CreateTestConfiguration(service_path, shill::kTypeWifi);
+
+  EXPECT_TRUE(network_configuration_observer->HasCreatedConfiguration(
+      create_service_path_));
+
+  network_configuration_handler_->RemoveObserver(
+      network_configuration_observer.get());
 }
 
 TEST_F(NetworkConfigurationHandlerTest, NetworkConfigurationObserver_Removed) {
@@ -736,8 +763,8 @@ TEST_F(NetworkConfigurationHandlerTest, AlwaysOnVpn) {
       base::DoNothing(), base::Bind(&ErrorCallback));
 
   ShillManagerClient::Get()->GetProperties(
-      Bind(&NetworkConfigurationHandlerTest::ManagerGetPropertiesCallback,
-           base::Unretained(this), "ManagerGetProperties"));
+      BindOnce(&NetworkConfigurationHandlerTest::ManagerGetPropertiesCallback,
+               base::Unretained(this), "ManagerGetProperties"));
   base::RunLoop().RunUntilIdle();
   std::string package_result;
   EXPECT_EQ("ManagerGetProperties", success_callback_name_);

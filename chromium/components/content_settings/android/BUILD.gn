@@ -9,8 +9,12 @@ generate_jni("content_settings_jni_headers") {
 }
 
 android_library("java") {
-  sources = [ "java/src/org/chromium/components/content_settings/ContentSettingsFeatureList.java" ]
+  sources = [
+    "java/src/org/chromium/components/content_settings/ContentSettingsFeatureList.java",
+    "java/src/org/chromium/components/content_settings/CookieControlsObserver.java",
+  ]
   deps = [
+    ":content_settings_enums_java",
     "//base:base_java",
     "//base:jni_java",
   ]
@@ -24,4 +28,20 @@ source_set("android") {
     "//base",
     "//components/content_settings/core/common",
   ]
+}
+
+android_library("content_settings_enums_java") {
+  srcjar_deps = [ ":content_settings_enums_javagen" ]
+  deps = [ "//third_party/android_deps:androidx_annotation_annotation_java" ]
+}
+
+java_cpp_enum("content_settings_enums_javagen") {
+  sources = [
+    "../core/browser/cookie_settings.h",
+    "../core/common/content_settings.h",
+    "../core/common/content_settings_types.h",
+    "../core/common/cookie_controls_enforcement.h",
+    "../core/common/cookie_controls_status.h",
+  ]
+  visibility = [ ":*" ]  # Depend on through :content_settings_enums_java
 }

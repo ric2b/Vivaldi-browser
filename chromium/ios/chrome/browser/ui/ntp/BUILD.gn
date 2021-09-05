@@ -100,6 +100,7 @@ source_set("ntp_internal") {
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/suggestions",
     "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/bookmarks",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
@@ -241,8 +242,8 @@ source_set("perf_tests") {
   sources = [ "new_tab_page_perftest.mm" ]
   deps = [
     "//base/test:test_support",
+    "//ios/chrome/browser/main",
     "//ios/chrome/browser/sessions",
-    "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/test:perf_test_support",
     "//ios/chrome/browser/ui/browser_view",
     "//ios/chrome/browser/ui/commands",

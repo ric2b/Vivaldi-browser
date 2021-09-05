@@ -11,9 +11,9 @@
 #include "calendar/calendar_type.h"
 #include "calendar/event_type.h"
 #include "calendar/notification_type.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_function.h"
 #include "extensions/schema/calendar.h"
 
 using calendar::CalendarModelObserver;
@@ -63,7 +63,7 @@ class CalendarEventRouter : public CalendarModelObserver {
   void OnNotificationChanged(CalendarService* service,
                              const calendar::NotificationRow& row) override;
 
-  void OnCalendarDataChanged(CalendarService* service);
+  void OnCalendarModified(CalendarService* service) override;
 
   void ExtensiveCalendarChangesBeginning(CalendarService* model) override;
   void ExtensiveCalendarChangesEnded(CalendarService* model) override;
@@ -136,7 +136,7 @@ class CalendarGetAllEventsFunction : public CalendarFunctionWithCallback {
   CalendarGetAllEventsFunction() = default;
 
  protected:
-  ~CalendarGetAllEventsFunction() override;
+  ~CalendarGetAllEventsFunction() override = default;
 
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -614,6 +614,25 @@ class CalendarGetAllAccountsFunction : public CalendarFunctionWithCallback {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CalendarGetAllAccountsFunction);
+};
+
+class CalendarGetAllEventTemplatesFunction : public CalendarFunctionWithCallback {
+  DECLARE_EXTENSION_FUNCTION("calendar.getAllEventTemplates", CALENDAR_GETALLEVENT_TEMPLATES)
+public:
+  CalendarGetAllEventTemplatesFunction() = default;
+
+protected:
+  ~CalendarGetAllEventTemplatesFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the calendar function to provide results.
+  void GetAllEventTemplatesComplete(
+    std::shared_ptr<calendar::EventQueryResults> results);
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(CalendarGetAllEventTemplatesFunction);
 };
 
 }  // namespace extensions

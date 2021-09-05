@@ -10,13 +10,8 @@ import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//ui/gl/features.gni")
 import("//ui/ozone/ozone.gni")
-declare_args() {
-  enable_swiftshader = (is_win || is_linux || (is_mac && use_egl) ||
-                        is_chromeos || is_fuchsia) &&
-                       (target_cpu == "x86" || target_cpu == "x64" ||
-                        target_cpu == "arm" || target_cpu == "arm64" ||
-                        target_cpu == "mipsel" || target_cpu == "mips64el")
 
+declare_args() {
   # Whether service side logging (actual calls into the GL driver) is enabled
   # or not.
   enable_gpu_service_logging = false
@@ -204,6 +199,8 @@ jumbo_component("gl") {
       "gl_bindings_autogen_egl.h",
       "gl_context_egl.cc",
       "gl_context_egl.h",
+      "gl_display_egl_util.cc",
+      "gl_display_egl_util.h",
       "gl_egl_api_implementation.cc",
       "gl_egl_api_implementation.h",
       "gl_fence_egl.cc",
@@ -253,8 +250,10 @@ jumbo_component("gl") {
     ]
   }
 
-  if (use_x11) {
+  if (use_x11 || ozone_platform_x11) {
     sources += [
+      "gl_surface_egl_x11.cc",
+      "gl_surface_egl_x11.h",
       "gl_surface_egl_x11_gles2.cc",
       "gl_surface_egl_x11_gles2.h",
       "gl_surface_glx_x11.cc",
@@ -288,13 +287,6 @@ jumbo_component("gl") {
       "gl_surface_glx.h",
       "gl_visual_picker_glx.cc",
       "gl_visual_picker_glx.h",
-    ]
-
-    configs += [
-      "//build/config/linux:x11",
-      "//build/config/linux:xcomposite",
-      "//build/config/linux:xext",
-      "//build/config/linux:xrandr",
     ]
 
     deps += [
@@ -478,10 +470,12 @@ jumbo_static_library("gl_unittest_utils") {
 jumbo_static_library("test_support") {
   testonly = true
   sources = [
+    "test/gl_image_bind_test_template.h",
     "test/gl_image_test_support.cc",
     "test/gl_image_test_support.h",
     "test/gl_image_test_template.cc",
     "test/gl_image_test_template.h",
+    "test/gl_image_zero_initialize_test_template.h",
     "test/gl_surface_test_support.cc",
     "test/gl_surface_test_support.h",
     "test/gl_test_helper.cc",
@@ -505,8 +499,10 @@ jumbo_static_library("test_support") {
   }
 
   if (use_x11) {
-    configs += [ "//build/config/linux:x11" ]
-    deps += [ "//ui/platform_window/x11" ]
+    deps += [
+      "//ui/gfx/x",
+      "//ui/platform_window/x11",
+    ]
   }
 
   if (use_ozone) {
@@ -600,10 +596,10 @@ test("gl_unittests") {
 
   data_deps = [ "//third_party/mesa_headers" ]
 
+  # TODO(https://crbug.com/789065): this must be moved to Ozone.
   if (use_x11) {
     sources += [ "gl_context_glx_unittest.cc" ]
     deps += [ "//ui/gfx/x" ]
-    configs += [ "//build/config/linux:x11" ]
   }
 }
 

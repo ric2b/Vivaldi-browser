@@ -191,11 +191,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // RenderView is the currently active RenderView of a WebContents.
   unsigned GetLocalSessionHistoryLengthForTesting() const;
 
-  // Invokes OnSetFocus and marks the widget as active depending on the value
-  // of |enable|. This is used for web tests that need to control the focus
-  // synchronously from the renderer.
-  void SetFocusAndActivateForTesting(bool enable);
-
   void UpdateBrowserControlsState(BrowserControlsState constraints,
                                   BrowserControlsState current,
                                   bool animate);
@@ -216,7 +211,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
       const blink::WebWindowFeatures& features,
       const blink::WebString& frame_name,
       blink::WebNavigationPolicy policy,
-      blink::mojom::WebSandboxFlags sandbox_flags,
+      network::mojom::WebSandboxFlags sandbox_flags,
       const blink::FeaturePolicy::FeatureState& opener_feature_state,
       const blink::SessionStorageNamespaceId& session_storage_namespace_id)
       override;
@@ -238,12 +233,11 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   blink::WebString AcceptLanguages() override;
   int HistoryBackListCount() override;
   int HistoryForwardListCount() override;
-  void DidUpdateTextAutosizerPageInfo(
-      const blink::WebTextAutosizerPageInfo& page_info) override;
   void DidAutoResize(const blink::WebSize& newSize) override;
   void DidFocus(blink::WebLocalFrame* calling_frame) override;
   bool CanHandleGestureEvent() override;
   bool AllowPopupsDuringPageUnload() override;
+  void OnPageVisibilityChanged(PageVisibilityState visibility) override;
 
   // RenderView implementation -------------------------------------------------
 
@@ -255,13 +249,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void SetWebkitPreferences(const WebPreferences& preferences) override;
   blink::WebView* GetWebView() override;
   bool GetContentStateImmediately() override;
-
-  // Only used for testing.
-  void SetEditCommandForNextKeyEvent(const std::string& name,
-                                     const std::string& value) override;
-  // Only used for testing.
-  void ClearEditCommands() override;
-
   const std::string& GetAcceptLanguages() override;
 
   // Please do not add your stuff randomly to the end here. If there is an
@@ -368,8 +355,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void SetActiveForWidget(bool active) override;
   bool SupportsMultipleWindowsForWidget() override;
   bool ShouldAckSyntheticInputImmediately() override;
-  void ApplyNewDisplayModeForWidget(
-      blink::mojom::DisplayMode new_display_mode) override;
   void ApplyAutoResizeLimitsForWidget(const gfx::Size& min_size,
                                       const gfx::Size& max_size) override;
   void DisableAutoResizeForWidget() override;
@@ -420,7 +405,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void OnAudioStateChanged(bool is_audio_playing);
 
   // Page message handlers -----------------------------------------------------
-  void OnPageVisibilityChanged(PageVisibilityState visibility_state);
   void SetPageFrozen(bool frozen);
   void PutPageIntoBackForwardCache();
   void RestorePageFromBackForwardCache(base::TimeTicks navigation_start);

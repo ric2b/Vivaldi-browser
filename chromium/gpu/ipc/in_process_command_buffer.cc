@@ -85,6 +85,12 @@
 #include "base/process/process_handle.h"
 #endif
 
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/platform_window_surface.h"
+#include "ui/ozone/public/surface_factory_ozone.h"
+#endif
+
 namespace gpu {
 
 namespace {
@@ -442,6 +448,14 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
               gl::GLSurfaceFormat::COLOR_SPACE_DISPLAY_P3);
           break;
       }
+#if defined(USE_OZONE)
+      if (params.surface_handle != gpu::kNullSurfaceHandle) {
+        window_surface_ =
+            ui::OzonePlatform::GetInstance()
+                ->GetSurfaceFactoryOzone()
+                ->CreatePlatformWindowSurface(params.surface_handle);
+      }
+#endif
       surface_ = ImageTransportSurface::CreateNativeSurface(
           gpu_thread_weak_ptr_factory_.GetWeakPtr(), params.surface_handle,
           surface_format);
@@ -480,7 +494,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
     std::unique_ptr<webgpu::WebGPUDecoder> webgpu_decoder(
         webgpu::WebGPUDecoder::Create(
             this, command_buffer_.get(), task_executor_->shared_image_manager(),
-            context_group_->memory_tracker(), task_executor_->outputter()));
+            context_group_->memory_tracker(), task_executor_->outputter(),
+            task_executor_->gpu_preferences()));
     gpu::ContextResult result = webgpu_decoder->Initialize();
     if (result != gpu::ContextResult::kSuccess) {
       DestroyOnGpuThread();
@@ -686,6 +701,9 @@ bool InProcessCommandBuffer::DestroyOnGpuThread() {
   }
   command_buffer_.reset();
   surface_ = nullptr;
+#if defined(USE_OZONE)
+  window_surface_.reset();
+#endif
 
   context_ = nullptr;
   if (sync_point_client_state_) {
@@ -1366,6 +1384,17 @@ void InProcessCommandBuffer::SetDisplayTransformOnGpuThread(
     gfx::OverlayTransform transform) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
   surface_->SetDisplayTransform(transform);
+}
+
+void InProcessCommandBuffer::SetFrameRate(float frame_rate) {
+  ScheduleGpuTask(
+      base::BindOnce(&InProcessCommandBuffer::SetFrameRateOnGpuThread,
+                     gpu_thread_weak_ptr_factory_.GetWeakPtr(), frame_rate));
+}
+
+void InProcessCommandBuffer::SetFrameRateOnGpuThread(float frame_rate) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(gpu_sequence_checker_);
+  surface_->SetFrameRate(frame_rate);
 }
 
 #if defined(OS_WIN)

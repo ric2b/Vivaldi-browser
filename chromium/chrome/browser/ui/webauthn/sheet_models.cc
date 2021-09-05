@@ -8,8 +8,9 @@
 #include <string>
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -472,192 +473,6 @@ void AuthenticatorBlePowerOnAutomaticSheetModel::OnAccept() {
   dialog_model()->PowerOnBleAdapter();
 }
 
-// AuthenticatorBlePairingBeginSheetModel -------------------------------------
-
-const gfx::VectorIcon&
-AuthenticatorBlePairingBeginSheetModel::GetStepIllustration(
-    ImageColorScheme color_scheme) const {
-  return color_scheme == ImageColorScheme::kDark ? kWebauthnBleDarkIcon
-                                                 : kWebauthnBleIcon;
-}
-
-base::string16 AuthenticatorBlePairingBeginSheetModel::GetStepTitle() const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_PAIRING_BEGIN_TITLE);
-}
-
-base::string16 AuthenticatorBlePairingBeginSheetModel::GetStepDescription()
-    const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_PAIRING_BEGIN_DESCRIPTION);
-}
-
-bool AuthenticatorBlePairingBeginSheetModel::IsAcceptButtonVisible() const {
-  return true;
-}
-
-bool AuthenticatorBlePairingBeginSheetModel::IsAcceptButtonEnabled() const {
-  return true;
-}
-
-base::string16 AuthenticatorBlePairingBeginSheetModel::GetAcceptButtonLabel()
-    const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_PAIRING_BEGIN_NEXT);
-}
-
-void AuthenticatorBlePairingBeginSheetModel::OnAccept() {
-  dialog_model()->SetCurrentStep(
-      AuthenticatorRequestDialogModel::Step::kBleDeviceSelection);
-}
-
-// AuthenticatorBleEnterPairingModeSheetModel ---------------------------------
-
-const gfx::VectorIcon&
-AuthenticatorBleEnterPairingModeSheetModel::GetStepIllustration(
-    ImageColorScheme color_scheme) const {
-  return color_scheme == ImageColorScheme::kDark ? kWebauthnBleDarkIcon
-                                                 : kWebauthnBleIcon;
-}
-
-base::string16 AuthenticatorBleEnterPairingModeSheetModel::GetStepTitle()
-    const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_ENTER_PAIRING_MODE_TITLE);
-}
-
-base::string16 AuthenticatorBleEnterPairingModeSheetModel::GetStepDescription()
-    const {
-  return l10n_util::GetStringUTF16(
-      IDS_WEBAUTHN_BLE_ENTER_PAIRING_MODE_DESCRIPTION);
-}
-
-// AuthenticatorBleDeviceSelectionSheetModel ----------------------------------
-
-bool AuthenticatorBleDeviceSelectionSheetModel::IsActivityIndicatorVisible()
-    const {
-  return true;
-}
-
-const gfx::VectorIcon&
-AuthenticatorBleDeviceSelectionSheetModel::GetStepIllustration(
-    ImageColorScheme color_scheme) const {
-  return color_scheme == ImageColorScheme::kDark ? kWebauthnBleNameDarkIcon
-                                                 : kWebauthnBleNameIcon;
-}
-
-base::string16 AuthenticatorBleDeviceSelectionSheetModel::GetStepTitle() const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_DEVICE_SELECTION_TITLE);
-}
-
-base::string16 AuthenticatorBleDeviceSelectionSheetModel::GetStepDescription()
-    const {
-  return l10n_util::GetStringUTF16(
-      IDS_WEBAUTHN_BLE_DEVICE_SELECTION_DESCRIPTION);
-}
-
-// AuthenticatorBlePinEntrySheetModel -----------------------------------------
-
-void AuthenticatorBlePinEntrySheetModel::SetPinCode(base::string16 pin_code) {
-  pin_code_ = std::move(pin_code);
-}
-
-const gfx::VectorIcon& AuthenticatorBlePinEntrySheetModel::GetStepIllustration(
-    ImageColorScheme color_scheme) const {
-  return color_scheme == ImageColorScheme::kDark ? kWebauthnBlePinDarkIcon
-                                                 : kWebauthnBlePinIcon;
-}
-
-base::string16 AuthenticatorBlePinEntrySheetModel::GetStepTitle() const {
-  const auto& authenticator_id = dialog_model()->selected_authenticator_id();
-  DCHECK(authenticator_id);
-  const auto* ble_authenticator =
-      dialog_model()->saved_authenticators().GetAuthenticator(
-          *authenticator_id);
-  DCHECK(ble_authenticator);
-  return l10n_util::GetStringFUTF16(
-      IDS_WEBAUTHN_BLE_PIN_ENTRY_TITLE,
-      ble_authenticator->authenticator_display_name);
-}
-
-base::string16 AuthenticatorBlePinEntrySheetModel::GetStepDescription() const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_PIN_ENTRY_DESCRIPTION);
-}
-
-bool AuthenticatorBlePinEntrySheetModel::IsAcceptButtonVisible() const {
-  return true;
-}
-
-bool AuthenticatorBlePinEntrySheetModel::IsAcceptButtonEnabled() const {
-  return true;
-}
-
-base::string16 AuthenticatorBlePinEntrySheetModel::GetAcceptButtonLabel()
-    const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_PIN_ENTRY_NEXT);
-}
-
-void AuthenticatorBlePinEntrySheetModel::OnAccept() {
-  dialog_model()->FinishPairingWithPin(pin_code_);
-}
-
-// AuthenticatorBleVerifyingSheetModel ----------------------------------------
-
-bool AuthenticatorBleVerifyingSheetModel::IsActivityIndicatorVisible() const {
-  return true;
-}
-
-const gfx::VectorIcon& AuthenticatorBleVerifyingSheetModel::GetStepIllustration(
-    ImageColorScheme color_scheme) const {
-  return color_scheme == ImageColorScheme::kDark ? kWebauthnBleDarkIcon
-                                                 : kWebauthnBleIcon;
-}
-
-base::string16 AuthenticatorBleVerifyingSheetModel::GetStepTitle() const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_VERIFYING_TITLE);
-}
-
-base::string16 AuthenticatorBleVerifyingSheetModel::GetStepDescription() const {
-  return base::string16();
-}
-
-// AuthenticatorBleActivateSheetModel -----------------------------------------
-
-AuthenticatorBleActivateSheetModel::AuthenticatorBleActivateSheetModel(
-    AuthenticatorRequestDialogModel* dialog_model)
-    : AuthenticatorSheetModelBase(dialog_model),
-      other_transports_menu_model_(std::make_unique<OtherTransportsMenuModel>(
-          dialog_model,
-          AuthenticatorTransport::kBluetoothLowEnergy)) {}
-
-AuthenticatorBleActivateSheetModel::~AuthenticatorBleActivateSheetModel() =
-    default;
-
-bool AuthenticatorBleActivateSheetModel::IsActivityIndicatorVisible() const {
-  return true;
-}
-
-const gfx::VectorIcon& AuthenticatorBleActivateSheetModel::GetStepIllustration(
-    ImageColorScheme color_scheme) const {
-  return color_scheme == ImageColorScheme::kDark ? kWebauthnBleTapDarkIcon
-                                                 : kWebauthnBleTapIcon;
-}
-
-base::string16 AuthenticatorBleActivateSheetModel::GetStepTitle() const {
-  return l10n_util::GetStringFUTF16(IDS_WEBAUTHN_GENERIC_TITLE,
-                                    GetRelyingPartyIdString(dialog_model()));
-}
-
-base::string16 AuthenticatorBleActivateSheetModel::GetStepDescription() const {
-  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_BLE_ACTIVATE_DESCRIPTION);
-}
-
-base::string16 AuthenticatorBleActivateSheetModel::GetAdditionalDescription()
-    const {
-  return PossibleResidentKeyWarning(dialog_model());
-}
-
-ui::MenuModel*
-AuthenticatorBleActivateSheetModel::GetOtherTransportsMenuModel() {
-  return other_transports_menu_model_.get();
-}
-
 // AuthenticatorTouchIdIncognitoBumpSheetModel
 // -----------------------------------------
 
@@ -923,6 +738,71 @@ base::string16 AuthenticatorClientPinTapAgainSheetModel::GetStepDescription()
 base::string16
 AuthenticatorClientPinTapAgainSheetModel::GetAdditionalDescription() const {
   return PossibleResidentKeyWarning(dialog_model());
+}
+
+// AuthenticatorBioEnrollmentSheetModel ----------------------------------
+
+AuthenticatorBioEnrollmentSheetModel::AuthenticatorBioEnrollmentSheetModel(
+    AuthenticatorRequestDialogModel* dialog_model)
+    : AuthenticatorSheetModelBase(dialog_model) {}
+
+AuthenticatorBioEnrollmentSheetModel::~AuthenticatorBioEnrollmentSheetModel() =
+    default;
+
+bool AuthenticatorBioEnrollmentSheetModel::IsActivityIndicatorVisible() const {
+  return !IsAcceptButtonVisible();
+}
+
+const gfx::VectorIcon&
+AuthenticatorBioEnrollmentSheetModel::GetStepIllustration(
+    ImageColorScheme color_scheme) const {
+  return color_scheme == ImageColorScheme::kDark ? kWebauthnFingerprintDarkIcon
+                                                 : kWebauthnFingerprintIcon;
+}
+
+base::string16 AuthenticatorBioEnrollmentSheetModel::GetStepTitle() const {
+  return l10n_util::GetStringUTF16(
+      IDS_SETTINGS_SECURITY_KEYS_BIO_ENROLLMENT_ADD_TITLE);
+}
+
+base::string16 AuthenticatorBioEnrollmentSheetModel::GetStepDescription()
+    const {
+  return IsAcceptButtonVisible()
+             ? l10n_util::GetStringUTF16(
+                   IDS_SETTINGS_SECURITY_KEYS_BIO_ENROLLMENT_ENROLLING_COMPLETE_LABEL)
+             : l10n_util::GetStringUTF16(
+                   IDS_SETTINGS_SECURITY_KEYS_BIO_ENROLLMENT_ENROLLING_LABEL);
+}
+
+bool AuthenticatorBioEnrollmentSheetModel::IsAcceptButtonEnabled() const {
+  return true;
+}
+
+bool AuthenticatorBioEnrollmentSheetModel::IsAcceptButtonVisible() const {
+  return dialog_model()->bio_samples_remaining() &&
+         dialog_model()->bio_samples_remaining() <= 0;
+}
+
+base::string16 AuthenticatorBioEnrollmentSheetModel::GetAcceptButtonLabel()
+    const {
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_PIN_ENTRY_NEXT);
+}
+
+bool AuthenticatorBioEnrollmentSheetModel::IsCancelButtonVisible() const {
+  return !IsAcceptButtonVisible();
+}
+
+base::string16 AuthenticatorBioEnrollmentSheetModel::GetCancelButtonLabel()
+    const {
+  return l10n_util::GetStringUTF16(IDS_WEBAUTHN_INLINE_ENROLLMENT_CANCEL_LABEL);
+}
+
+void AuthenticatorBioEnrollmentSheetModel::OnAccept() {
+  dialog_model()->OnBioEnrollmentDone();
+}
+
+void AuthenticatorBioEnrollmentSheetModel::OnCancel() {
+  OnAccept();
 }
 
 // AuthenticatorRetryUvSheetModel -------------------------------------

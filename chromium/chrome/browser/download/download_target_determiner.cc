@@ -423,8 +423,8 @@ DownloadTargetDeterminer::Result
 
   delegate_->ReserveVirtualPath(
       download_, virtual_path_, create_target_directory_, conflict_action_,
-      base::Bind(&DownloadTargetDeterminer::ReserveVirtualPathDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&DownloadTargetDeterminer::ReserveVirtualPathDone,
+                     weak_ptr_factory_.GetWeakPtr()));
   return QUIT_DOLOOP;
 }
 
@@ -1044,7 +1044,7 @@ DownloadConfirmationReason DownloadTargetDeterminer::NeedsConfirmation(
 #endif
 
   // Don't prompt for file types that are marked for opening automatically.
-  if (download_prefs_->IsAutoOpenEnabledBasedOnExtension(filename))
+  if (download_prefs_->IsAutoOpenEnabled(download_->GetURL(), filename))
     return DownloadConfirmationReason::NONE;
 
   // For everything else, prompting is controlled by the PromptForDownload pref.
@@ -1081,7 +1081,7 @@ DownloadFileType::DangerLevel DownloadTargetDeterminer::GetDangerLevel(
   }
 
   // Anything the user has marked auto-open is OK if it's user-initiated.
-  if (download_prefs_->IsAutoOpenEnabledBasedOnExtension(virtual_path_) &&
+  if (download_prefs_->IsAutoOpenEnabled(download_->GetURL(), virtual_path_) &&
       download_->HasUserGesture())
     return DownloadFileType::NOT_DANGEROUS;
 

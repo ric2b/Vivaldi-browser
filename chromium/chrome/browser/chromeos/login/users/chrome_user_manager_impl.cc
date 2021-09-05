@@ -291,7 +291,7 @@ void ChromeUserManagerImpl::RegisterPrefs(PrefRegistrySimple* registry) {
                                std::string());
   registry->RegisterListPref(prefs::kReportingUsers);
 
-  SupervisedUserManager::RegisterPrefs(registry);
+  SupervisedUserManager::RegisterLocalStatePrefs(registry);
   SessionLengthLimiter::RegisterPrefs(registry);
   enterprise_user_session_metrics::RegisterPrefs(registry);
 }
@@ -704,9 +704,6 @@ void ChromeUserManagerImpl::LoadDeviceLocalAccounts(
 
     users_.push_back(
         CreateUserFromDeviceLocalAccount(account_id, type).release());
-    if (type == policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION ||
-        type == policy::DeviceLocalAccount::TYPE_SAML_PUBLIC_SESSION)
-      UpdatePublicAccountDisplayName(account_id.GetUserEmail());
   }
 }
 
@@ -768,8 +765,8 @@ void ChromeUserManagerImpl::RetrieveTrustedDevicePolicies() {
   // Schedule a callback if device policy has not yet been verified.
   if (CrosSettingsProvider::TRUSTED !=
       cros_settings_->PrepareTrustedValues(
-          base::Bind(&ChromeUserManagerImpl::RetrieveTrustedDevicePolicies,
-                     weak_factory_.GetWeakPtr()))) {
+          base::BindOnce(&ChromeUserManagerImpl::RetrieveTrustedDevicePolicies,
+                         weak_factory_.GetWeakPtr()))) {
     return;
   }
 
@@ -1201,13 +1198,13 @@ void ChromeUserManagerImpl::UpdatePublicAccountDisplayName(
   if (device_local_account_policy_service_) {
     policy::DeviceLocalAccountPolicyBroker* broker =
         device_local_account_policy_service_->GetBrokerForUser(user_id);
-    if (broker)
+    if (broker) {
       display_name = broker->GetDisplayName();
+      // Set or clear the display name.
+      SaveUserDisplayName(AccountId::FromUserEmail(user_id),
+                          base::UTF8ToUTF16(display_name));
+    }
   }
-
-  // Set or clear the display name.
-  SaveUserDisplayName(AccountId::FromUserEmail(user_id),
-                      base::UTF8ToUTF16(display_name));
 }
 
 UserFlow* ChromeUserManagerImpl::GetCurrentUserFlow() const {

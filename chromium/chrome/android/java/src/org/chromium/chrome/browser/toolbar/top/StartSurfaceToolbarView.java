@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewPropertyAnimator;
@@ -133,6 +134,12 @@ class StartSurfaceToolbarView extends RelativeLayout {
      */
     void setNewTabButtonVisibility(boolean isVisible) {
         mNewTabButton.setVisibility(isVisible ? View.VISIBLE : View.GONE);
+        if (isVisible && Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            // This is a workaround for the issue that the UrlBar is given the default focus on
+            // Android versions before Pie when showing the start surface toolbar with the new tab
+            // button (UrlBar is invisible to users). Check crbug.com/1081538 for more details.
+            mNewTabButton.getParent().requestChildFocus(mNewTabButton, mNewTabButton);
+        }
     }
 
     /**
@@ -152,11 +159,11 @@ class StartSurfaceToolbarView extends RelativeLayout {
     }
 
     /**
-     * @param isAtLeft Whether the new tab button is at left.
+     * @param isAtStart Whether the new tab button is at start.
      */
-    void setNewTabButtonAtLeft(boolean isAtLeft) {
-        assert isAtLeft;
-        if (isAtLeft) {
+    void setNewTabButtonAtStart(boolean isAtStart) {
+        assert isAtStart;
+        if (isAtStart) {
             ((LayoutParams) mNewTabButton.getLayoutParams()).removeRule(RelativeLayout.START_OF);
 
             LayoutParams params = (LayoutParams) mIncognitoSwitch.getLayoutParams();
@@ -185,6 +192,13 @@ class StartSurfaceToolbarView extends RelativeLayout {
     /** @return The View for the identity disc. */
     View getIdentityDiscView() {
         return mIdentityDiscButton;
+    }
+
+    /**
+     * @param isAtStart Whether the identity disc is at start.
+     */
+    void setIdentityDiscAtStart(boolean isAtStart) {
+        ((LayoutParams) mIdentityDiscButton.getLayoutParams()).removeRule(RelativeLayout.START_OF);
     }
 
     /**

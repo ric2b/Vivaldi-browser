@@ -4,7 +4,7 @@
 
 #include "chrome/browser/chromeos/smb_client/smb_share_info.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 
 namespace chromeos {
 namespace smb_client {
@@ -13,12 +13,14 @@ SmbShareInfo::SmbShareInfo(const SmbUrl& share_url,
                            const std::string& display_name,
                            const std::string& username,
                            const std::string& workgroup,
-                           bool use_kerberos)
+                           bool use_kerberos,
+                           const std::vector<uint8_t>& password_salt)
     : share_url_(share_url),
       display_name_(display_name),
       username_(username),
       workgroup_(workgroup),
-      use_kerberos_(use_kerberos) {
+      use_kerberos_(use_kerberos),
+      password_salt_(password_salt) {
   DCHECK(share_url_.IsValid());
   DCHECK(!display_name.empty());
 }

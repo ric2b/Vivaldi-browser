@@ -44,11 +44,7 @@ mustache_pass("generate_new_style_manifest_for_upload") {
 # name conflict.
 template("webapk_java") {
   android_library(target_name) {
-    forward_variables_from(invoker,
-                           [
-                             "android_manifest_for_lint",
-                             "deps",
-                           ])
+    forward_variables_from(invoker, [ "deps" ])
 
     sources = [
       "src/org/chromium/webapk/shell_apk/ChooseHostBrowserDialog.java",
@@ -60,7 +56,6 @@ template("webapk_java") {
       "src/org/chromium/webapk/shell_apk/IdentityService.java",
       "src/org/chromium/webapk/shell_apk/InstallHostBrowserDialog.java",
       "src/org/chromium/webapk/shell_apk/LaunchHostBrowserSelector.java",
-      "src/org/chromium/webapk/shell_apk/MainActivity.java",
       "src/org/chromium/webapk/shell_apk/TransparentLauncherActivity.java",
       "src/org/chromium/webapk/shell_apk/WebApkSharedPreferences.java",
       "src/org/chromium/webapk/shell_apk/WebApkUtils.java",
@@ -76,24 +71,18 @@ template("webapk_java") {
       "//chrome/android/webapk/libs/common:common_java",
       "//chrome/android/webapk/libs/common:splash_java",
     ]
-    min_sdk_version = 19
   }
 }
 
 template("webapk_with_service_java") {
   android_library(target_name) {
-    forward_variables_from(invoker,
-                           [
-                             "android_manifest_for_lint",
-                             "deps",
-                           ])
+    forward_variables_from(invoker, [ "deps" ])
 
     sources = [
       "src/org/chromium/webapk/shell_apk/WebApkServiceFactory.java",
       "src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapper.java",
     ]
     deps += [ ":compiled_in_runtime_library_java" ]
-    min_sdk_version = 19
   }
 }
 
@@ -212,10 +201,12 @@ template("webapk_tmpl") {
       "res/values-hdpi/is_splash_icon_maskable_bool.xml",
       "res/values-mdpi/is_splash_icon_maskable_bool.xml",
       "res/values-v17/styles.xml",
+      "res/values-v24/default_enabled_activity.xml",
       "res/values-xhdpi/is_splash_icon_maskable_bool.xml",
       "res/values-xxhdpi/is_splash_icon_maskable_bool.xml",
       "res/values-xxxhdpi/is_splash_icon_maskable_bool.xml",
       "res/values/colors.xml",
+      "res/values/default_enabled_activity.xml",
       "res/values/dimens.xml",
       "res/xml/shortcuts.xml",
     ]
@@ -227,7 +218,6 @@ template("webapk_tmpl") {
   }
 
   webapk_java(_java_without_services_target_name) {
-    android_manifest_for_lint = _manifest_output
     deps = [
       ":$_manifest_target_name",
       ":$_resources_target_name",
@@ -235,7 +225,6 @@ template("webapk_tmpl") {
   }
 
   webapk_with_service_java(_java_with_services_target_name) {
-    android_manifest_for_lint = _manifest_output
     deps = [
       ":$_java_without_services_target_name",
       ":$_manifest_target_name",
@@ -243,12 +232,16 @@ template("webapk_tmpl") {
   }
 
   android_apk(target_name) {
-    forward_variables_from(invoker, [ "apk_name" ])
+    forward_variables_from(invoker,
+                           [
+                             "apk_name",
+                             "testonly",
+                           ])
     deps = [ ":$_java_with_services_target_name" ]
 
     android_manifest = _manifest_output
     android_manifest_dep = ":$_manifest_target_name"
-    min_sdk_version = 19
+    min_sdk_version = 21
     target_sdk_version = 29
     never_incremental = true
     enable_multidex = false
@@ -295,6 +288,7 @@ webapk_tmpl("maps_go_webapk") {
 }
 
 webapk_tmpl("uiautomator_maps_go_webapk") {
+  testonly = true
   config_file = "manifest/maps_go_manifest_config.json"
   manifest_to_upload_dep = ":generate_old_style_manifest_for_upload"
   apk_name = "JavatestsMapsWebApk"
@@ -318,6 +312,7 @@ webapk_tmpl("new_splash_webapk") {
 
 # Used by javatests
 webapk_tmpl("javatests_webapk") {
+  testonly = true
   config_file = "manifest/bound_manifest_config.json"
   manifest_to_upload_dep = ":generate_old_style_manifest_for_upload"
   delta_config_file = "manifest/javatest_manifest_config_delta.json"

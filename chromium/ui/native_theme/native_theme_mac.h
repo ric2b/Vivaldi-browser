@@ -40,6 +40,9 @@ class NATIVE_THEME_EXPORT NativeThemeMac : public NativeThemeBase {
   SkColor GetSystemColor(ColorId color_id,
                          ColorScheme color_scheme) const override;
 
+  // Overridden from NativeTheme:
+  SkColor GetSystemButtonPressedColor(SkColor base_color) const override;
+
   // Overridden from NativeThemeBase:
   void PaintMenuPopupBackground(
       cc::PaintCanvas* canvas,
@@ -82,6 +85,12 @@ class NATIVE_THEME_EXPORT NativeThemeMac : public NativeThemeBase {
 
   void ConfigureWebInstance() override;
 
+  // Used by the GetSystem to run the switch for MacOS override colors that may
+  // use named NS system colors. This is a separate function from GetSystemColor
+  // to make sure the NSAppearance can be set in a scoped way.
+  base::Optional<SkColor> GetOSColor(ColorId color_id,
+                                     ColorScheme color_scheme) const;
+
   base::scoped_nsobject<NativeThemeEffectiveAppearanceObserver>
       appearance_observer_;
   id high_contrast_notification_token_;
@@ -90,6 +99,8 @@ class NATIVE_THEME_EXPORT NativeThemeMac : public NativeThemeBase {
   // contrast.
   std::unique_ptr<NativeTheme::ColorSchemeNativeThemeObserver>
       color_scheme_observer_;
+
+  bool should_only_use_dark_colors_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeThemeMac);
 };

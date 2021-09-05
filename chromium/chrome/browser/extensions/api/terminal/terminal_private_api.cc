@@ -493,6 +493,24 @@ void TerminalPrivateAckOutputFunction::AckOutputOnRegistryTaskRunner(
   chromeos::ProcessProxyRegistry::Get()->AckOutput(terminal_id);
 }
 
+TerminalPrivateOpenWindowFunction::~TerminalPrivateOpenWindowFunction() =
+    default;
+
+ExtensionFunction::ResponseAction TerminalPrivateOpenWindowFunction::Run() {
+  crostini::LaunchTerminal(Profile::FromBrowserContext(browser_context()));
+  return RespondNow(NoArguments());
+}
+
+TerminalPrivateOpenOptionsPageFunction::
+    ~TerminalPrivateOpenOptionsPageFunction() = default;
+
+ExtensionFunction::ResponseAction
+TerminalPrivateOpenOptionsPageFunction::Run() {
+  crostini::LaunchTerminalSettings(
+      Profile::FromBrowserContext(browser_context()));
+  return RespondNow(NoArguments());
+}
+
 TerminalPrivateGetCroshSettingsFunction::
     ~TerminalPrivateGetCroshSettingsFunction() = default;
 
@@ -501,6 +519,10 @@ TerminalPrivateGetCroshSettingsFunction::Run() {
   const Extension* crosh_extension =
       TerminalExtensionHelper::GetTerminalExtension(
           Profile::FromBrowserContext(browser_context()));
+  if (!crosh_extension) {
+    return RespondNow(OneArgument(std::make_unique<base::DictionaryValue>()));
+  }
+
   StorageFrontend* frontend = StorageFrontend::Get(browser_context());
   frontend->RunWithStorage(
       crosh_extension, settings_namespace::SYNC,

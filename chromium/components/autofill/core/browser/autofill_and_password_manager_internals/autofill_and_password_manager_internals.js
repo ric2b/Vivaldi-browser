@@ -128,7 +128,7 @@ function addRawLog(node) {
 
 function setUpAutofillInternals() {
     document.title = "Autofill Internals";
-    document.getElementById("h1-title").innerHTML = "Autofill Internals";
+    document.getElementById("h1-title").textContent = "Autofill Internals";
     document.getElementById("logging-note").innerText =
       "Captured autofill logs are listed below. Logs are cleared and no longer \
       captured when all autofill-internals pages are closed.";
@@ -139,7 +139,7 @@ function setUpAutofillInternals() {
 
 function setUpPasswordManagerInternals() {
     document.title = "Password Manager Internals";
-    document.getElementById("h1-title").innerHTML =
+    document.getElementById("h1-title").textContent =
       "Password Manager Internals";
     document.getElementById("logging-note").innerText =
       "Captured password manager logs are listed below. Logs are cleared and \
@@ -174,6 +174,7 @@ function setUpLogDisplayConfig() {
     'Submission',
     'AutofillServer',
     'Metrics',
+    'AddressProfileFormImport',
   ];
   const displayConfigDiv = document.getElementById('log-display-config');
   const logDiv = document.getElementById('log-entries');

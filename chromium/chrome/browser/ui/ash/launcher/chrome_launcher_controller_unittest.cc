@@ -96,6 +96,7 @@
 #include "chrome/test/base/test_browser_window_aura.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_prefs.h"
@@ -106,6 +107,7 @@
 #include "components/exo/shell_surface_util.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/prefs/pref_notifier_impl.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -151,6 +153,7 @@ namespace {
 constexpr char kOfflineGmailUrl[] = "https://mail.google.com/mail/mu/u";
 constexpr char kGmailUrl[] = "https://mail.google.com/mail/u";
 constexpr char kGmailLaunchURL[] = "https://mail.google.com/mail/ca";
+constexpr char kLaunchURL[] = "https://foo.example/";
 
 // An extension prefix.
 constexpr char kCrxAppPrefix[] = "_crx_";
@@ -158,10 +161,6 @@ constexpr char kCrxAppPrefix[] = "_crx_";
 // Dummy app id is used to put at least one pin record to prevent initializing
 // pin model with default apps that can affect some tests.
 constexpr char kDummyAppId[] = "dummyappid_dummyappid_dummyappid";
-
-// Web App id.
-constexpr char kWebAppId[] = "lpikggcgamknpihimepdkohalcnpofed";
-constexpr char kWebAppUrl[] = "https://foo.example/";
 
 // Test implementation of AppIconLoader.
 class TestAppIconLoaderImpl : public AppIconLoader {
@@ -299,7 +298,7 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
     // AppService checks the app's type. So set the
     // manifest_keys::kLaunchWebURL, so that the extension can get the type
     // from manifest value, and then AppService can get the extension's type.
-    manifest.SetString(extensions::manifest_keys::kLaunchWebURL, kWebAppUrl);
+    manifest.SetString(extensions::manifest_keys::kLaunchWebURL, kLaunchURL);
 
     base::DictionaryValue manifest_platform_app;
     manifest_platform_app.SetString(extensions::manifest_keys::kName,
@@ -408,10 +407,7 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
     // manifest_keys::kLaunchWebURL, so that the extension can get the type
     // from manifest value, and then AppService can get the extension's type.
     manifest_web_app.SetString(extensions::manifest_keys::kLaunchWebURL,
-                               kWebAppUrl);
-    web_app_ = Extension::Create(base::FilePath(), Manifest::UNPACKED,
-                                 manifest_web_app, Extension::FROM_BOOKMARK,
-                                 kWebAppId, &error);
+                               kLaunchURL);
   }
 
   ui::BaseWindow* GetLastActiveWindowForItemController(
@@ -538,21 +534,30 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
     app_list_syncable_service_->StopSyncing(syncer::APP_LIST);
   }
 
+  // static
+  syncer::ModelType GetPreferencesModelType() {
+    // SplitSettingsSync makes shelf prefs into OS prefs.
+    return chromeos::features::IsSplitSettingsSyncEnabled()
+               ? syncer::OS_PREFERENCES
+               : syncer::PREFERENCES;
+  }
+
   sync_preferences::PrefModelAssociator* GetPrefSyncService() {
     sync_preferences::PrefServiceSyncable* pref_sync =
         profile()->GetTestingPrefService();
     sync_preferences::PrefModelAssociator* pref_sync_service =
         reinterpret_cast<sync_preferences::PrefModelAssociator*>(
-            pref_sync->GetSyncableService(syncer::PREFERENCES));
+            pref_sync->GetSyncableService(GetPreferencesModelType()));
     return pref_sync_service;
   }
 
   void StartPrefSyncService(const syncer::SyncDataList& init_sync_list) {
-    syncer::SyncMergeResult r = GetPrefSyncService()->MergeDataAndStartSyncing(
-        syncer::PREFERENCES, init_sync_list,
-        std::make_unique<syncer::FakeSyncChangeProcessor>(),
-        std::make_unique<syncer::SyncErrorFactoryMock>());
-    EXPECT_FALSE(r.error().IsSet());
+    base::Optional<syncer::ModelError> error =
+        GetPrefSyncService()->MergeDataAndStartSyncing(
+            GetPreferencesModelType(), init_sync_list,
+            std::make_unique<syncer::FakeSyncChangeProcessor>(),
+            std::make_unique<syncer::SyncErrorFactoryMock>());
+    EXPECT_FALSE(error.has_value());
   }
 
   void SetAppIconLoader(std::unique_ptr<AppIconLoader> loader) {
@@ -775,8 +780,6 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
             result += "Play Store";
           } else if (app == crostini::GetTerminalId()) {
             result += "Terminal";
-          } else if (app == web_app_->id()) {
-            result += "WebApp";
           } else {
             bool arc_app_found = false;
             for (const auto& arc_app : arc_test_.fake_apps()) {
@@ -947,7 +950,6 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
   scoped_refptr<Extension> extensionYoutubeApp_;
   scoped_refptr<Extension> extension_platform_app_;
   scoped_refptr<Extension> arc_support_host_;
-  scoped_refptr<Extension> web_app_;
 
   ArcAppTest arc_test_;
   bool auto_start_arc_test_ = false;
@@ -1025,7 +1027,7 @@ class ChromeLauncherControllerExtendedShelfTest
     // AppService checks the app's type. So set the
     // manifest_keys::kLaunchWebURL, so that the extension can get the type
     // from manifest value, and then AppService can get the extension's type.
-    manifest.SetString(extensions::manifest_keys::kLaunchWebURL, kWebAppUrl);
+    manifest.SetString(extensions::manifest_keys::kLaunchWebURL, kLaunchURL);
 
     const std::vector<std::pair<std::string, std::string>> extra_extensions = {
         {extension_misc::kCalendarAppId, "Calendar"},
@@ -1051,29 +1053,6 @@ class ChromeLauncherControllerExtendedShelfTest
   std::vector<scoped_refptr<Extension>> extra_extensions_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerExtendedShelfTest);
-};
-
-// Watches WebContents and blocks until it is destroyed. This is needed for
-// the destruction of a V2 application.
-class WebContentsDestroyedWatcher : public content::WebContentsObserver {
- public:
-  explicit WebContentsDestroyedWatcher(content::WebContents* web_contents)
-      : content::WebContentsObserver(web_contents),
-        message_loop_runner_(new content::MessageLoopRunner) {
-    EXPECT_TRUE(web_contents != nullptr);
-  }
-  ~WebContentsDestroyedWatcher() override {}
-
-  // Waits until the WebContents is destroyed.
-  void Wait() { message_loop_runner_->Run(); }
-
- private:
-  // Overridden WebContentsObserver methods.
-  void WebContentsDestroyed() override { message_loop_runner_->Quit(); }
-
-  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(WebContentsDestroyedWatcher);
 };
 
 // A V1 windowed application.
@@ -1127,7 +1106,8 @@ class V2App {
   }
 
   virtual ~V2App() {
-    WebContentsDestroyedWatcher destroyed_watcher(window_->web_contents());
+    content::WebContentsDestroyedWatcher destroyed_watcher(
+        window_->web_contents());
     window_->GetBaseWindow()->Close();
     destroyed_watcher.Wait();
   }
@@ -2997,42 +2977,6 @@ TEST_F(ChromeLauncherControllerTest, Policy) {
   profile()->GetTestingPrefService()->SetManagedPref(
       prefs::kPolicyPinnedLauncherApps, policy_value.CreateDeepCopy());
   EXPECT_EQ("Chrome, App1, App2", GetPinnedAppStatus());
-}
-
-TEST_F(ChromeLauncherControllerTest, WebAppPolicy) {
-  // Simulate one Web App being installed.
-  web_app::ExternallyInstalledWebAppPrefs web_app_prefs(profile()->GetPrefs());
-  web_app_prefs.Insert(GURL(kWebAppUrl), kWebAppId,
-                       web_app::ExternalInstallSource::kExternalPolicy);
-  extension_service_->AddExtension(web_app_.get());
-
-  // Set the policy value.
-  base::ListValue policy_value;
-  AppendPrefValue(&policy_value, kWebAppUrl);
-  profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kPolicyPinnedLauncherApps,
-      base::Value::ToUniquePtrValue(std::move(policy_value)));
-
-  InitLauncherController();
-
-  EXPECT_EQ("Chrome, WebApp", GetPinnedAppStatus());
-  EXPECT_EQ(AppListControllerDelegate::PIN_FIXED,
-            GetPinnableForAppID(kWebAppId, profile()));
-}
-
-TEST_F(ChromeLauncherControllerTest, WebAppPolicyNonExistentApp) {
-  // Set the policy value but don't install an app for it.
-  base::ListValue policy_value;
-  AppendPrefValue(&policy_value, kWebAppUrl);
-  profile()->GetTestingPrefService()->SetManagedPref(
-      prefs::kPolicyPinnedLauncherApps,
-      base::Value::ToUniquePtrValue(std::move(policy_value)));
-
-  InitLauncherController();
-
-  EXPECT_EQ("Chrome", GetPinnedAppStatus());
-  EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
-            GetPinnableForAppID(kWebAppId, profile()));
 }
 
 TEST_F(ChromeLauncherControllerTest, UnpinWithUninstall) {

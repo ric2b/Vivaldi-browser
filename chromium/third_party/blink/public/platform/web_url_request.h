@@ -113,17 +113,13 @@ class WebURLRequest {
     kResourceLoadingHintsOn = 1 << 7,  // Request that resource loading hints be
                                        // used during pageload.
     kOfflinePageOn = 1 << 8,
-    kLitePageRedirectOn = 1 << 9,  // Allow the browser to redirect the resource
-                                   // to a Lite Page server.
-    kLazyImageLoadDeferred = 1 << 10,  // Request the placeholder version of an
-                                       // image that was deferred by lazyload.
-    kLazyImageAutoReload = 1 << 11,    // Request the full version of an image
-                                       // that was previously fetched as a
-                                       // placeholder by lazyload.
-    kDeferAllScriptOn = 1 << 12,  // Request that script execution be deferred
+    kLitePageRedirectOn_DEPRECATED =
+        1 << 9,  // Allow the browser to redirect the resource
+                 // to a Lite Page server. Deprecated and should not be used.
+    kDeferAllScriptOn = 1 << 10,  // Request that script execution be deferred
                                   // until parsing completes.
     kSubresourceRedirectOn =
-        1 << 13,  // Allow the subresources in the page to be redirected
+        1 << 11,  // Allow the subresources in the page to be redirected
                   // to serve better optimized resources.
     kPreviewsStateLast = kSubresourceRedirectOn
   };
@@ -157,9 +153,11 @@ class WebURLRequest {
 
     // Determines whether SameSite cookies will be attached to the request
     // even when the request looks cross-site.
-    bool attach_same_site_cookies() const { return attach_same_site_cookies_; }
-    void set_attach_same_site_cookies(bool attach) {
-      attach_same_site_cookies_ = attach;
+    bool force_ignore_site_for_cookies() const {
+      return force_ignore_site_for_cookies_;
+    }
+    void set_force_ignore_site_for_cookies(bool attach) {
+      force_ignore_site_for_cookies_ = attach;
     }
 
    protected:
@@ -173,7 +171,7 @@ class WebURLRequest {
     ui::PageTransition transition_type_ = ui::PAGE_TRANSITION_LINK;
     bool is_for_no_state_prefetch_ = false;
     bool originated_from_service_worker_ = false;
-    bool attach_same_site_cookies_ = false;
+    bool force_ignore_site_for_cookies_ = false;
   };
 
   BLINK_PLATFORM_EXPORT ~WebURLRequest();

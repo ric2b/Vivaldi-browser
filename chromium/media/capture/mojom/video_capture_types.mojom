@@ -74,6 +74,7 @@ enum VideoCaptureApi {
   ANDROID_API2_LEGACY,
   ANDROID_API2_FULL,
   ANDROID_API2_LIMITED,
+  FUCHSIA_CAMERA3,
   VIRTUAL_DEVICE,
   UNKNOWN
 };
@@ -213,7 +214,14 @@ enum VideoCaptureError {
   kMacDeckLinkUnsupportedPixelFormat,
   kMacAvFoundationReceivedAVCaptureSessionRuntimeErrorNotification,
   kAndroidApi2ErrorConfiguringCamera,
-  kCrosHalV3DeviceDelegateFailedToFlush
+  kCrosHalV3DeviceDelegateFailedToFlush,
+  kFuchsiaCameraDeviceDisconnected,
+  kFuchsiaCameraStreamDisconnected,
+  kFuchsiaSysmemDidNotSetImageFormat,
+  kFuchsiaSysmemInvalidBufferIndex,
+  kFuchsiaSysmemInvalidBufferSize,
+  kFuchsiaUnsupportedPixelFormat,
+  kFuchsiaFailedToMapSysmemBuffer,
 };
 
 enum VideoCaptureFrameDropReason {

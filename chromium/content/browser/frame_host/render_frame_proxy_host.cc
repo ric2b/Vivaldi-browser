@@ -32,6 +32,7 @@
 #include "content/public/common/content_features.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom.h"
@@ -57,6 +58,12 @@ typedef std::unordered_map<RenderFrameProxyHostID,
 base::LazyInstance<RoutingIDFrameProxyMap>::DestructorAtExit
     g_routing_id_frame_proxy_map = LAZY_INSTANCE_INITIALIZER;
 
+using TokenFrameMap = std::unordered_map<base::UnguessableToken,
+                                         RenderFrameProxyHost*,
+                                         base::UnguessableTokenHash>;
+base::LazyInstance<TokenFrameMap>::Leaky g_token_frame_proxy_map =
+    LAZY_INSTANCE_INITIALIZER;
+
 }  // namespace
 
 // static
@@ -71,7 +78,22 @@ RenderFrameProxyHost* RenderFrameProxyHost::FromID(int process_id,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   RoutingIDFrameProxyMap* frames = g_routing_id_frame_proxy_map.Pointer();
   auto it = frames->find(RenderFrameProxyHostID(process_id, routing_id));
-  return it == frames->end() ? NULL : it->second;
+  return it == frames->end() ? nullptr : it->second;
+}
+
+// static
+RenderFrameProxyHost* RenderFrameProxyHost::FromFrameToken(
+    int process_id,
+    const base::UnguessableToken& frame_token) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  TokenFrameMap* frames = g_token_frame_proxy_map.Pointer();
+  auto it = frames->find(frame_token);
+  // The check against |process_id| isn't strictly necessary, but represents
+  // an extra level of protection against a renderer trying to force a frame
+  // token.
+  return it != frames->end() && it->second->GetProcess()->GetID() == process_id
+             ? it->second
+             : nullptr;
 }
 
 RenderFrameProxyHost::RenderFrameProxyHost(
@@ -90,13 +112,14 @@ RenderFrameProxyHost::RenderFrameProxyHost(
           .insert(std::make_pair(
               RenderFrameProxyHostID(GetProcess()->GetID(), routing_id_), this))
           .second);
+  CHECK(g_token_frame_proxy_map.Get()
+            .insert(std::make_pair(frame_token_, this))
+            .second);
   CHECK(render_view_host_ ||
         frame_tree_node_->render_manager()->IsMainFrameForInnerDelegate());
 
   bool is_proxy_to_parent = !frame_tree_node_->IsMainFrame() &&
                             frame_tree_node_->parent()
-                                    ->render_manager()
-                                    ->current_frame_host()
                                     ->GetSiteInstance() == site_instance;
   bool is_proxy_to_outer_delegate =
       frame_tree_node_->render_manager()->IsMainFrameForInnerDelegate();
@@ -137,6 +160,7 @@ RenderFrameProxyHost::~RenderFrameProxyHost() {
   GetProcess()->RemoveRoute(routing_id_);
   g_routing_id_frame_proxy_map.Get().erase(
       RenderFrameProxyHostID(GetProcess()->GetID(), routing_id_));
+  g_token_frame_proxy_map.Get().erase(frame_token_);
 }
 
 void RenderFrameProxyHost::SetChildRWHView(
@@ -156,6 +180,7 @@ RenderViewHostImpl* RenderFrameProxyHost::GetRenderViewHost() {
 
 RenderWidgetHostView* RenderFrameProxyHost::GetRenderWidgetHostView() {
   return frame_tree_node_->parent()
+      ->frame_tree_node()
       ->render_manager()
       ->GetRenderWidgetHostView();
 }
@@ -213,8 +238,10 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
     // new child frames always start out as local frames, so a new proxy should
     // never have a RenderFrameHost as a parent.
     RenderFrameProxyHost* parent_proxy =
-        frame_tree_node_->parent()->render_manager()->GetRenderFrameProxyHost(
-            site_instance_.get());
+        frame_tree_node_->parent()
+            ->frame_tree_node()
+            ->render_manager()
+            ->GetRenderFrameProxyHost(site_instance_.get());
     CHECK(parent_proxy);
 
     // Proxies that aren't live in the parent node should not be initialized
@@ -239,7 +266,7 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
                             ->GetRoutingID();
   GetProcess()->GetRendererInterface()->CreateFrameProxy(
       routing_id_, view_routing_id, opener_routing_id, parent_routing_id,
-      frame_tree_node_->current_replication_state(),
+      frame_tree_node_->current_replication_state(), frame_token_,
       frame_tree_node_->devtools_frame_token());
 
   SetRenderFrameProxyCreated(true);
@@ -459,8 +486,8 @@ void RenderFrameProxyHost::OnOpenURL(
       current_rfh, params.user_gesture, &download_policy);
 
   if ((frame_tree_node_->pending_frame_policy().sandbox_flags &
-       blink::mojom::WebSandboxFlags::kDownloads) !=
-      blink::mojom::WebSandboxFlags::kNone) {
+       network::mojom::WebSandboxFlags::kDownloads) !=
+      network::mojom::WebSandboxFlags::kNone) {
     if (download_policy.blocking_downloads_in_sandbox_enabled) {
       download_policy.SetDisallowed(content::NavigationDownloadType::kSandbox);
     } else {
@@ -475,11 +502,13 @@ void RenderFrameProxyHost::OnOpenURL(
   // TODO(clamy): The transition should probably be changed for POST navigations
   // to PAGE_TRANSITION_FORM_SUBMIT. See https://crbug.com/829827.
   frame_tree_node_->navigator()->NavigateFromFrameProxy(
-      current_rfh, validated_url, params.initiator_origin, site_instance_.get(),
-      params.referrer, ui::PAGE_TRANSITION_LINK,
-      params.should_replace_current_entry, download_policy,
-      params.post_body ? "POST" : "GET", params.post_body, params.extra_headers,
-      std::move(blob_url_loader_factory), params.user_gesture);
+      current_rfh, validated_url,
+      GlobalFrameRoutingId(GetProcess()->GetID(), params.initiator_routing_id),
+      params.initiator_origin, site_instance_.get(), params.referrer,
+      ui::PAGE_TRANSITION_LINK, params.should_replace_current_entry,
+      download_policy, params.post_body ? "POST" : "GET", params.post_body,
+      params.extra_headers, std::move(blob_url_loader_factory),
+      params.user_gesture, params.impression);
 }
 
 void RenderFrameProxyHost::CheckCompleted() {
@@ -564,27 +593,24 @@ void RenderFrameProxyHost::OnRouteMessageEvent(
                                                        GetSiteInstance()))
     return;
 
-  int32_t source_routing_id = params.source_routing_id;
+  base::Optional<base::UnguessableToken> translated_source_token;
   base::string16 source_origin = params.source_origin;
   base::string16 target_origin = params.target_origin;
   blink::TransferableMessage message = std::move(params.message->data);
 
-  // If there is a source_routing_id, translate it to the routing ID of the
+  // If there is a source_routing_id, translate it to the frame token of the
   // equivalent RenderFrameProxyHost in the target process.
-  if (source_routing_id != MSG_ROUTING_NONE) {
-    RenderFrameHostImpl* source_rfh =
-        RenderFrameHostImpl::FromID(GetProcess()->GetID(), source_routing_id);
-    if (!source_rfh) {
-      source_routing_id = MSG_ROUTING_NONE;
-    } else {
+  if (params.source_routing_id != MSG_ROUTING_NONE) {
+    RenderFrameHostImpl* source_rfh = RenderFrameHostImpl::FromID(
+        GetProcess()->GetID(), params.source_routing_id);
+    if (source_rfh) {
       // https://crbug.com/822958: If the postMessage is going to a descendant
       // frame, ensure that any pending visual properties such as size are sent
       // to the target frame before the postMessage, as sites might implicitly
       // be relying on this ordering.
       bool target_is_descendant_of_source = false;
-      for (FrameTreeNode* node = target_rfh->frame_tree_node(); node;
-           node = node->parent()) {
-        if (node == source_rfh->frame_tree_node()) {
+      for (RenderFrameHost* rfh = target_rfh; rfh; rfh = rfh->GetParent()) {
+        if (rfh == source_rfh) {
           target_is_descendant_of_source = true;
           break;
         }
@@ -627,16 +653,14 @@ void RenderFrameProxyHost::OnRouteMessageEvent(
               ->render_manager()
               ->GetRenderFrameProxyHost(target_site_instance);
       if (source_proxy_in_target_site_instance) {
-        source_routing_id =
-            source_proxy_in_target_site_instance->GetRoutingID();
-      } else {
-        source_routing_id = MSG_ROUTING_NONE;
+        translated_source_token =
+            source_proxy_in_target_site_instance->GetFrameToken();
       }
     }
   }
 
-  target_rfh->PostMessageEvent(source_routing_id, source_origin, target_origin,
-                               std::move(message));
+  target_rfh->PostMessageEvent(translated_source_token, source_origin,
+                               target_origin, std::move(message));
 }
 
 void RenderFrameProxyHost::OnDidChangeOpener(int32_t opener_routing_id) {

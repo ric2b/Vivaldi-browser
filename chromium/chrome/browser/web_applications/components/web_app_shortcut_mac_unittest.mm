@@ -50,7 +50,7 @@ class WebAppShortcutCreatorMock : public WebAppShortcutCreator {
       : WebAppShortcutCreator(app_data_dir, shortcut_info) {}
 
   MOCK_CONST_METHOD0(GetAppBundlesByIdUnsorted, std::vector<base::FilePath>());
-  MOCK_CONST_METHOD0(RevealAppShimInFinder, void());
+  MOCK_CONST_METHOD1(RevealAppShimInFinder, void(const base::FilePath&));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WebAppShortcutCreatorMock);
@@ -219,8 +219,10 @@ TEST_F(WebAppShortcutCreatorTest, FileHandlers) {
   }
   EXPECT_TRUE(base::DeleteFileRecursively(shim_path_));
 
-  // Register 2 mime types. We should now have kCFBundleTypeMIMETypesKey but
-  // not kCFBundleTypeExtensionsKey.
+  // Register 2 mime types (and 2 invalid extensions). We should now have
+  // kCFBundleTypeMIMETypesKey but not kCFBundleTypeExtensionsKey.
+  info_->file_handler_extensions.insert("byobb");
+  info_->file_handler_extensions.insert(".");
   info_->file_handler_mime_types.insert("foo/bar");
   info_->file_handler_mime_types.insert("moo/cow");
   EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
@@ -249,10 +251,10 @@ TEST_F(WebAppShortcutCreatorTest, FileHandlers) {
   }
   EXPECT_TRUE(base::DeleteFileRecursively(shim_path_));
 
-  // Register 3 extensions with the 2 mime types.
-  info_->file_handler_extensions.insert("cow");
-  info_->file_handler_extensions.insert("pig");
-  info_->file_handler_extensions.insert("bbq");
+  // Register 3 valid extensions (and 2 invalid ones) with the 2 mime types.
+  info_->file_handler_extensions.insert(".cow");
+  info_->file_handler_extensions.insert(".pig");
+  info_->file_handler_extensions.insert(".bbq");
   EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
                                                ShortcutLocations()));
   {
@@ -549,11 +551,11 @@ TEST_F(WebAppShortcutCreatorTest, UpdateIcon) {
 TEST_F(WebAppShortcutCreatorTest, RevealAppShimInFinder) {
   WebAppShortcutCreatorMock shortcut_creator(app_data_dir_, info_.get());
 
-  EXPECT_CALL(shortcut_creator, RevealAppShimInFinder()).Times(0);
+  EXPECT_CALL(shortcut_creator, RevealAppShimInFinder(_)).Times(0);
   EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_AUTOMATED,
                                                ShortcutLocations()));
 
-  EXPECT_CALL(shortcut_creator, RevealAppShimInFinder());
+  EXPECT_CALL(shortcut_creator, RevealAppShimInFinder(_));
   EXPECT_TRUE(shortcut_creator.CreateShortcuts(SHORTCUT_CREATION_BY_USER,
                                                ShortcutLocations()));
 }

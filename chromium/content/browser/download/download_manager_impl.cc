@@ -388,8 +388,8 @@ void DownloadManagerImpl::GetNextId(GetNextIdCallback callback) {
   if (!is_history_download_id_retrieved_ && id_callbacks_.size() == 1u) {
     if (delegate_) {
       delegate_->GetNextId(
-          base::BindRepeating(&DownloadManagerImpl::OnHistoryNextIdRetrived,
-                              weak_factory_.GetWeakPtr()));
+          base::BindOnce(&DownloadManagerImpl::OnHistoryNextIdRetrived,
+                         weak_factory_.GetWeakPtr()));
     } else {
       OnHistoryNextIdRetrived(download::DownloadItem::kInvalidId);
     }
@@ -451,12 +451,22 @@ bool DownloadManagerImpl::ShouldCompleteDownload(
   return false;
 }
 
-bool DownloadManagerImpl::ShouldOpenFileBasedOnExtension(
+bool DownloadManagerImpl::ShouldAutomaticallyOpenFile(
+    const GURL& url,
     const base::FilePath& path) {
   if (!delegate_)
     return false;
 
-  return delegate_->ShouldOpenFileBasedOnExtension(path);
+  return delegate_->ShouldAutomaticallyOpenFile(url, path);
+}
+
+bool DownloadManagerImpl::ShouldAutomaticallyOpenFileByPolicy(
+    const GURL& url,
+    const base::FilePath& path) {
+  if (!delegate_)
+    return false;
+
+  return delegate_->ShouldAutomaticallyOpenFileByPolicy(url, path);
 }
 
 bool DownloadManagerImpl::ShouldOpenDownload(
@@ -542,7 +552,7 @@ bool DownloadManagerImpl::InterceptDownload(
     return true;
   }
 
-  std::string user_agent = "";
+  std::string user_agent;
   for (const auto& header : info.request_headers) {
     if (header.first == net::HttpRequestHeaders::kUserAgent) {
       user_agent = header.second;

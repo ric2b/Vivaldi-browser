@@ -31,9 +31,7 @@
 #include "url/origin.h"
 
 namespace content {
-class BrowserContext;
 class FrameTreeNode;
-class InterstitialPageImpl;
 class NavigationControllerImpl;
 class NavigationEntry;
 class NavigationRequest;
@@ -120,6 +118,7 @@ class CONTENT_EXPORT RenderFrameHostManager
         RenderViewHost* render_view_host,
         int opener_frame_routing_id,
         int proxy_routing_id,
+        const base::UnguessableToken& frame_token,
         const base::UnguessableToken& devtools_frame_token,
         const FrameReplicationState& replicated_frame_state) = 0;
     virtual void CreateRenderWidgetHostViewForRenderManager(
@@ -136,21 +135,16 @@ class CONTENT_EXPORT RenderFrameHostManager
         bool* proceed_to_fire_unload) = 0;
     virtual void RenderProcessGoneFromRenderManager(
         RenderViewHost* render_view_host) = 0;
-    virtual void UpdateRenderViewSizeForRenderManager(bool is_main_frame) = 0;
     virtual void CancelModalDialogsForRenderManager() = 0;
-    virtual void NotifySwappedFromRenderManager(RenderFrameHost* old_host,
-                                                RenderFrameHost* new_host,
+    virtual void NotifySwappedFromRenderManager(RenderFrameHost* old_frame,
+                                                RenderFrameHost* new_frame,
                                                 bool is_main_frame) = 0;
     // TODO(nasko): This should be removed once extensions no longer use
     // NotificationService. See https://crbug.com/462682.
     virtual void NotifyMainFrameSwappedFromRenderManager(
-        RenderFrameHost* old_host,
-        RenderFrameHost* new_host) = 0;
+        RenderFrameHost* old_frame,
+        RenderFrameHost* new_frame) = 0;
     virtual NavigationControllerImpl& GetControllerForRenderManager() = 0;
-
-    // Returns the interstitial page showing in the delegate, or null if there
-    // is none.
-    virtual InterstitialPageImpl* GetInterstitialForRenderManager() = 0;
 
     // Returns true if the location bar should be focused by default rather than
     // the page contents. The view calls this function when the tab is focused
@@ -185,7 +179,9 @@ class CONTENT_EXPORT RenderFrameHostManager
   void InitRoot(SiteInstance* site_instance, bool renderer_initiated_creation);
 
   // Initialize this frame as the child of another frame.
-  void InitChild(SiteInstance* site_instance, int32_t frame_routing_id);
+  void InitChild(SiteInstance* site_instance,
+                 int32_t frame_routing_id,
+                 const base::UnguessableToken& frame_token);
 
   // Returns the currently active RenderFrameHost.
   //
@@ -486,8 +482,11 @@ class CONTENT_EXPORT RenderFrameHostManager
   scoped_refptr<SiteInstance> GetSiteInstanceForNavigationRequest(
       NavigationRequest* navigation_request);
 
-  // Helper to initialize the RenderFrame if it's not initialized.
-  void InitializeRenderFrameIfNecessary(RenderFrameHostImpl* render_frame_host);
+  // Helper to initialize the current RenderFrame if it's not initialized.
+  // TODO(https://crbug.com/1006814): Remove this. For now debug URLs and
+  // WebView JS execution are an exception to replacing all crashed frames for
+  // RenderDocument. This is a no-op if the frame is already initialized.
+  bool InitializeRenderFrameForImmediateUse();
 
   // Prepares the FrameTreeNode for attaching an inner WebContents. This step
   // may involve replacing |current_frame_host()| with a new RenderFrameHost
@@ -506,9 +505,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   void set_attach_complete() {
     attach_to_inner_delegate_state_ = AttachToInnerDelegateState::ATTACHED;
   }
-
-  // Sets an embedding token to track the relationship of a frame to its parent.
-  void SetEmbeddingToken(const base::UnguessableToken& embedding_token);
 
  private:
   friend class NavigatorTest;
@@ -546,8 +542,7 @@ class CONTENT_EXPORT RenderFrameHostManager
         : existing_site_instance(site_instance),
           relation(SiteInstanceRelation::PREEXISTING) {}
 
-    SiteInstanceDescriptor(BrowserContext* browser_context,
-                           GURL dest_url,
+    SiteInstanceDescriptor(GURL dest_url,
                            SiteInstanceRelation relation_to_current);
 
     // Set with an existing SiteInstance to be reused.
@@ -555,10 +550,6 @@ class CONTENT_EXPORT RenderFrameHostManager
 
     // In case |existing_site_instance| is null, specify a destination URL.
     GURL dest_url;
-
-    // In case |existing_site_instance| is null, specify a BrowsingContext, to
-    // be used with |dest_url| to resolve the site URL.
-    BrowserContext* browser_context;
 
     // Specifies how the new site is related to the current BrowsingInstance.
     // This is PREEXISTING iff |existing_site_instance| is defined.
@@ -736,6 +727,7 @@ class CONTENT_EXPORT RenderFrameHostManager
       CreateFrameCase create_frame_case,
       SiteInstance* site_instance,
       int32_t frame_routing_id,
+      const base::UnguessableToken& frame_token,
       bool renderer_initiated_creation);
 
   // Create and initialize a speculative RenderFrameHost for an ongoing

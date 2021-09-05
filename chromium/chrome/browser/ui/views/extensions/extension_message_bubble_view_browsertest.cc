@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_actions_bar_bubble_views.h"
+#include "content/public/test/browser_test.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/events/base_event_utils.h"
@@ -256,13 +257,13 @@ class NtpExtensionBubbleViewBrowserTest
     ExtensionMessageBubbleViewBrowserTest::SetUpCommandLine(command_line);
 // The NTP bubble is only enabled by default on Mac, Windows, and CrOS.
 #if !defined(OS_WIN) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
-    extensions::SetNtpBubbleEnabledForTesting(true);
+    extensions::SetNtpPostInstallUiEnabledForTesting(true);
 #endif
   }
 
   void TearDownOnMainThread() override {
 #if !defined(OS_WIN) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
-    extensions::SetNtpBubbleEnabledForTesting(false);
+    extensions::SetNtpPostInstallUiEnabledForTesting(false);
 #endif
     ExtensionMessageBubbleViewBrowserTest::TearDownOnMainThread();
   }

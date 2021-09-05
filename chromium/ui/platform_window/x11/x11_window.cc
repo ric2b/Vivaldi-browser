@@ -7,6 +7,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/base/buildflags.h"
+#include "ui/base/x/x11_desktop_window_move_client.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/base/x/x11_util_internal.h"
 #include "ui/display/screen.h"
@@ -24,7 +25,7 @@
 
 #if defined(USE_OZONE)
 #include "ui/events/ozone/events_ozone.h"
-#endif
+#endif  // defined(USE_OZONE)
 
 #if BUILDFLAG(USE_ATK)
 #include "ui/platform_window/x11/atk_event_conversion.h"
@@ -71,7 +72,6 @@ XWindow::WindowType GetXWindowType(PlatformWindowType window_type) {
       return WindowType::kPopup;
     case PlatformWindowType::kDrag:
       return WindowType::kDrag;
-      break;
     case PlatformWindowType::kBubble:
       return WindowType::kBubble;
   }
@@ -139,7 +139,7 @@ void X11Window::Initialize(PlatformWindowInitProperties properties) {
   config.bounds.set_size(adjusted_size_in_pixels);
   config.override_redirect =
       properties.x11_extension_delegate &&
-      properties.x11_extension_delegate->IsOverrideRedirect();
+      properties.x11_extension_delegate->IsOverrideRedirect(IsWmTiling());
 
   workspace_extension_delegate_ = properties.workspace_extension_delegate;
   x11_extension_delegate_ = properties.x11_extension_delegate;
@@ -219,11 +219,6 @@ void X11Window::SetBounds(const gfx::Rect& bounds) {
   // (possibly synthetic) ConfigureNotify about the actual size and correct
   // |bounds_| later.
   XWindow::SetBounds(bounds_in_pixels);
-
-  // Even if the pixel bounds didn't change this call to the delegate should
-  // still happen. The device scale factor may have changed which effectively
-  // changes the bounds.
-  platform_window_delegate_->OnBoundsChanged(bounds_in_pixels);
 }
 
 gfx::Rect X11Window::GetBounds() {
@@ -586,6 +581,9 @@ void X11Window::DispatchUiEvent(ui::Event* event, XEvent* xev) {
   auto* window_manager = X11WindowManager::GetInstance();
   DCHECK(window_manager);
 
+  if (DispatchDraggingUiEvent(event))
+    return;
+
   // Process X11-specific bits
   if (XWindow::IsTargetedBy(*xev))
     XWindow::ProcessEvent(xev);
@@ -645,7 +643,18 @@ void X11Window::OnXWindowCreated() {
   DCHECK(X11EventSource::HasInstance());
   X11EventSource::GetInstance()->AddXEventDispatcher(this);
 
+  x11_window_move_client_ =
+      std::make_unique<ui::X11DesktopWindowMoveClient>(this);
+
+  // Set a class property key, which allows |this| to be used for move loop aka
+  // tab dragging.
+  SetWmMoveLoopHandler(this, static_cast<WmMoveLoopHandler*>(this));
+
   platform_window_delegate_->OnAcceleratedWidgetAvailable(GetWidget());
+}
+
+bool X11Window::DispatchDraggingUiEvent(ui::Event* event) {
+  return false;
 }
 
 void X11Window::OnXWindowStateChanged() {
@@ -760,6 +769,14 @@ void X11Window::DispatchHostWindowDragMovement(
     int hittest,
     const gfx::Point& pointer_location_in_px) {
   XWindow::WmMoveResize(hittest, pointer_location_in_px);
+}
+
+bool X11Window::RunMoveLoop(const gfx::Vector2d& drag_offset) {
+  return x11_window_move_client_->RunMoveLoop(!HasCapture(), drag_offset);
+}
+
+void X11Window::EndMoveLoop() {
+  x11_window_move_client_->EndMoveLoop();
 }
 
 gfx::Size X11Window::AdjustSizeForDisplay(

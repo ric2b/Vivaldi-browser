@@ -108,7 +108,7 @@ bool VivaldiAppWindowContentsImpl::PreHandleGestureEvent(
   // When called this means the user has attempted a gesture on the UI. We do
   // not allow that.
 #ifdef OS_MACOSX
-  if (event.GetType() == blink::WebInputEvent::kGestureDoubleTap)
+  if (event.GetType() == blink::WebInputEvent::Type::kGestureDoubleTap)
     return true;
 #endif
   return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());

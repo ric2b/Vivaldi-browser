@@ -31,30 +31,12 @@
 namespace views {
 
 // static
-std::unique_ptr<LabelButton> MdTextButton::CreateSecondaryUiButton(
-    ButtonListener* listener,
-    const base::string16& text) {
-  return MdTextButton::Create(listener, text, style::CONTEXT_BUTTON_MD);
-}
-
-// static
-std::unique_ptr<LabelButton> MdTextButton::CreateSecondaryUiBlueButton(
-    ButtonListener* listener,
-    const base::string16& text) {
-  auto md_button =
-      MdTextButton::Create(listener, text, style::CONTEXT_BUTTON_MD);
-  md_button->SetProminent(true);
-  return md_button;
-}
-
-// static
 std::unique_ptr<MdTextButton> MdTextButton::Create(ButtonListener* listener,
                                                    const base::string16& text,
                                                    int button_context) {
   auto button = base::WrapUnique<MdTextButton>(
       new MdTextButton(listener, button_context));
   button->SetText(text);
-  button->SetFocusForPlatform();
 
   return button;
 }
@@ -172,8 +154,7 @@ PropertyEffects MdTextButton::UpdateStyleToIndicateDefaultStatus() {
 }
 
 MdTextButton::MdTextButton(ButtonListener* listener, int button_context)
-    : LabelButton(listener, base::string16(), button_context),
-      is_prominent_(false) {
+    : LabelButton(listener, base::string16(), button_context) {
   SetInkDropMode(InkDropMode::ON);
   set_has_ink_drop_action_on_click(true);
   set_show_ink_drop_when_hot_tracked(true);
@@ -259,7 +240,7 @@ void MdTextButton::UpdateColors() {
 
   ui::NativeTheme* theme = GetNativeTheme();
   SkColor bg_color =
-      theme->GetSystemColor(ui::NativeTheme::kColorId_DialogBackground);
+      theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonColor);
 
   if (bg_color_override_) {
     bg_color = *bg_color_override_;
@@ -274,9 +255,7 @@ void MdTextButton::UpdateColors() {
   }
 
   if (state() == STATE_PRESSED) {
-    SkColor shade =
-        theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonPressedShade);
-    bg_color = color_utils::GetResultingPaintColor(shade, bg_color);
+    bg_color = theme->GetSystemButtonPressedColor(bg_color);
   }
 
   SkColor stroke_color;

@@ -77,6 +77,12 @@ const char kAccessibilityCaretHighlightEnabled[] =
 // A boolean pref which determines whether cursor highlighting is enabled.
 const char kAccessibilityCursorHighlightEnabled[] =
     "settings.a11y.cursor_highlight";
+// A boolean pref which determines whether floating accessibility menu is
+// enabled.
+const char kAccessibilityFloatingMenuEnabled[] = "settings.a11y.floating_menu";
+// Floating a11y menu position, a FloatingMenuPosition;
+const char kAccessibilityFloatingMenuPosition[] =
+    "settings.a11y.floating_menu_position";
 // A boolean pref which determines whether focus highlighting is enabled.
 const char kAccessibilityFocusHighlightEnabled[] =
     "settings.a11y.focus_highlight";
@@ -367,6 +373,10 @@ const char kPowerSmartDimEnabled[] = "power.smart_dim_enabled";
 // Boolean controlling whether ALS logging is enabled.
 const char kPowerAlsLoggingEnabled[] = "power.als_logging_enabled";
 
+// Boolean controlling whether the settings is enabled. This pref is intended to
+// be set only by policy not by user.
+const char kOsSettingsEnabled[] = "os_settings_enabled";
+
 // |kShelfAlignment| and |kShelfAutoHideBehavior| have a local variant. The
 // local variant is not synced and is used if set. If the local variant is not
 // set its value is set from the synced value (once prefs have been
@@ -507,6 +517,21 @@ const char kAssistantPrivacyInfoDismissedInLauncher[] =
 // Controlled by user policy.
 const char kLockScreenMediaControlsEnabled[] =
     "ash.lock_screen_media_controls_enabled";
+
+// Boolean pref which determines whether key repeat is enabled.
+const char kXkbAutoRepeatEnabled[] =
+    "settings.language.xkb_auto_repeat_enabled_r2";
+
+// Integer pref which determines key repeat delay (in ms).
+const char kXkbAutoRepeatDelay[] = "settings.language.xkb_auto_repeat_delay_r2";
+
+// Integer pref which determines key repeat interval (in ms).
+const char kXkbAutoRepeatInterval[] =
+    "settings.language.xkb_auto_repeat_interval_r2";
+// "_r2" suffixes were added to the three prefs above when we changed the
+// preferences to not be user-configurable or sync with the cloud. The prefs are
+// now user-configurable and syncable again, but we don't want to overwrite the
+// current values with the old synced values, so we continue to use this suffix.
 
 // A boolean pref which is true if touchpad reverse scroll is enabled.
 const char kNaturalScroll[] = "settings.touchpad.natural_scroll";

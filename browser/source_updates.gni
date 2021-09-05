@@ -1,5 +1,5 @@
 
-update_template_instance("//chrome/browser:browser") {
+update_target("//chrome/browser:browser") {
   sources += [
     "//vivaldi/browser/menus/vivaldi_menu_enums.h",
     "//vivaldi/browser/shell_integration/vivaldi_shell_integration.h",
@@ -43,7 +43,7 @@ update_template_instance("//chrome/browser:browser") {
   }
 }
 
-update_template_instance("//chrome/browser/ui:ui") {
+update_target("//chrome/browser/ui:ui") {
   sources += [
     "//vivaldi/browser/ui/vivaldi_browser_navigator.cc",
     "//vivaldi/browser/ui/vivaldi_browser_navigator.h",

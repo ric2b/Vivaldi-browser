@@ -49,6 +49,7 @@
 #include "media/mojo/services/watch_time_recorder.h"
 #include "media/renderers/default_decoder_factory.h"
 #include "media/renderers/default_renderer_factory.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -318,17 +319,17 @@ class WebMediaPlayerImplTest
  public:
   WebMediaPlayerImplTest()
       : media_thread_("MediaThreadForTest"),
-        web_view_(
-            blink::WebView::Create(/*client=*/nullptr,
-                                   /*is_hidden=*/false,
-                                   /*compositing_enabled=*/false,
-                                   nullptr,
-                                   mojo::ScopedInterfaceEndpointHandle())),
-        web_local_frame_(
-            blink::WebLocalFrame::CreateMainFrame(web_view_,
-                                                  &web_frame_client_,
-                                                  nullptr,
-                                                  nullptr)),
+        web_view_(blink::WebView::Create(/*client=*/nullptr,
+                                         /*is_hidden=*/false,
+                                         /*compositing_enabled=*/false,
+                                         nullptr,
+                                         mojo::NullAssociatedReceiver())),
+        web_local_frame_(blink::WebLocalFrame::CreateMainFrame(
+            web_view_,
+            &web_frame_client_,
+            nullptr,
+            base::UnguessableToken::Create(),
+            nullptr)),
         context_provider_(viz::TestContextProvider::Create()),
         audio_parameters_(TestAudioParameters::Normal()),
         memory_dump_manager_(
@@ -349,6 +350,30 @@ class WebMediaPlayerImplTest
   }
 
   void InitializeWebMediaPlayerImpl() {
+    InitializeWebMediaPlayerImplInternal(nullptr);
+  }
+
+  ~WebMediaPlayerImplTest() override {
+    if (!wmpi_)
+      return;
+    EXPECT_CALL(client_, SetCcLayer(nullptr));
+    EXPECT_CALL(client_, MediaRemotingStopped(_));
+
+    // Destruct WebMediaPlayerImpl and pump the message loop to ensure that
+    // objects passed to the message loop for destruction are released.
+    //
+    // NOTE: This should be done before any other member variables are
+    // destructed since WMPI may reference them during destruction.
+    wmpi_.reset();
+
+    CycleThreads();
+
+    web_view_->Close();
+  }
+
+ protected:
+  void InitializeWebMediaPlayerImplInternal(
+      std::unique_ptr<media::Demuxer> demuxer_override) {
     auto media_log = std::make_unique<NiceMock<MockMediaLog>>();
     InitializeSurfaceLayerBridge();
 
@@ -361,13 +386,19 @@ class WebMediaPlayerImplTest
     auto factory_selector = std::make_unique<RendererFactorySelector>();
     renderer_factory_selector_ = factory_selector.get();
     decoder_factory_.reset(new media::DefaultDecoderFactory(nullptr));
+#if defined(OS_ANDROID)
+    factory_selector->AddBaseFactory(
+        RendererFactoryType::kDefault,
+        std::make_unique<DefaultRendererFactory>(
+            media_log.get(), decoder_factory_.get(),
+            DefaultRendererFactory::GetGpuFactoriesCB()));
+    factory_selector->StartRequestRemotePlayStateCB(base::DoNothing());
+#else
     factory_selector->AddBaseFactory(
         RendererFactoryType::kDefault,
         std::make_unique<DefaultRendererFactory>(
             media_log.get(), decoder_factory_.get(),
             DefaultRendererFactory::GetGpuFactoriesCB(), nullptr));
-#if defined(OS_ANDROID)
-    factory_selector->StartRequestRemotePlayStateCB(base::DoNothing());
 #endif
 
     mojo::Remote<mojom::MediaMetricsProvider> provider;
@@ -405,7 +436,7 @@ class WebMediaPlayerImplTest
         viz::TestContextProvider::Create(),
         blink::WebMediaPlayer::SurfaceLayerMode::kAlways,
         is_background_suspend_enabled_, is_background_video_playback_enabled_,
-        true, false, nullptr);
+        true, false, std::move(demuxer_override), nullptr);
 
     auto compositor = std::make_unique<NiceMock<MockVideoFrameCompositor>>(
         params->video_frame_compositor_task_runner());
@@ -417,25 +448,6 @@ class WebMediaPlayerImplTest
         std::move(params));
   }
 
-  ~WebMediaPlayerImplTest() override {
-    if (!wmpi_)
-      return;
-    EXPECT_CALL(client_, SetCcLayer(nullptr));
-    EXPECT_CALL(client_, MediaRemotingStopped(_));
-
-    // Destruct WebMediaPlayerImpl and pump the message loop to ensure that
-    // objects passed to the message loop for destruction are released.
-    //
-    // NOTE: This should be done before any other member variables are
-    // destructed since WMPI may reference them during destruction.
-    wmpi_.reset();
-
-    CycleThreads();
-
-    web_view_->Close();
-  }
-
- protected:
   std::unique_ptr<blink::WebSurfaceLayerBridge> CreateMockSurfaceLayerBridge(
       blink::WebSurfaceLayerBridgeObserver*,
       cc::UpdateSubmissionStateCB) {
@@ -1606,6 +1618,48 @@ TEST_F(WebMediaPlayerImplTest, MediaPositionState_PlayPauseSetRate) {
   Play();
 }
 
+TEST_F(WebMediaPlayerImplTest, MediaPositionState_Underflow) {
+  InitializeWebMediaPlayerImpl();
+
+  testing::Sequence sequence;
+  EXPECT_CALL(delegate_,
+              DidPlayerMediaPositionStateChange(delegate_.player_id(), _))
+      .InSequence(sequence)
+      .WillOnce([](auto id, auto position) {
+        EXPECT_EQ(0.0, position.playback_rate());
+      });
+  EXPECT_CALL(delegate_,
+              DidPlayerMediaPositionStateChange(delegate_.player_id(), _))
+      .InSequence(sequence)
+      .WillOnce([](auto id, auto position) {
+        EXPECT_EQ(1.0, position.playback_rate());
+      });
+  EXPECT_CALL(delegate_,
+              DidPlayerMediaPositionStateChange(delegate_.player_id(), _))
+      .InSequence(sequence)
+      .WillOnce([](auto id, auto position) {
+        EXPECT_EQ(0.0, position.playback_rate());
+      });
+  EXPECT_CALL(delegate_,
+              DidPlayerMediaPositionStateChange(delegate_.player_id(), _))
+      .InSequence(sequence)
+      .WillOnce([](auto id, auto position) {
+        EXPECT_EQ(1.0, position.playback_rate());
+      });
+
+  wmpi_->SetRate(1.0);
+  LoadAndWaitForReadyState(kAudioOnlyTestFile,
+                           blink::WebMediaPlayer::kReadyStateHaveCurrentData);
+  // Play will set the playback rate to 1.0.
+  Play();
+
+  // Underflow will set the playback rate to 0.0.
+  SetReadyState(blink::WebMediaPlayer::kReadyStateHaveCurrentData);
+
+  // Leaving the underflow state will restore the playback rate of 1.0.
+  SetReadyState(blink::WebMediaPlayer::kReadyStateHaveFutureData);
+}
+
 TEST_F(WebMediaPlayerImplTest, MediaPositionState_Seeking) {
   InitializeWebMediaPlayerImpl();
 
@@ -1629,9 +1683,9 @@ TEST_F(WebMediaPlayerImplTest, MediaPositionState_Seeking) {
               DidPlayerMediaPositionStateChange(delegate_.player_id(), _))
       .InSequence(s)
       .WillOnce([](auto id, auto position) {
-        EXPECT_EQ(1.0, position.playback_rate());
+        EXPECT_EQ(0.0, position.playback_rate());
         EXPECT_EQ(kAudioOnlyTestFileDuration, position.duration());
-        EXPECT_EQ(base::TimeDelta::FromMilliseconds(100),
+        EXPECT_EQ(base::TimeDelta(),
                   position.GetPositionAtTime(position.last_updated_time()));
       });
   EXPECT_CALL(delegate_, DidPlayerMediaPositionStateChange(
@@ -2137,6 +2191,33 @@ TEST_F(WebMediaPlayerImplTest, MemDumpReporting) {
 
   CycleThreads();
   EXPECT_EQ(dump_count, 3);
+}
+
+// Verify that a demuxer override is used when specified.
+TEST_F(WebMediaPlayerImplTest, DemuxerOverride) {
+  std::unique_ptr<MockDemuxer> demuxer =
+      std::make_unique<NiceMock<MockDemuxer>>();
+  StrictMock<MockDemuxerStream> stream(DemuxerStream::AUDIO);
+  stream.set_audio_decoder_config(TestAudioConfig::Normal());
+  std::vector<DemuxerStream*> streams;
+  streams.push_back(&stream);
+
+  EXPECT_CALL(stream, SupportsConfigChanges()).WillRepeatedly(Return(false));
+
+  EXPECT_CALL(*demuxer.get(), OnInitialize(_, _))
+      .WillOnce(RunOnceCallback<1>(PIPELINE_OK));
+  EXPECT_CALL(*demuxer.get(), GetAllStreams()).WillRepeatedly(Return(streams));
+  // Called when WebMediaPlayerImpl is destroyed.
+  EXPECT_CALL(*demuxer.get(), Stop());
+
+  InitializeWebMediaPlayerImplInternal(std::move(demuxer));
+
+  EXPECT_FALSE(IsSuspended());
+  wmpi_->Load(blink::WebMediaPlayer::kLoadTypeURL,
+              blink::WebMediaPlayerSource(blink::WebURL(GURL("data://test"))),
+              blink::WebMediaPlayer::kCorsModeUnspecified);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(IsSuspended());
 }
 
 class WebMediaPlayerImplBackgroundBehaviorTest

@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/views/hats/hats_web_dialog.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "url/gurl.h"
 
@@ -167,7 +168,7 @@ IN_PROC_BROWSER_TEST_F(HatsWebDialogBrowserTest, Cookies) {
       Create(browser(), base::TimeDelta::FromSeconds(100));
 
   settings_map = HostContentSettingsMapFactory::GetForProfile(
-      dialog->off_the_record_profile());
+      dialog->otr_profile_for_testing());
   GURL url1("https://survey.google.com/");
   GURL url2("https://survey.g.doubleclick.net/");
   EXPECT_EQ(CONTENT_SETTING_ALLOW,

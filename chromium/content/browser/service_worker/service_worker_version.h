@@ -62,10 +62,6 @@ namespace blink {
 class PendingURLLoaderFactoryBundle;
 }
 
-namespace net {
-class HttpResponseInfo;
-}
-
 namespace content {
 
 class ServiceWorkerContainerHost;
@@ -156,8 +152,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Contains a subset of the main script's response information.
   struct CONTENT_EXPORT MainScriptResponse {
-    // TODO(crbug.com/1060076): Remove this constructor.
-    explicit MainScriptResponse(const net::HttpResponseInfo& http_info);
     explicit MainScriptResponse(
         const network::mojom::URLResponseHead& response_head);
     ~MainScriptResponse();
@@ -188,24 +182,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
         const base::string16& message,
         int line_number,
         const GURL& source_url) {}
-    // OnControlleeAdded/Removed are called asynchronously. It is possible the
-    // provider host identified by |client_uuid| was already destroyed when they
-    // are called.
-    // Note regarding BackForwardCache integration:
-    // OnControlleeRemoved is called when a controllee enters back-forward
-    // cache, and OnControlleeAdded is called when a controllee is restored from
-    // back-forward cache.
-    virtual void OnControlleeAdded(ServiceWorkerVersion* version,
-                                   const std::string& client_uuid,
-                                   const ServiceWorkerClientInfo& client_info) {
-    }
-    virtual void OnControlleeRemoved(ServiceWorkerVersion* version,
-                                     const std::string& client_uuid) {}
-    // Called when all controllees are removed.
-    // Note regarding BackForwardCache integration:
-    // Clients in back-forward cache don't count as controllees.
-    virtual void OnNoControllees(ServiceWorkerVersion* version) {}
-    virtual void OnNoWork(ServiceWorkerVersion* version) {}
     virtual void OnCachedMetadataUpdated(ServiceWorkerVersion* version,
                                          size_t size) {}
 
@@ -599,21 +575,22 @@ class CONTENT_EXPORT ServiceWorkerVersion
       blink::mojom::ConsoleMessageLevel message_level,
       const std::string& message);
 
-  // TODO(crbug.com/951571): Remove once the bug is debugged.
-  const base::debug::StackTrace& redundant_state_callstack() const {
-    return redundant_state_callstack_;
-  }
-
   mojo::AssociatedReceiver<blink::mojom::ServiceWorkerHost>&
   service_worker_host_receiver_for_testing() {
     return receiver_;
+  }
+
+  void set_reporting_observer_receiver(
+      mojo::PendingReceiver<blink::mojom::ReportingObserver>
+          reporting_observer_receiver) {
+    reporting_observer_receiver_ = std::move(reporting_observer_receiver);
   }
 
  private:
   friend class base::RefCounted<ServiceWorkerVersion>;
   friend class EmbeddedWorkerInstanceTest;
   friend class ServiceWorkerPingController;
-  friend class ServiceWorkerProviderHostTest;
+  friend class ServiceWorkerContainerHostTest;
   friend class ServiceWorkerReadFromCacheJobTest;
   friend class ServiceWorkerVersionBrowserTest;
   friend class ServiceWorkerActivationTest;
@@ -627,8 +604,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   FRIEND_TEST_ALL_PREFIXES(service_worker_controllee_request_handler_unittest::
                                ServiceWorkerControlleeRequestHandlerTest,
                            FallbackWithNoFetchHandler);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerProviderHostTest,
-                           DontSetControllerInDestructor);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerJobTest, Register);
   FRIEND_TEST_ALL_PREFIXES(
       service_worker_version_unittest::ServiceWorkerVersionTest,
@@ -1089,15 +1064,14 @@ class CONTENT_EXPORT ServiceWorkerVersion
   blink::mojom::FetchClientSettingsObjectPtr
       outside_fetch_client_settings_object_;
 
-  // TODO(crbug.com/951571): Remove once the bug is debugged.
-  // This is set when this service worker becomes redundant.
-  base::debug::StackTrace redundant_state_callstack_;
-
   // Callback to stop service worker small seconds after all controllees are
   // gone. This callback can be canceled when the service worker starts to
   // control another client and we know the worker needs to be used more.
   // Used only when ServiceWorkerTerminationOnNoControllee is on.
   base::CancelableOnceClosure stop_on_no_controllee_callback_;
+
+  mojo::PendingReceiver<blink::mojom::ReportingObserver>
+      reporting_observer_receiver_;
 
   base::WeakPtrFactory<ServiceWorkerVersion> weak_factory_{this};
 

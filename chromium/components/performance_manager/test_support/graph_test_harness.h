@@ -93,9 +93,10 @@ struct TestNodeWrapper<FrameNodeImpl>::Factory {
 template <>
 struct TestNodeWrapper<ProcessNodeImpl>::Factory {
   static std::unique_ptr<ProcessNodeImpl> Create(
+      content::ProcessType process_type = content::PROCESS_TYPE_RENDERER,
       RenderProcessHostProxy proxy = RenderProcessHostProxy()) {
     // Provide an empty RenderProcessHostProxy by default.
-    return std::make_unique<ProcessNodeImpl>(std::move(proxy));
+    return std::make_unique<ProcessNodeImpl>(process_type, std::move(proxy));
   }
 };
 
@@ -194,7 +195,8 @@ class GraphTestHarness : public ::testing::Test {
 
   // Optional constructor for directly configuring the BrowserTaskEnvironment.
   template <class... ArgTypes>
-  explicit GraphTestHarness(ArgTypes... args) : task_env_(args...) {}
+  explicit GraphTestHarness(ArgTypes... args)
+      : task_env_(args...), graph_(new TestGraphImpl()) {}
 
   template <class NodeClass, typename... Args>
   TestNodeWrapper<NodeClass> CreateNode(Args&&... args) {
@@ -223,11 +225,18 @@ class GraphTestHarness : public ::testing::Test {
   void AdvanceClock(base::TimeDelta delta) { task_env_.FastForwardBy(delta); }
 
   content::BrowserTaskEnvironment& task_env() { return task_env_; }
-  TestGraphImpl* graph() { return &graph_; }
+  TestGraphImpl* graph() {
+    DCHECK(graph_.get());
+    return graph_.get();
+  }
+
+  // Manually tears down the graph. Useful for DEATH tests that deliberately
+  // violate graph invariants.
+  void TearDownAndDestroyGraph();
 
  private:
   content::BrowserTaskEnvironment task_env_;
-  TestGraphImpl graph_;
+  std::unique_ptr<TestGraphImpl> graph_;
 };
 
 }  // namespace performance_manager

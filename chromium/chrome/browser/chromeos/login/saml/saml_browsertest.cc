@@ -7,8 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/public/cpp/ash_features.h"
-#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/base64.h"
 #include "base/bind.h"
@@ -104,6 +102,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/common/features/feature_channel.h"
 #include "google_apis/gaia/fake_gaia.h"
@@ -847,6 +846,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, CredentialPassingAPI) {
           kFirstSAMLUserGaiaId)));
 
   histogram_tester.ExpectUniqueSample("ChromeOS.SAML.APILogin", 1, 1);
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.Provider", 1, 1);
 }
 
 // Tests the sign-in flow when the credentials passing API is used w/o 'confirm'
@@ -882,6 +882,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, CredentialPassingAPIWithoutConfirm) {
           kFirstSAMLUserGaiaId)));
 
   histogram_tester.ExpectUniqueSample("ChromeOS.SAML.APILogin", 1, 1);
+  histogram_tester.ExpectUniqueSample("ChromeOS.SAML.Provider", 1, 1);
 }
 
 // Tests the single password scraped flow.
@@ -1306,21 +1307,6 @@ class SAMLPolicyTest : public SamlTest {
   DISALLOW_COPY_AND_ASSIGN(SAMLPolicyTest);
 };
 
-class SAMLPolicyTestWebUILogin : public SAMLPolicyTest {
- public:
-  SAMLPolicyTestWebUILogin() = default;
-  ~SAMLPolicyTestWebUILogin() override = default;
-
-  // SAMLPolicyTest:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(ash::switches::kShowWebUiLogin);
-    SAMLPolicyTest::SetUpCommandLine(command_line);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SAMLPolicyTestWebUILogin);
-};
-
 SAMLPolicyTest::SAMLPolicyTest()
     : device_policy_(test_helper_.device_policy()) {
   device_state_.set_skip_initial_policy_setup(true);
@@ -1529,7 +1515,7 @@ void SAMLPolicyTest::GetCookies() {
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, PRE_NoSAML) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_NoSAML) {
   // Set the offline login time limit for SAML users to zero.
   SetSAMLOfflineSigninTimeLimitPolicy(0);
 
@@ -1551,14 +1537,15 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, PRE_NoSAML) {
 
 // Verifies that the offline login time limit does not affect a user who
 // authenticated without SAML.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, NoSAML) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, NoSAML) {
   // Verify that offline login is allowed.
-  test::OobeJS().ExpectTrue(
-      "window.getComputedStyle(document.querySelector("
-      "    '#pod-row .reauth-hint-container')).display == 'none'");
+  ash::LoginScreenTestApi::SubmitPassword(
+      AccountId::FromUserEmail(kNonSAMLUserEmail), "password",
+      true /* check_if_submittable */);
+  test::WaitForPrimaryUserSessionStart();
 }
 
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, PRE_SAMLNoLimit) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_SAMLNoLimit) {
   // Remove the offline login time limit for SAML users.
   SetSAMLOfflineSigninTimeLimitPolicy(-1);
 
@@ -1568,14 +1555,15 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, PRE_SAMLNoLimit) {
 
 // Verifies that when no offline login time limit is set, a user who
 // authenticated with SAML is allowed to log in offline.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, SAMLNoLimit) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLNoLimit) {
   // Verify that offline login is allowed.
-  test::OobeJS().ExpectTrue(
-      "window.getComputedStyle(document.querySelector("
-      "    '#pod-row .reauth-hint-container')).display == 'none'");
+  ash::LoginScreenTestApi::SubmitPassword(
+      AccountId::FromUserEmail(saml_test_users::kFirstUserCorpExampleComEmail),
+      "password", true /* check_if_submittable */);
+  test::WaitForPrimaryUserSessionStart();
 }
 
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, PRE_SAMLZeroLimit) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_SAMLZeroLimit) {
   // Set the offline login time limit for SAML users to zero.
   SetSAMLOfflineSigninTimeLimitPolicy(0);
 
@@ -1585,15 +1573,14 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, PRE_SAMLZeroLimit) {
 
 // Verifies that when the offline login time limit is exceeded for a user who
 // authenticated via SAML, that user is forced to log in online the next time.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, SAMLZeroLimit) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLZeroLimit) {
   // Verify that offline login is not allowed.
-  test::OobeJS().ExpectTrue(
-      "window.getComputedStyle(document.querySelector("
-      "    '#pod-row .reauth-hint-container')).display != 'none'");
+  ASSERT_TRUE(
+      ash::LoginScreenTestApi::IsForcedOnlineSignin(AccountId::FromUserEmail(
+          saml_test_users::kFirstUserCorpExampleComEmail)));
 }
 
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin,
-                       PRE_PRE_TransferCookiesAffiliated) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_PRE_TransferCookiesAffiliated) {
   fake_saml_idp()->SetCookieValue(kSAMLIdPCookieValue1);
   LogInWithSAML(saml_test_users::kFirstUserCorpExampleComEmail,
                 kTestAuthSIDCookie1, kTestAuthLSIDCookie1);
@@ -1608,8 +1595,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin,
 // IdP cookies are not transferred to a user's profile on subsequent login, even
 // if the user belongs to the domain that the device is enrolled into. Also
 // verifies that GAIA cookies are not transferred.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin,
-                       PRE_TransferCookiesAffiliated) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_TransferCookiesAffiliated) {
   fake_saml_idp()->SetCookieValue(kSAMLIdPCookieValue2);
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   ShowGAIALoginForm();
@@ -1626,7 +1612,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin,
 // cookies are transferred to a user's profile on subsequent login when the user
 // belongs to the domain that the device is enrolled into. Also verifies that
 // GAIA cookies are not transferred.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, TransferCookiesAffiliated) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TransferCookiesAffiliated) {
   fake_saml_idp()->SetCookieValue(kSAMLIdPCookieValue2);
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   ShowGAIALoginForm();
@@ -1641,8 +1627,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, TransferCookiesAffiliated) {
   EXPECT_EQ(kSAMLIdPCookieValue2, GetCookieValue(kSAMLIdPCookieName));
 }
 
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin,
-                       PRE_TransferCookiesUnaffiliated) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, PRE_TransferCookiesUnaffiliated) {
   fake_saml_idp()->SetCookieValue(kSAMLIdPCookieValue1);
   LogInWithSAML(saml_test_users::kFifthUserExampleTestEmail,
                 kTestAuthSIDCookie1, kTestAuthLSIDCookie1);
@@ -1657,7 +1642,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin,
 // IdP are not transferred to a user's profile on subsequent login if the user
 // does not belong to the domain that the device is enrolled into. Also verifies
 // that GAIA cookies are not transferred.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTestWebUILogin, TransferCookiesUnaffiliated) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TransferCookiesUnaffiliated) {
   fake_saml_idp()->SetCookieValue(kSAMLIdPCookieValue2);
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   ShowGAIALoginForm();
@@ -1733,7 +1718,6 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialNext) {
 // pages is controlled by the kLoginVideoCaptureAllowedUrls pref rather than the
 // underlying user content setting.
 IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
-  EXPECT_TRUE(ash::features::IsViewsLoginEnabled());
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
 
   const GURL url1("https://google.com");

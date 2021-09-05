@@ -25,6 +25,7 @@ extern const char kVmManagementCliAllowedByPolicy[];
 extern const char kUserCrostiniRootAccessAllowedByPolicy[];
 extern const char kCrostiniAnsiblePlaybookFilePath[];
 extern const char kCrostiniDefaultContainerConfigured[];
+extern const char kCrostiniArcAdbSideloadingUserPref[];
 
 extern const char kReportCrostiniUsageEnabled[];
 extern const char kCrostiniLastLaunchTerminaComponentVersion[];
@@ -32,8 +33,6 @@ extern const char kCrostiniLastLaunchTerminaKernelVersion[];
 extern const char kCrostiniLastLaunchTimeWindowStart[];
 extern const char kCrostiniLastDiskSize[];
 extern const char kCrostiniPortForwarding[];
-extern const char kCrostiniMicSharing[];
-extern const char kCrostiniMicSharingAtLastLaunch[];
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry);
 

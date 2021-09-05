@@ -14,7 +14,7 @@
 #include "base/containers/flat_set.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
-#include "components/optimization_guide/optimization_guide_decider.h"
+#include "components/optimization_guide/test_optimization_guide_decider.h"
 #include "components/previews/content/previews_user_data.h"
 #include "components/previews/core/previews_features.h"
 #include "components/previews/core/previews_switches.h"
@@ -26,7 +26,7 @@
 namespace previews {
 
 class TestOptimizationGuideDecider
-    : public optimization_guide::OptimizationGuideDecider {
+    : public optimization_guide::TestOptimizationGuideDecider {
  public:
   TestOptimizationGuideDecider() = default;
   ~TestOptimizationGuideDecider() override = default;
@@ -92,13 +92,6 @@ class TestOptimizationGuideDecider
       *optimization_metadata = std::get<1>(response);
 
     return std::get<0>(response);
-  }
-
-  void CanApplyOptimizationAsync(
-      content::NavigationHandle* navigation_handle,
-      optimization_guide::proto::OptimizationType,
-      optimization_guide::OptimizationGuideDecisionCallback callback) override {
-    NOTREACHED();
   }
 
   void SetResponses(
@@ -174,11 +167,6 @@ class PreviewsOptimizationGuideTest : public testing::Test {
              std::tuple<optimization_guide::OptimizationGuideDecision,
                         optimization_guide::OptimizationMetadata>>
         responses = {
-            {std::make_tuple(blacklisted_lpr_url(),
-                             optimization_guide::proto::LITE_PAGE_REDIRECT),
-             std::make_tuple(
-                 optimization_guide::OptimizationGuideDecision::kFalse,
-                 default_metadata)},
             {std::make_tuple(hint_not_loaded_url(),
                              optimization_guide::proto::NOSCRIPT),
              std::make_tuple(
@@ -215,8 +203,7 @@ TEST_F(PreviewsOptimizationGuideTest,
        InitializationRegistersCorrectOptimizationTypesAndTargets) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {previews::features::kLitePageServerPreviews,
-       previews::features::kDeferAllScriptPreviews,
+      {previews::features::kDeferAllScriptPreviews,
        previews::features::kNoScriptPreviews,
        previews::features::kResourceLoadingHints},
       {});
@@ -226,12 +213,9 @@ TEST_F(PreviewsOptimizationGuideTest,
   base::flat_set<optimization_guide::proto::OptimizationType>
       registered_optimization_types =
           optimization_guide_decider()->registered_optimization_types();
-  EXPECT_EQ(4u, registered_optimization_types.size());
-  // We expect for LITE_PAGE_REDIRECT, DEFER_ALL_SCRIPT, NOSCRIPT, and
-  // RESOURCE_LOADING to be registered.
-  EXPECT_TRUE(registered_optimization_types.find(
-                  optimization_guide::proto::LITE_PAGE_REDIRECT) !=
-              registered_optimization_types.end());
+  EXPECT_EQ(3u, registered_optimization_types.size());
+  // We expect for DEFER_ALL_SCRIPT, NOSCRIPT, and RESOURCE_LOADING to be
+  // registered.
   EXPECT_TRUE(registered_optimization_types.find(
                   optimization_guide::proto::DEFER_ALL_SCRIPT) !=
               registered_optimization_types.end());
@@ -257,22 +241,17 @@ TEST_F(PreviewsOptimizationGuideTest,
 TEST_F(PreviewsOptimizationGuideTest, InitializationRegistersOnlyEnabledTypes) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {previews::features::kLitePageServerPreviews},
-      {previews::features::kDeferAllScriptPreviews,
-       previews::features::kNoScriptPreviews,
-       previews::features::kResourceLoadingHints});
+      {}, {previews::features::kDeferAllScriptPreviews,
+           previews::features::kNoScriptPreviews,
+           previews::features::kResourceLoadingHints});
 
   PreviewsOptimizationGuide guide(optimization_guide_decider());
 
   base::flat_set<optimization_guide::proto::OptimizationType>
       registered_optimization_types =
           optimization_guide_decider()->registered_optimization_types();
-  EXPECT_EQ(1u, registered_optimization_types.size());
-  // We only expect for LITE_PAGE_REDIRECT to be registered, as it's the only
-  // type that is enabled.
-  EXPECT_TRUE(registered_optimization_types.find(
-                  optimization_guide::proto::LITE_PAGE_REDIRECT) !=
-              registered_optimization_types.end());
+  EXPECT_EQ(0u, registered_optimization_types.size());
+
   EXPECT_EQ(registered_optimization_types.find(
                 optimization_guide::proto::DEFER_ALL_SCRIPT),
             registered_optimization_types.end());
@@ -309,35 +288,6 @@ TEST_F(PreviewsOptimizationGuideTest,
 }
 
 TEST_F(PreviewsOptimizationGuideTest,
-       LitePageRedirectConvertsToOptimizationTypeCorrectly) {
-  PreviewsOptimizationGuide guide(optimization_guide_decider());
-  SeedOptimizationGuideDeciderWithDefaultResponses();
-
-  content::MockNavigationHandle navigation_handle;
-  navigation_handle.set_url(blacklisted_lpr_url());
-
-  EXPECT_FALSE(guide.CanApplyPreview(
-      /*previews_data=*/nullptr, &navigation_handle,
-      PreviewsType::LITE_PAGE_REDIRECT));
-}
-
-TEST_F(PreviewsOptimizationGuideTest,
-       LitePageRedirectSwitchOverridesDecisionForCanApplyPreview) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kIgnoreLitePageRedirectOptimizationBlacklist);
-
-  PreviewsOptimizationGuide guide(optimization_guide_decider());
-  SeedOptimizationGuideDeciderWithDefaultResponses();
-
-  content::MockNavigationHandle navigation_handle;
-  navigation_handle.set_url(blacklisted_lpr_url());
-
-  EXPECT_TRUE(guide.CanApplyPreview(
-      /*previews_data=*/nullptr, &navigation_handle,
-      PreviewsType::LITE_PAGE_REDIRECT));
-}
-
-TEST_F(PreviewsOptimizationGuideTest,
        CanApplyPreviewPopulatesResourceLoadingHintsCache) {
   PreviewsOptimizationGuide guide(optimization_guide_decider());
   SeedOptimizationGuideDeciderWithDefaultResponses();
@@ -366,6 +316,12 @@ TEST_F(PreviewsOptimizationGuideTest,
 
 TEST_F(PreviewsOptimizationGuideTest,
        CanApplyPreviewWithUnknownDecisionReturnsFalse) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeaturesAndParameters(
+      {{previews::features::kPreviews,
+        {{"apply_deferallscript_when_guide_decision_unknown", "false"}}}},
+      {});
+
   PreviewsOptimizationGuide guide(optimization_guide_decider());
   SeedOptimizationGuideDeciderWithDefaultResponses();
 
@@ -484,8 +440,7 @@ TEST_F(
     AreCommitTimePreviewsAvailableWithAtLeastOneNonFalseDecisionReturnsTrue) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {previews::features::kLitePageServerPreviews,
-       previews::features::kDeferAllScriptPreviews,
+      {previews::features::kDeferAllScriptPreviews,
        previews::features::kNoScriptPreviews,
        previews::features::kResourceLoadingHints},
       {});
@@ -504,10 +459,9 @@ TEST_F(
     AreCommitTimePreviewsAvailableReturnsFalseIfNoClientSidePreviewsEnabled) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {previews::features::kLitePageServerPreviews},
-      {previews::features::kDeferAllScriptPreviews,
-       previews::features::kNoScriptPreviews,
-       previews::features::kResourceLoadingHints});
+      {}, {previews::features::kDeferAllScriptPreviews,
+           previews::features::kNoScriptPreviews,
+           previews::features::kResourceLoadingHints});
 
   PreviewsOptimizationGuide guide(optimization_guide_decider());
   SeedOptimizationGuideDeciderWithDefaultResponses();

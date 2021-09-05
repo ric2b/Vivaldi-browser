@@ -10,9 +10,6 @@
 namespace web {
 namespace features {
 
-// Used to always allow scaling of the web page, regardless of author intent.
-extern const base::Feature kIgnoresViewportScaleLimits;
-
 // Used to crash the browser if unexpected URL change is detected.
 // https://crbug.com/841105.
 extern const base::Feature kCrashOnUnexpectedURLChange;
@@ -45,6 +42,7 @@ extern const base::Feature kUseJSForErrorPage;
 // When enabled, for each navigation, the default user agent is chosen by the
 // WebClient GetDefaultUserAgent() method. If it is disabled, the mobile version
 // is requested by default.
+// Use UseWebClientDefaultUserAgent() instead of checking this variable.
 extern const base::Feature kUseDefaultUserAgentInWebClient;
 
 // When enabled, preserves properties of the UIScrollView using CRWPropertyStore
@@ -58,6 +56,11 @@ extern const base::Feature kIOSLookalikeUrlNavigationSuggestionsUI;
 // Level at which battery power is considered low, and some cosmetic features
 // can be turned off.
 const float kLowBatteryLevelThreshold = 0.2;
+
+// When true, for each navigation, the default user agent is chosen by the
+// WebClient GetDefaultUserAgent() method. If it is false, the mobile version
+// is requested by default.
+bool UseWebClientDefaultUserAgent();
 
 }  // namespace features
 }  // namespace web

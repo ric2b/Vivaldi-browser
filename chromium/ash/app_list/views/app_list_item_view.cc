@@ -42,7 +42,6 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
-#include "ui/views/controls/progress_bar.h"
 #include "ui/views/drag_controller.h"
 
 namespace ash {
@@ -60,6 +59,9 @@ constexpr int kTouchLongpressDelayInMs = 300;
 
 // The drag and drop app icon should get scaled by this factor.
 constexpr float kDragDropAppIconScale = 1.2f;
+
+// The app icon should get scaled by this factor when entering cardify mode.
+constexpr float kCardifyIconScale = 0.84f;
 
 // The drag and drop icon scaling up or down animation transition duration.
 constexpr int kDragDropAppIconScaleTransitionInMs = 200;
@@ -274,12 +276,10 @@ AppListItemView::AppListItemView(AppsGridView* apps_grid_view,
   }
 
   title_ = AddChildView(std::move(title));
-  progress_bar_ = AddChildView(std::make_unique<views::ProgressBar>());
 
   SetIcon(item->GetIcon(GetAppListConfig().type()));
   SetItemName(base::UTF8ToUTF16(item->GetDisplayName()),
               base::UTF8ToUTF16(item->name()));
-  SetItemIsInstalling(item->is_installing());
   item->AddObserver(this);
 
   set_context_menu_controller(this);
@@ -342,24 +342,33 @@ void AppListItemView::RefreshIcon() {
   }
 }
 
+void AppListItemView::ScaleIconImmediatly(float scale_factor) {
+  icon_scale_ = scale_factor;
+  SetIcon(icon_image_);
+  layer()->SetTransform(gfx::Transform());
+}
+
 void AppListItemView::SetUIState(UIState ui_state) {
   if (ui_state_ == ui_state)
     return;
 
   switch (ui_state) {
     case UI_STATE_NORMAL:
-      title_->SetVisible(!is_installing_);
-      progress_bar_->SetVisible(is_installing_);
+      title_->SetVisible(true);
       if (ui_state_ == UI_STATE_DRAGGING)
         ScaleAppIcon(false);
+      else if (ui_state_ == UI_STATE_CARDIFY)
+        ScaleIconImmediatly(1.0f);
       break;
     case UI_STATE_DRAGGING:
       title_->SetVisible(false);
-      progress_bar_->SetVisible(false);
       if (ui_state_ == UI_STATE_NORMAL)
         ScaleAppIcon(true);
       break;
     case UI_STATE_DROPPING_IN_FOLDER:
+      break;
+    case UI_STATE_CARDIFY:
+      ScaleIconImmediatly(kCardifyIconScale);
       break;
   }
   ui_state_ = ui_state;
@@ -382,9 +391,7 @@ void AppListItemView::ScaleAppIcon(bool scale_up) {
       // end of that animation, the layer will be destroyed, causing the
       // animation observer to get canceled. For this case, we need to scale
       // down the icon immediately, with no animation.
-      icon_scale_ = 1.0f;
-      SetIcon(icon_image_);
-      layer()->SetTransform(gfx::Transform());
+      ScaleIconImmediatly(1.0f);
     }
   }
 
@@ -414,9 +421,7 @@ void AppListItemView::ScaleAppIcon(bool scale_up) {
 }
 
 void AppListItemView::OnImplicitAnimationsCompleted() {
-  icon_scale_ = 1.0f;
-  SetIcon(icon_image_);
-  layer()->SetTransform(gfx::Transform());
+  ScaleIconImmediatly(1.0f);
 }
 
 void AppListItemView::SetTouchDragging(bool touch_dragging) {
@@ -511,24 +516,6 @@ void AppListItemView::SetItemName(const base::string16& display_name,
   Layout();
 }
 
-void AppListItemView::SetItemIsInstalling(bool is_installing) {
-  is_installing_ = is_installing;
-  if (ui_state_ == UI_STATE_NORMAL) {
-    title_->SetVisible(!is_installing);
-    progress_bar_->SetVisible(is_installing);
-  }
-  SchedulePaint();
-}
-
-void AppListItemView::SetItemPercentDownloaded(int percent_downloaded) {
-  // A percent_downloaded() of -1 can mean it's not known how much percent is
-  // completed, or the download hasn't been marked complete, as is the case
-  // while an extension is being installed after being downloaded.
-  if (percent_downloaded == -1)
-    return;
-  progress_bar_->SetValue(percent_downloaded / 100.0);
-}
-
 void AppListItemView::OnContextMenuModelReceived(
     const gfx::Point& point,
     ui::MenuSourceType source_type,
@@ -613,6 +600,7 @@ void AppListItemView::PaintButtonContents(gfx::Canvas* canvas) {
   // TODO(ginko) focus and selection should be unified.
   if ((apps_grid_view_->IsSelectedView(this) || HasFocus()) &&
       (delegate_->KeyboardTraversalEngaged() ||
+       waiting_for_context_menu_options_ ||
        (context_menu_ && context_menu_->IsShowingMenu()))) {
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
@@ -689,9 +677,6 @@ void AppListItemView::Layout() {
   if (!apps_grid_view_->is_in_folder())
     title_bounds.Inset(title_shadow_margins_);
   title_->SetBoundsRect(title_bounds);
-
-  progress_bar_->SetBoundsRect(GetProgressBarBoundsForTargetViewBounds(
-      rect, progress_bar_->GetPreferredSize()));
 }
 
 gfx::Size AppListItemView::CalculatePreferredSize() const {
@@ -958,6 +943,14 @@ void AppListItemView::SetDragUIState() {
   SetUIState(UI_STATE_DRAGGING);
 }
 
+void AppListItemView::SetCardifyUIState() {
+  SetUIState(UI_STATE_CARDIFY);
+}
+
+void AppListItemView::SetNormalUIState() {
+  SetUIState(UI_STATE_NORMAL);
+}
+
 // static
 gfx::Rect AppListItemView::GetIconBoundsForTargetViewBounds(
     const AppListConfig& config,
@@ -990,17 +983,6 @@ gfx::Rect AppListItemView::GetTitleBoundsForTargetViewBounds(
   return rect;
 }
 
-// static
-gfx::Rect AppListItemView::GetProgressBarBoundsForTargetViewBounds(
-    const gfx::Rect& target_bounds,
-    const gfx::Size& progress_bar_size) {
-  gfx::Rect progress_bar_bounds(progress_bar_size);
-  progress_bar_bounds.set_x(
-      (target_bounds.width() - progress_bar_bounds.width()) / 2);
-  progress_bar_bounds.set_y(target_bounds.y());
-  return progress_bar_bounds;
-}
-
 void AppListItemView::ItemIconChanged(AppListConfigType config_type) {
   if (config_type != AppListConfigType::kShared &&
       config_type != GetAppListConfig().type()) {
@@ -1013,14 +995,6 @@ void AppListItemView::ItemIconChanged(AppListConfigType config_type) {
 void AppListItemView::ItemNameChanged() {
   SetItemName(base::UTF8ToUTF16(item_weak_->GetDisplayName()),
               base::UTF8ToUTF16(item_weak_->name()));
-}
-
-void AppListItemView::ItemIsInstallingChanged() {
-  SetItemIsInstalling(item_weak_->is_installing());
-}
-
-void AppListItemView::ItemPercentDownloadedChanged() {
-  SetItemPercentDownloaded(item_weak_->percent_downloaded());
 }
 
 void AppListItemView::ItemBeingDestroyed() {

@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">германска тастатура</translation>
 <translation id="1972984168337863910">Проширете ги таблите со повратни информации за датотеките</translation>
 <translation id="1984603991036629094">ерменска фонетска тастатура</translation>
+<translation id="1995337122023280937">Оди на локацијата на датотеката</translation>
 <translation id="2001796770603320721">Управување во Drive</translation>
 <translation id="2009067268969781306">Форматирањето на USB-дискот ќе ги избрише сите податоци складирани во него. Дејството не може да се врати.</translation>
 <translation id="2028997212275086731">РАР-архива</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Не можеше да се добие Google Диск. <ph name="BEGIN_LINK" />Одјавете се<ph name="END_LINK" /> и повторно најавете се.</translation>
 <translation id="2649120831653069427">Риба виножито</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Локација на датотеката</translation>
 <translation id="2672394958563893062">Настана грешка. Кликнете за да се рестартира отпочеток.</translation>
 <translation id="2676946222714718093">Се репродуцира на</translation>
 <translation id="2735698359135166290">Романска стандардна тастатура</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> грешки.</translation>
 <translation id="3519867315646775981">Транслитерација (shalom ← שלום)</translation>
 <translation id="3522708245912499433">португалски</translation>
+<translation id="3524311639100184459">Внимание: датотекиве се привремени и може да се бришат автоматски за да се ослободи простор на дискот.  <ph name="BEGIN_LINK" />Дознајте повеќе<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Папка</translation>
 <translation id="3549797760399244642">Одете на drive.google.com...</translation>
 <translation id="357479282490346887">литвански</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Киви</translation>
 <translation id="3966388904776714213">Аудиоплеер</translation>
 <translation id="4002066346123236978">Наслов</translation>
+<translation id="4065397611279318371">За да отворате датотеки со апликации на <ph name="APP_NAME" />, прво преместете ги во папката на <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Кантонски метод за внесување</translation>
 <translation id="4072248638558688893">тамилска тастатура (фонетска)</translation>
 <translation id="4124935795427217608">Еднорог</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Автоматска поправка</translation>
 <translation id="4881695831933465202">Отвори</translation>
 <translation id="4886021172213954916">тамилска тастатура (машина за пишување)</translation>
+<translation id="4892969127351273348">Не може да се отвори со <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Направете бекап на <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Поправено</translation>
 <translation id="4935975195727477204">Цвет од газанија</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Управувајте со споделувањето на Linux</translation>
 <translation id="6808193438228982088">Лисица</translation>
 <translation id="6820687829547641339">tar архива компримирана со gzip</translation>
+<translation id="6823166707458800069">Автоматски се прави резервна копија онлајн од сите датотеки зачувани во папкава.</translation>
 <translation id="6825883775269213504">руски</translation>
 <translation id="6827236167376090743">Видеото ќе се прикажува постојано.</translation>
 <translation id="6847101934483209767">Го отстранивте <ph name="ENTRY_NAME" /> од изборот.</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Карта на Google</translation>
 <translation id="7419631653042041064">каталонска тастатура</translation>
 <translation id="7434823369735508263">ОК тастатура Dvorak</translation>
+<translation id="7447678886297481665">Датотеките во папкава се само за читање. Некои активности не се поддржани.</translation>
 <translation id="7460898608667578234">украинска</translation>
 <translation id="7474889694310679759">тастатура на канадски англиски</translation>
 <translation id="7489215562877293245">Најдени се <ph name="FILE_COUNT" />

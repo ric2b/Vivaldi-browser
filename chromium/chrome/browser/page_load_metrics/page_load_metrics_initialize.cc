@@ -12,7 +12,6 @@
 #include "chrome/browser/page_load_metrics/observers/aborts_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/ad_metrics/ads_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/amp_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/data_reduction_proxy_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/data_saver_site_breakdown_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/data_use_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
@@ -29,7 +28,6 @@
 #include "chrome/browser/page_load_metrics/observers/offline_page_previews_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/omnibox_suggestion_used_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/optimization_guide_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/previews_lite_page_redirect_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/previews_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/previews_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/protocol_page_load_metrics_observer.h"
@@ -98,9 +96,6 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
   if (!IsPrerendering()) {
     tracker->AddObserver(std::make_unique<AbortsPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<AMPPageLoadMetricsObserver>());
-    tracker->AddObserver(
-        std::make_unique<
-            data_reduction_proxy::DataReductionProxyMetricsObserver>());
     tracker->AddObserver(std::make_unique<SchemePageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<FromGWSPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<ForegroundDurationUKMObserver>());
@@ -118,8 +113,6 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
             previews::OfflinePagePreviewsPageLoadMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<OptimizationGuidePageLoadMetricsObserver>());
-    tracker->AddObserver(
-        std::make_unique<PreviewsLitePageRedirectMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<previews::PreviewsPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<previews::PreviewsUKMObserver>());
@@ -208,6 +201,7 @@ void InitializePageLoadMetricsForWebContents(
     content::WebContents* web_contents) {
   // Change this method? consider to modify the peer in
   // android_webview/browser/page_load_metrics/page_load_metrics_initialize.cc
+  // weblayer/browser/page_load_metrics_initialize.cc
   // as well.
   page_load_metrics::MetricsWebContentsObserver::CreateForWebContents(
       web_contents, std::make_unique<PageLoadMetricsEmbedder>(web_contents));

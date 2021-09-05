@@ -238,8 +238,7 @@ void SessionService::SetPinnedState(const SessionID& window_id,
 }
 
 void SessionService::TabClosed(const SessionID& window_id,
-                               const SessionID& tab_id,
-                               bool closed_by_user_gesture) {
+                               const SessionID& tab_id) {
   if (!tab_id.id())
     return;  // Hapens when the tab is replaced.
 
@@ -252,24 +251,22 @@ void SessionService::TabClosed(const SessionID& window_id,
 
   if (find(pending_window_close_ids_.begin(), pending_window_close_ids_.end(),
            window_id) != pending_window_close_ids_.end()) {
-    // Tab is in last window. Don't commit it immediately, instead add it to the
-    // list of tabs to close. If the user creates another window, the close is
-    // committed.
+    // Tab is in last window and the window is being closed. Don't commit it
+    // immediately, instead add it to the list of tabs to close. If the user
+    // creates another window, the close is committed.
+    // This is necessary to ensure the session is properly stored when closing
+    // the final window.
     pending_tab_close_ids_.insert(tab_id);
-  } else if (find(window_closing_ids_.begin(), window_closing_ids_.end(),
-                  window_id) != window_closing_ids_.end() ||
-             !IsOnlyOneTabLeft() || closed_by_user_gesture) {
-    // Close is the result of one of the following:
-    // . window close (and it isn't the last window).
-    // . closing a tab and there are other windows/tabs open.
-    // . closed by a user gesture.
-    // In all cases we need to mark the tab as explicitly closed.
-    ScheduleCommand(sessions::CreateTabClosedCommand(tab_id));
   } else {
-    // User closed the last tab in the last tabbed browser. Don't mark the
-    // tab closed.
-    pending_tab_close_ids_.insert(tab_id);
-    has_open_trackable_browsers_ = false;
+    // If an individual tab is being closed or a secondary window is being
+    // closed, just mark the tab as closed now.
+    ScheduleCommand(sessions::CreateTabClosedCommand(tab_id));
+    if ((find(window_closing_ids_.begin(), window_closing_ids_.end(),
+              window_id) == window_closing_ids_.end()) &&
+        IsOnlyOneTabLeft()) {
+      // This is the last tab in the last tabbed browser.
+      has_open_trackable_browsers_ = false;
+    }
   }
 }
 
@@ -388,9 +385,7 @@ void SessionService::TabClosing(WebContents* contents) {
   session_storage_namespace->SetShouldPersist(false);
   sessions::SessionTabHelper* session_tab_helper =
       sessions::SessionTabHelper::FromWebContents(contents);
-  TabClosed(session_tab_helper->window_id(),
-            session_tab_helper->session_id(),
-            contents->GetClosedByUserGesture());
+  TabClosed(session_tab_helper->window_id(), session_tab_helper->session_id());
 }
 
 void SessionService::SetWindowType(const SessionID& window_id,
@@ -495,7 +490,7 @@ void SessionService::RebuildCommandsIfRequired() {
 void SessionService::SetTabUserAgentOverride(
     const SessionID& window_id,
     const SessionID& tab_id,
-    const std::string& user_agent_override) {
+    const sessions::SerializedUserAgentOverride& user_agent_override) {
   if (!ShouldTrackChangesToWindow(window_id))
     return;
 
@@ -714,13 +709,17 @@ void SessionService::BuildCommandsForTab(
         sessions::CreateSetExtDataCommand(session_id, tab->GetExtData()));
   }
 
-  // TODO(https://crbug.com/1061917: handle ua_metadata_override as well.
-  const std::string& ua_override =
-      tab->GetUserAgentOverride().ua_string_override;
-  if (!ua_override.empty()) {
+  const blink::UserAgentOverride& ua_override = tab->GetUserAgentOverride();
+
+  if (!ua_override.ua_string_override.empty()) {
+    sessions::SerializedUserAgentOverride serialized_ua_override;
+    serialized_ua_override.ua_string_override = ua_override.ua_string_override;
+    serialized_ua_override.opaque_ua_metadata_override =
+        blink::UserAgentMetadata::Marshal(ua_override.ua_metadata_override);
+
     command_storage_manager_->AppendRebuildCommand(
         sessions::CreateSetTabUserAgentOverrideCommand(session_id,
-                                                       ua_override));
+                                                       serialized_ua_override));
   }
 
   for (int i = min_index; i < max_index; ++i) {
@@ -883,8 +882,7 @@ void SessionService::CommitPendingCloses() {
 
 bool SessionService::IsOnlyOneTabLeft() const {
   if (!profile() || profile()->AsTestingProfile()) {
-    // We're testing, always return false.
-    return false;
+    return is_only_one_tab_left_for_test_;
   }
 
   int window_count = 0;
@@ -906,8 +904,7 @@ bool SessionService::IsOnlyOneTabLeft() const {
 bool SessionService::HasOpenTrackableBrowsers(
     const SessionID& window_id) const {
   if (!profile() || profile()->AsTestingProfile()) {
-    // We're testing, always return true.
-    return true;
+    return has_open_trackable_browser_for_test_;
   }
 
   for (auto* browser : *BrowserList::GetInstance()) {
@@ -935,6 +932,14 @@ bool SessionService::ShouldTrackBrowser(Browser* browser) const {
   if (crostini::CrostiniAppIdFromAppName(browser->app_name()) ||
       web_app::GetAppIdFromApplicationName(browser->app_name()) ==
           crostini::GetTerminalId()) {
+    return false;
+  }
+
+  // System Web App windows can't be properly restored without storing the app
+  // type. Until that is implemented we skip them for session restore.
+  // TODO(crbug.com/1003170): Enable session restore for System Web Apps.
+  if (browser->app_controller() &&
+      browser->app_controller()->is_for_system_web_app()) {
     return false;
   }
 

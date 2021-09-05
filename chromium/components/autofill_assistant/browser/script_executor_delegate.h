@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "base/observer_list_types.h"
 #include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/details.h"
 #include "components/autofill_assistant/browser/info_box.h"
@@ -33,13 +34,13 @@ class Service;
 class WebController;
 struct ClientSettings;
 class TriggerContext;
-class WebsiteLoginFetcher;
+class WebsiteLoginManager;
 class EventHandler;
 class UserModel;
 
 class ScriptExecutorDelegate {
  public:
-  class Listener {
+  class NavigationListener : public base::CheckedObserver {
    public:
     // The values returned by IsNavigatingToNewDocument() or
     // HasNavigationError() might have changed.
@@ -49,13 +50,14 @@ class ScriptExecutorDelegate {
   virtual const ClientSettings& GetSettings() = 0;
   virtual const GURL& GetCurrentURL() = 0;
   virtual const GURL& GetDeeplinkURL() = 0;
+  virtual const GURL& GetScriptURL() = 0;
   virtual Service* GetService() = 0;
   virtual WebController* GetWebController() = 0;
   virtual const TriggerContext* GetTriggerContext() = 0;
   virtual autofill::PersonalDataManager* GetPersonalDataManager() = 0;
-  virtual WebsiteLoginFetcher* GetWebsiteLoginFetcher() = 0;
+  virtual WebsiteLoginManager* GetWebsiteLoginManager() = 0;
   virtual content::WebContents* GetWebContents() = 0;
-  virtual std::string GetAccountEmailAddress() = 0;
+  virtual std::string GetEmailAddressForAccessTokenAccount() = 0;
   virtual std::string GetLocale() = 0;
 
   // Enters the given state. Returns true if the state was changed.
@@ -76,6 +78,8 @@ class ScriptExecutorDelegate {
   virtual void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>
           write_callback) = 0;
+  virtual void WriteUserModel(
+      base::OnceCallback<void(UserModel*)> write_callback) = 0;
   virtual void SetProgress(int progress) = 0;
   virtual void SetProgressVisible(bool visible) = 0;
   virtual void SetUserActions(
@@ -128,11 +132,11 @@ class ScriptExecutorDelegate {
 
   // Register a listener that can be told about changes. Duplicate calls are
   // ignored.
-  virtual void AddListener(Listener* listener) = 0;
+  virtual void AddListener(NavigationListener* listener) = 0;
 
   // Removes a previously registered listener. Does nothing if no such listeners
   // exists.
-  virtual void RemoveListener(Listener* listener) = 0;
+  virtual void RemoveListener(NavigationListener* listener) = 0;
 
   // Set how the sheet should behave when entering a prompt state.
   virtual void SetExpandSheetForPromptAction(bool expand) = 0;

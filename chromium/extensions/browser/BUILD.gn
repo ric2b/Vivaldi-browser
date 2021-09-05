@@ -121,6 +121,8 @@ jumbo_source_set("browser_sources") {
     "events/lazy_event_dispatch_util.h",
     "events/lazy_event_dispatcher.cc",
     "events/lazy_event_dispatcher.h",
+    "extension_action.cc",
+    "extension_action.h",
     "extension_api_frame_id_map.cc",
     "extension_api_frame_id_map.h",
     "extension_creator.cc",
@@ -282,7 +284,6 @@ jumbo_source_set("browser_sources") {
     "media_capture_util.h",
     "mojo/keep_alive_impl.cc",
     "mojo/keep_alive_impl.h",
-    "notification_types.cc",
     "notification_types.h",
     "null_app_sorting.cc",
     "null_app_sorting.h",
@@ -527,7 +528,6 @@ source_set("browser_tests") {
       "//chromeos/dbus/upstart",
       "//chromeos/login/login_state",
       "//chromeos/network",
-      "//components/crash/core/app:app",
     ]
   }
 }
@@ -539,6 +539,8 @@ jumbo_source_set("test_support") {
     "browsertest_util.h",
     "preload_check_test_util.cc",
     "preload_check_test_util.h",
+    "service_worker/service_worker_test_utils.cc",
+    "service_worker/service_worker_test_utils.h",
     "test_event_router_observer.cc",
     "test_event_router_observer.h",
     "updater/extension_cache_fake.cc",
@@ -568,6 +570,35 @@ jumbo_source_set("test_support") {
 
   public_deps =
       [ "//extensions/browser/api/declarative_net_request:test_support" ]
+
+  if (is_chromeos) {
+    sources += [
+      "api/crash_report_private/mock_crash_endpoint.cc",
+      "api/crash_report_private/mock_crash_endpoint.h",
+      "api/feedback_private/mock_feedback_service.cc",
+      "api/feedback_private/mock_feedback_service.h",
+    ]
+    deps += [
+      "//components/crash/core/app:app",
+      "//net:test_support",
+    ]
+  }
+}
+
+jumbo_source_set("value_store_test_support") {
+  testonly = true
+  sources = [
+    "value_store/value_store_unittest.cc",
+    "value_store/value_store_unittest.h",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//content/test:test_support",
+    "//extensions/browser",
+    "//testing/gtest",
+  ]
 }
 
 source_set("unit_tests") {
@@ -625,6 +656,7 @@ source_set("unit_tests") {
     "error_map_unittest.cc",
     "event_listener_map_unittest.cc",
     "event_router_unittest.cc",
+    "extension_action_unittest.cc",
     "extension_creator_filter_unittest.cc",
     "extension_creator_unittest.cc",
     "extension_event_histogram_value_unittest.cc",
@@ -664,8 +696,6 @@ source_set("unit_tests") {
     "value_store/testing_value_store_unittest.cc",
     "value_store/value_store_change_unittest.cc",
     "value_store/value_store_frontend_unittest.cc",
-    "value_store/value_store_unittest.cc",
-    "value_store/value_store_unittest.h",
     "verified_contents_unittest.cc",
     "warning_service_unittest.cc",
   ]
@@ -673,6 +703,7 @@ source_set("unit_tests") {
   deps = [
     ":browser",
     ":test_support",
+    ":value_store_test_support",
     "//base",
     "//base/test:test_support",
     "//components/cast_certificate",

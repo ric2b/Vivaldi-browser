@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">ຄີບອດພາສາເຢຍ​ລະ​ມັນ</translation>
 <translation id="1972984168337863910">ຂະຫຍາຍແຜງຄຳຕິຊົມໄຟລ໌</translation>
 <translation id="1984603991036629094">ຄີບອດການອອກສຽງພາສາອາເມເນຍ</translation>
+<translation id="1995337122023280937">ໄປຫາສະຖານທີ່ຂອງໄຟລ໌</translation>
 <translation id="2001796770603320721">ຈັດການໃນ Drive</translation>
 <translation id="2009067268969781306">ການຟໍແມັດໄດຣຈະລຶບຂໍ້ມູນທັງໝົດທີ່ເກັບໄວ້ໃນມັນ ຄຳສັ່ງນີ້ບໍ່ສາມາດຍົກເລີກໄດ້.</translation>
 <translation id="2028997212275086731">ເຄື່ອງເກັບມ້ຽນ RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">ບໍ່ສາມາດເຂົ້າຫາ Google Drive ໄດ້. ກະລຸນາ <ph name="BEGIN_LINK" />ອອກຈາກລະບົບ<ph name="END_LINK" /> ແລະລົງຊື່ກັບເຂົ້າຫາອີກ.</translation>
 <translation id="2649120831653069427">ປາສາຍຮຸ້ງ</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">ສະຖານທີ່ຂອງໄຟລ໌</translation>
 <translation id="2672394958563893062">ເກີດຄວາມຜິດພາດຂຶ້ນ. ຄລິກເພື່ອເລີ່ມຈາກການເລີ່ມຕົ້ນ.</translation>
 <translation id="2676946222714718093">ກຳລັງຫຼິ້ນຢູ່</translation>
 <translation id="2735698359135166290">ແປ້ນ​ພິມ​ມາດ​ຕະ​ຖານ​ພາ​ສາ​ໂຣ​ມັນ</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> ຄວາມ​ຜິດ​ພາດ​.</translation>
 <translation id="3519867315646775981">ການປ່ຽນ​ຖ່າຍ​ຕົວ​ອັກສອນ (Shalom ←​ຊາລໍາ)</translation>
 <translation id="3522708245912499433">ພາສາປັອກຕຸຍການ</translation>
+<translation id="3524311639100184459">ລະວັງ: ໄຟລ໌ເຫຼົ່ານີ້ເປັນໄຟລ໌ຊົ່ວຄາວ ແລະອາດຈະຖືກລຶບໄປໂດຍອັດຕະໂນມັດເພື່ອຂະຫຍາຍພື້ນທີ່ດິສ.  <ph name="BEGIN_LINK" />ສຶກສາເພີ່ມເຕີມ<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ໂຟລເດີ</translation>
 <translation id="3549797760399244642">ໄປທີ່ drive.google.com...</translation>
 <translation id="357479282490346887">ພາສາລິດທົວນີ</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">ເຄື່ອງຫຼິ້ນສຽງ</translation>
 <translation id="4002066346123236978">ຫົວຂໍ້</translation>
+<translation id="4065397611279318371">ເພື່ອເປີດໄຟລ໌ດ້ວຍແອັບ <ph name="APP_NAME" />, ກ່ອນອື່ນ ກະລຸນາຍ້າຍພວກມັນໄປໃສ່ໂຟນເດີ <ph name="SHARED_DIRECTORY_LABEL" /> ກ່ອນ.</translation>
 <translation id="4070370845051020638">ວິທີການປ້ອນຂໍ້ມູນພາສາຈີນກວາງຕຸ້ງ</translation>
 <translation id="4072248638558688893">ຄີບອດພາສາຕາມິນ (ການອອກສຽງ​)</translation>
 <translation id="4124935795427217608">ຢູນິຄອນ</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">ແກ້​ໄຂ​ອັດ​ຕະ​ໂນ​ມັດ</translation>
 <translation id="4881695831933465202">ເປີດ</translation>
 <translation id="4886021172213954916">ຄີບອດພາສາຕາມິນ (ພິມດີດ​)</translation>
+<translation id="4892969127351273348">ບໍ່ສາມາດເປີດດ້ວຍ <ph name="APP_NAME" /> ໄດ້</translation>
 <translation id="4905417359854579806">ພ້ອມສຳຮອງ <ph name="FILE_COUNT" /> ໄວ້ແລ້ວ</translation>
 <translation id="4924638091161556692">ກໍາ​ນົດໄວ້</translation>
 <translation id="4935975195727477204">ດອກ​ກາ​ຊາ​ເນຍ</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">ຈັດການການແບ່ງປັນ Linux</translation>
 <translation id="6808193438228982088">ໝາຈອກ</translation>
 <translation id="6820687829547641339">ບ່ອນເກັບມ້ຽນຢາງອັດແໜ້ນ Gzip</translation>
+<translation id="6823166707458800069">ທຸກໄຟລ໌ທີ່ບັນທຶກຢູ່ໃນໂຟນເດີນີ້ຖືກສຳຮອງຂໍ້ມູນແບບອອນລາຍໂດຍອັດຕະໂນມັດແລ້ວ.</translation>
 <translation id="6825883775269213504">ພາສາລັດເຊຍ</translation>
 <translation id="6827236167376090743">ວິດີໂອນີ້ຈະສືບຕໍ່ຫຼິ້ນໄປຈົນກ່ວາງົວຈະກັບບ້ານ.</translation>
 <translation id="6847101934483209767">ລຶບ <ph name="ENTRY_NAME" /> ອອກຈາກການເລືອກແລ້ວ.</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">ແຜນ​ທີ່ Google</translation>
 <translation id="7419631653042041064">ຄີບອດພາສາກາຕາລັນ</translation>
 <translation id="7434823369735508263">ຄີບອດດີວໍຣັກສະ​ຫະ​ລາດຊະອານາຈັກ</translation>
+<translation id="7447678886297481665">ໄຟລ໌ໃນໂຟນເດີນີ້ເປັນແບບອ່ານເທົ່ານັ້ນ. ບໍ່ຮອງຮັບບາງກິດຈະກຳ.</translation>
 <translation id="7460898608667578234">ພາສາຢູ​ເຄຣນ</translation>
 <translation id="7474889694310679759">ຄີບອດພາສາອັງກິດການາດາ</translation>
 <translation id="7489215562877293245">ພົບ <ph name="FILE_COUNT" />

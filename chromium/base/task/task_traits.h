@@ -37,11 +37,12 @@ class PostTaskAndroid;
 enum class TaskPriority : uint8_t {
   // This will always be equal to the lowest priority available.
   LOWEST = 0,
-  // This task will only start running when machine resources are available. The
-  // application may preempt the task if it expects that resources will soon be
-  // needed by work of higher priority. Dependending on the ThreadPolicy, the
-  // task may run on a thread that is likely to be descheduled when higher
-  // priority work arrives (in this process or another).
+  // Best effort tasks will only start running when machine resources are
+  // available. The application may preempt best effort tasks if it expects that
+  // resources will soon be needed by work of higher priority. Dependending on
+  // the ThreadPolicy, best effort tasks may run on a thread that is likely to
+  // be descheduled when higher priority work arrives (in this process or
+  // another).
   //
   // Examples:
   // - Reporting metrics.
@@ -51,7 +52,7 @@ enum class TaskPriority : uint8_t {
   //   when that user interactions happens).
   BEST_EFFORT = LOWEST,
 
-  // The result of this task is visible to the user (in the UI or as a
+  // The result of user visible tasks is visible to the user (in the UI or as a
   // side-effect on the system) but it is not an immediate response to a user
   // interaction.
   //
@@ -61,7 +62,7 @@ enum class TaskPriority : uint8_t {
   // - Loading an image that is displayed in the UI but is non-critical.
   USER_VISIBLE,
 
-  // This task affects UI immediately after a user interaction.
+  // User blocking tasks affects UI immediately after a user interaction.
   //
   // Example:
   // - Loading and rendering a web page after the user clicks a link.
@@ -143,12 +144,16 @@ enum class TaskShutdownBehavior : uint8_t {
 //   thread priority in order to avoid priority inversions. Please consult with
 //   //base/task/OWNERS if you suspect a priority inversion.
 enum class ThreadPolicy : uint8_t {
-  // The task runs at background thread priority if:
+  // The task runs on a background priority thread if:
   // - The TaskPriority is BEST_EFFORT.
   // - Background thread priority is supported by the platform (see
   //   environment_config_unittest.cc).
   // - No extension trait (e.g. BrowserThread) is used.
-  // Otherwise, it runs at normal thread priority.
+  // - ThreadPoolInstance::Shutdown() hadn't been called when the task started running.
+  //       (Remaining TaskShutdownBehavior::BLOCK_SHUTDOWN tasks use foreground
+  //        threads during shutdown regardless of TaskPriority)
+  // Otherwise, it runs on a normal priority thread.
+  // This is the default.
   PREFER_BACKGROUND,
 
   // The task runs at normal thread priority, irrespective of its TaskPriority.

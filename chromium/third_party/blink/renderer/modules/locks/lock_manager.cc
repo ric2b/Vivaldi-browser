@@ -5,8 +5,8 @@
 #include "third_party/blink/renderer/modules/locks/lock_manager.h"
 
 #include <algorithm>
+#include <utility>
 
-#include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
@@ -16,8 +16,8 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_lock_info.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_lock_manager_snapshot.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_associated_receiver.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -64,8 +65,6 @@ class LockManager::LockRequestImpl final
     : public GarbageCollected<LockRequestImpl>,
       public NameClient,
       public mojom::blink::LockRequest {
-  USING_PRE_FINALIZER(LockManager::LockRequestImpl, Dispose);
-
  public:
   LockRequestImpl(
       V8LockGrantedCallback* callback,
@@ -79,25 +78,21 @@ class LockManager::LockRequestImpl final
         resolver_(resolver),
         name_(name),
         mode_(mode),
-        receiver_(
-            this,
-            std::move(receiver),
-            manager->GetExecutionContext()->GetTaskRunner(TaskType::kWebLocks)),
+        receiver_(this, manager->GetExecutionContext()),
         lock_lifetime_(std::move(lock_lifetime)),
-        manager_(manager) {}
+        manager_(manager) {
+    receiver_.Bind(
+        std::move(receiver),
+        manager->GetExecutionContext()->GetTaskRunner(TaskType::kWebLocks));
+  }
 
   ~LockRequestImpl() override = default;
-
-  void Dispose() {
-    // This Impl might still be bound to a LockRequest, so we reset
-    // the receiver before destroying the object.
-    receiver_.reset();
-  }
 
   void Trace(Visitor* visitor) {
     visitor->Trace(resolver_);
     visitor->Trace(manager_);
     visitor->Trace(callback_);
+    visitor->Trace(receiver_);
   }
 
   const char* NameInHeapSnapshot() const override {
@@ -192,7 +187,8 @@ class LockManager::LockRequestImpl final
   // Held to stamp the Lock object's |mode| property.
   mojom::blink::LockMode mode_;
 
-  mojo::AssociatedReceiver<mojom::blink::LockRequest> receiver_;
+  HeapMojoAssociatedReceiver<mojom::blink::LockRequest, LockRequestImpl>
+      receiver_;
 
   // Held to pass into the Lock if granted, to inform the browser that
   // WebLocks are being used by this frame.
@@ -446,8 +442,8 @@ bool LockManager::AllowLocks(ScriptState* script_state) {
     DCHECK(execution_context->IsContextThread());
     SECURITY_DCHECK(execution_context->IsDocument() ||
                     execution_context->IsWorkerGlobalScope());
-    if (auto* document = Document::DynamicFrom(execution_context)) {
-      LocalFrame* frame = document->GetFrame();
+    if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
+      LocalFrame* frame = window->GetFrame();
       if (!frame) {
         cached_allowed_ = false;
       } else if (auto* settings_client = frame->GetContentSettingsClient()) {

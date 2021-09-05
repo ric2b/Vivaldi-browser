@@ -625,10 +625,6 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   // The current cursor.
   HCURSOR current_cursor_;
 
-  // The last cursor that was active before the current one was selected. Saved
-  // so that we can restore it.
-  HCURSOR previous_cursor_;
-
   // The icon created from the bitmap image of the window icon.
   base::win::ScopedHICON window_icon_;
 
@@ -797,6 +793,11 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
   using FullscreenWindowMonitorMap = std::map<HMONITOR, HWNDMessageHandler*>;
   static base::LazyInstance<FullscreenWindowMonitorMap>::DestructorAtExit
       fullscreen_monitor_map_;
+
+  // How many pixels the window is expected to grow from OnWindowPosChanging().
+  // Used to fill the newly exposed pixels black in OnPaint() before the
+  // browser compositor is able to redraw at the new window size.
+  gfx::Size exposed_pixels_;
 
   // Populated if the cursor position is being mocked for testing purposes.
   base::Optional<gfx::Point> mock_cursor_position_;

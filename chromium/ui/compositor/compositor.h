@@ -11,12 +11,14 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "cc/metrics/frame_sequence_tracker.h"
 #include "cc/paint/element_id.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_client.h"
@@ -33,6 +35,8 @@
 #include "ui/compositor/compositor_lock.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/layer_animator_collection.h"
+#include "ui/compositor/throughput_tracker.h"
+#include "ui/compositor/throughput_tracker_host.h"
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -80,6 +84,7 @@ class Compositor;
 class Layer;
 class ScopedAnimationDurationScaleMode;
 class ScrollInputHandler;
+class ThroughputTracker;
 struct PendingBeginFrameArgs;
 
 constexpr int kCompositorLockTimeoutMs = 67;
@@ -129,7 +134,8 @@ class COMPOSITOR_EXPORT ContextFactory {
 // view hierarchy.
 class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
                                      public cc::LayerTreeHostSingleThreadClient,
-                                     public viz::HostFrameSinkClient {
+                                     public viz::HostFrameSinkClient,
+                                     public ThroughputTrackerHost {
  public:
   Compositor(const viz::FrameSinkId& frame_sink_id,
              ui::ContextFactory* context_factory,
@@ -187,6 +193,10 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
   void ScheduleRedrawRect(const gfx::Rect& damage_rect);
 
 #if defined(OS_WIN)
+  // Until this is called with |should| true then both DisableSwapUntilResize()
+  // and ReenableSwap() do nothing.
+  void SetShouldDisableSwapUntilResize(bool should);
+
   // Attempts to immediately swap a frame with the current size if possible,
   // then disables swapping on this surface until it is resized.
   void DisableSwapUntilResize();
@@ -295,6 +305,9 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
       bool force,
       base::OnceCallback<void(const viz::BeginFrameAck&)> callback);
 
+  // Creates a ThroughputTracker for tracking this Compositor.
+  ThroughputTracker RequestNewThroughputTracker();
+
   // LayerTreeHostClient implementation.
   void WillBeginMainFrame() override {}
   void DidBeginMainFrame() override {}
@@ -331,6 +344,8 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
       cc::ActiveFrameSequenceTrackers trackers) override {}
   std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
       override;
+  void NotifyThroughputTrackerResults(
+      cc::CustomTrackerResults results) override;
 
   // cc::LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override;
@@ -340,6 +355,13 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
   // viz::HostFrameSinkClient implementation.
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
   void OnFrameTokenChanged(uint32_t frame_token) override;
+
+  // ThroughputTrackerHost implementation.
+  void StartThroughputTracker(
+      TrackerId tracker_id,
+      ThroughputTrackerHost::ReportCallback callback) override;
+  void StopThroughtputTracker(TrackerId tracker_id) override;
+  void CancelThroughtputTracker(TrackerId tracker_id) override;
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   void OnCompleteSwapWithNewSize(const gfx::Size& size);
@@ -377,6 +399,11 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
 
  private:
   friend class base::RefCounted<Compositor>;
+
+  // Called when throughput data for the tracker of |tracker_id| is ready.
+  void ReportThroughputForTracker(
+      int tracker_id,
+      cc::FrameSequenceMetrics::ThroughputData throughput);
 
   gfx::Size size_;
 
@@ -443,8 +470,17 @@ class COMPOSITOR_EXPORT Compositor : public cc::LayerTreeHostClient,
 
   std::unique_ptr<ScrollInputHandler> scroll_input_handler_;
 
+#if defined(OS_WIN)
+  bool should_disable_swap_until_resize_ = false;
+#endif
+
   // Set in DisableSwapUntilResize and reset when a resize happens.
   bool disabled_swap_until_resize_ = false;
+
+  TrackerId next_throughput_tracker_id_ = 1u;
+  using ThroughputTrackerMap =
+      base::flat_map<TrackerId, ThroughputTrackerHost::ReportCallback>;
+  ThroughputTrackerMap throughput_tracker_map_;
 
   base::WeakPtrFactory<Compositor> context_creation_weak_ptr_factory_{this};
 

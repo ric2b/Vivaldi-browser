@@ -16,11 +16,6 @@ class CORE_EXPORT DocumentPolicyViolationReportBody
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DocumentPolicyViolationReportBody(const String& feature_id,
-                                    const String& message,
-                                    const String& disposition)
-      : feature_id_(feature_id), message_(message), disposition_(disposition) {}
-
   DocumentPolicyViolationReportBody(
       const String& feature_id,
       const String& message,
@@ -29,12 +24,16 @@ class CORE_EXPORT DocumentPolicyViolationReportBody
       const String& resource_url)
       : LocationReportBody(resource_url),
         feature_id_(feature_id),
-        message_(message),
+        message_("Document policy violation: " +
+                 (message.IsEmpty()
+                      ? feature_id + " is not allowed in this document."
+                      : message)),
         disposition_(disposition) {}
 
   const String& featureId() const { return feature_id_; }
   const String& disposition() const { return disposition_; }
   const String& message() const { return message_; }
+
   void BuildJSONValue(V8ObjectBuilder& builder) const override;
 
   ~DocumentPolicyViolationReportBody() override = default;

@@ -27,7 +27,6 @@
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request_base.h"
 #include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
-#include "chrome/browser/safe_browsing/download_protection/download_item_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/common/safe_browsing/download_type_util.h"
@@ -80,7 +79,12 @@ void MaybeOverrideDlpScanResult(DownloadCheckResultReason reason,
         NOTREACHED();
         return;
     }
+  } else if (reason == REASON_WHITELISTED_URL) {
+    callback.Run(deep_scan_result);
+    return;
   }
+
+  NOTREACHED();
 }
 
 }  // namespace
@@ -304,6 +308,13 @@ bool CheckClientDownloadRequest::ShouldPromptForDeepScanning(
          AdvancedProtectionStatusManagerFactory::GetForProfile(profile)
              ->IsUnderAdvancedProtection();
 #endif
+}
+
+bool CheckClientDownloadRequest::IsWhitelistedByPolicy() const {
+  Profile* profile = Profile::FromBrowserContext(GetBrowserContext());
+  if (!profile)
+    return false;
+  return MatchesEnterpriseWhitelist(*profile->GetPrefs(), item_->GetUrlChain());
 }
 
 }  // namespace safe_browsing

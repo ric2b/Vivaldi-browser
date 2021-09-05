@@ -46,40 +46,26 @@ LocaleOutputHelper = class {
   }
 
   /**
-   * Main entry point for locale switching logic.
-   * @param {string} text The text we want to queue for output.
+   * Computes |this.currentLocale_| and |outputString|, and returns them.
+   * @param {string} text
    * @param {AutomationNode} contextNode The AutomationNode that owns |text|.
-   * @param {function(string, string)} appendWithLocaleCallback
+   * @return {!{text: string, locale: string}}
    */
-  assignLocalesAndAppend(text, contextNode, appendWithLocaleCallback) {
+  computeTextAndLocale(text, contextNode) {
     if (!text || !contextNode) {
-      return;
+      return {text, locale: LocaleOutputHelper.BROWSER_UI_LOCALE_};
     }
 
-    this.processText_(text, contextNode, appendWithLocaleCallback);
-  }
-
-  /**
-   * This method does the following:
-   * 1. Computes output locale.
-   * 2. Computes |outputString|
-   * 3. Calls |appendWithLocaleCallback|
-   * @param {string} text
-   * @param {!AutomationNode} contextNode The AutomationNode that owns |text|.
-   * @param {function(string, string)} appendWithLocaleCallback
-   * @private
-   */
-  processText_(text, contextNode, appendWithLocaleCallback) {
     // Prefer the node's detected locale and fall back on the author-assigned
     // locale.
     const nodeLocale =
         contextNode.detectedLanguage || contextNode.language || '';
     const newLocale = this.computeNewLocale_(nodeLocale);
     let outputString = text;
-    const shouldUpdate = this.shouldUpdateLocale_(newLocale);
+    const shouldAlert = newLocale !== this.currentLocale_;
     if (this.hasVoiceForLocale_(newLocale)) {
       this.setCurrentLocale_(newLocale);
-      if (shouldUpdate) {
+      if (shouldAlert) {
         // Prepend the human-readable locale to |outputString|.
         const displayLanguage =
             chrome.accessibilityPrivate.getDisplayNameForLocale(
@@ -99,7 +85,7 @@ LocaleOutputHelper = class {
           Msgs.getMsg('voice_unavailable_for_language', [displayLanguage]);
     }
 
-    appendWithLocaleCallback(outputString, this.currentLocale_);
+    return {text: outputString, locale: this.currentLocale_};
   }
 
   /**
@@ -116,24 +102,6 @@ LocaleOutputHelper = class {
     return LocaleOutputHelper.BROWSER_UI_LOCALE_;
   }
 
-  // TODO(akihiroota): http://crbug.com/1061222
-  /**
-   * Only compares the language components of each locale.
-   * Note: Locale validation is the responsibility of the caller.
-   * Ex: 'fr-fr' and 'fr-ca' have the same language component, but different
-   * country components. We would return false in the above case. Ex: 'fr-ca'
-   * and 'en-ca' have different language components, but the same country
-   * components. We would return true in the above case.
-   * @param {string} newLocale
-   * @return {boolean}
-   * @private
-   */
-  shouldUpdateLocale_(newLocale) {
-    const newComponents = newLocale.split('-');
-    const currentComponents = this.currentLocale_.split('-');
-    return newComponents[0] !== currentComponents[0];
-  }
-
   /**
    * @param {string} targetLocale
    * @return {boolean}
@@ -147,6 +115,9 @@ LocaleOutputHelper = class {
 
     const targetLanguage = components[0];
     for (const voice of this.availableVoices_) {
+      if (!voice.lang) {
+        continue;
+      }
       const candidateLanguage = voice.lang.toLowerCase().split('-')[0];
       if (candidateLanguage === targetLanguage) {
         return true;

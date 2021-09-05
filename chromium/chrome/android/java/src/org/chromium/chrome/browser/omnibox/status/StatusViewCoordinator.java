@@ -4,21 +4,27 @@
 
 package org.chromium.chrome.browser.omnibox.status;
 
+import android.app.Activity;
 import android.content.res.Resources;
 import android.view.View;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlTextChangeListener;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
-import org.chromium.chrome.browser.page_info.PageInfoController;
+import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
+import org.chromium.chrome.browser.page_info.ChromePermissionParamsListBuilderDelegate;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
+import org.chromium.components.page_info.PageInfoController;
+import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -35,6 +41,7 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
     private final StatusMediator mMediator;
     private final PropertyModel mModel;
     private final boolean mIsTablet;
+    private Supplier<ModalDialogManager> mModalDialogManagerSupplier;
     private ToolbarDataProvider mToolbarDataProvider;
     private boolean mUrlHasFocus;
 
@@ -52,8 +59,16 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
         mModel = new PropertyModel(StatusProperties.ALL_KEYS);
 
         PropertyModelChangeProcessor.create(mModel, mStatusView, new StatusViewBinder());
+
+        Runnable forceModelViewReconciliationRunnable = () -> {
+            final View securityIconView = getSecurityIconView();
+            mStatusView.setAlpha(1f);
+            securityIconView.setAlpha(mModel.get(StatusProperties.STATUS_ICON_ALPHA));
+            securityIconView.setVisibility(
+                    mModel.get(StatusProperties.SHOW_STATUS_ICON) ? View.VISIBLE : View.GONE);
+        };
         mMediator = new StatusMediator(mModel, mStatusView.getResources(), mStatusView.getContext(),
-                urlBarEditingTextStateProvider, isTablet);
+                urlBarEditingTextStateProvider, isTablet, forceModelViewReconciliationRunnable);
 
         Resources res = mStatusView.getResources();
         mMediator.setUrlMinWidth(res.getDimensionPixelSize(R.dimen.location_bar_min_url_width)
@@ -141,6 +156,15 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
     }
 
     /**
+     * @param modalDialogManagerSupplier A supplier for {@link ModalDialogManager} used
+     *         to display a dialog.
+     */
+    public void setModalDialogManagerSupplier(
+            Supplier<ModalDialogManager> modalDialogManagerSupplier) {
+        mModalDialogManagerSupplier = modalDialogManagerSupplier;
+    }
+
+    /**
      * Updates the security icon displayed in the LocationBar.
      */
     public void updateStatusIcon() {
@@ -205,10 +229,15 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
         }
 
         Tab tab = mToolbarDataProvider.getTab();
-        PageInfoController.show(((TabImpl) tab).getActivity(), tab.getWebContents(), null,
+        WebContents webContents = tab.getWebContents();
+        Activity activity = TabUtils.getActivity(tab);
+        PageInfoController.show(activity, webContents, null,
                 PageInfoController.OpenedFromSource.TOOLBAR,
-                /*offlinePageLoadUrlDelegate=*/
-                new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab));
+                new ChromePageInfoControllerDelegate(activity, webContents,
+                        mModalDialogManagerSupplier,
+                        /*offlinePageLoadUrlDelegate=*/
+                        new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab)),
+                new ChromePermissionParamsListBuilderDelegate());
     }
 
     /**
@@ -232,8 +261,6 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
      */
     public void setShowIconsWhenUrlFocused(boolean showIconsWithUrlFocused) {
         mMediator.setShowIconsWhenUrlFocused(showIconsWithUrlFocused);
-        if (!ChromeApplication.isVivaldi()) // In Vivaldi this kills status icon and search icon.
-        reconcileVisualState(showIconsWithUrlFocused);
     }
 
     /**
@@ -243,6 +270,10 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
         mMediator.setFirstSuggestionIsSearchType(firstSuggestionIsSearchQuery);
     }
 
+    public void setIncognitoStateProvider(IncognitoStateProvider incognitoStateProvider) {
+        mMediator.setIncognitoStateProvider(incognitoStateProvider);
+    }
+
     /**
      * Update information required to display the search engine icon.
      */
@@ -250,40 +281,6 @@ public class StatusViewCoordinator implements View.OnClickListener, UrlTextChang
             boolean isSearchEngineGoogle, String searchEngineUrl) {
         mMediator.updateSearchEngineStatusIcon(
                 shouldShowSearchEngineLogo, isSearchEngineGoogle, searchEngineUrl);
-    }
-
-    /**
-     * Temporary workaround for the divergent logic for status icon visibility changes for the dse
-     * icon experiment. Should be removed when the dse icon launches (crbug.com/1019488).
-     *
-     * When transitioning to incognito, the first visible view when focused will be assigned to
-     * UrlBar. When the UrlBar is the first visible view when focused, the StatusView's alpha
-     * will be set to 0 in LocationBarPhone#populateFadeAnimations. When transitioning back from
-     * incognito, StatusView's state needs to be reset to match the current state of the status view
-     * {@link org.chromium.chrome.browser.omnibox.LocationBarPhone#updateVisualsForState}.
-     * property model.
-     **/
-    private void reconcileVisualState(boolean showStatusIconWhenFocused) {
-        // No reconciliation is needed on tablet because the status icon is always shown.
-        if (mIsTablet) return;
-
-        // State requirements:
-        // - The ToolbarDataProvider and views are not null.
-        // - The status icon will be shown when focused.
-        // - Incognito isn't active.
-        // - The search engine logo should be shown.
-        if (mToolbarDataProvider == null || mStatusView == null || getSecurityIconView() == null
-                || !showStatusIconWhenFocused || mToolbarDataProvider.isIncognito()
-                || !SearchEngineLogoUtils.shouldShowSearchEngineLogo(
-                        mToolbarDataProvider.isIncognito())) {
-            return;
-        }
-        View securityIconView = getSecurityIconView();
-
-        mStatusView.setAlpha(1f);
-        securityIconView.setAlpha(mModel.get(StatusProperties.STATUS_ICON_ALPHA));
-        securityIconView.setVisibility(
-                mModel.get(StatusProperties.SHOW_STATUS_ICON) ? View.VISIBLE : View.GONE);
     }
 
     /**

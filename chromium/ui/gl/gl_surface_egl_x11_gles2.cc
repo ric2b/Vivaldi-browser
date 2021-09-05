@@ -14,10 +14,10 @@ namespace gl {
 
 NativeViewGLSurfaceEGLX11GLES2::NativeViewGLSurfaceEGLX11GLES2(
     EGLNativeWindowType window)
-    : NativeViewGLSurfaceEGL(0, nullptr), parent_window_(window) {}
+    : NativeViewGLSurfaceEGLX11(0), parent_window_(window) {}
 
 bool NativeViewGLSurfaceEGLX11GLES2::InitializeNativeWindow() {
-  Display* x11_display = GetNativeDisplay();
+  Display* x11_display = GetXNativeDisplay();
   XWindowAttributes attributes;
   if (!XGetWindowAttributes(x11_display, parent_window_, &attributes)) {
     LOG(ERROR) << "XGetWindowAttributes failed for window " << parent_window_
@@ -36,8 +36,9 @@ bool NativeViewGLSurfaceEGLX11GLES2::InitializeNativeWindow() {
   swa.background_pixmap = 0;
   swa.bit_gravity = NorthWestGravity;
   window_ = XCreateWindow(x11_display, parent_window_, 0, 0, size_.width(),
-                          size_.height(), 0, CopyFromParent, InputOutput,
-                          CopyFromParent, CWBackPixmap | CWBitGravity, &swa);
+                          size_.height(), 0, 0 /* CopyFromParent */,
+                          1 /* InputOutput */, 0 /* CopyFromParent */,
+                          CWBackPixmap | CWBitGravity, &swa);
   XMapWindow(x11_display, window_);
   XSelectInput(x11_display, window_, ExposureMask);
   XFlush(x11_display);
@@ -46,10 +47,10 @@ bool NativeViewGLSurfaceEGLX11GLES2::InitializeNativeWindow() {
 }
 
 void NativeViewGLSurfaceEGLX11GLES2::Destroy() {
-  NativeViewGLSurfaceEGL::Destroy();
+  NativeViewGLSurfaceEGLX11::Destroy();
 
   if (window_) {
-    Display* x11_display = GetNativeDisplay();
+    Display* x11_display = GetXNativeDisplay();
     XDestroyWindow(x11_display, window_);
     window_ = 0;
     XFlush(x11_display);
@@ -61,7 +62,7 @@ EGLConfig NativeViewGLSurfaceEGLX11GLES2::GetConfig() {
     // Get a config compatible with the window
     DCHECK(window_);
     XWindowAttributes win_attribs;
-    if (!XGetWindowAttributes(GetNativeDisplay(), window_, &win_attribs)) {
+    if (!XGetWindowAttributes(GetXNativeDisplay(), window_, &win_attribs)) {
       return nullptr;
     }
 
@@ -130,18 +131,19 @@ bool NativeViewGLSurfaceEGLX11GLES2::Resize(const gfx::Size& size,
   size_ = size;
 
   eglWaitGL();
-  XResizeWindow(GetNativeDisplay(), window_, size.width(), size.height());
+  XResizeWindow(GetXNativeDisplay(), window_, size.width(), size.height());
   eglWaitNative(EGL_CORE_NATIVE_ENGINE);
 
   return true;
 }
 
 bool NativeViewGLSurfaceEGLX11GLES2::DispatchXEvent(XEvent* xev) {
-  if (xev->type != Expose || xev->xexpose.window != window_)
+  if (xev->type != Expose ||
+      xev->xexpose.window != static_cast<Window>(window_))
     return false;
 
   xev->xexpose.window = parent_window_;
-  Display* x11_display = GetNativeDisplay();
+  Display* x11_display = GetXNativeDisplay();
   XSendEvent(x11_display, parent_window_, x11::False, ExposureMask, xev);
   XFlush(x11_display);
   return true;

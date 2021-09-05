@@ -563,11 +563,11 @@ TEST_F(ContextMenuControllerTest, ShowNonLocatedContextMenuEvent) {
   // Select the 'Sample' of |input|.
   DOMRect* rect = input_element->getBoundingClientRect();
   WebGestureEvent gesture_event(
-      WebInputEvent::kGestureLongPress, WebInputEvent::kNoModifiers,
+      WebInputEvent::Type::kGestureLongPress, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now(), WebGestureDevice::kTouchscreen);
   gesture_event.SetPositionInWidget(gfx::PointF(rect->left(), rect->top()));
   GetWebView()->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(gesture_event));
+      WebCoalescedInputEvent(gesture_event, ui::LatencyInfo()));
 
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
@@ -608,11 +608,11 @@ TEST_F(ContextMenuControllerTest, SelectionRectClipped) {
   // Select the 'Sample' of |textarea|.
   DOMRect* rect = editable_element->getBoundingClientRect();
   WebGestureEvent gesture_event(
-      WebInputEvent::kGestureLongPress, WebInputEvent::kNoModifiers,
+      WebInputEvent::Type::kGestureLongPress, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now(), WebGestureDevice::kTouchscreen);
   gesture_event.SetPositionInWidget(gfx::PointF(rect->left(), rect->top()));
   GetWebView()->MainFrameWidget()->HandleInputEvent(
-      WebCoalescedInputEvent(gesture_event));
+      WebCoalescedInputEvent(gesture_event, ui::LatencyInfo()));
 
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();

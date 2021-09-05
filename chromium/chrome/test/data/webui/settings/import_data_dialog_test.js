@@ -3,12 +3,13 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {ImportDataBrowserProxyImpl, ImportDataStatus} from 'chrome://settings/lazy_load.js';
-// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {ImportDataBrowserProxyImpl, ImportDataStatus} from 'chrome://settings/lazy_load.js';
+import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
 // clang-format on
 
-/** @implements {settings.ImportDataBrowserProxy} */
+/** @implements {ImportDataBrowserProxy} */
 class TestImportDataBrowserProxy extends TestBrowserProxy {
   constructor() {
     super([
@@ -17,11 +18,11 @@ class TestImportDataBrowserProxy extends TestBrowserProxy {
       'importData',
     ]);
 
-    /** @private {!Array<!settings.BrowserProfile} */
+    /** @private {!Array<!BrowserProfile} */
     this.browserProfiles_ = [];
   }
 
-  /** @param {!Array<!settings.BrowserProfile} browserProfiles */
+  /** @param {!Array<!BrowserProfile} browserProfiles */
   setBrowserProfiles(browserProfiles) {
     this.browserProfiles_ = browserProfiles;
   }
@@ -44,7 +45,7 @@ class TestImportDataBrowserProxy extends TestBrowserProxy {
 }
 
 suite('ImportDataDialog', function() {
-  /** @type {!Array<!settings.BrowserProfile} */
+  /** @type {!Array<!BrowserProfile} */
   const browserProfiles = [
     {
       autofillFormData: true,
@@ -85,8 +86,10 @@ suite('ImportDataDialog', function() {
   }
 
   const prefs = {};
-  ['import_dialog_history', 'import_dialog_bookmarks',
-   'import_dialog_saved_passwords', 'import_dialog_search_engine',
+  ['import_dialog_history',
+   'import_dialog_bookmarks',
+   'import_dialog_saved_passwords',
+   'import_dialog_search_engine',
    'import_dialog_autofill_form_data',
   ].forEach(function(name) {
     prefs[name] = createBooleanPref(name);
@@ -99,14 +102,14 @@ suite('ImportDataDialog', function() {
   setup(function() {
     browserProxy = new TestImportDataBrowserProxy();
     browserProxy.setBrowserProfiles(browserProfiles);
-    settings.ImportDataBrowserProxyImpl.instance_ = browserProxy;
+    ImportDataBrowserProxyImpl.instance_ = browserProxy;
     PolymerTest.clearBody();
     dialog = document.createElement('settings-import-data-dialog');
     dialog.set('prefs', prefs);
     document.body.appendChild(dialog);
     return browserProxy.whenCalled('initializeImportDialog').then(function() {
       assertTrue(dialog.$.dialog.open);
-      Polymer.dom.flush();
+      flush();
     });
   });
 
@@ -175,19 +178,19 @@ suite('ImportDataDialog', function() {
     assertTrue(dialog.$$('paper-spinner-lite').hidden);
   }
 
-  /** @param {!settings.ImportDataStatus} status */
+  /** @param {!ImportDataStatus} status */
   function simulateImportStatusChange(status) {
-    cr.webUIListenerCallback('import-data-status-changed', status);
+    webUIListenerCallback('import-data-status-changed', status);
   }
 
   test('ImportFromBookmarksFile', function() {
     simulateBrowserProfileChange(2);
     dialog.$.import.click();
     return browserProxy.whenCalled('importFromBookmarksFile').then(function() {
-      simulateImportStatusChange(settings.ImportDataStatus.IN_PROGRESS);
+      simulateImportStatusChange(ImportDataStatus.IN_PROGRESS);
       assertInProgressButtons();
 
-      simulateImportStatusChange(settings.ImportDataStatus.SUCCEEDED);
+      simulateImportStatusChange(ImportDataStatus.SUCCEEDED);
       assertSucceededButtons();
 
       assertFalse(dialog.$.successIcon.parentElement.hidden);
@@ -209,10 +212,10 @@ suite('ImportDataDialog', function() {
       assertFalse(types['import_dialog_bookmarks']);
       assertTrue(types['import_dialog_search_engine']);
 
-      simulateImportStatusChange(settings.ImportDataStatus.IN_PROGRESS);
+      simulateImportStatusChange(ImportDataStatus.IN_PROGRESS);
       assertInProgressButtons();
 
-      simulateImportStatusChange(settings.ImportDataStatus.SUCCEEDED);
+      simulateImportStatusChange(ImportDataStatus.SUCCEEDED);
       assertSucceededButtons();
 
       assertFalse(dialog.$.successIcon.parentElement.hidden);
@@ -221,7 +224,7 @@ suite('ImportDataDialog', function() {
   });
 
   test('ImportError', function() {
-    simulateImportStatusChange(settings.ImportDataStatus.FAILED);
+    simulateImportStatusChange(ImportDataStatus.FAILED);
     assertFalse(dialog.$.dialog.open);
   });
 });

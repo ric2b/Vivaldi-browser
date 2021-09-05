@@ -11,6 +11,7 @@
 #include "components/services/storage/public/mojom/indexed_db_control.mojom.h"
 #include "content/public/browser/storage_partition.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 
 namespace leveldb_proto {
 class ProtoDatabaseProvider;
@@ -25,6 +26,7 @@ class DOMStorageContext;
 class NativeFileSystemEntryFactory;
 class PlatformNotificationContext;
 class ServiceWorkerContext;
+class IdleManager;
 
 #if !defined(OS_ANDROID)
 class HostZoomLevelContext;
@@ -64,16 +66,10 @@ class TestStoragePartition : public StoragePartition {
     cookie_manager_for_browser_process_ = cookie_manager_for_browser_process;
   }
   network::mojom::CookieManager* GetCookieManagerForBrowserProcess() override;
-  void CreateRestrictedCookieManager(
-      network::mojom::RestrictedCookieManagerRole role,
-      const url::Origin& origin,
-      const net::SiteForCookies& site_for_cookies,
-      const url::Origin& top_frame_origin,
-      bool is_service_worker,
-      int process_id,
-      int routing_id,
-      mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver)
-      override;
+
+  void CreateHasTrustTokensAnswerer(
+      mojo::PendingReceiver<network::mojom::HasTrustTokensAnswerer> receiver,
+      const url::Origin& top_frame_origin) override;
 
   void set_quota_manager(storage::QuotaManager* manager) {
     quota_manager_ = manager;
@@ -104,6 +100,8 @@ class TestStoragePartition : public StoragePartition {
     dom_storage_context_ = context;
   }
   DOMStorageContext* GetDOMStorageContext() override;
+
+  IdleManager* GetIdleManager() override;
 
   storage::mojom::IndexedDBControl& GetIndexedDBControl() override;
 
@@ -202,9 +200,13 @@ class TestStoragePartition : public StoragePartition {
   void FlushNetworkInterfaceForTesting() override;
   void WaitForDeletionTasksForTesting() override;
   void WaitForCodeCacheShutdownForTesting() override;
+  void SetNetworkContextForTesting(
+      mojo::PendingRemote<network::mojom::NetworkContext>
+          network_context_remote) override;
 
  private:
   base::FilePath file_path_;
+  mojo::Remote<network::mojom::NetworkContext> network_context_remote_;
   network::mojom::NetworkContext* network_context_ = nullptr;
   network::mojom::CookieManager* cookie_manager_for_browser_process_ = nullptr;
   storage::QuotaManager* quota_manager_ = nullptr;

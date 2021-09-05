@@ -514,13 +514,10 @@ CompositorTimingHistory::CreateUMAReporter(UMACategory category) {
   switch (category) {
     case RENDERER_UMA:
       return base::WrapUnique(new RendererUMAReporter);
-      break;
     case BROWSER_UMA:
       return base::WrapUnique(new BrowserUMAReporter);
-      break;
     case NULL_UMA:
       return base::WrapUnique(new NullUMAReporter);
-      break;
   }
   NOTREACHED();
   return base::WrapUnique<CompositorTimingHistory::UMAReporter>(nullptr);
@@ -662,6 +659,7 @@ void CompositorTimingHistory::WillFinishImplFrame(bool needs_redraw,
 void CompositorTimingHistory::BeginImplFrameNotExpectedSoon() {
   SetBeginMainFrameNeededContinuously(false);
   SetCompositorDrawingContinuously(false);
+  compositor_frame_reporting_controller_->OnStoppedRequestingBeginFrames();
 }
 
 void CompositorTimingHistory::WillBeginMainFrame(
@@ -951,8 +949,10 @@ void CompositorTimingHistory::DidSubmitCompositorFrame(
   submit_start_time_ = Now();
 }
 
-void CompositorTimingHistory::DidNotProduceFrame(const viz::BeginFrameId& id) {
-  compositor_frame_reporting_controller_->DidNotProduceFrame(id);
+void CompositorTimingHistory::DidNotProduceFrame(
+    const viz::BeginFrameId& id,
+    FrameSkippedReason skip_reason) {
+  compositor_frame_reporting_controller_->DidNotProduceFrame(id, skip_reason);
 }
 
 void CompositorTimingHistory::DidReceiveCompositorFrameAck() {

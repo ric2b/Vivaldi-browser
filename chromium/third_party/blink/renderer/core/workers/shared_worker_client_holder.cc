@@ -32,7 +32,7 @@
 
 #include <memory>
 #include <utility>
-#include "base/logging.h"
+#include "base/check.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
@@ -60,23 +60,24 @@ namespace blink {
 const char SharedWorkerClientHolder::kSupplementName[] =
     "SharedWorkerClientHolder";
 
-SharedWorkerClientHolder* SharedWorkerClientHolder::From(Document& document) {
+SharedWorkerClientHolder* SharedWorkerClientHolder::From(
+    LocalDOMWindow& window) {
   DCHECK(IsMainThread());
   SharedWorkerClientHolder* holder =
-      Supplement<Document>::From<SharedWorkerClientHolder>(document);
+      Supplement<LocalDOMWindow>::From<SharedWorkerClientHolder>(window);
   if (!holder) {
-    holder = MakeGarbageCollected<SharedWorkerClientHolder>(document);
-    Supplement<Document>::ProvideTo(document, holder);
+    holder = MakeGarbageCollected<SharedWorkerClientHolder>(window);
+    Supplement<LocalDOMWindow>::ProvideTo(window, holder);
   }
   return holder;
 }
 
-SharedWorkerClientHolder::SharedWorkerClientHolder(Document& document)
-    : connector_(document.ToExecutionContext()),
-      client_receivers_(document.ToExecutionContext()),
-      task_runner_(document.GetTaskRunner(blink::TaskType::kDOMManipulation)) {
+SharedWorkerClientHolder::SharedWorkerClientHolder(LocalDOMWindow& window)
+    : connector_(&window),
+      client_receivers_(&window),
+      task_runner_(window.GetTaskRunner(blink::TaskType::kDOMManipulation)) {
   DCHECK(IsMainThread());
-  document.GetBrowserInterfaceBroker().GetInterface(
+  window.GetBrowserInterfaceBroker().GetInterface(
       connector_.BindNewPipeAndPassReceiver(task_runner_));
 }
 
@@ -142,7 +143,7 @@ void SharedWorkerClientHolder::Connect(
 void SharedWorkerClientHolder::Trace(Visitor* visitor) {
   visitor->Trace(connector_);
   visitor->Trace(client_receivers_);
-  Supplement<Document>::Trace(visitor);
+  Supplement<LocalDOMWindow>::Trace(visitor);
 }
 
 }  // namespace blink

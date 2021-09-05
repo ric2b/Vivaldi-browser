@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
@@ -427,9 +428,9 @@ SearchBox* GetSearchBoxForCurrentContext() {
 }
 
 base::Value CreateAutocompleteMatches(
-    const std::vector<chrome::mojom::AutocompleteMatchPtr>& matches) {
+    const std::vector<search::mojom::AutocompleteMatchPtr>& matches) {
   base::Value list(base::Value::Type::LIST);
-  for (const chrome::mojom::AutocompleteMatchPtr& match : matches) {
+  for (const search::mojom::AutocompleteMatchPtr& match : matches) {
     base::Value dict(base::Value::Type::DICTIONARY);
     dict.SetBoolKey("allowedToBeDefaultMatch",
                     match->allowed_to_be_default_match);
@@ -451,7 +452,8 @@ base::Value CreateAutocompleteMatches(
       description_class.Append(std::move(entry));
     }
     dict.SetKey("descriptionClass", std::move(description_class));
-    dict.SetStringKey("destinationUrl", match->destination_url);
+    dict.SetStringKey("destinationUrl", match->destination_url.spec());
+    dict.SetIntKey("suggestionGroupId", match->suggestion_group_id);
     dict.SetStringKey("inlineAutocompletion", match->inline_autocompletion);
     dict.SetBoolKey("isSearchType", match->is_search_type);
     dict.SetStringKey("fillIntoEdit", match->fill_into_edit);
@@ -465,6 +467,20 @@ base::Value CreateAutocompleteMatches(
     list.Append(std::move(dict));
   }
   return list;
+}
+
+base::Value CreateSuggestionGroupsMap(
+    const base::flat_map<int32_t, search::mojom::SuggestionGroupPtr>&
+        suggestion_groups_map) {
+  base::Value result_map(base::Value::Type::DICTIONARY);
+  for (const auto& pair : suggestion_groups_map) {
+    base::Value suggestion_group(base::Value::Type::DICTIONARY);
+    suggestion_group.SetStringKey("header", pair.second->header);
+    suggestion_group.SetBoolKey("hidden", pair.second->hidden);
+    result_map.SetPath(base::NumberToString(pair.first),
+                       std::move(suggestion_group));
+  }
+  return result_map;
 }
 
 static const char kDispatchFocusChangedScript[] =
@@ -640,6 +656,7 @@ class SearchBoxBindings : public gin::Wrappable<SearchBoxBindings> {
                                     bool ctrl_key,
                                     bool meta_key,
                                     bool shift_key);
+  static void ToggleSuggestionGroupIdVisibility(int32_t suggestion_group_id);
 
   DISALLOW_COPY_AND_ASSIGN(SearchBoxBindings);
 };
@@ -659,17 +676,19 @@ gin::ObjectTemplateBuilder SearchBoxBindings::GetObjectTemplateBuilder(
                    &SearchBoxBindings::IsKeyCaptureEnabled)
       .SetMethod("deleteAutocompleteMatch",
                  &SearchBoxBindings::DeleteAutocompleteMatch)
+      .SetMethod("logCharTypedToRepaintLatency",
+                 &SearchBoxBindings::LogCharTypedToRepaintLatency)
       .SetMethod("openAutocompleteMatch",
                  &SearchBoxBindings::OpenAutocompleteMatch)
       .SetMethod("paste", &SearchBoxBindings::Paste)
       .SetMethod("queryAutocomplete", &SearchBoxBindings::QueryAutocomplete)
       .SetMethod("stopAutocomplete", &SearchBoxBindings::StopAutocomplete)
-      .SetMethod("logCharTypedToRepaintLatency",
-                 &SearchBoxBindings::LogCharTypedToRepaintLatency)
       .SetMethod("startCapturingKeyStrokes",
                  &SearchBoxBindings::StartCapturingKeyStrokes)
       .SetMethod("stopCapturingKeyStrokes",
-                 &SearchBoxBindings::StopCapturingKeyStrokes);
+                 &SearchBoxBindings::StopCapturingKeyStrokes)
+      .SetMethod("toggleSuggestionGroupIdVisibility",
+                 &SearchBoxBindings::ToggleSuggestionGroupIdVisibility);
 }
 
 // static
@@ -696,6 +715,15 @@ void SearchBoxBindings::DeleteAutocompleteMatch(int line) {
   if (!search_box)
     return;
   search_box->DeleteAutocompleteMatch(line);
+}
+
+// static
+void SearchBoxBindings::ToggleSuggestionGroupIdVisibility(
+    int32_t suggestion_group_id) {
+  SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box)
+    return;
+  search_box->ToggleSuggestionGroupIdVisibility(suggestion_group_id);
 }
 
 // static
@@ -1498,10 +1526,12 @@ void SearchBoxExtension::DispatchDeleteCustomLinkResult(
 // static
 void SearchBoxExtension::DispatchAutocompleteResultChanged(
     blink::WebLocalFrame* frame,
-    chrome::mojom::AutocompleteResultPtr result) {
+    search::mojom::AutocompleteResultPtr result) {
   base::Value dict(base::Value::Type::DICTIONARY);
   dict.SetStringKey("input", result->input);
   dict.SetKey("matches", CreateAutocompleteMatches(result->matches));
+  dict.SetKey("suggestionGroupsMap",
+              CreateSuggestionGroupsMap(result->suggestion_groups_map));
 
   std::string json;
   base::JSONWriter::Write(dict, &json);

@@ -26,6 +26,7 @@
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator_id.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -38,9 +39,8 @@
 namespace blink {
 
 Navigator::Navigator(LocalFrame* frame)
-    : NavigatorLanguage(frame ? frame->GetDocument()->ToExecutionContext()
-                              : nullptr),
-      DOMWindowClient(frame) {}
+    : NavigatorLanguage(frame ? frame->DomWindow() : nullptr),
+      ExecutionContextClient(frame) {}
 
 String Navigator::productSub() const {
   return "20030107";
@@ -117,7 +117,7 @@ String Navigator::GetAcceptLanguages() {
 void Navigator::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
   NavigatorLanguage::Trace(visitor);
-  DOMWindowClient::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
   Supplementable<Navigator>::Trace(visitor);
 }
 

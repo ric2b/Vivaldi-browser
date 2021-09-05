@@ -33,6 +33,7 @@
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 
 #if defined(OS_CHROMEOS)
@@ -75,7 +76,7 @@ class MultipleProfileDeletionObserver
  public:
   explicit MultipleProfileDeletionObserver(size_t expected_count)
       : expected_count_(expected_count),
-        profiles_created_count_(0),
+        profiles_removed_count_(0),
         profiles_data_removed_count_(0) {
     EXPECT_GT(expected_count_, 0u);
     ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -104,7 +105,7 @@ class MultipleProfileDeletionObserver
 
  private:
   void OnProfileWillBeRemoved(const base::FilePath& profile_path) override {
-    profiles_created_count_++;
+    profiles_removed_count_++;
     MaybeQuit();
   }
 
@@ -117,16 +118,14 @@ class MultipleProfileDeletionObserver
   }
 
   void MaybeQuit() {
-    DLOG(INFO) << profiles_created_count_
-               << " profiles removed, and "
+    DLOG(INFO) << profiles_removed_count_ << " profiles removed, and "
                << profiles_data_removed_count_
-               << " profile data removed of expected "
-               << expected_count_;
-    if (profiles_created_count_ < expected_count_ ||
+               << " profile data removed of expected " << expected_count_;
+    if (profiles_removed_count_ < expected_count_ ||
         profiles_data_removed_count_ < expected_count_)
       return;
 
-    EXPECT_EQ(expected_count_, profiles_created_count_);
+    EXPECT_EQ(expected_count_, profiles_removed_count_);
     EXPECT_EQ(expected_count_, profiles_data_removed_count_);
 
     keep_alive_.reset();
@@ -136,7 +135,7 @@ class MultipleProfileDeletionObserver
   base::RunLoop loop_;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
   size_t expected_count_;
-  size_t profiles_created_count_;
+  size_t profiles_removed_count_;
   size_t profiles_data_removed_count_;
 
   DISALLOW_COPY_AND_ASSIGN(MultipleProfileDeletionObserver);
@@ -323,8 +322,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteInactiveProfile) {
 
 // Delete current profile in a multi profile setup and make sure an existing one
 // is loaded.
-// TODO(https://crbug.com/1073451) flaky on windows + linux bots
-#if defined(OS_WIN) || defined(OS_LINUX)
+// TODO(https://crbug.com/1073451) flaky on windows.
+#if defined(OS_WIN)
 #define MAYBE_DeleteCurrentProfile DISABLED_DeleteCurrentProfile
 #else
 #define MAYBE_DeleteCurrentProfile DeleteCurrentProfile
@@ -634,14 +633,14 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, IncognitoProfile) {
 
   Profile* profile = ProfileManager::GetActiveUserProfile();
   ASSERT_TRUE(profile);
-  EXPECT_FALSE(profile->HasOffTheRecordProfile());
+  EXPECT_FALSE(profile->HasPrimaryOTRProfile());
 
   size_t initial_profile_count = profile_manager->GetNumberOfProfiles();
 
   // Create an incognito profile.
-  Profile* incognito_profile = profile->GetOffTheRecordProfile();
+  Profile* incognito_profile = profile->GetPrimaryOTRProfile();
 
-  EXPECT_TRUE(profile->HasOffTheRecordProfile());
+  EXPECT_TRUE(profile->HasPrimaryOTRProfile());
   ASSERT_TRUE(profile_manager->IsValidProfile(incognito_profile));
   EXPECT_EQ(initial_profile_count, profile_manager->GetNumberOfProfiles());
 
@@ -658,9 +657,10 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, IncognitoProfile) {
                   .empty());
 
   // Delete the incognito profile.
-  incognito_profile->GetOriginalProfile()->DestroyOffTheRecordProfile();
+  incognito_profile->GetOriginalProfile()->DestroyOffTheRecordProfile(
+      incognito_profile);
 
-  EXPECT_FALSE(profile->HasOffTheRecordProfile());
+  EXPECT_FALSE(profile->HasPrimaryOTRProfile());
   EXPECT_FALSE(profile_manager->IsValidProfile(incognito_profile));
   EXPECT_EQ(initial_profile_count, profile_manager->GetNumberOfProfiles());
   // After destroying the incognito profile incognito preferences should be

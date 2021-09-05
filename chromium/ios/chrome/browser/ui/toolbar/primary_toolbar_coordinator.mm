@@ -11,6 +11,7 @@
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
@@ -71,6 +72,8 @@
                    forProtocol:@protocol(FakeboxFocuser)];
 
   self.viewController = [[PrimaryToolbarViewController alloc] init];
+  self.viewController.shouldHideOmniboxOnNTP =
+      !self.browser->GetBrowserState()->IsOffTheRecord();
   self.viewController.buttonFactory = [self buttonFactoryWithType:PRIMARY];
   // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
   // clean up.
@@ -96,7 +99,7 @@
         FullscreenController::FromBrowser(self.browser), self.viewController);
   } else {
     _fullscreenUIUpdater = std::make_unique<FullscreenUIUpdater>(
-        FullscreenController::FromBrowserState(self.browserState),
+        FullscreenController::FromBrowserState(self.browser->GetBrowserState()),
         self.viewController);
   }
 
@@ -163,7 +166,8 @@
   if (fullscreen::features::ShouldScopeFullscreenControllerToBrowser()) {
     FullscreenController::FromBrowser(self.browser)->ExitFullscreen();
   } else {
-    FullscreenController::FromBrowserState(self.browserState)->ExitFullscreen();
+    FullscreenController::FromBrowserState(self.browser->GetBrowserState())
+        ->ExitFullscreen();
   }
 }
 

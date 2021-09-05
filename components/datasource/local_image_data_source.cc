@@ -20,15 +20,15 @@ LocalImageDataClassHandler::~LocalImageDataClassHandler() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
-bool LocalImageDataClassHandler::GetData(
+void LocalImageDataClassHandler::GetData(
     const std::string& data_id,
     content::URLDataSource::GotDataCallback callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!data_sources_api_)
-    return false;
+  if (!data_sources_api_) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
 
   data_sources_api_->GetDataForId(url_kind_, data_id, std::move(callback));
-
-  return true;
 }

@@ -45,12 +45,14 @@
 #include "chrome/browser/profiles/profile_observer.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
@@ -79,6 +81,7 @@
 #include "components/user_manager/user_manager.h"
 #else
 #include "chrome/browser/extensions/api/messaging/native_messaging_launch_from_native.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/user_manager.h"
 #endif
 
@@ -96,13 +99,13 @@
 #include "chrome/browser/notifications/win/notification_launch_id.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/credential_provider/common/gcp_strings.h"
-#endif
-
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-#include "chrome/browser/printing/print_dialog_cloud.h"
-#endif
+#include "chrome/browser/printing/print_dialog_cloud_win.h"
+#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#endif  // defined(OS_WIN)
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 
 using content::BrowserThread;
 using content::ChildProcessSecurityPolicy;
@@ -260,11 +263,18 @@ bool CanOpenProfileOnStartup(Profile* profile) {
   // Guest or system profiles are not available unless a separate process
   // already has a window open for the profile.
   return (!profile->IsGuestSession() && !profile->IsSystemProfile()) ||
-         (chrome::GetBrowserCount(profile->GetOffTheRecordProfile()) > 0);
+         (chrome::GetBrowserCount(profile->GetPrimaryOTRProfile()) > 0);
 #endif
 }
 
-void ShowUserManagerOnStartup(const base::CommandLine& command_line) {
+#if !defined(OS_CHROMEOS)
+bool ShouldShowProfilePicker() {
+  return !signin_util::IsForceSigninEnabled() &&
+         base::FeatureList::IsEnabled(features::kNewProfilePicker);
+}
+#endif  // !defined(OS_CHROMEOS)
+
+void ShowUserManagerOnStartup() {
 #if !defined(OS_CHROMEOS)
   UserManager::Show(base::FilePath(),
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
@@ -357,7 +367,7 @@ bool StartupBrowserCreator::LaunchBrowser(
   // is forced.
   if (IncognitoModePrefs::ShouldLaunchIncognito(command_line,
                                                 profile->GetPrefs())) {
-    profile = profile->GetOffTheRecordProfile();
+    profile = profile->GetPrimaryOTRProfile();
   } else if (command_line.HasSwitch(switches::kIncognito)) {
     LOG(WARNING) << "Incognito mode disabled by policy, launching a normal "
                  << "browser session.";
@@ -366,13 +376,13 @@ bool StartupBrowserCreator::LaunchBrowser(
   if (IsGuestModeEnforced(command_line, /* show_warning= */ true)) {
     profile = g_browser_process->profile_manager()
                   ->GetProfile(ProfileManager::GetGuestProfilePath())
-                  ->GetOffTheRecordProfile();
+                  ->GetPrimaryOTRProfile();
   }
 
 #if defined(OS_WIN)
   // Continue with the incognito profile if this is a credential provider logon.
   if (command_line.HasSwitch(credential_provider::kGcpwSigninSwitch))
-    profile = profile->GetOffTheRecordProfile();
+    profile = profile->GetPrimaryOTRProfile();
 #endif
 
   if (!IsSilentLaunchEnabled(command_line, profile)) {
@@ -534,6 +544,22 @@ std::vector<GURL> StartupBrowserCreator::GetURLsFromCommandLine(
       }
     }
 
+    // NOTE(bjorgvin@vivaldi.com): VB-35394 Map mailto: URL to internal URL
+#if !defined(OS_ANDROID) && !defined(OFFICIAL_BUILD)
+    if (params[i].find(FILE_PATH_LITERAL("mailto:")) == 0) {
+      base::CommandLine::StringType internal_mailto_url =
+#if defined(OS_WIN)
+          base::UTF8ToWide(vivaldi::kVivaldiMailURL + ("?path=composer&mailto=" +
+          net::EscapeQueryParamValue(param.MaybeAsASCII(), true)));
+#else
+          vivaldi::kVivaldiMailURL + ("?path=composer&mailto=" +
+          net::EscapeQueryParamValue(params[i], true));
+#endif
+      urls.push_back(GURL(internal_mailto_url));
+      continue;
+    }
+#endif
+
     // Otherwise, fall through to treating it as a URL.
 
     // This will create a file URL or a regular URL.
@@ -611,7 +637,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
        !IncognitoModePrefs::ShouldLaunchIncognito(
            command_line, last_used_profile->GetPrefs()));
 
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#if defined(OS_WIN) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
   // If we are just displaying a print dialog we shouldn't open browser
   // windows.
   if (command_line.HasSwitch(switches::kCloudPrintFile) &&
@@ -620,7 +646,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
                                                            command_line)) {
     silent_launch = true;
   }
-#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
+#endif  // defined(OS_WIN) && BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   if (command_line.HasSwitch(switches::kValidateCrx)) {
     if (!process_startup) {
@@ -794,6 +820,13 @@ bool StartupBrowserCreator::LaunchBrowserForLastProfiles(
     bool process_startup,
     Profile* last_used_profile,
     const Profiles& last_opened_profiles) {
+#if !defined(OS_CHROMEOS)
+  if (ShouldShowProfilePicker()) {
+    ProfilePicker::Show();
+    return true;
+  }
+#endif  // !defined(OS_CHROMEOS)
+
   chrome::startup::IsProcessStartup is_process_startup = process_startup ?
       chrome::startup::IS_PROCESS_STARTUP :
       chrome::startup::IS_NOT_PROCESS_STARTUP;
@@ -819,17 +852,16 @@ bool StartupBrowserCreator::LaunchBrowserForLastProfiles(
   // - All of the last opened profiles fail to initialize.
   if (last_opened_profiles.empty() || was_windows_notification_launch) {
     if (CanOpenProfileOnStartup(last_used_profile)) {
-      Profile* profile_to_open =
-          last_used_profile->IsGuestSession()
-              ? last_used_profile->GetOffTheRecordProfile()
-              : last_used_profile;
+      Profile* profile_to_open = last_used_profile->IsGuestSession()
+                                     ? last_used_profile->GetPrimaryOTRProfile()
+                                     : last_used_profile;
 
       return LaunchBrowser(command_line, profile_to_open, cur_dir,
                            is_process_startup, is_first_run);
     }
 
     // Show UserManager if |last_used_profile| can't be auto opened.
-    ShowUserManagerOnStartup(command_line);
+    ShowUserManagerOnStartup();
     return true;
   }
   return ProcessLastOpenedProfiles(command_line, cur_dir, is_process_startup,
@@ -895,7 +927,7 @@ bool StartupBrowserCreator::ProcessLastOpenedProfiles(
 // activation this one.
 #if !defined(OS_CHROMEOS)
   if (is_process_startup == chrome::startup::IS_PROCESS_STARTUP)
-    ShowUserManagerOnStartup(command_line);
+    ShowUserManagerOnStartup();
   else
 #endif
     profile_launch_observer.Get().set_profile_to_activate(last_used_profile);

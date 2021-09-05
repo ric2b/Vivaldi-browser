@@ -45,7 +45,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 #include "chrome/browser/ui/webui/settings_utils.h"
-#include "chrome/browser/ui/webui/site_settings_helper.h"
+#include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
@@ -469,7 +469,8 @@ ExtensionFunction::ResponseAction UtilitiesIsUrlValidFunction::Run() {
   // message loops.
   ExternalProtocolHandler::BlockState block_state =
       ExternalProtocolHandler::GetBlockState(
-          url.scheme(), Profile::FromBrowserContext(browser_context()));
+          url.scheme(), nullptr,
+          Profile::FromBrowserContext(browser_context()));
   prompt_user_ = block_state == ExternalProtocolHandler::UNKNOWN;
   url_ = url;
 
@@ -1042,8 +1043,8 @@ ExtensionFunction::ResponseAction UtilitiesGetStartupActionFunction::Run() {
   namespace Results = vivaldi::utilities::GetStartupAction::Results;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  const SessionStartupPref startup_pref =
-      SessionStartupPref::GetStartupPref(profile->GetPrefs());
+  const SessionStartupPref startup_pref = SessionStartupPref::GetStartupPref(
+      profile->GetOriginalProfile()->GetPrefs());
 
   std::string startupRes;
   switch (startup_pref.type) {
@@ -1091,7 +1092,7 @@ ExtensionFunction::ResponseAction UtilitiesSetStartupActionFunction::Run() {
   }
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  PrefService* prefs = profile->GetPrefs();
+  PrefService* prefs = profile->GetOriginalProfile()->GetPrefs();
 
   SessionStartupPref::SetStartupPref(prefs, startup_pref);
 
@@ -1106,7 +1107,8 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
   // Show new features tab only for official final builds.
 #if defined(OFFICIAL_BUILD) && \
    (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
-  Profile* profile = Profile::FromBrowserContext(browser_context());
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
   bool version_changed = false;
   std::string version = ::vivaldi::GetVivaldiVersionString();
   std::string last_seen_version =

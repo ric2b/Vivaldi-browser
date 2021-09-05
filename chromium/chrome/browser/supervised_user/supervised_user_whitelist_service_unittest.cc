@@ -169,16 +169,17 @@ class SupervisedUserWhitelistServiceTest : public testing::Test {
 TEST_F(SupervisedUserWhitelistServiceTest, MergeEmpty) {
   service_->Init();
 
-  syncer::SyncMergeResult result = service_->MergeDataAndStartSyncing(
+  ASSERT_TRUE(
+      service_->GetAllSyncDataForTesting(syncer::SUPERVISED_USER_WHITELISTS)
+          .empty());
+  base::Optional<syncer::ModelError> error = service_->MergeDataAndStartSyncing(
       syncer::SUPERVISED_USER_WHITELISTS, syncer::SyncDataList(),
       std::unique_ptr<syncer::SyncChangeProcessor>(),
       std::unique_ptr<syncer::SyncErrorFactory>());
-  EXPECT_FALSE(result.error().IsSet());
-  EXPECT_EQ(0, result.num_items_added());
-  EXPECT_EQ(0, result.num_items_modified());
-  EXPECT_EQ(0, result.num_items_deleted());
-  EXPECT_EQ(0, result.num_items_before_association());
-  EXPECT_EQ(0, result.num_items_after_association());
+  EXPECT_TRUE(
+      service_->GetAllSyncDataForTesting(syncer::SUPERVISED_USER_WHITELISTS)
+          .empty());
+  EXPECT_FALSE(error.has_value());
 
   EXPECT_EQ(0u, installer_->registered_whitelists().size());
 }
@@ -214,16 +215,17 @@ TEST_F(SupervisedUserWhitelistServiceTest, MergeExisting) {
   initial_data.push_back(
       SupervisedUserWhitelistService::CreateWhitelistSyncData(
           "cccc", "Whitelist C"));
-  syncer::SyncMergeResult result = service_->MergeDataAndStartSyncing(
+  ASSERT_EQ(
+      2u, service_->GetAllSyncDataForTesting(syncer::SUPERVISED_USER_WHITELISTS)
+              .size());
+  base::Optional<syncer::ModelError> error = service_->MergeDataAndStartSyncing(
       syncer::SUPERVISED_USER_WHITELISTS, initial_data,
       std::unique_ptr<syncer::SyncChangeProcessor>(),
       std::unique_ptr<syncer::SyncErrorFactory>());
-  EXPECT_FALSE(result.error().IsSet());
-  EXPECT_EQ(1, result.num_items_added());
-  EXPECT_EQ(1, result.num_items_modified());
-  EXPECT_EQ(1, result.num_items_deleted());
-  EXPECT_EQ(2, result.num_items_before_association());
-  EXPECT_EQ(2, result.num_items_after_association());
+  EXPECT_EQ(
+      2u, service_->GetAllSyncDataForTesting(syncer::SUPERVISED_USER_WHITELISTS)
+              .size());
+  EXPECT_FALSE(error.has_value());
 
   // Whitelist A (which was previously ready) should be removed now, and
   // whitelist B was never ready.
@@ -251,8 +253,9 @@ TEST_F(SupervisedUserWhitelistServiceTest, ApplyChanges) {
       FROM_HERE, syncer::SyncChange::ACTION_DELETE,
       SupervisedUserWhitelistService::CreateWhitelistSyncData(
           "aaaa", "Ignored")));
-  syncer::SyncError error = service_->ProcessSyncChanges(FROM_HERE, changes);
-  EXPECT_FALSE(error.IsSet());
+  base::Optional<syncer::ModelError> error =
+      service_->ProcessSyncChanges(FROM_HERE, changes);
+  EXPECT_FALSE(error.has_value());
 
   EXPECT_EQ(0u, site_lists_.size());
 

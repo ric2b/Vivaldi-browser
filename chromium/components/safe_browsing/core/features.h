@@ -34,14 +34,6 @@ extern const base::Feature kAdSamplerTriggerFeature;
 // reports.
 extern const base::Feature kCaptureInlineJavascriptForGoogleAds;
 
-// Controls whether we try to get the SafetyNet ID of the device for use when
-// a SBER user downloads an APK file.
-extern const base::Feature kCaptureSafetyNetId;
-
-// Controls if safe browsing interstitials are implemented as committed
-// navigations instead of overlays.
-extern const base::Feature kCommittedSBInterstitials;
-
 // Controls whether to do deep scanning for DLP. If both this feature and
 // the enterprise policies are enabled, the downloaded and uploaded files are
 // sent for scanning.

@@ -20,6 +20,7 @@
 #include "chrome/browser/chromeos/login/test/enrollment_helper_mixin.h"
 #include "chrome/browser/chromeos/login/test/enrollment_ui_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
+#include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -29,6 +30,7 @@
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/upstart/upstart_client.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 
@@ -42,6 +44,7 @@ namespace {
 
 constexpr char kEnrollmentUI[] = "enterprise-enrollment";
 constexpr char kAdDialog[] = "oauth-enroll-ad-join-ui";
+constexpr char kBackButton[] = "oobe-signin-back-button";
 
 constexpr char kAdUnlockConfigurationStep[] = "unlockStep";
 constexpr char kAdUnlockPasswordInput[] = "unlockPasswordInput";
@@ -138,11 +141,9 @@ class MockAuthPolicyClient : public FakeAuthPolicyClient {
 
 }  // namespace
 
-class EnterpriseEnrollmentTestBase : public LoginManagerTest {
+class EnterpriseEnrollmentTestBase : public OobeBaseTest {
  public:
-  explicit EnterpriseEnrollmentTestBase(bool should_initialize_webui)
-      : LoginManagerTest(true /*should_launch_browser*/,
-                         should_initialize_webui) {}
+  EnterpriseEnrollmentTestBase() = default;
 
   // Submits regular enrollment credentials.
   void SubmitEnrollmentCredentials() {
@@ -174,7 +175,6 @@ class EnterpriseEnrollmentTestBase : public LoginManagerTest {
     OobeScreenWaiter(EnrollmentScreenView::kScreenId).Wait();
     ASSERT_TRUE(enrollment_screen() != nullptr);
     ASSERT_TRUE(WizardController::default_controller() != nullptr);
-    ASSERT_FALSE(StartupUtils::IsOobeCompleted());
   }
 
   // Helper method to return the current EnrollmentScreen instance.
@@ -193,8 +193,7 @@ class EnterpriseEnrollmentTestBase : public LoginManagerTest {
 
 class EnterpriseEnrollmentTest : public EnterpriseEnrollmentTestBase {
  public:
-  EnterpriseEnrollmentTest()
-      : EnterpriseEnrollmentTestBase(true /* should_initialize_webui */) {}
+  EnterpriseEnrollmentTest() = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EnterpriseEnrollmentTest);
@@ -510,8 +509,12 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest, StoragePartitionUpdated) {
       test::OobeJS().GetString(webview_partition_path);
   EXPECT_FALSE(webview_partition_name_1.empty());
 
-  // Simulate navigating over the enrollment screen a second time (without using
-  // 'Back' and 'Next' buttons).
+  // Cancel button is enabled when the authenticator is ready. Do it manually
+  // instead of waiting for it.
+  test::ExecuteOobeJS("$('enterprise-enrollment').isCancelDisabled = false");
+  test::OobeJS().ClickOnPath({kEnrollmentUI, kBackButton});
+
+  // Simulate navigating over the enrollment screen a second time.
   ShowEnrollmentScreen();
   ExecutePendingJavaScript();
 

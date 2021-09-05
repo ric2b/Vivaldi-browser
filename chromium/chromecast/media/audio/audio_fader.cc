@@ -7,8 +7,7 @@
 #include <algorithm>
 
 #include "base/bits.h"
-#include "base/logging.h"
-#include "media/base/audio_bus.h"
+#include "base/check_op.h"
 
 namespace chromecast {
 namespace media {
@@ -42,7 +41,7 @@ AudioFader::AudioFader(AudioProvider* provider,
   DCHECK_LE(num_channels_, kMaxChannels);
   DCHECK_GT(sample_rate_, 0);
 
-  fade_buffer_ = ::media::AudioBus::Create(num_channels_, fade_frames_);
+  fade_buffer_ = CastAudioBus::Create(num_channels_, fade_frames_);
   fade_buffer_->Zero();
 }
 

@@ -77,10 +77,11 @@ template("chrome_bundle") {
                              "base_module_target",
                              "bundle_name",
                              "compress_shared_libraries",
-                             "failed_proguard_expectation_file",
                              "keystore_name",
                              "keystore_password",
                              "keystore_path",
+                             "lint_suppressions_file",
+                             "manifest_package",
                              "min_sdk_version",
                              "proguard_android_sdk_dep",
                              "proguard_jar_path",
@@ -88,6 +89,7 @@ template("chrome_bundle") {
                              "static_library_provider",
                              "static_library_synchronized_proguard",
                              "verify_proguard_flags",
+                             "verify_native_libs_and_assets",
                              "version_code",
                            ])
     command_line_flags_file = "chrome-command-line"
@@ -96,6 +98,11 @@ template("chrome_bundle") {
     extra_modules = _extra_modules
     system_image_locale_allowlist = android_apk_locales
     is_multi_abi = _is_multi_abi
+
+    # List of DFMs that are installed by default by wrapper scripts, to make
+    # testing easier. This removes the need to manually specify, e.g.,
+    # "-m dev_ui" on every install or run.
+    default_modules_for_testing = [ "dev_ui" ]
 
     # NOTE: Only sign bundle for official builds since this is very slow.
     if (enable_chrome_android_internal && use_signing_keys &&

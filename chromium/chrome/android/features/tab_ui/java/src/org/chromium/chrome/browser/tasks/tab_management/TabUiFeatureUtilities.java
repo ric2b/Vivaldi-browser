@@ -9,7 +9,6 @@ import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.chrome.browser.device.DeviceClassManager;
@@ -19,12 +18,10 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.DoubleCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.StringCachedFieldTrialParameter;
+import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
-import org.chromium.ui.base.DeviceFormFactor;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * A class to handle the state of flags for tab_management.
@@ -33,12 +30,12 @@ public class TabUiFeatureUtilities {
     private static final String TAG = "TabFeatureUtilities";
 
     // Field trial parameters:
-    public static final String SKIP_SLOW_ZOOMING_PARAM = "skip-slow-zooming";
+    private static final String SKIP_SLOW_ZOOMING_PARAM = "skip-slow-zooming";
     public static final BooleanCachedFieldTrialParameter SKIP_SLOW_ZOOMING =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_TO_GTS_ANIMATION, SKIP_SLOW_ZOOMING_PARAM, true);
 
-    public static final String TAB_GRID_LAYOUT_ANDROID_NEW_TAB_TILE_PARAM =
+    private static final String TAB_GRID_LAYOUT_ANDROID_NEW_TAB_TILE_PARAM =
             "tab_grid_layout_android_new_tab_tile";
     public static final StringCachedFieldTrialParameter TAB_GRID_LAYOUT_ANDROID_NEW_TAB_TILE =
             new StringCachedFieldTrialParameter(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
@@ -49,23 +46,24 @@ public class TabUiFeatureUtilities {
             new DoubleCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, THUMBNAIL_ASPECT_RATIO_PARAM, 1.0);
 
-    public static final String SEARCH_CHIP_PARAM = "enable_search_term_chip";
+    private static final String SEARCH_CHIP_PARAM = "enable_search_term_chip";
     public static final BooleanCachedFieldTrialParameter ENABLE_SEARCH_CHIP =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, SEARCH_CHIP_PARAM, false);
 
-    public static final String SEARCH_CHIP_ADAPTIVE_PARAM = "enable_search_term_chip_adaptive_icon";
+    private static final String SEARCH_CHIP_ADAPTIVE_PARAM =
+            "enable_search_term_chip_adaptive_icon";
     public static final BooleanCachedFieldTrialParameter ENABLE_SEARCH_CHIP_ADAPTIVE =
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, SEARCH_CHIP_ADAPTIVE_PARAM, false);
 
     // Field trial parameter for the minimum Android SDK version to enable zooming animation.
-    public static final String MIN_SDK_PARAM = "zooming-min-sdk-version";
+    private static final String MIN_SDK_PARAM = "zooming-min-sdk-version";
     public static final IntCachedFieldTrialParameter ZOOMING_MIN_SDK =
             new IntCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_TO_GTS_ANIMATION, MIN_SDK_PARAM, Build.VERSION_CODES.M);
     // Field trial parameter for the minimum physical memory size to enable zooming animation.
-    public static final String MIN_MEMORY_MB_PARAM = "zooming-min-memory-mb";
+    private static final String MIN_MEMORY_MB_PARAM = "zooming-min-memory-mb";
     public static final IntCachedFieldTrialParameter ZOOMING_MIN_MEMORY =
             new IntCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_TO_GTS_ANIMATION, MIN_MEMORY_MB_PARAM, 2048);
@@ -91,27 +89,12 @@ public class TabUiFeatureUtilities {
     }
 
     /**
-     * @return Tab UI related feature flags that should be cached.
-     */
-    public static List<String> getFeaturesToCache() {
-        if (!isEligibleForTabUiExperiments()) {
-            return Collections.emptyList();
-        }
-        return Arrays.asList(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
-                ChromeFeatureList.TAB_GROUPS_ANDROID,
-                ChromeFeatureList.DUET_TABSTRIP_INTEGRATION_ANDROID,
-                ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID);
-    }
-
-    private static boolean isEligibleForTabUiExperiments() {
-        return !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
-                ContextUtils.getApplicationContext());
-    }
-
-    /**
      * @return Whether the Grid Tab Switcher UI is enabled and available for use.
      */
     public static boolean isGridTabSwitcherEnabled() {
+        // Disable grid tab switcher if stack tab switcher is enabled for the start surface.
+        if (StartSurfaceConfiguration.isStartSurfaceStackTabSwitcherEnabled()) return false;
+
         // Having Tab Groups or Start implies Grid Tab Switcher.
         return (!DeviceClassManager.enableAccessibilityLayout()
                        && CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID)
@@ -123,6 +106,9 @@ public class TabUiFeatureUtilities {
      * @return Whether the tab group feature is enabled and available for use.
      */
     public static boolean isTabGroupsAndroidEnabled() {
+        // Disable tab groups if stack tab switcher is enabled for the start surface.
+        if (StartSurfaceConfiguration.isStartSurfaceStackTabSwitcherEnabled()) return false;
+
         return !DeviceClassManager.enableAccessibilityLayout()
                 && CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_GROUPS_ANDROID)
                 && isTabManagementModuleSupported();
@@ -146,6 +132,15 @@ public class TabUiFeatureUtilities {
     }
 
     /**
+     * @return Whether the conditional tab strip feature is enabled and available for use.
+     */
+    public static boolean isConditionalTabStripEnabled() {
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.CONDITIONAL_TAB_STRIP_ANDROID)
+                && !isGridTabSwitcherEnabled() && isTabManagementModuleSupported()
+                && !ConditionalTabStripUtils.getOptOutIndicator();
+    }
+
+    /**
      * @return Whether the thumbnail_aspect_ratio field trail is set.
      */
     public static boolean isTabThumbnailAspectRatioNotOne() {
@@ -162,9 +157,20 @@ public class TabUiFeatureUtilities {
     public static boolean isTabToGtsAnimationEnabled() {
         Log.d(TAG, "GTS.MinSdkVersion = " + ZOOMING_MIN_SDK.getValue());
         Log.d(TAG, "GTS.MinMemoryMB = " + ZOOMING_MIN_MEMORY.getValue());
+        if (ChromeApplication.isVivaldi()) return false;
         return CachedFeatureFlags.isEnabled(ChromeFeatureList.TAB_TO_GTS_ANIMATION)
                 && Build.VERSION.SDK_INT >= ZOOMING_MIN_SDK.getValue()
                 && SysUtils.amountOfPhysicalMemoryKB() / 1024 >= ZOOMING_MIN_MEMORY.getValue()
                 && !StartSurfaceConfiguration.isStartSurfaceSinglePaneEnabled();
+    }
+
+    /**
+     * @return Whether the instant start is supported.
+     */
+    public static boolean supportInstantStart(boolean isTablet) {
+        // TODO(crbug.com/1076449): Support instant start when the stack tab switcher is
+        // enabled.
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START) && !isTablet
+                && !StartSurfaceConfiguration.isStartSurfaceStackTabSwitcherEnabled();
     }
 }

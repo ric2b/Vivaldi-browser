@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/base_paths.h"
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
@@ -82,8 +82,8 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
                                                            user_agent));
     storage_->set_proxy_resolution_service(
         net::ConfiguredProxyResolutionService::CreateUsingSystemProxyResolver(
-            std::move(proxy_config_service_), /*quick_check_enabled=*/true,
-            url_request_context_->net_log()));
+            std::move(proxy_config_service_), url_request_context_->net_log(),
+            /*quick_check_enabled=*/true));
     storage_->set_ssl_config_service(
         std::make_unique<net::SSLConfigServiceDefaults>());
     storage_->set_cert_verifier(

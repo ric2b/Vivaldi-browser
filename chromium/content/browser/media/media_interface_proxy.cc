@@ -16,14 +16,15 @@
 #include "base/time/time.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/service_sandbox_type.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/media_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/service_process_host.h"
 #include "content/public/common/content_client.h"
 #include "media/mojo/buildflags.h"
+#include "media/mojo/mojom/frame_interface_factory.mojom.h"
 #include "media/mojo/mojom/media_service.mojom.h"
-#include "media/mojo/services/media_interface_provider.h"
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
 #include "content/public/browser/browser_context.h"
@@ -34,6 +35,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/time/time.h"
 #include "content/browser/media/cdm_storage_impl.h"
@@ -46,10 +48,6 @@
 #include "sandbox/mac/seatbelt_extension.h"
 #endif  // defined(OS_MACOSX)
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-#include "media/mojo/mojom/cdm_proxy.mojom.h"
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 #if defined(OS_ANDROID)
 #include "content/browser/media/android/media_player_renderer.h"
@@ -64,35 +62,80 @@ namespace {
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 // How long an instance of the CDM service is allowed to sit idle before we
 // disconnect and effectively kill it.
-constexpr base::TimeDelta kCdmServiceIdleTimeout =
-    base::TimeDelta::FromSeconds(5);
+constexpr auto kCdmServiceIdleTimeout = base::TimeDelta::FromSeconds(5);
 
-// Gets an instance of the CDM service for the CDM identified by |guid|.
-// Instances are started lazily as needed.
-media::mojom::CdmService& GetCdmServiceForGuid(const base::Token& guid) {
-  // NOTE: Sequence-local storage is used to limit the lifetime of these Remote
+// The CDM name will be displayed as the process name in the Task Manager.
+// Put a length limit and restrict to ASCII. Empty name is allowed, in which
+// case the process name will be "media::mojom::CdmService".
+bool IsValidCdmDisplayName(const std::string& cdm_name) {
+  constexpr size_t kMaxCdmNameSize = 256;
+  return cdm_name.size() <= kMaxCdmNameSize && base::IsStringASCII(cdm_name);
+}
+
+// A map hosts all media::mojom::CdmService remotes, each of which corresponds
+// to one CDM process. There should be only one instance of this class stored in
+// base::SequenceLocalStorageSlot. See below.
+class CdmServiceMap {
+ public:
+  CdmServiceMap() = default;
+
+  ~CdmServiceMap() {
+    DVLOG(1) << __func__ << ": max_remote_count_=" << max_remote_count_;
+    UMA_HISTOGRAM_COUNTS_100("Media.EME.MaxCdmProcessCount", max_remote_count_);
+  }
+
+  // Gets or creates a media::mojom::CdmService remote. The returned remote
+  // might not be bound, e.g. if it's newly created.
+  auto& GetOrCreateRemote(const base::Token& guid) {
+    auto& remote = remotes_[guid];
+    max_remote_count_ = std::max(max_remote_count_, remotes_.size());
+    return remote;
+  }
+
+  void EraseRemote(const base::Token& guid) {
+    DCHECK(remotes_.count(guid));
+    remotes_.erase(guid);
+  }
+
+ private:
+  std::map<base::Token, mojo::Remote<media::mojom::CdmService>> remotes_;
+  size_t max_remote_count_ = 0;
+};
+
+CdmServiceMap& GetCdmServiceMap() {
+  // NOTE: Sequence-local storage is used to limit the lifetime of the Remote
   // objects to that of the UI-thread sequence. This ensures the Remotes are
   // destroyed when the task environment is torn down and reinitialized, e.g.,
   // between unit tests.
-  static base::NoDestructor<base::SequenceLocalStorageSlot<
-      std::map<base::Token, mojo::Remote<media::mojom::CdmService>>>>
-      slot;
-  auto& remotes = slot->GetOrCreateValue();
-  auto& remote = remotes[guid];
+  static base::NoDestructor<base::SequenceLocalStorageSlot<CdmServiceMap>> slot;
+  return slot->GetOrCreateValue();
+}
+
+// Erases the CDM service instance for the CDM identified by |guid|.
+void EraseCdmServiceForGuid(const base::Token& guid) {
+  GetCdmServiceMap().EraseRemote(guid);
+}
+
+// Gets an instance of the CDM service for the CDM identified by |guid|.
+// Instances are started lazily as needed.
+media::mojom::CdmService& GetCdmServiceForGuid(const base::Token& guid,
+                                               const std::string& cdm_name) {
+  auto& remote = GetCdmServiceMap().GetOrCreateRemote(guid);
   if (!remote) {
     ServiceProcessHost::Launch(
         remote.BindNewPipeAndPassReceiver(),
         ServiceProcessHost::Options()
-            .WithDisplayName("Content Decryption Module Service")
-            .WithSandboxType(service_manager::SandboxType::kCdm)
+            .WithDisplayName(cdm_name)
             .Pass());
-    remote.reset_on_disconnect();
-    remote.reset_on_idle_timeout(kCdmServiceIdleTimeout);
+    remote.set_disconnect_handler(
+        base::BindOnce(&EraseCdmServiceForGuid, guid));
+    remote.set_idle_handler(kCdmServiceIdleTimeout,
+                            base::BindRepeating(EraseCdmServiceForGuid, guid));
   }
 
   return *remote.get();
 }
-#endif
+#endif  // ENABLE_LIBRARY_CDMS
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS) && defined(OS_MACOSX)
 
@@ -185,6 +228,51 @@ media::mojom::MediaService& GetSecondaryMediaService() {
   return *remote->get();
 }
 
+class FrameInterfaceFactoryImpl : public media::mojom::FrameInterfaceFactory {
+ public:
+  FrameInterfaceFactoryImpl(RenderFrameHost* rfh,
+                            const base::Token& cdm_guid,
+                            const std::string& cdm_file_system_id)
+      : render_frame_host_(rfh),
+        cdm_guid_(cdm_guid),
+        cdm_file_system_id_(cdm_file_system_id) {
+  }
+
+  void CreateProvisionFetcher(
+      mojo::PendingReceiver<media::mojom::ProvisionFetcher> receiver) override {
+#if BUILDFLAG(ENABLE_MOJO_CDM)
+    ProvisionFetcherImpl::Create(
+        BrowserContext::GetDefaultStoragePartition(
+            render_frame_host_->GetProcess()->GetBrowserContext())
+            ->GetURLLoaderFactoryForBrowserProcess(),
+        std::move(receiver));
+#endif
+  }
+
+  void CreateCdmStorage(
+      mojo::PendingReceiver<media::mojom::CdmStorage> receiver) override {
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+    // Only provide CdmStorageImpl when we have a valid |cdm_file_system_id|,
+    // which is currently only set for the CdmService (not the MediaService).
+    if (cdm_file_system_id_.empty())
+      return;
+
+    CdmStorageImpl::Create(render_frame_host_, cdm_file_system_id_,
+                           std::move(receiver));
+#endif
+  }
+
+  void BindEmbedderReceiver(mojo::GenericPendingReceiver receiver) override {
+    GetContentClient()->browser()->BindMediaServiceReceiver(
+        render_frame_host_, std::move(receiver));
+  }
+
+ private:
+  RenderFrameHost* const render_frame_host_;
+  const base::Token cdm_guid_;
+  const std::string cdm_file_system_id_;
+};
+
 }  // namespace
 
 MediaInterfaceProxy::MediaInterfaceProxy(
@@ -197,14 +285,13 @@ MediaInterfaceProxy::MediaInterfaceProxy(
   DCHECK(render_frame_host_);
   DCHECK(!error_handler.is_null());
 
-  auto create_interface_provider_cb =
+  auto frame_factory_getter =
       base::BindRepeating(&MediaInterfaceProxy::GetFrameServices,
                           base::Unretained(this), base::Token(), std::string());
   media_interface_factory_ptr_ = std::make_unique<MediaInterfaceFactoryHolder>(
-      base::BindRepeating(&GetMediaService), create_interface_provider_cb);
+      base::BindRepeating(&GetMediaService), frame_factory_getter);
   secondary_interface_factory_ = std::make_unique<MediaInterfaceFactoryHolder>(
-      base::BindRepeating(&GetSecondaryMediaService),
-      create_interface_provider_cb);
+      base::BindRepeating(&GetSecondaryMediaService), frame_factory_getter);
 
   receiver_.set_disconnect_handler(std::move(error_handler));
 
@@ -319,64 +406,14 @@ void MediaInterfaceProxy::CreateCdm(
     factory->CreateCdm(key_system, std::move(receiver));
 }
 
-void MediaInterfaceProxy::CreateDecryptor(
-    int cdm_id,
-    mojo::PendingReceiver<media::mojom::Decryptor> receiver) {
-  InterfaceFactory* factory = media_interface_factory_ptr_->Get();
-  if (factory)
-    factory->CreateDecryptor(cdm_id, std::move(receiver));
-}
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-void MediaInterfaceProxy::CreateCdmProxy(
-    const base::Token& cdm_guid,
-    mojo::PendingReceiver<media::mojom::CdmProxy> receiver) {
-  NOTREACHED() << "The CdmProxy should only be created by a CDM.";
-}
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
-
-mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+mojo::PendingRemote<media::mojom::FrameInterfaceFactory>
 MediaInterfaceProxy::GetFrameServices(const base::Token& cdm_guid,
                                       const std::string& cdm_file_system_id) {
-  // Register frame services.
-  mojo::PendingRemote<service_manager::mojom::InterfaceProvider> interfaces;
-
-  // TODO(xhwang): Replace this InterfaceProvider with a dedicated media host
-  // interface. See http://crbug.com/660573
-  auto provider = std::make_unique<media::MediaInterfaceProvider>(
-      interfaces.InitWithNewPipeAndPassReceiver());
-
-#if BUILDFLAG(ENABLE_MOJO_CDM)
-  // TODO(slan): Wrap these into a RenderFrame specific ProvisionFetcher impl.
-  provider->registry()->AddInterface(base::BindRepeating(
-      &ProvisionFetcherImpl::Create,
-      base::RetainedRef(
-          BrowserContext::GetDefaultStoragePartition(
-              render_frame_host_->GetProcess()->GetBrowserContext())
-              ->GetURLLoaderFactoryForBrowserProcess())));
-
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  // Only provide CdmStorageImpl when we have a valid |cdm_file_system_id|,
-  // which is currently only set for the CdmService (not the MediaService).
-  if (!cdm_file_system_id.empty()) {
-    provider->registry()->AddInterface(base::BindRepeating(
-        &CdmStorageImpl::Create, render_frame_host_, cdm_file_system_id));
-  }
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-  provider->registry()->AddInterface(
-      base::BindRepeating(&MediaInterfaceProxy::CreateCdmProxyInternal,
-                          base::Unretained(this), cdm_guid));
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
-#endif  // BUILDFLAG(ENABLE_MOJO_CDM)
-
-  GetContentClient()->browser()->ExposeInterfacesToMediaService(
-      provider->registry(), render_frame_host_);
-
-  media_registries_.push_back(std::move(provider));
-
-  return interfaces;
+  mojo::PendingRemote<media::mojom::FrameInterfaceFactory> factory;
+  frame_factories_.Add(std::make_unique<FrameInterfaceFactoryImpl>(
+                           render_frame_host_, cdm_guid, cdm_file_system_id),
+                       factory.InitWithNewPipeAndPassReceiver());
+  return factory;
 }
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -384,10 +421,6 @@ MediaInterfaceProxy::GetFrameServices(const base::Token& cdm_guid,
 media::mojom::CdmFactory* MediaInterfaceProxy::GetCdmFactory(
     const std::string& key_system) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
-  base::Token cdm_guid;
-  base::FilePath cdm_path;
-  std::string cdm_file_system_id;
 
   std::unique_ptr<CdmInfo> cdm_info =
       KeySystemSupportImpl::GetCdmInfoForKeySystem(key_system);
@@ -403,26 +436,32 @@ media::mojom::CdmFactory* MediaInterfaceProxy::GetCdmFactory(
     NOTREACHED() << "Invalid file system ID " << cdm_info->file_system_id;
     return nullptr;
   }
-  cdm_guid = cdm_info->guid;
-  cdm_path = cdm_info->path;
-  cdm_file_system_id = cdm_info->file_system_id;
+  if (!IsValidCdmDisplayName(cdm_info->name)) {
+    NOTREACHED() << "Invalid CDM display name " << cdm_info->name;
+    return nullptr;
+  }
+
+  auto& cdm_guid = cdm_info->guid;
 
   auto found = cdm_factory_map_.find(cdm_guid);
   if (found != cdm_factory_map_.end())
     return found->second.get();
 
-  return ConnectToCdmService(cdm_guid, cdm_path, cdm_file_system_id);
+  return ConnectToCdmService(cdm_guid, cdm_info->path, cdm_info->file_system_id,
+                             cdm_info->name);
 }
 
 media::mojom::CdmFactory* MediaInterfaceProxy::ConnectToCdmService(
     const base::Token& cdm_guid,
     const base::FilePath& cdm_path,
-    const std::string& cdm_file_system_id) {
+    const std::string& cdm_file_system_id,
+    const std::string& cdm_name) {
   DVLOG(1) << __func__ << ": cdm_guid = " << cdm_guid.ToString();
 
   DCHECK(!cdm_factory_map_.count(cdm_guid));
 
-  media::mojom::CdmService& cdm_service = GetCdmServiceForGuid(cdm_guid);
+  media::mojom::CdmService& cdm_service =
+      GetCdmServiceForGuid(cdm_guid, cdm_name);
 
 #if defined(OS_MACOSX)
   // LoadCdm() should always be called before CreateInterfaceFactory().
@@ -457,19 +496,6 @@ void MediaInterfaceProxy::OnCdmServiceConnectionError(
   DCHECK(cdm_factory_map_.count(cdm_guid));
   cdm_factory_map_.erase(cdm_guid);
 }
-
-#if BUILDFLAG(ENABLE_CDM_PROXY)
-void MediaInterfaceProxy::CreateCdmProxyInternal(
-    const base::Token& cdm_guid,
-    mojo::PendingReceiver<media::mojom::CdmProxy> receiver) {
-  DVLOG(1) << __func__;
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  InterfaceFactory* factory = media_interface_factory_ptr_->Get();
-  if (factory)
-    factory->CreateCdmProxy(cdm_guid, std::move(receiver));
-}
-#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 

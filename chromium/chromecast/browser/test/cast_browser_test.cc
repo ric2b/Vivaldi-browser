@@ -4,8 +4,8 @@
 
 #include "chromecast/browser/test/cast_browser_test.h"
 
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
@@ -94,8 +94,9 @@ bool CastBrowserTest::CanHandleGesture(GestureType gesture_type) {
   return false;
 }
 
-bool CastBrowserTest::ConsumeGesture(GestureType gesture_type) {
-  return false;
+void CastBrowserTest::ConsumeGesture(GestureType gesture_type,
+                                     GestureHandledCallback handled_callback) {
+  std::move(handled_callback).Run(false);
 }
 
 std::string CastBrowserTest::GetId() {

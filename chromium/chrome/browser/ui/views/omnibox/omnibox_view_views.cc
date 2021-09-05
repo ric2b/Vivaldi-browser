@@ -7,9 +7,9 @@
 #include <set>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -38,7 +38,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
@@ -53,12 +53,14 @@
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/base/dragdrop/os_exchange_data_provider.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_keyboard_controller.h"
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
@@ -77,6 +79,7 @@
 #include "ui/views/border.h"
 #include "ui/views/button_drag_utils.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
@@ -132,6 +135,10 @@ OmniboxState::OmniboxState(const OmniboxEditModel::State& model_state,
 
 OmniboxState::~OmniboxState() {
 }
+
+enum OmniboxMenuCommands {
+  kShowUrl = views::Textfield::MenuCommands::kLastCommandId + 1,
+};
 
 }  // namespace
 
@@ -496,20 +503,13 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
   // In the base class, touch text selection is deactivated when a command is
   // executed. Since we are not always calling the base class implementation
   // here, we need to deactivate touch text selection here, too.
-  //
-  // Note: while it looks weird that some of these cases are IDC_* and some are
-  // IDS_*, that is intentional. The commands that do not have matching IDC_*
-  // constants are registered using their names' IDS constants as their command
-  // IDs. If at some point in the future someone adds a new IDC constant that
-  // clashes with one of these IDS constants, this stanza will fail to compile
-  // because there'll be a duplicate switch case.
   DestroyTouchSelection();
   switch (command_id) {
     // These commands don't invoke the popup via OnBefore/AfterPossibleChange().
     case IDC_PASTE_AND_GO:
       model()->PasteAndGo(GetClipboardText());
       return;
-    case IDS_SHOW_URL:
+    case kShowUrl:
       model()->Unelide(true /* exit_query_in_omnibox */);
       return;
     case IDC_SHOW_FULL_URLS:
@@ -525,7 +525,7 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
       return;
 
     // These commands do invoke the popup.
-    case IDS_APP_PASTE:
+    case Textfield::kPaste:
       ExecuteTextEditCommand(ui::TextEditCommand::PASTE);
       return;
     default:
@@ -695,6 +695,12 @@ bool OmniboxViewViews::DirectionAwareSelectionAtEnd() const {
   return TextAndUIDirectionMatch() ? SelectionAtEnd() : SelectionAtBeginning();
 }
 
+#if defined(OS_MACOSX)
+void OmniboxViewViews::AnnounceFriendlySuggestionText() {
+  GetViewAccessibility().AnnounceText(friendly_suggestion_text_);
+}
+#endif
+
 bool OmniboxViewViews::MaybeTriggerSecondaryButton(const ui::KeyEvent& event) {
   // TODO(tommycli): If we have a WebUI omnibox popup, we should move the
   // secondary button logic out of the View and into the OmniboxPopupModel.
@@ -835,9 +841,15 @@ void OmniboxViewViews::SetAccessibilityLabel(const base::string16& display_text,
   }
 
 #if defined(OS_MACOSX)
-  // On macOS, the text field value changed notification is not
-  // announced, so we need to explicitly announce the suggestion text.
-  GetViewAccessibility().AnnounceText(friendly_suggestion_text_);
+  // On macOS, the only way to get VoiceOver to speak the friendly suggestion
+  // text (for example, "how to open a pdf, search suggestion, 4 of 8") is
+  // with an explicit announcement. Use PostTask to ensure that this
+  // announcement happens after the text change notification, otherwise
+  // the text change can interrupt the announcement.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&OmniboxViewViews::AnnounceFriendlySuggestionText,
+                     weak_factory_.GetWeakPtr()));
 #endif
 }
 
@@ -1155,7 +1167,14 @@ void OmniboxViewViews::OnMouseReleased(const ui::MouseEvent& event) {
 }
 
 void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
-  if (!HasFocus() && event->type() == ui::ET_GESTURE_TAP_DOWN) {
+  static const bool kTakeFocusOnTapUp =
+      base::FeatureList::IsEnabled(views::features::kTextfieldFocusOnTapUp);
+
+  const bool gesture_should_take_focus =
+      !HasFocus() &&
+      event->type() ==
+          (kTakeFocusOnTapUp ? ui::ET_GESTURE_TAP : ui::ET_GESTURE_TAP_DOWN);
+  if (gesture_should_take_focus) {
     select_all_on_gesture_tap_ = true;
 
     // If we're trying to select all on tap, invalidate any saved selection lest
@@ -1164,9 +1183,9 @@ void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
   }
 
   // Show on-focus suggestions if either:
-  //  - The textfield doesn't already have focus.
-  //  - Or if the textfield is empty, to cover the NTP ZeroSuggest case.
-  if (!HasFocus() || GetText().empty())
+  //  - The textfield is taking focus.
+  //  - The textfield is focused but empty, to cover the NTP ZeroSuggest case.
+  if (gesture_should_take_focus || (HasFocus() && GetText().empty()))
     model()->ShowOnFocusSuggestionsIfAutocompleteIdle();
 
   views::Textfield::OnGestureEvent(event);
@@ -1431,13 +1450,13 @@ void OmniboxViewViews::OnBlur() {
 }
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
-  if (command_id == IDS_APP_PASTE)
+  if (command_id == Textfield::kPaste)
     return !GetReadOnly() && !GetClipboardText().empty();
   if (command_id == IDC_PASTE_AND_GO)
     return !GetReadOnly() && model()->CanPasteAndGo(GetClipboardText());
 
   // Menu item is only shown when it is valid.
-  if (command_id == IDS_SHOW_URL)
+  if (command_id == kShowUrl)
     return true;
   if (command_id == IDC_SHOW_FULL_URLS)
     return true;
@@ -1788,11 +1807,10 @@ int OmniboxViewViews::OnDrop(const ui::OSExchangeData& data) {
     return ui::DragDropTypes::DRAG_NONE;
 
   base::string16 text;
-  if (data.HasURL(ui::OSExchangeData::CONVERT_FILENAMES)) {
+  if (data.HasURL(ui::CONVERT_FILENAMES)) {
     GURL url;
     base::string16 title;
-    if (data.GetURLAndTitle(ui::OSExchangeData::CONVERT_FILENAMES, &url,
-                            &title)) {
+    if (data.GetURLAndTitle(ui::CONVERT_FILENAMES, &url, &title)) {
       text = StripJavascriptSchemas(base::UTF8ToUTF16(url.spec()));
     }
   } else if (data.HasString() && data.GetString(&text)) {
@@ -1814,7 +1832,7 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
           location_bar_view_->GetWebContents())) {
     send_tab_to_self::RecordSendTabToSelfClickResult(
         send_tab_to_self::kOmniboxMenu, SendTabToSelfClickResult::kShowItem);
-    int index = menu_contents->GetIndexOfCommandId(IDS_APP_UNDO);
+    int index = menu_contents->GetIndexOfCommandId(Textfield::kUndo);
     // Add a separator if this is not the first item.
     if (index)
       menu_contents->InsertSeparatorAt(index++, ui::NORMAL_SEPARATOR);
@@ -1842,12 +1860,13 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
           send_tab_to_self_sub_menu_model_.get());
     }
 #if !defined(OS_MACOSX)
-    menu_contents->SetIcon(index, kSendTabToSelfIcon);
+    menu_contents->SetIcon(index,
+                           ui::ImageModel::FromVectorIcon(kSendTabToSelfIcon));
 #endif
     menu_contents->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
   }
 
-  int paste_position = menu_contents->GetIndexOfCommandId(IDS_APP_PASTE);
+  int paste_position = menu_contents->GetIndexOfCommandId(Textfield::kPaste);
   DCHECK_GE(paste_position, 0);
   menu_contents->InsertItemWithStringIdAt(paste_position + 1, IDC_PASTE_AND_GO,
                                           IDS_PASTE_AND_GO);
@@ -1861,15 +1880,12 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
     if (!GetReadOnly() && !model()->user_input_in_progress() &&
         GetText() !=
             controller()->GetLocationBarModel()->GetFormattedFullURL()) {
-      menu_contents->AddItemWithStringId(IDS_SHOW_URL, IDS_SHOW_URL);
+      menu_contents->AddItemWithStringId(kShowUrl, IDS_SHOW_URL);
     }
   }
 
   menu_contents->AddSeparator(ui::NORMAL_SEPARATOR);
 
-  // Minor note: We use IDC_ for command id here while the underlying textfield
-  // is using IDS_ for all its command ids. This is because views cannot depend
-  // on IDC_ for now.
   menu_contents->AddItemWithStringId(IDC_EDIT_SEARCH_ENGINES,
                                      IDS_EDIT_SEARCH_ENGINES);
 

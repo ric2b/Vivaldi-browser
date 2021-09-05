@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/base64.h"
 #include "base/bind.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
@@ -1036,7 +1037,7 @@ TEST_F(NetworkServiceTestWithService, RawRequestHeadersAbsent) {
   client()->RunUntilRedirectReceived();
   EXPECT_TRUE(client()->has_received_redirect());
   EXPECT_TRUE(!client()->response_head()->raw_request_response_info);
-  loader()->FollowRedirect({}, {}, base::nullopt);
+  loader()->FollowRedirect({}, {}, {}, base::nullopt);
   client()->RunUntilComplete();
   EXPECT_TRUE(!client()->response_head()->raw_request_response_info);
 }
@@ -1066,7 +1067,7 @@ TEST_F(NetworkServiceTestWithService, RawRequestHeadersPresent) {
                                  "HTTP/1.1 301 Moved Permanently\r",
                                  base::CompareCase::SENSITIVE));
   }
-  loader()->FollowRedirect({}, {}, base::nullopt);
+  loader()->FollowRedirect({}, {}, {}, base::nullopt);
   client()->RunUntilComplete();
   {
     auto& request_response_info =
@@ -1154,12 +1155,12 @@ TEST_F(NetworkServiceTestWithResolverMap, RawRequestAccessControlWithRedirect) {
   client()->RunUntilRedirectReceived();  // from a.test to b.test
   EXPECT_TRUE(client()->response_head()->raw_request_response_info);
 
-  loader()->FollowRedirect({}, {}, base::nullopt);
+  loader()->FollowRedirect({}, {}, {}, base::nullopt);
   client()->ClearHasReceivedRedirect();
   client()->RunUntilRedirectReceived();  // from b.test to a.test
   EXPECT_FALSE(client()->response_head()->raw_request_response_info);
 
-  loader()->FollowRedirect({}, {}, base::nullopt);
+  loader()->FollowRedirect({}, {}, {}, base::nullopt);
   client()->RunUntilComplete();  // Done loading a.test
   EXPECT_TRUE(client()->response_head()->raw_request_response_info.get());
 
@@ -1169,12 +1170,12 @@ TEST_F(NetworkServiceTestWithResolverMap, RawRequestAccessControlWithRedirect) {
   client()->RunUntilRedirectReceived();  // from a.test to b.test
   EXPECT_FALSE(client()->response_head()->raw_request_response_info);
 
-  loader()->FollowRedirect({}, {}, base::nullopt);
+  loader()->FollowRedirect({}, {}, {}, base::nullopt);
   client()->ClearHasReceivedRedirect();
   client()->RunUntilRedirectReceived();  // from b.test to a.test
   EXPECT_TRUE(client()->response_head()->raw_request_response_info);
 
-  loader()->FollowRedirect({}, {}, base::nullopt);
+  loader()->FollowRedirect({}, {}, {}, base::nullopt);
   client()->RunUntilComplete();  // Done loading a.test
   EXPECT_FALSE(client()->response_head()->raw_request_response_info.get());
 }
@@ -1230,25 +1231,26 @@ TEST_F(NetworkServiceTestWithService, SetsTrustTokenKeyCommitments) {
   ASSERT_TRUE(service_->trust_token_key_commitments());
 
   auto expectation = mojom::TrustTokenKeyCommitmentResult::New();
-  expectation->batch_size = mojom::TrustTokenKeyCommitmentBatchSize::New(5);
+  ASSERT_TRUE(base::Base64Decode(
+      "aaaa", &expectation->signed_redemption_record_verification_key));
+  expectation->batch_size = 5;
 
-  url::Origin issuer_origin =
-      url::Origin::Create(GURL("https://issuer.example"));
-
-  base::flat_map<url::Origin, mojom::TrustTokenKeyCommitmentResultPtr> to_set;
-  to_set.insert_or_assign(issuer_origin, expectation.Clone());
-  network_service_->SetTrustTokenKeyCommitments(std::move(to_set));
-  network_service_.FlushForTesting();
+  base::RunLoop run_loop;
+  network_service_->SetTrustTokenKeyCommitments(
+      R"( { "https://issuer.example": { "batchsize": 5, "srrkey": "aaaa" } } )",
+      run_loop.QuitClosure());
+  run_loop.Run();
 
   mojom::TrustTokenKeyCommitmentResultPtr result;
   bool ran = false;
 
   service_->trust_token_key_commitments()->Get(
-      issuer_origin, base::BindLambdaForTesting(
-                         [&](mojom::TrustTokenKeyCommitmentResultPtr ptr) {
-                           result = std::move(ptr);
-                           ran = true;
-                         }));
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuer.example")),
+      base::BindLambdaForTesting(
+          [&](mojom::TrustTokenKeyCommitmentResultPtr ptr) {
+            result = std::move(ptr);
+            ran = true;
+          }));
 
   ASSERT_TRUE(ran);
 
@@ -1493,7 +1495,9 @@ TEST_F(NetworkServiceTestWithService, MAYBE_AIAFetching) {
       network_context_.BindNewPipeAndPassReceiver(), std::move(context_params));
 
   net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_AUTO_AIA_INTERMEDIATE);
+  net::EmbeddedTestServer::ServerCertificateConfig cert_config;
+  cert_config.intermediate = net::EmbeddedTestServer::IntermediateType::kByAIA;
+  test_server.SetSSLConfig(cert_config);
   test_server.AddDefaultHandlers(base::FilePath(kServicesTestData));
   ASSERT_TRUE(test_server.Start());
 

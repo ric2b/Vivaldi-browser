@@ -6,13 +6,64 @@
 
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/optional.h"
+#include "base/values.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/mojom/trust_tokens.mojom-forward.h"
 #include "services/network/trust_tokens/suitable_trust_token_origin.h"
+#include "services/network/trust_tokens/trust_token_key_commitment_parser.h"
+#include "services/network/trust_tokens/trust_token_key_filtering.h"
+#include "services/network/trust_tokens/trust_token_parameterization.h"
 
 namespace network {
 
-TrustTokenKeyCommitments::TrustTokenKeyCommitments() = default;
+namespace {
+
+base::flat_map<SuitableTrustTokenOrigin,
+               mojom::TrustTokenKeyCommitmentResultPtr>
+ParseCommitmentsFromCommandLine() {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAdditionalTrustTokenKeyCommitments)) {
+    return {};
+  }
+
+  std::string raw_commitments =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          network::switches::kAdditionalTrustTokenKeyCommitments);
+
+  if (auto parsed = TrustTokenKeyCommitmentParser().ParseMultipleIssuers(
+          raw_commitments)) {
+    return std::move(*parsed);
+  } else {
+    // Crash loudly here because the user presumably only provides key
+    // commitments through the command line out of a desire to _use_ the key
+    // commitments.
+    LOG(FATAL)
+        << "Couldn't parse Trust Tokens key commitments from the command line: "
+        << raw_commitments;
+  }
+  return {};
+}
+
+// Filters |result->keys| to contain only a small number of
+// soon-to-expire-but-not-yet-expired keys, then passes |result| to |done|.
+mojom::TrustTokenKeyCommitmentResultPtr FilterCommitments(
+    mojom::TrustTokenKeyCommitmentResultPtr result) {
+  if (result) {
+    RetainSoonestToExpireTrustTokenKeys(
+        &result->keys, kMaximumConcurrentlyValidTrustTokenVerificationKeys);
+  }
+
+  return result;
+}
+
+}  // namespace
+
+TrustTokenKeyCommitments::TrustTokenKeyCommitments()
+    : additional_commitments_from_command_line_(
+          ParseCommitmentsFromCommandLine()) {}
+
 TrustTokenKeyCommitments::~TrustTokenKeyCommitments() = default;
 
 void TrustTokenKeyCommitments::Set(
@@ -40,27 +91,43 @@ void TrustTokenKeyCommitments::Set(
                           std::move(kv.second));
   }
 
-  map_.replace(std::move(filtered));
+  commitments_.replace(std::move(filtered));
+}
+
+void TrustTokenKeyCommitments::ParseAndSet(base::StringPiece raw_commitments) {
+  TrustTokenKeyCommitmentParser parser;
+  if (auto parsed = parser.ParseMultipleIssuers(raw_commitments))
+    commitments_.swap(*parsed);
 }
 
 void TrustTokenKeyCommitments::Get(
     const url::Origin& origin,
     base::OnceCallback<void(mojom::TrustTokenKeyCommitmentResultPtr)> done)
     const {
+  std::move(done).Run(GetSync(origin));
+}
+
+mojom::TrustTokenKeyCommitmentResultPtr TrustTokenKeyCommitments::GetSync(
+    const url::Origin& origin) const {
   base::Optional<SuitableTrustTokenOrigin> suitable_origin =
       SuitableTrustTokenOrigin::Create(origin);
   if (!suitable_origin) {
-    std::move(done).Run(nullptr);
-    return;
+    return nullptr;
   }
 
-  auto it = map_.find(*suitable_origin);
-  if (it == map_.end()) {
-    std::move(done).Run(nullptr);
-    return;
+  if (!additional_commitments_from_command_line_.empty()) {
+    auto it = additional_commitments_from_command_line_.find(*suitable_origin);
+    if (it != commitments_.end()) {
+      return FilterCommitments(it->second->Clone());
+    }
   }
 
-  std::move(done).Run(it->second->Clone());
+  auto it = commitments_.find(*suitable_origin);
+  if (it == commitments_.end()) {
+    return nullptr;
+  }
+
+  return FilterCommitments(it->second->Clone());
 }
 
 }  // namespace network

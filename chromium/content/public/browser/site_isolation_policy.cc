@@ -130,6 +130,20 @@ bool SiteIsolationPolicy::AreDynamicIsolatedOriginsEnabled() {
 }
 
 // static
+bool SiteIsolationPolicy::ArePreloadedIsolatedOriginsEnabled() {
+  if (IsSiteIsolationDisabled())
+    return false;
+
+  // Currently, preloaded isolated origins are redundant when full site
+  // isolation is enabled.  This may be true on Android if full site isolation
+  // is enabled manually or via field trials.
+  if (UseDedicatedProcessesForAllSites())
+    return false;
+
+  return true;
+}
+
+// static
 std::string SiteIsolationPolicy::GetIsolatedOriginsFromCommandLine() {
   std::string cmdline_arg =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(

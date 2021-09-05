@@ -70,7 +70,9 @@ jumbo_source_set("common") {
     "indexeddb/indexeddb_key_path.cc",
     "indexeddb/indexeddb_key_range.cc",
     "indexeddb/indexeddb_metadata.cc",
+    "input/web_coalesced_input_event.cc",
     "input/web_gesture_event.cc",
+    "input/web_input_event.cc",
     "input/web_keyboard_event.cc",
     "input/web_mouse_event.cc",
     "input/web_mouse_wheel_event.cc",
@@ -80,7 +82,6 @@ jumbo_source_set("common") {
     "loader/mime_sniffing_url_loader.cc",
     "loader/resource_type_util.cc",
     "loader/throttling_url_loader.cc",
-    "loader/throttling_url_loader.h",
     "loader/url_loader_factory_bundle.cc",
     "loader/url_loader_factory_bundle_mojom_traits.cc",
     "loader/url_loader_throttle.cc",
@@ -113,10 +114,12 @@ jumbo_source_set("common") {
     "permissions/permission_utils.cc",
     "privacy_budget/identifiability_metric_builder.cc",
     "privacy_budget/identifiability_metrics.cc",
+    "privacy_budget/identifiability_study_participation.cc",
     "scheduler/web_scheduler_tracked_feature.cc",
     "service_worker/service_worker_status_code.cc",
     "service_worker/service_worker_type_converters.cc",
     "service_worker/service_worker_utils.cc",
+    "switches.cc",
     "thread_safe_browser_interface_broker_proxy.cc",
     "user_agent/user_agent_metadata.cc",
     "web_package/signed_exchange_consts.cc",
@@ -132,10 +135,13 @@ jumbo_source_set("common") {
 
   deps = [
     "//base",
+    "//media/capture:capture_base",
+    "//media/capture/mojom:video_capture_mojom_support",
     "//mojo/public/cpp/system",
     "//net",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/cpp:ukm_builders",
+    "//services/metrics/public/mojom:mojom",
     "//services/network/public/cpp:cpp",
   ]
 
@@ -189,6 +195,7 @@ jumbo_source_set("common_unittests_sources") {
     "feature_policy/policy_value_unittest.cc",
     "frame/user_activation_state_unittest.cc",
     "indexeddb/indexeddb_key_unittest.cc",
+    "input/web_input_event_unittest.cc",
     "loader/mime_sniffing_throttle_unittest.cc",
     "loader/throttling_url_loader_unittest.cc",
     "manifest/manifest_icon_selector_unittest.cc",
@@ -203,6 +210,7 @@ jumbo_source_set("common_unittests_sources") {
     "privacy_budget/identifiability_metrics_unittest.cc",
     "privacy_budget/identifiable_surface_unittest.cc",
     "test/run_all_unittests.cc",
+    "user_agent/user_agent_metadata_unittest.cc",
     "web_package/web_package_request_matcher_unittest.cc",
   ]
 

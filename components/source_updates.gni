@@ -3,9 +3,12 @@ update_target("//components/bookmarks/browser:browser") {
   sources += [
     "//vivaldi/components/bookmarks/vivaldi_bookmark_node.cc",
     "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.cc",
+    "//vivaldi/components/bookmarks/vivaldi_partners.cc",
+    "//vivaldi/components/bookmarks/vivaldi_partners.h",
   ]
   public += [
     "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.h",
+    "//vivaldi/components/bookmarks/vivaldi_partners.h",
   ]
 }
 
@@ -68,7 +71,6 @@ update_template_instance("//third_party/blink/renderer/platform/loader:loader") 
 update_template_instance("//content/browser:browser") {
   sources += [
     "//vivaldi/components/content/vivaldi_browser_plugin_guest.cc",
-    "//vivaldi/components/content/vivaldi_interstitial_page_impl.cc",
     "//vivaldi/components/content/vivaldi_render_frame_host_impl.cc",
     "//vivaldi/components/content/vivaldi_render_view_host_impl.cc",
     "//vivaldi/components/content/vivaldi_renderers.cc",
@@ -172,6 +174,8 @@ if (is_mac) {
   update_target("//components/remote_cocoa/app_shim:app_shim") {
     sources += [
       "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_ns_window_bridge.mm",
+      "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.h",
+      "//vivaldi/components/remote_cocoa/app_shim/vivaldi_native_widget_mac_frameless_nswindow.mm",
     ]
   }
 }

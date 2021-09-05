@@ -30,6 +30,7 @@
   X("accessibility")                                                     \
   X("AccountFetcherService")                                             \
   X("android_webview")                                                   \
+  X("aogh")                                                              \
   X("audio")                                                             \
   X("base")                                                              \
   X("benchmark")                                                         \
@@ -46,8 +47,13 @@
   X("browser")                                                           \
   X("browsing_data")                                                     \
   X("CacheStorage")                                                      \
+  X("Calculators")                                                       \
+  X("CameraStream")                                                      \
   X("camera")                                                            \
+  X("cast_app")                                                          \
   X("cast_perf_test")                                                    \
+  X("cast.mdns")                                                         \
+  X("cast.mdns.socket")                                                  \
   X("cast.stream")                                                       \
   X("cc")                                                                \
   X("cc.debug")                                                          \
@@ -67,7 +73,6 @@
   X("drmcursor")                                                         \
   X("dwrite")                                                            \
   X("DXVA Decoding")                                                     \
-  X("EarlyJava")                                                         \
   X("evdev")                                                             \
   X("event")                                                             \
   X("exo")                                                               \
@@ -112,9 +117,12 @@
   X("passwords")                                                         \
   X("p2p")                                                               \
   X("page-serialization")                                                \
+  X("paint_preview")                                                     \
   X("pepper")                                                            \
+  X("PlatformMalloc")                                                    \
   X("ppapi")                                                             \
   X("ppapi proxy")                                                       \
+  X("print")                                                             \
   X("rail")                                                              \
   X("renderer")                                                          \
   X("renderer_host")                                                     \
@@ -132,6 +140,8 @@
   X("SiteEngagement")                                                    \
   X("skia")                                                              \
   X("sql")                                                               \
+  X("stadia_media")                                                      \
+  X("stadia_rtc")                                                        \
   X("startup")                                                           \
   X("sync")                                                              \
   X("sync_lock_contention")                                              \
@@ -154,6 +164,7 @@
   X("webrtc")                                                            \
   X("xr")                                                                \
   X(TRACE_DISABLED_BY_DEFAULT("animation-worklet"))                      \
+  X(TRACE_DISABLED_BY_DEFAULT("audio"))                                  \
   X(TRACE_DISABLED_BY_DEFAULT("audio-worklet"))                          \
   X(TRACE_DISABLED_BY_DEFAULT("blink.debug"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("blink.debug.display_lock"))               \
@@ -188,12 +199,14 @@
   X(TRACE_DISABLED_BY_DEFAULT("gpu.decoder"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("gpu.device"))                             \
   X(TRACE_DISABLED_BY_DEFAULT("gpu.service"))                            \
+  X(TRACE_DISABLED_BY_DEFAULT("gpu.vulkan.vma"))                         \
   X(TRACE_DISABLED_BY_DEFAULT("histogram_samples"))                      \
   X(TRACE_DISABLED_BY_DEFAULT("java-heap-profiler"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("layer-element"))                          \
   X(TRACE_DISABLED_BY_DEFAULT("layout_shift.debug"))                     \
   X(TRACE_DISABLED_BY_DEFAULT("lifecycles"))                             \
   X(TRACE_DISABLED_BY_DEFAULT("loading"))                                \
+  X(TRACE_DISABLED_BY_DEFAULT("mediastream"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("memory-infra"))                           \
   X(TRACE_DISABLED_BY_DEFAULT("memory-infra.v8.code_stats"))             \
   X(TRACE_DISABLED_BY_DEFAULT("net"))                                    \

@@ -24,9 +24,11 @@ import android.text.style.UpdateAppearance;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.BuildInfo;
+import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
@@ -34,6 +36,7 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.task.AsyncTask;
 import org.chromium.ui.R;
 import org.chromium.ui.widget.Toast;
 
@@ -62,6 +65,18 @@ public class Clipboard implements ClipboardManager.OnPrimaryClipChangedListener 
      * Interface to be implemented for sharing image through FileProvider.
      */
     public interface ImageFileProvider {
+        /**
+         * Saves the given set of image bytes and provides that URI to a callback for
+         * sharing the image.
+         *
+         * @param context The context used to trigger the action.
+         * @param imageData The image data to be shared in |fileExtension| format.
+         * @param fileExtension File extension which |imageData| encoded to.
+         * @param callback A provided callback function which will act on the generated URI.
+         */
+        void storeImageAndGenerateUri(final Context context, final byte[] imageData,
+                String fileExtension, Callback<Uri> callback);
+
         /**
          * Store the last image uri we put in the sytstem clipboard, this is special case for
          * Android O.
@@ -223,8 +238,13 @@ public class Clipboard implements ClipboardManager.OnPrimaryClipChangedListener 
             if (uri == null) return null;
 
             // TODO(crbug.com/1065914): Use ImageDecoder.decodeBitmap for API level 29 and up.
-            return MediaStore.Images.Media.getBitmap(
+            Bitmap bitmap = MediaStore.Images.Media.getBitmap(
                     ContextUtils.getApplicationContext().getContentResolver(), uri);
+
+            if (!bitmapSupportByGfx(bitmap)) {
+                return bitmap.copy(Bitmap.Config.ARGB_8888, /*mutable=*/false);
+            }
+            return bitmap;
         } catch (IOException | SecurityException e) {
             return null;
         }
@@ -256,6 +276,8 @@ public class Clipboard implements ClipboardManager.OnPrimaryClipChangedListener 
 
     /**
      * Setting the clipboard's current primary clip to an image.
+     * This method requires background work and might not be immediately committed upon returning
+     * from this method.
      * @param Uri The {@link Uri} will become the content of the clipboard's primary clip.
      */
     public void setImageUri(final Uri uri) {
@@ -266,9 +288,37 @@ public class Clipboard implements ClipboardManager.OnPrimaryClipChangedListener 
 
         grantUriPermission(uri);
 
-        ClipData clip = ClipData.newUri(
-                ContextUtils.getApplicationContext().getContentResolver(), "image", uri);
-        setPrimaryClipNoException(clip);
+        // ClipData.newUri may access the disk (for reading mime types), and cause
+        // StrictModeDiskReadViolation if do it on UI thread.
+        new AsyncTask<ClipData>() {
+            @Override
+            protected ClipData doInBackground() {
+                return ClipData.newUri(
+                        ContextUtils.getApplicationContext().getContentResolver(), "image", uri);
+            }
+            @Override
+            protected void onPostExecute(ClipData clipData) {
+                setPrimaryClipNoException(clipData);
+            }
+        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    /**
+     * Setting the clipboard's current primary clip to an image.
+     * @param imageData The image data to be shared in |extension| format.
+     * @param extension Image file extension which |imageData| encoded to.
+     */
+    @CalledByNative
+    @VisibleForTesting
+    public void setImage(final byte[] imageData, final String extension) {
+        if (mImageFileProvider == null) {
+            // Since |mImageFileProvider| is set on very early on during process init, and if
+            // setImage is called before the file provider is set, we can just drop it on the floor.
+            return;
+        }
+
+        mImageFileProvider.storeImageAndGenerateUri(
+                mContext, imageData, extension, (Uri uri) -> { setImageUri(uri); });
     }
 
     /**
@@ -417,6 +467,16 @@ public class Clipboard implements ClipboardManager.OnPrimaryClipChangedListener 
         mContext.revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
         // Clear uri to avoid revoke over and over.
         mImageFileProvider.clearLastCopiedImageUri();
+    }
+
+    /**
+     * Check if |bitmap| is support by native side. gfx::CreateSkBitmapFromJavaBitmap only support
+     * ARGB_8888 and ALPHA_8.
+     */
+    private boolean bitmapSupportByGfx(Bitmap bitmap) {
+        return bitmap != null
+                && (bitmap.getConfig() == Bitmap.Config.ARGB_8888
+                        || bitmap.getConfig() == Bitmap.Config.ALPHA_8);
     }
 
     @NativeMethods

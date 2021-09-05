@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Teclado alemán </translation>
 <translation id="1972984168337863910">Expandir paneles de comentarios de archivos</translation>
 <translation id="1984603991036629094">Teclado fonético armenio</translation>
+<translation id="1995337122023280937">Ir a la ubicación del archivo</translation>
 <translation id="2001796770603320721">Administrar en Drive</translation>
 <translation id="2009067268969781306">Si formateas una unidad, se borrarán todos los datos almacenados en ella. No se puede deshacer esta acción.</translation>
 <translation id="2028997212275086731">Archivo RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">No se pudo establecer conexión con Google Drive. <ph name="BEGIN_LINK" />Sal de la cuenta<ph name="END_LINK" /> y vuelve a acceder.</translation>
 <translation id="2649120831653069427">Pez arco iris</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Ubicación del archivo</translation>
 <translation id="2672394958563893062">Ocurrió un error. Haz clic para reiniciar desde el principio.</translation>
 <translation id="2676946222714718093">Reproduciendo en</translation>
 <translation id="2735698359135166290">Teclado estándar rumano</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> errores</translation>
 <translation id="3519867315646775981">Transliteración (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugués</translation>
+<translation id="3524311639100184459">Precaución: Estos archivos son temporales y es posible que se borren automáticamente para liberar espacio en el disco.  <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Carpeta</translation>
 <translation id="3549797760399244642">Ir a drive.google.com</translation>
 <translation id="357479282490346887">Lituano</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Reproductor de audio</translation>
 <translation id="4002066346123236978">Título</translation>
+<translation id="4065397611279318371">Para abrir archivos con las apps de <ph name="APP_NAME" />, primero debes moverlos a la carpeta de <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Método de entrada cantonés</translation>
 <translation id="4072248638558688893">Teclado tamil (fonético)</translation>
 <translation id="4124935795427217608">Unicornio</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Autocorrección</translation>
 <translation id="4881695831933465202">Abrir</translation>
 <translation id="4886021172213954916">Teclado tamil (máquina de escribir)</translation>
+<translation id="4892969127351273348">No se puede abrir con <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Ya se puede realizar una copia de seguridad de <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Corregida</translation>
 <translation id="4935975195727477204">Gazania</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Administrar uso compartido de Linux</translation>
 <translation id="6808193438228982088">Zorro</translation>
 <translation id="6820687829547641339">Archivo tar comprimido en Gzip</translation>
+<translation id="6823166707458800069">Se realiza automáticamente una copia de seguridad en línea de todos los archivos guardados en esta carpeta.</translation>
 <translation id="6825883775269213504">Ruso</translation>
 <translation id="6827236167376090743">Este video seguirá reproduciéndose sin parar.</translation>
 <translation id="6847101934483209767">Se quitó <ph name="ENTRY_NAME" /> de la selección.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Mapa de Google</translation>
 <translation id="7419631653042041064">Teclado catalán</translation>
 <translation id="7434823369735508263">Teclado Dvorak en inglés del Reino Unido</translation>
+<translation id="7447678886297481665">Como los archivos que se encuentran en esta carpeta son de solo lectura, no se pueden realizar algunas acciones.</translation>
 <translation id="7460898608667578234">Ucraniano</translation>
 <translation id="7474889694310679759">Teclado en inglés de Canadá</translation>
 <translation id="7489215562877293245">Se encontró un total de <ph name="FILE_COUNT" />

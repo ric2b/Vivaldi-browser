@@ -23,6 +23,7 @@
 #include "content/browser/worker_host/dedicated_worker_service_impl.h"
 #include "content/browser/worker_host/worker_script_fetch_initiator.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/idle_manager.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/service_worker_context.h"
@@ -31,7 +32,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/isolation_info.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom.h"
 #include "third_party/blink/public/mojom/usb/web_usb_service.mojom.h"
@@ -143,9 +144,6 @@ void DedicatedWorkerHost::StartScriptLoad(
     return;
   }
 
-  network_isolation_key_ =
-      nearest_ancestor_render_frame_host->GetNetworkIsolationKey();
-
   // Get a storage domain.
   SiteInstance* site_instance =
       nearest_ancestor_render_frame_host->GetSiteInstance();
@@ -204,13 +202,15 @@ void DedicatedWorkerHost::StartScriptLoad(
   file_url_support_ = creator_origin_.scheme() == url::kFileScheme;
 
   service_worker_handle_ = std::make_unique<ServiceWorkerMainResourceHandle>(
-      storage_partition_impl->GetServiceWorkerContext());
+      storage_partition_impl->GetServiceWorkerContext(), base::DoNothing());
 
   WorkerScriptFetchInitiator::Start(
-      worker_process_host_->GetID(), script_url, creator_render_frame_host,
+      worker_process_host_->GetID(), id_, SharedWorkerId(), script_url,
+      creator_render_frame_host,
       nearest_ancestor_render_frame_host->ComputeSiteForCookies(),
-      creator_origin_, network_isolation_key_, credentials_mode,
-      std::move(outside_fetch_client_settings_object),
+      creator_origin_,
+      nearest_ancestor_render_frame_host->GetIsolationInfoForSubresources(),
+      credentials_mode, std::move(outside_fetch_client_settings_object),
       blink::mojom::ResourceType::kWorker,
       storage_partition_impl->GetServiceWorkerContext(),
       service_worker_handle_.get(),
@@ -371,7 +371,7 @@ void DedicatedWorkerHost::CreateWebSocketConnector(
       std::make_unique<WebSocketConnectorImpl>(
           ancestor_render_frame_host_id_.child_id,
           ancestor_render_frame_host_id_.frame_routing_id, worker_origin_,
-          network_isolation_key_),
+          ancestor_render_frame_host->GetIsolationInfoForSubresources()),
       std::move(receiver));
 }
 
@@ -385,10 +385,12 @@ void DedicatedWorkerHost::CreateQuicTransportConnector(
     // will soon be terminated too, so abort the connection.
     return;
   }
-  mojo::MakeSelfOwnedReceiver(std::make_unique<QuicTransportConnectorImpl>(
-                                  worker_process_host_->GetID(), worker_origin_,
-                                  network_isolation_key_),
-                              std::move(receiver));
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<QuicTransportConnectorImpl>(
+          worker_process_host_->GetID(), /*frame=*/nullptr, worker_origin_,
+          ancestor_render_frame_host->GetIsolationInfoForSubresources()
+              .network_isolation_key()),
+      std::move(receiver));
 }
 
 void DedicatedWorkerHost::CreateWakeLockService(
@@ -445,7 +447,9 @@ void DedicatedWorkerHost::CreateIdleManager(
   static_cast<StoragePartitionImpl*>(
       ancestor_render_frame_host->GetProcess()->GetStoragePartition())
       ->GetIdleManager()
-      ->CreateService(std::move(receiver));
+      ->CreateService(
+          std::move(receiver),
+          ancestor_render_frame_host->GetMainFrame()->GetLastCommittedOrigin());
 }
 
 void DedicatedWorkerHost::BindSmsReceiverReceiver(

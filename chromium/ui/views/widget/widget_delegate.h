@@ -29,6 +29,44 @@ class View;
 // Handles events on Widgets in context-specific ways.
 class VIEWS_EXPORT WidgetDelegate {
  public:
+  struct Params {
+    Params();
+    ~Params();
+
+    // Whether the window should display controls for the user to minimize,
+    // maximize, or resize it.
+    bool can_maximize = false;
+    bool can_minimize = false;
+    bool can_resize = false;
+
+#if defined(USE_AURA)
+    // Whether to center the widget's title within the frame.
+    bool center_title = false;
+#endif
+
+    // Controls focus traversal past the first/last focusable view.
+    // If true, focus moves out of this Widget and to this Widget's toplevel
+    // Widget; if false, focus cycles within this Widget.
+    bool focus_traverses_out = false;
+
+    // The widget's icon, if any.
+    gfx::ImageSkia icon;
+
+    // Whether to show a close button in the widget frame.
+    bool show_close_button = true;
+
+    // Whether to show the widget's icon.
+    // TODO(ellyjones): What if this was implied by !icon.isNull()?
+    bool show_icon = false;
+
+    // Whether to display the widget's title in the frame.
+    bool show_title = true;
+
+    // The widget's title, if any.
+    // TODO(ellyjones): Should it be illegal to have show_title && !title?
+    base::string16 title;
+  };
+
   WidgetDelegate();
 
   // Sets the return value of CanActivate(). Default is true.
@@ -90,9 +128,6 @@ class VIEWS_EXPORT WidgetDelegate {
   // Returns true if the window should show a title in the title bar.
   virtual bool ShouldShowWindowTitle() const;
 
-  // Returns true if the title text should be centered. Default is false.
-  virtual bool ShouldCenterWindowTitleText() const;
-
   // Returns true if the window should show a close button in the title bar.
   virtual bool ShouldShowCloseButton() const;
 
@@ -149,9 +184,12 @@ class VIEWS_EXPORT WidgetDelegate {
   // Close() or CloseNow().
   // Important note: for OS-initiated window closes, steps 1 and 2 don't happen
   // - i.e, WindowWillClose() is never invoked.
-  virtual void WindowWillClose() {}
-  virtual void WindowClosing() {}
-  virtual void DeleteDelegate() {}
+  //
+  // The default implementations of these methods simply call the corresponding
+  // callbacks; see Set*Callback() below. If you override these it is not
+  // necessary to call the base implementations.
+  virtual void WindowClosing();
+  virtual void DeleteDelegate();
 
   // Called when the user begins/ends to change the bounds of the window.
   virtual void OnWindowBeginUserBoundsChange() {}
@@ -190,11 +228,6 @@ class VIEWS_EXPORT WidgetDelegate {
   // Provides the hit-test mask if HasHitTestMask above returns true.
   virtual void GetWidgetHitTestMask(SkPath* mask) const;
 
-  // Returns true if focus should advance to the top level widget when
-  // tab/shift-tab is hit and on the last/first focusable view. Default returns
-  // false, which means tab/shift-tab never advance to the top level Widget.
-  virtual bool ShouldAdvanceFocusToTopLevelWidget() const;
-
   // Returns true if event handling should descend into |child|.
   // |location| is in terms of the Window.
   virtual bool ShouldDescendIntoChildForEventHandling(
@@ -205,17 +238,51 @@ class VIEWS_EXPORT WidgetDelegate {
   // be cycled through with keyboard focus.
   virtual void GetAccessiblePanes(std::vector<View*>* panes) {}
 
+  // Setters for data parameters of the WidgetDelegate. If you use these
+  // setters, there is no need to override the corresponding virtual getters.
+  void SetCanMaximize(bool can_maximize);
+  void SetCanMinimize(bool can_minimize);
+  void SetCanResize(bool can_resize);
+  void SetFocusTraversesOut(bool focus_traverses_out);
+  void SetIcon(const gfx::ImageSkia& icon);
+  void SetShowCloseButton(bool show_close_button);
+  void SetShowIcon(bool show_icon);
+  void SetShowTitle(bool show_title);
+  void SetTitle(const base::string16& title);
+#if defined(USE_AURA)
+  void SetCenterTitle(bool center_title);
+#endif
+
+  void RegisterWindowWillCloseCallback(base::OnceClosure callback);
+  void RegisterWindowClosingCallback(base::OnceClosure callback);
+  void RegisterDeleteDelegateCallback(base::OnceClosure callback);
+
+  // Call this to notify the WidgetDelegate that its Widget is about to start
+  // closing.
+  void WindowWillClose();
+
+  // Returns true if the title text should be centered.
+  bool ShouldCenterWindowTitleText() const;
+
+  bool focus_traverses_out() const { return params_.focus_traverses_out; }
+
  protected:
   virtual ~WidgetDelegate();
 
  private:
   friend class Widget;
 
+  Params params_;
+
   View* default_contents_view_ = nullptr;
   bool can_activate_ = true;
 
   // Managed by Widget. Ensures |this| outlives its Widget.
   bool can_delete_this_ = true;
+
+  std::vector<base::OnceClosure> window_will_close_callbacks_;
+  std::vector<base::OnceClosure> window_closing_callbacks_;
+  std::vector<base::OnceClosure> delete_delegate_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(WidgetDelegate);
 };

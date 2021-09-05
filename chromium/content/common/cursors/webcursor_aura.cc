@@ -4,10 +4,10 @@
 
 #include "content/common/cursors/webcursor.h"
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/cursor_util.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 
 namespace content {
 

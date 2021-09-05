@@ -6,10 +6,8 @@ module chromeos.assistant.mojom;
 
 import "ash/public/mojom/assistant_controller.mojom";
 import "ash/public/mojom/assistant_volume_control.mojom";
-import "ash/public/mojom/assistant_state_controller.mojom";
 import "chromeos/services/assistant/public/mojom/assistant_audio_decoder.mojom";
 import "chromeos/services/assistant/public/mojom/assistant_notification.mojom";
-import "chromeos/services/assistant/public/mojom/settings.mojom";
 import "chromeos/services/network_config/public/mojom/cros_network_config.mojom";
 import "mojo/public/mojom/base/string16.mojom";
 import "mojo/public/mojom/base/time.mojom";
@@ -23,52 +21,10 @@ import "ui/accessibility/mojom/ax_assistant_structure.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/url.mojom";
 
-// Main interface to the Assistant service.
-interface AssistantService {
-  // Initiates assistant and provides interfaces for assistant to call into the
-  // browser.
-  Init(pending_remote<Client> assistant_client_interface,
-       pending_remote<DeviceActions> device_actions_interface);
-
-  // Binds the main assistant backend interface.
-  BindAssistant(pending_receiver<Assistant> receiver);
-
-  // Binds an interface to control assistant settings.
-  BindSettingsManager(pending_receiver<AssistantSettingsManager> receiver);
-
-  // Signals system shutdown, the service could start cleaning up if needed.
-  Shutdown();
-};
-
-// Interface whose implementation is owned by Shell in Ash. This is used
-// primarily to provide Ash with an interface to the Assistant service.
-interface AssistantController {
-  // Provides a reference to the underlying |assistant| service.
-  SetAssistant(pending_remote<Assistant> assistant);
-
-  // All other methods may only be called after |SetAssistant| is called.
-
-  // Show speaker id enrollment flow.
-  StartSpeakerIdEnrollmentFlow();
-
-  // Send Assistant feedback to Assistant server. If |pii_allowed| is
-  // true then the user gives permission to attach Assistant debug info.
-  // |feedback_description| is user's feedback input.
-  SendAssistantFeedback(
-    bool pii_allowed,
-    string feedback_description,
-    string screenshot_png);
-
-  // Start Assistant text interaction.
-  // TODO(b/146074655): Move the API to appropriate module as part of the
-  // Assistant controller mojo interface cleanup effort.
-  StartTextInteraction(
-    string query,
-    bool allow_tts,
-    AssistantQuerySource source);
-};
-
 // Interface to communicate with assistant backend.
+// The Assistant instance is held by chromeos::assistant::Service, which is
+// hosted in the browser process.
+// The callers are mostly in ash, and some are in autotest.
 interface Assistant {
   // Starts an interaction to edit the reminder uniquely identified by
   // |client_id|. In response to the request, LibAssistant will initiate
@@ -79,6 +35,7 @@ interface Assistant {
   // Starts a screen context interaction. Results related to the screen context
   // will be returned through the |AssistantInteractionSubscriber| interface to
   // registered subscribers.
+  // |assistant_screenshot| contains JPEG data.
   StartScreenContextInteraction(
       ax.mojom.AssistantStructure? assistant_structure,
       array<uint8> assistant_screenshot);
@@ -138,8 +95,19 @@ interface Assistant {
   // this method is a no-op if there is no existing timer identified by |id|.
   AddTimeToTimer(string id, mojo_base.mojom.TimeDelta duration);
 
-  // Stops timer or alarm ringing.
-  StopAlarmTimerRinging();
+  // Pauses the timer specified by |id|. Note that this method is a no-op if
+  // there is no existing timer identified by |id| or if a timer does exist but
+  // is already paused.
+  PauseTimer(string id);
+
+  // Remove the alarm/timer specified by |id|.
+  // NOTE: this is a no-op if no such alarm/timer exists.
+  RemoveAlarmOrTimer(string id);
+
+  // Resumes the timer specified by |id|. Note that this method is a no-op if
+  // there is no existing timer identified by |id| or if a timer does exist but
+  // isn't currently paused.
+  ResumeTimer(string id);
 };
 
 // Enumeration of Assistant entry points. These values are persisted to logs.
@@ -157,6 +125,7 @@ enum AssistantEntryPoint {
   kLauncherSearchResult = 8,
   kLauncherSearchBoxIcon = 9,
   kProactiveSuggestions = 10,
+  kLauncherChip = 11,
 };
 
 // Enumeration of Assistant exit points. These values are persisted to logs.
@@ -209,6 +178,7 @@ enum AssistantQuerySource {
   kConversationStarter = 9,
   kWhatsOnMyScreen = 10,
   kQuickAnswers = 11,
+  kLauncherChip = 12,
 };
 
 // Subscribes to Assistant's interaction event. These events are server driven
@@ -230,13 +200,6 @@ interface AssistantInteractionSubscriber {
 
   // Assistant got text response from server.
   OnTextResponse(string response);
-
-  // Assistant got a timers response from server.
-  // The specified |timer_ids| represent the unique identifiers for each timer
-  // included in the server response. These ids are generated by LibAssistant
-  // on the client but included in the server response to indicate which timers
-  // should be displayed in Assistant UI.
-  OnTimersResponse(array<string> timer_ids);
 
   // Assistant got open URL response from server. |in_background| refers to
   // being in background of Assistant UI, not in background of browser.
@@ -268,111 +231,6 @@ interface AssistantInteractionSubscriber {
   // Assistant has started waiting. This occur during execution of a routine to
   // give the user time to digest a response before continuing execution.
   OnWaitStarted();
-};
-
-// Interface for assistant to call into client.
-interface Client {
-  // Notifies assistant client that assistant running status has changed.
-  OnAssistantStatusChanged(ash.mojom.AssistantState new_state);
-
-  // Requests an AssistantController implementation from Ash, via the browser.
-  RequestAssistantController(pending_receiver<AssistantController> receiver);
-
-  // Requests Ash's AssistantAlarmTimerController interface from the browser.
-  RequestAssistantAlarmTimerController(
-      pending_receiver<ash.mojom.AssistantAlarmTimerController> receiver);
-
-  // Requests Ash's AssistantNotificationController interface from the browser.
-  RequestAssistantNotificationController(
-      pending_receiver<ash.mojom.AssistantNotificationController> receiver);
-
-  // Requests Ash's AssistantScreenContextController interface from the browser.
-  RequestAssistantScreenContextController(
-      pending_receiver<ash.mojom.AssistantScreenContextController> receiver);
-
-  // Requests Ash's AssistantVolumeControl interface from the browser.
-  RequestAssistantVolumeControl(
-      pending_receiver<ash.mojom.AssistantVolumeControl> receiver);
-
-  // Requests Ash's AssistantStateController interface from the browser.
-  RequestAssistantStateController(
-      pending_receiver<ash.mojom.AssistantStateController> receiver);
-
-  // Requests a BatteryMonitor from the browser.
-  RequestBatteryMonitor(pending_receiver<device.mojom.BatteryMonitor> receiver);
-
-  // Requests a connection to the Device service's WakeLockProvider interface
-  // from the browser.
-  RequestWakeLockProvider(
-      pending_receiver<device.mojom.WakeLockProvider> receiver);
-
-  // Requests an Audio Service StreamFactory from the browser.
-  RequestAudioStreamFactory(
-      pending_receiver<audio.mojom.StreamFactory> receiver);
-
-  // Requests an audio decoder interface from the Assistant Audio Decoder
-  // service, via the browser.
-  RequestAudioDecoderFactory(
-      pending_receiver<AssistantAudioDecoderFactory> receiver);
-
-  // Requests a connection to the Media Session service's AudioFocusManager from
-  // the browser.
-  RequestAudioFocusManager(
-      pending_receiver<media_session.mojom.AudioFocusManager> receiver);
-
-  // Requests a connection to the Media Session service's MediaControllerManager
-  // interface from the browser.
-  RequestMediaControllerManager(
-      pending_receiver<media_session.mojom.MediaControllerManager> receiver);
-
-  // Requests a connection to the CrosNetworkConfig service interface via the
-  // browser.
-  RequestNetworkConfig(
-      pending_receiver<chromeos.network_config.mojom.CrosNetworkConfig>
-          receiver);
-};
-
-// Interface for assistant to call into browser to perform device actions.
-interface DeviceActions {
-  // Enables or disables WiFi.
-  SetWifiEnabled(bool enabled);
-
-  // Enables or disables Bluetooth.
-  SetBluetoothEnabled(bool enabled);
-
-  // Gets the current screen brightness level (0-1.0).
-  // The level is set to 0 in the event of an error.
-  GetScreenBrightnessLevel() => (bool success, double level);
-
-  // Sets the screen brightness level (0-1.0).  If |gradual| is true, the
-  // transition will be animated.
-  SetScreenBrightnessLevel(double level, bool gradual);
-
-  // Enables or disables Night Light.
-  SetNightLightEnabled(bool enabled);
-
-  // Enables or disables Switch Access.
-  SetSwitchAccessEnabled(bool enabled);
-
-  // Open the Android app if the app is available.
-  OpenAndroidApp(AndroidAppInfo app_info) => (bool app_opened);
-
-  // Verify the status of the Android apps.
-  VerifyAndroidApp(array<AndroidAppInfo> apps_info) => (array<AndroidAppInfo>
-                                                        apps_info);
-
-  // Launch Android intent. The intent is encoded as a URI string.
-  // See Intent.toUri().
-  LaunchAndroidIntent(string intent);
-
-  // Register App list event subscriber.
-  AddAppListEventSubscriber(pending_remote<AppListEventSubscriber> subscriber);
-};
-
-// Subscribes to App list events.
-interface AppListEventSubscriber {
-  // Called when the android app list changed.
-  OnAndroidAppListRefreshed(array<AndroidAppInfo> apps_info);
 };
 
 // Enumeration of possible completions for an Assistant interaction.

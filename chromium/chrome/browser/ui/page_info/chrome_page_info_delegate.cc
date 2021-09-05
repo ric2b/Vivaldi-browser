@@ -8,7 +8,7 @@
 #include "chrome/browser/bluetooth/bluetooth_chooser_context.h"
 #include "chrome/browser/bluetooth/bluetooth_chooser_context_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
@@ -20,6 +20,7 @@
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/url_constants.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/permissions/chooser_context_base.h"
 #include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_result.h"
@@ -37,6 +38,9 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/page_info/page_info_infobar_delegate.h"
+#else
+#include "chrome/grit/chromium_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 #endif
 
 ChromePageInfoDelegate::ChromePageInfoDelegate(
@@ -45,14 +49,6 @@ ChromePageInfoDelegate::ChromePageInfoDelegate(
 
 Profile* ChromePageInfoDelegate::GetProfile() const {
   return Profile::FromBrowserContext(web_contents_->GetBrowserContext());
-}
-
-TabSpecificContentSettings*
-ChromePageInfoDelegate::GetTabSpecificContentSettings() const {
-  // When |web_contents| is not from a Tab, |web_contents| does not have a
-  // |TabSpecificContentSettings| and need to create one; otherwise, noop.
-  TabSpecificContentSettings::CreateForWebContents(web_contents_);
-  return TabSpecificContentSettings::FromWebContents(web_contents_);
 }
 
 permissions::ChooserContextBase* ChromePageInfoDelegate::GetChooserContext(
@@ -77,49 +73,6 @@ permissions::ChooserContextBase* ChromePageInfoDelegate::GetChooserContext(
       NOTREACHED();
       return nullptr;
   }
-}
-
-bool ChromePageInfoDelegate::HasContentSettingChangedViaPageInfo(
-    ContentSettingsType type) {
-  return GetTabSpecificContentSettings()->HasContentSettingChangedViaPageInfo(
-      type);
-}
-
-void ChromePageInfoDelegate::ContentSettingChangedViaPageInfo(
-    ContentSettingsType type) {
-  GetTabSpecificContentSettings()->ContentSettingChangedViaPageInfo(type);
-}
-
-const LocalSharedObjectsContainer& ChromePageInfoDelegate::GetAllowedObjects(
-    const GURL& site_url) {
-  return GetTabSpecificContentSettings()->allowed_local_shared_objects();
-}
-
-const LocalSharedObjectsContainer& ChromePageInfoDelegate::GetBlockedObjects(
-    const GURL& site_url) {
-  return GetTabSpecificContentSettings()->blocked_local_shared_objects();
-}
-
-int ChromePageInfoDelegate::GetFirstPartyAllowedCookiesCount(
-    const GURL& site_url) {
-  return GetAllowedObjects(site_url).GetObjectCountForDomain(site_url);
-}
-
-int ChromePageInfoDelegate::GetFirstPartyBlockedCookiesCount(
-    const GURL& site_url) {
-  return GetBlockedObjects(site_url).GetObjectCountForDomain(site_url);
-}
-
-int ChromePageInfoDelegate::GetThirdPartyAllowedCookiesCount(
-    const GURL& site_url) {
-  return GetAllowedObjects(site_url).GetObjectCount() -
-         GetFirstPartyAllowedCookiesCount(site_url);
-}
-
-int ChromePageInfoDelegate::GetThirdPartyBlockedCookiesCount(
-    const GURL& site_url) {
-  return GetBlockedObjects(site_url).GetObjectCount() -
-         GetFirstPartyBlockedCookiesCount(site_url);
 }
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -235,6 +188,19 @@ ChromePageInfoDelegate::GetVisibleSecurityState() {
   DCHECK(helper);
   return *helper->GetVisibleSecurityState();
 }
+
+std::unique_ptr<content_settings::TabSpecificContentSettings::Delegate>
+ChromePageInfoDelegate::GetTabSpecificContentSettingsDelegate() {
+  auto delegate = std::make_unique<chrome::TabSpecificContentSettingsDelegate>(
+      web_contents_);
+  return std::move(delegate);
+}
+
+#if defined(OS_ANDROID)
+const base::string16 ChromePageInfoDelegate::GetClientApplicationName() {
+  return l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
+}
+#endif
 
 void ChromePageInfoDelegate::SetSecurityStateForTests(
     security_state::SecurityLevel security_level,

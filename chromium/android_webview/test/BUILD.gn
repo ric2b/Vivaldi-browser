@@ -20,28 +20,26 @@ group("test") {
   ]
 }
 
-if (define_upstream_webview_targets) {
-  python_library("webview_cts_tests") {
-    pydeps_file = "//android_webview/tools/run_cts.pydeps"
-    deps = [ "//android_webview:system_webview_apk" ]
-    data_deps = [
-      "//build/android:logdog_wrapper_py",
-      "//build/android:test_runner_py",
-      "//testing/buildbot/filters:webview_cts_tests_filters",
-    ]
-    data = [ "//android_webview/tools/cts_config/" ]
-  }
+python_library("webview_cts_tests") {
+  pydeps_file = "//android_webview/tools/run_cts.pydeps"
+  deps = [ "//android_webview:system_webview_apk" ]
+  data_deps = [
+    "//build/android:logdog_wrapper_py",
+    "//build/android:test_runner_py",
+    "//testing/buildbot/filters:webview_cts_tests_filters",
+  ]
+  data = [ "//android_webview/tools/cts_config/" ]
+}
 
-  python_library("system_webview_wpt") {
-    testonly = true
-    pydeps_file = "//testing/scripts/run_android_wpt.pydeps"
-    data_deps = [
-      "//android_webview:system_webview_apk",
-      "//android_webview/tools/system_webview_shell:system_webview_shell_layout_test_apk",
-      "//chrome/test/chromedriver:chromedriver($host_toolchain)",
-      "//third_party/blink/tools:wpt_tests_android_isolate",
-    ]
-  }
+python_library("system_webview_wpt") {
+  testonly = true
+  pydeps_file = "//testing/scripts/run_android_wpt.pydeps"
+  data_deps = [
+    "//android_webview:system_webview_apk",
+    "//android_webview/tools/system_webview_shell:system_webview_shell_layout_test_apk",
+    "//chrome/test/chromedriver:chromedriver($host_toolchain)",
+    "//third_party/blink/tools:wpt_tests_android_isolate",
+  ]
 }
 
 android_apk("webview_instrumentation_apk") {
@@ -56,7 +54,7 @@ android_apk("webview_instrumentation_apk") {
     "//android_webview:platform_service_bridge_upstream_implementation_java",
     "//base:base_java",
     "//base:base_java_test_support",
-    "//components/heap_profiling:heap_profiling_java_test_support",
+    "//components/heap_profiling/multi_process:heap_profiling_java_test_support",
     "//components/policy/android:policy_java_test_support",
     "//content/public/android:content_java",
     "//third_party/android_support_test_runner:runner_java",
@@ -119,10 +117,8 @@ android_assets("webview_instrumentation_apk_assets") {
     "shell/assets/full_screen_video_test.html",
     "shell/assets/full_screen_video_test_not_preloaded.html",
     "shell/assets/key-system-test.html",
-    "shell/assets/platform-media-codec-test.html",
     "shell/assets/star.svg",
     "shell/assets/star.svgz",
-    "shell/assets/video.3gp",
     "shell/assets/video.webm",
     "shell/assets/visual_state_during_fullscreen_test.html",
     "shell/assets/visual_state_on_page_commit_visible_test.html",
@@ -148,7 +144,7 @@ shared_library("libstandalonelibwebviewchromium") {
     "//android_webview/nonembedded",
     "//android_webview/public",
     "//base",
-    "//components/heap_profiling:test_support",
+    "//components/heap_profiling/multi_process:test_support",
     "//content/public/test/android:content_native_test_support",
   ]
   configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
@@ -182,8 +178,11 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//net/android:net_javatests",
     "//services/device/public/java:geolocation_java",
     "//services/device/public/java:geolocation_java_test_support",
+    "//third_party/android_deps:com_google_guava_failureaccess_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/espresso:espresso_all_java",
+    "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
     "//third_party/metrics_proto:metrics_proto_java",
     "//ui/android:ui_java",
@@ -264,7 +263,6 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/MemoryMetricsLoggerTest.java",
     "../javatests/src/org/chromium/android_webview/test/NavigationHistoryTest.java",
     "../javatests/src/org/chromium/android_webview/test/OnDiskFileTest.java",
-    "../javatests/src/org/chromium/android_webview/test/PlatformMediaCodecTest.java",
     "../javatests/src/org/chromium/android_webview/test/PolicyUrlFilteringTest.java",
     "../javatests/src/org/chromium/android_webview/test/PopupWindowTest.java",
     "../javatests/src/org/chromium/android_webview/test/PostMessageTest.java",
@@ -284,14 +282,22 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/WebViewAsynchronousFindApisTest.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewFindApisTestRule.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewModalDialogOverrideTest.java",
+    "../javatests/src/org/chromium/android_webview/test/common/crash/CrashInfoEqualityMatcher.java",
+    "../javatests/src/org/chromium/android_webview/test/common/crash/CrashInfoTest.java",
+    "../javatests/src/org/chromium/android_webview/test/common/metrics/AwNonembeddedUmaRecorderTest.java",
     "../javatests/src/org/chromium/android_webview/test/common/variations/VariationsUtilsTest.java",
+    "../javatests/src/org/chromium/android_webview/test/devui/DeveloperUiTest.java",
+    "../javatests/src/org/chromium/android_webview/test/devui/util/CrashBugUrlFactoryTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/util/UnuploadedFilesStateLoaderTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/util/UploadedCrashesInfoLoaderTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/util/WebViewCrashInfoCollectorTest.java",
     "../javatests/src/org/chromium/android_webview/test/devui/util/WebViewCrashLogParserTest.java",
     "../javatests/src/org/chromium/android_webview/test/services/CrashReceiverServiceTest.java",
+    "../javatests/src/org/chromium/android_webview/test/services/MetricsBridgeServiceTest.java",
     "../javatests/src/org/chromium/android_webview/test/services/MinidumpUploadJobTest.java",
+    "../javatests/src/org/chromium/android_webview/test/services/MockMetricsBridgeService.java",
     "../javatests/src/org/chromium/android_webview/test/services/MockVariationsSeedServer.java",
+    "../javatests/src/org/chromium/android_webview/test/services/ServiceConnectionHelper.java",
     "../javatests/src/org/chromium/android_webview/test/services/VariationsSeedServerTest.java",
     "../javatests/src/org/chromium/android_webview/test/services/VisualStateCallbackTest.java",
     "../javatests/src/org/chromium/android_webview/test/util/AwQuotaManagerBridgeTestUtil.java",
@@ -403,8 +409,8 @@ test("android_webview_unittests") {
     "../browser/gfx/test/rendering_test.h",
     "../browser/input_stream_unittest.cc",
     "../browser/lifecycle/aw_contents_lifecycle_notifier_unittest.cc",
-    "../browser/metrics/aw_metrics_service_client_unittest.cc",
     "../browser/metrics/aw_stability_metrics_provider_unittest.cc",
+    "../browser/metrics/visibility_metrics_logger_unittest.cc",
     "../browser/network_service/android_stream_reader_url_loader_unittest.cc",
     "../browser/network_service/input_stream_reader_unittest.cc",
     "../browser/permission/media_access_permission_request_unittest.cc",
@@ -452,12 +458,14 @@ junit_binary("android_webview_junit_tests") {
     "../junit/src/org/chromium/android_webview/robolectric/AwScrollOffsetManagerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/FindAddressTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/common/FlagOverrideHelperTest.java",
+    "../junit/src/org/chromium/android_webview/robolectric/common/metrics/AwNonembeddedUmaReplayerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/common/services/ServiceNamesTest.java",
   ]
 
   deps = [
     "//android_webview:android_webview_java",
     "//base:base_java_test_support",
+    "//base:base_junit_test_support",
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_support_test_runner:runner_java",
   ]

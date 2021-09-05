@@ -8,12 +8,12 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
@@ -28,11 +28,11 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/ppapi_test_utils.h"
-#include "content/public/test/web_test_support.h"
+#include "content/public/test/web_test_support_browser.h"
 #include "content/shell/browser/shell.h"
-#include "content/shell/browser/web_test/blink_test_controller.h"
 #include "content/shell/browser/web_test/test_info_extractor.h"
 #include "content/shell/browser/web_test/web_test_browser_main_platform_support.h"
+#include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/common/web_test/web_test_switches.h"
 #include "gpu/config/gpu_switches.h"
@@ -50,20 +50,20 @@ namespace content {
 namespace {
 
 bool RunOneTest(const content::TestInfo& test_info,
-                content::BlinkTestController* blink_test_controller,
+                content::WebTestControlHost* web_test_control_host,
                 content::BrowserMainRunner* main_runner) {
-  DCHECK(blink_test_controller);
+  DCHECK(web_test_control_host);
 
-  if (!blink_test_controller->PrepareForWebTest(test_info))
+  if (!web_test_control_host->PrepareForWebTest(test_info))
     return false;
 
   main_runner->Run();
 
-  return blink_test_controller->ResetAfterWebTest();
+  return web_test_control_host->ResetBrowserAfterWebTest();
 }
 
 void RunTests(content::BrowserMainRunner* main_runner) {
-  content::BlinkTestController test_controller;
+  content::WebTestControlHost test_controller;
   {
     // We're outside of the message loop here, and this is a test.
     base::ScopedAllowBlockingForTesting allow_blocking;

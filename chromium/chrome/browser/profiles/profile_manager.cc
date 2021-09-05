@@ -22,6 +22,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -128,6 +129,8 @@
 #include "chrome/browser/android/metrics/android_profile_session_durations_service_factory.h"
 #include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
 #else
+#include "chrome/browser/accessibility/caption_controller.h"
+#include "chrome/browser/accessibility/caption_controller_factory.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -335,7 +338,7 @@ void OnProfileLoaded(ProfileManager::ProfileLoadedCallback client_callback,
   }
   DCHECK(profile);
   std::move(client_callback)
-      .Run(incognito ? profile->GetOffTheRecordProfile() : profile);
+      .Run(incognito ? profile->GetPrimaryOTRProfile() : profile);
 }
 
 #if !defined(OS_ANDROID)
@@ -347,6 +350,17 @@ bool IsProfileEphemeral(ProfileAttributesStorage* storage,
          entry->IsEphemeral();
 }
 #endif
+
+// Helper function that deletes entries from the kProfilesLastActive pref list.
+// It is called when every ephemeral profile is handled.
+void RemoveFromLastActiveProfilesPrefList(base::FilePath path) {
+  PrefService* local_state = g_browser_process->local_state();
+  DCHECK(local_state);
+  ListPrefUpdate update(local_state, prefs::kProfilesLastActive);
+  base::ListValue* profile_list = update.Get();
+  base::Value entry_value = base::Value(path.BaseName().MaybeAsASCII());
+  profile_list->EraseListValue(entry_value);
+}
 
 #if defined(OS_CHROMEOS)
 bool IsLoggedIn() {
@@ -405,7 +419,7 @@ Profile* ProfileManager::GetLastUsedProfileAllowedByPolicy() {
   if (!profile)
     return nullptr;
   if (IsOffTheRecordModeForced(profile))
-    return profile->GetOffTheRecordProfile();
+    return profile->GetPrimaryOTRProfile();
   return profile;
 }
 
@@ -486,7 +500,7 @@ Profile* ProfileManager::CreateInitialProfile() {
           profile_manager->GetInitialProfileDir()));
 
   if (profile_manager->ShouldGoOffTheRecord(profile))
-    return profile->GetOffTheRecordProfile();
+    return profile->GetPrimaryOTRProfile();
   return profile;
 }
 
@@ -595,7 +609,7 @@ void ProfileManager::CreateProfileAsync(const base::FilePath& profile_path,
       // such as having no extensions, not writing to disk, etc.
       if (profile->IsGuestSession() || profile->IsSystemProfile()) {
         SetNonPersonalProfilePrefs(profile);
-        profile = profile->GetOffTheRecordProfile();
+        profile = profile->GetPrimaryOTRProfile();
       }
       // Profile has already been created. Run callback immediately.
       callback.Run(profile, Profile::CREATE_STATUS_INITIALIZED);
@@ -612,11 +626,12 @@ bool ProfileManager::IsValidProfile(const void* profile) {
        ++iter) {
     if (iter->second->created) {
       Profile* candidate = iter->second->profile.get();
-      if (candidate == profile ||
-          (candidate->HasOffTheRecordProfile() &&
-           candidate->GetOffTheRecordProfile() == profile)) {
+      if (candidate == profile)
         return true;
-      }
+      std::vector<Profile*> otr_profiles =
+          candidate->GetAllOffTheRecordProfiles();
+      if (base::Contains(otr_profiles, profile))
+        return true;
     }
   }
   return false;
@@ -656,8 +671,7 @@ Profile* ProfileManager::GetLastUsedProfile(
   LOG_IF(FATAL, !profile) << "Calling GetLastUsedProfile() before profile "
                           << "initialization is completed.";
 
-  return profile->IsGuestSession() ? profile->GetOffTheRecordProfile()
-                                   : profile;
+  return profile->IsGuestSession() ? profile->GetPrimaryOTRProfile() : profile;
 #else
   return GetProfile(GetLastUsedProfileDir(user_data_dir));
 #endif
@@ -894,6 +908,7 @@ void ProfileManager::CleanUpEphemeralProfiles() {
     base::FilePath profile_path = entry->GetPath();
     if (entry->IsEphemeral()) {
       profiles_to_delete.push_back(profile_path);
+      RemoveFromLastActiveProfilesPrefList(profile_path);
       if (profile_path.BaseName().MaybeAsASCII() == last_used_profile)
         last_active_profile_deleted = true;
     } else if (new_profile_path.empty()) {
@@ -1154,7 +1169,7 @@ void ProfileManager::OnProfileCreated(Profile* profile,
   if (success) {
     DoFinalInit(info, go_off_the_record);
     if (go_off_the_record)
-      profile = profile->GetOffTheRecordProfile();
+      profile = profile->GetPrimaryOTRProfile();
   } else {
     profile = nullptr;
     profiles_info_.erase(iter);
@@ -1266,6 +1281,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   // DoFinalInitForServices.
   profiles::UpdateIsProfileLockEnabledIfNeeded(profile);
 #endif
+
   // Start the deferred task runners once the profile is loaded.
   StartupTaskRunnerServiceFactory::GetForProfile(profile)->
       StartDeferredTaskRunners();
@@ -1310,6 +1326,8 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
   // TODO(b/678590): create services during profile startup.
   // Service is responsible for fetching content snippets for the NTP.
   ContentSuggestionsServiceFactory::GetForProfile(profile);
+#else
+  captions::CaptionControllerFactory::GetForProfile(profile)->Init();
 #endif
 
 #if defined(OS_WIN) && BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -1368,7 +1386,7 @@ Profile* ProfileManager::GetActiveUserOrOffTheRecordProfileFromPath(
     // many of the browser and ui tests fail. We do return the OTR profile
     // if the login-profile switch is passed so that we can test this.
     if (ShouldGoOffTheRecord(profile))
-      return profile->GetOffTheRecordProfile();
+      return profile->GetPrimaryOTRProfile();
     DCHECK(!user_manager::UserManager::Get()->IsLoggedInAsGuest());
     return profile;
   }
@@ -1384,7 +1402,7 @@ Profile* ProfileManager::GetActiveUserOrOffTheRecordProfileFromPath(
   // Some unit tests didn't initialize the UserManager.
   if (user_manager::UserManager::IsInitialized() &&
       user_manager::UserManager::Get()->IsLoggedInAsGuest())
-    return profile->GetOffTheRecordProfile();
+    return profile->GetPrimaryOTRProfile();
   return profile;
 #else
   base::FilePath default_profile_dir(user_data_dir);
@@ -1736,7 +1754,7 @@ void ProfileManager::SaveActiveProfiles() {
 
   profile_list->Clear();
 
-  // crbug.com/120112 -> several non-incognito profiles might have the same
+  // crbug.com/120112 -> several non-off-the-record profiles might have the same
   // GetPath().BaseName(). In that case, we cannot restore both
   // profiles. Include each base name only once in the last active profile
   // list.
@@ -1809,6 +1827,11 @@ void ProfileManager::OnBrowserClosed(Browser* browser) {
 }
 
 void ProfileManager::UpdateLastUser(Profile* last_active) {
+  // The profile may incorrectly become "active" during its destruction, caused
+  // by the UI teardown. See https://crbug.com/1073451
+  if (IsProfileDirectoryMarkedForDeletion(last_active->GetPath()))
+    return;
+
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
   // Only keep track of profiles that we are managing; tests may create others.
@@ -1917,6 +1940,8 @@ void ProfileManager::ScheduleForcedEphemeralProfileForDeletion(
       found_entry_loaded = entry_loaded;
     }
   }
+
+  RemoveFromLastActiveProfilesPrefList(profile_dir);
 
   const base::FilePath new_active_profile_dir =
       found_entry ? found_entry->GetPath() : GenerateNextProfileDirectoryPath();

@@ -1,0 +1,93 @@
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+namespace adblock_filter.flat;
+
+// Identifies a rule based on which source it comes from and its position in
+// the list of rules provided by that source
+table RuleId {
+  source_id: uint;
+
+  rule_nr: uint;
+}
+
+// Contains an N-gram (acting as a key in a hash table) and a list of rule IDs
+// associated with that N-gram.
+table NGramToRules {
+  // A string consisting of N (up to 8) ascii-only non-special characters, which
+  // are stored in the lowest N non-zero bytes, lower bytes corresponding to
+  // later symbols. These are lower-cased to support case-insensitive matching.
+  ngram : ulong;
+
+  // The list of rules containing |ngram| as a substring of their URL pattern.
+  // Sorted in descending order of rule priority.
+  rule_list : [RuleId];
+}
+
+// A data structure used to select only a handful of URL rule candidates that
+// need to be matched against a certain resource URL.
+table RulesMap {
+  // The N of an N-gram index. Note: |n| should be between 1 and 8.
+  n : uint;
+
+  // A hash table with open addressing. The keys of the table are N-grams.
+  ngram_index : [NGramToRules];
+
+  // The slot that is pointed to by all empty slots of |ngram_index| hash table.
+  // Note: This is a workaround needed because null offsets are not allowed as
+  // elements of FlatBuffer arrays.
+  ngram_index_empty_slot : NGramToRules;
+
+  // A list storing the rules that doesn't contain any valid N-grams in their
+  // URL patterns. Contains all the REGEXP rules as well. Sorted in descending
+  // order of rule priority.
+  // TODO(pkalinnikov): Think about better implementation for the fallback
+  // index. Possibly make it a hash map and maybe merge it with the N-gram
+  // index, since we can treat any sequence of characters shorter than N as an
+  // N-gram with zero bytes used for padding.
+  fallback_rules : [RuleId];
+}
+
+table SourceChecksum {
+  id: uint (key);
+
+  checksum: string;
+}
+
+table CosmeticRuleForDomain {
+  rule_id: RuleId;
+  allow_for_domain: bool;
+}
+
+table CosmeticRulesNode {
+  rules: [CosmeticRuleForDomain];
+  first_child_node_index: uint;
+  subdomains: [string];
+}
+
+table RulesIndex {
+  sources_checksum: [SourceChecksum];
+
+  // Activation rules are only checked for the frames of a page and the list of
+  // all activation types found in matching rules should be extracted when
+  // queried. The resulting activations are used to affect the loading of the
+  // documents themselves and of all their subresources and sub-documents.
+  activation_rules_map: RulesMap;
+
+  // These rules are used to determine if a given sub-resource request should
+  // be blocked, allowed, or cause a redirect.
+  before_request_map: RulesMap;
+
+  // These rules can modify the response headers for matching requests,
+  // before they're passed on.
+  headers_received_map: RulesMap;
+
+  default_stylesheet : string;
+  cosmetic_rule_tree_root_index: uint;
+  cosmetic_rules_tree : [CosmeticRulesNode];
+}
+
+root_type RulesIndex;

@@ -52,6 +52,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcPlayStoreAutoUpdate[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcScale[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcStartMode[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcTosHostForTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcTransitionMigrationRequired[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kCellularFirst[];
@@ -160,6 +161,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHomedir[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kIgnoreUserProfileMappingForTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kKernelnextRestrictVMs[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLacrosChromePath[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginManager[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginProfile[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kLoginUser[];
@@ -168,6 +170,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kNaturalScrollDefault[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kNeedArcMigrationPolicyCheck[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kNoteTakingAppIds[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kOobeEulaUrlForTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kOobeForceShowScreen[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kOobeForceTabletFirstRun[];
@@ -193,6 +196,9 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShelfHotseat[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kShowAndroidFilesInFilesApp[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowLoginDevOverlay[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowOobeDevOverlay[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kOobeScreenshotDirectory[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kTestEncryptionMigrationUI[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kTestWallpaperServer[];

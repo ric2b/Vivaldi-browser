@@ -6,21 +6,16 @@
 
 #include <iostream>
 
+#include "base/test/scoped_feature_list.h"
+#include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/mojom/web_client_hints/web_client_hints_types.mojom-shared.h"
+#include "third_party/blink/public/common/features.h"
+#include "url/gurl.h"
 
 using testing::UnorderedElementsAre;
 
 namespace blink {
-
-namespace mojom {
-
-void PrintTo(const blink::mojom::WebClientHintsType& value, std::ostream* os) {
-  *os << ::testing::PrintToString(static_cast<int>(value));
-}
-
-}  // namespace mojom
 
 TEST(ClientHintsTest, SerializeLangClientHint) {
   std::string header = SerializeLangClientHint("");
@@ -37,109 +32,96 @@ TEST(ClientHintsTest, SerializeLangClientHint) {
             header);
 }
 
-TEST(ClientHintsTest, ParseAcceptCH) {
-  base::Optional<std::vector<blink::mojom::WebClientHintsType>> result;
+TEST(ClientHintsTest, FilterAcceptCH) {
+  EXPECT_FALSE(FilterAcceptCH(base::nullopt, true, true).has_value());
 
-  // Empty is OK.
-  result = ParseAcceptCH(" ",
-                         /* permit_lang_hints = */ true,
-                         /* permit_ua_hints = */ true);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_TRUE(result.value().empty());
-
-  // Normal case.
-  result = ParseAcceptCH("device-memory,  rtt, lang ",
-                         /* permit_lang_hints = */ true,
-                         /* permit_ua_hints = */ true);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kDeviceMemory,
-                                   mojom::WebClientHintsType::kRtt,
-                                   mojom::WebClientHintsType::kLang));
-
-  // Must be a list of tokens, not other things.
-  result = ParseAcceptCH("\"device-memory\", \"rtt\", \"lang\"",
-                         /* permit_lang_hints = */ true,
-                         /* permit_ua_hints = */ true);
-  EXPECT_FALSE(result.has_value());
-
-  // Parameters to the tokens are ignored, as encourageed by structured headers
-  // spec.
-  result = ParseAcceptCH("device-memory;resolution=GIB, rtt, lang",
-                         /* permit_lang_hints = */ true,
-                         /* permit_ua_hints = */ true);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kDeviceMemory,
-                                   mojom::WebClientHintsType::kRtt,
-                                   mojom::WebClientHintsType::kLang));
-
-  // Unknown tokens are fine, since this meant to be extensible.
-  result = ParseAcceptCH("device-memory,  rtt, lang , nosuchtokenwhywhywhy",
-                         /* permit_lang_hints = */ true,
-                         /* permit_ua_hints = */ true);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kDeviceMemory,
-                                   mojom::WebClientHintsType::kRtt,
-                                   mojom::WebClientHintsType::kLang));
-}
-
-TEST(ClientHintsTest, ParseAcceptCHCaseInsensitive) {
-  base::Optional<std::vector<blink::mojom::WebClientHintsType>> result;
-
-  // Matching is case-insensitive.
-  result = ParseAcceptCH("Device-meMory,  Rtt, lanG ",
-                         /* permit_lang_hints = */ true,
-                         /* permit_ua_hints = */ true);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kDeviceMemory,
-                                   mojom::WebClientHintsType::kRtt,
-                                   mojom::WebClientHintsType::kLang));
-}
-
-// Checks to make sure that language-controlled things are filtered.
-TEST(ClientHintsTest, ParseAcceptCHFlag) {
-  base::Optional<std::vector<blink::mojom::WebClientHintsType>> result;
-
-  result = ParseAcceptCH("device-memory,  rtt, lang, ua",
-                         /* permit_lang_hints = */ false,
-                         /* permit_ua_hints = */ true);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kDeviceMemory,
-                                   mojom::WebClientHintsType::kRtt,
-                                   mojom::WebClientHintsType::kUA));
-
-  result = ParseAcceptCH("rtt, lang, ua, arch, platform, model, mobile",
-                         /* permit_lang_hints = */ true,
-                         /* permit_ua_hints = */ false);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kRtt,
-                                   mojom::WebClientHintsType::kLang));
+  base::Optional<std::vector<network::mojom::WebClientHintsType>> result;
 
   result =
-      ParseAcceptCH("rtt, lang, ua, ua-arch, ua-platform, ua-model, ua-mobile",
-                    /* permit_lang_hints = */ true,
-                    /* permit_ua_hints = */ true);
+      FilterAcceptCH(std::vector<network::mojom::WebClientHintsType>(
+                         {network::mojom::WebClientHintsType::kDeviceMemory,
+                          network::mojom::WebClientHintsType::kRtt,
+                          network::mojom::WebClientHintsType::kUA}),
+                     /* permit_lang_hints = */ false,
+                     /* permit_ua_hints = */ true);
   ASSERT_TRUE(result.has_value());
-  EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kRtt,
-                                   mojom::WebClientHintsType::kLang,
-                                   mojom::WebClientHintsType::kUA,
-                                   mojom::WebClientHintsType::kUAArch,
-                                   mojom::WebClientHintsType::kUAPlatform,
-                                   mojom::WebClientHintsType::kUAModel,
-                                   mojom::WebClientHintsType::kUAMobile));
+  EXPECT_THAT(
+      result.value(),
+      UnorderedElementsAre(network::mojom::WebClientHintsType::kDeviceMemory,
+                           network::mojom::WebClientHintsType::kRtt,
+                           network::mojom::WebClientHintsType::kUA));
 
-  result = ParseAcceptCH("rtt, lang, ua, arch, platform, model, mobile",
-                         /* permit_lang_hints = */ false,
-                         /* permit_ua_hints = */ false);
+  std::vector<network::mojom::WebClientHintsType> in{
+      network::mojom::WebClientHintsType::kRtt,
+      network::mojom::WebClientHintsType::kLang,
+      network::mojom::WebClientHintsType::kUA,
+      network::mojom::WebClientHintsType::kUAArch,
+      network::mojom::WebClientHintsType::kUAPlatform,
+      network::mojom::WebClientHintsType::kUAPlatformVersion,
+      network::mojom::WebClientHintsType::kUAModel,
+      network::mojom::WebClientHintsType::kUAMobile,
+      network::mojom::WebClientHintsType::kUAFullVersion};
+
+  result = FilterAcceptCH(in,
+                          /* permit_lang_hints = */ true,
+                          /* permit_ua_hints = */ false);
   ASSERT_TRUE(result.has_value());
   EXPECT_THAT(result.value(),
-              UnorderedElementsAre(mojom::WebClientHintsType::kRtt));
+              UnorderedElementsAre(network::mojom::WebClientHintsType::kRtt,
+                                   network::mojom::WebClientHintsType::kLang));
+
+  result = FilterAcceptCH(in,
+                          /* permit_lang_hints = */ true,
+                          /* permit_ua_hints = */ true);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_THAT(result.value(),
+              UnorderedElementsAre(
+                  network::mojom::WebClientHintsType::kRtt,
+                  network::mojom::WebClientHintsType::kLang,
+                  network::mojom::WebClientHintsType::kUA,
+                  network::mojom::WebClientHintsType::kUAArch,
+                  network::mojom::WebClientHintsType::kUAPlatform,
+                  network::mojom::WebClientHintsType::kUAPlatformVersion,
+                  network::mojom::WebClientHintsType::kUAModel,
+                  network::mojom::WebClientHintsType::kUAMobile,
+                  network::mojom::WebClientHintsType::kUAFullVersion));
+
+  result = FilterAcceptCH(in,
+                          /* permit_lang_hints = */ false,
+                          /* permit_ua_hints = */ false);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_THAT(result.value(),
+              UnorderedElementsAre(network::mojom::WebClientHintsType::kRtt));
 }
 
+// Checks that the removed header list doesn't include legacy headers nor the
+// on-by-default ones, when the kAllowClientHintsToThirdParty flag is on.
+TEST(ClientHintsTest, FindClientHintsToRemoveLegacy) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kAllowClientHintsToThirdParty);
+  std::vector<std::string> removed_headers;
+  FindClientHintsToRemove(nullptr, GURL(), &removed_headers);
+  EXPECT_THAT(removed_headers,
+              UnorderedElementsAre("rtt", "downlink", "ect", "sec-ch-lang",
+                                   "sec-ch-ua-arch", "sec-ch-ua-platform",
+                                   "sec-ch-ua-model", "sec-ch-ua-full-version",
+                                   "sec-ch-ua-platform-version"));
+}
+
+// Checks that the removed header list includes legacy headers but not the
+// on-by-default ones, when the kAllowClientHintsToThirdParty flag is off.
+TEST(ClientHintsTest, FindClientHintsToRemoveNoLegacy) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      features::kAllowClientHintsToThirdParty);
+  std::vector<std::string> removed_headers;
+  FindClientHintsToRemove(nullptr, GURL(), &removed_headers);
+  EXPECT_THAT(removed_headers,
+              UnorderedElementsAre(
+                  "device-memory", "dpr", "width", "viewport-width", "rtt",
+                  "downlink", "ect", "sec-ch-lang", "sec-ch-ua-arch",
+                  "sec-ch-ua-platform", "sec-ch-ua-model",
+                  "sec-ch-ua-full-version", "sec-ch-ua-platform-version"));
+}
 }  // namespace blink

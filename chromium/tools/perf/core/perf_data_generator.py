@@ -90,6 +90,10 @@ class TEST_TYPES(object):
 
   ALL = (GENERIC, GTEST, TELEMETRY)
 
+# This is an opt-in list for tester which will skip the perf data handling.
+# The perf data will be handled on a separated 'processor' VM.
+# This list will be removed or replace by an opt-out list.
+LIGHTWEIGHT_TESTERS = ['linux-perf-fyi', 'android-pixel2-perf-fyi']
 
 FYI_BUILDERS = {
     'android-nexus5x-perf-fyi': {
@@ -200,6 +204,14 @@ FYI_BUILDERS = {
             'os': 'ChromeOS',
             'device_type': 'kevin',
         },
+    },
+    'linux-processor-perf-fyi': {
+        'platform': 'linux',
+        'perf_processor': True,
+    },
+    'android-pixel2-processor-perf-fyi': {
+        'platform': 'linux',
+        'perf_processor': True,
     },
 }
 
@@ -1041,6 +1053,8 @@ def generate_performance_test(tester_config, test, builder_name):
   result['merge'] = {
       'script': '//tools/perf/process_perf_results.py',
   }
+  if builder_name in LIGHTWEIGHT_TESTERS:
+    result['merge']['args'] = ['--lightweight', '--skip-perf']
 
   result['swarming'] = {
       # Always say this is true regardless of whether the tester
@@ -1075,6 +1089,12 @@ def generate_builder_config(condensed_config, builder_name):
   if 'additional_compile_targets' in condensed_config:
     config['additional_compile_targets'] = (
         condensed_config['additional_compile_targets'])
+  # TODO(crbug.com/1078675): remove this setting
+  if 'perf_processor' in condensed_config:
+    config['merge'] = {
+        'script': '//tools/perf/process_perf_results.py',
+    }
+    config['merge']['args'] = ['--lightweight']
 
   condensed_tests = condensed_config.get('tests')
   if condensed_tests:

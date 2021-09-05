@@ -11,7 +11,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/net/dns_util.h"
+#include "chrome/browser/net/secure_dns_config.h"
+#include "chrome/browser/net/secure_dns_util.h"
 #include "chrome/browser/net/stub_resolver_config_reader.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/chrome_features.h"
@@ -31,52 +32,35 @@ namespace settings {
 
 namespace {
 
-const char kProbeHostname[] = "google.com";
-
 std::unique_ptr<base::DictionaryValue> CreateSecureDnsSettingDict() {
   // Fetch the current host resolver configuration. It is not sufficient to read
   // the secure DNS prefs directly since the host resolver configuration takes
   // other factors into account such as whether a managed environment or
   // parental controls have been detected.
-  bool insecure_stub_resolver_enabled = false;
-  net::DnsConfig::SecureDnsMode secure_dns_mode;
-  std::vector<net::DnsOverHttpsServerConfig> dns_over_https_servers;
-  chrome_browser_net::SecureDnsUiManagementMode management_mode;
-  SystemNetworkContextManager::GetStubResolverConfigReader()->GetConfiguration(
-      true /* force_check_parental_controls_for_automatic_mode */,
-      &insecure_stub_resolver_enabled, &secure_dns_mode,
-      &dns_over_https_servers, &management_mode);
-
-  std::string secure_dns_mode_str;
-  switch (secure_dns_mode) {
-    case net::DnsConfig::SecureDnsMode::SECURE:
-      secure_dns_mode_str = chrome_browser_net::kDnsOverHttpsModeSecure;
-      break;
-    case net::DnsConfig::SecureDnsMode::AUTOMATIC:
-      secure_dns_mode_str = chrome_browser_net::kDnsOverHttpsModeAutomatic;
-      break;
-    case net::DnsConfig::SecureDnsMode::OFF:
-      secure_dns_mode_str = chrome_browser_net::kDnsOverHttpsModeOff;
-      break;
-    default:
-      NOTREACHED();
-  }
+  SecureDnsConfig config =
+      SystemNetworkContextManager::GetStubResolverConfigReader()
+          ->GetSecureDnsConfiguration(
+              true /* force_check_parental_controls_for_automatic_mode */);
 
   auto secure_dns_templates = std::make_unique<base::ListValue>();
-  for (const auto& doh_server : dns_over_https_servers) {
+  for (const auto& doh_server : config.servers()) {
     secure_dns_templates->Append(doh_server.server_template);
   }
 
   auto dict = std::make_unique<base::DictionaryValue>();
-  dict->SetString("mode", secure_dns_mode_str);
+  dict->SetString("mode", SecureDnsConfig::ModeToString(config.mode()));
   dict->SetList("templates", std::move(secure_dns_templates));
-  dict->SetInteger("managementMode", static_cast<int>(management_mode));
+  dict->SetInteger("managementMode",
+                   static_cast<int>(config.management_mode()));
   return dict;
 }
 
 }  // namespace
 
-SecureDnsHandler::SecureDnsHandler() = default;
+SecureDnsHandler::SecureDnsHandler()
+    : network_context_getter_(
+          base::BindRepeating(&SecureDnsHandler::GetNetworkContext,
+                              base::Unretained(this))) {}
 
 SecureDnsHandler::~SecureDnsHandler() = default;
 
@@ -92,8 +76,8 @@ void SecureDnsHandler::RegisterMessages() {
                           base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
-      "validateCustomDnsEntry",
-      base::BindRepeating(&SecureDnsHandler::HandleValidateCustomDnsEntry,
+      "parseCustomDnsEntry",
+      base::BindRepeating(&SecureDnsHandler::HandleParseCustomDnsEntry,
                           base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
@@ -179,7 +163,17 @@ base::Value SecureDnsHandler::GetSecureDnsResolverListForCountry(
 
 void SecureDnsHandler::SetNetworkContextForTesting(
     network::mojom::NetworkContext* network_context) {
-  network_context_for_testing_ = network_context;
+  network_context_getter_ = base::BindRepeating(
+      [](network::mojom::NetworkContext* network_context) {
+        return network_context;
+      },
+      network_context);
+}
+
+network::mojom::NetworkContext* SecureDnsHandler::GetNetworkContext() {
+  return content::BrowserContext::GetDefaultStoragePartition(
+             web_ui()->GetWebContents()->GetBrowserContext())
+      ->GetNetworkContext();
 }
 
 void SecureDnsHandler::HandleGetSecureDnsResolverList(
@@ -200,31 +194,38 @@ void SecureDnsHandler::HandleGetSecureDnsSetting(const base::ListValue* args) {
   ResolveJavascriptCallback(callback_id, *CreateSecureDnsSettingDict());
 }
 
-void SecureDnsHandler::HandleValidateCustomDnsEntry(
-    const base::ListValue* args) {
+void SecureDnsHandler::HandleParseCustomDnsEntry(const base::ListValue* args) {
   AllowJavascript();
   const base::Value* callback_id;
   std::string custom_entry;
   CHECK(args->Get(0, &callback_id));
   CHECK(args->GetString(1, &custom_entry));
 
-  // Return the first template, or none if the entry is invalid.
-  std::string first_template;
-  bool valid = !custom_entry.empty() &&
-               chrome_browser_net::IsValidDohTemplateGroup(custom_entry);
-  if (valid) {
-    first_template =
-        std::string(chrome_browser_net::SplitDohTemplateGroup(custom_entry)[0]);
+  // Return all templates in the entry, or none if they are not all valid.
+  base::Value templates(base::Value::Type::LIST);
+  if (chrome_browser_net::secure_dns::IsValidGroup(custom_entry)) {
+    for (base::StringPiece t :
+         chrome_browser_net::secure_dns::SplitGroup(custom_entry)) {
+      templates.Append(t);
+    }
   }
-  UMA_HISTOGRAM_BOOLEAN("Net.DNS.UI.ValidationAttemptSuccess", valid);
-  ResolveJavascriptCallback(*callback_id, base::Value(first_template));
+  UMA_HISTOGRAM_BOOLEAN("Net.DNS.UI.ValidationAttemptSuccess",
+                        !templates.GetList().empty());
+  ResolveJavascriptCallback(*callback_id, templates);
 }
 
 void SecureDnsHandler::HandleProbeCustomDnsTemplate(
     const base::ListValue* args) {
   AllowJavascript();
-  receiver_.reset();
-  host_resolver_.reset();
+
+  if (!probe_callback_id_.empty()) {
+    // Cancel the pending probe by destroying the probe runner (which does not
+    // call the callback), and report a non-error response to avoid leaking the
+    // callback.
+    runner_.reset();
+    ResolveJavascriptCallback(base::Value(probe_callback_id_),
+                              base::Value(true));
+  }
 
   std::string server_template;
   CHECK(args->GetString(0, &probe_callback_id_));
@@ -235,33 +236,12 @@ void SecureDnsHandler::HandleProbeCustomDnsTemplate(
   overrides.attempts = 1;
   overrides.randomize_ports = false;
   overrides.secure_dns_mode = net::DnsConfig::SecureDnsMode::SECURE;
-  std::string server_method;
-  // We only send probe queries to templates that have already passed a format
-  // validation check.
-  CHECK(net::dns_util::IsValidDohTemplate(server_template, &server_method));
-  overrides.dns_over_https_servers.emplace({net::DnsOverHttpsServerConfig(
-      server_template, server_method == "POST")});
-  auto* network_context =
-      network_context_for_testing_
-          ? network_context_for_testing_
-          : content::BrowserContext::GetDefaultStoragePartition(
-                web_ui()->GetWebContents()->GetBrowserContext())
-                ->GetNetworkContext();
-  network_context->CreateHostResolver(
-      overrides, host_resolver_.BindNewPipeAndPassReceiver());
-
-  network::mojom::ResolveHostParametersPtr parameters =
-      network::mojom::ResolveHostParameters::New();
-  parameters->dns_query_type = net::DnsQueryType::A;
-  parameters->source = net::HostResolverSource::DNS;
-  parameters->cache_usage =
-      network::mojom::ResolveHostParameters::CacheUsage::DISALLOWED;
-  host_resolver_->ResolveHost(net::HostPortPair(kProbeHostname, 80),
-                              net::NetworkIsolationKey::CreateTransient(),
-                              std::move(parameters),
-                              receiver_.BindNewPipeAndPassRemote());
-  receiver_.set_disconnect_handler(base::BindOnce(
-      &SecureDnsHandler::OnMojoConnectionError, base::Unretained(this)));
+  chrome_browser_net::secure_dns::ApplyTemplate(&overrides, server_template);
+  DCHECK(!runner_);
+  runner_ = std::make_unique<chrome_browser_net::DnsProbeRunner>(
+      overrides, network_context_getter_);
+  runner_->RunProbe(base::BindOnce(&SecureDnsHandler::OnProbeComplete,
+                                   base::Unretained(this)));
 }
 
 void SecureDnsHandler::HandleRecordUserDropdownInteraction(
@@ -289,21 +269,14 @@ void SecureDnsHandler::HandleRecordUserDropdownInteraction(
   }
 }
 
-// network::ResolveHostClientBase impl:
-void SecureDnsHandler::OnComplete(
-    int result,
-    const net::ResolveErrorInfo& resolve_error_info,
-    const base::Optional<net::AddressList>& resolved_addresses) {
-  receiver_.reset();
-  host_resolver_.reset();
-  UMA_HISTOGRAM_BOOLEAN("Net.DNS.UI.ProbeAttemptSuccess", (result == 0));
+void SecureDnsHandler::OnProbeComplete() {
+  bool success =
+      runner_->result() == chrome_browser_net::DnsProbeRunner::CORRECT;
+  runner_.reset();
+  UMA_HISTOGRAM_BOOLEAN("Net.DNS.UI.ProbeAttemptSuccess", success);
   ResolveJavascriptCallback(base::Value(probe_callback_id_),
-                            base::Value(result == 0));
-}
-
-void SecureDnsHandler::OnMojoConnectionError() {
-  OnComplete(net::ERR_NAME_NOT_RESOLVED, net::ResolveErrorInfo(net::ERR_FAILED),
-             base::nullopt);
+                            base::Value(success));
+  probe_callback_id_.clear();
 }
 
 void SecureDnsHandler::SendSecureDnsSettingUpdatesToJavascript() {

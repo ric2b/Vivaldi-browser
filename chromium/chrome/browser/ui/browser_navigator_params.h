@@ -16,6 +16,7 @@
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/common/impression.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/was_activated_option.mojom.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -86,6 +87,12 @@ struct NavigateParams {
   // The URL/referrer to be loaded. Ignored if |contents_to_insert| is non-NULL.
   GURL url;
   content::Referrer referrer;
+
+  // The routing id of the initiator of the navigation. This is best effort: it
+  // is only defined for some renderer-initiated navigations (e.g., not drag and
+  // drop), and the frame with the corresponding routing ID may have been
+  // deleted before the navigation begins.
+  content::GlobalFrameRoutingId initiator_routing_id;
 
   // The origin of the initiator of the navigation.
   base::Optional<url::Origin> initiator_origin;
@@ -288,6 +295,11 @@ struct NavigateParams {
 
   // Indicates the reload type of this navigation.
   content::ReloadType reload_type = content::ReloadType::NONE;
+
+  // Optional impression associated with this navigation. Only set on
+  // navigations that originate from links with impression attributes. Used for
+  // conversion measurement.
+  base::Optional<content::Impression> impression;
 
   // Create webcontentsview as a guest.
   bool should_create_guestframe = false;

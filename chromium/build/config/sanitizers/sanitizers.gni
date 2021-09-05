@@ -57,7 +57,7 @@ declare_args() {
   # crbug.com/1033839. Similarly, don't use this on ARC builds.
   is_cfi = is_official_build &&
            ((target_os == "linux" && !is_chromeos && target_cpu == "x64") ||
-            (target_os == "chromeos" && is_chromeos_device && !is_android))
+            (target_os == "chromeos" && is_chromeos_device))
 
   # Enable checks for indirect function calls via a function pointer.
   # TODO(pcc): remove this when we're ready to add these checks by default.
@@ -78,6 +78,9 @@ declare_args() {
 
   # Compile for fuzzing with AFL.
   use_afl = false
+
+  # Compile for fuzzing with an external engine (e.g., Grammarinator).
+  use_external_fuzzing_engine = false
 
   # Enables core ubsan security features. Will later be removed once it matches
   # is_ubsan.
@@ -152,7 +155,7 @@ use_prebuilt_instrumented_libraries = is_msan
 # Whether we are doing a fuzzer build. Normally this should be checked instead
 # of checking "use_libfuzzer || use_afl" because often developers forget to
 # check for "use_afl".
-use_fuzzing_engine = use_libfuzzer || use_afl
+use_fuzzing_engine = use_libfuzzer || use_afl || use_external_fuzzing_engine
 
 # Args that are in turn dependent on other args must be in a separate
 # declare_args block. User overrides are only applied at the end of a

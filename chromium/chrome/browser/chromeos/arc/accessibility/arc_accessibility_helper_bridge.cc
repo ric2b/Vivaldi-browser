@@ -46,6 +46,28 @@ using ash::ArcNotificationSurfaceManager;
 
 namespace {
 
+constexpr char kToastEventSource[] = "android.widget.Toast$TN";
+
+bool ShouldAnnounceEvent(arc::mojom::AccessibilityEventData* event_data) {
+  if (event_data->event_type ==
+      arc::mojom::AccessibilityEventType::ANNOUNCEMENT) {
+    return true;
+  } else if (event_data->event_type ==
+             arc::mojom::AccessibilityEventType::NOTIFICATION_STATE_CHANGED) {
+    // Only announce the event from toast (event is from its inner class TN).
+    if (!event_data->string_properties)
+      return false;
+
+    auto it = event_data->string_properties->find(
+        arc::mojom::AccessibilityEventStringProperty::CLASS_NAME);
+    if (it == event_data->string_properties->end())
+      return false;
+
+    return it->second == kToastEventSource;
+  }
+  return false;
+}
+
 float DeviceScaleFactorFromWindow(aura::Window* window) {
   if (!window || !window->GetToplevelWindow())
     return 1.0;
@@ -475,11 +497,6 @@ void ArcAccessibilityHelperBridge::OnAction(
     return;
   } else if (action == arc::mojom::AccessibilityActionType::CUSTOM_ACTION) {
     action_data->custom_action_id = data.custom_action_id;
-  } else if (action == arc::mojom::AccessibilityActionType::SHOW_ON_SCREEN) {
-    // This action is performed every time ChromeVox focus gets changed (from
-    // Background.setCurrentRange). Use this action as a notification of focus
-    // change, and update focus cache.
-    tree_source->UpdateAccessibilityFocusLocation(data.target_node_id);
   }
 
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
@@ -776,24 +793,8 @@ void ArcAccessibilityHelperBridge::HandleFilterTypeFocusEvent(
 
 void ArcAccessibilityHelperBridge::HandleFilterTypeAllEvent(
     mojom::AccessibilityEventDataPtr event_data) {
-  if (event_data->event_type ==
-          arc::mojom::AccessibilityEventType::ANNOUNCEMENT ||
-      event_data->event_type ==
-          arc::mojom::AccessibilityEventType::NOTIFICATION_STATE_CHANGED) {
-    if (!event_data->event_text.has_value())
-      return;
-
-    extensions::EventRouter* event_router = GetEventRouter();
-    // OnAnnounceForAccessibility is used to force speech output.
-    std::unique_ptr<base::ListValue> event_args(
-        extensions::api::accessibility_private::OnAnnounceForAccessibility::
-            Create(*(event_data->event_text)));
-    std::unique_ptr<extensions::Event> event(new extensions::Event(
-        extensions::events::ACCESSIBILITY_PRIVATE_ON_ANNOUNCE_FOR_ACCESSIBILITY,
-        extensions::api::accessibility_private::OnAnnounceForAccessibility::
-            kEventName,
-        std::move(event_args)));
-    event_router->BroadcastEvent(std::move(event));
+  if (ShouldAnnounceEvent(event_data.get())) {
+    DispatchEventTextAnnouncement(event_data.get());
     return;
   }
 
@@ -880,9 +881,29 @@ void ArcAccessibilityHelperBridge::HandleFilterTypeAllEvent(
   if (is_focus_highlight_enabled_ &&
       event_data->event_type ==
           arc::mojom::AccessibilityEventType::VIEW_FOCUSED) {
-    DispatchFocusChange(
-        tree_source->GetFromId(event_data->source_id)->GetNode(), profile_);
+    for (size_t i = 0; i < event_data->node_data.size(); ++i) {
+      if (event_data->node_data[i]->id == event_data->source_id) {
+        DispatchFocusChange(event_data->node_data[i].get(), profile_);
+        break;
+      }
+    }
   }
+}
+
+void ArcAccessibilityHelperBridge::DispatchEventTextAnnouncement(
+    mojom::AccessibilityEventData* event_data) const {
+  if (!event_data->event_text.has_value())
+    return;
+
+  std::unique_ptr<base::ListValue> event_args(
+      extensions::api::accessibility_private::OnAnnounceForAccessibility::
+          Create(*(event_data->event_text)));
+  std::unique_ptr<extensions::Event> event(new extensions::Event(
+      extensions::events::ACCESSIBILITY_PRIVATE_ON_ANNOUNCE_FOR_ACCESSIBILITY,
+      extensions::api::accessibility_private::OnAnnounceForAccessibility::
+          kEventName,
+      std::move(event_args)));
+  GetEventRouter()->BroadcastEvent(std::move(event));
 }
 
 void ArcAccessibilityHelperBridge::DispatchCustomSpokenFeedbackToggled(

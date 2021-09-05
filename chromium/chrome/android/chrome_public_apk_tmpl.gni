@@ -4,6 +4,7 @@
 
 import("//android_webview/variables.gni")
 import("//base/android/linker/config.gni")
+import("//base/android/resource_exclusions.gni")
 import("//build/config/android/extract_unwind_tables.gni")
 import("//build/config/android/rules.gni")
 import("//build/config/compiler/compiler.gni")
@@ -139,7 +140,9 @@ template("chrome_public_common_apk_or_module_tmpl") {
   }
 
   target(_target_type, target_name) {
-    forward_variables_from(invoker, "*")
+    # TODO(crbug.com/1076896): remove "disable_library_rename" after
+    # chrome_public_apk is removed
+    forward_variables_from(invoker, "*", [ "disable_library_rename" ])
     if (defined(shared_resources_whitelist_target)) {
       shared_resources_allowlist_target = shared_resources_whitelist_target
       shared_resources_allowlist_locales = shared_resources_whitelist_locales
@@ -152,25 +155,46 @@ template("chrome_public_common_apk_or_module_tmpl") {
     } else if (_is_modern) {
       min_sdk_version = 21
     } else {
-      min_sdk_version = 21  # Vivaldi
+      min_sdk_version = 21
     }
     target_sdk_version = android_sdk_version
 
-    # Match drawables, but not mipmaps.
-    resource_exclusion_regex = "drawable[^/]*-xxxhdpi"
+    resource_exclusion_regex = common_resource_exclusion_regex
+    resource_exclusion_exceptions = common_resource_exclusion_exceptions
+
+    # Exceptions (rationale in https://crbug.com/691733):
+    resource_exclusion_exceptions += [
+      "*ic_file_download_white*",  # Bottom edge seems misaligned.
+      "*ic_lock.*",  # Bottom edge seems misaligned.
+      "*ic_group_*",  # Appear only in xxxhdpi.
+    ]
+
     if (min_sdk_version >= 21) {
       # Resources used by AndroidManifest.xml only for pre-21.
       resource_exclusion_regex += "|app_single_page_icon"
     }
 
-    # Exception rationale in https://crbug.com/691733.
-    resource_exclusion_exceptions = [
-      "*shadow*",  # Combination of gradient & transparency cause pixelation.
-      "*.9.*",  # Most nine-patches contain shadows.
-      "*ic_file_download_white*",  # Bottom edge seems misaligned.
-      "*ic_lock.*",  # Bottom edge seems misaligned.
-      "*ic_group_*",  # Appear only in xxxhdpi.
+    # Used only by alert dialog on tiny screens.
+    _material_package = "com_google_android_material_material.*"
+    resource_exclusion_regex += "|${_material_package}values-small"
+
+    # Material design layouts that cause views to be kept that we don't use.
+    # Instead of manually filtering, unused resource removal would be better:
+    # https://crbug.com/636448
+    resource_exclusion_regex += "|${_material_package}/layout"
+    _material_package = "*com_google_android_material_material*"
+    resource_exclusion_exceptions += [
+      # AppBarLayout
+      "${_material_package}design_appbar_*",
+
+      # TabLayout
+      "${_material_package}_tab*",
+
+      # TextInputLayout
+      "${_material_package}/design_text_*",
+      "${_material_package}/text_*",
     ]
+    resource_values_filter_rules = [ "${_material_package}:mtrl_alert" ]
 
     if (!_is_monochrome) {
       product_config_java_packages = [ "org.chromium.chrome.browser" ]
@@ -225,6 +249,23 @@ template("chrome_public_common_apk_or_module_tmpl") {
         loadable_modules = []
       }
       loadable_modules += [ "$root_out_dir/libchrome_crashpad_handler.so" ]
+      library_always_compress = [
+        "libchrome_crashpad_handler.so",
+        "libchromium_android_linker.so",
+      ]
+
+      # TODO(crbug.com/1076896): remove disable_library_rename check after
+      # chrome_public_apk is removed.
+      if (!(defined(invoker.disable_library_rename) &&
+            invoker.disable_library_rename) &&
+          (_is_modern || android_64bit_target_cpu)) {
+        # This adds the "crazy." prefix to avoid the file being extracted upon
+        # install.
+        library_renames = [
+          "libchrome.so",
+          "libchromefortest.so",
+        ]
+      }
     }
 
     if (_enable_multidex) {
@@ -277,6 +318,21 @@ template("chrome_public_common_apk_or_module_tmpl") {
     }
 
     if (use_chromium_linker) {
+      _is_trichrome_3264 =
+          !_is_trichrome || !android_64bit_target_cpu || _is_64_bit_browser
+
+      if (_is_trichrome_3264) {
+        deps += [ "//base/android/linker:chromium_android_linker" ]
+        loadable_modules +=
+            [ "$root_out_dir/libchromium_android_linker$shlib_extension" ]
+      } else {
+        _secondary_linker = "//base/android/linker:chromium_android_linker($android_secondary_abi_toolchain)"
+        deps += [ _secondary_linker ]
+        _secondary_out_dir = get_label_info(_secondary_linker, "root_out_dir")
+        secondary_abi_loadable_modules +=
+            [ "$_secondary_out_dir/libchromium_android_linker$shlib_extension" ]
+      }
+
       if (!defined(load_library_from_apk)) {
         # Whether native libraries should be loaded from within the apk.
         # Only attempt loading the library from the APK for 64 bit devices

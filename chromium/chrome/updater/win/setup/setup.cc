@@ -7,11 +7,13 @@
 #include <shlobj.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -34,29 +36,7 @@
 #include "chrome/updater/win/util.h"
 
 namespace updater {
-
 namespace {
-
-const base::char16* kUpdaterFiles[] = {
-    L"icudtl.dat",
-    L"updater.exe",
-    L"uninstall.cmd",
-#if defined(COMPONENT_BUILD)
-    // TODO(sorin): get the list of component dependencies from a build-time
-    // file instead of hardcoding the names of the components here.
-    L"base.dll",
-    L"base_i18n.dll",
-    L"boringssl.dll",
-    L"crcrypto.dll",
-    L"icui18n.dll",
-    L"icuuc.dll",
-    L"libc++.dll",
-    L"prefs.dll",
-    L"protobuf_lite.dll",
-    L"url_lib.dll",
-    L"zlib.dll",
-#endif
-};
 
 // Adds work items to register the COM Server with Windows.
 void AddComServerWorkItems(HKEY root,
@@ -68,31 +48,35 @@ void AddComServerWorkItems(HKEY root,
     return;
   }
 
-  const base::string16 clsid_reg_path = GetComServerClsidRegistryPath();
+  for (const auto& clsid :
+       {__uuidof(UpdaterClass), __uuidof(GoogleUpdate3WebUserClass)}) {
+    const base::string16 clsid_reg_path = GetComServerClsidRegistryPath(clsid);
 
-  // Delete any old registrations first.
-  for (const auto& reg_path : {clsid_reg_path}) {
-    for (const auto& key_flag : {KEY_WOW64_32KEY, KEY_WOW64_64KEY})
-      list->AddDeleteRegKeyWorkItem(root, reg_path, key_flag);
-  }
+    // Delete any old registrations first.
+    for (const auto& reg_path : {clsid_reg_path}) {
+      for (const auto& key_flag : {KEY_WOW64_32KEY, KEY_WOW64_64KEY})
+        list->AddDeleteRegKeyWorkItem(root, reg_path, key_flag);
+    }
 
-  list->AddCreateRegKeyWorkItem(root, clsid_reg_path, WorkItem::kWow64Default);
-  const base::string16 local_server32_reg_path =
-      base::StrCat({clsid_reg_path, L"\\LocalServer32"});
-  list->AddCreateRegKeyWorkItem(root, local_server32_reg_path,
-                                WorkItem::kWow64Default);
+    list->AddCreateRegKeyWorkItem(root, clsid_reg_path,
+                                  WorkItem::kWow64Default);
+    const base::string16 local_server32_reg_path =
+        base::StrCat({clsid_reg_path, L"\\LocalServer32"});
+    list->AddCreateRegKeyWorkItem(root, local_server32_reg_path,
+                                  WorkItem::kWow64Default);
 
-  base::CommandLine run_com_server_command(com_server_path);
-  run_com_server_command.AppendSwitch(kServerSwitch);
+    base::CommandLine run_com_server_command(com_server_path);
+    run_com_server_command.AppendSwitch(kServerSwitch);
 #if !defined(NDEBUG)
-  run_com_server_command.AppendSwitch(kEnableLoggingSwitch);
-  run_com_server_command.AppendSwitchASCII(kLoggingModuleSwitch,
-                                           "*/chrome/updater/*=2");
+    run_com_server_command.AppendSwitch(kEnableLoggingSwitch);
+    run_com_server_command.AppendSwitchASCII(kLoggingModuleSwitch,
+                                             "*/chrome/updater/*=2");
 #endif
 
-  list->AddSetRegValueWorkItem(
-      root, local_server32_reg_path, WorkItem::kWow64Default, L"",
-      run_com_server_command.GetCommandLineString(), true);
+    list->AddSetRegValueWorkItem(
+        root, local_server32_reg_path, WorkItem::kWow64Default, L"",
+        run_com_server_command.GetCommandLineString(), true);
+  }
 }
 
 // Adds work items to register the COM Service with Windows.
@@ -100,32 +84,16 @@ void AddComServiceWorkItems(const base::FilePath& com_service_path,
                             WorkItemList* list) {
   DCHECK(list);
   DCHECK(::IsUserAnAdmin());
-  const HKEY root = HKEY_LOCAL_MACHINE;
 
   if (com_service_path.empty()) {
     LOG(DFATAL) << "com_service_path is invalid.";
     return;
   }
 
-  const base::string16 clsid_reg_path = GetComServiceClsidRegistryPath();
-  const base::string16 appid_reg_path = GetComServiceAppidRegistryPath();
-
-  // Delete any old registrations first.
-  for (const auto& reg_path : {clsid_reg_path, appid_reg_path}) {
-    for (const auto& key_flag : {KEY_WOW64_32KEY, KEY_WOW64_64KEY})
-      list->AddDeleteRegKeyWorkItem(root, reg_path, key_flag);
-  }
-
   list->AddWorkItem(new installer::InstallServiceWorkItem(
       kWindowsServiceName, kWindowsServiceName,
-      base::CommandLine(com_service_path)));
-
-  list->AddCreateRegKeyWorkItem(root, clsid_reg_path, WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, clsid_reg_path, WorkItem::kWow64Default,
-                               L"AppID", GetComServiceClsid(), true);
-  list->AddCreateRegKeyWorkItem(root, appid_reg_path, WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, appid_reg_path, WorkItem::kWow64Default,
-                               L"LocalService", kWindowsServiceName, true);
+      base::CommandLine(com_service_path), base::ASCIIToUTF16(UPDATER_KEY),
+      __uuidof(UpdaterServiceClass), GUID_NULL));
 }
 
 // Adds work items to register the COM Interfaces with Windows.
@@ -138,8 +106,10 @@ void AddComInterfacesWorkItems(HKEY root,
     return;
   }
 
-  for (const auto iid : {__uuidof(IUpdater), __uuidof(IUpdaterObserver),
-                         __uuidof(ICompleteStatus)}) {
+  for (const auto& iid :
+       {__uuidof(IUpdater), __uuidof(IUpdaterObserver),
+        __uuidof(ICompleteStatus), __uuidof(IGoogleUpdate3Web),
+        __uuidof(IAppBundleWeb), __uuidof(IAppWeb), __uuidof(ICurrentState)}) {
     const base::string16 iid_reg_path = GetComIidRegistryPath(iid);
     const base::string16 typelib_reg_path = GetComTypeLibRegistryPath(iid);
 
@@ -177,8 +147,38 @@ void AddComInterfacesWorkItems(HKEY root,
   }
 }
 
+// Returns a list of base file names which the setup copies to the install
+// directory. The source of these files is either the unpacked metainstaller
+// archive, or the `out` directory of the build, if a command line argument is
+// present. In the former case, which is the normal execution flow, the files
+// are enumerated from the directory where the metainstaller unpacked its
+// contents. In the latter case, the file containing the run time dependencies
+// of the updater (which is generated by GN at build time) is parsed, and the
+// relevant file names are extracted.
+std::vector<base::FilePath> GetSetupFiles(const base::FilePath& source_dir) {
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(kInstallFromOutDir)) {
+    return ParseFilesFromDeps(source_dir.Append(FILE_PATH_LITERAL(
+        "gen\\chrome\\updater\\win\\installer\\updater.runtime_deps")));
+  }
+  std::vector<base::FilePath> result;
+  base::FileEnumerator it(
+      source_dir, false, base::FileEnumerator::FileType::FILES,
+      FILE_PATH_LITERAL("*"), base::FileEnumerator::FolderSearchPolicy::ALL,
+      base::FileEnumerator::ErrorPolicy::STOP_ENUMERATION);
+  for (base::FilePath file = it.Next(); !file.empty(); file = it.Next()) {
+    result.push_back(file.BaseName());
+  }
+  if (it.GetError() != base::File::Error::FILE_OK) {
+    VLOG(2) << __func__ << " could not enumerate files : " << it.GetError();
+    return {};
+  }
+  return result;
+}
+
 }  // namespace
 
+// TODO(crbug.com/1069976): use specific return values for different code paths.
 int Setup(bool is_machine) {
   VLOG(1) << __func__ << ", is_machine: " << is_machine;
   DCHECK(!is_machine || ::IsUserAnAdmin());
@@ -210,11 +210,18 @@ int Setup(bool is_machine) {
     return -1;
   }
 
-  const base::FilePath source_dir = exe_path.DirName();
+  const auto source_dir = exe_path.DirName();
+  const auto setup_files = GetSetupFiles(source_dir);
+  if (setup_files.empty()) {
+    LOG(ERROR) << "No files to set up.";
+    return -1;
+  }
 
+  // All source files are installed in a flat directory structure inside the
+  // install directory, hence the BaseName function call below.
   std::unique_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());
-  for (const auto* file : kUpdaterFiles) {
-    const base::FilePath target_path = product_dir.Append(file);
+  for (const auto& file : setup_files) {
+    const base::FilePath target_path = product_dir.Append(file.BaseName());
     const base::FilePath source_path = source_dir.Append(file);
     install_list->AddCopyTreeWorkItem(source_path.value(), target_path.value(),
                                       temp_dir.value(), WorkItem::ALWAYS);
@@ -246,9 +253,6 @@ int Setup(bool is_machine) {
   base::CommandLine run_updater_ua_command(product_dir.Append(kUpdaterExe));
   run_updater_ua_command.AppendSwitch(kUpdateAppsSwitch);
 
-  // TODO(sorin) remove "single-process" when the updater COM client works.
-  // crbug.com/1053729.
-  run_updater_ua_command.AppendSwitch(kSingleProcessSwitch);
 #if !defined(NDEBUG)
   run_updater_ua_command.AppendSwitch(kEnableLoggingSwitch);
   run_updater_ua_command.AppendSwitchASCII(kLoggingModuleSwitch,

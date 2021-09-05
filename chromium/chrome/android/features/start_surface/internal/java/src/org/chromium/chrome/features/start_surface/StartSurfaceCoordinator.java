@@ -5,6 +5,7 @@
 package org.chromium.chrome.features.start_surface;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -71,6 +72,15 @@ public class StartSurfaceCoordinator implements StartSurface {
     @Nullable
     private TabSwitcher.OnTabSelectingListener mOnTabSelectingListener;
 
+    // Whether the {@link initWithNative()} is called.
+    private boolean mIsInitializedWithNative;
+
+    // A flag of whether there is a pending call to {@link initialize()} but waiting for native's
+    // initialization.
+    private boolean mIsInitPending;
+
+    private boolean mIsSecondaryTaskInitPending;
+
     public StartSurfaceCoordinator(ChromeActivity activity) {
         mActivity = activity;
         mSurfaceMode = computeSurfaceMode();
@@ -90,14 +100,17 @@ public class StartSurfaceCoordinator implements StartSurface {
                 mTabSwitcher != null ? mTabSwitcher.getController() : mTasksSurface.getController();
         mStartSurfaceMediator = new StartSurfaceMediator(controller,
                 mActivity.getTabModelSelector(), mPropertyModel,
-                mExploreSurfaceCoordinator == null
-                        ? null
-                        : mExploreSurfaceCoordinator.getFeedSurfaceCreator(),
                 mSurfaceMode == SurfaceMode.SINGLE_PANE ? this::initializeSecondaryTasksSurface
                                                         : null,
                 mSurfaceMode, mActivity.getNightModeStateProvider(),
                 mActivity.getFullscreenManager(), this::isActivityFinishingOrDestroyed,
-                excludeMVTiles);
+                excludeMVTiles,
+                StartSurfaceConfiguration.START_SURFACE_SHOW_STACK_TAB_SWITCHER.getValue());
+    }
+
+    boolean isShowingTabSwitcher() {
+        assert StartSurfaceConfiguration.isStartSurfaceStackTabSwitcherEnabled();
+        return mStartSurfaceMediator.isShowingTabSwitcher();
     }
 
     // Implements StartSurface.
@@ -105,6 +118,12 @@ public class StartSurfaceCoordinator implements StartSurface {
     public void initialize() {
         // TODO (crbug.com/1041047): Move more stuff from the constructor to here for lazy
         // initialization.
+        if (!mIsInitializedWithNative) {
+            mIsInitPending = true;
+            return;
+        }
+
+        mIsInitPending = false;
         if (mTasksSurface != null) {
             mTasksSurface.initialize();
         }
@@ -136,16 +155,41 @@ public class StartSurfaceCoordinator implements StartSurface {
 
     @Override
     public void initWithNative() {
+        if (mIsInitializedWithNative) return;
+
+        mIsInitializedWithNative = true;
+        if (mSurfaceMode == SurfaceMode.SINGLE_PANE || mSurfaceMode == SurfaceMode.TWO_PANES) {
+            mExploreSurfaceCoordinator = new ExploreSurfaceCoordinator(mActivity,
+                    mSurfaceMode == SurfaceMode.SINGLE_PANE ? mTasksSurface.getBodyViewContainer()
+                                                            : mActivity.getCompositorViewHolder(),
+                    mPropertyModel, mSurfaceMode == SurfaceMode.SINGLE_PANE);
+        }
         mStartSurfaceMediator.initWithNative(mSurfaceMode != SurfaceMode.NO_START_SURFACE
                         ? mActivity.getToolbarManager().getFakeboxDelegate()
+                        : null,
+                mExploreSurfaceCoordinator != null
+                        ? mExploreSurfaceCoordinator.getFeedSurfaceCreator()
                         : null);
+
         if (mTabSwitcher != null) {
             mTabSwitcher.initWithNative(mActivity, mActivity.getTabContentManager(),
-                    mActivity.getCompositorViewHolder().getDynamicResourceLoader(), mActivity);
+                    mActivity.getCompositorViewHolder().getDynamicResourceLoader(), mActivity,
+                    mActivity.getModalDialogManager());
         }
         if (mTasksSurface != null) {
             mTasksSurface.onFinishNativeInitialization(
                     mActivity, mActivity.getToolbarManager().getFakeboxDelegate());
+        }
+
+        if (mIsInitPending) {
+            initialize();
+        }
+
+        if (mIsSecondaryTaskInitPending) {
+            mIsSecondaryTaskInitPending = false;
+            mSecondaryTasksSurface.onFinishNativeInitialization(
+                    mActivity, mActivity.getToolbarManager().getFakeboxDelegate());
+            mSecondaryTasksSurface.initialize();
         }
     }
 
@@ -166,6 +210,21 @@ public class StartSurfaceCoordinator implements StartSurface {
     @Override
     public TabSwitcher.TabDialogDelegation getTabDialogDelegate() {
         return mTabSwitcher.getTabGridDialogDelegation();
+    }
+
+    @VisibleForTesting
+    public boolean isInitPendingForTesting() {
+        return mIsInitPending;
+    }
+
+    @VisibleForTesting
+    public boolean isInitializedWithNativeForTesting() {
+        return mIsInitializedWithNative;
+    }
+
+    @VisibleForTesting
+    public boolean isSecondaryTaskInitPendingForTesting() {
+        return mIsSecondaryTaskInitPending;
     }
 
     private @SurfaceMode int computeSurfaceMode() {
@@ -232,11 +291,6 @@ public class StartSurfaceCoordinator implements StartSurface {
             mBottomBarCoordinator = new BottomBarCoordinator(
                     mActivity, mActivity.getCompositorViewHolder(), mPropertyModel);
         }
-
-        mExploreSurfaceCoordinator = new ExploreSurfaceCoordinator(mActivity,
-                mSurfaceMode == SurfaceMode.SINGLE_PANE ? mTasksSurface.getBodyViewContainer()
-                                                        : mActivity.getCompositorViewHolder(),
-                mPropertyModel, mSurfaceMode == SurfaceMode.SINGLE_PANE);
     }
 
     private TabSwitcher.Controller initializeSecondaryTasksSurface() {
@@ -246,10 +300,18 @@ public class StartSurfaceCoordinator implements StartSurface {
         PropertyModel propertyModel = new PropertyModel(TasksSurfaceProperties.ALL_KEYS);
         mStartSurfaceMediator.setSecondaryTasksSurfacePropertyModel(propertyModel);
         mSecondaryTasksSurface = TabManagementModuleProvider.getDelegate().createTasksSurface(
-                mActivity, propertyModel, TabSwitcherType.GRID, false);
-        mSecondaryTasksSurface.onFinishNativeInitialization(
-                mActivity, mActivity.getToolbarManager().getFakeboxDelegate());
-        mSecondaryTasksSurface.initialize();
+                mActivity, propertyModel,
+                StartSurfaceConfiguration.isStartSurfaceStackTabSwitcherEnabled()
+                        ? TabSwitcherType.NONE
+                        : TabSwitcherType.GRID,
+                false);
+        if (mIsInitializedWithNative) {
+            mSecondaryTasksSurface.onFinishNativeInitialization(
+                    mActivity, mActivity.getToolbarManager().getFakeboxDelegate());
+            mSecondaryTasksSurface.initialize();
+        } else {
+            mIsSecondaryTaskInitPending = true;
+        }
 
         mSecondaryTasksSurface.getView().setId(R.id.secondary_tasks_surface_view);
         mSecondaryTasksSurfacePropertyModelChangeProcessor =

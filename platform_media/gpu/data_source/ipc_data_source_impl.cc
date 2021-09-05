@@ -108,155 +108,89 @@ IPCDataSourceImpl::~IPCDataSourceImpl() {
 #endif // CONTENT_LOG_FOLDER
 }
 
-void IPCDataSourceImpl::Read(int64_t position,
-                             int size,
-                             ipc_data_source::ReadCB read_cb) {
+void IPCDataSourceImpl::Read(ipc_data_source::Buffer buffer) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  DCHECK_GE(size, 0);
+  DCHECK(buffer);
+  DCHECK(!buffer.IsReadError());
 
-  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " size=" << size
-          << " position=" << position << " stopped_=" << !channel_
-          << " read_callback_" << !!read_callback_
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " size=" << buffer.GetRequestedSize()
+          << " position=" << buffer.GetReadPosition()
+          << " stopped_=" << !channel_
           << " tag=" << (last_message_tag_ + 1);
-  int error = 0;
+  bool error = false;
   if (!channel_) {
-    error = ipc_data_source::kReadError;
-  } else if (read_callback_) {
+    error = true;
+  } else if (buffer_) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " attempt to read when another request is active";
-    error = ipc_data_source::kReadError;
+    error = true;
   }
   if (error) {
-    std::move(read_cb).Run(error, nullptr);
-    return;
-  }
-
-  // On Mac we can be asked for the last read region.
-  if (position == last_read_position_ && size == last_requested_size_ &&
-      last_read_size_ > 0) {
-    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " cached_read=" << last_read_size_;
-    DCHECK(last_read_size_ <= size);
-    DCHECK(static_cast<size_t>(last_read_size_) <= raw_mapping_.size());
-    std::move(read_cb).Run(last_read_size_,
-                           raw_mapping_.GetMemoryAs<uint8_t>());
+    buffer.SetReadError();
+    ipc_data_source::Buffer::SendReply(std::move(buffer));
     return;
   }
 
   int64_t tag = ++last_message_tag_;
-  last_read_position_ = position;
-  last_requested_size_ = size;
-  last_read_size_ = -1;
-  read_callback_ = std::move(read_cb);
+  buffer_ = std::move(buffer);
 
-  channel_->Send(
-      new MediaPipelineMsg_ReadRawData(routing_id_, tag, position, size));
+  channel_->Send(new MediaPipelineMsg_ReadRawData(
+      routing_id_, tag, buffer_.GetReadPosition(), buffer_.GetRequestedSize()));
 }
 
 void IPCDataSourceImpl::Stop() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " stopped_=" << !channel_
-          << " read_callback_=" << !!read_callback_
+          << " has_buffer=" << !!buffer_
           << " last_message_tag_=" << last_message_tag_;
 
   channel_ = nullptr;
 
-  // Release no longer used mapping.
-  raw_mapping_ = base::ReadOnlySharedMemoryMapping();
-  last_read_size_ = -1;
-
-  FinishRead();
+  if (buffer_) {
+    buffer_.SetReadError();
+    ipc_data_source::Buffer::SendReply(std::move(buffer_));
+  }
 }
 
-void IPCDataSourceImpl::OnRawDataReady(
-    int64_t tag,
-    int read_size,
-    base::ReadOnlySharedMemoryRegion raw_region) {
+void IPCDataSourceImpl::OnRawDataReady(int64_t tag, int read_size) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  do {
-    VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " read_size=" << read_size
-            << " requested_size=" << last_requested_size_
-            << " read_position=" << last_read_position_
-            << " tag=" << tag
-            << " last_message_tag_=" << last_message_tag_
-            << " tag_match=" << (tag == last_message_tag_);
 
-    if (!read_callback_ || tag != last_message_tag_) {
+  VLOG(4) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " read_size=" << read_size
+          << " requested_size=" << (buffer_ ? buffer_.GetRequestedSize() : -1)
+          << " read_position=" << (buffer_ ? buffer_.GetReadPosition() : -1)
+          << " tag=" << tag << " last_message_tag_=" << last_message_tag_
+          << " tag_match=" << (tag == last_message_tag_);
+
+  do {
+    if (!buffer_ || tag != last_message_tag_) {
       // This should never happen unless the renderer process in a bad state as
       // we never send a new request until we get a reply.
       LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " unexpected reply";
-      read_size = ipc_data_source::kReadError;
       break;
     }
-    if (read_size > last_requested_size_) {
+    if (read_size > buffer_.GetRequestedSize()) {
       LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " the size from the reply exceeded the requested size "
-                 << last_requested_size_;
-      read_size = ipc_data_source::kReadError;
+                 << buffer_.GetRequestedSize();
       break;
     }
 
-    // Check for a new region before we check for end-of-stream as the renderer
-    // can prepare the region before it knows that it will send end-of-stream
-    // for a particular request.
-    if (raw_region.IsValid()) {
-      if (raw_region.GetSize() > kMaxSharedMemorySize) {
-        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " shared region is too big";
-        read_size = ipc_data_source::kReadError;
-        break;
-      }
-      raw_mapping_ = raw_region.Map();
-
-      // We no longer need the region as we created the mapping.
-      raw_region = base::ReadOnlySharedMemoryRegion();
-
-      if (!raw_mapping_.IsValid()) {
-        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " failed to map a new region of size "
-                   << raw_region.GetSize();
-        read_size = ipc_data_source::kReadError;
-        break;
-      }
-    }
-
-    if (read_size <= 0) {
-      // end-of-stream or read error
+    buffer_.SetReadSize(read_size);
+    if (buffer_.IsReadError())
       break;
-    }
-
-    size_t mapping_size = raw_mapping_.IsValid() ? raw_mapping_.size() : 0;
-    if (static_cast<size_t>(read_size) > mapping_size) {
-      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " the shared memory buffer is null or too small: "
-                 << mapping_size;
-      read_size = ipc_data_source::kReadError;
-      break;
-    }
 
 #if defined(CONTENT_LOG_FOLDER)
-    WriteMediaLog(this, last_read_position_,
-                  raw_mapping_.GetMemoryAs<uint8_t>(), read_size);
-#endif // CONTENT_LOG_FOLDER
+    if (read_size > 0) {
+      WriteMediaLog(this, buffer_.GetReadPosition(), buffer_.GetReadData(),
+                    read_size);
+    }
+#endif  // CONTENT_LOG_FOLDER
+    ipc_data_source::Buffer::SendReply(std::move(buffer_));
+    return;
+
   } while (false);
-
-  last_read_size_ = read_size;
-  FinishRead();
-  if (read_size < 0) {
-    Stop();
-  }
-}
-
-void IPCDataSourceImpl::FinishRead() {
-  DCHECK(last_read_size_ <= 0 ||
-         (raw_mapping_.IsValid() &&
-          raw_mapping_.mapped_size() >= static_cast<size_t>(last_read_size_)));
-  if (read_callback_) {
-    const uint8_t* data =
-        (last_read_size_ <= 0) ? nullptr : raw_mapping_.GetMemoryAs<uint8_t>();
-    std::move(read_callback_).Run(last_read_size_, data);
-  }
+  Stop();
 }
 
 }  // namespace media

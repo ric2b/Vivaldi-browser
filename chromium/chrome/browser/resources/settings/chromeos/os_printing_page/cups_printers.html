@@ -13,7 +13,7 @@
 <link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="cups_add_printer_dialog.html">
+<link rel="import" href="cups_settings_add_printer_dialog.html">
 <link rel="import" href="cups_edit_printer_dialog.html">
 <link rel="import" href="cups_printer_shared_css.html">
 <link rel="import" href="cups_printers_entry_manager.html">
@@ -34,13 +34,6 @@
 
       .padded {
         padding: 20px;
-      }
-
-      #addPrinterSection {
-        padding-inline-start:
-            var(--settings-list-frame-padding_-_padding-inline-start);
-        padding-inline-end:
-            var(--settings-list-frame-padding_-_padding-inline-end);
       }
 
       #addPrinterText {
@@ -132,7 +125,7 @@
       </template>
     </div>
 
-    <div id="addPrinterSection">
+    <div id="addPrinterSection" class="list-frame">
       <div class="layout horizontal center custom-list-item">
         <div id="addPrinterText" aria-hidden="true">
           $i18n{addCupsPrinter}

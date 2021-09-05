@@ -54,8 +54,6 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
                                   UninstallWebAppCallback callback) override;
   bool WasExternalAppUninstalledByUser(
       const web_app::AppId& app_id) const override;
-  bool CanRevealAppShim() const override;
-  void RevealAppShim(const web_app::AppId& app_id) override;
 
   using CrxInstallerFactory =
       base::RepeatingCallback<scoped_refptr<CrxInstaller>(Profile*)>;
@@ -71,6 +69,7 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
 
   void OnExtensionInstalled(const GURL& app_url,
                             LaunchType launch_type,
+                            bool enable_experimental_tabbed_window,
                             bool is_locally_installed,
                             bool is_system_app,
                             InstallFinalizedCallback callback,

@@ -1593,6 +1593,27 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Badging">
+  <owner>phillis@chromium.org</owner>
+  <owner>cmumford@chromium.org</owner>
+  <summary>
+    Metrics that measure the use of Badging API
+  </summary>
+  <metric name="UpdateAppBadge" enum="UpdateAppBadgeTypes">
+    <summary>
+      Logged when navigator.setAppBadge or navigator.clearAppBadge is called.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="Blink.FindInPage" singular="True">
   <owner>vmpstr@chromium.org</owner>
   <owner>chrishtr@chromium.org</owner>
@@ -1603,7 +1624,7 @@ be describing additional metrics about the same event.
   </summary>
   <metric name="DidHaveRenderSubtreeMatch">
     <summary>
-      Boolean indicating whether there was an active match in subtree-visibility
+      Boolean indicating whether there was an active match in content-visibility
       unrendered elements.
     </summary>
   </metric>
@@ -5368,6 +5389,96 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Media.EME.ApiPromiseRejection">
+  <owner>xhwang@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Event recorded when an Encrypted Media Extensions (EME) API promise is
+    rejected. In most cases this indicates a failure.
+  </summary>
+  <metric name="Api" enum="EmeApiType">
+    <summary>
+      The EME API for which the promise is rejected.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="SystemCode" enum="CdmSystemCode">
+    <summary>
+      A CDM specific code providing more details about the cause of rejection.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="Media.EME.CreateMediaKeys">
+  <owner>xhwang@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Event recorded when createMediaKeys() is called as part of Encrypted Media
+    Extensions (EME) API.
+  </summary>
+  <metric name="IsAdFrame" enum="Boolean">
+    <summary>
+      Whether the frame is an ad frame.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="IsCrossOrigin" enum="Boolean">
+    <summary>
+      Whether the frame is Cross-Origin to the main frame.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="IsTopFrame" enum="Boolean">
+    <summary>
+      Whether the frame is the main frame.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="KeySystem" enum="MediaKeySystem">
+    <summary>
+      The key system associated with this call.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="Media.EME.RequestMediaKeySystemAccess">
   <owner>xhwang@chromium.org</owner>
   <owner>media-dev@chromium.org</owner>
@@ -5375,26 +5486,76 @@ be describing additional metrics about the same event.
     Event recorded when RequestMediaKeySystemAccess() is called as part of
     Encrypted Media Extensions (EME) API.
   </summary>
-  <metric name="KeySystem">
+  <metric name="IsAdFrame" enum="Boolean">
+    <summary>
+      Whether the frame is an ad frame.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="IsCrossOrigin" enum="Boolean">
+    <summary>
+      Whether the frame is Cross-Origin to the main frame.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="IsTopFrame" enum="Boolean">
+    <summary>
+      Whether the frame is the main frame.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="KeySystem" enum="MediaKeySystem">
     <summary>
       The key system passed in requestMediaKeySystemAccess() call.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
-  <metric name="VideoCapabilities">
+  <metric name="VideoCapabilities" enum="Boolean">
     <summary>
       Whether there are any &quot;videoCapabilities&quot;.
     </summary>
   </metric>
-  <metric name="VideoCapabilities.HasEmptyRobustness">
+  <metric name="VideoCapabilities.HasEmptyRobustness" enum="Boolean">
     <summary>
       Whether there are any &quot;videoCapabilities&quot; with empty robustness.
     </summary>
   </metric>
-  <metric name="VideoCapabilities.HasHwSecureAllRobustness">
+  <metric name="VideoCapabilities.HasHwSecureAllRobustness" enum="Boolean">
     <summary>
       Whether there are any &quot;videoCapabilities&quot; with robustness being
       &quot;HW_SECURE_ALL&quot;.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
 </event>
 
@@ -5546,6 +5707,21 @@ be describing additional metrics about the same event.
     the length considered &quot;short&quot;.
   </summary>
   <metric name="Length"/>
+</event>
+
+<event name="Media.Feed.Discover">
+  <owner>beccahughes@chromium.org</owner>
+  <owner>media-dev@chromium.org</owner>
+  <summary>
+    Media Feeds are out of band feeds of media recommendations that are fetched
+    by the browser. This records when we discover a feed that has been placed in
+    a meta tag on a website.
+  </summary>
+  <metric name="HasMediaFeed">
+    <summary>
+      Whether the site has a media feed.
+    </summary>
+  </metric>
 </event>
 
 <event name="Media.GlobalMediaControls.ActionButtonPressed">
@@ -6018,6 +6194,11 @@ be describing additional metrics about the same event.
   <metric name="NumberOfAdSubframes">
     <summary>
       The number of ad subframes that the associated renderer owns.
+    </summary>
+  </metric>
+  <metric name="NumberOfArrayBufferContents">
+    <summary>
+      The number of arraybuffer contents that the associated renderer owns.
     </summary>
   </metric>
   <metric name="NumberOfCallsInDetachedWindowByClosing">
@@ -6961,15 +7142,29 @@ be describing additional metrics about the same event.
     See //components/optimization_guide/.
   </summary>
   <metric name="HintGenerationTimestamp">
+    <obsolete>
+      Obsolete as of 04/2020.
+    </obsolete>
     <summary>
       The timestamp, in seconds from epoch, that the server generated the hint
       for the optimization applied on the page load.
     </summary>
   </metric>
   <metric name="HintSource">
+    <obsolete>
+      Obsolete as of 04/2020.
+    </obsolete>
     <summary>
       The |optimization_guide::proto::HintSource| for the optimization that was
       applied on the page load.
+    </summary>
+  </metric>
+  <metric name="NavigationHintsFetchAttemptStatus"
+      enum="OptimizationGuideRaceNavigationFetchAttemptStatus">
+    <summary>
+      An enum value representing the status of a fetch attempt for the page load
+      and what it contains (i.e. hosts or URLs). Captured at the start of the
+      navigation.
     </summary>
   </metric>
   <metric name="NavigationHintsFetchRequestLatency">
@@ -6982,6 +7177,9 @@ be describing additional metrics about the same event.
   </metric>
   <metric name="NavigationHostCovered"
       enum="OptimizationGuideNavigationHostCoveredStatus">
+    <obsolete>
+      Obsolete as of 04/2020.
+    </obsolete>
     <summary>
       An enum value representing whether Chrome had a hint cached for the
       navigation or had attempted to fetch a hint from the remote Optimization
@@ -7045,6 +7243,20 @@ be describing additional metrics about the same event.
       time a prediction was requested. Recorded once per page load.
     </summary>
   </metric>
+  <metric name="RegisteredOptimizationTargets">
+    <summary>
+      A bitmask of the optimization targets that were registered at the start of
+      the page load where each flipped bit corresponds to its int value in
+      |optimization_guide::proto::OptimizationTarget|.
+    </summary>
+  </metric>
+  <metric name="RegisteredOptimizationTypes">
+    <summary>
+      A bitmask of the optimization types that were registered at the start of
+      the page load where each flipped bit corresponds to its int value in
+      |optimization_guide::proto::OptimizationTarget|.
+    </summary>
+  </metric>
 </event>
 
 <event name="PageDomainInfo">
@@ -7081,6 +7293,62 @@ be describing additional metrics about the same event.
       <history>
         <index fields="profile.country"/>
         <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ForegroundNumInputEvents">
+    <summary>
+      The number of Input Events, recorded each time the page is backgrounded.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ForegroundTotalAdjustedInputDelay">
+    <summary>
+      sum(max(Input Delay - 50, 0)), recorded each time the page is
+      backgrounded. The Input Delay refers to the duration between the hardware
+      timestamp and the start of event processing on the main thread for the
+      meaningful input. In ms.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ForegroundTotalInputDelay">
+    <summary>
+      sum(Input Delay), recorded each time the page is backgrounded. The Input
+      Delay refers to the duration between the hardware timestamp and the start
+      of event processing on the main thread for the meaningful input. In ms.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
         <index fields="profile.system_ram"/>
         <statistics>
           <quantiles type="std-percentiles"/>
@@ -7575,6 +7843,10 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="IsSignedExchangeInnerResponse">
+    <obsolete>
+      Migrated to the PageLoad.SignedExchange event. The presence of that event
+      indicates the associated source was served via signed exchange.
+    </obsolete>
     <summary>
       Set to 1 if the main resource is an inner response of a signed exchange.
     </summary>
@@ -8005,6 +8277,19 @@ be describing additional metrics about the same event.
   </summary>
 </event>
 
+<event name="PageLoad.SignedExchange" singular="True">
+  <owner>horo@chromium.org</owner>
+  <summary>
+    Recorded for page loads which main resource is an inner response of a signed
+    exchange.
+  </summary>
+  <metric name="ServedFromGoogleCache">
+    <summary>
+      Set to 1 if the main resource was served from Google's cache server.
+    </summary>
+  </metric>
+</event>
+
 <event name="PageLoadCapping" singular="True">
   <obsolete>
     Deprecated as of 3/2019.
@@ -8172,12 +8457,20 @@ be describing additional metrics about the same event.
       enum ManagerAutofillEvent.
     </summary>
   </metric>
-  <metric name="ManagerFill.Assistance">
+  <metric name="ManagerFill.Assistance" enum="PasswordManagerFillingAssistance">
     <summary>
       Records for each successful submission the degree to which the user has
-      been assisted by the password manager. Recorded values correspond to the
-      enum password_manager::PasswordFormMetricsRecorder::FillingAssistance.
+      been assisted by the password manager.
+
+      This is replicated as PasswordManager.FillingAssistance in UMA.
     </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="ParsingComparison">
     <obsolete>
@@ -8775,11 +9068,53 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="prefetch_usage">
+    <obsolete>
+      Replaced by PrefetchProxy.AfterSRPClick.SRPClickPrefetchStatus in M84.
+    </obsolete>
     <summary>
       This enum records if a cached prefetch page was used, and its probe
       status, when the user navigates off the Google Search Result Page. Not set
       if there was no prefetch. Values: Prefetch used, no probe = 0. Prefetch
       used, successful probe = 1. Prefetch not used, failed probe = 2.
+    </summary>
+  </metric>
+</event>
+
+<event name="PrefetchProxy.AfterSRPClick" singular="True">
+  <owner>robertogden@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>tbansal@chromium.org</owner>
+  <summary>
+    Metrics related to the privacy-preserving prefetch proxy on the page load
+    after the SRP. Recorded only for eligible users on the first mainframe
+    user-initiated page load immediately after a Google Search Result Page (SRP)
+    which Chrome parsed and may have prefetched links.
+  </summary>
+  <metric name="ClickedLinkSRPPosition">
+    <summary>
+      When a user clicks on a Google SRP link, this int records which position
+      the clicked link was in. Recorded only when the user navigates to a Google
+      SRP link.
+    </summary>
+  </metric>
+  <metric name="ProbeLatencyMs">
+    <summary>
+      How long the network probe blocked commit in milliseconds. Recorded only
+      when a probe was required.
+    </summary>
+  </metric>
+  <metric name="SRPClickPrefetchStatus" enum="IsolatedPrerenderPrefetchStatus">
+    <summary>
+      The outcome of the prefetch eligibility check and possible attempt to
+      prefetch the resource. The prefetched url is always the committed URL of
+      the page. See |IsolatedPrerenderTabHelper.PrefetchStatus| for a mapping of
+      enum values and their meanings.
+    </summary>
+  </metric>
+  <metric name="SRPPrefetchEligibleCount">
+    <summary>
+      The number of links from the SRP page (the previous page load) that were
+      eligible for prefetch. Always set when this event is recorded.
     </summary>
   </metric>
 </event>
@@ -8830,11 +9165,17 @@ be describing additional metrics about the same event.
     </summary>
   </metric>
   <metric name="lite_page_redirect">
+    <obsolete>
+      Removed in M84.
+    </obsolete>
     <summary>
       Set to 1 when a user is shown a lite page redirect in page load.
     </summary>
   </metric>
   <metric name="lite_page_redirect_eligibility_reason">
+    <obsolete>
+      Removed in M84.
+    </obsolete>
     <summary>
       Set to the value of the last known reason a Lite Page Redirect preview was
       not eligible on this page load. The value of this metric corresponds to
@@ -9268,6 +9609,10 @@ be describing additional metrics about the same event.
 <event name="SameSiteDifferentSchemeRequest">
   <owner>bingler@chromium.org</owner>
   <metric name="SameSiteContextWithSchemes" enum="SameSiteCookieContext">
+    <obsolete>
+      Removed Apr 2020 as this metric doesn't capture the correct information.
+      https://crbug.com/1066231
+    </obsolete>
     <summary>
       An enum that records the type of same-site context if a cookie marked with
       SameSite=Lax or SameSite=Strict is sent across schemes on a request. E.x.:
@@ -9279,10 +9624,40 @@ be describing additional metrics about the same event.
 <event name="SameSiteDifferentSchemeResponse">
   <owner>bingler@chromium.org</owner>
   <metric name="SameSiteContextWithSchemes" enum="SameSiteCookieContext">
+    <obsolete>
+      Removed Apr 2020 as this metric doesn't capture the correct information.
+      https://crbug.com/1066231
+    </obsolete>
     <summary>
       An enum that records the type of same-site context if a cookie marked with
       SameSite=Lax or SameSite=Strict is set across schemes on a response. E.x.:
       An http site returning a response to an https site.
+    </summary>
+  </metric>
+</event>
+
+<event name="SchemefulSameSiteContextDowngrade">
+  <owner>bingler@chromium.org</owner>
+  <metric name="RequestPerCookie"
+      enum="SameSiteCookieContextBreakingDowngradeWithSecureness">
+    <summary>
+      An enum which records the type of schemeful same-site downgrade applied to
+      a cookie which is being sent on a request along with the secureness of the
+      origin the cookie is attempting to be sent to. This is recorded once per
+      cookie when the cookie is included in the request or if the cookie
+      excluded due to insufficent same-site context only. Cookies that meet the
+      above conditions but without a downgrade warning are not recorded.
+    </summary>
+  </metric>
+  <metric name="ResponsePerCookie"
+      enum="SameSiteCookieContextBreakingDowngradeWithSecureness">
+    <summary>
+      An enum which records the type of schemeful same-site downgrade applied to
+      a cookie which is being set by a response along with the secureness of the
+      origin that is attempting to set the cookie. This is recorded once per
+      cookie when the cookie is allowed to be set or if the cookie is ignored
+      due to insufficent same-site context only. Cookies that meet the above
+      conditions but without a downgrade warning are not recorded.
     </summary>
   </metric>
 </event>
@@ -11487,6 +11862,147 @@ be describing additional metrics about the same event.
     <aggregation>
       <history>
         <index fields="metrics.Distributor"/>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="WebApp.DailyInteraction">
+  <owner>glenrob@chromium.org</owner>
+  <owner>benwells@chromium.org</owner>
+  <summary>
+    Features of a web app recorded at most once per day if a user interacted
+    with the web app. Recorded for both installed and promotable (installable)
+    web apps unless noted otherwise on the metric.
+  </summary>
+  <metric name="BackgroundDuration">
+    <summary>
+      Records the total duration (seconds, bucketed) that the app was open in
+      the background in the last calendar day. Summed during the day and emitted
+      if the date changes. Recorded only for installed web apps that open with
+      standalone display mode.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="DisplayMode" enum="WebAppDisplayMode">
+    <summary>
+      Effective display mode of the web app (may be set by a manifest and
+      manifest may be overridden by the user).
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="ForegroundDuration">
+    <summary>
+      Records the total duration (seconds, bucketed) that the app was open in
+      the foreground in the last calendar day. Summed during the day and emitted
+      if the date changes. Recorded only for installed web apps that open with
+      standalone display mode.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="Installed" enum="Boolean">
+    <summary>
+      Whether the web app is installed.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="InstallSource" enum="WebappInstallSource">
+    <summary>
+      Install source of the web app (omnibox, menu item, policy, etc).
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="NumSessions">
+    <summary>
+      Records the total number of times the app was focused in the foreground in
+      the last calendar day. Recorded only for installed web apps that open with
+      standalone display mode.
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="Promotable" enum="Boolean">
+    <summary>
+      Whether the web app is currently considered 'promotable' (passes Chrome
+      checks to be considered an installable web app).
+    </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.form_factor"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="Used" enum="Boolean">
+    <summary>
+      Records that the web app was used. Always true (or the event would not
+      have been emitted for this WebApp).
+    </summary>
+    <aggregation>
+      <history>
         <index fields="profile.country"/>
         <index fields="profile.form_factor"/>
         <index fields="profile.system_ram"/>

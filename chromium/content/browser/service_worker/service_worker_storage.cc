@@ -56,8 +56,7 @@ void MaybeNotifyWriteFailed(
   }
 }
 
-const base::FilePath::CharType kDatabaseName[] =
-    FILE_PATH_LITERAL("Database");
+const base::FilePath::CharType kDatabaseName[] = FILE_PATH_LITERAL("Database");
 const base::FilePath::CharType kDiskCacheName[] =
     FILE_PATH_LITERAL("ScriptCache");
 
@@ -68,8 +67,7 @@ ServiceWorkerStorage::InitialData::InitialData()
       next_version_id(blink::mojom::kInvalidServiceWorkerVersionId),
       next_resource_id(blink::mojom::kInvalidServiceWorkerResourceId) {}
 
-ServiceWorkerStorage::InitialData::~InitialData() {
-}
+ServiceWorkerStorage::InitialData::~InitialData() = default;
 
 ServiceWorkerStorage::DidDeleteRegistrationParams::DidDeleteRegistrationParams(
     int64_t registration_id,
@@ -540,7 +538,7 @@ void ServiceWorkerStorage::DoomUncommittedResources(
 void ServiceWorkerStorage::StoreUserData(
     int64_t registration_id,
     const GURL& origin,
-    const std::vector<std::pair<std::string, std::string>>& key_value_pairs,
+    std::vector<storage::mojom::ServiceWorkerUserDataPtr> user_data,
     DatabaseStatusCallback callback) {
   switch (state_) {
     case STORAGE_STATE_DISABLED:
@@ -552,7 +550,7 @@ void ServiceWorkerStorage::StoreUserData(
     case STORAGE_STATE_UNINITIALIZED:
       LazyInitialize(base::BindOnce(
           &ServiceWorkerStorage::StoreUserData, weak_factory_.GetWeakPtr(),
-          registration_id, origin, key_value_pairs, std::move(callback)));
+          registration_id, origin, std::move(user_data), std::move(callback)));
       return;
     case STORAGE_STATE_INITIALIZED:
       break;
@@ -561,13 +559,13 @@ void ServiceWorkerStorage::StoreUserData(
   // TODO(bashi): Consider replacing these DCHECKs with returning errors once
   // this class is moved to the Storage Service.
   DCHECK_NE(registration_id, blink::mojom::kInvalidServiceWorkerRegistrationId);
-  DCHECK(!key_value_pairs.empty());
+  DCHECK(!user_data.empty());
 
   base::PostTaskAndReplyWithResult(
       database_task_runner_.get(), FROM_HERE,
       base::BindOnce(&ServiceWorkerDatabase::WriteUserData,
                      base::Unretained(database_.get()), registration_id, origin,
-                     key_value_pairs),
+                     std::move(user_data)),
       base::BindOnce(&ServiceWorkerStorage::DidStoreUserData,
                      weak_factory_.GetWeakPtr(), std::move(callback), origin));
 }
@@ -896,7 +894,8 @@ void ServiceWorkerStorage::PurgeResources(
 }
 
 void ServiceWorkerStorage::ApplyPolicyUpdates(
-    std::vector<storage::mojom::LocalStoragePolicyUpdatePtr> policy_updates) {
+    const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>&
+        policy_updates) {
   for (const auto& update : policy_updates) {
     GURL url = update->origin.GetURL();
     if (!update->purge_on_shutdown)
@@ -1028,7 +1027,7 @@ void ServiceWorkerStorage::DidStoreRegistrationData(
   if (quota_manager_proxy_) {
     // Can be nullptr in tests.
     quota_manager_proxy_->NotifyStorageModified(
-        storage::QuotaClient::kServiceWorker, url::Origin::Create(origin),
+        storage::QuotaClientType::kServiceWorker, url::Origin::Create(origin),
         blink::mojom::StorageType::kTemporary,
         new_resources_total_size_bytes -
             deleted_version.resources_total_size_bytes);
@@ -1062,7 +1061,7 @@ void ServiceWorkerStorage::DidDeleteRegistration(
   if (quota_manager_proxy_) {
     // Can be nullptr in tests.
     quota_manager_proxy_->NotifyStorageModified(
-        storage::QuotaClient::kServiceWorker,
+        storage::QuotaClientType::kServiceWorker,
         url::Origin::Create(params->origin),
         blink::mojom::StorageType::kTemporary,
         -deleted_version.resources_total_size_bytes);
@@ -1303,10 +1302,9 @@ void ServiceWorkerStorage::ReadInitialDataFromDB(
   std::unique_ptr<ServiceWorkerStorage::InitialData> data(
       new ServiceWorkerStorage::InitialData());
 
-  ServiceWorkerDatabase::Status status =
-      database->GetNextAvailableIds(&data->next_registration_id,
-                                    &data->next_version_id,
-                                    &data->next_resource_id);
+  ServiceWorkerDatabase::Status status = database->GetNextAvailableIds(
+      &data->next_registration_id, &data->next_version_id,
+      &data->next_resource_id);
   if (status != ServiceWorkerDatabase::Status::kOk) {
     original_task_runner->PostTask(
         FROM_HERE,

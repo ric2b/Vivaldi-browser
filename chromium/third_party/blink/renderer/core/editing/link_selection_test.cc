@@ -4,7 +4,7 @@
 
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/range.h"
@@ -19,7 +19,7 @@
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 #include "ui/base/cursor/cursor.h"
-#include "ui/base/mojom/cursor_type.mojom-blink.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-blink.h"
 
 using testing::_;
 
@@ -62,10 +62,10 @@ void LinkSelectionTestBase::EmulateMouseDrag(const IntPoint& down_point,
                                              DragFlags drag_flags) {
   if (drag_flags & kSendDownEvent) {
     const auto& down_event = frame_test_helpers::CreateMouseEvent(
-        WebMouseEvent::kMouseDown, WebMouseEvent::Button::kLeft, down_point,
-        modifiers);
+        WebMouseEvent::Type::kMouseDown, WebMouseEvent::Button::kLeft,
+        down_point, modifiers);
     web_view_->MainFrameWidget()->HandleInputEvent(
-        WebCoalescedInputEvent(down_event));
+        WebCoalescedInputEvent(down_event, ui::LatencyInfo()));
   }
 
   const int kMoveEventsNumber = 10;
@@ -75,18 +75,18 @@ void LinkSelectionTestBase::EmulateMouseDrag(const IntPoint& down_point,
     const auto& move_point =
         down_point + Scaled(up_down_vector, i * kMoveIncrementFraction);
     const auto& move_event = frame_test_helpers::CreateMouseEvent(
-        WebMouseEvent::kMouseMove, WebMouseEvent::Button::kLeft, move_point,
-        modifiers);
+        WebMouseEvent::Type::kMouseMove, WebMouseEvent::Button::kLeft,
+        move_point, modifiers);
     web_view_->MainFrameWidget()->HandleInputEvent(
-        WebCoalescedInputEvent(move_event));
+        WebCoalescedInputEvent(move_event, ui::LatencyInfo()));
   }
 
   if (drag_flags & kSendUpEvent) {
     const auto& up_event = frame_test_helpers::CreateMouseEvent(
-        WebMouseEvent::kMouseUp, WebMouseEvent::Button::kLeft, up_point,
+        WebMouseEvent::Type::kMouseUp, WebMouseEvent::Button::kLeft, up_point,
         modifiers);
     web_view_->MainFrameWidget()->HandleInputEvent(
-        WebCoalescedInputEvent(up_event));
+        WebCoalescedInputEvent(up_event, ui::LatencyInfo()));
   }
 }
 
@@ -95,11 +95,13 @@ void LinkSelectionTestBase::EmulateMouseClick(const IntPoint& click_point,
                                               int modifiers,
                                               int count) {
   auto event = frame_test_helpers::CreateMouseEvent(
-      WebMouseEvent::kMouseDown, button, click_point, modifiers);
+      WebMouseEvent::Type::kMouseDown, button, click_point, modifiers);
   event.click_count = count;
-  web_view_->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
-  event.SetType(WebMouseEvent::kMouseUp);
-  web_view_->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
+  web_view_->MainFrameWidget()->HandleInputEvent(
+      WebCoalescedInputEvent(event, ui::LatencyInfo()));
+  event.SetType(WebMouseEvent::Type::kMouseUp);
+  web_view_->MainFrameWidget()->HandleInputEvent(
+      WebCoalescedInputEvent(event, ui::LatencyInfo()));
 }
 
 void LinkSelectionTestBase::EmulateMouseDown(const IntPoint& click_point,
@@ -107,9 +109,10 @@ void LinkSelectionTestBase::EmulateMouseDown(const IntPoint& click_point,
                                              int modifiers,
                                              int count) {
   auto event = frame_test_helpers::CreateMouseEvent(
-      WebMouseEvent::kMouseDown, button, click_point, modifiers);
+      WebMouseEvent::Type::kMouseDown, button, click_point, modifiers);
   event.click_count = count;
-  web_view_->MainFrameWidget()->HandleInputEvent(WebCoalescedInputEvent(event));
+  web_view_->MainFrameWidget()->HandleInputEvent(
+      WebCoalescedInputEvent(event, ui::LatencyInfo()));
 }
 
 String LinkSelectionTestBase::GetSelectionText() {

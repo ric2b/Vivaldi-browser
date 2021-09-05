@@ -84,10 +84,13 @@ class FakeWritableFileStream {
 
 /** @implements FileSystemHandle  */
 class FakeFileSystemHandle {
-  constructor() {
+  /**
+   * @param {!string=} name
+   */
+  constructor(name = 'fake_file.png') {
     this.isFile = true;
     this.isDirectory = false;
-    this.name = 'fake_file.png';
+    this.name = name;
   }
   /** @override */
   async isSameEntry(other) {
@@ -101,10 +104,19 @@ class FakeFileSystemHandle {
 
 /** @implements FileSystemFileHandle  */
 class FakeFileSystemFileHandle extends FakeFileSystemHandle {
-  constructor() {
-    super();
-    /** @type {?FakeWritableFileStream} */
-    this.lastWritable;
+  /**
+   * @param {!string=} name
+   * @param {!string=} type
+   * @param {!Blob} blob
+   */
+  constructor(name = 'fake_file.png', type = '', blob = new Blob()) {
+    super(name);
+    this.lastWritable = new FakeWritableFileStream();
+
+    this.lastWritable.data = blob;
+
+    /** @type {!string} */
+    this.type = type;
   }
   /** @override */
   createWriter(options) {
@@ -117,23 +129,24 @@ class FakeFileSystemFileHandle extends FakeFileSystemHandle {
   }
   /** @override */
   async getFile() {
-    // TODO(b/152832337): Use a real image file and set mime type to be
-    // 'image/png'. In tests, the src_internal app struggles to reliably load
-    // empty images because a size of 0 can't be decoded but also can't reliably
-    // load real images due to b/152832025. Mitigate this for now by now by not
-    // providing a mime type so the image doesn't get loaded in tests but we can
-    // still test the IPC mechanisms.
-    return new File([], this.name);
+    return this.getFileSync();
+  }
+
+  /** @return {!File} */
+  getFileSync() {
+    return new File([this.lastWritable.data], this.name, {type: this.type});
   }
 }
 
 /** @implements FileSystemDirectoryHandle  */
 class FakeFileSystemDirectoryHandle extends FakeFileSystemHandle {
-  constructor() {
-    super();
+  /**
+   * @param {!string=} name
+   */
+  constructor(name = 'fake-dir') {
+    super(name);
     this.isFile = false;
     this.isDirectory = true;
-    this.name = 'fake-dir';
     /**
      * Internal state mocking file handles in a directory handle.
      * @type {!Array<!FakeFileSystemFileHandle>}
@@ -151,6 +164,13 @@ class FakeFileSystemDirectoryHandle extends FakeFileSystemHandle {
    */
   addFileHandleForTest(fileHandle) {
     this.files.push(fileHandle);
+  }
+  /**
+   * Helper to get all entries as File.
+   * @return {!Array<!File>}
+   */
+  getFilesSync(index) {
+    return this.files.map(f => f.getFileSync());
   }
   /** @override */
   async getFile(name, options) {
@@ -188,10 +208,30 @@ class FakeFileSystemDirectoryHandle extends FakeFileSystemHandle {
   }
 }
 
-/** Creates a mock directory with a single file in it. */
-function createMockTestDirectory() {
+/**
+ * Structure to define a test file.
+ * @typedef{{
+ *   name: (string|undefined),
+ *   type: (string|undefined),
+ *   arrayBuffer: (function(): (Promise<ArrayBuffer>)|undefined)
+ * }}
+ */
+let FileDesc;
+
+/**
+ * Creates a mock directory with the provided files in it.
+ * @param {!Array<!FileDesc>=} files
+ * @return {Promise<FakeFileSystemDirectoryHandle>}
+ */
+async function createMockTestDirectory(files = [{}]) {
   const directory = new FakeFileSystemDirectoryHandle();
-  directory.addFileHandleForTest(new FakeFileSystemFileHandle());
+  for (const /** FileDesc */ file of files) {
+    const fileBlob = file.arrayBuffer !== undefined ?
+        new Blob([await file.arrayBuffer()]) :
+        new Blob();
+    directory.addFileHandleForTest(
+        new FakeFileSystemFileHandle(file.name, file.type, fileBlob));
+  }
   return directory;
 }
 
@@ -199,12 +239,13 @@ function createMockTestDirectory() {
  * Helper to send a single file to the guest.
  * @param {!File} file
  * @param {!FileSystemFileHandle} handle
+ * @return {!Promise<undefined>}
  */
-function loadFile(file, handle) {
+async function loadFile(file, handle) {
   currentFiles.length = 0;
   currentFiles.push({token: -1, file, handle});
   entryIndex = 0;
-  sendFilesToGuest();
+  await sendFilesToGuest();
 }
 
 /**
@@ -212,13 +253,13 @@ function loadFile(file, handle) {
  * @param {!Array<{file: !File, handle: !FileSystemFileHandle}>} files
  * @return {!Promise<undefined>}
  */
-function loadMultipleFiles(files) {
+async function loadMultipleFiles(files) {
   currentFiles.length = 0;
   for (const f of files) {
     currentFiles.push({token: -1, file: f.file, handle: f.handle});
   }
   entryIndex = 0;
-  return sendFilesToGuest();
+  await sendFilesToGuest();
 }
 
 /**
@@ -231,4 +272,26 @@ function createNamedError(name, msg) {
   const error = new Error(msg);
   error.name = name;
   return error;
+}
+
+/**
+ * Wraps `chai.assert.match` allowing tests to use `assertMatch`.
+ * @param {string} string the string to match
+ * @param {string} regex an escaped regex compatible string
+ * @param {string|undefined} opt_message logged if the assertion fails
+ */
+function assertMatch(string, regex, opt_message) {
+  chai.assert.match(string, new RegExp(regex), opt_message);
+}
+
+/**
+ * Use to match error stack traces.
+ * @param {string} stackTrace the stacktrace
+ * @param {Array<string>} regexLines a list of escaped regex compatible strings,
+ *     used to compare with the stacktrace.
+ * @param {string|undefined} opt_message logged if the assertion fails
+ */
+function assertMatchErrorStack(stackTrace, regexLines, opt_message) {
+  const regex = `(.|\\n)*${regexLines.join('(.|\\n)*')}(.|\\n)*`;
+  assertMatch(stackTrace, regex, opt_message);
 }

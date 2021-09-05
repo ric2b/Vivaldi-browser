@@ -390,12 +390,7 @@ TabDragController::TabDragController()
       last_move_screen_loc_(0),
       source_view_index_(std::numeric_limits<size_t>::max()),
       initial_move_(true),
-#if defined(USE_OZONE) && !defined(OS_CHROMEOS)
-      // TODO(crbug.com/896640): Support detachable tabs
-      detach_behavior_(NOT_DETACHABLE),
-#else
       detach_behavior_(DETACHABLE),
-#endif
       move_behavior_(REORDER),
       mouse_has_ever_moved_left_(false),
       mouse_has_ever_moved_right_(false),
@@ -834,8 +829,8 @@ TabDragController::Liveness TabDragController::ContinueDragging(
   if (current_state_ == DragState::kDraggingWindow) {
     bring_to_front_timer_.Start(
         FROM_HERE, base::TimeDelta::FromMilliseconds(750),
-        base::Bind(&TabDragController::BringWindowUnderPointToFront,
-                   base::Unretained(this), point_in_screen));
+        base::BindOnce(&TabDragController::BringWindowUnderPointToFront,
+                       base::Unretained(this), point_in_screen));
   }
 
   if (current_state_ == DragState::kDraggingTabs) {
@@ -1066,14 +1061,14 @@ void TabDragController::StartMoveStackedTimerIfNecessary(
           bounds, *touch_index, mouse_has_ever_moved_right_)) {
     move_stacked_timer_.Start(
         FROM_HERE, delay,
-        base::Bind(&TabDragController::MoveAttachedToNextStackedIndex,
-                   base::Unretained(this), point_in_screen));
+        base::BindOnce(&TabDragController::MoveAttachedToNextStackedIndex,
+                       base::Unretained(this), point_in_screen));
   } else if (attached_context_->ShouldDragToPreviousStackedTab(
                  bounds, *touch_index, mouse_has_ever_moved_left_)) {
     move_stacked_timer_.Start(
         FROM_HERE, delay,
-        base::Bind(&TabDragController::MoveAttachedToPreviousStackedIndex,
-                   base::Unretained(this), point_in_screen));
+        base::BindOnce(&TabDragController::MoveAttachedToPreviousStackedIndex,
+                       base::Unretained(this), point_in_screen));
   }
 }
 

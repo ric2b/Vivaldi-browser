@@ -8,10 +8,10 @@
 #include <shellapi.h>
 #include <string>
 
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process.h"
 #include "base/strings/string_number_conversions.h"
@@ -24,7 +24,6 @@
 #include "chrome/common/chrome_switches.h"
 
 #include "browser/win/vivaldi_utils.h"
-
 
 namespace {
 
@@ -65,9 +64,7 @@ NotifyChromeResult AttemptToNotifyRunningChrome(HWND remote_window) {
   cds.dwData = 0;
   cds.cbData = static_cast<DWORD>((to_send.length() + 1) * sizeof(wchar_t));
   cds.lpData = const_cast<wchar_t*>(to_send.c_str());
-
   DWORD_PTR result = 0;
-
   if (::SendMessageTimeout(remote_window, WM_COPYDATA, NULL,
                            reinterpret_cast<LPARAM>(&cds), SMTO_ABORTIFHUNG,
                            g_timeout_in_milliseconds, &result)) {

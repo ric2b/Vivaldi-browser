@@ -90,6 +90,10 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
   template <class K>
   void SetFrames(HeapVector<K>& keyframes);
 
+  // Keyframes for CSS animations require additional processing to lazy
+  // evaluate computed values.
+  virtual KeyframeVector GetComputedKeyframes(Element*) { return keyframes_; }
+
   CompositeOperation Composite() const { return composite_; }
   void SetComposite(CompositeOperation composite);
 
@@ -148,6 +152,11 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
     return keyframe_groups_->Contains(property);
   }
 
+  bool HasRevert() const {
+    EnsureKeyframeGroups();
+    return has_revert_;
+  }
+
   bool IsTransformRelatedEffect() const override;
 
   virtual KeyframeEffectModelBase* Clone() = 0;
@@ -164,7 +173,8 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
         composite_(composite),
         default_keyframe_easing_(std::move(default_keyframe_easing)),
         has_synthetic_keyframes_(false),
-        needs_compositor_keyframes_snapshot_(true) {}
+        needs_compositor_keyframes_snapshot_(true),
+        has_revert_(false) {}
 
   // Lazily computes the groups of property-specific keyframes.
   void EnsureKeyframeGroups() const;
@@ -207,13 +217,14 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
 
   mutable bool has_synthetic_keyframes_;
   mutable bool needs_compositor_keyframes_snapshot_;
+  mutable bool has_revert_;
 
   friend class KeyframeEffectModelTest;
 };
 
 // Time independent representation of an Animation's keyframes.
 template <class K>
-class KeyframeEffectModel final : public KeyframeEffectModelBase {
+class KeyframeEffectModel : public KeyframeEffectModelBase {
  public:
   using KeyframeVector = HeapVector<Member<K>>;
   KeyframeEffectModel(

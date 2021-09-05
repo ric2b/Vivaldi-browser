@@ -53,6 +53,7 @@
 #include "ash/wm/fullscreen_window_finder.h"
 #include "ash/wm/lock_action_handler_layout_manager.h"
 #include "ash/wm/lock_layout_manager.h"
+#include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overlay_layout_manager.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_session.h"
@@ -247,9 +248,12 @@ void ReparentAllWindows(aura::Window* src, aura::Window* dst) {
       container_ids.emplace_back(id);
   }
 
+  const std::vector<aura::Window*> mru_list =
+      Shell::Get()->mru_window_tracker()->BuildWindowForCycleList(kAllDesks);
   for (int id : container_ids) {
     aura::Window* src_container = src->GetChildById(id);
     aura::Window* dst_container = dst->GetChildById(id);
+    const bool switchable_container = IsSwitchableContainer(src_container);
     while (!src_container->children().empty()) {
       // Restart iteration from the source container windows each time as they
       // may change as a result of moving other windows.
@@ -267,7 +271,37 @@ void ReparentAllWindows(aura::Window* src, aura::Window* dst) {
       // |iter| is invalidated after ReparentWindow. Cache it to use afterwards.
       aura::Window* const window = *iter;
       ReparentWindow(window, dst_container);
-      dst_container->StackChildAtBottom(window);
+
+      aura::Window* stacking_target = nullptr;
+      if (switchable_container) {
+        // Find the first window that comes after |window| in the MRU list that
+        // shares the same parent.
+        bool found_window = false;
+        for (aura::Window* window_iter : mru_list) {
+          // First determine the position of |window| in the |mru_list|.
+          if (!found_window && window == window_iter) {
+            found_window = true;
+            continue;
+          }
+
+          if (!found_window || window_iter->parent() != dst_container)
+            continue;
+
+          // Once |window| is found, the next item in |mru_list| with the same
+          // parent (container) is the stacking target.
+          stacking_target = window_iter;
+          break;
+        }
+      }
+
+      // |stacking_target| may be null if |switchable_container| is false, which
+      // means the children of that container wouldn't be in the MRU list or if
+      // |window| was the last item in the MRU list with parent id |id|. In
+      // this case stack |window| at the bottom.
+      if (stacking_target)
+        dst_container->StackChildAbove(window, stacking_target);
+      else
+        dst_container->StackChildAtBottom(window);
     }
   }
 }
@@ -732,6 +766,11 @@ aura::Window* RootWindowController::GetWindowForFullscreenMode() {
   return GetWindowForFullscreenModeInRoot(GetRootWindow());
 }
 
+bool RootWindowController::IsInFullscreenMode() {
+  auto* window = GetWindowForFullscreenMode();
+  return window && WindowState::Get(window)->GetHideShelfWhenFullscreen();
+}
+
 void RootWindowController::SetTouchAccessibilityAnchorPoint(
     const gfx::Point& anchor_point) {
   if (touch_exploration_manager_)
@@ -1123,10 +1162,11 @@ void RootWindowController::CreateContainers() {
   ::wm::SetChildWindowVisibilityChangesAnimated(menu_container);
   menu_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
 
-  aura::Window* autoclick_container = CreateContainer(
-      kShellWindowId_AutoclickContainer, "AutoclickBubbleContainer",
-      lock_screen_related_containers);
-  autoclick_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
+  aura::Window* accessibility_bubble_container = CreateContainer(
+      kShellWindowId_AccessibilityBubbleContainer,
+      "AccessibilityBubbleContainer", lock_screen_related_containers);
+  accessibility_bubble_container->SetProperty(::wm::kUsesScreenCoordinatesKey,
+                                              true);
 
   aura::Window* drag_drop_container = CreateContainer(
       kShellWindowId_DragImageAndTooltipContainer,

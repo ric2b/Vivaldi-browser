@@ -9,6 +9,7 @@
 
 #include "base/base64.h"
 #include "base/location.h"
+#include "base/notreached.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,6 +38,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -47,17 +49,32 @@ using guest_view::GuestViewBase;
 
 namespace extensions {
 
+namespace {
+std::string GetPartitionName(WebAuthFlow::Partition partition) {
+  switch (partition) {
+    case WebAuthFlow::LAUNCH_WEB_AUTH_FLOW:
+      return "launchWebAuthFlow";
+    case WebAuthFlow::GET_AUTH_TOKEN:
+      return "getAuthFlow";
+  }
+
+  NOTREACHED() << "Unexpected partition value " << partition;
+  return std::string();
+}
+}  // namespace
+
 namespace identity_private = api::identity_private;
 
-WebAuthFlow::WebAuthFlow(
-    Delegate* delegate,
-    Profile* profile,
-    const GURL& provider_url,
-    Mode mode)
+WebAuthFlow::WebAuthFlow(Delegate* delegate,
+                         Profile* profile,
+                         const GURL& provider_url,
+                         Mode mode,
+                         Partition partition)
     : delegate_(delegate),
       profile_(profile),
       provider_url_(provider_url),
       mode_(mode),
+      partition_(partition),
       embedded_window_created_(false) {
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("identity", "WebAuthFlow", this);
 }
@@ -96,6 +113,7 @@ void WebAuthFlow::Start() {
     args->AppendString("interactive");
   else
     args->AppendString("silent");
+  args->AppendString(GetPartitionName(partition_));
 
   auto event =
       std::make_unique<Event>(events::IDENTITY_PRIVATE_ON_WEB_FLOW_REQUEST,
@@ -122,7 +140,7 @@ void WebAuthFlow::DetachDelegateAndDelete() {
 
 content::StoragePartition* WebAuthFlow::GetGuestPartition() {
   return content::BrowserContext::GetStoragePartitionForSite(
-      profile_, GetWebViewSiteURL());
+      profile_, GetWebViewSiteURL(partition_));
 }
 
 const std::string& WebAuthFlow::GetAppWindowKey() const {
@@ -130,9 +148,9 @@ const std::string& WebAuthFlow::GetAppWindowKey() const {
 }
 
 // static
-GURL WebAuthFlow::GetWebViewSiteURL() {
+GURL WebAuthFlow::GetWebViewSiteURL(Partition partition) {
   return extensions::WebViewGuest::GetSiteForGuestPartitionConfig(
-      extension_misc::kIdentityApiUiAppId, /*partition_name=*/std::string(),
+      extension_misc::kIdentityApiUiAppId, GetPartitionName(partition),
       /*in_memory=*/true);
 }
 
@@ -247,6 +265,13 @@ void WebAuthFlow::DidFinishNavigation(
       // the web auth flow.
       DCHECK_EQ(net::ERR_UNKNOWN_URL_SCHEME,
                 navigation_handle->GetNetErrorCode());
+    } else if (navigation_handle->GetResponseHeaders() &&
+               navigation_handle->GetResponseHeaders()->response_code() ==
+                   net::HTTP_NO_CONTENT) {
+      // Navigation to no content URLs is aborted but shouldn't be treated as a
+      // failure.
+      // In particular, Gaia navigates to a no content page to pass Mirror
+      // response headers.
     } else {
       failed = true;
       TRACE_EVENT_NESTABLE_ASYNC_INSTANT1(

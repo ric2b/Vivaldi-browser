@@ -7,9 +7,10 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/ios/block_types.h"
-#include "base/logging.h"
 #include "base/metrics/user_metrics.h"
+#include "base/notreached.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -96,8 +97,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
   if (_navigationController) {
     [_navigationController cleanUpSettings];
     _navigationController = nil;
-    [[_delegate presentingViewController] dismissViewControllerAnimated:NO
-                                                             completion:nil];
+    [_delegate dismissPresentingViewControllerAnimated:NO completion:nil];
   }
   [self stopWatchdogTimer];
 }
@@ -196,7 +196,8 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 - (void)promptSwitchFromManagedEmail:(NSString*)managedEmail
                     withHostedDomain:(NSString*)hostedDomain
                              toEmail:(NSString*)toEmail
-                      viewController:(UIViewController*)viewController {
+                      viewController:(UIViewController*)viewController
+                             browser:(Browser*)browser {
   DCHECK(!_alertCoordinator);
   NSString* title = l10n_util::GetNSString(IDS_IOS_MANAGED_SWITCH_TITLE);
   NSString* subtitle = l10n_util::GetNSStringF(
@@ -209,6 +210,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 
   _alertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:viewController
+                                                   browser:browser
                                                      title:title
                                                    message:subtitle];
 
@@ -269,7 +271,8 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
     [self promptSwitchFromManagedEmail:lastSignedInEmail
                       withHostedDomain:hostedDomain
                                toEmail:[identity userEmail]
-                        viewController:viewController];
+                        viewController:viewController
+                               browser:browser];
     return;
   }
   _navigationController = [SettingsNavigationController
@@ -279,10 +282,9 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
                            fromEmail:lastSignedInEmail
                              toEmail:[identity userEmail]
                           isSignedIn:isSignedIn];
-  [[_delegate presentingViewController]
-      presentViewController:_navigationController
-                   animated:YES
-                 completion:nil];
+  [_delegate presentViewController:_navigationController
+                          animated:YES
+                        completion:nil];
 }
 
 - (void)clearDataFromBrowser:(Browser*)browser
@@ -360,8 +362,8 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 }
 
 - (void)showManagedConfirmationForHostedDomain:(NSString*)hostedDomain
-                                viewController:
-                                    (UIViewController*)viewController {
+                                viewController:(UIViewController*)viewController
+                                       browser:(Browser*)browser {
   DCHECK(!_alertCoordinator);
   NSString* title = l10n_util::GetNSString(IDS_IOS_MANAGED_SIGNIN_TITLE);
   NSString* subtitle = l10n_util::GetNSStringF(
@@ -372,6 +374,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 
   _alertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:viewController
+                                                   browser:browser
                                                      title:title
                                                    message:subtitle];
 
@@ -404,10 +407,11 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
 
 - (void)showAuthenticationError:(NSError*)error
                  withCompletion:(ProceduralBlock)callback
-                 viewController:(UIViewController*)viewController {
+                 viewController:(UIViewController*)viewController
+                        browser:(Browser*)browser {
   DCHECK(!_alertCoordinator);
 
-  _alertCoordinator = ErrorCoordinatorNoItem(error, viewController);
+  _alertCoordinator = ErrorCoordinatorNoItem(error, viewController, browser);
 
   __weak AuthenticationFlowPerformer* weakSelf = self;
   __weak AlertCoordinator* weakAlert = _alertCoordinator;
@@ -460,8 +464,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
     [[strongSelf delegate] didChooseClearDataPolicy:shouldClearData];
   };
   [_navigationController cleanUpSettings];
-  [[_delegate presentingViewController] dismissViewControllerAnimated:YES
-                                                           completion:block];
+  [_delegate dismissPresentingViewControllerAnimated:YES completion:block];
 }
 
 #pragma mark - SettingsNavigationControllerDelegate
@@ -478,8 +481,7 @@ const int64_t kAuthenticationFlowTimeoutSeconds = 10;
     [[strongSelf delegate] didChooseCancel];
   };
   [_navigationController cleanUpSettings];
-  [[_delegate presentingViewController] dismissViewControllerAnimated:YES
-                                                           completion:block];
+  [_delegate dismissPresentingViewControllerAnimated:YES completion:block];
 }
 
 - (void)settingsWasDismissed {

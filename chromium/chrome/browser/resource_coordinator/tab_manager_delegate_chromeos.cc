@@ -115,7 +115,8 @@ std::ostream& operator<<(std::ostream& out,
   if (candidate.app())
     out << "app " << *candidate.app();
   else if (candidate.lifecycle_unit())
-    out << "tab " << candidate.lifecycle_unit()->GetTitle();
+    out << "tab (id: " << candidate.lifecycle_unit()->GetID()
+        << ", pid: " << candidate.lifecycle_unit()->GetProcessHandle() << ")";
   out << ", process_type " << candidate.process_type();
   return out;
 }
@@ -347,7 +348,9 @@ void TabManagerDelegate::LowMemoryKill(
     TabManager::TabDiscardDoneCB tab_discard_done) {
   arc::ArcProcessService* arc_process_service = arc::ArcProcessService::Get();
   base::TimeTicks now = base::TimeTicks::Now();
-  if (arc_process_service) {
+  // ARCVM defers to Android's LMK to kill apps in low memory situations because
+  // memory can't be reclaimed directly to ChromeOS.
+  if (arc_process_service && !arc::IsArcVmEnabled()) {
     arc_process_service->RequestAppProcessList(base::BindOnce(
         &TabManagerDelegate::LowMemoryKillImpl, weak_ptr_factory_.GetWeakPtr(),
         now, reason, std::move(tab_discard_done)));
@@ -487,7 +490,8 @@ void TabManagerDelegate::AdjustOomPriorities() {
     return;
 
   arc::ArcProcessService* arc_process_service = arc::ArcProcessService::Get();
-  // TODO(b/135633925): Design and implement OOM handling for ARCVM.
+  // ARCVM defers to Android's LMK to manage low memory situations, so don't
+  // adjust OOM scores for VM processes.
   if (arc_process_service && !arc::IsArcVmEnabled()) {
     arc_process_service->RequestAppProcessList(
         base::BindOnce(&TabManagerDelegate::AdjustOomPrioritiesImpl,
@@ -682,8 +686,8 @@ void TabManagerDelegate::LowMemoryKillImpl(
       }
     } else if (it->lifecycle_unit()) {
       if (process_type == ProcessType::FOCUSED_TAB) {
-        MEMORY_LOG(ERROR) << "Skipped killing focused tab "
-                          << it->lifecycle_unit()->GetTitle();
+        MEMORY_LOG(ERROR) << "Skipped killing focused tab (id: "
+                          << it->lifecycle_unit()->GetID() << ")";
         continue;
       }
 
@@ -699,8 +703,8 @@ void TabManagerDelegate::LowMemoryKillImpl(
         target_memory_to_free_kb -= estimated_memory_freed_kb;
         memory::MemoryKillsMonitor::LogLowMemoryKill("TAB",
                                                      estimated_memory_freed_kb);
-        MEMORY_LOG(ERROR) << "Killed tab " << it->lifecycle_unit()->GetTitle()
-                          << ", estimated " << estimated_memory_freed_kb
+        MEMORY_LOG(ERROR) << "Killed tab (id: " << it->lifecycle_unit()->GetID()
+                          << "), estimated " << estimated_memory_freed_kb
                           << " KB freed";
       }
     }
@@ -847,7 +851,7 @@ void TabManagerDelegate::DistributeOomScoreInRange(
 
   if (oom_scores_to_change.size()) {
     GetDebugDaemonClient()->SetOomScoreAdj(oom_scores_to_change,
-                                           base::Bind(&OnSetOomScoreAdj));
+                                           base::BindOnce(&OnSetOomScoreAdj));
   }
 }
 

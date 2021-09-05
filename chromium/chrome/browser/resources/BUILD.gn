@@ -18,6 +18,7 @@ if (closure_compile) {
       "engagement:closure_compile",
       "interventions_internals:closure_compile",
       "media:closure_compile",
+      "memory_internals:closure_compile",
       "reset_password:closure_compile",
     ]
     if (is_linux || is_win || is_mac) {
@@ -99,7 +100,7 @@ if (!is_android) {
     } else {
       source = "bookmarks/bookmarks_resources.grd"
 
-      deps = [ "//chrome/browser/resources/bookmarks:polymer3_elements" ]
+      deps = [ "//chrome/browser/resources/bookmarks:web_components" ]
     }
 
     defines = chrome_grit_defines
@@ -120,7 +121,7 @@ if (!is_android) {
       "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
     ]
 
-    deps = [ "//chrome/browser/resources/pdf/elements:polymer3_elements" ]
+    deps = [ "//chrome/browser/resources/pdf/elements:web_components" ]
 
     defines = chrome_grit_defines
     if (enable_hangout_services_extension) {
@@ -168,7 +169,7 @@ if (!is_android) {
     } else {
       source = "history/history_resources.grd"
 
-      deps = [ "//chrome/browser/resources/history:polymer3_elements" ]
+      deps = [ "//chrome/browser/resources/history:web_components" ]
     }
 
     defines = chrome_grit_defines
@@ -192,13 +193,21 @@ if (!is_android) {
   }
 
   grit("new_tab_page_resources") {
-    source = "new_tab_page/new_tab_page_resources.grd"
+    if (optimize_webui) {
+      source = "new_tab_page/new_tab_page_resources_vulcanized.grd"
+    } else {
+      source = "new_tab_page/new_tab_page_resources.grd"
+    }
 
     deps = [
-      "//chrome/browser/resources/new_tab_page:polymer3_elements",
       "//chrome/browser/ui/webui/new_tab_page:mojo_bindings_js",
       "//skia/public/mojom:mojom_js",
     ]
+    if (optimize_webui) {
+      deps += [ "//chrome/browser/resources/new_tab_page:optimized_js" ]
+    } else {
+      deps += [ "//chrome/browser/resources/new_tab_page:web_components" ]
+    }
 
     grit_flags = [
       "-E",
@@ -224,10 +233,7 @@ if (!is_android) {
     if (optimize_webui) {
       source = "settings/settings_resources_vulcanized.grd"
 
-      deps = [
-        "//chrome/browser/resources/settings:build",
-        "//chrome/browser/resources/settings:build_polymer3",
-      ]
+      deps = [ "//chrome/browser/resources/settings:build_polymer3" ]
     } else {
       source = "settings/settings_resources.grd"
       deps = [ "//chrome/browser/resources/settings:polymer3_elements" ]
@@ -251,7 +257,7 @@ if (!is_android) {
     } else {
       source = "downloads/downloads_resources.grd"
 
-      deps = [ "//chrome/browser/resources/downloads:polymer3_elements" ]
+      deps = [ "//chrome/browser/resources/downloads:web_components" ]
     }
     deps += [ "//chrome/browser/ui/webui/downloads:mojo_bindings_js" ]
 
@@ -273,10 +279,11 @@ if (!is_android) {
 
 if (is_chromeos) {
   grit("os_settings_resources") {
-    deps = [
-      "//chrome/browser/ui/webui/app_management:mojo_bindings_js",
-      "//chrome/browser/ui/webui/settings/chromeos/search:mojo_bindings_js",
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
     ]
+    deps = [ "//chrome/browser/ui/webui/settings/chromeos:mojom_js" ]
     if (optimize_webui) {
       # Required due to flattenhtml="true" on a generated file.
       enable_input_discovery_for_gn_analyze = false
@@ -285,12 +292,9 @@ if (is_chromeos) {
       deps += [ "//chrome/browser/resources/settings/chromeos:build" ]
     } else {
       source = "settings/os_settings_resources.grd"
+      deps +=
+          [ "//chrome/browser/resources/settings/chromeos:polymer3_elements" ]
     }
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
 
     defines = chrome_grit_defines
     outputs = [
@@ -307,7 +311,7 @@ if (!is_android && !is_chromeos) {
   grit("welcome_resources") {
     source = "welcome/welcome_resources.grd"
 
-    deps = [ "//chrome/browser/resources/welcome:polymer3_elements" ]
+    deps = [ "//chrome/browser/resources/welcome:web_components" ]
     grit_flags = [
       "-E",
       "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
@@ -319,6 +323,24 @@ if (!is_android && !is_chromeos) {
       "grit/welcome_resources_map.cc",
       "grit/welcome_resources_map.h",
       "welcome_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("profile_picker_resources") {
+    source = "signin/profile_picker/profile_picker_resources.grd"
+
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    ]
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/profile_picker_resources.h",
+      "grit/profile_picker_resources_map.cc",
+      "grit/profile_picker_resources_map.h",
+      "profile_picker_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }
@@ -337,7 +359,7 @@ if (enable_extensions) {
     } else {
       source = "extensions/extensions_resources.grd"
 
-      deps = [ "//chrome/browser/resources/extensions:polymer3_elements" ]
+      deps = [ "//chrome/browser/resources/extensions:web_components" ]
     }
 
     defines = chrome_grit_defines
@@ -371,10 +393,16 @@ if (enable_print_preview) {
 
     if (optimize_webui) {
       source = "print_preview/print_preview_resources_vulcanized.grd"
-      deps = [ "//chrome/browser/resources/print_preview:build" ]
+      deps = [
+        "//chrome/browser/resources/pdf/elements:web_components",
+        "//chrome/browser/resources/print_preview:build",
+      ]
     } else {
       source = "print_preview/print_preview_resources.grd"
-      deps = [ "//chrome/browser/resources/print_preview/ui:polymer3_elements" ]
+      deps = [
+        "//chrome/browser/resources/pdf/elements:web_components",
+        "//chrome/browser/resources/print_preview/ui:web_components",
+      ]
     }
 
     defines = chrome_grit_defines
@@ -392,7 +420,7 @@ if (enable_webui_tab_strip) {
   grit("tab_strip_resources") {
     source = "tab_strip/tab_strip_resources.grd"
     defines = chrome_grit_defines
-    deps = [ "tab_strip:tab_strip_modules" ]
+    deps = [ "tab_strip:web_components" ]
     outputs = [
       "grit/tab_strip_resources.h",
       "grit/tab_strip_resources_map.cc",

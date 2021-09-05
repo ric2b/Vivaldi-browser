@@ -332,34 +332,16 @@ static_assert(ValidateHeaderEntries(kResponseHeaderEntries),
 bool HasMatchingRemovedDNRRequestHeader(
     const extensions::WebRequestInfo& request,
     const std::string& header) {
-  for (const auto& action : *request.dnr_actions) {
-    if (std::find_if(action.request_headers_to_remove.begin(),
-                     action.request_headers_to_remove.end(),
-                     [&header](const char* header_to_remove) {
-                       return base::EqualsCaseInsensitiveASCII(header_to_remove,
-                                                               header);
-                     }) != action.request_headers_to_remove.end()) {
-      return true;
-    }
-  }
-
+  // TODO(crbug.com/947591): Reimplement this method with
+  // |action.request_headers_to_modify|.
   return false;
 }
 
 bool HasMatchingRemovedDNRResponseHeader(
     const extensions::WebRequestInfo& request,
     const std::string& header) {
-  for (const auto& action : *request.dnr_actions) {
-    if (std::find_if(action.response_headers_to_remove.begin(),
-                     action.response_headers_to_remove.end(),
-                     [&header](const char* header_to_remove) {
-                       return base::EqualsCaseInsensitiveASCII(
-                           header, header_to_remove);
-                     }) != action.response_headers_to_remove.end()) {
-      return true;
-    }
-  }
-
+  // TODO(crbug.com/947591): Reimplement this method with
+  // |action.response_headers_to_modify|.
   return false;
 }
 
@@ -1101,8 +1083,7 @@ static void StoreResponseCookies(
     scoped_refptr<net::HttpResponseHeaders> override_response_headers) {
   override_response_headers->RemoveHeader("Set-Cookie");
   for (const std::unique_ptr<net::ParsedCookie>& cookie : cookies) {
-    override_response_headers->AddHeader("Set-Cookie: " +
-                                         cookie->ToCookieLine());
+    override_response_headers->AddHeader("Set-Cookie", cookie->ToCookieLine());
   }
 }
 
@@ -1377,8 +1358,7 @@ void MergeOnHeadersReceivedResponses(
           if (added_headers.find(lowercase_header) != added_headers.end())
             continue;
           added_headers.insert(lowercase_header);
-          (*override_response_headers)
-              ->AddHeader(header.first + ": " + header.second);
+          (*override_response_headers)->AddHeader(header.first, header.second);
         }
       }
       *response_headers_modified = true;
@@ -1404,8 +1384,7 @@ void MergeOnHeadersReceivedResponses(
               original_response_headers->raw_headers());
     }
     (*override_response_headers)->ReplaceStatusLine("HTTP/1.1 302 Found");
-    (*override_response_headers)->RemoveHeader("location");
-    (*override_response_headers)->AddHeader("Location: " + new_url.spec());
+    (*override_response_headers)->SetHeader("Location", new_url.spec());
     // Prevent the original URL's fragment from being added to the new URL.
     *preserve_fragment_on_redirect_url = new_url;
   }

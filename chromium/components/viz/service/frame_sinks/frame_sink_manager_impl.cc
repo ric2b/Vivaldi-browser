@@ -8,8 +8,9 @@
 #include <stdint.h>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/trace_event/trace_event.h"
 #include "components/viz/service/display/shared_bitmap_manager.h"
 #include "components/viz/service/display_embedder/output_surface_provider.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
@@ -291,6 +292,7 @@ void FrameSinkManagerImpl::EvictSurfaces(
 void FrameSinkManagerImpl::RequestCopyOfOutput(
     const SurfaceId& surface_id,
     std::unique_ptr<CopyOutputRequest> request) {
+  TRACE_EVENT0("viz", "FrameSinkManagerImpl::RequestCopyOfOutput");
   auto it = support_map_.find(surface_id.frame_sink_id());
   if (it == support_map_.end()) {
     // |request| will send an empty result when it goes out of scope.
@@ -569,21 +571,16 @@ const CompositorFrameSinkSupport* FrameSinkManagerImpl::GetFrameSinkForId(
   return nullptr;
 }
 
-void FrameSinkManagerImpl::SetPreferredFrameIntervalForFrameSinkId(
-    const FrameSinkId& id,
-    base::TimeDelta interval) {
-  auto it = frame_sink_data_.find(id);
-  DCHECK(it != frame_sink_data_.end());
-  it->second.preferred_frame_interval = interval;
-}
-
 base::TimeDelta FrameSinkManagerImpl::GetPreferredFrameIntervalForFrameSinkId(
-    const FrameSinkId& id) const {
-  auto it = frame_sink_data_.find(id);
-  if (it == frame_sink_data_.end())
-    return BeginFrameArgs::MinInterval();
+    const FrameSinkId& id,
+    mojom::CompositorFrameSinkType* type) const {
+  auto it = support_map_.find(id);
+  if (it != support_map_.end())
+    return it->second->GetPreferredFrameInterval(type);
 
-  return it->second.preferred_frame_interval;
+  if (type)
+    *type = mojom::CompositorFrameSinkType::kUnspecified;
+  return BeginFrameArgs::MinInterval();
 }
 
 void FrameSinkManagerImpl::DiscardPendingCopyOfOutputRequests(

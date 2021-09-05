@@ -10,9 +10,10 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/rand_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversion_utils.h"
@@ -487,7 +488,7 @@ base::flat_set<device::FidoTransportProtocol> GetAvailableTransports(
 
   // FIXME(martinkr): Check whether this can be moved in front of the BLE
   // adapter enumeration logic in FidoRequestHandlerBase.
-  if (!device::BluetoothAdapterFactory::Get().IsLowEnergySupported()) {
+  if (!device::BluetoothAdapterFactory::Get()->IsLowEnergySupported()) {
     return transports;
   }
 
@@ -539,13 +540,12 @@ AuthenticatorCommon::CreateRequestDelegate() {
 
 void AuthenticatorCommon::StartMakeCredentialRequest(
     bool allow_skipping_pin_touch) {
-  discovery_factory_ =
+  device::FidoDiscoveryFactory* discovery_factory =
       AuthenticatorEnvironmentImpl::GetInstance()->GetDiscoveryFactoryOverride(
           static_cast<RenderFrameHostImpl*>(render_frame_host_)
               ->frame_tree_node());
-  if (!discovery_factory_) {
-    discovery_factory_ = request_delegate_->GetDiscoveryFactory();
-  }
+  if (!discovery_factory)
+    discovery_factory = request_delegate_->GetDiscoveryFactory();
 
   if (base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
     std::vector<device::CableDiscoveryData> cable_pairings =
@@ -557,17 +557,19 @@ void AuthenticatorCommon::StartMakeCredentialRequest(
     if (request_delegate_->SetCableTransportInfo(
             /*cable_extension_provided=*/false, have_paired_phones,
             qr_generator_key)) {
-      discovery_factory_->set_cable_data(cable_pairings,
-                                         std::move(qr_generator_key));
+      discovery_factory->set_cable_data(cable_pairings,
+                                        std::move(qr_generator_key));
     }
   }
 
+  make_credential_options_->allow_skipping_pin_touch = allow_skipping_pin_touch;
+
   request_ = std::make_unique<device::MakeCredentialRequestHandler>(
-      discovery_factory_,
+      discovery_factory,
       GetAvailableTransports(render_frame_host_, request_delegate_.get(),
                              caller_origin_),
       *ctap_make_credential_request_, *authenticator_selection_criteria_,
-      allow_skipping_pin_touch,
+      *make_credential_options_,
       base::BindOnce(&AuthenticatorCommon::OnRegisterResponse,
                      weak_factory_.GetWeakPtr()));
 
@@ -583,10 +585,7 @@ void AuthenticatorCommon::StartMakeCredentialRequest(
           request_->GetWeakPtr()) /* request_callback */,
       base::BindRepeating(
           &device::FidoRequestHandlerBase::PowerOnBluetoothAdapter,
-          request_->GetWeakPtr()) /* bluetooth_adapter_power_on_callback */,
-      base::BindRepeating(
-          &device::FidoRequestHandlerBase::InitiatePairingWithDevice,
-          request_->GetWeakPtr()) /* ble_pairing_callback */);
+          request_->GetWeakPtr()) /* bluetooth_adapter_power_on_callback */);
   if (authenticator_selection_criteria_->require_resident_key()) {
     request_delegate_->SetMightCreateResidentCredential(true);
   }
@@ -595,13 +594,12 @@ void AuthenticatorCommon::StartMakeCredentialRequest(
 
 void AuthenticatorCommon::StartGetAssertionRequest(
     bool allow_skipping_pin_touch) {
-  discovery_factory_ =
+  device::FidoDiscoveryFactory* discovery_factory =
       AuthenticatorEnvironmentImpl::GetInstance()->GetDiscoveryFactoryOverride(
           static_cast<RenderFrameHostImpl*>(render_frame_host_)
               ->frame_tree_node());
-  if (!discovery_factory_) {
-    discovery_factory_ = request_delegate_->GetDiscoveryFactory();
-  }
+  if (!discovery_factory)
+    discovery_factory = request_delegate_->GetDiscoveryFactory();
 
   std::vector<device::CableDiscoveryData> cable_pairings;
   bool have_cable_extension = false;
@@ -625,12 +623,12 @@ void AuthenticatorCommon::StartGetAssertionRequest(
   if ((!cable_pairings.empty() || qr_generator_key.has_value()) &&
       request_delegate_->SetCableTransportInfo(
           have_cable_extension, have_paired_phones, qr_generator_key)) {
-    discovery_factory_->set_cable_data(std::move(cable_pairings),
-                                       std::move(qr_generator_key));
+    discovery_factory->set_cable_data(std::move(cable_pairings),
+                                      std::move(qr_generator_key));
   }
 
   request_ = std::make_unique<device::GetAssertionRequestHandler>(
-      discovery_factory_,
+      discovery_factory,
       GetAvailableTransports(render_frame_host_, request_delegate_.get(),
                              caller_origin_),
       *ctap_get_assertion_request_, allow_skipping_pin_touch,
@@ -649,10 +647,7 @@ void AuthenticatorCommon::StartGetAssertionRequest(
           request_->GetWeakPtr()) /* request_callback */,
       base::BindRepeating(
           &device::FidoRequestHandlerBase::PowerOnBluetoothAdapter,
-          request_->GetWeakPtr()) /* bluetooth_adapter_power_on_callback */,
-      base::BindRepeating(
-          &device::FidoRequestHandlerBase::InitiatePairingWithDevice,
-          request_->GetWeakPtr()) /* ble_pairing_callback*/);
+          request_->GetWeakPtr()) /* bluetooth_adapter_power_on_callback */);
 
   request_->set_observer(request_delegate_.get());
 }
@@ -686,8 +681,10 @@ void AuthenticatorCommon::MakeCredential(
 
   bool is_cross_origin;
   blink::mojom::AuthenticatorStatus status =
-      security_checker_->ValidateAncestorOrigins(caller_origin,
-                                                 &is_cross_origin);
+      security_checker_->ValidateAncestorOrigins(
+          caller_origin,
+          WebAuthRequestSecurityChecker::RequestType::kMakeCredential,
+          &is_cross_origin);
   if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
     InvokeCallbackAndCleanup(std::move(callback), status);
     return;
@@ -797,12 +794,31 @@ void AuthenticatorCommon::MakeCredential(
     return;
   }
 
-  if (options->protection_policy ==
-          blink::mojom::ProtectionPolicy::UNSPECIFIED &&
-      resident_key) {
-    // If not specified, UV_OR_CRED_ID_REQUIRED is made the default.
-    options->protection_policy =
-        blink::mojom::ProtectionPolicy::UV_OR_CRED_ID_REQUIRED;
+  base::Optional<device::CredProtectRequest> cred_protect_request;
+  switch (options->protection_policy) {
+    case blink::mojom::ProtectionPolicy::UNSPECIFIED:
+      if (resident_key) {
+        // If not specified, kUVOrCredIDRequired is made the default unless the
+        // authenticator defaults to something better.
+        cred_protect_request =
+            device::CredProtectRequest::kUVOrCredIDRequiredOrBetter;
+      }
+      break;
+    case blink::mojom::ProtectionPolicy::NONE:
+      cred_protect_request = device::CredProtectRequest::kUVOptional;
+      break;
+    case blink::mojom::ProtectionPolicy::UV_OR_CRED_ID_REQUIRED:
+      cred_protect_request = device::CredProtectRequest::kUVOrCredIDRequired;
+      break;
+    case blink::mojom::ProtectionPolicy::UV_REQUIRED:
+      cred_protect_request = device::CredProtectRequest::kUVRequired;
+      break;
+  }
+
+  make_credential_options_.emplace();
+  if (cred_protect_request) {
+    make_credential_options_->cred_protect_request.emplace(
+        *cred_protect_request, options->enforce_protection_policy);
   }
 
   DCHECK(make_credential_response_callback_.is_null());
@@ -855,7 +871,7 @@ void AuthenticatorCommon::MakeCredential(
     // NOTE: Because Android has no way of building a clientDataJSON for
     // cross-origin requests, we don't create the extension for those. This
     // problem will go away once we add clientDataHash inputs to Android.
-    ctap_make_credential_request_->android_client_data_ext.emplace(
+    make_credential_options_->android_client_data_ext.emplace(
         client_data::kCreateType, caller_origin_, options->challenge);
   }
 
@@ -870,21 +886,6 @@ void AuthenticatorCommon::MakeCredential(
   ctap_make_credential_request_->attestation_preference = attestation;
   attestation_requested_ =
       attestation != ::device::AttestationConveyancePreference::kNone;
-
-  switch (options->protection_policy) {
-    case blink::mojom::ProtectionPolicy::UNSPECIFIED:
-    case blink::mojom::ProtectionPolicy::NONE:
-      break;
-    case blink::mojom::ProtectionPolicy::UV_OR_CRED_ID_REQUIRED:
-      ctap_make_credential_request_->cred_protect =
-          std::make_pair(device::CredProtect::kUVOrCredIDRequired,
-                         options->enforce_protection_policy);
-      break;
-    case blink::mojom::ProtectionPolicy::UV_REQUIRED:
-      ctap_make_credential_request_->cred_protect = std::make_pair(
-          device::CredProtect::kUVRequired, options->enforce_protection_policy);
-      break;
-  }
 
   StartMakeCredentialRequest(/*allow_skipping_pin_touch=*/true);
 }
@@ -913,8 +914,10 @@ void AuthenticatorCommon::GetAssertion(
 
   bool is_cross_origin;
   blink::mojom::AuthenticatorStatus status =
-      security_checker_->ValidateAncestorOrigins(caller_origin,
-                                                 &is_cross_origin);
+      security_checker_->ValidateAncestorOrigins(
+          caller_origin,
+          WebAuthRequestSecurityChecker::RequestType::kGetAssertion,
+          &is_cross_origin);
   if (status != blink::mojom::AuthenticatorStatus::SUCCESS) {
     InvokeCallbackAndCleanup(std::move(callback), status);
     return;
@@ -1482,15 +1485,8 @@ void AuthenticatorCommon::Cleanup() {
 
   timer_->Stop();
   request_.reset();
-  if (discovery_factory_) {
-    // The FidoDiscoveryFactory instance may have been obtained via
-    // AuthenticatorEnvironmentImpl::GetDiscoveryFactoryOverride() (in unit
-    // tests or when WebDriver injected a virtual authenticator), in which case
-    // it may be long-lived and handle more than one request. Hence, we need to
-    // reset all per-request state before deleting its pointer.
-    discovery_factory_->ResetRequestState();
-    discovery_factory_ = nullptr;
-  }
+  ctap_make_credential_request_.reset();
+  make_credential_options_.reset();
   request_delegate_.reset();
   make_credential_response_callback_.Reset();
   get_assertion_response_callback_.Reset();

@@ -29,6 +29,8 @@
 #include <utility>
 
 #include "base/debug/dump_without_crashing.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -50,7 +52,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/location.h"
-#include "third_party/blink/renderer/core/frame/sandbox_flags.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
@@ -156,7 +157,7 @@ ContentSecurityPolicy::ContentSecurityPolicy()
       override_inline_style_allowed_(false),
       script_hash_algorithms_used_(kContentSecurityPolicyHashAlgorithmNone),
       style_hash_algorithms_used_(kContentSecurityPolicyHashAlgorithmNone),
-      sandbox_mask_(mojom::blink::WebSandboxFlags::kNone),
+      sandbox_mask_(network::mojom::blink::WebSandboxFlags::kNone),
       require_trusted_types_(false),
       insecure_request_policy_(
           mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone) {}
@@ -200,19 +201,14 @@ void ContentSecurityPolicy::ApplyPolicySideEffectsToDelegate() {
 
   // Set mixed content checking and sandbox flags, then dump all the parsing
   // error messages, then poke at histograms.
-  if (sandbox_mask_ != mojom::blink::WebSandboxFlags::kNone) {
+  if (sandbox_mask_ != network::mojom::blink::WebSandboxFlags::kNone) {
     Count(WebFeature::kSandboxViaCSP);
     delegate_->SetSandboxFlags(sandbox_mask_);
   }
 
   if (require_trusted_types_) {
-    if (delegate_->GetSecureContextMode() ==
-        SecureContextMode::kSecureContext) {
-      delegate_->SetRequireTrustedTypes();
-      Count(WebFeature::kTrustedTypesEnabled);
-    } else {
-      ReportNonsecureTrustedTypes();
-    }
+    delegate_->SetRequireTrustedTypes();
+    Count(WebFeature::kTrustedTypesEnabled);
   }
 
   delegate_->AddInsecureRequestPolicy(insecure_request_policy_);
@@ -649,13 +645,15 @@ bool ContentSecurityPolicy::AllowPluginTypeForDocument(
 
 bool ContentSecurityPolicy::AllowRequestWithoutIntegrity(
     mojom::RequestContextType context,
+    network::mojom::RequestDestination request_destination,
     const KURL& url,
     RedirectStatus redirect_status,
     ReportingDisposition reporting_disposition,
     CheckHeaderType check_header_type) const {
   for (const auto& policy : policies_) {
     if (CheckHeaderTypeMatches(check_header_type, policy->HeaderType()) &&
-        !policy->AllowRequestWithoutIntegrity(context, url, redirect_status,
+        !policy->AllowRequestWithoutIntegrity(context, request_destination, url,
+                                              redirect_status,
                                               reporting_disposition))
       return false;
   }
@@ -729,6 +727,7 @@ GetDirectiveTypeFromRequestContextType(mojom::RequestContextType context) {
 
 bool ContentSecurityPolicy::AllowRequest(
     mojom::RequestContextType context,
+    network::mojom::RequestDestination request_destination,
     const KURL& url,
     const String& nonce,
     const IntegrityMetadataSet& integrity_metadata,
@@ -737,13 +736,15 @@ bool ContentSecurityPolicy::AllowRequest(
     ReportingDisposition reporting_disposition,
     CheckHeaderType check_header_type) const {
   if (integrity_metadata.IsEmpty() &&
-      !AllowRequestWithoutIntegrity(context, url, redirect_status,
-                                    reporting_disposition, check_header_type)) {
+      !AllowRequestWithoutIntegrity(context, request_destination, url,
+                                    redirect_status, reporting_disposition,
+                                    check_header_type)) {
     return false;
   }
 
   base::Optional<ContentSecurityPolicy::DirectiveType> type =
       GetDirectiveTypeFromRequestContextType(context);
+
   if (!type)
     return true;
   return AllowFromSource(*type, url, redirect_status, reporting_disposition,
@@ -928,7 +929,8 @@ const KURL ContentSecurityPolicy::FallbackUrlForPlugin() const {
   return delegate_ ? delegate_->Url() : KURL();
 }
 
-void ContentSecurityPolicy::EnforceSandboxFlags(SandboxFlags mask) {
+void ContentSecurityPolicy::EnforceSandboxFlags(
+    network::mojom::blink::WebSandboxFlags mask) {
   sandbox_mask_ |= mask;
 }
 
@@ -1058,10 +1060,25 @@ static void GatherSecurityPolicyViolationEventData(
   if (!source_location)
     source_location = delegate->GetSourceLocation();
   if (source_location && source_location->LineNumber()) {
-    KURL source = KURL(source_location->Url());
-    init->setSourceFile(StripURLForUseInReport(delegate->GetSecurityOrigin(),
-                                               source, redirect_status,
-                                               effective_type));
+    KURL source_url = KURL(source_location->Url());
+    // The source file might be a script loaded from a redirect. Web browser
+    // usually tries to hide post-redirect information. The script might be
+    // cross-origin with the document, but also with other scripts. As a result,
+    // everything is cleared no matter the |source_url| origin.
+    // See https://crbug.com/1074317
+    //
+    // Note: The username, password and ref are stripped later below by
+    // StripURLForUseInReport(..)
+    source_url.SetQuery(String());
+
+    // TODO(arthursonzogni): |redirect_status| refers to the redirect status of
+    // the |blocked_url|. This is unrelated to |source_url|. Why using it in
+    // this case? This is obviously wrong:
+    String source_file =
+        StripURLForUseInReport(delegate->GetSecurityOrigin(), source_url,
+                               redirect_status, effective_type);
+
+    init->setSourceFile(source_file);
     init->setLineNumber(source_location->LineNumber());
     init->setColumnNumber(source_location->ColumnNumber());
   } else {
@@ -1248,11 +1265,12 @@ void ContentSecurityPolicy::ReportValueForEmptyDirective(const String& name,
                "'. The directive has been applied, and the value ignored.");
 }
 
-void ContentSecurityPolicy::ReportNonsecureTrustedTypes() {
-  LogToConsole(
-      "The Content Security Policy directive "
-      "'require-trusted-types-for' only has an effect in a secure "
-      "context. The directive has been ignored.");
+void ContentSecurityPolicy::ReportMixedContentReportURI(
+    const String& endpoint) {
+  LogToConsole("The Content Security Policy directive specifies as endpoint '" +
+               endpoint +
+               "'. This endpoint will be ignored since it violates the policy "
+               "for Mixed Content.");
 }
 
 void ContentSecurityPolicy::ReportInvalidInReportOnly(const String& name) {
@@ -1397,12 +1415,11 @@ void ContentSecurityPolicy::ReportInvalidSourceExpression(
   LogToConsole(message);
 }
 
-void ContentSecurityPolicy::ReportMissingReportURI(const String& policy) {
-  LogToConsole("The Content Security Policy '" + policy +
-               "' was delivered in report-only mode, but does not specify a "
-               "'report-uri'; the policy will have no effect. Please either "
-               "add a 'report-uri' directive, or deliver the policy via the "
-               "'Content-Security-Policy' header.");
+void ContentSecurityPolicy::ReportMultipleReportToEndpoints() {
+  LogToConsole(
+      "The Content Security Policy directive 'report-to' contains more than "
+      "one endpoint. Only the first one will be used, the other ones will be "
+      "ignored.");
 }
 
 void ContentSecurityPolicy::LogToConsole(const String& message,

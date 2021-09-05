@@ -40,15 +40,29 @@ void BrowserAccessibilityWin::UpdatePlatformAttributes() {
   GetCOM()->UpdateStep3FireEvents();
 }
 
-ui::AXPlatformNode* BrowserAccessibilityWin::GetAXPlatformNode() const {
-  if (!instance_active())
-    return nullptr;
+bool BrowserAccessibilityWin::PlatformIsLeafIncludingIgnored() const {
+  // On Windows, we want to hide the subtree of a collapsed <select> element.
+  // Otherwise, ATs are always going to announce its options whether it's
+  // collapsed or expanded. In the AXTree, this element corresponds to a node
+  // with role ax::mojom::Role::kPopUpButton parent of a node with role
+  // ax::mojom::Role::kMenuListPopup.
+  if (IsCollapsedMenuListPopUpButton())
+    return true;
 
-  return GetCOM();
+  return BrowserAccessibility::PlatformIsLeafIncludingIgnored();
 }
 
-bool BrowserAccessibilityWin::IsNative() const {
-  return true;
+bool BrowserAccessibilityWin::CanFireEvents() const {
+  // On Windows, we want to hide the subtree of a collapsed <select> element but
+  // we still need to fire events on those hidden nodes.
+  if (!IsIgnored() && GetCollapsedMenuListPopUpButtonAncestor())
+    return true;
+
+  return BrowserAccessibility::CanFireEvents();
+}
+
+ui::AXPlatformNode* BrowserAccessibilityWin::GetAXPlatformNode() const {
+  return GetCOM();
 }
 
 void BrowserAccessibilityWin::OnLocationChanged() {
@@ -104,13 +118,11 @@ BrowserAccessibilityComWin* BrowserAccessibilityWin::GetCOM() const {
 }
 
 BrowserAccessibilityWin* ToBrowserAccessibilityWin(BrowserAccessibility* obj) {
-  DCHECK(!obj || obj->IsNative());
   return static_cast<BrowserAccessibilityWin*>(obj);
 }
 
 const BrowserAccessibilityWin* ToBrowserAccessibilityWin(
     const BrowserAccessibility* obj) {
-  DCHECK(!obj || obj->IsNative());
   return static_cast<const BrowserAccessibilityWin*>(obj);
 }
 

@@ -31,6 +31,8 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickMovementThreshold[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickMenuPosition[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityCaretHighlightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityCursorHighlightEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityFloatingMenuEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityFloatingMenuPosition[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityFocusHighlightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySelectToSpeakEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessEnabled[];
@@ -101,6 +103,8 @@ ASH_PUBLIC_EXPORT extern const char kNightLightCustomEndTime[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCachedLatitude[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCachedLongitude[];
 ASH_PUBLIC_EXPORT extern const char kAutoNightLightNotificationDismissed[];
+
+ASH_PUBLIC_EXPORT extern const char kOsSettingsEnabled[];
 
 ASH_PUBLIC_EXPORT extern const char kAllowScreenLock[];
 ASH_PUBLIC_EXPORT extern const char kEnableAutoScreenLock[];
@@ -182,6 +186,10 @@ ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoShownInLauncher[];
 ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoDismissedInLauncher[];
 
 ASH_PUBLIC_EXPORT extern const char kLockScreenMediaControlsEnabled[];
+
+ASH_PUBLIC_EXPORT extern const char kXkbAutoRepeatDelay[];
+ASH_PUBLIC_EXPORT extern const char kXkbAutoRepeatEnabled[];
+ASH_PUBLIC_EXPORT extern const char kXkbAutoRepeatInterval[];
 
 ASH_PUBLIC_EXPORT extern const char kNaturalScroll[];
 ASH_PUBLIC_EXPORT extern const char kMouseReverseScroll[];

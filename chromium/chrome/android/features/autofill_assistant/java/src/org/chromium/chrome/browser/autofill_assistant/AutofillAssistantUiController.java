@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.Snackbar
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -111,7 +112,7 @@ class AutofillAssistantUiController {
         mActivity = activity;
         mCoordinator = new AssistantCoordinator(activity, controller, tabObscuringHandler,
                 onboardingCoordinator == null ? null : onboardingCoordinator.transferControls(),
-                this::safeNativeOnKeyboardVisibilityChanged);
+                this::safeNativeOnKeyboardVisibilityChanged, this::safeNativeOnBackButtonClicked);
         mActivityTabObserver =
                 new ActivityTabProvider.ActivityTabTabObserver(activity.getActivityTabProvider()) {
                     @Override
@@ -140,7 +141,9 @@ class AutofillAssistantUiController {
                             // The original tab was re-selected. Show it again and force an
                             // expansion on the bottom sheet.
                             safeNativeSetVisible(true);
-                            showContentAndExpandBottomSheet();
+                            if (mCoordinator.getBottomBarCoordinator() != null) {
+                                showContentAndExpandBottomSheet();
+                            }
                         } else {
                             // A new tab was selected. If Autofill Assistant is running on it,
                             // attach the UI to that other instance, otherwise destroy the UI.
@@ -150,10 +153,11 @@ class AutofillAssistantUiController {
                     }
 
                     @Override
-                    public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {
+                    public void onActivityAttachmentChanged(
+                            Tab tab, @Nullable WindowAndroid window) {
                         if (mWebContents == null) return;
 
-                        if (!isAttached && tab.getWebContents() == mWebContents) {
+                        if (window == null && tab.getWebContents() == mWebContents) {
                             if (!allowTabSwitching) {
                                 safeNativeStop(DropOutReason.TAB_DETACHED);
                                 return;
@@ -409,6 +413,14 @@ class AutofillAssistantUiController {
         }
     }
 
+    private boolean safeNativeOnBackButtonClicked() {
+        if (mNativeUiController != 0) {
+            return AutofillAssistantUiControllerJni.get().onBackButtonClicked(
+                    mNativeUiController, AutofillAssistantUiController.this);
+        }
+        return false;
+    }
+
     private void safeNativeSetVisible(boolean visible) {
         if (mNativeUiController != 0) {
             AutofillAssistantUiControllerJni.get().setVisible(
@@ -432,6 +444,8 @@ class AutofillAssistantUiController {
                 long nativeUiControllerAndroid, AutofillAssistantUiController caller);
         void onKeyboardVisibilityChanged(long nativeUiControllerAndroid,
                 AutofillAssistantUiController caller, boolean visible);
+        boolean onBackButtonClicked(
+                long nativeUiControllerAndroid, AutofillAssistantUiController caller);
         void setVisible(long nativeUiControllerAndroid, AutofillAssistantUiController caller,
                 boolean visible);
     }

@@ -30,16 +30,26 @@ import org.chromium.ui.modelutil.PropertyModel;
  */
 @JNINamespace("weblayer")
 public final class BrowserViewController
-        implements TopControlsContainerView.Listener,
+        implements BrowserControlsContainerView.Listener,
                    WebContentsGestureStateTracker.OnGestureStateChangedListener,
                    ModalDialogManager.ModalDialogManagerObserver {
     private final ContentViewRenderView mContentViewRenderView;
+    // Child of mContentViewRenderView. Be very careful adding Views to this, as any Views are not
+    // accessible (ContentView provides it's own accessible implementation that interacts with
+    // WebContents).
     private final ContentView mContentView;
-    // Child of mContentView, holds top-view from client.
-    private final TopControlsContainerView mTopControlsContainerView;
-    // Other child of mContentView, which holds views that sit on top of the web contents, such as
-    // tab modal dialogs.
+    // Child of mContentViewRenderView, holds top-view from client.
+    private final BrowserControlsContainerView mTopControlsContainerView;
+    // Child of mContentViewRenderView, holds bottom-view from client.
+    private final BrowserControlsContainerView mBottomControlsContainerView;
+    // Other child of mContentViewRenderView, which holds views that sit on top of the web contents,
+    // such as tab modal dialogs.
     private final FrameLayout mWebContentsOverlayView;
+    // Child of mContentViewRenderView. This view has a top margin matching the current state of the
+    // top controls, which allows the autofill popup to be positioned correctly.
+    private final AutofillView mAutofillView;
+    private final RelativeLayout.LayoutParams mAutofillParams = new RelativeLayout.LayoutParams(
+            RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT);
 
     private final FragmentWindowAndroid mWindowAndroid;
     private final ModalDialogManager mModalDialogManager;
@@ -63,23 +73,32 @@ public final class BrowserViewController
         mContentViewRenderView.onNativeLibraryLoaded(
                 mWindowAndroid, ContentViewRenderView.MODE_SURFACE_VIEW);
         mTopControlsContainerView =
-                new TopControlsContainerView(context, mContentViewRenderView, this);
+                new BrowserControlsContainerView(context, mContentViewRenderView, this, true);
         mTopControlsContainerView.setId(View.generateViewId());
+        mBottomControlsContainerView =
+                new BrowserControlsContainerView(context, mContentViewRenderView, this, false);
+        mBottomControlsContainerView.setId(View.generateViewId());
         mContentView = ContentView.createContentView(
                 context, mTopControlsContainerView.getEventOffsetHandler());
         mContentViewRenderView.addView(mContentView,
-                new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.UNSPECIFIED_GRAVITY));
-        mContentView.addView(mTopControlsContainerView,
+                new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT,
+                        RelativeLayout.LayoutParams.MATCH_PARENT));
+        mContentViewRenderView.addView(mTopControlsContainerView,
                 new RelativeLayout.LayoutParams(
                         LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        RelativeLayout.LayoutParams bottomControlsContainerViewParams =
+                new RelativeLayout.LayoutParams(
+                        LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        bottomControlsContainerViewParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        mContentViewRenderView.addView(
+                mBottomControlsContainerView, bottomControlsContainerViewParams);
 
         mWebContentsOverlayView = new FrameLayout(context);
         RelativeLayout.LayoutParams overlayParams =
                 new RelativeLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0);
         overlayParams.addRule(RelativeLayout.BELOW, mTopControlsContainerView.getId());
-        overlayParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-        mContentView.addView(mWebContentsOverlayView, overlayParams);
+        overlayParams.addRule(RelativeLayout.ABOVE, mBottomControlsContainerView.getId());
+        mContentViewRenderView.addView(mWebContentsOverlayView, overlayParams);
         mWindowAndroid.setAnimationPlaceholderView(mWebContentsOverlayView);
 
         mModalDialogManager = new ModalDialogManager(
@@ -88,12 +107,16 @@ public final class BrowserViewController
         mModalDialogManager.registerPresenter(
                 new WebLayerTabModalPresenter(this, context), ModalDialogType.TAB);
         mWindowAndroid.setModalDialogManager(mModalDialogManager);
+
+        mAutofillView = new AutofillView(context);
+        mContentViewRenderView.addView(mAutofillView, mAutofillParams);
     }
 
     public void destroy() {
         mWindowAndroid.setModalDialogManager(null);
         setActiveTab(null);
         mTopControlsContainerView.destroy();
+        mBottomControlsContainerView.destroy();
         mContentViewRenderView.destroy();
     }
 
@@ -108,6 +131,10 @@ public final class BrowserViewController
 
     public FrameLayout getWebContentsOverlayView() {
         return mWebContentsOverlayView;
+    }
+
+    public ViewGroup getAutofillView() {
+        return mAutofillView;
     }
 
     public void setActiveTab(TabImpl tab) {
@@ -132,12 +159,15 @@ public final class BrowserViewController
             mGestureStateTracker =
                     new WebContentsGestureStateTracker(mContentView, webContents, this);
         }
+        mAutofillView.setTab(mTab);
         mContentView.setTab(mTab);
 
         mContentViewRenderView.setWebContents(webContents);
         mTopControlsContainerView.setWebContents(webContents);
+        mBottomControlsContainerView.setWebContents(webContents);
         if (mTab != null) {
-            mTab.onDidGainActive(mTopControlsContainerView.getNativeHandle());
+            mTab.onDidGainActive(mTopControlsContainerView.getNativeHandle(),
+                    mBottomControlsContainerView.getNativeHandle());
             mContentView.requestFocus();
         }
     }
@@ -150,16 +180,31 @@ public final class BrowserViewController
         mTopControlsContainerView.setView(view);
     }
 
+    public void setBottomView(View view) {
+        mBottomControlsContainerView.setView(view);
+    }
+
+    public boolean compositorHasSurface() {
+        return mContentViewRenderView.hasSurface();
+    }
+
+    public void setWebContentIsObscured(boolean isObscured) {
+        mContentView.setIsObscuredForAccessibility(isObscured);
+    }
+
     @Override
-    public void onTopControlsCompletelyShownOrHidden() {
+    public void onBrowserControlsCompletelyShownOrHidden() {
         adjustWebContentsHeightIfNecessary();
     }
 
     @Override
     public void onGestureStateChanged() {
+        // This is called from |mGestureStateTracker|.
+        assert mGestureStateTracker != null;
         if (mGestureStateTracker.isInGestureOrScroll()) {
             mCachedDoBrowserControlsShrinkRendererSize =
-                    mTopControlsContainerView.isTopControlVisible();
+                    mTopControlsContainerView.isControlVisible()
+                    || mBottomControlsContainerView.isControlVisible();
         }
         adjustWebContentsHeightIfNecessary();
     }
@@ -187,12 +232,17 @@ public final class BrowserViewController
     }
 
     private void adjustWebContentsHeightIfNecessary() {
-        if (mGestureStateTracker.isInGestureOrScroll()
-                || !mTopControlsContainerView.isTopControlsCompletelyShownOrHidden()) {
+        if (mGestureStateTracker == null || mGestureStateTracker.isInGestureOrScroll()
+                || !mTopControlsContainerView.isCompletelyShownOrHidden()
+                || !mBottomControlsContainerView.isCompletelyShownOrHidden()) {
             return;
         }
         mContentViewRenderView.setWebContentsHeightDelta(
-                mTopControlsContainerView.getTopContentOffset());
+                mTopControlsContainerView.getContentHeightDelta()
+                + mBottomControlsContainerView.getContentHeightDelta());
+
+        mAutofillParams.topMargin = mTopControlsContainerView.getContentHeightDelta();
+        mAutofillView.setLayoutParams(mAutofillParams);
     }
 
     public void setSupportsEmbedding(boolean enable, ValueCallback<Boolean> callback) {
@@ -202,13 +252,27 @@ public final class BrowserViewController
     }
 
     public void onTopControlsChanged(int topControlsOffsetY, int topContentOffsetY) {
-        mTopControlsContainerView.onTopControlsChanged(topControlsOffsetY, topContentOffsetY);
+        mTopControlsContainerView.onOffsetsChanged(topControlsOffsetY, topContentOffsetY);
+    }
+
+    public void onBottomControlsChanged(int bottomControlsOffsetY) {
+        mBottomControlsContainerView.onOffsetsChanged(bottomControlsOffsetY, 0);
     }
 
     public boolean doBrowserControlsShrinkRendererSize() {
-        return (mGestureStateTracker.isInGestureOrScroll())
+        return mGestureStateTracker.isInGestureOrScroll()
                 ? mCachedDoBrowserControlsShrinkRendererSize
-                : mTopControlsContainerView.isTopControlVisible();
+                : (mTopControlsContainerView.isControlVisible()
+                        || mBottomControlsContainerView.isControlVisible());
+    }
+
+    /**
+     * Causes the browser controls to be fully shown. Take care in calling this. Normally the
+     * renderer drives the offsets, but this method circumvents that.
+     */
+    public void showControls() {
+        mTopControlsContainerView.onOffsetsChanged(0, mTopControlsContainerView.getHeight());
+        mBottomControlsContainerView.onOffsetsChanged(0, 0);
     }
 
     /**

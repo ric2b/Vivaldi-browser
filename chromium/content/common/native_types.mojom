@@ -41,39 +41,6 @@ enum NetworkConnectionType;
 struct WebCursor;
 
 [Native]
-enum Button;
-
-[Native]
-enum PointerType;
-
-[Native]
-struct EditCommand;
-
-[Native]
-enum InputEventAckState;
-
-[Native]
-enum InputEventAckSource;
-
-[Native]
-enum EventType;
-
-[Native]
-enum Cancelability;
-
-[Native]
-enum GestureDevice;
-
-[Native]
-enum InertialPhaseState;
-
-[Native]
-enum TouchState;
-
-[Native]
-struct DidOverscrollParams;
-
-[Native]
 struct SyntheticSmoothDrag;
 
 [Native]

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <tuple>
 #include <utility>
 
 #include "base/bind.h"
@@ -514,7 +515,15 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes / 2,
+                                    download_metrics.total_bytes));
+
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -583,7 +592,7 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
       false, base::BindOnce(&CompletionCallbackMock::Callback, quit_closure()));
   RunThreads();
 
-  EXPECT_EQ(8u, items.size());
+  EXPECT_EQ(9u, items.size());
   EXPECT_EQ(ComponentState::kChecking, items[0].state);
   EXPECT_STREQ("jebgalgnebhfojomionfpkfelancnnkf", items[0].id.c_str());
   EXPECT_EQ(ComponentState::kChecking, items[1].state);
@@ -594,12 +603,23 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoUpdate) {
   EXPECT_STREQ("jebgalgnebhfojomionfpkfelancnnkf", items[3].id.c_str());
   EXPECT_EQ(ComponentState::kDownloading, items[4].state);
   EXPECT_STREQ("jebgalgnebhfojomionfpkfelancnnkf", items[4].id.c_str());
-  EXPECT_EQ(ComponentState::kUpdating, items[5].state);
+  EXPECT_EQ(ComponentState::kDownloading, items[5].state);
   EXPECT_STREQ("jebgalgnebhfojomionfpkfelancnnkf", items[5].id.c_str());
-  EXPECT_EQ(ComponentState::kUpdated, items[6].state);
+  EXPECT_EQ(ComponentState::kUpdating, items[6].state);
   EXPECT_STREQ("jebgalgnebhfojomionfpkfelancnnkf", items[6].id.c_str());
-  EXPECT_EQ(ComponentState::kUpToDate, items[7].state);
-  EXPECT_STREQ("abagagagagagagagagagagagagagagag", items[7].id.c_str());
+  EXPECT_EQ(ComponentState::kUpdated, items[7].state);
+  EXPECT_STREQ("jebgalgnebhfojomionfpkfelancnnkf", items[7].id.c_str());
+  EXPECT_EQ(ComponentState::kUpToDate, items[8].state);
+  EXPECT_STREQ("abagagagagagagagagagagagagagagag", items[8].id.c_str());
+
+  std::vector<std::tuple<int64_t, int64_t>> progress_bytes = {
+      {-1, -1},     {-1, -1},     {-1, -1},     {-1, -1}, {921, 1843},
+      {1843, 1843}, {1843, 1843}, {1843, 1843}, {-1, -1}};
+  EXPECT_EQ(items.size(), progress_bytes.size());
+  for (size_t i{0}; i != items.size(); ++i) {
+    EXPECT_EQ(items[i].downloaded_bytes, std::get<0>(progress_bytes[i]));
+    EXPECT_EQ(items[i].total_bytes, std::get<1>(progress_bytes[i]));
+  }
 
   update_client->RemoveObserver(&observer);
 }
@@ -738,7 +758,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdateFirstServerIgnoresSecond) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -973,7 +995,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdateNoCrxComponentData) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -1345,7 +1369,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -1462,7 +1488,8 @@ TEST_F(UpdateClientTest, TwoCrxUpdateDownloadTimeout) {
   update_client->RemoveObserver(&observer);
 }
 
-// Tests the differential update scenario for one CRX.
+// Tests the differential update scenario for one CRX. Tests install progress
+// for differential and full updates.
 TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
   class DataCallbackMock {
    public:
@@ -1471,8 +1498,8 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
       static int num_calls = 0;
 
       // Must use the same stateful installer object.
-      static scoped_refptr<CrxInstaller> installer =
-          base::MakeRefCounted<VersionedTestInstaller>();
+      static auto installer = base::MakeRefCounted<VersionedTestInstaller>();
+      installer->set_installer_progress_samples({-1, 50, 100});
 
       ++num_calls;
 
@@ -1667,7 +1694,15 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes / 2,
+                                    download_metrics.total_bytes));
+
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -1718,6 +1753,9 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
         .Times(AtLeast(1));
     EXPECT_CALL(observer, OnEvent(Events::COMPONENT_UPDATE_READY,
                                   "ihfokbkgjpifnbbojhneepfflplebdkc")).Times(1);
+    EXPECT_CALL(observer, OnEvent(Events::COMPONENT_UPDATE_UPDATING,
+                                  "ihfokbkgjpifnbbojhneepfflplebdkc"))
+        .Times(3);
     EXPECT_CALL(observer, OnEvent(Events::COMPONENT_UPDATED,
                                   "ihfokbkgjpifnbbojhneepfflplebdkc")).Times(1);
     EXPECT_CALL(observer, OnEvent(Events::COMPONENT_CHECKING_FOR_UPDATES,
@@ -1729,6 +1767,9 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
         .Times(AtLeast(1));
     EXPECT_CALL(observer, OnEvent(Events::COMPONENT_UPDATE_READY,
                                   "ihfokbkgjpifnbbojhneepfflplebdkc")).Times(1);
+    EXPECT_CALL(observer, OnEvent(Events::COMPONENT_UPDATE_UPDATING,
+                                  "ihfokbkgjpifnbbojhneepfflplebdkc"))
+        .Times(3);
     EXPECT_CALL(observer, OnEvent(Events::COMPONENT_UPDATED,
                                   "ihfokbkgjpifnbbojhneepfflplebdkc")).Times(1);
   }
@@ -1751,7 +1792,7 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
                        runloop.QuitClosure()));
     runloop.Run();
 
-    EXPECT_EQ(6u, items.size());
+    EXPECT_EQ(10u, items.size());
     EXPECT_EQ(ComponentState::kChecking, items[0].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[0].id.c_str());
     EXPECT_EQ(ComponentState::kCanUpdate, items[1].state);
@@ -1760,10 +1801,23 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[2].id.c_str());
     EXPECT_EQ(ComponentState::kDownloading, items[3].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[3].id.c_str());
-    EXPECT_EQ(ComponentState::kUpdating, items[4].state);
+    EXPECT_EQ(ComponentState::kDownloading, items[4].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[4].id.c_str());
-    EXPECT_EQ(ComponentState::kUpdated, items[5].state);
+    EXPECT_EQ(ComponentState::kUpdating, items[5].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[5].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdating, items[6].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[6].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdating, items[7].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[7].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdating, items[8].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[8].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdated, items[9].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[9].id.c_str());
+
+    std::vector<int> samples = {-1, -1, -1, -1, -1, -1, -1, 50, 100, 100};
+    EXPECT_EQ(items.size(), samples.size());
+    for (size_t i = 0; i != items.size(); ++i)
+      EXPECT_EQ(items[i].install_progress, samples[i]);
   }
 
   {
@@ -1782,7 +1836,7 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
                        runloop.QuitClosure()));
     runloop.Run();
 
-    EXPECT_EQ(6u, items.size());
+    EXPECT_EQ(10u, items.size());
     EXPECT_EQ(ComponentState::kChecking, items[0].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[0].id.c_str());
     EXPECT_EQ(ComponentState::kCanUpdate, items[1].state);
@@ -1791,10 +1845,23 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdate) {
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[2].id.c_str());
     EXPECT_EQ(ComponentState::kDownloadingDiff, items[3].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[3].id.c_str());
-    EXPECT_EQ(ComponentState::kUpdatingDiff, items[4].state);
+    EXPECT_EQ(ComponentState::kDownloadingDiff, items[4].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[4].id.c_str());
-    EXPECT_EQ(ComponentState::kUpdated, items[5].state);
+    EXPECT_EQ(ComponentState::kUpdatingDiff, items[5].state);
     EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[5].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdatingDiff, items[6].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[6].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdatingDiff, items[7].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[7].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdatingDiff, items[8].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[8].id.c_str());
+    EXPECT_EQ(ComponentState::kUpdated, items[9].state);
+    EXPECT_STREQ("ihfokbkgjpifnbbojhneepfflplebdkc", items[9].id.c_str());
+
+    std::vector<int> samples = {-1, -1, -1, -1, -1, -1, -1, 50, 100, 100};
+    EXPECT_EQ(items.size(), samples.size());
+    for (size_t i = 0; i != items.size(); ++i)
+      EXPECT_EQ(items[i].install_progress, samples[i]);
   }
 
   update_client->RemoveObserver(&observer);
@@ -1818,6 +1885,7 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
     void Install(const base::FilePath& unpack_path,
                  const std::string& public_key,
                  std::unique_ptr<InstallParams> /*install_params*/,
+                 ProgressCallback progress_callback,
                  Callback callback) override {
       DoInstall(unpack_path, std::move(callback));
 
@@ -1967,7 +2035,9 @@ TEST_F(UpdateClientTest, OneCrxInstallError) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -2055,8 +2125,7 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
       static int num_calls = 0;
 
       // Must use the same stateful installer object.
-      static scoped_refptr<CrxInstaller> installer =
-          base::MakeRefCounted<VersionedTestInstaller>();
+      static auto installer = base::MakeRefCounted<VersionedTestInstaller>();
 
       ++num_calls;
 
@@ -2263,7 +2332,9 @@ TEST_F(UpdateClientTest, OneCrxDiffUpdateFailsFullUpdateSucceeds) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -2688,7 +2759,9 @@ TEST_F(UpdateClientTest, OneCrxInstall) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,
@@ -3560,7 +3633,9 @@ TEST_F(UpdateClientTest, TwoCrxUpdateOneUpdateDisabled) {
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadProgress,
-                                    base::Unretained(this)));
+                                    base::Unretained(this),
+                                    download_metrics.downloaded_bytes,
+                                    download_metrics.total_bytes));
 
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::BindOnce(&MockCrxDownloader::OnDownloadComplete,

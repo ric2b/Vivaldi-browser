@@ -6,6 +6,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
@@ -158,9 +159,17 @@ GrGLFunction<R GR_GL_FUNCTION_TYPE(Args...)> bind_with_flush_on_mac(
     // Conditional may be optimized out because droppable_call is set at compile
     // time.
     if (!droppable_call || !HasInitializedNullDrawGLBindings()) {
-      glFlush();
+      {
+        TRACE_EVENT0(
+            "gpu", "CreateGrGLInterface - bind_with_flush_on_mac - beforefunc")
+        glFlush();
+      }
       func(args...);
-      glFlush();
+      {
+        TRACE_EVENT0("gpu",
+                     "CreateGrGLInterface - bind_with_flush_on_mac - afterfunc")
+        glFlush();
+      }
     }
   };
 #else
@@ -215,8 +224,7 @@ const char* kBlacklistExtensions[] = {
 sk_sp<GrGLInterface> CreateGrGLInterface(
     const gl::GLVersionInfo& version_info,
     bool use_version_es2,
-    gl::ProgressReporter* progress_reporter,
-    std::vector<const char*> blacklisted_extensions) {
+    gl::ProgressReporter* progress_reporter) {
   // Can't fake ES with desktop GL.
   use_version_es2 &= version_info.is_es;
 
@@ -267,8 +275,6 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
     return nullptr;
   }
   for (const char* extension : kBlacklistExtensions)
-    extensions.remove(extension);
-  for (const char* extension : blacklisted_extensions)
     extensions.remove(extension);
 
   GrGLInterface* interface = new GrGLInterface();
@@ -504,8 +510,8 @@ sk_sp<GrGLInterface> CreateGrGLInterface(
       gl->glGetFramebufferAttachmentParameterivEXTFn;
   functions->fGetRenderbufferParameteriv =
       gl->glGetRenderbufferParameterivEXTFn;
-  functions->fBindFramebuffer =
-      bind_with_flush_on_mac(gl->glBindFramebufferEXTFn);
+  functions->fBindFramebuffer = bind_slow_with_flush_on_mac(
+      gl->glBindFramebufferEXTFn, progress_reporter);
   functions->fFramebufferTexture2D = gl->glFramebufferTexture2DEXTFn;
   functions->fCheckFramebufferStatus = gl->glCheckFramebufferStatusEXTFn;
   functions->fDeleteFramebuffers = bind_slow_with_flush_on_mac(

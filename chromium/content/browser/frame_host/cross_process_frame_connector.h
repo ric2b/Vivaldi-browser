@@ -14,6 +14,7 @@
 #include "content/browser/renderer_host/frame_connector_delegate.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_visual_properties.h"
+#include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom.h"
 
 namespace IPC {
@@ -80,7 +81,7 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   RenderWidgetHostViewBase* GetRootRenderWidgetHostView() override;
   void RenderProcessGone() override;
   void SendIntrinsicSizingInfoToParent(
-      const blink::WebIntrinsicSizingInfo&) override;
+      blink::mojom::IntrinsicSizingInfoPtr) override;
 
   void UpdateCursor(const WebCursor& cursor) override;
   gfx::PointF TransformPointToRootCoordSpace(
@@ -91,8 +92,9 @@ class CONTENT_EXPORT CrossProcessFrameConnector
       RenderWidgetHostViewBase* target_view,
       const viz::SurfaceId& local_surface_id,
       gfx::PointF* transformed_point) override;
-  void ForwardAckedTouchpadZoomEvent(const blink::WebGestureEvent& event,
-                                     InputEventAckState ack_result) override;
+  void ForwardAckedTouchpadZoomEvent(
+      const blink::WebGestureEvent& event,
+      blink::mojom::InputEventResultState ack_result) override;
   bool BubbleScrollEvent(const blink::WebGestureEvent& event) override;
   bool HasFocus() override;
   void FocusRootView() override;
@@ -111,8 +113,9 @@ class CONTENT_EXPORT CrossProcessFrameConnector
   bool IsSubtreeThrottled() const override;
   void DidUpdateVisualProperties(
       const cc::RenderFrameMetadata& metadata) override;
-  void DidAckGestureEvent(const blink::WebGestureEvent& event,
-                          InputEventAckState ack_result) override;
+  void DidAckGestureEvent(
+      const blink::WebGestureEvent& event,
+      blink::mojom::InputEventResultState ack_result) override;
 
   // Set the visibility of immediate child views, i.e. views whose parent view
   // is |view_|.

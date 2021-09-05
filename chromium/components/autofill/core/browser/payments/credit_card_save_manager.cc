@@ -318,18 +318,6 @@ void CreditCardSaveManager::OnDidUploadCard(
   }
 
   if (result == AutofillClient::SUCCESS) {
-    // If the upload succeeds and we can store unmasked cards on this OS, we
-    // will keep a copy of the card as a full server card on the device.
-    if (!server_id.empty() &&
-        OfferStoreUnmaskedCards(payments_client_->is_off_the_record()) &&
-        !IsAutofillNoLocalSaveOnUploadSuccessExperimentEnabled()) {
-      upload_request_.card.set_record_type(CreditCard::FULL_SERVER_CARD);
-      upload_request_.card.SetServerStatus(CreditCard::OK);
-      upload_request_.card.set_server_id(server_id);
-      DCHECK(personal_data_manager_);
-      if (personal_data_manager_)
-        personal_data_manager_->AddFullServerCreditCard(upload_request_.card);
-    }
     // Log how many strikes the card had when it was saved.
     LogStrikesPresentWhenCardSaved(
         /*is_local=*/false,
@@ -371,6 +359,7 @@ CreditCardSaveManager::GetCreditCardSaveStrikeDatabase() {
   return credit_card_save_strike_database_.get();
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 LocalCardMigrationStrikeDatabase*
 CreditCardSaveManager::GetLocalCardMigrationStrikeDatabase() {
   if (local_card_migration_strike_database_.get() == nullptr) {
@@ -380,6 +369,7 @@ CreditCardSaveManager::GetLocalCardMigrationStrikeDatabase() {
   }
   return local_card_migration_strike_database_.get();
 }
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 void CreditCardSaveManager::OnDidGetUploadDetails(
     AutofillClient::PaymentsRpcResult result,
@@ -555,10 +545,13 @@ void CreditCardSaveManager::OnUserDidDecideOnLocalSave(
       // removed.
       GetCreditCardSaveStrikeDatabase()->ClearStrikes(
           base::UTF16ToUTF8(local_card_save_candidate_.LastFourDigits()));
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
       // Clear some local card migration strikes, as there is now a new card
       // eligible for migration.
       GetLocalCardMigrationStrikeDatabase()->RemoveStrikes(
           LocalCardMigrationStrikeDatabase::kStrikesToRemoveWhenLocalCardAdded);
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
       personal_data_manager_->OnAcceptedLocalCreditCardSave(
           local_card_save_candidate_);

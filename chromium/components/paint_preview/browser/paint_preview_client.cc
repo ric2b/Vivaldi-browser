@@ -94,7 +94,8 @@ void RecordUkmCaptureData(ukm::SourceId source_id,
 
 }  // namespace
 
-PaintPreviewClient::PaintPreviewParams::PaintPreviewParams() = default;
+PaintPreviewClient::PaintPreviewParams::PaintPreviewParams()
+    : is_main_frame(false), max_per_capture_size(0) {}
 
 PaintPreviewClient::PaintPreviewParams::~PaintPreviewParams() = default;
 
@@ -102,8 +103,9 @@ PaintPreviewClient::PaintPreviewData::PaintPreviewData() = default;
 
 PaintPreviewClient::PaintPreviewData::~PaintPreviewData() = default;
 
-PaintPreviewClient::PaintPreviewData& PaintPreviewClient::PaintPreviewData::
-operator=(PaintPreviewData&& rhs) = default;
+PaintPreviewClient::PaintPreviewData&
+PaintPreviewClient::PaintPreviewData::operator=(
+    PaintPreviewData&& rhs) noexcept = default;
 
 PaintPreviewClient::PaintPreviewData::PaintPreviewData(
     PaintPreviewData&& other) noexcept = default;
@@ -140,6 +142,9 @@ void PaintPreviewClient::CapturePaintPreview(
   document_data.source_id =
       ukm::GetSourceIdForWebContentsDocument(web_contents());
   all_document_data_.insert({params.document_guid, std::move(document_data)});
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+      "paint_preview", "PaintPreviewClient::CapturePaintPreview",
+      TRACE_ID_LOCAL(&all_document_data_[params.document_guid]));
   CapturePaintPreviewInternal(params, render_frame_host);
 }
 
@@ -212,6 +217,7 @@ mojom::PaintPreviewCaptureParamsPtr PaintPreviewClient::CreateMojoParams(
   mojo_params->clip_rect = params.clip_rect;
   mojo_params->is_main_frame = params.is_main_frame;
   mojo_params->file = std::move(file);
+  mojo_params->max_capture_size = params.max_per_capture_size;
   return mojo_params;
 }
 
@@ -403,6 +409,11 @@ void PaintPreviewClient::OnFinished(base::UnguessableToken guid,
                                     PaintPreviewData* document_data) {
   if (!document_data || !document_data->callback)
     return;
+
+  TRACE_EVENT_NESTABLE_ASYNC_END2(
+      "paint_preview", "PaintPreviewClient::CapturePaintPreview",
+      TRACE_ID_LOCAL(document_data), "success", document_data->proto != nullptr,
+      "subframes", document_data->finished_subframes.size());
 
   base::UmaHistogramBoolean("Browser.PaintPreview.Capture.Success",
                             document_data->proto != nullptr);

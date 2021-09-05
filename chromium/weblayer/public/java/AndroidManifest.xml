@@ -54,7 +54,12 @@
                 android:resource="@xml/weblayer_file_paths" />
         </provider>
 
-        <receiver android:name="org.chromium.weblayer.DownloadBroadcastReceiver"
+        <activity android:name="org.chromium.weblayer.SiteSettingsActivity"
+            android:theme="@style/Theme.WebLayer.SiteSettings"
+            android:exported="false">
+        </activity>
+
+        <receiver android:name="org.chromium.weblayer.BroadcastReceiver"
             android:exported="false">
             <intent-filter>
                 <!-- these need to be in sync with DownloadImpl.java-->
@@ -63,6 +68,8 @@
                 <action android:name="org.chromium.weblayer.downloads.PAUSE"/>
                 <action android:name="org.chromium.weblayer.downloads.RESUME"/>
                 <action android:name="org.chromium.weblayer.downloads.CANCEL"/>
+                <!-- this needs to be in sync with MediaStreamManager.java-->
+                <action android:name="org.chromium.weblayer.webrtc.ACTIVATE_TAB"/>
             </intent-filter>
         </receiver>
     </application>

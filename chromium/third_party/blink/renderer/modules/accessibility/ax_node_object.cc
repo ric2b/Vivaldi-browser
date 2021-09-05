@@ -30,6 +30,8 @@
 
 #include <math.h>
 
+#include <algorithm>
+
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
@@ -79,6 +81,7 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_table.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/mathml_names.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
@@ -189,6 +192,15 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
     return kIgnoreObject;
   }
 
+  // Objects inside a portal should be ignored. Portals don't directly expose
+  // their contents as the contents are not focusable (portals do not currently
+  // support input events). Portals do use their contents to compute a default
+  // accessible name.
+  if (GetDocument() && GetDocument()->GetPage() &&
+      GetDocument()->GetPage()->InsidePortal()) {
+    return kIgnoreObject;
+  }
+
   if (IsTableLikeRole() || IsTableRowLikeRole() || IsTableCellLikeRole())
     return kIncludeObject;
 
@@ -276,6 +288,7 @@ AXObjectInclusion AXNodeObject::ShouldIncludeBasedOnSemantics(
       ax::mojom::Role::kMark,
       ax::mojom::Role::kMath,
       ax::mojom::Role::kMeter,
+      ax::mojom::Role::kPluginObject,
       ax::mojom::Role::kProgressIndicator,
       ax::mojom::Role::kRuby,
       ax::mojom::Role::kSplitter,
@@ -782,7 +795,7 @@ ax::mojom::Role AXNodeObject::NativeRoleIgnoringAria() const {
   if (GetNode()->HasTagName(html_names::kDtTag))
     return ax::mojom::Role::kDescriptionListTerm;
 
-  if (GetNode()->nodeName() == "math")
+  if (GetNode()->nodeName() == mathml_names::kMathTag.LocalName())
     return ax::mojom::Role::kMath;
 
   if (GetNode()->HasTagName(html_names::kRpTag) ||
@@ -877,7 +890,7 @@ ax::mojom::Role AXNodeObject::NativeRoleIgnoringAria() const {
   if (GetNode()->HasTagName(html_names::kFigureTag))
     return ax::mojom::Role::kFigure;
 
-  if (GetNode()->nodeName() == "TIME")
+  if (GetNode()->HasTagName(html_names::kTimeTag))
     return ax::mojom::Role::kTime;
 
   if (IsA<HTMLPlugInElement>(GetNode())) {
@@ -979,24 +992,12 @@ bool AXNodeObject::IsTextControl() const {
   if (!GetNode())
     return false;
 
-  if (HasContentEditableAttributeSet())
+  if (IsNativeTextControl() || HasContentEditableAttributeSet() ||
+      IsARIATextControl()) {
     return true;
-
-  switch (RoleValue()) {
-    case ax::mojom::Role::kTextField:
-    case ax::mojom::Role::kTextFieldWithComboBox:
-    case ax::mojom::Role::kSearchBox:
-      return true;
-    case ax::mojom::Role::kSpinButton:
-      // When it's a native spin button, it behaves like a text box, i.e. users
-      // can type in it and navigate around using cursors.
-      if (const auto* input = DynamicTo<HTMLInputElement>(*GetNode())) {
-        return input->IsTextField();
-      }
-      return false;
-    default:
-      return false;
   }
+
+  return false;
 }
 
 AXObject* AXNodeObject::MenuButtonForMenu() const {
@@ -1097,10 +1098,6 @@ bool AXNodeObject::IsAXNodeObject() const {
   return true;
 }
 
-bool AXNodeObject::IsAnchor() const {
-  return !IsNativeImage() && IsLink();
-}
-
 bool AXNodeObject::IsControl() const {
   Node* node = this->GetNode();
   if (!node)
@@ -1139,30 +1136,10 @@ bool AXNodeObject::IsFieldset() const {
   return IsA<HTMLFieldSetElement>(GetNode());
 }
 
-bool AXNodeObject::IsHeading() const {
-  return RoleValue() == ax::mojom::Role::kHeading;
-}
-
 bool AXNodeObject::IsHovered() const {
   if (Node* node = this->GetNode())
     return node->IsHovered();
   return false;
-}
-
-bool AXNodeObject::IsImage() const {
-  // Canvas is not currently included so that it is not exposed unless there is
-  // a label, fallback content or something to make it accessible. This decision
-  // may be revisited at a later date.
-  switch (RoleValue()) {
-    case ax::mojom::Role::kDocCover:
-    case ax::mojom::Role::kGraphicsSymbol:
-    case ax::mojom::Role::kImage:
-    case ax::mojom::Role::kImageMap:
-    case ax::mojom::Role::kSvgRoot:
-      return true;
-    default:
-      return false;
-  }
 }
 
 bool AXNodeObject::IsImageButton() const {
@@ -1175,10 +1152,6 @@ bool AXNodeObject::IsInputImage() const {
     return html_input_element->type() == input_type_names::kImage;
 
   return false;
-}
-
-bool AXNodeObject::IsLink() const {
-  return RoleValue() == ax::mojom::Role::kLink;
 }
 
 // It is not easily possible to find out if an element is the target of an
@@ -1203,18 +1176,6 @@ bool AXNodeObject::IsInPageLinkTarget() const {
     return true;
   }
   return false;
-}
-
-bool AXNodeObject::IsMenu() const {
-  return RoleValue() == ax::mojom::Role::kMenu;
-}
-
-bool AXNodeObject::IsMenuButton() const {
-  return RoleValue() == ax::mojom::Role::kMenuButton;
-}
-
-bool AXNodeObject::IsMeter() const {
-  return RoleValue() == ax::mojom::Role::kMeter;
 }
 
 bool AXNodeObject::IsMultiSelectable() const {
@@ -1333,10 +1294,6 @@ bool AXNodeObject::IsNativeSpinButton() const {
   return false;
 }
 
-bool AXNodeObject::IsMoveableSplitter() const {
-  return RoleValue() == ax::mojom::Role::kSplitter && CanSetFocusAttribute();
-}
-
 bool AXNodeObject::IsClickable() const {
   Node* node = GetNode();
   if (!node)
@@ -1355,7 +1312,7 @@ bool AXNodeObject::IsClickable() const {
     return true;
   }
 
-  return AXObject::IsClickable();
+  return IsTextControl() || AXObject::IsClickable();
 }
 
 AXRestriction AXNodeObject::Restriction() const {
@@ -1915,7 +1872,7 @@ String AXNodeObject::AriaInvalidValue() const {
 }
 
 String AXNodeObject::ValueDescription() const {
-  if (!SupportsRangeValue())
+  if (!IsRangeValueSupported())
     return String();
 
   return GetAOMPropertyOrARIAAttribute(AOMStringProperty::kValueText)
@@ -2148,6 +2105,12 @@ String AXNodeObject::StringValue() const {
     }
   }
 
+  // ARIA combobox can get value from inner contents.
+  if (AriaRoleAttribute() == ax::mojom::Role::kComboBoxMenuButton) {
+    AXObjectSet visited;
+    return TextFromDescendants(visited, false);
+  }
+
   return String();
 }
 
@@ -2260,7 +2223,7 @@ String AXNodeObject::TextAlternative(bool recursive,
     if (IsTextControl())
       return GetText();
 
-    if (IsRange()) {
+    if (IsRangeValueSupported()) {
       const AtomicString& aria_valuetext =
           GetAOMPropertyOrARIAAttribute(AOMStringProperty::kValueText);
       if (!aria_valuetext.IsNull())
@@ -2972,12 +2935,6 @@ bool AXNodeObject::CanHaveChildren() const {
   if (GetNode() && IsA<HTMLMapElement>(GetNode()))
     return false;  // Does not have a role, so check here
 
-  // The AXTree of a portal should only have one node: the root document node.
-  if (GetNode() && GetNode()->IsDocumentNode() &&
-      GetNode()->GetDocument().GetPage() &&
-      GetNode()->GetDocument().GetPage()->InsidePortal())
-    return false;
-
   switch (native_role_) {
     case ax::mojom::Role::kCheckBox:
     case ax::mojom::Role::kImage:
@@ -3136,10 +3093,18 @@ HTMLLabelElement* AXNodeObject::LabelElementContainer() const {
 }
 
 bool AXNodeObject::OnNativeFocusAction() {
+  // Checking if node is focusable in a native focus action requires that we
+  // have updated style and layout tree, since the focus check relies on the
+  // existence of layout objects to determine the result. However, these layout
+  // objects may have been deferred by display-locking.
+  Document* document = GetDocument();
+  Node* node = GetNode();
+  if (document && node)
+    document->UpdateStyleAndLayoutTreeForNode(node);
+
   if (!CanSetFocusAttribute())
     return false;
 
-  Document* document = GetDocument();
   if (IsWebArea()) {
     // If another Frame has focused content (e.g. nested iframe), then we
     // need to clear focus for the other Document Frame.
@@ -3387,10 +3352,9 @@ void AXNodeObject::ComputeAriaOwnsChildren(
   Element* element = GetElement();
   if (element && element->HasExplicitlySetAttrAssociatedElements(
                      html_names::kAriaOwnsAttr)) {
-    bool is_null = false;
     AXObjectCache().UpdateAriaOwnsFromAttrAssociatedElements(
         this,
-        element->GetElementArrayAttribute(html_names::kAriaOwnsAttr, is_null),
+        element->GetElementArrayAttribute(html_names::kAriaOwnsAttr).value(),
         owned_children);
     return;
   }
@@ -3398,6 +3362,22 @@ void AXNodeObject::ComputeAriaOwnsChildren(
   // Case 2: aria-owns attribute
   TokenVectorFromAttribute(id_vector, html_names::kAriaOwnsAttr);
   AXObjectCache().UpdateAriaOwns(this, id_vector, owned_children);
+}
+
+// According to the standard, the figcaption should only be the first or
+// last child: https://html.spec.whatwg.org/#the-figcaption-element
+static Element* GetChildFigcaption(const Node& node) {
+  Element* element = ElementTraversal::FirstChild(node);
+  if (!element)
+    return nullptr;
+  if (element->HasTagName(html_names::kFigcaptionTag))
+    return element;
+
+  element = ElementTraversal::LastChild(node);
+  if (element->HasTagName(html_names::kFigcaptionTag))
+    return element;
+
+  return nullptr;
 }
 
 // Based on
@@ -3651,13 +3631,7 @@ String AXNodeObject::NativeTextAlternative(
       name_sources->back().type = name_from;
       name_sources->back().native_source = kAXTextFromNativeHTMLFigcaption;
     }
-    Element* figcaption = nullptr;
-    for (Element& element : ElementTraversal::DescendantsOf(*(GetNode()))) {
-      if (element.HasTagName(html_names::kFigcaptionTag)) {
-        figcaption = &element;
-        break;
-      }
-    }
+    Element* figcaption = GetChildFigcaption(*(GetNode()));
     if (figcaption) {
       AXObject* figcaption_ax_object = AXObjectCache().GetOrCreate(figcaption);
       if (figcaption_ax_object) {

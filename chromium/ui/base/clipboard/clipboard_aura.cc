@@ -11,11 +11,12 @@
 #include <memory>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "skia/ext/skia_utils_base.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -461,17 +462,13 @@ void ClipboardAura::Clear(ClipboardBuffer buffer) {
   clipboard_internal_->Clear();
 }
 
-void ClipboardAura::ReadAvailableTypes(ClipboardBuffer buffer,
-                                       std::vector<base::string16>* types,
-                                       bool* contains_filenames) const {
+void ClipboardAura::ReadAvailableTypes(
+    ClipboardBuffer buffer,
+    std::vector<base::string16>* types) const {
   DCHECK(CalledOnValidThread());
-  if (!types || !contains_filenames) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(types);
 
   types->clear();
-  *contains_filenames = false;
   if (IsFormatAvailable(ClipboardFormatType::GetPlainTextType(), buffer))
     types->push_back(
         base::UTF8ToUTF16(ClipboardFormatType::GetPlainTextType().GetName()));

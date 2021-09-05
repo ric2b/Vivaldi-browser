@@ -81,7 +81,6 @@ class IPCMediaPipelineHostImpl : public IPCMediaPipelineHost,
                      int size);
   void OnReadRawDataFinished(
       int64_t tag,
-      base::ReadOnlySharedMemoryRegion raw_region_to_send,
       base::WritableSharedMemoryMapping mapping,
       int size);
 

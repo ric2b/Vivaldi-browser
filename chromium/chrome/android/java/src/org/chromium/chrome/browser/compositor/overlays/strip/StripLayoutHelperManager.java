@@ -184,18 +184,16 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mModelSelectorButton.setY(MODEL_SELECTOR_BUTTON_Y_OFFSET_DP);
 
         Resources res = context.getResources();
-        // Note(david@vivaldi.com): Set the correct height for the phone tab strip.
-        mActivity = (ChromeTabbedActivity)context;
-        if (ChromeApplication.isVivaldi() && !mActivity.isTablet())
-            mHeight = res.getDimension(R.dimen.tab_strip_height_phone_with_tabs)
-                    / res.getDisplayMetrics().density;
-        else
+
         mHeight = res.getDimension(R.dimen.tab_strip_height) / res.getDisplayMetrics().density;
         mModelSelectorButton.setAccessibilityDescription(
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_incognito));
 
         onContextChanged(context);
+
+        // Vivaldi
+        mActivity = (ChromeTabbedActivity)context;
     }
 
     /**
@@ -268,8 +266,14 @@ public class StripLayoutHelperManager implements SceneOverlay {
             mModelSelectorButton.setX(MODEL_SELECTOR_BUTTON_END_PADDING_DP);
         }
 
+        // Note(david@vivaldi.com): We need to take the orientation into account.
+        if (ChromeApplication.isVivaldi()) {
+            mNormalHelper.onSizeChanged(mWidth, mHeight, visibleViewportOffsetY, orientation);
+            mIncognitoHelper.onSizeChanged(mWidth, mHeight, visibleViewportOffsetY, orientation);
+        } else {
         mNormalHelper.onSizeChanged(mWidth, mHeight);
         mIncognitoHelper.onSizeChanged(mWidth, mHeight);
+        }
 
         mStripFilterArea.set(0, 0, mWidth, Math.min(getHeight(), visibleViewportOffsetY));
         mEventFilter.setEventArea(mStripFilterArea);

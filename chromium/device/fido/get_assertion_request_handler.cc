@@ -79,6 +79,8 @@ base::Optional<GetAssertionStatus> ConvertDeviceResponseCode(
   }
 }
 
+// ResponseValid returns whether |response| is permissible for the given
+// |authenticator| and |request|.
 bool ResponseValid(const FidoAuthenticator& authenticator,
                    const CtapGetAssertionRequest& request,
                    const AuthenticatorGetAssertionResponse& response,
@@ -272,6 +274,24 @@ GetAssertionRequestHandler::GetAssertionRequestHandler(
 
 GetAssertionRequestHandler::~GetAssertionRequestHandler() = default;
 
+void GetAssertionRequestHandler::OnBluetoothAdapterEnumerated(
+    bool is_present,
+    bool is_powered_on,
+    bool can_power_on,
+    bool is_peripheral_role_supported) {
+  if (!is_peripheral_role_supported && request_.cable_extension) {
+    // caBLEv1 relies on the client being able to broadcast Bluetooth
+    // advertisements. |is_peripheral_role_supported| supposedly indicates
+    // whether the adapter supports advertising, but there appear to be false
+    // negatives (crbug/1074692). So we can't really do anything about it
+    // besides log it to aid diagnostics.
+    FIDO_LOG(ERROR)
+        << "caBLEv1 request, but BLE adapter does not support peripheral role";
+  }
+  FidoRequestHandlerBase::OnBluetoothAdapterEnumerated(
+      is_present, is_powered_on, can_power_on, is_peripheral_role_supported);
+}
+
 void GetAssertionRequestHandler::DispatchRequest(
     FidoAuthenticator* authenticator) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
@@ -409,6 +429,16 @@ void GetAssertionRequestHandler::HandleResponse(
                base::nullopt, authenticator);
       return;
     }
+    if (!ResponseValid(*authenticator, request_, *response,
+                       android_client_data_ext_)) {
+      FIDO_LOG(ERROR) << "Failing assertion request due to bad response from "
+                      << authenticator->GetDisplayName();
+      std::move(completion_callback_)
+          .Run(GetAssertionStatus::kWinNotAllowedError, base::nullopt,
+               authenticator);
+      return;
+    }
+
     DCHECK(responses_.empty());
     responses_.emplace_back(std::move(*response));
     std::move(completion_callback_)
@@ -717,7 +747,7 @@ void GetAssertionRequestHandler::OnHaveUvToken(
       FIDO_LOG(DEBUG) << "Internal UV blocked for "
                       << authenticator->GetDisplayName()
                       << ", falling back to PIN.";
-      if (authenticator_->WillNeedPINToGetAssertion(request_, observer()) ==
+      if (authenticator->WillNeedPINToGetAssertion(request_, observer()) ==
           PINDisposition::kUsePINForFallback) {
         authenticator->GetTouch(base::BindOnce(
             &GetAssertionRequestHandler::StartPINFallbackForInternalUv,

@@ -8,23 +8,18 @@ import android.support.test.filters.SmallTest;
 
 import androidx.preference.Preference;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.homepage.HomepageTestRule;
-import org.chromium.chrome.browser.settings.SettingsActivity;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -60,8 +55,8 @@ public class HomepageSettingsFragmentWithEditorTest {
     public static final String CHROME_NTP = UrlConstants.NTP_NON_NATIVE_URL;
 
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public SettingsActivityTestRule<HomepageSettings> mTestRule =
+            new SettingsActivityTestRule<>(HomepageSettings.class);
 
     @Rule
     public HomepageTestRule mHomepageTestRule = new HomepageTestRule();
@@ -69,23 +64,12 @@ public class HomepageSettingsFragmentWithEditorTest {
     @Rule
     public TestRule mFeatureProcessor = new Features.InstrumentationProcessor();
 
-    @Before
-    public void setup() {
-        RecordHistogram.setDisabledForTests(true);
-    }
-
-    @After
-    public void tearDown() {
-        RecordHistogram.setDisabledForTests(false);
-    }
-
     private ChromeSwitchPreference mSwitch;
     private Preference mHomepageEditor;
 
     private void launchSettingsActivity() {
-        SettingsActivity homepagePreferenceActivity =
-                mTestRule.startSettingsActivity(HomepageSettings.class.getName());
-        HomepageSettings fragment = (HomepageSettings) homepagePreferenceActivity.getMainFragment();
+        mTestRule.startSettingsActivity();
+        HomepageSettings fragment = mTestRule.getFragment();
         Assert.assertNotNull(fragment);
 
         mSwitch = (ChromeSwitchPreference) fragment.findPreference(

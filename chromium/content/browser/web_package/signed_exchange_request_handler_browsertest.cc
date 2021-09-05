@@ -15,7 +15,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
-#include "build/build_config.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/loader/prefetch_url_loader_service.h"
@@ -40,6 +39,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/page_type.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/content_cert_verifier_browser_test.h"
@@ -48,6 +48,7 @@
 #include "content/public/test/url_loader_interceptor.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
+#include "media/media_buildflags.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/dns/mock_host_resolver.h"
@@ -226,23 +227,12 @@ class SignedExchangeRequestHandlerBrowserTestBase
     inactive_rfh_deletion_observer_ =
         std::make_unique<InactiveRenderFrameHostDeletionObserver>(
             shell()->web_contents());
-#if defined(OS_ANDROID)
-    // TODO(crbug.com/864403): It seems that we call unsupported Android APIs on
-    // KitKat when we set a ContentBrowserClient. Don't call such APIs and make
-    // this test available on KitKat.
-    int32_t major_version = 0, minor_version = 0, bugfix_version = 0;
-    base::SysInfo::OperatingSystemVersionNumbers(&major_version, &minor_version,
-                                                 &bugfix_version);
-    if (major_version < 5)
-      return;
-#endif
     original_client_ = SetBrowserClientForTesting(&client_);
   }
 
   void TearDownOnMainThread() override {
     sxg_test_helper_.TearDownOnMainThread();
-    if (original_client_)
-      SetBrowserClientForTesting(original_client_);
+    SetBrowserClientForTesting(original_client_);
   }
 
  protected:
@@ -258,18 +248,12 @@ class SignedExchangeRequestHandlerBrowserTestBase
     sxg_test_helper_.InstallMockCertChainInterceptor();
   }
 
-  // Returns false if we cannot override accept languages. It happens only on
-  // Android Kitkat or older systems.
-  bool SetAcceptLangs(const std::string langs) {
-    if (!original_client_)
-      return false;
-
+  void SetAcceptLangs(const std::string langs) {
     client_.SetAcceptLangs(langs);
     StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
         BrowserContext::GetDefaultStoragePartition(
             shell()->web_contents()->GetBrowserContext()));
     partition->GetPrefetchURLLoaderService()->SetAcceptLanguages(langs);
-    return true;
   }
 
   std::unique_ptr<InactiveRenderFrameHostDeletionObserver>
@@ -448,8 +432,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest, Simple) {
 }
 
 IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest, VariantMatch) {
-  if (!SetAcceptLangs("en-US,fr"))
-    return;
+  SetAcceptLangs("en-US,fr");
   InstallUrlInterceptor(
       GURL("https://cert.example.org/cert.msg"),
       "content/test/data/sxg/test.example.org.public.pem.cbor");
@@ -490,8 +473,7 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest, VariantMatch) {
 
 IN_PROC_BROWSER_TEST_P(SignedExchangeRequestHandlerBrowserTest,
                        VariantMismatch) {
-  if (!SetAcceptLangs("en-US,ja"))
-    return;
+  SetAcceptLangs("en-US,ja");
   InstallUrlInterceptor(
       GURL("https://cert.example.org/cert.msg"),
       "content/test/data/sxg/test.example.org.public.pem.cbor");
@@ -1099,15 +1081,23 @@ class SignedExchangeAcceptHeaderBrowserTest
                          bool is_fallback) {
     const auto accept_header = GetInterceptedAcceptHeader(url);
     ASSERT_TRUE(accept_header);
+    const char* frame_accept_c_str = network::kFrameAcceptHeaderValue;
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+    if (base::FeatureList::IsEnabled(blink::features::kAVIF)) {
+      frame_accept_c_str =
+          "text/html,application/xhtml+xml,application/xml;q=0.9,"
+          "image/avif,image/webp,image/apng,*/*;q=0.8";
+    }
+#endif
     EXPECT_EQ(
         *accept_header,
         IsSignedExchangeEnabled() && !is_fallback
             ? (is_navigation
-                   ? std::string(network::kFrameAcceptHeaderValue) +
+                   ? std::string(frame_accept_c_str) +
                          std::string(kAcceptHeaderSignedExchangeSuffix)
                    : std::string(kExpectedSXGEnabledAcceptHeaderForPrefetch))
             : (is_navigation
-                   ? std::string(network::kFrameAcceptHeaderValue)
+                   ? std::string(frame_accept_c_str)
                    : std::string(network::kDefaultAcceptHeaderValue)));
   }
 
@@ -1294,8 +1284,15 @@ IN_PROC_BROWSER_TEST_P(SignedExchangeAcceptHeaderBrowserTest, ServiceWorker) {
   NavigateAndWaitForTitle(https_server_.GetURL("/sxg/service-worker.html"),
                           "Done");
 
-  const std::string frame_accept =
-      std::string(network::kFrameAcceptHeaderValue);
+  const char* frame_accept_c_str = network::kFrameAcceptHeaderValue;
+#if BUILDFLAG(ENABLE_AV1_DECODER)
+  if (base::FeatureList::IsEnabled(blink::features::kAVIF)) {
+    frame_accept_c_str =
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,image/apng,*/*;q=0.8";
+  }
+#endif
+  const std::string frame_accept = std::string(frame_accept_c_str);
   const std::string frame_accept_with_sxg =
       frame_accept + std::string(kAcceptHeaderSignedExchangeSuffix);
   const std::vector<std::string> scopes = {"/sxg/sw-scope-generated/",

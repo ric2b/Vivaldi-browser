@@ -58,10 +58,12 @@ class TickClock;
 namespace blink {
 
 class PerformanceMarkOptions;
+class EventCounts;
 class ExceptionState;
 class LargestContentfulPaint;
 class LayoutShift;
 class MemoryInfo;
+class Node;
 class PerformanceElementTiming;
 class PerformanceEventTiming;
 class PerformanceMark;
@@ -97,6 +99,7 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   virtual MemoryInfo* memory() const;
   virtual ScriptPromise measureMemory(ScriptState*,
                                       ExceptionState& exception_state) const;
+  virtual EventCounts* eventCounts();
 
   // Reduce the resolution to prevent timing attacks. See:
   // http://www.w3.org/TR/hr-time-2/#privacy-security
@@ -107,12 +110,23 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
       base::TimeTicks monotonic_time,
       bool allow_negative_value);
 
+  static base::TimeDelta MonotonicTimeToTimeDelta(
+      base::TimeTicks time_origin,
+      base::TimeTicks monotonic_time,
+      bool allow_negative_value);
+
   // Translate given platform monotonic time in seconds into a high resolution
   // DOMHighResTimeStamp in milliseconds. The result timestamp is relative to
   // document's time origin and has a time resolution that is safe for
   // exposing to web.
   DOMHighResTimeStamp MonotonicTimeToDOMHighResTimeStamp(base::TimeTicks) const;
   DOMHighResTimeStamp now() const;
+
+  // Translate given platform monotonic time in seconds into base::TimeDelta.
+  // The result timestamp is relative to document's time origin and is
+  // equivalent to the timestamp returned by the function
+  // MonotonicTimeToDOMHighResTimeStamp.
+  base::TimeDelta MonotonicTimeToTimeDelta(base::TimeTicks) const;
 
   // High Resolution Time Level 3 timeOrigin.
   // (https://www.w3.org/TR/hr-time-3/#dom-performance-timeorigin)
@@ -285,25 +299,16 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
                                    const SecurityOrigin&,
                                    ExecutionContext*);
 
+  // Determine whether a given Node can be exposed via a Web Perf API.
+  static bool CanExposeNode(Node*);
+
   ScriptValue toJSONForBinding(ScriptState*) const;
 
   void Trace(Visitor*) override;
 
-  class UnifiedClock {
-   public:
-    UnifiedClock(const base::Clock* clock, const base::TickClock* tick_clock)
-        : clock_(clock), tick_clock_(tick_clock) {}
-    DOMHighResTimeStamp GetUnixAtZeroMonotonic() const;
-    base::TimeTicks NowTicks() const;
-
-   private:
-    const base::Clock* clock_;
-    const base::TickClock* tick_clock_;
-    mutable base::Optional<DOMHighResTimeStamp> unix_at_zero_monotonic_;
-  };
-
   // The caller owns the |clock|.
-  void SetClocksForTesting(const UnifiedClock* clock);
+  void SetClocksForTesting(const base::Clock* clock,
+                           const base::TickClock* tick_clock);
   void ResetTimeOriginForTesting(base::TimeTicks time_origin);
 
  private:
@@ -370,7 +375,8 @@ class CORE_EXPORT Performance : public EventTargetWithInlineData {
   Member<PerformanceEventTiming> first_input_timing_;
 
   base::TimeTicks time_origin_;
-  const UnifiedClock* unified_clock_;
+  DOMHighResTimeStamp unix_at_zero_monotonic_;
+  const base::TickClock* tick_clock_;
 
   PerformanceEntryTypeMask observer_filter_options_;
   HeapLinkedHashSet<Member<PerformanceObserver>> observers_;

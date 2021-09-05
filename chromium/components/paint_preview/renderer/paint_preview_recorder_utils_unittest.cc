@@ -27,7 +27,7 @@
 
 namespace paint_preview {
 
-TEST(PaintPreviewServiceUtilsTest, TestParseGlyphs) {
+TEST(PaintPreviewRecorderUtilsTest, TestParseGlyphs) {
   auto typeface = SkTypeface::MakeDefault();
   SkFont font(typeface);
   std::string unichars_1 = "abc";
@@ -64,7 +64,7 @@ TEST(PaintPreviewServiceUtilsTest, TestParseGlyphs) {
       (*usage_map)[typeface->uniqueID()]->IsSet(typeface->unicharToGlyph('g')));
 }
 
-TEST(PaintPreviewServiceUtilsTest, TestSerializeAsSkPicture) {
+TEST(PaintPreviewRecorderUtilsTest, TestSerializeAsSkPicture) {
   PaintPreviewTracker tracker(base::UnguessableToken::Create(),
                               base::UnguessableToken::Create(), true);
 
@@ -93,8 +93,9 @@ TEST(PaintPreviewServiceUtilsTest, TestSerializeAsSkPicture) {
       file_path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
 
   auto record = recorder.finishRecordingAsPicture();
+  size_t out_size = 0;
   EXPECT_TRUE(SerializeAsSkPicture(record, &tracker, dimensions,
-                                   std::move(write_file)));
+                                   std::move(write_file), 0, &out_size));
   base::File read_file(file_path, base::File::FLAG_OPEN |
                                       base::File::FLAG_READ |
                                       base::File::FLAG_EXCLUSIVE_READ);
@@ -115,7 +116,32 @@ TEST(PaintPreviewServiceUtilsTest, TestSerializeAsSkPicture) {
   EXPECT_TRUE(ctx.empty());
 }
 
-TEST(PaintPreviewServiceUtilsTest, TestBuildAndSerializeProto) {
+TEST(PaintPreviewRecorderUtilsTest, TestSerializeAsSkPictureFail) {
+  PaintPreviewTracker tracker(base::UnguessableToken::Create(),
+                              base::UnguessableToken::Create(), true);
+
+  gfx::Rect dimensions(100, 100);
+  cc::PaintRecorder recorder;
+  cc::PaintCanvas* canvas =
+      recorder.beginRecording(dimensions.width(), dimensions.width());
+  cc::PaintFlags flags;
+  canvas->drawRect(SkRect::MakeWH(dimensions.width(), dimensions.height()),
+                   flags);
+
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath file_path = temp_dir.GetPath().AppendASCII("test_file");
+  base::File write_file(
+      file_path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+
+  auto record = recorder.finishRecordingAsPicture();
+  size_t out_size = 2;
+  EXPECT_FALSE(SerializeAsSkPicture(record, &tracker, dimensions,
+                                    std::move(write_file), 1, &out_size));
+  EXPECT_LE(out_size, 1U);
+}
+
+TEST(PaintPreviewRecorderUtilsTest, TestBuildResponse) {
   auto token = base::UnguessableToken::Create();
   auto embedding_token = base::UnguessableToken::Create();
   PaintPreviewTracker tracker(token, embedding_token, true);
@@ -131,11 +157,11 @@ TEST(PaintPreviewServiceUtilsTest, TestBuildAndSerializeProto) {
 
   EXPECT_EQ(response->embedding_token, embedding_token);
   EXPECT_EQ(response->links.size(), 2U);
-  EXPECT_EQ(response->links.size(), tracker.GetLinks().size());
-  for (size_t i = 0; i < response->links.size(); ++i) {
-    EXPECT_THAT(response->links[i]->url, tracker.GetLinks()[i].url);
-    EXPECT_THAT(response->links[i]->rect, tracker.GetLinks()[i].rect);
-  }
+  EXPECT_THAT(response->links[0]->url, GURL("www.google.com"));
+  EXPECT_THAT(response->links[0]->rect, gfx::Rect(1, 2, 3, 4));
+  EXPECT_THAT(response->links[1]->url, GURL("www.chromium.org"));
+  EXPECT_THAT(response->links[1]->rect, gfx::Rect(10, 20, 10, 20));
+
   auto* content_map = tracker.GetPictureSerializationContext();
   for (const auto& id_pair : response->content_id_to_embedding_token) {
     auto it = content_map->find(id_pair.first);

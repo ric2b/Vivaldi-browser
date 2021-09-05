@@ -155,15 +155,6 @@ class TabListRecyclerView
         // Stop all the animations to make all the items show up and scroll to position immediately.
         mOriginalAnimator = getItemAnimator();
         setItemAnimator(null);
-
-        // Note(david@vivaldi.com): Update the top margin according to the toolbar.
-        if (ChromeApplication.isVivaldi()) {
-            int toolbarHeight = ((ChromeTabbedActivity) getContext())
-                                        .getToolbarManager()
-                                        .getToolbar()
-                                        .getHeight();
-            VivaldiUtils.updateTopMarginForTabsOnPhoneUI(this, toolbarHeight);
-        }
     }
 
     /**
@@ -173,6 +164,15 @@ class TabListRecyclerView
     void startShowing(boolean animate) {
         // NOTE (david@vivaldi.com): Showing animation is handled in the |TabSwitcherView|.
         if (ChromeApplication.isVivaldi()) {
+            // Note(david@vivaldi.com): Update the top margin according to the toolbar.
+            if (ChromeApplication.isVivaldi()) {
+                int toolbarHeight = ((ChromeTabbedActivity) getContext())
+                        .getToolbarManager()
+                        .getToolbar()
+                        .getHeight();
+                VivaldiUtils.updateTopMarginForTabsOnPhoneUI(this, toolbarHeight);
+            }
+
             mListener.startedShowing(animate);
             setAlpha(1);
             setVisibility(View.VISIBLE);
@@ -292,7 +292,7 @@ class TabListRecyclerView
         return mResourceId;
     }
 
-    long getLastDirtyTimeForTesting() {
+    long getLastDirtyTime() {
         return mLastDirtyTime;
     }
 

@@ -6,7 +6,7 @@ if (!is_android) {
     ]
   }
 
-  update_template_instance("//chrome/browser:browser") {
+  update_target("//chrome/browser:browser") {
     sources += [
       "//vivaldi/importer/vivaldi_external_process_importer_client.cc",
       "//vivaldi/importer/vivaldi_external_process_importer_host.cc",

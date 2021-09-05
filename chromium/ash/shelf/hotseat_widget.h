@@ -60,8 +60,8 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   // Notifies children of tablet mode state changes.
   void OnTabletModeChanged();
 
-  // Returns the target opacity (between 0 and 1) given current conditions.
-  float CalculateOpacity() const;
+  // Returns the target opacity for the shelf view given current conditions.
+  float CalculateShelfViewOpacity() const;
 
   // Sets the bounds of the translucent background which functions as the
   // hotseat background.
@@ -93,11 +93,24 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   ShelfView* GetShelfView();
   const ShelfView* GetShelfView() const;
 
+  // Returns the hotseat height (or width for side shelf).
+  int GetHotseatSize() const;
+
+  // Returns the drag distance required to fully show the hotseat widget from
+  // the hidden state.
+  int GetHotseatFullDragAmount() const;
+
+  // Updates the app scaling state, if needed. Returns whether the app scaling
+  // state changed.
+  bool UpdateAppScalingIfNeeded();
+
   // Returns the background blur of the |translucent_background_|, for tests.
   int GetHotseatBackgroundBlurForTest() const;
 
   // Returns whether the translucent background is visible, for tests.
   bool GetIsTranslucentBackgroundVisibleForTest() const;
+
+  ui::AnimationMetricsReporter* GetTranslucentBackgroundMetricsReporter();
 
   void SetState(HotseatState state);
   HotseatState state() const { return state_; }
@@ -118,22 +131,33 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
 
   void set_manually_extended(bool value) { is_manually_extended_ = value; }
 
+  bool is_forced_dense() const { return is_forced_dense_; }
+
  private:
   class DelegateView;
 
   struct LayoutInputs {
     gfx::Rect bounds;
-    float opacity = 0.0f;
+    float shelf_view_opacity = 0.0f;
     bool is_active_session_state = false;
 
     bool operator==(const LayoutInputs& other) const {
-      return bounds == other.bounds && opacity == other.opacity &&
+      return bounds == other.bounds &&
+             shelf_view_opacity == other.shelf_view_opacity &&
              is_active_session_state == other.is_active_session_state;
     }
   };
 
   // Collects the inputs for layout.
   LayoutInputs GetLayoutInputs() const;
+
+  // May update the hotseat widget's target in account of app scaling.
+  void MaybeAdjustTargetBoundsForAppScaling(HotseatState hotseat_target_state);
+
+  // Returns whether app scaling should be triggered if hotseat's size becomes
+  // |available_size| and the hotseat's state is |hotseat_target_state|.
+  bool ShouldTriggerAppScaling(const gfx::Size& available_size,
+                               HotseatState hotseat_target_state) const;
 
   // The set of inputs that impact this widget's layout. The assumption is that
   // this widget needs a relayout if, and only if, one or more of these has
@@ -156,6 +180,11 @@ class ASH_EXPORT HotseatWidget : public ShelfComponent,
   // Whether the widget is currently extended because the user has manually
   // dragged it. This will be reset with any visible shelf configuration change.
   bool is_manually_extended_ = false;
+
+  // Indicates whether app scaling is triggered, which scales shelf app icons
+  // from the normal size to the dense size in tablet mode if hotseat does not
+  // have enough space to show all app icons without scrolling.
+  bool is_forced_dense_ = false;
 
   // The window targeter installed on the hotseat. Filters out events which land
   // on the non visible portion of the hotseat, or events that reach the hotseat

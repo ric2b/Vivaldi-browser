@@ -85,8 +85,10 @@ TEST(SandboxTypeTest, Utility) {
   EXPECT_EQ(SandboxType::kAudio, SandboxTypeFromCommandLine(command_line8));
 
   base::CommandLine command_line9(command_line);
-  SetCommandLineFlagsForSandboxType(&command_line9, SandboxType::kSoda);
-  EXPECT_EQ(SandboxType::kSoda, SandboxTypeFromCommandLine(command_line9));
+  SetCommandLineFlagsForSandboxType(&command_line9,
+                                    SandboxType::kSpeechRecognition);
+  EXPECT_EQ(SandboxType::kSpeechRecognition,
+            SandboxTypeFromCommandLine(command_line9));
 
 #if defined(OS_WIN)
   base::CommandLine command_line10(command_line);
@@ -161,11 +163,12 @@ TEST(SandboxTypeTest, PPAPIPlugin) {
 TEST(SandboxTypeTest, Nonesuch) {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   command_line.AppendSwitchASCII(switches::kProcessType, "nonesuch");
-  EXPECT_EQ(SandboxType::kInvalid, SandboxTypeFromCommandLine(command_line));
+  // If tested here would CHECK.
 
   command_line.AppendSwitchASCII(switches::kServiceSandboxType, "network");
-  EXPECT_EQ(SandboxType::kInvalid, SandboxTypeFromCommandLine(command_line));
+  // If tested here would CHECK.
 
+  // With kNoSandbox will parse the command line correctly.
   command_line.AppendSwitch(switches::kNoSandbox);
   EXPECT_EQ(SandboxType::kNoSandbox, SandboxTypeFromCommandLine(command_line));
 }

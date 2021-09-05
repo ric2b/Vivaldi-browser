@@ -109,9 +109,10 @@ class PageNodeImpl
 
  private:
   friend class FrameNodeImpl;
-  friend class PageAggregatorAccess;
   friend class FrozenFrameAggregatorAccess;
+  friend class PageAggregatorAccess;
   friend class PageLoadTrackerAccess;
+  friend class PageNodeImplDescriber;
 
   // PageNode implementation.
   const std::string& GetBrowserContextID() const override;
@@ -128,6 +129,7 @@ class PageNodeImpl
   const std::string& GetContentsMimeType() const override;
   base::TimeDelta GetTimeSinceLastNavigation() const override;
   const FrameNode* GetMainFrameNode() const override;
+  bool VisitMainFrameNodes(const FrameNodeVisitor& visitor) const override;
   const base::flat_set<const FrameNode*> GetMainFrameNodes() const override;
   const GURL& GetMainFrameUrl() const override;
   bool HadFormInteraction() const override;

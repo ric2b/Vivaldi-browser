@@ -41,6 +41,7 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.h"
+#include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
@@ -571,11 +572,11 @@ bool VivaldiBrowserWindow::HandleKeyboardEvent(
   // (at least on Linux). Try pressing F1 for a while and switch to F2. The
   // first auto repeat is not flagged as such.
   is_auto_repeat = false;
-  if (event.GetType() == blink::WebInputEvent::kRawKeyDown) {
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) {
     is_auto_repeat = event.windows_key_code == last_key_code_;
     last_key_code_ = event.windows_key_code;
-  } else if (event.GetType() != blink::WebInputEvent::kKeyDown &&
-             event.GetType() != blink::WebInputEvent::kChar) {
+  } else if (event.GetType() != blink::WebInputEvent::Type::kKeyDown &&
+             event.GetType() != blink::WebInputEvent::Type::kChar) {
     last_key_code_ = 0;
   }
 #endif  // defined(OS_MACOSX)
@@ -697,10 +698,6 @@ void VivaldiBrowserWindow::OnExclusiveAccessUserInput() {}
 content::WebContents* VivaldiBrowserWindow::GetActiveWebContents() {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
-
-void VivaldiBrowserWindow::UnhideDownloadShelf() {}
-
-void VivaldiBrowserWindow::HideDownloadShelf() {}
 
 ShowTranslateBubbleResult VivaldiBrowserWindow::ShowTranslateBubble(
     content::WebContents* contents,
@@ -902,36 +899,6 @@ void VivaldiBrowserWindow::OnActiveTabChanged(
 
   infobar_container_->ChangeInfoBarManager(
       InfoBarService::FromWebContents(new_contents));
-
-#if !defined(OS_MACOSX)
-
-  // TODO(pettern): MOVE THIS CODE TO ExtensionActionUtil::ActiveTabChanged,
-  // this does not belong here.
-  //
-  // Make sure we do a re-layout to keep all webviews in size-sync. Scenario; if
-  // the user switch tab in fullscreen mode, only
-  // BrowserPlugin::UpdateVisibility is called. We need to make sure
-  // BrowserPlugin::UpdateGeometry is called. Note this was not visible prior to
-  // the change we have in BrowserPlugin::UpdateGeometry where a lot of extra
-  // resizing on hidden WebViews was done, and we want to be lazy. See VB-29032.
-  content::WebContentsImpl* web_contents =
-      static_cast<content::WebContentsImpl*>(new_contents);
-  content::BrowserPluginGuest* guestplugin =
-      web_contents->GetBrowserPluginGuest();
-  // Only do this in fullscreen as switching tabs in windowed mode will cause a
-  // relayout through RenderWidgetCompositor::UpdateLayerTreeHost() (This is due
-  // to painting optimization.)
-  bool is_fullscreen_without_chrome = IsFullscreen();
-  if (guestplugin && is_fullscreen_without_chrome) {
-    gfx::Rect frame_rect = guestplugin->frame_rect();
-    gfx::Rect bounds = GetBounds();
-    gfx::Size window_size = gfx::Size(bounds.width(), bounds.height());
-    if (window_size != gfx::Size(frame_rect.x() + frame_rect.width(),
-                                 frame_rect.y() + frame_rect.height())) {
-      guestplugin->SizeContents(window_size);
-    }
-  }
-#endif  // !OS_MACOSX
 }
 
 void VivaldiBrowserWindow::SetWebContentsBlocked(
@@ -1103,6 +1070,13 @@ void VivaldiBrowserWindow::NavigationStateChanged(
   }
 }
 
+void VivaldiBrowserWindow::AllTabsClosed(int window_id) {
+  ::vivaldi::BroadcastEvent(
+    extensions::vivaldi::window_private::OnCloseAllTabsDone::kEventName,
+    extensions::vivaldi::window_private::OnCloseAllTabsDone::Create(window_id),
+    GetProfile());
+}
+
 ExtensionsContainer* VivaldiBrowserWindow::GetExtensionsContainer() {
   return nullptr;
 }
@@ -1161,4 +1135,10 @@ void VivaldiBrowserWindow::OnDidFinishFirstNavigation() {
   for (auto& callback : callbacks) {
     std::move(callback).Run(true /* did_finish */);
   }
+}
+
+std::unique_ptr<content::EyeDropper> VivaldiBrowserWindow::OpenEyeDropper(
+    content::RenderFrameHost* frame,
+    content::EyeDropperListener* listener) {
+  return ShowEyeDropper(frame, listener);
 }

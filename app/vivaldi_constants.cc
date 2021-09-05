@@ -25,6 +25,8 @@ const char kVivaldiIncognitoURL[] = "chrome-extension://" VIVALDI_APP_ID
 const char kVivaldiGuestSessionURL[] = "chrome-extension://" VIVALDI_APP_ID
                                        "/components/"
                                        "guest-intro/guest-intro.html";
+const char kVivaldiMailURL[] = "chrome-extension://" VIVALDI_APP_ID
+                               "/components/mail/mail.html";
 // Defines the URL that should be opened in an empty new tab or window.
 const char kVivaldiNewTabURL[] = "chrome://vivaldi-webui/startpage";
 
@@ -57,6 +59,8 @@ const char kVivaldiWebUIURL[] =
 
 const char kVivaldiThumbURL[] =
     VIVALDI_DATA_URL_SCHEME "://" VIVALDI_THUMB_URL_HOST "/";
+
+const char kVivaldiDataUrlThumbnailDir[] = VIVALDI_DATA_URL_THUMBNAIL_DIR;
 
 const char kWindowExtDataKey[] = "extData";
 

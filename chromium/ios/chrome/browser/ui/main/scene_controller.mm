@@ -12,6 +12,7 @@
 #include "base/task/post_task.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/url_formatter/url_formatter.h"
+#import "ios/chrome/app/application_delegate/app_state.h"
 #include "ios/chrome/app/application_delegate/tab_opening.h"
 #import "ios/chrome/app/application_delegate/url_opener.h"
 #include "ios/chrome/app/application_mode.h"
@@ -29,11 +30,12 @@
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
-#include "ios/chrome/browser/crash_report/breakpad_helper.h"
+#include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #include "ios/chrome/browser/crash_report/crash_report_helper.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #include "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/ntp_snippets/content_suggestions_scheduler_notifications.h"
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #include "ios/chrome/browser/system_flags.h"
@@ -66,6 +68,7 @@
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
+#import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/mailto/mailto_handler_provider.h"
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
@@ -114,7 +117,8 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
 
 }  // namespace
 
-@interface SceneController () <UserFeedbackDataSource,
+@interface SceneController () <AppStateObserver,
+                               UserFeedbackDataSource,
                                SettingsNavigationControllerDelegate,
                                SceneURLLoadingServiceDelegate,
                                WebStateListObserving> {
@@ -199,11 +203,12 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
   if (self) {
     _sceneState = sceneState;
     [_sceneState addObserver:self];
+    [_sceneState.appState addObserver:self];
     // The window is necessary very early in the app/scene lifecycle, so it
     // should be created right away.
     // When multiwindow is supported, the window is created by SceneDelegate,
     // and fetched by SceneState from UIScene's windows.
-    if (!IsMultiwindowSupported() && !self.sceneState.window) {
+    if (!IsSceneStartupSupported() && !self.sceneState.window) {
       self.sceneState.window = [[ChromeOverlayWindow alloc]
           initWithFrame:[[UIScreen mainScreen] bounds]];
     }
@@ -257,12 +262,27 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
 
 - (void)sceneState:(SceneState*)sceneState
     transitionedToActivationLevel:(SceneActivationLevel)level {
+  AppState* appState = self.sceneState.appState;
+  if (appState.isInSafeMode) {
+    // Nothing at all should happen in safe mode. Code in
+    // appStateDidExitSafeMode will ensure the updates happen once safe mode
+    // ends.
+    return;
+  }
+
   if (level > SceneActivationLevelBackground && !self.hasInitializedUI) {
     [self initializeUI];
   }
 
   if (level == SceneActivationLevelForegroundActive) {
     [self presentSignInAccountsViewControllerIfNecessary];
+    // Mitigation for crbug.com/1092326, where a nil browser state is passed
+    // (presumably because mainInterface is nil as well).
+    // TODO(crbug.com/1094916): Handle this more cleanly.
+    if (self.mainInterface.browserState) {
+      [ContentSuggestionsSchedulerNotifications
+          notifyForeground:self.mainInterface.browserState];
+    }
   }
 }
 
@@ -275,6 +295,14 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
   }
 }
 
+#pragma mark - AppStateObserver
+
+- (void)appStateDidExitSafeMode:(AppState*)appState {
+  // All events were postponed in safe mode. Resend them.
+  [self sceneState:self.sceneState
+      transitionedToActivationLevel:self.sceneState.activationLevel];
+}
+
 #pragma mark - SceneControllerGuts
 - (void)initializeUI {
   if (self.hasInitializedUI) {
@@ -282,9 +310,9 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
   }
 
   DCHECK(self.mainController);
-  if (IsMultiwindowSupported()) {
+  if (IsSceneStartupSupported()) {
     // TODO(crbug.com/1012697): This should probably be the only code path for
-    // multiwindow and non-multiwindow cases.
+    // UIScene and non-UIScene cases.
     [self startUpChromeUIPostCrash:NO needRestoration:NO];
   }
 
@@ -306,6 +334,13 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
        applicationCommandEndpoint:self
       browsingDataCommandEndpoint:self.mainController];
 
+  if (IsMultiwindowSupported()) {
+    if (@available(iOS 13, *)) {
+      self.browserViewWrangler.sessionID =
+          self.sceneState.scene.session.persistentIdentifier;
+    }
+  }
+
   // Ensure the main browser is created. This also creates the BVC.
   [self.browserViewWrangler createMainBrowser];
 
@@ -319,8 +354,6 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
   [self openTabFromLaunchOptions:self.mainController.launchOptions
               startupInformation:self.mainController
                         appState:self.mainController.appState];
-
-  [self scheduleShowPromo];
 
   // Before bringing up the UI, make sure the launch mode is correct, and
   // check for previous crashes.
@@ -395,12 +428,35 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
     tabModel = self.mainInterface.tabModel;
     [self setCurrentInterfaceForMode:ApplicationMode::NORMAL];
   }
+
+  // Figure out what UI to show initially.
+
+  // See if this scene launched as part of a multiwindow URL opening.
+  // If so, load that URL (this also creates a new tab to load the URL in).
+  // No other UI will show in this case.
+  if (IsMultiwindowSupported()) {
+    if (@available(iOS 13, *)) {
+      for (NSUserActivity* activity in self.sceneState.connectionOptions
+               .userActivities) {
+        if (ActivityIsURLLoad(activity)) {
+          UrlLoadParams params = LoadParamsFromActivity(activity);
+          UrlLoadingBrowserAgent::FromBrowser(self.mainInterface.browser)
+              ->Load(params);
+          return;
+        }
+      }
+    }
+  }
+
   if (self.tabSwitcherIsActive) {
     DCHECK(!self.dismissingTabSwitcher);
     [self beginDismissingTabSwitcherWithCurrentModel:self.mainInterface.tabModel
                                         focusOmnibox:NO];
     [self finishDismissingTabSwitcher];
   }
+
+  // If this is first run, or if this web state list should have an NTP created
+  // when it activates, then create that tab.
   if (firstRun || [self shouldOpenNTPTabOnActivationOfTabModel:tabModel]) {
     OpenNewTabCommand* command = [OpenNewTabCommand
         commandWithIncognito:self.currentInterface.incognito];
@@ -411,11 +467,15 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
     [applicationHandler openURLInNewTab:command];
   }
 
+  // If this is first run, show the first run UI on top of the new tab.
+  // If this isn't first run, check if the sign-in promo needs to display.
   if (firstRun) {
     [self.mainController prepareForFirstRunUI];
     [self showFirstRunUI];
     // Do not ever show the 'restore' infobar during first run.
     self.mainController.restoreHelper = nil;
+  } else {
+    [self scheduleShowPromo];
   }
 }
 
@@ -453,6 +513,7 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
 
 // Initializes the first run UI and presents it to the user.
 - (void)showFirstRunUI {
+  DCHECK(!self.signinCoordinator);
   // Register for the first run dismissal notification to reset
   // |sceneState.presentingFirstRunUI| flag;
   [[NSNotificationCenter defaultCenter]
@@ -526,7 +587,7 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
                                                       browser:browser];
       __weak SceneController* weakSelf = self;
       self.signinCoordinator.signinCompletion =
-          ^(SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
+          ^(SigninCoordinatorResult signinResult, SigninCompletionInfo*) {
             [weakSelf.signinCoordinator stop];
             weakSelf.signinCoordinator = nil;
           };
@@ -714,17 +775,44 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
                                    presentingViewController:baseViewController
                                                  completion:command.callback];
       break;
+    case AUTHENTICATION_OPERATION_ADD_ACCOUNT:
+      [self.signinInteractionCoordinator
+          addAccountWithAccessPoint:command.accessPoint
+                        promoAction:command.promoAction
+           presentingViewController:baseViewController
+                         completion:command.callback];
+      break;
   }
 }
 
 - (void)showAdvancedSigninSettingsFromViewController:
     (UIViewController*)baseViewController {
   Browser* mainBrowser = self.mainInterface.browser;
-  self.signinInteractionCoordinator =
-      [[SigninInteractionCoordinator alloc] initWithBrowser:mainBrowser];
+  if (!self.signinInteractionCoordinator) {
+    self.signinInteractionCoordinator =
+        [[SigninInteractionCoordinator alloc] initWithBrowser:mainBrowser];
+  }
   [self.signinInteractionCoordinator
       showAdvancedSigninSettingsWithPresentingViewController:
           baseViewController];
+}
+
+- (void)
+    showTrustedVaultReauthenticationFromViewController:
+        (UIViewController*)baseViewController
+                                      retrievalTrigger:
+                                          (syncer::KeyRetrievalTriggerForUMA)
+                                              retrievalTrigger {
+  Browser* mainBrowser = self.mainInterface.browser;
+  if (!self.signinInteractionCoordinator) {
+    self.signinInteractionCoordinator =
+        [[SigninInteractionCoordinator alloc] initWithBrowser:mainBrowser];
+  }
+  [self.signinInteractionCoordinator
+      showTrustedVaultReauthenticationWithPresentingViewController:
+          baseViewController
+                                                  retrievalTrigger:
+                                                      retrievalTrigger];
 }
 
 // TODO(crbug.com/779791) : Remove settings commands from MainController.
@@ -777,8 +865,7 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
                                  completion:nil];
 }
 
-#if !defined(NDEBUG)
-- (void)openNewWindow {
+- (void)openNewWindowWithActivity:(NSUserActivity*)userActivity {
   if (!IsMultiwindowSupported())
     return;  // silent no-op.
 
@@ -789,12 +876,11 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
 
     [UIApplication.sharedApplication
         requestSceneSessionActivation:nil /* make a new scene */
-                         userActivity:nil
+                         userActivity:userActivity
                               options:options
                          errorHandler:nil];
   }
 }
-#endif  // !defined(NDEBUG)
 
 #pragma mark - ApplicationSettingsCommands
 
@@ -1548,15 +1634,27 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
 - (void)closeSettingsAnimated:(BOOL)animated
                    completion:(ProceduralBlock)completion {
   if (self.settingsNavigationController) {
-    [self.settingsNavigationController cleanUpSettings];
-    UIViewController* presentingViewController =
-        [self.settingsNavigationController presentingViewController];
-    // If presentingViewController is nil it means the VC was already dismissed
-    // by some other action like swiping down.
-    DCHECK(presentingViewController);
-    [presentingViewController dismissViewControllerAnimated:animated
-                                                 completion:completion];
-    self.settingsNavigationController = nil;
+    ProceduralBlock dismissSettings = ^() {
+      [self.settingsNavigationController cleanUpSettings];
+      UIViewController* presentingViewController =
+          [self.settingsNavigationController presentingViewController];
+      // If presentingViewController is nil it means the VC was already
+      // dismissed by some other action like swiping down.
+      DCHECK(presentingViewController);
+      [presentingViewController dismissViewControllerAnimated:animated
+                                                   completion:completion];
+      self.settingsNavigationController = nil;
+    };
+    // |self.signinInteractionCoordinator| can be presented on top of the
+    // settings, to present the Trusted Vault reauthentication.
+    // |self.signinInteractionCoordinator| has to be closed first.
+    if (self.signinInteractionCoordinator.isActive) {
+      [self.signinInteractionCoordinator
+          abortAndDismissSettingsViewAnimated:animated
+                                   completion:dismissSettings];
+    } else if (dismissSettings) {
+      dismissSettings();
+    }
     return;
   }
   // |self.signinInteractionCoordinator| can also present settings, like
@@ -1608,7 +1706,7 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
 - (void)lastIncognitoTabClosed {
   // This seems the best place to mark the start of destroying the incognito
   // browser state.
-  breakpad_helper::SetDestroyingAndRebuildingIncognitoBrowserState(
+  crash_keys::SetDestroyingAndRebuildingIncognitoBrowserState(
       /*in_progress=*/true);
   DCHECK(self.mainController.mainBrowserState
              ->HasOffTheRecordChromeBrowserState());
@@ -1741,7 +1839,7 @@ const NSTimeInterval kDisplayPromoDelay = 0.1;
 
   // This seems the best place to deem the destroying and rebuilding the
   // incognito browser state to be completed.
-  breakpad_helper::SetDestroyingAndRebuildingIncognitoBrowserState(
+  crash_keys::SetDestroyingAndRebuildingIncognitoBrowserState(
       /*in_progress=*/false);
 }
 

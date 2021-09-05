@@ -18,7 +18,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -110,15 +109,6 @@ const std::vector<InternalApp>& GetInternalAppListImpl(bool get_all,
          /*searchable_string_resource_id=*/0});
   }
 
-  if (get_all || plugin_vm::IsPluginVmAllowedForProfile(profile)) {
-    internal_app_list->push_back(
-        {plugin_vm::kPluginVmAppId, IDS_PLUGIN_VM_APP_NAME,
-         IDR_LOGO_PLUGIN_VM_DEFAULT_192,
-         /*recommendable=*/true,
-         /*searchable=*/true,
-         /*show_in_launcher=*/true, apps::BuiltInAppName::kPluginVm,
-         /*searchable_string_resource_id=*/0});
-  }
   return *internal_app_list;
 }
 

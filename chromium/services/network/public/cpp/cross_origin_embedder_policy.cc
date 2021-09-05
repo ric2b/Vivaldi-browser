@@ -4,6 +4,7 @@
 
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 
+
 namespace network {
 
 CrossOriginEmbedderPolicy::CrossOriginEmbedderPolicy() = default;

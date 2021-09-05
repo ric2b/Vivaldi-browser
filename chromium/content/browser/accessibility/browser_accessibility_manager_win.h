@@ -31,10 +31,8 @@ static const wchar_t kUiaTestCompleteSentinel[] = L"kUiaTestCompleteSentinel";
 class CONTENT_EXPORT BrowserAccessibilityManagerWin
     : public BrowserAccessibilityManager {
  public:
-  BrowserAccessibilityManagerWin(
-      const ui::AXTreeUpdate& initial_tree,
-      BrowserAccessibilityDelegate* delegate,
-      BrowserAccessibilityFactory* factory = new BrowserAccessibilityFactory());
+  BrowserAccessibilityManagerWin(const ui::AXTreeUpdate& initial_tree,
+                                 BrowserAccessibilityDelegate* delegate);
 
   ~BrowserAccessibilityManagerWin() override;
 
@@ -85,8 +83,6 @@ class CONTENT_EXPORT BrowserAccessibilityManagerWin
       ui::AXTree* tree,
       bool root_changed,
       const std::vector<ui::AXTreeObserver::Change>& changes) override;
-
-  bool ShouldFireEventForNode(BrowserAccessibility* node) const;
 
  private:
   void HandleSelectedStateChanged(BrowserAccessibility* node);

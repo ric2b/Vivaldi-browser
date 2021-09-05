@@ -4,11 +4,22 @@
 
 #include "components/infobars/core/confirm_infobar_delegate.h"
 
-#include "base/logging.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
 
 ConfirmInfoBarDelegate::~ConfirmInfoBarDelegate() = default;
+
+bool ConfirmInfoBarDelegate::EqualsDelegate(
+    infobars::InfoBarDelegate* delegate) const {
+  ConfirmInfoBarDelegate* confirm_delegate =
+      delegate->AsConfirmInfoBarDelegate();
+  return confirm_delegate &&
+         (confirm_delegate->GetMessageText() == GetMessageText());
+}
+
+ConfirmInfoBarDelegate* ConfirmInfoBarDelegate::AsConfirmInfoBarDelegate() {
+  return this;
+}
 
 infobars::InfoBarDelegate::InfoBarAutomationType
 ConfirmInfoBarDelegate::GetInfoBarAutomationType() const {
@@ -42,15 +53,3 @@ bool ConfirmInfoBarDelegate::Cancel() {
 }
 
 ConfirmInfoBarDelegate::ConfirmInfoBarDelegate() = default;
-
-bool ConfirmInfoBarDelegate::EqualsDelegate(
-    infobars::InfoBarDelegate* delegate) const {
-  ConfirmInfoBarDelegate* confirm_delegate =
-      delegate->AsConfirmInfoBarDelegate();
-  return confirm_delegate &&
-      (confirm_delegate->GetMessageText() == GetMessageText());
-}
-
-ConfirmInfoBarDelegate* ConfirmInfoBarDelegate::AsConfirmInfoBarDelegate() {
-  return this;
-}

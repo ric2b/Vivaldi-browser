@@ -2,7 +2,13 @@
   "name": "Test extension",
   "declarative_net_request": {
     "rule_resources": [{
-      "path": "rules.json"
+      "id": "rules1",
+      "path": "rules1.json",
+      "enabled": true
+    }, {
+      "id": "rules2",
+      "path": "rules2.json",
+      "enabled": true
     }]
   },
   "manifest_version": 2,

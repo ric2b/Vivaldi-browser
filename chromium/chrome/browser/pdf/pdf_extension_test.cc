@@ -75,6 +75,7 @@
 #include "content/public/common/untrustworthy_context_menu_params.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/accessibility_notification_waiter.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/dump_accessibility_test_helper.h"
 #include "content/public/test/hit_test_region_observer.h"
@@ -458,6 +459,34 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
       content::EvalJs(embedder_web_contents,
                       "document.body.firstChild.hasAttribute('internalid');")
           .ExtractBool());
+}
+
+// This test verifies that when a PDF is served with a restrictive
+// Content-Security-Policy, the embed tag is still sized correctly.
+// Regression test for https://crbug.com/271452.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
+                       CSPDoesNotBlockEmbedStyles) {
+  GURL main_url(embedded_test_server()->GetURL("/pdf/test-csp.pdf"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  auto* embedder_web_contents = GetActiveWebContents();
+  ASSERT_TRUE(embedder_web_contents);
+
+  // Verify the pdf has loaded.
+  auto* guest_web_contents = GetGuestViewManager()->WaitForSingleGuestCreated();
+  ASSERT_TRUE(guest_web_contents);
+  EXPECT_NE(embedder_web_contents, guest_web_contents);
+  EXPECT_TRUE(content::WaitForLoadStop(guest_web_contents));
+
+  // Verify the extension was loaded.
+  const GURL extension_url(
+      "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html");
+  EXPECT_EQ(extension_url, guest_web_contents->GetURL());
+  EXPECT_EQ(main_url, embedder_web_contents->GetURL());
+
+  // Verify that the plugin occupies all of the page area.
+  const gfx::Rect embedder_rect = embedder_web_contents->GetContainerBounds();
+  const gfx::Rect guest_rect = guest_web_contents->GetContainerBounds();
+  EXPECT_EQ(embedder_rect, guest_rect);
 }
 
 class PDFExtensionLoadTest : public PDFExtensionTest,
@@ -2114,12 +2143,14 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionHitTestTest, DISABLED_MouseLeave) {
       "});"));
 
   // Inject some MouseMoves to invoke a MouseLeave in the PDF.
+  content::SimulateRoutedMouseEvent(embedder_contents,
+                                    blink::WebInputEvent::Type::kMouseMove,
+                                    point_in_parent);
   content::SimulateRoutedMouseEvent(
-      embedder_contents, blink::WebInputEvent::kMouseMove, point_in_parent);
-  content::SimulateRoutedMouseEvent(
-      embedder_contents, blink::WebInputEvent::kMouseMove, point_in_pdf);
-  content::SimulateRoutedMouseEvent(
-      embedder_contents, blink::WebInputEvent::kMouseMove, point_in_parent);
+      embedder_contents, blink::WebInputEvent::Type::kMouseMove, point_in_pdf);
+  content::SimulateRoutedMouseEvent(embedder_contents,
+                                    blink::WebInputEvent::Type::kMouseMove,
+                                    point_in_parent);
 
   // Verify MouseEnter, MouseLeave received.
   int leave_count = 0;
@@ -2209,6 +2240,49 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, BackgroundColor) {
   ASSERT_TRUE(
       content::ExecuteScriptAndExtractString(guest_contents, script, &inner));
   EXPECT_EQ(inner, outer);
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DefaultFocusForEmbeddedPDF) {
+  GURL url = embedded_test_server()->GetURL("/pdf/pdf_embed.html");
+
+  // Load page with embedded PDF and make sure it succeeds.
+  ASSERT_TRUE(LoadPdf(url));
+  WebContents* guest_contents = nullptr;
+  WebContents* embedder_contents = GetActiveWebContents();
+  content::BrowserPluginGuestManager* guest_manager =
+      embedder_contents->GetBrowserContext()->GetGuestManager();
+  ASSERT_NO_FATAL_FAILURE(guest_manager->ForEachGuest(
+      embedder_contents,
+      base::BindRepeating(&GetGuestCallback, &guest_contents)));
+  ASSERT_TRUE(guest_contents);
+
+  // Verify that current focus state is body element.
+  const std::string script =
+      "const is_plugin_focused = document.activeElement === "
+      "document.body;"
+      "window.domAutomationController.send(is_plugin_focused);";
+
+  bool result = false;
+  ASSERT_TRUE(
+      content::ExecuteScriptAndExtractBool(guest_contents, script, &result));
+  ASSERT_TRUE(result);
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DefaultFocusForNonEmbeddedPDF) {
+  GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+
+  // Verify that current focus state is document element.
+  const std::string script =
+      "const is_plugin_focused = document.activeElement === "
+      "document.body;"
+      "window.domAutomationController.send(is_plugin_focused);";
+
+  bool result = false;
+  ASSERT_TRUE(
+      content::ExecuteScriptAndExtractBool(guest_contents, script, &result));
+  ASSERT_TRUE(result);
 }
 
 // A helper for waiting for the first request for |url_to_intercept|.
@@ -2373,6 +2447,51 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Metrics) {
   EXPECT_EQ(1, actions.GetActionCount("PDF.LoadSuccess"));
 }
 
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest, TabInAndOutOfPDFPlugin) {
+  GURL test_pdf_url(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  content::WebContents* guest_contents = LoadPdfGetGuestContents(test_pdf_url);
+  ASSERT_TRUE(guest_contents);
+
+  // Set focus on last toolbar element (zoom-out-button).
+  ASSERT_TRUE(content::ExecuteScript(guest_contents,
+                                     R"(document.getElementById('zoom-toolbar')
+                                            .$['zoom-out-button']
+                                            .$$('cr-icon-button')
+                                            .focus();)"));
+
+  // The script will ensure we return the the focused element on focus.
+  const char kScript[] = R"(
+    const plugin = document.getElementById('plugin');
+    plugin.addEventListener('focus', () => {
+      window.domAutomationController.send('plugin');
+    });
+
+    const button = document.getElementById('zoom-toolbar')
+                   .$['zoom-out-button']
+                   .$$('cr-icon-button');
+    button.addEventListener('focus', () => {
+      window.domAutomationController.send('zoom-out-button');
+    });
+  )";
+  ASSERT_TRUE(content::ExecuteScript(guest_contents, kScript));
+
+  // Helper to simulate a tab press and wait for a focus message.
+  auto press_tab_and_wait_for_message = [guest_contents](bool reverse) {
+    content::DOMMessageQueue msg_queue;
+    std::string reply;
+    SimulateKeyPress(guest_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                     ui::VKEY_TAB, false, /*shift=*/reverse, false, false);
+    EXPECT_TRUE(msg_queue.WaitForMessage(&reply));
+    return reply;
+  };
+
+  // Press <tab> and ensure that PDF document receives focus.
+  EXPECT_EQ("\"plugin\"", press_tab_and_wait_for_message(false));
+  // Press <shift-tab> and ensure that last toolbar element (zoom-out-button)
+  // receives focus.
+  EXPECT_EQ("\"zoom-out-button\"", press_tab_and_wait_for_message(true));
+}
+
 // This test suite does a simple text-extraction based on the accessibility
 // internals, breaking lines & paragraphs where appropriate.  Unlike
 // TreeDumpTests, this allows us to verify the kNextOnLine and kPreviousOnLine
@@ -2384,8 +2503,10 @@ class PDFExtensionAccessibilityTextExtractionTest : public PDFExtensionTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PDFExtensionTest::SetUpCommandLine(command_line);
-    feature_list_.InitAndEnableFeature(
-        chrome_pdf::features::kAccessiblePDFHighlight);
+    std::vector<base::Feature> enabled_features = {
+        chrome_pdf::features::kAccessiblePDFHighlight,
+        chrome_pdf::features::kAccessiblePDFForm};
+    feature_list_.InitWithFeatures(enabled_features, /*disabled_features=*/{});
   }
 
   void RunTextExtractionTest(const base::FilePath::CharType* pdf_file) {
@@ -2549,6 +2670,12 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
   RunTextExtractionTest(FILE_PATH_LITERAL("highlights.pdf"));
 }
 
+// Test data of inline text boxes for PDF with text fields.
+IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
+                       TextFields) {
+  RunTextExtractionTest(FILE_PATH_LITERAL("text_fields.pdf"));
+}
+
 // Test data of inline text boxes for PDF with multi-line and various font-sized
 // text.
 IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityTextExtractionTest,
@@ -2581,8 +2708,11 @@ class PDFExtensionAccessibilityTreeDumpTest
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PDFExtensionTest::SetUpCommandLine(command_line);
-    feature_list_.InitAndEnableFeature(
-        chrome_pdf::features::kAccessiblePDFHighlight);
+    std::vector<base::Feature> enabled_features = {
+        chrome_pdf::features::kAccessiblePDFHighlight,
+        chrome_pdf::features::kAccessiblePDFForm};
+    feature_list_.InitWithFeatures(enabled_features, /*disabled_features=*/{});
+
     // Each test pass might require custom command-line setup
     if (test_pass_.set_up_command_line)
       test_pass_.set_up_command_line(command_line);
@@ -2780,6 +2910,10 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest,
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, Highlights) {
   RunPDFTest(FILE_PATH_LITERAL("highlights.pdf"));
+}
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, TextFields) {
+  RunPDFTest(FILE_PATH_LITERAL("text_fields.pdf"));
 }
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, Images) {

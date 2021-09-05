@@ -29,7 +29,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/language/core/browser/url_language_histogram.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/prefs/pref_service.h"
@@ -619,7 +619,7 @@ void BrowsingDataRemoverImpl::NotifyRemovalComplete() {
             "History.ClearBrowsingData.Duration.FullDeletion", delta);
       } else {
         UMA_HISTOGRAM_MEDIUM_TIMES(
-            "History.ClearBrowsingData.Duration.PartialDeletion", delta);
+            "History.ClearBrowsingData.Duration.TimeRangeDeletion", delta);
       }
     }
     removal_queue_.pop();

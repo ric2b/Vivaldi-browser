@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "components/autofill_assistant/browser/client_settings.h"
+#include "base/logging.h"
 
 namespace {
 
@@ -87,6 +88,9 @@ void ClientSettings::UpdateFromProto(const ClientSettingsProto& proto) {
     integration_test_settings = proto.integration_test_settings();
   } else {
     integration_test_settings.reset();
+  }
+  if (proto.has_talkback_sheet_size_fraction()) {
+    talkback_sheet_size_fraction = proto.talkback_sheet_size_fraction();
   }
 }
 

@@ -25,6 +25,7 @@
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/dice_tab_helper.h"
+#include "chrome/browser/signin/logout_tab_helper.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -32,6 +33,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/signin/public/base/account_consistency_method.h"
+#include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/google_api_keys.h"
@@ -44,6 +46,10 @@ const base::Feature kSigninReauthPrompt = {"SigninReauthPrompt",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+const base::Feature kOpenSignoutTab = {"OpenSignoutTab",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Returns the sign-in reason for |mode|.
 signin_metrics::Reason GetSigninReasonFromMode(profiles::BubbleViewMode mode) {
   DCHECK(SigninViewController::ShouldShowSigninForMode(mode));
@@ -106,10 +112,42 @@ signin_metrics::PromoAction GetPromoActionForNewAccount(
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
+// If this is destroyed before SignalReauthDone is called, will call
+// |close_modal_signin_callback_| to stop the ongoing reauth.
+class ReauthAbortHandleImpl : public SigninViewController::ReauthAbortHandle {
+ public:
+  explicit ReauthAbortHandleImpl(base::OnceClosure close_modal_signin_callback);
+  ReauthAbortHandleImpl(const ReauthAbortHandleImpl&) = delete;
+  ReauthAbortHandleImpl operator=(const ReauthAbortHandleImpl&) = delete;
+  ~ReauthAbortHandleImpl() override;
+
+  // Nullifies |close_modal_signin_callback_|.
+  void SignalReauthDone();
+
+ private:
+  base::OnceClosure close_modal_signin_callback_;
+};
+
+ReauthAbortHandleImpl::ReauthAbortHandleImpl(
+    base::OnceClosure close_modal_signin_callback)
+    : close_modal_signin_callback_(std::move(close_modal_signin_callback)) {
+  DCHECK(close_modal_signin_callback_);
+}
+
+ReauthAbortHandleImpl::~ReauthAbortHandleImpl() {
+  if (close_modal_signin_callback_) {
+    std::move(close_modal_signin_callback_).Run();
+  }
+}
+
+void ReauthAbortHandleImpl::SignalReauthDone() {
+  close_modal_signin_callback_.Reset();
+}
+
 }  // namespace
 
 SigninViewController::SigninViewController(Browser* browser)
-    : browser_(browser), delegate_(nullptr) {}
+    : browser_(browser) {}
 
 SigninViewController::~SigninViewController() {
   CloseModalSignin();
@@ -148,8 +186,9 @@ void SigninViewController::ShowModalSyncConfirmationDialog() {
   CloseModalSignin();
   // The delegate will delete itself on request of the UI code when the widget
   // is closed.
-  delegate_ = SigninViewControllerDelegate::CreateSyncConfirmationDelegate(
-      this, browser_);
+  delegate_ =
+      SigninViewControllerDelegate::CreateSyncConfirmationDelegate(browser_);
+  delegate_observer_.Add(delegate_);
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::SIGN_IN_SYNC_CONFIRMATION);
 }
@@ -158,15 +197,32 @@ void SigninViewController::ShowModalSigninErrorDialog() {
   CloseModalSignin();
   // The delegate will delete itself on request of the UI code when the widget
   // is closed.
-  delegate_ =
-      SigninViewControllerDelegate::CreateSigninErrorDelegate(this, browser_);
+  delegate_ = SigninViewControllerDelegate::CreateSigninErrorDelegate(browser_);
+  delegate_observer_.Add(delegate_);
   chrome::RecordDialogCreation(chrome::DialogIdentifier::SIGN_IN_ERROR);
 }
 
-void SigninViewController::ShowReauthPrompt(
+std::unique_ptr<SigninViewController::ReauthAbortHandle>
+SigninViewController::ShowReauthPrompt(
     const CoreAccountId& account_id,
     base::OnceCallback<void(signin::ReauthResult)> reauth_callback) {
   CloseModalSignin();
+
+  auto abort_handle = std::make_unique<ReauthAbortHandleImpl>(base::BindOnce(
+      &SigninViewController::CloseModalSignin, weak_ptr_factory_.GetWeakPtr()));
+
+  // Wrap |reauth_callback| so that it also signals to |reauth_abort_handle|
+  // when executed. The handle outlives the callback because it calls
+  // CloseModalSignin on destruction, and this runs the callback (with a
+  // "cancelled" result). So base::Unretained can be used.
+  auto wrapped_reauth_callback = base::BindOnce(
+      [](ReauthAbortHandleImpl* handle,
+         base::OnceCallback<void(signin::ReauthResult)> cb,
+         signin::ReauthResult result) {
+        handle->SignalReauthDone();
+        std::move(cb).Run(result);
+      },
+      base::Unretained(abort_handle.get()), std::move(reauth_callback));
 
   // The delegate will delete itself on request of the UI code when the widget
   // is closed.
@@ -174,8 +230,9 @@ void SigninViewController::ShowReauthPrompt(
     // This currently displays a fake dialog for development purposes. Should
     // not be called in production.
     delegate_ = SigninViewControllerDelegate::CreateFakeReauthDelegate(
-        this, browser_, account_id, std::move(reauth_callback));
-    return;
+        browser_, account_id, std::move(wrapped_reauth_callback));
+    delegate_observer_.Add(delegate_);
+    return abort_handle;
   }
 
   signin::IdentityManager* identity_manager =
@@ -190,21 +247,25 @@ void SigninViewController::ShowReauthPrompt(
       identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kNotRequired);
 
   if (!account_info || account_id != primary_account_id) {
-    std::move(reauth_callback).Run(signin::ReauthResult::kAccountNotSignedIn);
-    return;
+    std::move(wrapped_reauth_callback)
+        .Run(signin::ReauthResult::kAccountNotSignedIn);
+    return abort_handle;
   }
 
   if (account_info->hosted_domain != kNoHostedDomainFound &&
       account_info->hosted_domain != "google.com") {
     // Display a popup for Dasher users. Ideally it should only be shown for
     // SAML users but there is no way to distinguish them.
-    delegate_ = new SigninReauthPopupDelegate(this, browser_, account_id,
-                                              std::move(reauth_callback));
+    delegate_ = new SigninReauthPopupDelegate(
+        browser_, account_id, std::move(wrapped_reauth_callback));
+    delegate_observer_.Add(delegate_);
   } else {
     delegate_ = SigninViewControllerDelegate::CreateReauthDelegate(
-        this, browser_, account_id, std::move(reauth_callback));
+        browser_, account_id, std::move(wrapped_reauth_callback));
+    delegate_observer_.Add(delegate_);
   }
   chrome::RecordDialogCreation(chrome::DialogIdentifier::SIGNIN_REAUTH);
+  return abort_handle;
 }
 
 bool SigninViewController::ShowsModalDialog() {
@@ -223,7 +284,8 @@ void SigninViewController::SetModalSigninHeight(int height) {
     delegate_->ResizeNativeView(height);
 }
 
-void SigninViewController::ResetModalSigninDelegate() {
+void SigninViewController::OnModalSigninClosed() {
+  delegate_observer_.Remove(delegate_);
   delegate_ = nullptr;
 }
 
@@ -337,6 +399,35 @@ void SigninViewController::ShowDiceAddAccountTab(
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO, email_hint);
 }
 
+void SigninViewController::ShowGaiaLogoutTab(
+    signin_metrics::SourceForRefreshTokenOperation source) {
+  if (!base::FeatureList::IsEnabled(kOpenSignoutTab)) {
+    IdentityManagerFactory::GetForProfile(browser_->profile())
+        ->GetAccountsMutator()
+        ->RemoveAllAccounts(source);
+    return;
+  }
+
+  // Since the user may be triggering navigation from another UI element such as
+  // a menu, ensure the web contents (and therefore the page that is about to be
+  // shown) is focused. (See crbug/926492 for motivation.)
+  auto* const contents = browser_->tab_strip_model()->GetActiveWebContents();
+  if (contents)
+    contents->Focus();
+
+  // Do not use a singleton tab. A new tab should be opened even if there is
+  // already a logout tab.
+  ShowTabOverwritingNTP(browser_,
+                        GaiaUrls::GetInstance()->service_logout_url());
+
+  // Monitor the logout and fallback to local signout if it fails. The
+  // LogoutTabHelper deletes itself.
+  content::WebContents* logout_tab_contents =
+      browser_->tab_strip_model()->GetActiveWebContents();
+  DCHECK(logout_tab_contents);
+  LogoutTabHelper::CreateForWebContents(logout_tab_contents);
+}
+
 void SigninViewController::ShowModalSigninEmailConfirmationDialog(
     const std::string& last_email,
     const std::string& email,
@@ -347,8 +438,9 @@ void SigninViewController::ShowModalSigninEmailConfirmationDialog(
   // The delegate will delete itself on request of the UI code when the widget
   // is closed.
   delegate_ = SigninEmailConfirmationDialog::AskForConfirmation(
-      this, active_contents, browser_->profile(), last_email, email,
+      active_contents, browser_->profile(), last_email, email,
       std::move(callback));
+  delegate_observer_.Add(delegate_);
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::SIGN_IN_EMAIL_CONFIRMATION);
 }

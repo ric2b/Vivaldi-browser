@@ -10,13 +10,10 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.DataSetObserver;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -30,10 +27,10 @@ import android.widget.ExpandableListView;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
-import androidx.fragment.app.Fragment;
 
 import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.common.DeveloperModeUtils;
@@ -41,10 +38,11 @@ import org.chromium.android_webview.common.PlatformServiceBridge;
 import org.chromium.android_webview.common.crash.CrashInfo;
 import org.chromium.android_webview.common.crash.CrashInfo.UploadState;
 import org.chromium.android_webview.common.crash.CrashUploadUtil;
+import org.chromium.android_webview.devui.util.CrashBugUrlFactory;
 import org.chromium.android_webview.devui.util.WebViewCrashInfoCollector;
-import org.chromium.android_webview.devui.util.WebViewPackageHelper;
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.ui.widget.Toast;
 
@@ -56,44 +54,35 @@ import java.util.Locale;
 /**
  * A fragment to show a list of recent WebView crashes.
  */
-public class CrashesListFragment extends Fragment {
+public class CrashesListFragment extends DevUiBaseFragment {
     private static final String TAG = "WebViewDevTools";
 
     // Max number of crashes to show in the crashes list.
     private static final int MAX_CRASHES_NUMBER = 20;
 
     private CrashListExpandableAdapter mCrashListViewAdapter;
-    private PersistentErrorView mCrashConsentError;
     private Context mContext;
 
-    // There is a limit on the length of this query string, see https://crbug.com/1015923
-    // TODO(https://crbug.com/1052295): add assert statement to check the length of this String.
-    private static final String CRASH_REPORT_TEMPLATE = ""
-            + "Build fingerprint: %s\n"
-            + "Android API level: %s\n"
-            + "WebView package: %s (%s/%s)\n"
-            + "Application: %s\n"
-            + "Application version: %s\n"
-            + "If this app is available on Google Play, please include a URL:\n"
-            + "\n"
-            + "\n"
-            + "Steps to reproduce:\n"
-            + "(1)\n"
-            + "(2)\n"
-            + "(3)\n"
-            + "\n"
-            + "\n"
-            + "Expected result:\n"
-            + "(What should have happened?)\n"
-            + "\n"
-            + "\n"
-            + "<Any additional comments, you want to share>"
-            + "\n"
-            + "\n"
-            + "****DO NOT CHANGE BELOW THIS LINE****\n"
-            + "Crash ID: http://crash/%s\n"
-            + "Instructions for triaging this report (Chromium members only): "
-            + "https://bit.ly/2SM1Y9t\n";
+    // These values are persisted to logs. Entries should not be renumbered and
+    // numeric values should never be reused.
+    @IntDef({CollectionState.ENABLED_BY_COMMANDLINE, CollectionState.ENABLED_BY_FLAG_UI,
+            CollectionState.ENABLED_BY_USER_CONSENT, CollectionState.DISABLED_BY_USER_CONSENT,
+            CollectionState.DISABLED_BY_USER_CONSENT_CANNOT_FIND_SETTINGS,
+            CollectionState.DISABLED_CANNOT_USE_GMS})
+    private @interface CollectionState {
+        int ENABLED_BY_COMMANDLINE = 0;
+        int ENABLED_BY_FLAG_UI = 1;
+        int ENABLED_BY_USER_CONSENT = 2;
+        int DISABLED_BY_USER_CONSENT = 3;
+        int DISABLED_BY_USER_CONSENT_CANNOT_FIND_SETTINGS = 4;
+        int DISABLED_CANNOT_USE_GMS = 5;
+        int COUNT = 6;
+    }
+
+    private static void logCrashCollectionState(@CollectionState int state) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.WebView.DevUi.CrashList.CollectionState", state, CollectionState.COUNT);
+    }
 
     @Override
     public void onAttach(Context context) {
@@ -122,31 +111,11 @@ public class CrashesListFragment extends Fragment {
         mCrashListViewAdapter = new CrashListExpandableAdapter(crashesSummaryView);
         ExpandableListView crashListView = view.findViewById(R.id.crashes_list);
         crashListView.setAdapter(mCrashListViewAdapter);
-
-        mCrashConsentError =
-                buildCrashConsentError(PlatformServiceBridge.getInstance().canUseGms());
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        // Check if crash collection is enabled and show or hide the error message.
-        // Firstly, check for the flag value in commandline, since it doesn't require any IPCs.
-        // Then check for flags value in the DeveloperUi ContentProvider (it involves an IPC but
-        // it's guarded by quick developer mode check). Finally check the GMS service since it
-        // is the slowest check.
-        if (isCrashUploadsEnabledFromCommandLine() || isCrashUploadsEnabledFromFlagsUi()) {
-            mCrashConsentError.hide();
-        } else {
-            PlatformServiceBridge.getInstance().queryMetricsSetting(enabled -> {
-                if (Boolean.TRUE.equals(enabled)) {
-                    mCrashConsentError.hide();
-                } else {
-                    mCrashConsentError.show();
-                }
-            });
-        }
-
         mCrashListViewAdapter.updateCrashes();
     }
 
@@ -179,6 +148,8 @@ public class CrashesListFragment extends Fragment {
                 public void onChanged() {
                     crashesSummaryView.setText(
                             String.format(Locale.US, "Crashes (%d)", mCrashInfoList.size()));
+                    RecordHistogram.recordCount100Histogram(
+                            "Android.WebView.DevUi.CrashList.NumberShown", mCrashInfoList.size());
                 }
             });
         }
@@ -200,14 +171,13 @@ public class CrashesListFragment extends Fragment {
             CrashInfo crashInfo = (CrashInfo) getGroup(groupPosition);
 
             ImageView packageIcon = view.findViewById(R.id.crash_package_icon);
-            String packageName;
-            if (crashInfo.packageName == null) {
+            String packageName = crashInfo.getCrashKey(CrashInfo.APP_PACKAGE_NAME_KEY);
+            if (packageName == null) {
                 // This can happen if crash log file where we keep crash info is cleared but other
                 // log files like upload logs still exist.
                 packageName = "unknown app";
                 packageIcon.setImageResource(android.R.drawable.sym_def_app_icon);
             } else {
-                packageName = crashInfo.packageName;
                 try {
                     Drawable icon = mContext.getPackageManager().getApplicationIcon(packageName);
                     packageIcon.setImageDrawable(icon);
@@ -369,41 +339,6 @@ public class CrashesListFragment extends Fragment {
         }
     }
 
-    // Build a report uri to open an issue on https://bugs.chromium.org/p/chromium/issues/entry.
-    // It uses WebView Bugs Template and adds "User-Submitted" Label.
-    // It adds the upload id at the end of the template and populates the Application package
-    // name field.
-    private Uri getReportUri(CrashInfo crashInfo) {
-        String appPackage = "";
-        String appVersion = "";
-        if (crashInfo.packageName != null) {
-            try {
-                PackageManager pm = mContext.getPackageManager();
-                PackageInfo packageInfo = pm.getPackageInfo(crashInfo.packageName, 0);
-                appPackage = crashInfo.packageName;
-                appVersion = String.format(
-                        Locale.US, "%s/%s", packageInfo.versionName, packageInfo.versionCode);
-            } catch (PackageManager.NameNotFoundException e) {
-            }
-        }
-
-        PackageInfo webViewPackage = WebViewPackageHelper.getContextPackageInfo(mContext);
-
-        return new Uri.Builder()
-                .scheme("https")
-                .authority("bugs.chromium.org")
-                .path("/p/chromium/issues/entry")
-                .appendQueryParameter("template", "Webview+Bugs")
-                .appendQueryParameter("description",
-                        String.format(Locale.US, CRASH_REPORT_TEMPLATE, Build.FINGERPRINT,
-                                Build.VERSION.SDK_INT, webViewPackage.packageName,
-                                webViewPackage.versionName, webViewPackage.versionCode, appPackage,
-                                appVersion, crashInfo.uploadId))
-                .appendQueryParameter(
-                        "labels", "User-Submitted,Via-WebView-DevTools,Pri-3,Type-Bug,OS-Android")
-                .build();
-    }
-
     private static String uploadStateString(UploadState uploadState) {
         switch (uploadState) {
             case UPLOADED:
@@ -437,13 +372,36 @@ public class CrashesListFragment extends Fragment {
         }
     }
 
-    private PersistentErrorView buildCrashConsentError(boolean canUseGms) {
-        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(mContext);
-        dialogBuilder.setTitle("Error Showing Crashes");
-        if (canUseGms) {
-            dialogBuilder.setMessage(
-                    "Crash collection is disabled. Please turn on 'Usage & diagnostics' "
-                    + "to enable WebView crash collection.");
+    @Override
+    void maybeShowErrorView(PersistentErrorView errorView) {
+        // Check if crash collection is enabled and show or hide the error message.
+        // Firstly, check for the flag value in commandline, since it doesn't require any IPCs.
+        // Then check for flags value in the DeveloperUi ContentProvider (it involves an IPC but
+        // it's guarded by quick developer mode check). Finally check the GMS service since it
+        // is the slowest check.
+        if (isCrashUploadsEnabledFromCommandLine()) {
+            logCrashCollectionState(CollectionState.ENABLED_BY_COMMANDLINE);
+            errorView.hide();
+        } else if (isCrashUploadsEnabledFromFlagsUi()) {
+            logCrashCollectionState(CollectionState.ENABLED_BY_FLAG_UI);
+            errorView.hide();
+        } else {
+            PlatformServiceBridge.getInstance().queryMetricsSetting(enabled -> {
+                if (Boolean.TRUE.equals(enabled)) {
+                    logCrashCollectionState(CollectionState.ENABLED_BY_USER_CONSENT);
+                    errorView.hide();
+                } else {
+                    buildCrashConsentError(errorView);
+                    errorView.show();
+                }
+            });
+        }
+    }
+
+    private void buildCrashConsentError(PersistentErrorView errorView) {
+        if (PlatformServiceBridge.getInstance().canUseGms()) {
+            errorView.setText("Crash collection is disabled. Please turn on 'Usage & diagnostics' "
+                    + "from the three-dotted menu in Google settings.");
             // Open Google Settings activity, "Usage & diagnostics" activity is not exported and
             // cannot be opened directly.
             Intent settingsIntent = new Intent("com.android.settings.action.EXTRA_SETTINGS");
@@ -451,20 +409,17 @@ public class CrashesListFragment extends Fragment {
                     mContext.getPackageManager().queryIntentActivities(settingsIntent, 0);
             // Show a button to open GMS settings activity only if it exists.
             if (intentResolveInfo.size() > 0) {
-                dialogBuilder.setPositiveButton(
-                        "Settings", (dialog, id) -> startActivity(settingsIntent));
+                logCrashCollectionState(CollectionState.DISABLED_BY_USER_CONSENT);
+                errorView.setActionButton("Open Settings", v -> startActivity(settingsIntent));
             } else {
+                logCrashCollectionState(
+                        CollectionState.DISABLED_BY_USER_CONSENT_CANNOT_FIND_SETTINGS);
                 Log.e(TAG, "Cannot find GMS settings activity");
             }
         } else {
-            dialogBuilder.setMessage("Crash collection is not supported at the moment.");
+            logCrashCollectionState(CollectionState.DISABLED_CANNOT_USE_GMS);
+            errorView.setText("Crash collection is not supported at the moment.");
         }
-
-        Activity activity = (Activity) mContext;
-        return new PersistentErrorView(
-                activity, R.id.crash_consent_error, PersistentErrorView.Type.ERROR)
-                .setText("Crash collection is disabled. Tap for more info.")
-                .setDialog(dialogBuilder.create());
     }
 
     private AlertDialog buildCrashBugDialog(CrashInfo crashInfo) {
@@ -473,8 +428,7 @@ public class CrashesListFragment extends Fragment {
                 "This crash has already been reported to our crash system. Do you want to share "
                 + "more information, such as steps to reproduce the crash?");
         dialogBuilder.setPositiveButton("Provide more info",
-                (dialog, id)
-                        -> startActivity(new Intent(Intent.ACTION_VIEW, getReportUri(crashInfo))));
+                (dialog, id) -> startActivity(new CrashBugUrlFactory(crashInfo).getReportIntent()));
         dialogBuilder.setNegativeButton("Dismiss", (dialog, id) -> dialog.dismiss());
         return dialogBuilder.create();
     }
@@ -487,15 +441,10 @@ public class CrashesListFragment extends Fragment {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.options_menu_refresh) {
+            MainActivity.logMenuSelection(MainActivity.MenuChoice.CRASHES_REFRESH);
             mCrashListViewAdapter.updateCrashes();
             return true;
         }
         return super.onOptionsItemSelected(item);
-    }
-
-    @Override
-    public void onDestroyView() {
-        mCrashConsentError.hide();
-        super.onDestroyView();
     }
 }

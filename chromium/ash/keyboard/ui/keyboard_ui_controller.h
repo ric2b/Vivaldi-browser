@@ -199,6 +199,9 @@ class KEYBOARD_EXPORT KeyboardUIController
   // here are relative to the window's origin.
   bool SetAreaToRemainOnScreen(const gfx::Rect& bounds_in_window);
 
+  // Sets the bounds of the keyboard window in screen coordinates.
+  bool SetKeyboardWindowBoundsInScreen(const gfx::Rect& bounds_in_screen);
+
   ContainerType GetActiveContainerType() const {
     return container_behavior_->GetType();
   }
@@ -226,7 +229,7 @@ class KEYBOARD_EXPORT KeyboardUIController
   // will trigger a hide animation and a subsequent show animation. Otherwise
   // the ContainerBehavior change is synchronous.
   void SetContainerType(ContainerType type,
-                        const base::Optional<gfx::Rect>& target_bounds_in_root,
+                        const gfx::Rect& target_bounds_in_root,
                         base::OnceCallback<void(bool)> callback);
 
   // Sets floating keyboard draggable rect.

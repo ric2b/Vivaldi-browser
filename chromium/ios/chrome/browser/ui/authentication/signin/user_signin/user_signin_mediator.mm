@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/logging.h"
+#include "base/check.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/consent_auditor/consent_auditor.h"
@@ -105,8 +105,7 @@
   if (success) {
     [self signinCompletedWithIdentity:identity];
   } else {
-    [self.delegate userSigninMediatorNeedPrimaryButtonUpdate];
-    [self.delegate userSigninMediatorDidTapResetSettingLink];
+    [self.delegate userSigninMediatorSigninFailed];
   }
 }
 

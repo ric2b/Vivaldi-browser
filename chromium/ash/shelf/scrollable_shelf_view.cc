@@ -100,18 +100,6 @@ constexpr char kAnimationSmoothnessClamshellLauncherVisibleHistogram[] =
 constexpr char kAnimationSmoothnessClamshellLauncherHiddenHistogram[] =
     "Apps.ScrollableShelf.AnimationSmoothness.ClamshellMode.LauncherHidden";
 
-// Sum of the shelf button size and the gap between shelf buttons.
-int GetUnit() {
-  return ShelfConfig::Get()->button_size() +
-         ShelfConfig::Get()->button_spacing();
-}
-
-// Decides whether the current first visible shelf icon of the scrollable shelf
-// should be hidden or fully shown when gesture scroll ends.
-int GetGestureDragThreshold() {
-  return ShelfConfig::Get()->button_size() / 2;
-}
-
 // Returns the display id for the display that shows the shelf for |view|.
 int64_t GetDisplayIdForView(const views::View* view) {
   aura::Window* window = view->GetWidget()->GetNativeWindow();
@@ -281,7 +269,8 @@ class ScrollableShelfView::ScrollableShelfArrowView
       : ScrollArrowView(arrow_type,
                         is_horizontal_alignment,
                         shelf,
-                        shelf_button_delegate) {
+                        shelf_button_delegate),
+        shelf_(shelf) {
     SetInkDropMode(InkDropMode::OFF);
     SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
     SetPaintToLayer();
@@ -293,15 +282,17 @@ class ScrollableShelfView::ScrollableShelfArrowView
   bool DoesIntersectRect(const views::View* target,
                          const gfx::Rect& rect) const override {
     DCHECK_EQ(target, this);
-    gfx::Rect bounds = gfx::Rect(size());
+    const gfx::Rect bounds = gfx::Rect(size());
 
-    // Calculate padding for the tap area. (Should be 32 x shelfButtonSize)
-    constexpr int horizontalPadding =
-        (kArrowButtonTapAreaHorizontal - kArrowButtonSize) / 2;
-    const int verticalPadding =
-        (ShelfConfig::Get()->button_size() - kArrowButtonSize) / 2;
-    bounds.Inset(gfx::Insets(-verticalPadding, -horizontalPadding));
-    return bounds.Intersects(rect);
+    // Calculates the tapping area. Note that tapping area is bigger than the
+    // arrow button's bounds.
+    gfx::Rect tap_rect(kArrowButtonTapAreaHorizontal,
+                       shelf_->hotseat_widget()->GetHotseatSize());
+    tap_rect -= gfx::Vector2d((tap_rect.width() - bounds.width()) / 2,
+                              (tap_rect.height() - bounds.height()) / 2);
+    DCHECK(tap_rect.Contains(bounds));
+
+    return tap_rect.Intersects(rect);
   }
 
   // Make ScrollRectToVisible a no-op because ScrollableShelfArrowView is
@@ -314,6 +305,9 @@ class ScrollableShelfView::ScrollableShelfArrowView
   const char* GetClassName() const override {
     return "ScrollableShelfArrowView";
   }
+
+ private:
+  Shelf* const shelf_ = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -396,7 +390,7 @@ void ScrollableShelfContainerView::Layout() {
   // CalculateIdealSize. Because ShelfView::CalculatePreferredSize relies on the
   // bounds of app icon. Meanwhile, the icon's bounds may be updated by
   // animation.
-  const gfx::Rect ideal_bounds = gfx::Rect(CalculateIdealSize());
+  const gfx::Rect ideal_bounds = gfx::Rect(CalculatePreferredSize());
 
   const gfx::Rect local_bounds = GetLocalBounds();
   gfx::Rect shelf_view_bounds =
@@ -608,6 +602,11 @@ bool ScrollableShelfView::ShouldAdaptToRTL() const {
   return base::i18n::IsRTL() && GetShelf()->IsHorizontalAlignment();
 }
 
+bool ScrollableShelfView::NeedUpdateToTargetBounds() const {
+  return GetAvailableLocalBounds(/*use_target_bounds=*/true) !=
+         GetAvailableLocalBounds(/*use_target_bounds=*/false);
+}
+
 gfx::Rect ScrollableShelfView::GetTargetScreenBoundsOfItemIcon(
     const ShelfID& id) const {
   // Calculates the available space for child views based on the target bounds.
@@ -678,6 +677,14 @@ gfx::Rect ScrollableShelfView::GetTargetScreenBoundsOfItemIcon(
   return icon_bounds;
 }
 
+bool ScrollableShelfView::RequiresScrollingForItemSize(
+    const gfx::Size& target_size,
+    int button_size) const {
+  const gfx::Size icons_preferred_size =
+      shelf_container_view_->CalculateIdealSize(button_size);
+  return !CanFitAllAppsWithoutScrolling(target_size, icons_preferred_size);
+}
+
 views::View* ScrollableShelfView::GetShelfContainerViewForTest() {
   return shelf_container_view_;
 }
@@ -691,6 +698,14 @@ void ScrollableShelfView::SetTestObserver(TestObserver* test_observer) {
   DCHECK(!(test_observer && test_observer_));
 
   test_observer_ = test_observer;
+}
+
+int ScrollableShelfView::GetSumOfButtonSizeAndSpacing() const {
+  return shelf_view_->GetButtonSize() + ShelfConfig::Get()->button_spacing();
+}
+
+int ScrollableShelfView::GetGestureDragThreshold() const {
+  return shelf_view_->GetButtonSize() / 2;
 }
 
 float ScrollableShelfView::CalculateScrollUpperBound(
@@ -758,8 +773,11 @@ ScrollableShelfView::LayoutStrategy
 ScrollableShelfView::CalculateLayoutStrategy(float scroll_distance_on_main_axis,
                                              int space_for_icons,
                                              bool use_target_bounds) const {
-  if (CanFitAllAppsWithoutScrolling(use_target_bounds))
+  if (CanFitAllAppsWithoutScrolling(
+          GetAvailableLocalBounds(use_target_bounds).size(),
+          CalculatePreferredSize())) {
     return kNotShowArrowButtons;
+  }
 
   if (scroll_distance_on_main_axis == 0.f) {
     // No invisible shelf buttons at the left side. So hide the left button.
@@ -964,6 +982,12 @@ void ScrollableShelfView::ViewHierarchyChanged(
 
   shelf_view_->UpdateVisibleIndices();
 
+  // When app scaling state needs update, hotseat bounds should change. Then
+  // it is not meaningful to do further work in the current view bounds. So
+  // returns early.
+  if (GetShelf()->hotseat_widget()->UpdateAppScalingIfNeeded())
+    return;
+
   const gfx::Vector2dF old_scroll_offset = scroll_offset_;
 
   // Adding/removing an icon may change the padding then affect the available
@@ -1155,7 +1179,20 @@ bool ScrollableShelfView::ShouldShowTooltipForView(
 
 bool ScrollableShelfView::ShouldHideTooltip(
     const gfx::Point& cursor_location) const {
-  return !visible_space_.Contains(cursor_location);
+  if ((ShouldShowLeftArrow() &&
+       left_arrow_->GetMirroredBounds().Contains(cursor_location)) ||
+      (ShouldShowRightArrow() &&
+       right_arrow_->GetMirroredBounds().Contains(cursor_location))) {
+    return false;
+  }
+
+  // Should hide the tooltip if |cursor_location| is not in |visible_space_|.
+  if (!visible_space_.Contains(cursor_location))
+    return true;
+
+  gfx::Point location_in_shelf_view = cursor_location;
+  views::View::ConvertPointToTarget(this, shelf_view_, &location_in_shelf_view);
+  return shelf_view_->ShouldHideTooltip(location_in_shelf_view);
 }
 
 const std::vector<aura::Window*> ScrollableShelfView::GetOpenWindowsForView(
@@ -1351,7 +1388,8 @@ gfx::Insets ScrollableShelfView::CalculateExtraEdgePadding(
   }
 
   const int icons_size =
-      shelf_view_->GetSizeOfAppIcons(shelf_view_->number_of_visible_apps()) +
+      shelf_view_->GetSizeOfAppButtons(shelf_view_->number_of_visible_apps(),
+                                       shelf_view_->GetButtonSize()) +
       2 * ShelfConfig::Get()->GetAppIconEndPadding();
 
   const gfx::Rect available_local_bounds =
@@ -1361,13 +1399,16 @@ gfx::Insets ScrollableShelfView::CalculateExtraEdgePadding(
                                    available_local_bounds.height()) -
       2 * base_padding_;
 
-  int gap = CanFitAllAppsWithoutScrolling(use_target_bounds)
-                ? available_size_for_app_icons - icons_size  // shelf centering
-                : 0;                                         // overflow
+  int gap = CanFitAllAppsWithoutScrolling(available_local_bounds.size(),
+                                          CalculatePreferredSize())
+                ? available_size_for_app_icons - icons_size
+                : 0;  // overflow
 
   // Calculates the paddings before/after the visible area of scrollable shelf.
-  const int before_padding = gap / 2;
-  const int after_padding = (gap % 2 ? gap / 2 + 1 : gap / 2);
+  // |after_padding| being zero ensures that the available space after the
+  // visible area is filled first.
+  const int before_padding = gap;
+  const int after_padding = 0;
 
   gfx::Insets padding_insets;
   if (GetShelf()->IsHorizontalAlignment()) {
@@ -1409,7 +1450,8 @@ gfx::Rect ScrollableShelfView::GetAvailableLocalBounds(
 gfx::Insets ScrollableShelfView::CalculatePaddingForDisplayCentering(
     bool use_target_bounds) const {
   const int icons_size =
-      shelf_view_->GetSizeOfAppIcons(shelf_view_->number_of_visible_apps()) +
+      shelf_view_->GetSizeOfAppButtons(shelf_view_->number_of_visible_apps(),
+                                       shelf_view_->GetButtonSize()) +
       2 * ShelfConfig::Get()->GetAppIconEndPadding();
   const gfx::Rect display_bounds =
       screen_util::GetDisplayBoundsWithShelf(GetWidget()->GetNativeWindow());
@@ -1421,12 +1463,17 @@ gfx::Insets ScrollableShelfView::CalculatePaddingForDisplayCentering(
   const gfx::Rect screen_bounds =
       use_target_bounds ? GetShelf()->hotseat_widget()->GetTargetBounds()
                         : GetBoundsInScreen();
-  int before_padding = gap - GetShelf()->PrimaryAxisValue(
-                                 screen_bounds.x() - display_bounds.x(),
-                                 screen_bounds.y() - display_bounds.y());
+  int before_padding =
+      gap - GetShelf()->PrimaryAxisValue(
+                ShouldAdaptToRTL()
+                    ? display_bounds.right() - screen_bounds.right()
+                    : screen_bounds.x() - display_bounds.x(),
+                screen_bounds.y() - display_bounds.y());
   int after_padding =
       gap - GetShelf()->PrimaryAxisValue(
-                display_bounds.right() - screen_bounds.right(),
+                ShouldAdaptToRTL()
+                    ? screen_bounds.x() - display_bounds.x()
+                    : display_bounds.right() - screen_bounds.right(),
                 display_bounds.bottom() - screen_bounds.bottom());
 
   before_padding -= base_padding_;
@@ -1677,6 +1724,8 @@ float ScrollableShelfView::CalculatePageScrollingOffsetInAbs(
   // The available space for icons excluding the area taken by arrow button(s).
   int space_excluding_arrow;
 
+  const int space_needed_for_button = GetSumOfButtonSizeAndSpacing();
+
   if (layout_strategy == kShowRightArrowButton) {
     space_excluding_arrow = GetSpaceForIcons() - kArrowButtonGroupWidth;
 
@@ -1685,21 +1734,21 @@ float ScrollableShelfView::CalculatePageScrollingOffsetInAbs(
     const int offset_for_extra_arrow =
         kArrowButtonGroupWidth - ShelfConfig::Get()->GetAppIconEndPadding();
 
-    const int mod = space_excluding_arrow % GetUnit();
+    const int mod = space_excluding_arrow % space_needed_for_button;
     offset = space_excluding_arrow - mod - offset_for_extra_arrow;
   } else if (layout_strategy == kShowButtons ||
              layout_strategy == kShowLeftArrowButton) {
     space_excluding_arrow = GetSpaceForIcons() - 2 * kArrowButtonGroupWidth;
-    const int mod = space_excluding_arrow % GetUnit();
+    const int mod = space_excluding_arrow % space_needed_for_button;
     offset = space_excluding_arrow - mod;
 
     // Layout of kShowLeftArrowButton can be regarded as the layout of
     // kShowButtons with extra offset.
     if (layout_strategy == kShowLeftArrowButton) {
-      const int extra_offset =
-          -ShelfConfig::Get()->button_spacing() -
-          (GetSpaceForIcons() - kArrowButtonGroupWidth) % GetUnit() +
-          ShelfConfig::Get()->GetAppIconEndPadding();
+      const int extra_offset = -ShelfConfig::Get()->button_spacing() -
+                               (GetSpaceForIcons() - kArrowButtonGroupWidth) %
+                                   space_needed_for_button +
+                               ShelfConfig::Get()->GetAppIconEndPadding();
       offset += extra_offset;
     }
   }
@@ -1895,23 +1944,26 @@ std::pair<int, int> ScrollableShelfView::CalculateTappableIconIndices(
                                ? visible_space_.width()
                                : visible_space_.height();
 
+  const int space_needed_for_button = GetSumOfButtonSizeAndSpacing();
+
   if (layout_strategy == kShowRightArrowButton ||
       layout_strategy == kShowButtons) {
-    first_tappable_app_index = scroll_distance_on_main_axis / GetUnit() +
-                               (layout_strategy == kShowButtons ? 1 : 0);
+    first_tappable_app_index =
+        scroll_distance_on_main_axis / space_needed_for_button +
+        (layout_strategy == kShowButtons ? 1 : 0);
     last_tappable_app_index =
-        first_tappable_app_index + visible_size / GetUnit();
+        first_tappable_app_index + visible_size / space_needed_for_button;
 
-    const int end_of_last_tappable_app = last_tappable_app_index * GetUnit() +
-                                         ShelfConfig::Get()->button_size() -
-                                         scroll_distance_on_main_axis;
+    const int end_of_last_tappable_app =
+        last_tappable_app_index * space_needed_for_button +
+        shelf_view_->GetButtonSize() - scroll_distance_on_main_axis;
     if (end_of_last_tappable_app > visible_size)
       last_tappable_app_index--;
   } else {
     DCHECK_EQ(layout_strategy, kShowLeftArrowButton);
     last_tappable_app_index = shelf_view_->last_visible_index();
     first_tappable_app_index =
-        last_tappable_app_index - visible_size / GetUnit() + 1;
+        last_tappable_app_index - visible_size / space_needed_for_button + 1;
   }
 
   return tappable_icon_indices;
@@ -1937,17 +1989,16 @@ int ScrollableShelfView::GetSpaceForIcons() const {
 }
 
 bool ScrollableShelfView::CanFitAllAppsWithoutScrolling(
-    bool use_target_bounds) const {
-  const gfx::Rect available_rect = GetAvailableLocalBounds(use_target_bounds);
+    const gfx::Size& available_size,
+    const gfx::Size& icons_preferred_size) const {
   const int available_length =
-      (GetShelf()->IsHorizontalAlignment() ? available_rect.width()
-                                           : available_rect.height()) -
+      (GetShelf()->IsHorizontalAlignment() ? available_size.width()
+                                           : available_size.height()) -
       2 * ShelfConfig::Get()->app_icon_group_margin();
 
-  gfx::Size preferred_size = GetPreferredSize();
   int preferred_length = GetShelf()->IsHorizontalAlignment()
-                             ? preferred_size.width()
-                             : preferred_size.height();
+                             ? icons_preferred_size.width()
+                             : icons_preferred_size.height();
   preferred_length += 2 * ShelfConfig::Get()->GetAppIconEndPadding();
 
   return available_length >= preferred_length;
@@ -2005,9 +2056,10 @@ float ScrollableShelfView::CalculateAdjustmentOffset(
   // to use modulo operation here.
   const int remainder = static_cast<int>(GetActualScrollOffset(
                             main_axis_scroll_distance, layout_strategy)) %
-                        GetUnit();
-  int offset = remainder > GetGestureDragThreshold() ? GetUnit() - remainder
-                                                     : -remainder;
+                        GetSumOfButtonSizeAndSpacing();
+  int offset = remainder > GetGestureDragThreshold()
+                   ? GetSumOfButtonSizeAndSpacing() - remainder
+                   : -remainder;
 
   return offset;
 }

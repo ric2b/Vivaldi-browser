@@ -32,7 +32,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging_status.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_container_type.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "url/gurl.h"
 
@@ -440,14 +439,9 @@ void ServiceWorkerHandler::OnWorkerVersionUpdated(
 
     for (const auto& client : version.clients) {
       if (client.second.type ==
-          blink::mojom::ServiceWorkerContainerType::kForWindow) {
-        // A navigation may not yet be associated with a RenderFrameHost. Use
-        // the |web_contents_getter| instead.
+          blink::mojom::ServiceWorkerClientType::kWindow) {
         WebContents* web_contents =
-            client.second.web_contents_getter
-                ? client.second.web_contents_getter.Run()
-                : WebContents::FromRenderFrameHost(RenderFrameHostImpl::FromID(
-                      client.second.process_id, client.second.route_id));
+            WebContents::FromFrameTreeNodeId(client.second.frame_tree_node_id);
         // There is a possibility that the frame is already deleted
         // because of the thread hopping.
         if (!web_contents)

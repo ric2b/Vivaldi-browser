@@ -22,6 +22,7 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
+#include "gpu/ipc/scheduler_sequence.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "ui/gl/trace_util.h"
 
@@ -35,6 +36,19 @@ namespace {
 base::AtomicSequenceNumber g_next_display_resource_provider_tracing_id;
 
 }  // namespace
+
+class ScopedAllowGpuAccessForDisplayResourceProvider {
+ public:
+  ~ScopedAllowGpuAccessForDisplayResourceProvider() = default;
+
+  explicit ScopedAllowGpuAccessForDisplayResourceProvider(
+      DisplayResourceProvider* provider) {
+    DCHECK(provider->can_access_gpu_thread_);
+  }
+
+ private:
+  gpu::ScopedAllowScheduleGpuTask allow_gpu_;
+};
 
 class ScopedSetActiveTexture {
  public:
@@ -622,8 +636,11 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
   if (unused.empty() && !child_info->marked_for_deletion)
     return;
 
-  // Store unused resources while batching is enabled.
-  if (batch_return_resources_lock_count_ > 0) {
+  // Store unused resources while batching is enabled or we can't access gpu
+  // thread right now.
+  // TODO(vasilyt): Technically we need to delay only resources with
+  // |image_context|.
+  if (batch_return_resources_lock_count_ > 0 || !can_access_gpu_thread_) {
     int child_id = child_it->first;
     // Ensure that we have an entry in |batched_returning_resources_| for child
     // even if |unused| is empty, in case child is marked for deletion.
@@ -644,7 +661,9 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
 
   std::vector<std::unique_ptr<ExternalUseClient::ImageContext>>
       image_contexts_to_return;
+  std::vector<ReturnedResource*> external_used_resources;
   image_contexts_to_return.reserve(unused.size());
+  external_used_resources.reserve(unused.size());
 
   GLES2Interface* gl = ContextGL();
   for (ResourceId local_id : unused) {
@@ -681,9 +700,6 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
       is_lost = true;
     }
 
-    if (resource.image_context)
-      image_contexts_to_return.emplace_back(std::move(resource.image_context));
-
     if (resource.is_gpu_resource_type() &&
         resource.gl_id &&
         resource.filter != resource.transferable.filter) {
@@ -703,12 +719,20 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
                            resource.imported_count, is_lost);
     auto& returned = to_return.back();
 
-    if (resource.is_gpu_resource_type()) {
-      if (resource.needs_sync_token()) {
-        need_synchronization_resources.push_back(&returned);
-      } else if (returned.sync_token.HasData() &&
-                 !returned.sync_token.verified_flush()) {
-        unverified_sync_tokens.push_back(returned.sync_token.GetData());
+    if (external_use_client_) {
+      if (resource.image_context) {
+        image_contexts_to_return.emplace_back(
+            std::move(resource.image_context));
+        external_used_resources.push_back(&returned);
+      }
+    } else {
+      if (resource.is_gpu_resource_type()) {
+        if (resource.needs_sync_token()) {
+          need_synchronization_resources.push_back(&returned);
+        } else if (returned.sync_token.HasData() &&
+                   !returned.sync_token.verified_flush()) {
+          unverified_sync_tokens.push_back(returned.sync_token.GetData());
+        }
       }
     }
 
@@ -720,28 +744,33 @@ void DisplayResourceProvider::DeleteAndReturnUnusedResourcesToChild(
     DeleteResourceInternal(it, style);
   }
 
-  gpu::SyncToken new_sync_token;
-  if (!need_synchronization_resources.empty()) {
-    DCHECK(gl);
-    gl->GenUnverifiedSyncTokenCHROMIUM(new_sync_token.GetData());
-    unverified_sync_tokens.push_back(new_sync_token.GetData());
+  if (external_use_client_) {
+    if (!image_contexts_to_return.empty()) {
+      ScopedAllowGpuAccessForDisplayResourceProvider allow_gpu(this);
+      gpu::SyncToken sync_token = external_use_client_->ReleaseImageContexts(
+          std::move(image_contexts_to_return));
+      for (auto* resource : external_used_resources) {
+        resource->sync_token = sync_token;
+      }
+    }
+  } else {
+    gpu::SyncToken new_sync_token;
+    if (!need_synchronization_resources.empty()) {
+      DCHECK(gl);
+      gl->GenUnverifiedSyncTokenCHROMIUM(new_sync_token.GetData());
+      unverified_sync_tokens.push_back(new_sync_token.GetData());
+    }
+
+    if (!unverified_sync_tokens.empty()) {
+      DCHECK(gl);
+      gl->VerifySyncTokensCHROMIUM(unverified_sync_tokens.data(),
+                                   unverified_sync_tokens.size());
+    }
+
+    // Set sync token after verification.
+    for (ReturnedResource* returned : need_synchronization_resources)
+      returned->sync_token = new_sync_token;
   }
-
-  if (!unverified_sync_tokens.empty()) {
-    DCHECK(gl);
-    gl->VerifySyncTokensCHROMIUM(unverified_sync_tokens.data(),
-                                 unverified_sync_tokens.size());
-  }
-
-  // Set sync token after verification.
-  for (ReturnedResource* returned : need_synchronization_resources)
-    returned->sync_token = new_sync_token;
-
-  if (external_use_client_ && !image_contexts_to_return.empty()) {
-    external_use_client_->ReleaseImageContexts(
-        std::move(image_contexts_to_return));
-  }
-
   if (!to_return.empty())
     child_info->return_callback.Run(to_return);
 
@@ -771,6 +800,27 @@ void DisplayResourceProvider::DestroyChildInternal(ChildMap::iterator it,
   DeleteAndReturnUnusedResourcesToChild(it, style, resources_for_child);
 }
 
+void DisplayResourceProvider::TryFlushBatchedResources() {
+  if (batch_return_resources_lock_count_ == 0 && can_access_gpu_thread_) {
+    for (auto& child_resources_kv : batched_returning_resources_) {
+      auto child_it = children_.find(child_resources_kv.first);
+
+      // Remove duplicates from child's unused resources.  Duplicates are
+      // possible when batching is enabled because resources are saved in
+      // |batched_returning_resources_| for removal, and not removed from the
+      // child's |child_to_parent_map|, so the same set of resources can be
+      // saved again using DeclareUsedResourcesForChild() or DestroyChild().
+      auto& unused_resources = child_resources_kv.second;
+      std::sort(unused_resources.begin(), unused_resources.end());
+      auto last = std::unique(unused_resources.begin(), unused_resources.end());
+      unused_resources.erase(last, unused_resources.end());
+
+      DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL, unused_resources);
+    }
+    batched_returning_resources_.clear();
+  }
+}
+
 void DisplayResourceProvider::SetBatchReturnResources(bool batch) {
   if (batch) {
     DCHECK_GE(batch_return_resources_lock_count_, 0);
@@ -785,25 +835,15 @@ void DisplayResourceProvider::SetBatchReturnResources(bool batch) {
     if (batch_return_resources_lock_count_ == 0) {
       DCHECK(scoped_batch_read_access_);
       scoped_batch_read_access_.reset();
-      for (auto& child_resources_kv : batched_returning_resources_) {
-        auto child_it = children_.find(child_resources_kv.first);
-
-        // Remove duplicates from child's unused resources.  Duplicates are
-        // possible when batching is enabled because resources are saved in
-        // |batched_returning_resources_| for removal, and not removed from the
-        // child's |child_to_parent_map|, so the same set of resources can be
-        // saved again using DeclareUsedResourcesForChild() or DestroyChild().
-        auto& unused_resources = child_resources_kv.second;
-        std::sort(unused_resources.begin(), unused_resources.end());
-        auto last =
-            std::unique(unused_resources.begin(), unused_resources.end());
-        unused_resources.erase(last, unused_resources.end());
-
-        DeleteAndReturnUnusedResourcesToChild(child_it, NORMAL,
-                                              unused_resources);
-      }
-      batched_returning_resources_.clear();
+      TryFlushBatchedResources();
     }
+  }
+}
+
+void DisplayResourceProvider::SetAllowAccessToGPUThread(bool allow) {
+  can_access_gpu_thread_ = allow;
+  if (allow) {
+    TryFlushBatchedResources();
   }
 }
 
@@ -1046,14 +1086,21 @@ void DisplayResourceProvider::SynchronousFence::Synchronize() {
 }
 
 DisplayResourceProvider::ScopedBatchReturnResources::ScopedBatchReturnResources(
-    DisplayResourceProvider* resource_provider)
-    : resource_provider_(resource_provider) {
+    DisplayResourceProvider* resource_provider,
+    bool allow_access_to_gpu_thread)
+    : resource_provider_(resource_provider),
+      was_access_to_gpu_thread_allowed_(
+          resource_provider_->can_access_gpu_thread_) {
   resource_provider_->SetBatchReturnResources(true);
+  if (allow_access_to_gpu_thread)
+    resource_provider_->SetAllowAccessToGPUThread(true);
 }
 
 DisplayResourceProvider::ScopedBatchReturnResources::
     ~ScopedBatchReturnResources() {
   resource_provider_->SetBatchReturnResources(false);
+  resource_provider_->SetAllowAccessToGPUThread(
+      was_access_to_gpu_thread_allowed_);
 }
 
 DisplayResourceProvider::Child::Child() = default;

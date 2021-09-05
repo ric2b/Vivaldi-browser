@@ -52,8 +52,7 @@ class CONTENT_EXPORT ServiceWorkerRegistrationObjectHost
   // ServiceWorkerRegistration::Listener overrides.
   void OnVersionAttributesChanged(
       ServiceWorkerRegistration* registration,
-      blink::mojom::ChangedServiceWorkerObjectsMaskPtr changed_mask,
-      const ServiceWorkerRegistrationInfo& info) override;
+      blink::mojom::ChangedServiceWorkerObjectsMaskPtr changed_mask) override;
   void OnUpdateViaCacheChanged(
       ServiceWorkerRegistration* registration) override;
   void OnRegistrationFailed(ServiceWorkerRegistration* registration) override;
@@ -83,11 +82,10 @@ class CONTENT_EXPORT ServiceWorkerRegistrationObjectHost
   //
   // TODO(falken): See if tests can call |Update| directly, then this separate
   // function isn't needed.
-  static void DelayUpdate(
-      blink::mojom::ServiceWorkerContainerType container_type,
-      ServiceWorkerRegistration* registration,
-      ServiceWorkerVersion* version,
-      StatusCallback update_function);
+  static void DelayUpdate(bool is_container_for_client,
+                          ServiceWorkerRegistration* registration,
+                          ServiceWorkerVersion* version,
+                          StatusCallback update_function);
   // Called back from ServiceWorkerContextCore when an update is complete.
   void UpdateComplete(UpdateCallback callback,
                       blink::ServiceWorkerStatusCode status,

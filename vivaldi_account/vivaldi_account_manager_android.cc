@@ -34,6 +34,12 @@ VivaldiAccountManagerAndroid::~VivaldiAccountManagerAndroid() {
   account_manager_->RemoveObserver(this);
 }
 
+/*static*/
+void VivaldiAccountManagerAndroid::CreateNow() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_VivaldiAccountManager_createNow(env);
+}
+
 void VivaldiAccountManagerAndroid::Login(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,

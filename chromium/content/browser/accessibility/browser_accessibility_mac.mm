@@ -21,19 +21,14 @@ BrowserAccessibility* BrowserAccessibility::Create() {
 BrowserAccessibilityMac::BrowserAccessibilityMac()
     : browser_accessibility_cocoa_(NULL) {}
 
-bool BrowserAccessibilityMac::IsNative() const {
-  return true;
-}
-
-void BrowserAccessibilityMac::NativeReleaseReference() {
+BrowserAccessibilityMac::~BrowserAccessibilityMac() {
   // Detach this object from |browser_accessibility_cocoa_| so it
   // no longer has a pointer to this object.
   [browser_accessibility_cocoa_ detach];
+
   // Now, release it - but at this point, other processes may have a
   // reference to the cocoa object.
   [browser_accessibility_cocoa_ release];
-  // Finally, it's safe to delete this since we've detached.
-  delete this;
 }
 
 void BrowserAccessibilityMac::OnDataChanged() {
@@ -181,14 +176,12 @@ BrowserAccessibility* BrowserAccessibilityMac::PlatformGetPreviousSibling()
 const BrowserAccessibilityCocoa* ToBrowserAccessibilityCocoa(
     const BrowserAccessibility* obj) {
   DCHECK(obj);
-  DCHECK(obj->IsNative());
   return static_cast<const BrowserAccessibilityMac*>(obj)->native_view();
 }
 
 BrowserAccessibilityCocoa* ToBrowserAccessibilityCocoa(
     BrowserAccessibility* obj) {
   DCHECK(obj);
-  DCHECK(obj->IsNative());
   return static_cast<BrowserAccessibilityMac*>(obj)->native_view();
 }
 

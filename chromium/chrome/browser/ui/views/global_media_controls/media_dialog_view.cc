@@ -131,6 +131,11 @@ void MediaDialogView::OnContainerMetadataChanged() {
     observer.OnMediaSessionMetadataUpdated();
 }
 
+void MediaDialogView::OnContainerActionsChanged() {
+  for (auto& observer : observers_)
+    observer.OnMediaSessionActionsChanged();
+}
+
 void MediaDialogView::OnContainerDestroyed(const std::string& id) {
   auto iter = observed_containers_.find(id);
   DCHECK(iter != observed_containers_.end());
@@ -152,13 +157,18 @@ MediaDialogView::GetNotificationsForTesting() const {
   return active_sessions_view_->notifications_for_testing();
 }
 
+const MediaNotificationListView* MediaDialogView::GetListViewForTesting()
+    const {
+  return active_sessions_view_;
+}
+
 MediaDialogView::MediaDialogView(views::View* anchor_view,
                                  MediaNotificationService* service)
     : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_RIGHT),
       service_(service),
       active_sessions_view_(
           AddChildView(std::make_unique<MediaNotificationListView>())) {
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetButtons(ui::DIALOG_BUTTON_NONE);
   DCHECK(service_);
 }
 

@@ -8,7 +8,7 @@
  */
 
 // clang-format off
-// #import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
+import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
 // clang-format on
 
 /**
@@ -25,63 +25,55 @@
  *   appName: string
  * }}
  */
-/* #export */ let InstalledApp;
+export let InstalledApp;
 
-cr.define('settings', function() {
-  /** @interface */
-  /* #export */ class ClearBrowsingDataBrowserProxy {
-    /**
-     * @param {!Array<string>} dataTypes
-     * @param {number} timePeriod
-     * @param {Array<InstalledApp>} installedApps
-     * @return {!Promise<boolean>}
-     *     A promise resolved when data clearing has completed. The boolean
-     *     indicates whether an additional dialog should be shown, informing the
-     *     user about other forms of browsing history.
-     */
-    clearBrowsingData(dataTypes, timePeriod, installedApps) {}
-
-    /**
-     * @param {number} timePeriod
-     * @return {!Promise<!Array<!InstalledApp>>}
-     *     A promise resolved after fetching all installed apps. The array
-     *     will contain a list of origins for which there are installed apps.
-     */
-    getInstalledApps(timePeriod) {}
-
-    /**
-     * Kick off counter updates and return initial state.
-     * @return {!Promise<void>} Signal when the setup is complete.
-     */
-    initialize() {}
-  }
+/** @interface */
+export class ClearBrowsingDataBrowserProxy {
+  /**
+   * @param {!Array<string>} dataTypes
+   * @param {number} timePeriod
+   * @param {Array<InstalledApp>} installedApps
+   * @return {!Promise<boolean>}
+   *     A promise resolved when data clearing has completed. The boolean
+   *     indicates whether an additional dialog should be shown, informing the
+   *     user about other forms of browsing history.
+   */
+  clearBrowsingData(dataTypes, timePeriod, installedApps) {}
 
   /**
-   * @implements {settings.ClearBrowsingDataBrowserProxy}
+   * @param {number} timePeriod
+   * @return {!Promise<!Array<!InstalledApp>>}
+   *     A promise resolved after fetching all installed apps. The array
+   *     will contain a list of origins for which there are installed apps.
    */
-  /* #export */ class ClearBrowsingDataBrowserProxyImpl {
-    /** @override */
-    clearBrowsingData(dataTypes, timePeriod, installedApps) {
-      return cr.sendWithPromise(
-          'clearBrowsingData', dataTypes, timePeriod, installedApps);
-    }
+  getInstalledApps(timePeriod) {}
 
-    /** @override */
-    getInstalledApps(timePeriod) {
-      return cr.sendWithPromise('getInstalledApps', timePeriod);
-    }
+  /**
+   * Kick off counter updates and return initial state.
+   * @return {!Promise<void>} Signal when the setup is complete.
+   */
+  initialize() {}
+}
 
-    /** @override */
-    initialize() {
-      return cr.sendWithPromise('initializeClearBrowsingData');
-    }
+/**
+ * @implements {ClearBrowsingDataBrowserProxy}
+ */
+export class ClearBrowsingDataBrowserProxyImpl {
+  /** @override */
+  clearBrowsingData(dataTypes, timePeriod, installedApps) {
+    return sendWithPromise(
+        'clearBrowsingData', dataTypes, timePeriod, installedApps);
   }
 
-  cr.addSingletonGetter(ClearBrowsingDataBrowserProxyImpl);
+  /** @override */
+  getInstalledApps(timePeriod) {
+    return sendWithPromise('getInstalledApps', timePeriod);
+  }
 
-  // #cr_define_end
-  return {
-    ClearBrowsingDataBrowserProxy: ClearBrowsingDataBrowserProxy,
-    ClearBrowsingDataBrowserProxyImpl: ClearBrowsingDataBrowserProxyImpl,
-  };
-});
+  /** @override */
+  initialize() {
+    return sendWithPromise('initializeClearBrowsingData');
+  }
+}
+
+addSingletonGetter(ClearBrowsingDataBrowserProxyImpl);

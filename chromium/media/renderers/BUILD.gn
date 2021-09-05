@@ -32,6 +32,8 @@ source_set("renderers") {
     "video_renderer_impl.h",
     "video_resource_updater.cc",
     "video_resource_updater.h",
+    "yuv_util.cc",
+    "yuv_util.h",
   ]
 
   deps = [
@@ -59,7 +61,6 @@ source_set("renderers") {
   if (is_fuchsia) {
     deps += [ "//fuchsia/engine:switches" ]
   }
-
   configs += [
     "//media:subcomponent_config",
 
@@ -97,7 +98,14 @@ source_set("unit_tests") {
     "//ui/gl:test_support",
   ]
   if (is_win) {
-    deps += [ "//media/renderers:media_foundation_renderer" ]
+    sources += [
+      "win/media_foundation_renderer_integration_test.cc",
+      "win/media_foundation_renderer_unittest.cc",
+    ]
+    deps += [
+      "//media/renderers:media_foundation_renderer",
+      "//media/test:pipeline_integration_test_base",
+    ]
   }
 }
 
@@ -112,6 +120,9 @@ if (is_win) {
       "win/media_foundation_audio_stream.h",
       "win/media_foundation_protection_manager.cc",
       "win/media_foundation_protection_manager.h",
+      "win/media_foundation_renderer.cc",
+      "win/media_foundation_renderer.h",
+      "win/media_foundation_renderer_extension.h",
       "win/media_foundation_source_wrapper.cc",
       "win/media_foundation_source_wrapper.h",
       "win/media_foundation_stream_wrapper.cc",

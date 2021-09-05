@@ -104,7 +104,8 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void Initialize(DisplayClient* client,
                   SurfaceManager* surface_manager,
                   bool enable_shared_images = kEnableSharedImages,
-                  bool using_synthetic_bfs = false);
+                  bool hw_support_for_multiple_refresh_rates = false,
+                  size_t num_of_frames_to_toggle_interval = 60);
 
   void AddObserver(DisplayObserver* observer);
   void RemoveObserver(DisplayObserver* observer);
@@ -114,6 +115,10 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void SetLocalSurfaceId(const LocalSurfaceId& id, float device_scale_factor);
   void SetVisible(bool visible);
   void Resize(const gfx::Size& new_size);
+
+  // This disallows resource provider to access GPU thread to unlock resources
+  // outside of Initialize, DrawAndSwap and dtor.
+  void DisableGPUAccessByDefault();
 
   // Stop drawing until Resize() is called with a new size. If the display
   // hasn't drawn a frame at the current size *and* it's possible to immediately
@@ -159,7 +164,8 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // FrameRateDecider::Client implementation
   void SetPreferredFrameInterval(base::TimeDelta interval) override;
   base::TimeDelta GetPreferredFrameIntervalForFrameSinkId(
-      const FrameSinkId& id) override;
+      const FrameSinkId& id,
+      mojom::CompositorFrameSinkType* type) override;
 
   bool has_scheduler() const { return !!scheduler_; }
   DirectRenderer* renderer_for_testing() const { return renderer_.get(); }
@@ -239,6 +245,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   std::unique_ptr<DisplaySchedulerBase> scheduler_;
   std::unique_ptr<DisplayResourceProvider> resource_provider_;
   std::unique_ptr<SurfaceAggregator> aggregator_;
+  bool last_wide_color_enabled_ = false;
   std::unique_ptr<FrameRateDecider> frame_rate_decider_;
   // This may be null if the Display is on a thread without a MessageLoop.
   scoped_refptr<base::SingleThreadTaskRunner> current_task_runner_;

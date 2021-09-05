@@ -76,7 +76,7 @@ void WebAppContextMenu::BuildMenu(ui::SimpleMenuModel* menu_model) {
 
   AddContextMenuOption(menu_model, ash::UNINSTALL, IDS_APP_LIST_UNINSTALL_ITEM);
 
-  if (controller()->CanDoShowAppInfoFlow() && !is_system_web_app) {
+  if (!is_system_web_app) {
     AddContextMenuOption(menu_model, ash::SHOW_APP_INFO,
                          IDS_APP_CONTEXT_MENU_SHOW_INFO);
   }
@@ -89,12 +89,13 @@ base::string16 WebAppContextMenu::GetLabelForCommandId(int command_id) const {
   return AppContextMenu::GetLabelForCommandId(command_id);
 }
 
-const gfx::VectorIcon* WebAppContextMenu::GetVectorIconForCommandId(
-    int command_id) const {
-  if (command_id == ash::LAUNCH_NEW)
-    return &GetMenuItemVectorIcon(ash::LAUNCH_NEW, GetLaunchStringId());
+ui::ImageModel WebAppContextMenu::GetIconForCommandId(int command_id) const {
+  if (command_id == ash::LAUNCH_NEW) {
+    return ui::ImageModel::FromVectorIcon(
+        GetMenuItemVectorIcon(ash::LAUNCH_NEW, GetLaunchStringId()));
+  }
 
-  return AppContextMenu::GetVectorIconForCommandId(command_id);
+  return AppContextMenu::GetIconForCommandId(command_id);
 }
 
 bool WebAppContextMenu::IsItemForCommandIdDynamic(int command_id) const {
@@ -155,7 +156,8 @@ void WebAppContextMenu::CreateOpenNewSubmenu(ui::SimpleMenuModel* menu_model) {
       kGroupId);
   menu_model->AddActionableSubmenuWithStringIdAndIcon(
       ash::LAUNCH_NEW, GetLaunchStringId(), open_new_submenu_model_.get(),
-      GetMenuItemVectorIcon(ash::LAUNCH_NEW, GetLaunchStringId()));
+      ui::ImageModel::FromVectorIcon(
+          GetMenuItemVectorIcon(ash::LAUNCH_NEW, GetLaunchStringId())));
 }
 
 web_app::WebAppProvider& WebAppContextMenu::GetProvider() const {

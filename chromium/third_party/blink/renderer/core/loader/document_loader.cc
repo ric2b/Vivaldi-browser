@@ -36,7 +36,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_tick_clock.h"
 #include "services/network/public/cpp/features.h"
-#include "third_party/blink/public/common/origin_policy/origin_policy.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -80,6 +80,7 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
+#include "third_party/blink/renderer/core/xml/document_xslt.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
@@ -129,7 +130,9 @@ DocumentLoader::DocumentLoader(
       service_worker_network_provider_(
           std::move(params_->service_worker_network_provider)),
       was_blocked_by_document_policy_(false),
-      was_blocked_by_csp_(false),
+      content_security_policy_(content_security_policy),
+      // The CSP is null when the CSP check done in the FrameLoader failed.
+      was_blocked_by_csp_(!content_security_policy),
       state_(kNotStarted),
       in_commit_data_(false),
       data_buffer_(SharedBuffer::Create()),
@@ -183,21 +186,6 @@ DocumentLoader::DocumentLoader(
 
   document_policy_ = CreateDocumentPolicy();
 
-  // If the document is blocked by document policy, there won't be content
-  // in the sub-frametree, thus no need to initialize required_policy for
-  // subtree.
-  if (!was_blocked_by_document_policy_) {
-    // Require-Document-Policy header only affects subtree of current document,
-    // but not the current document.
-    const DocumentPolicy::FeatureState header_required_policy =
-        DocumentPolicyParser::Parse(
-            response_.HttpHeaderField(http_names::kRequireDocumentPolicy))
-            .value_or(DocumentPolicy::ParsedDocumentPolicy{})
-            .feature_state;
-    frame_->SetRequiredDocumentPolicy(DocumentPolicy::MergeFeatureState(
-        frame_policy_.required_document_policy, header_required_policy));
-  }
-
   WebNavigationTimings& timings = params_->navigation_timings;
   if (!timings.input_start.is_null())
     document_load_timing_.SetInputStart(timings.input_start);
@@ -239,27 +227,20 @@ DocumentLoader::DocumentLoader(
   loading_url_as_empty_document_ =
       !params_->is_static_data && WillLoadUrlAsEmpty(url_);
 
-  if (!loading_url_as_empty_document_) {
-    content_security_policy_ = content_security_policy;
+  if (was_blocked_by_csp_) {
+    // Loading the document was blocked by the CSP check. Pretend that this was
+    // an empty document instead and don't reuse the original URL. More details
+    // in: https://crbug.com/622385.
+    // TODO(https://crbug.com/555418) Remove this once XFO moves to the browser.
 
-    // The CSP are null when the CSP check done in the FrameLoader failed.
-    if (!content_security_policy_) {
-      // Loading the document was blocked by the CSP check. Pretend that
-      // this was an empty document instead and don't reuse the
-      // original URL (https://crbug.com/622385).
-      // TODO(mkwst):  Remove this once XFO moves to the browser.
-      // https://crbug.com/555418.
-
-      // Update |origin_to_commit_| to contain an opaque origin with precursor
-      // information that is consistent with the final request URL.
-      // Note: We can't use |url_| for the origin calculation because
-      // we need to take into account any redirects that may have occurred.
-      const auto request_url_origin =
-          blink::SecurityOrigin::Create(response_.CurrentRequestUrl());
-      origin_to_commit_ = request_url_origin->DeriveNewOpaqueOrigin();
-
-      was_blocked_by_csp_ = true;
-    }
+    // Update |origin_to_commit_| to contain an opaque origin with precursor
+    // information that is consistent with the final request URL.
+    // Note: this doesn't use |url_| for the origin calculation, because
+    // redirects are not yet accounted for (this happens later in
+    // StartLoadingInternal).
+    const auto request_url_origin =
+        blink::SecurityOrigin::Create(response_.CurrentRequestUrl());
+    origin_to_commit_ = request_url_origin->DeriveNewOpaqueOrigin();
   }
 
   if (was_blocked_by_csp_ || was_blocked_by_document_policy_)
@@ -652,6 +633,9 @@ void DocumentLoader::BodyLoadingFinished(
         completion_time, total_encoded_data_length, total_decoded_body_length,
         should_report_corb_blocking);
     if (response_.IsHTTP()) {
+      // The response is being copied here to pass the Encoded and Decoded
+      // sizes.
+      // TODO(yoav): copy the sizes info directly.
       navigation_timing_info_->SetFinalResponse(response_);
       navigation_timing_info_->AddFinalTransferSize(
           total_encoded_data_length == -1 ? 0 : total_encoded_data_length);
@@ -714,7 +698,7 @@ void DocumentLoader::FinishedLoading(base::TimeTicks finish_time) {
   body_loader_.reset();
   virtual_time_pauser_.UnpauseVirtualTime();
 
-  DCHECK(frame_->Loader().StateMachine()->CreatingInitialEmptyDocument() ||
+  DCHECK(commit_reason_ == CommitReason::kInitialization ||
          !frame_->GetPage()->Paused() ||
          MainThreadDebugger::Instance()->IsPaused());
 
@@ -842,21 +826,52 @@ DocumentPolicy::ParsedDocumentPolicy DocumentLoader::CreateDocumentPolicy() {
       url_.ProtocolIs("blob") || url_.ProtocolIs("filesystem"))
     return {frame_policy_.required_document_policy, {} /* endpoint_map */};
 
-  // Assume Document policy feature is enabled so we can check the
-  // Required- headers. Will re-validate when we install the new Document.
-  const auto parsed_policy =
+  PolicyParserMessageBuffer header_logger("Document-Policy HTTP header: ");
+  PolicyParserMessageBuffer require_header_logger(
+      "Require-Document-Policy HTTP header: ");
+
+  // Filtering out features that are disabled by origin trial is done
+  // in SecurityContextInit when origin trial context is available.
+  auto parsed_policy =
       DocumentPolicyParser::Parse(
-          response_.HttpHeaderField(http_names::kDocumentPolicy))
+          response_.HttpHeaderField(http_names::kDocumentPolicy), header_logger)
           .value_or(DocumentPolicy::ParsedDocumentPolicy{});
 
+  // |parsed_policy| can have policies that are disabled by origin trial,
+  // but |frame_policy_.required_document_policy| cannot.
+  // It is safe to call |IsPolicyCompatible| as long as required policy is
+  // checked against origin trial.
   if (!DocumentPolicy::IsPolicyCompatible(
           frame_policy_.required_document_policy,
           parsed_policy.feature_state)) {
     was_blocked_by_document_policy_ = true;
     // When header policy is less strict than required policy, use required
     // policy to initialize document policy for the document.
-    return {frame_policy_.required_document_policy, {} /* endpoint_map */};
+    parsed_policy = {frame_policy_.required_document_policy,
+                     {} /* endpoint_map */};
   }
+
+  // Initialize required document policy for subtree.
+  //
+  // If the document is blocked by document policy, there won't be content
+  // in the sub-frametree, thus no need to initialize required_policy for
+  // subtree.
+  if (!was_blocked_by_document_policy_) {
+    // Require-Document-Policy header only affects subtree of current document,
+    // but not the current document.
+    const DocumentPolicy::FeatureState header_required_policy =
+        DocumentPolicyParser::Parse(
+            response_.HttpHeaderField(http_names::kRequireDocumentPolicy),
+            require_header_logger)
+            .value_or(DocumentPolicy::ParsedDocumentPolicy{})
+            .feature_state;
+    frame_->SetRequiredDocumentPolicy(DocumentPolicy::MergeFeatureState(
+        frame_policy_.required_document_policy, header_required_policy));
+  }
+
+  document_policy_parsing_messages_.AppendVector(header_logger.GetMessages());
+  document_policy_parsing_messages_.AppendVector(
+      require_header_logger.GetMessages());
 
   return parsed_policy;
 }
@@ -897,7 +912,7 @@ void DocumentLoader::CommitNavigation() {
 
   // TODO(dcheng): This differs from the behavior of both IE and Firefox: the
   // origin is inherited from the document that loaded the URL.
-  if (loading_url_as_javascript_) {
+  if (IsJavaScriptURLOrXSLTCommit()) {
     owner_document = frame_->GetDocument();
   } else if (Document::ShouldInheritSecurityOriginFromOwner(Url())) {
     Frame* owner_frame = frame_->Tree().Parent();
@@ -911,6 +926,12 @@ void DocumentLoader::CommitNavigation() {
   DCHECK(frame_->GetPage());
 
   InstallNewDocument(Url(), initiator_origin, owner_document, MimeType());
+
+  if (response_.IsHTTP() && navigation_timing_info_) {
+    // The response is being copied here to pass the ServerTiming info.
+    // TODO(yoav): copy the ServerTiming info directly.
+    navigation_timing_info_->SetFinalResponse(response_);
+  }
 }
 
 void DocumentLoader::CommitData(const char* bytes, size_t length) {
@@ -1161,10 +1182,8 @@ void DocumentLoader::StartLoadingInternal() {
       GetFrame()->GetTaskRunner(TaskType::kNetworking),
       params_->appcache_host_id);
 
-  if (url_.IsEmpty() &&
-      !GetFrameLoader().StateMachine()->CreatingInitialEmptyDocument()) {
+  if (url_.IsEmpty() && commit_reason_ != CommitReason::kInitialization)
     url_ = BlankURL();
-  }
 
   if (loading_url_as_empty_document_) {
     InitializeEmptyResponse();
@@ -1290,6 +1309,17 @@ void DocumentLoader::StartLoadingResponse() {
     return;
 
   CHECK_GE(state_, kCommitted);
+
+  // Let the browser process know about all the CSP applied to the document.
+  // The browser process is enforcing several directives. It needs to know about
+  // 'frame-src', 'child-src', 'navigate-to', 'upgrade-insecure-request', etc.
+  //
+  // It is important to forward all the CSP data before loading the response
+  // body, otherwise some loaded content might not be blocked.
+  frame_->GetSecurityContext()
+      ->GetContentSecurityPolicy()
+      ->ReportAccumulatedHeaders(frame_);
+
   CreateParserPostCommit();
 
   // Finish load of MHTML archives and empty documents.
@@ -1378,8 +1408,7 @@ void DocumentLoader::DidInstallNewDocument(Document* document) {
       response_.HttpHeaderField(http_names::kReferrerPolicy);
   if (!referrer_policy_header.IsNull()) {
     UseCounter::Count(*document, WebFeature::kReferrerPolicyHeader);
-    document->ToExecutionContext()->ParseAndSetReferrerPolicy(
-        referrer_policy_header);
+    document->domWindow()->ParseAndSetReferrerPolicy(referrer_policy_header);
   }
 
   if (response_.IsSignedExchangeInnerResponse()) {
@@ -1389,17 +1418,35 @@ void DocumentLoader::DidInstallNewDocument(Document* document) {
                           ? WebFeature::kSignedExchangeInnerResponseInMainFrame
                           : WebFeature::kSignedExchangeInnerResponseInSubFrame);
   }
+
+  if (!response_.HttpHeaderField(http_names::kRequireDocumentPolicy).IsNull())
+    UseCounter::Count(*document, WebFeature::kRequireDocumentPolicyHeader);
+
+  if (was_blocked_by_document_policy_)
+    UseCounter::Count(*document, WebFeature::kDocumentPolicyCausedPageUnload);
+
+  // Required document policy can either come from iframe attribute or HTTP
+  // header 'Require-Document-Policy'.
+  if (!frame_policy_.required_document_policy.empty())
+    UseCounter::Count(*document, WebFeature::kRequiredDocumentPolicy);
+
+  for (const auto& message : document_policy_parsing_messages_) {
+    document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kOther, message.level,
+        message.content));
+  }
+  document_policy_parsing_messages_.clear();
 }
 
 void DocumentLoader::WillCommitNavigation() {
-  if (GetFrameLoader().StateMachine()->CreatingInitialEmptyDocument())
+  if (commit_reason_ != CommitReason::kRegular)
     return;
   probe::WillCommitLoad(frame_, this);
   frame_->GetIdlenessDetector()->WillCommitLoad();
 }
 
 void DocumentLoader::DidCommitNavigation() {
-  if (GetFrameLoader().StateMachine()->CreatingInitialEmptyDocument())
+  if (commit_reason_ != CommitReason::kRegular)
     return;
 
   if (!frame_->Loader().StateMachine()->CommittedMultipleRealLoads() &&
@@ -1532,10 +1579,13 @@ void DocumentLoader::InstallNewDocument(
           .WithContentSecurityPolicy(content_security_policy_.Get())
           .WithWebBundleClaimedUrl(web_bundle_claimed_url_);
 
-  // A javascript: url inherits CSP from the document in which it was
+  if (commit_reason_ == CommitReason::kXSLT)
+    init = init.WithSandboxFlags(owner_document->GetSandboxFlags());
+
+  // A javascript: url or XSLT inherits CSP from the document in which it was
   // executed.
   ContentSecurityPolicy* csp =
-      loading_url_as_javascript_
+      IsJavaScriptURLOrXSLTCommit()
           ? frame_->GetDocument()->GetContentSecurityPolicy()
           : content_security_policy_.Get();
   global_object_reuse_policy_ =
@@ -1579,10 +1629,9 @@ void DocumentLoader::InstallNewDocument(
     }
   }
 
-  if (!loading_url_as_javascript_)
-    WillCommitNavigation();
+  WillCommitNavigation();
 
-  Document* document = frame_->DomWindow()->InstallNewDocument(init, false);
+  Document* document = frame_->DomWindow()->InstallNewDocument(init);
 
   // Clear the user activation state.
   // TODO(crbug.com/736415): Clear this bit unconditionally for all frames.
@@ -1618,12 +1667,14 @@ void DocumentLoader::InstallNewDocument(
     document->SetBaseURLOverride(archive_->MainResource()->Url());
   }
 
+  if (commit_reason_ == CommitReason::kXSLT)
+    DocumentXSLT::From(*document).SetTransformSourceDocument(owner_document);
+
   DidInstallNewDocument(document);
 
   // This must be called before the document is opened, otherwise HTML parser
   // will use stale values from HTMLParserOption.
-  if (!loading_url_as_javascript_)
-    DidCommitNavigation();
+  DidCommitNavigation();
 
   if (was_cross_origin_to_parent_frame !=
       frame_->IsCrossOriginToParentFrame()) {
@@ -1698,17 +1749,6 @@ void DocumentLoader::CreateParserPostCommit() {
   DispatchLinkHeaderPreloads(nullptr /* viewport */,
                              PreloadHelper::kOnlyLoadNonMedia);
 
-  if (!loading_url_as_javascript_ &&
-      !GetFrameLoader().StateMachine()->CreatingInitialEmptyDocument()) {
-    // When the embedder gets notified (above) that the new navigation has
-    // committed, the embedder will drop the old Content Security Policy and
-    // therefore now is a good time to report to the embedder the Content
-    // Security Policies that have accumulated so far for the new navigation.
-    frame_->GetSecurityContext()
-        ->GetContentSecurityPolicy()
-        ->ReportAccumulatedHeaders(frame_);
-  }
-
   // Initializing origin trials might force window proxy initialization,
   // which later triggers CHECK when swapping in via WebFrame::Swap().
   // We can safely omit installing original trials on initial empty document
@@ -1737,16 +1777,28 @@ void DocumentLoader::CreateParserPostCommit() {
 #endif
 
     OriginTrialContext::ActivateNavigationFeaturesFromInitiator(
-        document->ToExecutionContext(), &initiator_origin_trial_features_);
+        frame_->DomWindow(), &initiator_origin_trial_features_);
   }
 
   ParserSynchronizationPolicy parsing_policy = kAllowAsynchronousParsing;
-  if (loading_url_as_javascript_ ||
+  if (IsJavaScriptURLOrXSLTCommit() ||
       !Document::ThreadedParsingEnabledForTesting()) {
     parsing_policy = kForceSynchronousParsing;
   }
-  parser_ = document->OpenForNavigation(parsing_policy, MimeType(),
-                                        response_.TextEncodingName());
+  const AtomicString& encoding = commit_reason_ == CommitReason::kXSLT
+                                     ? "UTF-8"
+                                     : response_.TextEncodingName();
+
+  parser_ = document->OpenForNavigation(parsing_policy, MimeType(), encoding);
+
+  // XSLT processing converts the response into UTF-8 before sending it through
+  // the DocumentParser, but we should still report the original encoding when
+  // script queries it via document.characterSet.
+  if (commit_reason_ == CommitReason::kXSLT) {
+    DocumentEncodingData data;
+    data.SetEncoding(WTF::TextEncoding(response_.TextEncodingName()));
+    document->SetEncodingData(data);
+  }
 
   // If this is a scriptable parser and there is a resource, register the
   // resource's cache handler with the parser.
@@ -1814,7 +1866,6 @@ void DocumentLoader::ReportPreviewsIntervention() const {
 
   // Verify that certain types are not on main frame requests.
   DCHECK_NE(WebURLRequest::kClientLoFiAutoReload, previews_state_);
-  DCHECK_NE(WebURLRequest::kLazyImageLoadDeferred, previews_state_);
   DCHECK_NE(WebURLRequest::kSubresourceRedirectOn, previews_state_);
 
   static_assert(WebURLRequest::kPreviewsStateLast ==
@@ -1842,17 +1893,9 @@ void DocumentLoader::ParseAndPersistClientHints(
   const KURL& url = response.CurrentRequestUrl();
 
   // The accept-ch header is honored only on the navigation responses from a top
-  // level frame or with an origin matching the origin of the to level frame.
-  if (!frame_->IsMainFrame()) {
-    bool is_first_party_origin =
-        frame_->Tree()
-            .Top()
-            .GetSecurityContext()
-            ->GetSecurityOrigin()
-            ->IsSameOriginWith(SecurityOrigin::Create(url).get());
-    if (!is_first_party_origin)
-      return;
-  }
+  // level frame.
+  if (!frame_->IsMainFrame())
+    return;
 
   if (!response.HttpHeaderFields().Contains(http_names::kAcceptCH))
     return;
@@ -1863,7 +1906,8 @@ void DocumentLoader::ParseAndPersistClientHints(
       response.HttpHeaderField(http_names::kAcceptCHLifetime), url,
       &hints_context);
   client_hints_preferences_.UpdateFromAcceptClientHintsHeader(
-      response.HttpHeaderField(http_names::kAcceptCH), url, &hints_context);
+      response.HttpHeaderField(http_names::kAcceptCH), url,
+      ClientHintsPreferences::UpdateMode::kReplace, &hints_context);
 
   base::TimeDelta persist_duration;
 
@@ -1890,6 +1934,8 @@ void DocumentLoader::ParseAndPersistClientHints(
     return;
 
   // Do not persist client hint preferences if the JavaScript is disabled.
+  // TODO(yoav): this seems buggy, and settings doesn't seem notified in
+  // ClientHintBrowserTest.ClientHintsNoLifetimeScriptNotAllowed.
   bool allow_script = frame_->GetSettings()->GetScriptEnabled();
   if (!settings_client->AllowScriptFromSource(allow_script, url))
     return;
@@ -1920,6 +1966,19 @@ void DocumentLoader::InitializePrefetchedSignedExchangeManager() {
 PrefetchedSignedExchangeManager*
 DocumentLoader::GetPrefetchedSignedExchangeManager() const {
   return prefetched_signed_exchange_manager_;
+}
+
+base::TimeDelta DocumentLoader::RemainingTimeToLCPLimit() const {
+  // We shouldn't call this function before navigation start
+  DCHECK(!document_load_timing_.NavigationStart().is_null());
+  base::TimeTicks lcp_limit =
+      document_load_timing_.NavigationStart() +
+      base::TimeDelta::FromMilliseconds(
+          features::kAlignFontDisplayAutoTimeoutWithLCPGoalTimeoutParam.Get());
+  base::TimeTicks now = clock_->NowTicks();
+  if (now < lcp_limit)
+    return lcp_limit - now;
+  return base::TimeDelta();
 }
 
 DEFINE_WEAK_IDENTIFIER_MAP(DocumentLoader)

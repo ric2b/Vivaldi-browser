@@ -81,9 +81,9 @@
     {
         name: "DiffNeedsFullLayoutAndPaintInvalidation",
         fields_to_diff: ["padding-top", "padding-left", "padding-right", 
-                "padding-bottom", "-webkit-appearance", "-webkit-line-clamp",
+                "padding-bottom", "appearance", "-webkit-line-clamp",
                 "text-overflow", "shape-margin", "order", "-webkit-highlight",
-                "text-indent", "text-align-last", "TextIndentLine", "-internal-effective-zoom",
+                "text-indent", "text-align-last", "TextIndentLine", "EffectiveZoom",
                 "word-break", "overflow-wrap", "-webkit-line-break", 
                 "-webkit-text-security", "hyphens", "HyphenationLimitBefore", 
                 "HyphenationLimitAfter", "-webkit-hyphenate-character", 
@@ -128,10 +128,6 @@
           {
             method: "BorderRightWidth()",
             field_dependencies: ["border-right-width"]
-          },
-          {
-            method: "HasFilters()",
-            field_dependencies: ["filter"]
           },
           {
             method: "HasPseudoElementStyle(kPseudoIdScrollbar)",
@@ -269,6 +265,10 @@
           {
             method: "Resize()",
             field_dependencies: ["resize"]
+          },
+          {
+            method: "UsedColorScheme()",
+            field_dependencies: ["color-scheme"]
           },
         ],
         predicates_to_test: [

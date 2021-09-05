@@ -6,13 +6,15 @@
 
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager.h"
 #import "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_observer_bridge.h"
-#include "ios/chrome/browser/crash_report/breakpad_helper.h"
+#include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-const int kMaxProductDataLength = 255;
+// The breadcrumbs size cannot be larger than the maximum length of a single
+// Breakpad product data value (currently 2550 bytes).
+const NSUInteger kMaxBreadcrumbsDataLength = 1530;
 
 @interface CrashReporterBreadcrumbObserver () {
   // Map associating the observed BreadcrumbManager with the corresponding
@@ -81,26 +83,14 @@ const int kMaxProductDataLength = 255;
   NSString* eventWithSeperator = [NSString stringWithFormat:@"%@\n", event];
   [_breadcrumbs insertString:eventWithSeperator atIndex:0];
 
-  NSUInteger maxBreadcrumbsLength =
-      self.breadcrumbsKeyCount * kMaxProductDataLength;
-  if (_breadcrumbs.length > maxBreadcrumbsLength) {
-    NSRange trimRange = NSMakeRange(maxBreadcrumbsLength,
-                                    _breadcrumbs.length - maxBreadcrumbsLength);
+  if (_breadcrumbs.length > kMaxBreadcrumbsDataLength) {
+    NSRange trimRange =
+        NSMakeRange(kMaxBreadcrumbsDataLength,
+                    _breadcrumbs.length - kMaxBreadcrumbsDataLength);
     [_breadcrumbs deleteCharactersInRange:trimRange];
   }
 
-  // Cut breadcrumbs strings into multiple pieces and upload with separate keys.
-  NSMutableArray* breadcrumbs =
-      [[NSMutableArray alloc] initWithCapacity:self.breadcrumbsKeyCount];
-  for (NSUInteger i = 0; i < self.breadcrumbsKeyCount &&
-                         (i * kMaxProductDataLength) < _breadcrumbs.length;
-       i++) {
-    NSUInteger location = i * kMaxProductDataLength;
-    NSRange range = NSMakeRange(
-        location, MIN(kMaxProductDataLength, _breadcrumbs.length - location));
-    [breadcrumbs addObject:[_breadcrumbs substringWithRange:range]];
-  }
-  breakpad_helper::SetBreadcrumbEvents(breadcrumbs);
+  crash_keys::SetBreadcrumbEvents(_breadcrumbs);
 }
 
 @end

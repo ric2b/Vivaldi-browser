@@ -4,8 +4,10 @@
 
 package org.chromium.weblayer;
 
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.RemoteException;
+import android.util.Pair;
 import android.webkit.ValueCallback;
 
 import androidx.annotation.NonNull;
@@ -39,9 +41,10 @@ public class Tab {
     // Maps from id (as returned from ITab.getId()) to Tab.
     private static final Map<Integer, Tab> sTabMap = new HashMap<Integer, Tab>();
 
-    private final ITab mImpl;
+    private ITab mImpl;
     private final NavigationController mNavigationController;
     private final FindInPageController mFindInPageController;
+    private final MediaCaptureController mMediaCaptureController;
     private final ObserverList<TabCallback> mCallbacks;
     private Browser mBrowser;
     private Profile.DownloadCallbackClientImpl mDownloadCallbackClient;
@@ -55,6 +58,7 @@ public class Tab {
         mImpl = null;
         mNavigationController = null;
         mFindInPageController = null;
+        mMediaCaptureController = null;
         mCallbacks = null;
         mId = 0;
     }
@@ -72,6 +76,7 @@ public class Tab {
         mCallbacks = new ObserverList<TabCallback>();
         mNavigationController = NavigationController.create(mImpl);
         mFindInPageController = new FindInPageController(mImpl);
+        mMediaCaptureController = new MediaCaptureController(mImpl);
         registerTab(this);
     }
 
@@ -192,10 +197,12 @@ public class Tab {
      * asynchronously closes the tab.
      *
      * If there is a beforeunload handler a dialog is shown to the user which will allow them to
-     * choose whether to proceed with closing the tab. The closure will be notified via {@link
-     * NewTabCallback#onCloseTab}. The tab will not close if the user chooses to cancel the action.
-     * If there is no beforeunload handler, the tab closure will be asynchronous (but immediate) and
-     * will be notified in the same way.
+     * choose whether to proceed with closing the tab. If the WebLayer implementation is < 84 the
+     * closure will be notified via {@link NewTabCallback#onCloseTab}; on 84 and above, WebLayer
+     * closes the tab internally and the embedder will be notified via
+     * TabListCallback#onTabRemoved(). The tab will not close if the user chooses to cancel the
+     * action. If there is no beforeunload handler, the tab closure will be asynchronous (but
+     * immediate) and will be notified in the same way.
      *
      * To close the tab synchronously without running beforeunload, use {@link Browser#destroyTab}.
      *
@@ -265,6 +272,12 @@ public class Tab {
         return mFindInPageController;
     }
 
+    @NonNull
+    public MediaCaptureController getMediaCaptureController() {
+        ThreadCheck.ensureOnUiThread();
+        return mMediaCaptureController;
+    }
+
     public void registerTabCallback(@Nullable TabCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mCallbacks.addObserver(callback);
@@ -273,6 +286,39 @@ public class Tab {
     public void unregisterTabCallback(@Nullable TabCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mCallbacks.removeObserver(callback);
+    }
+
+    /**
+     * Take a screenshot of this tab and return it as a Bitmap.
+     * This API captures only the web content, not any Java Views, including the
+     * view in Browser.setTopView. The browser top view shrinks the height of
+     * the screenshot if it is not completely hidden.
+     * This method will fail if
+     * * the Fragment of this Tab is not started during the operation
+     * * this tab is not the active tab in its Browser
+     * * if scale is not in the range (0, 1]
+     * * Bitmap allocation fails
+     * The API is asynchronous when successful, but can be synchronous on
+     * failure. So embedder must take care when implementing resultCallback to
+     * allow reentrancy.
+     * @param scale Scale applied to the Bitmap.
+     * @param resultCallback Called when operation is complete.
+     * @since 84
+     */
+    public void captureScreenShot(float scale, @NonNull CaptureScreenShotCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.captureScreenShot(scale,
+                    ObjectWrapper.wrap(
+                            (ValueCallback<Pair<Bitmap, Integer>>) (Pair<Bitmap, Integer> pair) -> {
+                                callback.onScreenShotCaptured(pair.first, pair.second);
+                            }));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
     }
 
     ITab getITab() {
@@ -324,10 +370,22 @@ public class Tab {
         @Override
         public void onCloseTab() {
             StrictModeWorkaround.apply();
+
+            // Prior to 84 this method was used to signify that the embedder should take action to
+            // close the Tab; 84+ it's deprecated and no longer sent..
+            assert WebLayer.getSupportedMajorVersionInternal() < 84;
+
             // This should only be hit if setNewTabCallback() has been called with a non-null
             // value.
             assert mNewTabCallback != null;
             mNewTabCallback.onCloseTab();
+        }
+
+        @Override
+        public void onTabDestroyed() {
+            // Ensure that the app will fail fast if the embedder mistakenly tries to call back
+            // into the implementation via this Tab.
+            mImpl = null;
         }
 
         @Override
@@ -369,6 +427,14 @@ public class Tab {
             String titleString = ObjectWrapper.unwrap(title, String.class);
             for (TabCallback callback : mCallbacks) {
                 callback.onTitleUpdated(titleString);
+            }
+        }
+
+        @Override
+        public void bringTabToFront() {
+            StrictModeWorkaround.apply();
+            for (TabCallback callback : mCallbacks) {
+                callback.bringTabToFront();
             }
         }
     }

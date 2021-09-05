@@ -88,7 +88,6 @@
 #include "chrome/browser/site_isolation/site_isolation_policy.h"
 #include "chrome/browser/startup_data.h"
 #include "chrome/browser/tracing/background_tracing_field_trial.h"
-#include "chrome/browser/tracing/navigation_tracing.h"
 #include "chrome/browser/tracing/trace_event_system_stats_monitor.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/javascript_dialogs/chrome_javascript_app_modal_dialog_view_factory.h"
@@ -115,6 +114,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "components/device_event_log/device_event_log.h"
+#include "components/embedder_support/switches.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/google/core/common/google_util.h"
 #include "components/language/content/browser/geo_language_provider.h"
@@ -157,7 +157,6 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/system_connector.h"
-#include "content/public/browser/webvr_service_provider.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -174,7 +173,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "rlz/buildflags/buildflags.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "services/tracing/public/cpp/stack_sampling/tracing_sampler_profiler.h"
 #include "third_party/blink/public/common/experiments/memory_ablation_experiment.h"
 #include "ui/base/layout.h"
@@ -183,6 +181,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/metrics/thread_watcher_android.h"
+#include "chrome/browser/ui/page_info/chrome_page_info_client.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #else
 #include "chrome/browser/resource_coordinator/tab_activity_watcher.h"
@@ -293,11 +292,8 @@
 #include "components/rlz/rlz_tracker.h"
 #endif  // BUILDFLAG(ENABLE_RLZ)
 
-#if BUILDFLAG(ENABLE_VR)
-#include "chrome/browser/vr/service/vr_service_impl.h"
-#if defined(OS_WIN)
+#if BUILDFLAG(ENABLE_VR) && defined(OS_WIN)
 #include "chrome/browser/vr/consent/xr_session_request_consent_manager_impl.h"
-#endif
 #endif
 
 #if defined(USE_AURA)
@@ -582,16 +578,17 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
 void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
     PrefService* local_state) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(switches::kOriginTrialPublicKey)) {
+  if (!command_line->HasSwitch(embedder_support::kOriginTrialPublicKey)) {
     std::string new_public_key =
         local_state->GetString(prefs::kOriginTrialPublicKey);
     if (!new_public_key.empty()) {
       command_line->AppendSwitchASCII(
-          switches::kOriginTrialPublicKey,
+          embedder_support::kOriginTrialPublicKey,
           local_state->GetString(prefs::kOriginTrialPublicKey));
     }
   }
-  if (!command_line->HasSwitch(switches::kOriginTrialDisabledFeatures)) {
+  if (!command_line->HasSwitch(
+          embedder_support::kOriginTrialDisabledFeatures)) {
     const base::ListValue* override_disabled_feature_list =
         local_state->GetList(prefs::kOriginTrialDisabledFeatures);
     if (override_disabled_feature_list) {
@@ -605,12 +602,13 @@ void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
       if (!disabled_features.empty()) {
         const std::string override_disabled_features =
             base::JoinString(disabled_features, "|");
-        command_line->AppendSwitchASCII(switches::kOriginTrialDisabledFeatures,
-                                        override_disabled_features);
+        command_line->AppendSwitchASCII(
+            embedder_support::kOriginTrialDisabledFeatures,
+            override_disabled_features);
       }
     }
   }
-  if (!command_line->HasSwitch(switches::kOriginTrialDisabledTokens)) {
+  if (!command_line->HasSwitch(embedder_support::kOriginTrialDisabledTokens)) {
     const base::ListValue* disabled_token_list =
         local_state->GetList(prefs::kOriginTrialDisabledTokens);
     if (disabled_token_list) {
@@ -624,8 +622,9 @@ void ChromeBrowserMainParts::SetupOriginTrialsCommandLine(
       if (!disabled_tokens.empty()) {
         const std::string disabled_token_switch =
             base::JoinString(disabled_tokens, "|");
-        command_line->AppendSwitchASCII(switches::kOriginTrialDisabledTokens,
-                                        disabled_token_switch);
+        command_line->AppendSwitchASCII(
+            embedder_support::kOriginTrialDisabledTokens,
+            disabled_token_switch);
       }
     }
   }
@@ -951,21 +950,10 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   SecKeychainAddCallback(&KeychainCallback, 0, NULL);
 #endif  // defined(OS_MACOSX)
 
-#if BUILDFLAG(ENABLE_VR)
-  content::WebvrServiceProvider::SetWebvrServiceCallback(
-      base::Bind(&vr::VRServiceImpl::Create));
-
-#if defined(OS_WIN)
+#if BUILDFLAG(ENABLE_VR) && defined(OS_WIN)
   vr::XRSessionRequestConsentManager::SetInstance(
       new vr::XRSessionRequestConsentManagerImpl());
-#endif  // defined(OS_WIN)
-#endif  // BUILDFLAG(ENABLE_VR)
-
-  // Enable Navigation Tracing only if a trace upload url is specified.
-  if (parsed_command_line_.HasSwitch(switches::kEnableNavigationTracing) &&
-      parsed_command_line_.HasSwitch(switches::kTraceUploadURL)) {
-    tracing::SetupNavigationTracing();
-  }
+#endif  // BUILDFLAG(ENABLE_VR) && OS_WIN
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
@@ -1399,6 +1387,10 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // called inside PostProfileInit.
   content::WebUIControllerFactory::RegisterFactory(
       ChromeWebUIControllerFactory::GetInstance());
+
+#if defined(OS_ANDROID)
+  page_info::SetPageInfoClient(new ChromePageInfoClient());
+#endif
 
 #if BUILDFLAG(ENABLE_NACL)
   // NaClBrowserDelegateImpl is accessed inside PostProfileInit().

@@ -43,6 +43,7 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
@@ -142,6 +143,9 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     private static final String EXTRA_FOCUS_INTENT =
             "androidx.browser.customtabs.extra.FOCUS_INTENT";
 
+    private static final String EXTRA_TWA_DISCLOSURE_UI =
+            "androidx.browser.trusted.extra.DISCLOSURE_VERSION";
+
     private static final int MAX_CUSTOM_MENU_ITEMS = 5;
 
     private static final int MAX_CUSTOM_TOOLBAR_ITEMS = 2;
@@ -165,7 +169,7 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     private final int mInitialBackgroundColor;
     private final boolean mDisableStar;
     private final boolean mDisableDownload;
-    private final boolean mIsTrustedWebActivity;
+    private final @ActivityType int mActivityType;
     @Nullable
     private final Integer mNavigationBarColor;
     private final boolean mIsIncognito;
@@ -306,8 +310,10 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
             }
         }
 
-        mIsTrustedWebActivity = IntentUtils.safeGetBooleanExtra(
-                intent, TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, false);
+        mActivityType = IntentUtils.safeGetBooleanExtra(
+                                intent, TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, false)
+                ? ActivityType.TRUSTED_WEB_ACTIVITY
+                : ActivityType.CUSTOM_TAB;
         mTrustedWebActivityAdditionalOrigins = IntentUtils.safeGetStringArrayListExtra(intent,
                 TrustedWebActivityIntentBuilder.EXTRA_ADDITIONAL_TRUSTED_ORIGINS);
         mTrustedWebActivityDisplayMode = resolveTwaDisplayMode();
@@ -527,6 +533,11 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     }
 
     @Override
+    public @ActivityType int getActivityType() {
+        return mActivityType;
+    }
+
+    @Override
     @Nullable
     public Intent getIntent() {
         return mIntent;
@@ -726,11 +737,6 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
         return mIsIncognito;
     }
 
-    @Override
-    public boolean isTrustedWebActivity() {
-        return mIsTrustedWebActivity;
-    }
-
     @Nullable
     @Override
     public TrustedWebActivityDisplayMode getTwaDisplayMode() {
@@ -783,5 +789,18 @@ public class CustomTabIntentDataProvider extends BrowserServicesIntentDataProvid
     @Nullable
     public PendingIntent getFocusIntent() {
         return mFocusIntent;
+    }
+
+    @TwaDisclosureUi
+    @Override
+    public int getTwaDisclosureUi() {
+        int version = mIntent.getIntExtra(EXTRA_TWA_DISCLOSURE_UI, TwaDisclosureUi.DEFAULT);
+
+        if (version != TwaDisclosureUi.V1_INFOBAR
+                && version != TwaDisclosureUi.V2_NOTIFICATION_OR_SNACKBAR) {
+            return TwaDisclosureUi.DEFAULT;
+        }
+
+        return version;
     }
 }

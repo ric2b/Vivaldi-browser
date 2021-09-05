@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "content/shell/common/web_test.mojom.h"
+#include "content/shell/common/web_test/web_test.mojom.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
@@ -50,8 +50,6 @@ class WebTestClientImpl : public mojom::WebTestClient {
 
  private:
   // WebTestClient implementation.
-  void InspectSecondaryWindow() override;
-  void TestFinishedInSecondaryRenderer() override;
   void SimulateWebNotificationClick(
       const std::string& title,
       int32_t action_index,
@@ -59,7 +57,6 @@ class WebTestClientImpl : public mojom::WebTestClient {
   void SimulateWebNotificationClose(const std::string& title,
                                     bool by_user) override;
   void SimulateWebContentIndexDelete(const std::string& id) override;
-  void BlockThirdPartyCookies(bool block) override;
   void ResetPermissions() override;
   void SetPermission(const std::string& name,
                      blink::mojom::PermissionStatus status,
@@ -70,13 +67,12 @@ class WebTestClientImpl : public mojom::WebTestClient {
   void DeleteAllCookies() override;
   void ClearAllDatabases() override;
   void SetDatabaseQuota(int32_t quota) override;
-  void InitiateCaptureDump(bool capture_navigation_history,
-                           bool capture_pixels) override;
-  void GetWritableDirectory(GetWritableDirectoryCallback callback) override;
   void RegisterIsolatedFileSystem(
       const std::vector<base::FilePath>& absolute_filenames,
       RegisterIsolatedFileSystemCallback callback) override;
-  void SetFilePathForMockFileDialog(const base::FilePath& path) override;
+  void SetTrustTokenKeyCommitments(const std::string& raw_commitments,
+                                   base::OnceClosure callback) override;
+  void ClearTrustTokenState(base::OnceClosure callback) override;
 
   int render_process_id_;
 
@@ -84,6 +80,7 @@ class WebTestClientImpl : public mojom::WebTestClient {
   scoped_refptr<storage::DatabaseTracker> database_tracker_;
 
   mojo::Remote<network::mojom::CookieManager> cookie_manager_;
+  network::mojom::NetworkContext* const network_context_;
 };
 
 }  // namespace content

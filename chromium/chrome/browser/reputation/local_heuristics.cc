@@ -4,13 +4,16 @@
 
 #include "chrome/browser/reputation/local_heuristics.h"
 
+#include "base/bind.h"
+#include "base/callback.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/lookalikes/lookalike_url_blocking_page.h"
 #include "chrome/browser/lookalikes/lookalike_url_navigation_throttle.h"
 #include "chrome/browser/lookalikes/lookalike_url_service.h"
+#include "chrome/browser/reputation/safety_tips_config.h"
 #include "chrome/common/chrome_features.h"
-#include "components/lookalikes/lookalike_url_util.h"
+#include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/security_state/core/features.h"
 #include "components/url_formatter/spoof_checks/top_domains/top_domain_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -43,8 +46,11 @@ bool ShouldTriggerSafetyTipFromLookalike(
     return false;
   }
 
-  if (!GetMatchingDomain(navigated_domain, engaged_sites, &matched_domain,
-                         &match_type)) {
+  auto* config = GetSafetyTipsRemoteConfigProto();
+  const LookalikeTargetAllowlistChecker in_target_allowlist =
+      base::BindRepeating(&IsTargetUrlAllowlistedBySafetyTipsComponent, config);
+  if (!GetMatchingDomain(navigated_domain, engaged_sites, in_target_allowlist,
+                         &matched_domain, &match_type)) {
     return false;
   }
 
@@ -58,8 +64,6 @@ bool ShouldTriggerSafetyTipFromLookalike(
   *safe_url = GURL(std::string(url::kHttpScheme) +
                    url::kStandardSchemeSeparator + matched_domain);
   switch (match_type) {
-    case LookalikeUrlMatchType::kTopSite:
-      return kEnableLookalikeTopSites.Get();
     case LookalikeUrlMatchType::kEditDistance:
       return kEnableLookalikeEditDistance.Get();
     case LookalikeUrlMatchType::kEditDistanceSiteEngagement:
@@ -67,12 +71,15 @@ bool ShouldTriggerSafetyTipFromLookalike(
     case LookalikeUrlMatchType::kTargetEmbedding:
       return kEnableLookalikeTargetEmbedding.Get();
     case LookalikeUrlMatchType::kSiteEngagement:
-      // We should only ever reach this case when the
-      // kLookalikeUrlNavigationSuggestionsUI feature is disabled. Otherwise, an
-      // interstitial will already be shown on the kSiteEngagement match type.
+    case LookalikeUrlMatchType::kSkeletonMatchTop500:
+      // We should only ever reach these cases when the lookalike interstitial
+      // is disabled. Now that interstitial is fully launched, this only happens
+      // in tests.
       DCHECK(!base::FeatureList::IsEnabled(
           features::kLookalikeUrlNavigationSuggestionsUI));
       return true;
+    case LookalikeUrlMatchType::kSkeletonMatchTop5k:
+      return kEnableLookalikeTopSites.Get();
     case LookalikeUrlMatchType::kNone:
       NOTREACHED();
   }

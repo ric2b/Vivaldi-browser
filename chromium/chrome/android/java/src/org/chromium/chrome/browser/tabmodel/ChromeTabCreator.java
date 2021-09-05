@@ -18,6 +18,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ServiceTabLauncher;
 import org.chromium.chrome.browser.init.StartupTabPreloader;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.tab.RedirectHandlerTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAssociatedApp;
 import org.chromium.chrome.browser.tab.TabBuilder;
@@ -25,7 +26,6 @@ import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabParentIntent;
-import org.chromium.chrome.browser.tab.TabRedirectHandler;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tab_activity_glue.ReparentingDelegateFactory;
 import org.chromium.chrome.browser.tab_activity_glue.ReparentingTask;
@@ -33,6 +33,7 @@ import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
+import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
@@ -45,11 +46,11 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
     public interface OverviewNTPCreator {
         /**
          * Handles showing the StartSurface instead of the NTP if needed.
-         * @param isNTPUrl Whether tab with NTP should be created.
+         * @param isNTP Whether tab with NTP should be created.
          * @param isIncognito Whether tab is created in incognito.
          * @return Whether NTP creation was handled.
          */
-        boolean handleCreateNTPIfNeeded(boolean isNTP, boolean incognito);
+        boolean handleCreateNTPIfNeeded(boolean isNTP, boolean isIncognito);
     }
 
     private final ChromeActivity mActivity;
@@ -180,7 +181,7 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
                               .setDelegateFactory(delegateFactory)
                               .setInitiallyHidden(!openInForeground)
                               .build();
-                TabParentIntent.from(tab).set(parentIntent);
+                TabParentIntent.from(tab).set(parentIntent).setCurrentTab(selector::getCurrentTab);
                 webContents.resumeLoadingCreatedWebContents();
             } else if (!openInForeground && SysUtils.isLowEndDevice()) {
                 // On low memory devices the tabs opened in background are not loaded automatically
@@ -214,7 +215,7 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
                     TraceEvent.end("ChromeTabCreator.loadUrl");
                 }
             }
-            TabRedirectHandler.from(tab).updateIntent(intent);
+            RedirectHandlerTabHelper.updateIntentInTab(tab, intent);
             if (intent != null && intent.hasExtra(ServiceTabLauncher.LAUNCH_REQUEST_ID_EXTRA)) {
                 ServiceTabLauncher.onWebContentsForRequestAvailable(
                         intent.getIntExtra(ServiceTabLauncher.LAUNCH_REQUEST_ID_EXTRA, 0),
@@ -298,8 +299,9 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
      * @param intentTimestamp the time the intent was received.
      * @return the tab the URL was opened in, could be a new tab or a reused one.
      */
-    public Tab launchUrlFromExternalApp(String url, String referer, String headers,
-            String appId, boolean forceNewTab, Intent intent, long intentTimestamp) {
+    // TODO(crbug.com/1081924): Clean up the launches from SearchActivity/Chrome.
+    public Tab launchUrlFromExternalApp(String url, String referer, String headers, String appId,
+            boolean forceNewTab, Intent intent, long intentTimestamp) {
         assert !mIncognito;
         boolean isLaunchedFromChrome = TextUtils.equals(appId, mActivity.getPackageName());
 
@@ -309,11 +311,30 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
             // reused either.
             LoadUrlParams loadUrlParams = new LoadUrlParams(url);
             loadUrlParams.setIntentReceivedTimestamp(intentTimestamp);
-            loadUrlParams.setVerbatimHeaders(headers);
             if (referer != null) {
                 loadUrlParams.setReferrer(
                         new Referrer(referer, IntentHandler.getReferrerPolicyFromIntent(intent)));
             }
+            // Handle post data case.
+            if (IntentHandler.wasIntentSenderChrome(intent)) {
+                String postDataType =
+                        IntentUtils.safeGetStringExtra(intent, IntentHandler.EXTRA_POST_DATA_TYPE);
+                byte[] postData =
+                        IntentUtils.safeGetByteArrayExtra(intent, IntentHandler.EXTRA_POST_DATA);
+                if (!TextUtils.isEmpty(postDataType) && postData != null && postData.length != 0) {
+                    StringBuilder appendToHeader = new StringBuilder();
+                    appendToHeader.append("Content-Type: ");
+                    appendToHeader.append(postDataType);
+                    if (TextUtils.isEmpty(headers)) {
+                        headers = appendToHeader.toString();
+                    } else {
+                        headers = headers + "\r\n" + appendToHeader.toString();
+                    }
+
+                    loadUrlParams.setPostData(ResourceRequestBody.createFromBytes(postData));
+                }
+            }
+            loadUrlParams.setVerbatimHeaders(headers);
             return createNewTab(loadUrlParams, TabLaunchType.FROM_EXTERNAL_APP, null, intent);
         }
 

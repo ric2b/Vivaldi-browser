@@ -72,6 +72,8 @@ source_set("intents") {
 
 source_set("preferred_apps") {
   sources = [
+    "preferred_apps_converter.cc",
+    "preferred_apps_converter.h",
     "preferred_apps_list.cc",
     "preferred_apps_list.h",
   ]
@@ -82,6 +84,15 @@ source_set("preferred_apps") {
     "//chrome/services/app_service/public/mojom",
     "//url",
   ]
+}
+
+source_set("publisher") {
+  sources = [
+    "publisher_base.cc",
+    "publisher_base.h",
+  ]
+
+  deps = [ "//chrome/services/app_service/public/mojom" ]
 }
 
 source_set("unit_tests") {
@@ -95,12 +106,14 @@ source_set("unit_tests") {
     "intent_test_util.cc",
     "intent_test_util.h",
     "intent_util_unittest.cc",
+    "preferred_apps_converter_unittest.cc",
     "preferred_apps_list_unittest.cc",
   ]
 
   deps = [
     ":app_update",
     ":icon_loader",
+    ":publisher",
     "//content/test:test_support",
     "//testing/gtest",
   ]

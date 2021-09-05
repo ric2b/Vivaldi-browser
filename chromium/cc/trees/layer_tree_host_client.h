@@ -10,7 +10,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "cc/input/browser_controls_state.h"
-#include "cc/metrics/frame_sequence_tracker.h"
+#include "cc/metrics/frame_sequence_tracker_collection.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
@@ -168,9 +168,10 @@ class LayerTreeHostClient {
   // committed to the compositor, which is before the call to
   // RecordEndOfFrameMetrics.
   virtual std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() = 0;
+  virtual void NotifyThroughputTrackerResults(CustomTrackerResults results) = 0;
 
  protected:
-  virtual ~LayerTreeHostClient() {}
+  virtual ~LayerTreeHostClient() = default;
 };
 
 // LayerTreeHost->WebThreadScheduler callback interface. Instances of this class

@@ -573,11 +573,7 @@ bool LayoutTheme::IsReadOnlyControl(const Node* node) {
 bool LayoutTheme::IsHovered(const Node* node) {
   if (!node)
     return false;
-  const auto* element = DynamicTo<SpinButtonElement>(node);
-  if (!element)
-    return node->IsHovered();
-  return element->IsHovered() &&
-         element->GetUpDownState() != SpinButtonElement::kIndeterminate;
+  return node->IsHovered();
 }
 
 bool LayoutTheme::IsSpinUpButtonPartHovered(const Node* node) {
@@ -864,10 +860,6 @@ Color LayoutTheme::TapHighlightColor() {
 void LayoutTheme::SetCustomFocusRingColor(const Color& c) {
   custom_focus_ring_color_ = c;
   has_custom_focus_ring_color_ = true;
-}
-
-bool LayoutTheme::IsFocusRingOutset() const {
-  return false;
 }
 
 Color LayoutTheme::FocusRingColor() const {

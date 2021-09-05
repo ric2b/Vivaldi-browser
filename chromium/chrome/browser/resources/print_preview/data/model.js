@@ -99,7 +99,8 @@ export let SerializedSettings;
 /**
  * @typedef {{
  *  value: *,
- *  managed: boolean
+ *  managed: boolean,
+ *  applyOnDestinationUpdate: boolean
  * }}
  */
 export let PolicyEntry;
@@ -108,6 +109,8 @@ export let PolicyEntry;
  * @typedef {{
  *   headerFooter: (PolicyEntry | undefined),
  *   cssBackground: (PolicyEntry | undefined),
+ *   mediaSize: (PolicyEntry | undefined),
+ *   sheets: (number | undefined),
  * }}
  */
 export let PolicySettings;
@@ -482,6 +485,13 @@ Polymer({
 
     /** @type {!Size} */
     pageSize: Object,
+
+    /** @private {number} */
+    maxSheets: {
+      type: Number,
+      value: 0,
+      notify: true,
+    }
   },
 
   observers: [
@@ -1005,15 +1015,18 @@ Polymer({
    * @param {string} settingName Name of the setting being applied.
    * @param {*} value Value of the setting provided via policy.
    * @param {boolean} managed Flag showing whether value of setting is managed.
+   * @param {boolean} applyOnDestinationUpdate Flag showing whether policy
+   *     should be applied on every destination update.
    * @private
    */
-  setPolicySetting_(settingName, value, managed) {
+  setPolicySetting_(settingName, value, managed, applyOnDestinationUpdate) {
     if (!this.policySettings_) {
       this.policySettings_ = {};
     }
     this.policySettings_[settingName] = {
       value: value,
       managed: managed,
+      applyOnDestinationUpdate: applyOnDestinationUpdate,
     };
   },
 
@@ -1030,7 +1043,9 @@ Polymer({
       case 'headerFooter': {
         const value = allowedMode !== undefined ? allowedMode : defaultMode;
         if (value !== undefined) {
-          this.setPolicySetting_(settingName, value, allowedMode !== undefined);
+          this.setPolicySetting_(
+              settingName, value, allowedMode !== undefined,
+              /*applyOnDestinationUpdate=*/ false);
         }
         break;
       }
@@ -1039,7 +1054,15 @@ Polymer({
         if (value !== undefined) {
           this.setPolicySetting_(
               settingName, value === BackgroundGraphicsModeRestriction.ENABLED,
-              !!allowedMode);
+              !!allowedMode, /*applyOnDestinationUpdate=*/ false);
+        }
+        break;
+      }
+      case 'mediaSize': {
+        if (defaultMode !== undefined) {
+          this.setPolicySetting_(
+              settingName, defaultMode, /*managed=*/ false,
+              /*applyOnDestinationUpdate=*/ true);
         }
         break;
       }
@@ -1057,7 +1080,7 @@ Polymer({
     if (policies === undefined) {
       return;
     }
-    ['headerFooter', 'cssBackground'].forEach(settingName => {
+    ['headerFooter', 'cssBackground', 'mediaSize'].forEach(settingName => {
       if (!policies[settingName]) {
         return;
       }
@@ -1065,6 +1088,17 @@ Polymer({
       const allowedMode = policies[settingName].allowedMode;
       this.configurePolicySetting_(settingName, allowedMode, defaultMode);
     });
+    // <if expr="chromeos">
+    if (policies['sheets']) {
+      if (!this.policySettings_) {
+        this.policySettings_ = {};
+      }
+      this.policySettings_['sheets'] = {
+        value: policies['sheets'].value,
+        applyOnDestinationUpdate: false
+      };
+    }
+    // </if>
   },
 
   applyStickySettings() {
@@ -1121,22 +1155,30 @@ Polymer({
     if (this.policySettings_) {
       for (const [settingName, policy] of Object.entries(
                this.policySettings_)) {
-        if (policy.value !== undefined) {
-          this.setSetting(settingName, policy.value, true);
+        // <if expr="chromeos">
+        if (settingName === 'sheets') {
+          this.maxSheets = this.policySettings_['sheets'].value;
+          continue;
         }
-        if (policy.managed) {
-          this.set(`settings.${settingName}.setByPolicy`, true);
+        // </if>
+        if (policy.value !== undefined && !policy.applyOnDestinationUpdate) {
+          this.setSetting(settingName, policy.value, true);
+          if (policy.managed) {
+            this.set(`settings.${settingName}.setByPolicy`, true);
+          }
         }
       }
     }
   },
 
-  // <if expr="chromeos">
+  // TODO (crbug.com/1069802): Migrate these policies from Destination.policies
+  // to NativeInitialSettings.policies.
   /**
    * Restricts settings and applies defaults as defined by policy applicable to
    * current destination.
    */
   applyDestinationSpecificPolicies() {
+    // <if expr="chromeos">
     const colorPolicy = this.destination.colorPolicy;
     const colorValue =
         colorPolicy ? colorPolicy : this.destination.defaultColorPolicy;
@@ -1179,10 +1221,25 @@ Polymer({
       this.set('settings.pin.value', pinValue === PinModeRestriction.PIN);
     }
     this.set('settings.pin.setByPolicy', !!pinPolicy);
+    // </if>
+
+    if (this.settings.mediaSize.available && this.policySettings_) {
+      const mediaSizePolicy = this.policySettings_['mediaSize'] &&
+          this.policySettings_['mediaSize'].value;
+      if (mediaSizePolicy !== undefined) {
+        const matchingOption =
+            this.destination.capabilities.printer.media_size.option.find(o => {
+              return o.width_microns === mediaSizePolicy.width &&
+                  o.height_microns === mediaSizePolicy.height;
+            });
+        if (matchingOption !== undefined) {
+          this.set('settings.mediaSize.value', matchingOption);
+        }
+      }
+    }
 
     this.updateManaged_();
   },
-  // </if>
 
   /** @private */
   updateManaged_() {

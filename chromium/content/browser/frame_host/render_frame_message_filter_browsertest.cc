@@ -25,6 +25,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -75,7 +76,7 @@ void SetCookieDirect(WebContentsImpl* tab,
   BrowserContext::GetDefaultStoragePartition(tab->GetBrowserContext())
       ->GetCookieManagerForBrowserProcess()
       ->SetCanonicalCookie(
-          *cookie_obj, url.scheme(), options,
+          *cookie_obj, url, options,
           base::BindLambdaForTesting(
               [&](net::CanonicalCookie::CookieInclusionStatus status) {
                 run_loop.Quit();

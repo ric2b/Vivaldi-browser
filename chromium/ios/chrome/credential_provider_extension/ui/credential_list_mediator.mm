@@ -6,6 +6,7 @@
 
 #import <AuthenticationServices/AuthenticationServices.h>
 
+#import "ios/chrome/common/credential_provider/credential_store.h"
 #import "ios/chrome/credential_provider_extension/ui/credential_list_consumer.h"
 #import "ios/chrome/credential_provider_extension/ui/credential_list_ui_handler.h"
 
@@ -21,6 +22,9 @@
 // The consumer for this mediator.
 @property(nonatomic, weak) id<CredentialListConsumer> consumer;
 
+// Interface for the persistent credential store.
+@property(nonatomic, weak) id<CredentialStore> credentialStore;
+
 // The service identifiers to be prioritized.
 @property(nonatomic, strong)
     NSArray<ASCredentialServiceIdentifier*>* serviceIdentifiers;
@@ -28,12 +32,19 @@
 // The extension context in which the credential list was started.
 @property(nonatomic, weak) ASCredentialProviderExtensionContext* context;
 
+// List of suggested credentials.
+@property(nonatomic, copy) NSArray<id<Credential>>* suggestedCredentials;
+
+// List of all credentials.
+@property(nonatomic, copy) NSArray<id<Credential>>* allCredentials;
+
 @end
 
 @implementation CredentialListMediator
 
 - (instancetype)initWithConsumer:(id<CredentialListConsumer>)consumer
                        UIHandler:(id<CredentialListUIHandler>)UIHandler
+                 credentialStore:(id<CredentialStore>)credentialStore
                          context:(ASCredentialProviderExtensionContext*)context
               serviceIdentifiers:
                   (NSArray<ASCredentialServiceIdentifier*>*)serviceIdentifiers {
@@ -43,15 +54,43 @@
     _UIHandler = UIHandler;
     _consumer = consumer;
     _consumer.delegate = self;
+    _credentialStore = credentialStore;
     _context = context;
   }
   return self;
 }
 
 - (void)fetchCredentials {
-  // TODO(crbug.com/1045454): Implement this method. For now present the empty
-  // credentials screen all the time.
-  [self.UIHandler showEmptyCredentials];
+  dispatch_queue_t priorityQueue =
+      dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0ul);
+  dispatch_async(priorityQueue, ^{
+    self.allCredentials = [self.credentialStore.credentials
+        sortedArrayUsingComparator:^NSComparisonResult(id<Credential> obj1,
+                                                       id<Credential> obj2) {
+          return [obj1.serviceName compare:obj2.serviceName];
+        }];
+
+    NSMutableArray* suggestions = [[NSMutableArray alloc] init];
+    for (id<Credential> credential in self.allCredentials) {
+      for (ASCredentialServiceIdentifier* identifier in self
+               .serviceIdentifiers) {
+        if ([identifier.identifier containsString:credential.serviceName]) {
+          [suggestions addObject:credential];
+          break;
+        }
+      }
+    }
+    self.suggestedCredentials = suggestions;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (!self.allCredentials.count) {
+        [self.UIHandler showEmptyCredentials];
+        return;
+      }
+      [self.consumer presentSuggestedPasswords:self.suggestedCredentials
+                                  allPasswords:self.allCredentials];
+    });
+  });
 }
 
 #pragma mark - CredentialListConsumerDelegate
@@ -64,8 +103,36 @@
   [self.context cancelRequestWithError:error];
 }
 
+- (void)userSelectedCredential:(id<Credential>)credential {
+  [self.UIHandler userSelectedCredential:credential];
+}
+
 - (void)updateResultsWithFilter:(NSString*)filter {
-  // TODO(crbug.com/1045454): Implement this method.
+  NSMutableArray<id<Credential>>* suggested = [[NSMutableArray alloc] init];
+  if (self.suggestedCredentials.count > 0) {
+    for (id<Credential> credential in self.suggestedCredentials) {
+      if ([filter length] == 0 ||
+          [credential.serviceName localizedStandardContainsString:filter] ||
+          [credential.user localizedStandardContainsString:filter]) {
+        [suggested addObject:credential];
+      }
+    }
+  }
+  NSMutableArray<id<Credential>>* all = [[NSMutableArray alloc] init];
+  if (self.allCredentials.count > 0) {
+    for (id<Credential> credential in self.allCredentials) {
+      if ([filter length] == 0 ||
+          [credential.serviceName localizedStandardContainsString:filter] ||
+          [credential.user localizedStandardContainsString:filter]) {
+        [all addObject:credential];
+      }
+    }
+  }
+  [self.consumer presentSuggestedPasswords:suggested allPasswords:all];
+}
+
+- (void)showDetailsForCredential:(id<Credential>)credential {
+  [self.UIHandler showDetailsForCredential:credential];
 }
 
 @end

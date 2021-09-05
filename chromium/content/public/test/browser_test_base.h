@@ -56,9 +56,6 @@ class BrowserTestBase : public testing::Test {
   // Override this to add command line flags specific to your test.
   virtual void SetUpCommandLine(base::CommandLine* command_line) {}
 
-  // Override this to disallow accesses to be production-compatible.
-  virtual bool AllowFileAccessFromFiles();
-
   // By default browser tests use hardcoded quota settings for consistency,
   // instead of dynamically based on available disk space. Tests can override
   // this if they want to use the production path.
@@ -73,7 +70,7 @@ class BrowserTestBase : public testing::Test {
   // Returns the host resolver being used for the tests. Subclasses might want
   // to configure it inside tests.
   net::RuleBasedHostResolverProc* host_resolver() {
-    return test_host_resolver_->host_resolver();
+    return test_host_resolver_ ? test_host_resolver_->host_resolver() : nullptr;
   }
 
  protected:
@@ -92,6 +89,10 @@ class BrowserTestBase : public testing::Test {
   // Called after the BrowserMainParts have been created, and before
   // PreEarlyInitialization() has been called.
   virtual void CreatedBrowserMainParts(BrowserMainParts* browser_main_parts) {}
+
+  // Sets flag to allow host resolutions to reach the network. Must be called
+  // before Setup() to take effect.
+  void SetAllowNetworkAccessToHostResolutions();
 
   // This is invoked from main after browser_init/browser_main have completed.
   // This prepares for the test by creating a new browser and doing any other
@@ -212,6 +213,8 @@ class BrowserTestBase : public testing::Test {
   std::unique_ptr<NoRendererCrashesAssertion> no_renderer_crashes_assertion_;
 
   bool initialized_network_process_ = false;
+
+  bool allow_network_access_to_host_resolutions_ = false;
 
 #if defined(OS_POSIX)
   bool handle_sigterm_;

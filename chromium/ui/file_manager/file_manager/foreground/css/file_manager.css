@@ -309,6 +309,20 @@ html:not(.col-resize) #directory-tree
   background-color: var(--google-grey-100);
 }
 
+html.pointer-active #directory-tree
+    .tree-row:not([active]):not([selected]) > .file-row:active {
+  background-color: var(--google-grey-100);
+}
+
+html.pointer-active #directory-tree
+    .tree-row:not([active]):not([selected]):hover > .file-row:not(:active) {
+  background-color: unset;
+}
+
+html.pointer-active #directory-tree :not(:active) {
+  cursor: default;
+}
+
 html.focus-outline-visible #directory-tree:focus .tree-row[selected] > .file-row {
   border: 1px solid var(--google-blue-600);
 }
@@ -508,7 +522,15 @@ body.check-select .dialog-header {
   background: white;
   border-bottom: 1px solid rgb(219, 219, 219);
   border-top: 1px solid transparent;
+}
+
+body.check-select .dialog-header:not(.files-ng) {
   color: rgb(90, 90, 90);
+}
+
+body.check-select .dialog-header.files-ng {
+  color: var(--google-blue-600);
+  font-size: 14px;
 }
 
 /* Display a grey border during check-select mode if we're in a dialog. (This
@@ -1005,7 +1027,14 @@ html[dir='rtl'] #cloud-import-details {
 #files-selected-label {
   display: none;
   font-weight: 500;
+}
+
+body:not(.files-ng) #files-selected-label {
   margin-inline-start: 20px;
+}
+
+body.files-ng #files-selected-label {
+  margin-inline-start: 8px;
 }
 
 body.check-select #files-selected-label {
@@ -1014,7 +1043,6 @@ body.check-select #files-selected-label {
 
 #cancel-selection-button {
   --ink-color: currentColor;
-  background-color: transparent;
   border: none;
   box-shadow: none;
   color: currentColor;
@@ -1022,17 +1050,36 @@ body.check-select #files-selected-label {
   text-transform: none;
 }
 
-#cancel-selection-button:focus:not([tabindex='-1']):not(:active) {
+body:not(.files-ng) #cancel-selection-button {
+  background-color: transparent;
+}
+
+/* TODO(adanilo) document the calc() reason. */
+body.files-ng #cancel-selection-button {
+  border: 1px solid transparent;
+  margin-inline-start: calc(10px + 1px);
+  width: 36px;
+}
+
+body:not(.files-ng) #cancel-selection-button:focus:not([tabindex='-1']):not(:active) {
   background-color: rgba(153, 153, 153, 20%);
 }
 
-#cancel-selection-button > span {
+html.focus-outline-visible body.files-ng #cancel-selection-button:focus:not([tabindex='-1']):not(:active) {
+  border: 1px solid var(--google-blue-600);
+}
+
+body:not(.files-ng) #cancel-selection-button > span {
   display: inline-block;
   font-weight: 500;
   vertical-align: middle;
 }
 
-#cancel-selection-button .icon-arrow-back {
+body.files-ng #cancel-selection-button > span#cancel-selection-label {
+  display: none;
+}
+
+body:not(.files-ng) #cancel-selection-button .icon-arrow-back {
   background-image: -webkit-image-set(
       url(../images/files/ui/back.png) 1x,
       url(../images/files/ui/2x/back.png) 2x);
@@ -1044,9 +1091,22 @@ body.check-select #files-selected-label {
   width: 16px;
 }
 
+body.files-ng #cancel-selection-button .icon-arrow-back {
+  -webkit-mask-image: url(../images/files/ui/list_check.svg);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  background-color: var(--google-blue-600);
+  flex: none;
+  height: 20px;
+  width: 20px;
+}
+
+body:not(.files-ng) #cancel-selection-button-wrapper {
+  width: 240px;  /* initial value, same as .dialog-navigation-list's width. */
+}
+
 #cancel-selection-button-wrapper {
   display: none;
-  width: 240px;  /* initial value, same as .dialog-navigation-list's width. */
 }
 
 #cancel-selection-button > iron-icon {
@@ -1215,7 +1275,21 @@ html[dir='rtl'] #search-box .clear {
   flex: none;
   flex-direction: row;
   outline: none;
+}
+
+body:not(.files-ng) .dialog-footer {
   padding: 8px 4px;
+}
+
+body.files-ng .dialog-footer {
+  padding: 16px 24px;
+}
+
+body.files-ng .dialog-footer #filename-input-box {
+  margin-inline-end: 16px;
+  margin-inline-start: 16px;
+  max-width: 320px;
+  min-width: 123px;
 }
 
 .dialog-footer .buttonbar {
@@ -1224,7 +1298,7 @@ html[dir='rtl'] #search-box .clear {
 }
 
 /* Copy style from paper-button for buttons on the footer. */
-.dialog-footer button {
+body:not(.files-ng) .dialog-footer button {
   background: transparent;
   border: 0;
   border-image: none;
@@ -1239,6 +1313,21 @@ html[dir='rtl'] #search-box .clear {
   text-align: center;
   text-transform: uppercase;
   transition: box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  z-index: 0;
+}
+
+body.files-ng .dialog-footer button {
+  border: 0;
+  border-image: none;
+  border-radius: 4px;
+  box-sizing: border-box;
+  cursor: pointer;
+  margin: 0;
+  outline: none;
+  padding: 1px 16px;
+  position: relative;
+  text-align: center;
   user-select: none;
   z-index: 0;
 }
@@ -1277,18 +1366,35 @@ html[dir='rtl'] #search-box .clear {
   color: rgb(168, 168, 168);
 }
 
-.dialog-footer .primary,
-.dialog-footer .primary:hover {
+body:not(.files-ng) .dialog-footer .primary,
+body:not(.files-ng) .dialog-footer .primary:hover {
   background-color: rgb(51, 103, 214);
   color: white;
 }
 
-.dialog-footer .secondary {
+body.files-ng .dialog-footer .primary,
+body.files-ng .dialog-footer .primary:hover {
+  background-color: var(--cros-default-button-background-color-primary);
+  color: var(--cros-default-button-label-color-primary);
+}
+
+body:not(.files-ng) .dialog-footer .secondary {
   color: rgb(100, 100, 100);
 }
 
-.dialog-footer .secondary:hover {
+body.files-ng .dialog-footer .secondary {
+  background-color: var(--cros-default-button-background-color-secondary);
+  border: 1px solid var(--cros-default-button-stroke-color-secondary);
+  color: var(--cros-default-button-label-color-secondary);
+  margin-inline-end: 8px;
+}
+
+body:not(.files-ng) .dialog-footer .secondary:hover {
   color: rgb(51, 103, 214);
+}
+
+body.files-ng .dialog-footer .secondary:hover {
+  background: var(--cros-default-button-background-color-secondary-hover);
 }
 
 .dialog-footer select {
@@ -1462,6 +1568,7 @@ html[dir='rtl'] .breadcrumbs .separator {
 
 body.files-ng #read-only-indicator {
   background-color: var(--google-grey-100);
+  margin-inline-start: 12px;
   padding-inline-end: 16px;
   padding-inline-start: 12px;
 }
@@ -1544,7 +1651,7 @@ body.check-select #read-only-indicator {
   width: 16px;
 }
 
-.loading-indicator {
+body:not(.files-ng) .loading-indicator {
   height: 3px;
   left: 0;
   position: absolute;
@@ -1552,23 +1659,22 @@ body.check-select #read-only-indicator {
   width: 100%;
 }
 
-.list-view .loading-indicator {
+body.files-ng .loading-indicator {
+  left: calc(50% - 24px);
+  position: absolute;
+  right: calc(50% - 24px);
+  top: 64px;
+}
+
+body:not(.files-ng) .list-view .loading-indicator {
   top: 40px;
 }
 
-body.files-ng .loading-indicator {
-    --paper-progress-active-color: var(--google-blue-600);
-}
-
-body.files-ng .list-view .loading-indicator {
-  top: 48px;
-}
-
-.thumbnail-view .loading-indicator {
+body:not(.files-ng) .thumbnail-view .loading-indicator {
   top: 0;
 }
 
-.downloads-warning {
+body:not(.files-ng) .downloads-warning {
   align-items: center;
   background-color: rgb(79, 129, 232);
   color: white;
@@ -1581,13 +1687,27 @@ body.files-ng .list-view .loading-indicator {
   transition: height 70ms linear;
 }
 
-.downloads-warning a:link,
-.volume-warning a:link {
+body.files-ng .downloads-warning {
+  align-items: center;
+  border-bottom: 1px solid var(--cr-separator-color, rgb(224, 224, 224));
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  height: 40px;
+}
+
+body:not(.files-ng) .downloads-warning a:link,
+body:not(.files-ng) .volume-warning a:link {
   color: white;
   flex: none;
 }
 
-.downloads-warning .warning-icon {
+body.files-ng .downloads-warning a:link,
+body.files-ng .volume-warning a:link {
+  color: var(--google-blue-600);
+}
+
+body:not(.files-ng) .downloads-warning .warning-icon {
   background-image: -webkit-image-set(
       url(../images/files/ui/warning_white.png) 1x,
       url(../images/files/ui/2x/warning_white.png) 2x);
@@ -1598,11 +1718,22 @@ body.files-ng .list-view .loading-indicator {
   width: 16px;
 }
 
-.downloads-warning .warning-message {
+body.files-ng .downloads-warning .warning-icon {
+  -webkit-mask-image: url(../images/files/ui/warning.svg);
+  background-color: var(--google-grey-700);
+  background-size: 20px 20px;
+  flex: none;
+  height: 20px;
+  margin-inline-end: 12px;
+  margin-inline-start: 8px;
+  width: 20px;
+}
+
+body:not(.files-ng) .downloads-warning .warning-message {
   margin-inline-end: 40px;
 }
 
-.downloads-warning[hidden] {
+body:not(.files-ng) .downloads-warning[hidden] {
   display: flex !important;  /* Overrides [hidden] for animation. */
   height: 0;
 }
@@ -1615,7 +1746,7 @@ body.files-ng .list-view .loading-indicator {
 }
 
 /* Drive space warning banner. */
-.volume-warning {
+body:not(.files-ng) .volume-warning {
   align-items: center;
   animation: heightAnimation 70ms linear;
   background-color: rgb(79, 129, 232);
@@ -1629,12 +1760,25 @@ body.files-ng .list-view .loading-indicator {
   position: relative;
 }
 
+body.files-ng .volume-warning {
+  align-items: center;
+  border-bottom: 1px solid var(--cr-separator-color, rgb(224, 224, 224));
+  color: white;
+  display: flex;
+  flex: none;
+  flex-direction: row;
+  font-size: 13px;
+  height: 40px;
+  overflow: hidden;
+  position: relative;
+}
+
 .volume-warning[hidden] {
   border-top-width: 0;
   height: 0;
 }
 
-.volume-warning .drive-icon {
+body:not(.files-ng) .volume-warning .drive-icon {
   background: white -webkit-image-set(
       url(../images/files/ui/drive_logo.png) 1x,
       url(../images/files/ui/2x/drive_logo.png) 2x) no-repeat center;
@@ -1646,13 +1790,33 @@ body.files-ng .list-view .loading-indicator {
   width: 36px;
 }
 
-.volume-warning .drive-text {
+body.files-ng .volume-warning .drive-icon {
+  background: white url(../images/files/ui/drive_logo.svg) no-repeat center;
+  background-size: 20px 20px;
+  flex: none;
+  height: 20px;
+  margin-inline-end: 12px;
+  margin-inline-start: 8px;
+  width: 20px;
+}
+
+body:not(.files-ng) .volume-warning .drive-text {
   flex: none;
   font-size: 16px;
   margin-inline-end: 51px;
 }
 
-.volume-warning .imitate-paper-button {
+body.files-ng .button-group {
+  display: flex;
+  flex-direction: row-reverse;
+  margin-inline-start: auto;
+}
+
+body.files-ng .button-group > a {
+  text-decoration-line: none;
+}
+
+body:not(.files-ng) .volume-warning .imitate-paper-button {
   background-color: white;
   border-radius: 2px;
   color: rgb(79, 129, 232);
@@ -1661,7 +1825,15 @@ body.files-ng .list-view .loading-indicator {
   height: 2.5em;
 }
 
-.banner-close {
+body.files-ng .volume-warning .banner-button {
+  border: 0;
+  height: 32px;
+  margin-inline-end: 8px;
+  padding-inline-end: 16px;
+  padding-inline-start: 16px;
+}
+
+body:not(.files-ng) .banner-close {
   background: -webkit-image-set(
       url(../images/files/ui/close_button_white.png) 1x,
       url(../images/files/ui/2x/close_button_white.png) 2x) no-repeat center;
@@ -1674,15 +1846,16 @@ body.files-ng .list-view .loading-indicator {
   width: 40px;
 }
 
-html[dir='ltr'] .banner-close {
-  right: 0;
+body.files-ng .banner-close {
+  border: 0;
+  height: 32px;
+  margin-inline-end: 20px;
+  padding-inline-end: 16px;
+  padding-inline-start: 16px;
+  position: relative;
 }
 
-html[dir='rtl'] .banner-close {
-  left: 0;
-}
-
-.banner-cloud-bg {
+body:not(.files-ng) .banner-cloud-bg {
   background-image: -webkit-image-set(
       url(../images/files/ui/drive_banner_clouds.png) 1x,
       url(../images/files/ui/2x/drive_banner_clouds.png) 2x);
@@ -1724,8 +1897,10 @@ body[type='full-page'] .thumbnail-frame > .img-container {
   position: relative;
 }
 
-body[type='full-page'] .thumbnail-frame > .img-container,
-body[type='full-page'] .detail-name .detail-icon {
+html:not(.pointer-active) body[type='full-page'] .thumbnail-frame > .img-container,
+body[type='full-page'] .thumbnail-frame > .img-container:active,
+html:not(.pointer-active) body[type='full-page'] .detail-name .detail-icon,
+body[type='full-page'] .detail-name .detail-icon:active {
   cursor: pointer;
 }
 
@@ -1799,11 +1974,15 @@ body.files-ng #list-container .thumbnail-grid li {
 
 body.files-ng grid .thumbnail-bottom .detail-icon {
   color: var(--google-grey-700);
-  cursor: pointer;
   height: 40px;
   padding-inline-end: 6px;
   padding-inline-start: 6px;
   width: 32px;
+}
+
+html:not(.pointer-active) body.files-ng grid .thumbnail-bottom .detail-icon,
+body.files-ng grid .thumbnail-bottom .detail-icon:active {
+  cursor: pointer;
 }
 
 .thumbnail-grid .thumbnail-frame {
@@ -2040,21 +2219,57 @@ html[dir='rtl'] .badge {
 /* Padding counterweights negative margins of items, thus eliminating scroll
    bar when it's not needed. Max height is set to fit 8 items before showing
    scroll bar. */
-#default-tasks-list {
+body:not(.files-ng) #default-tasks-list {
   max-height: 328px;
   padding: 1px 0;
 }
 
-#default-tasks-list li {
+body.files-ng #default-tasks-list {
+  border-top: solid 1px rgba(0, 0, 0, 14%);
+  height: 240px;
+  margin: 16px -16px;
+  margin-bottom: 12px;
+  padding-top: 8px;
+}
+
+body.files-ng #default-task-dialog::after {
+  background: linear-gradient(180deg, #FFF 0, rgba(255, 255, 255, 0) 100%);
+  bottom: 24px;
+  content: '';
+  height: 40px;
+  left: 0;
+  position: absolute;
+  transform: rotate(-180deg);
+  width: 100%
+}
+
+
+body:not(.files-ng) #default-tasks-list li {
   height: 32px;
   line-height: 32px;
 }
 
-#default-tasks-list > li > * {
+body.files-ng #default-tasks-list li {
+  height: 40px;
+  line-height: 40px;
+}
+
+body:not(.files-ng) #default-tasks-list > li > * {
   background-position: 5px center;
   background-repeat: no-repeat;
   background-size: 16px 16px;
   padding-inline-start: 26px;
+}
+
+body.files-ng #default-tasks-list > li > * {
+  background-position: 16px center;
+  background-repeat: no-repeat;
+  background-size: 20px;
+  padding-inline-start: 52px;
+}
+
+html[dir='rtl'] body.files-ng #default-tasks-list > li > * {
+  background-position-x: calc(100% - 16px);
 }
 
 #list-container list > li[selected],
@@ -2084,10 +2299,34 @@ body.files-ng #list-container list:focus > li[lead] {
   background-color: var(--google-blue-50);
 }
 
-#default-tasks-list:focus > li[selected],
-#default-tasks-list > li[selected] {
+body:not(.files-ng) #default-tasks-list:focus > li[selected],
+body:not(.files-ng) #default-tasks-list > li[selected] {
   background-color: rgb(216, 223, 240);
   outline: none;
+}
+
+body.files-ng #default-tasks-list:focus > li[selected],
+body.files-ng #default-tasks-list > li[selected] {
+  background-color: var(--google-blue-50);
+  outline: none;
+}
+
+body.files-ng #default-tasks-list li[selected]::after {
+  background-image: url(../images/common/ic_selected.svg);
+  background-position: right;
+  background-repeat: no-repeat;
+  content: ' ';
+  height: 40px;
+  position: absolute;
+  right: 16px;
+  top: 0;
+  width: 40px;
+}
+
+html[dir='rtl'] body.files-ng #default-tasks-list li[selected]::after {
+  background-position: left;
+  left: 16px;
+  right: unset;
 }
 
 body.check-select #list-container list > li[lead]:not([selected]),
@@ -2803,17 +3042,21 @@ body.files-ng #list-container li .detail-thumbnail {
   flex: none;
 }
 
-#default-task-dialog {
+.cr-dialog-container:not(.files-ng) #default-task-dialog {
   min-width: 300px;
   width: auto;
 }
 
-#install-linux-package-dialog {
+.cr-dialog-container.files-ng #default-task-dialog {
+  width: 352px;
+}
+
+.cr-dialog-container:not(.files-ng) #install-linux-package-dialog {
   min-width: 300px;
   width: 40%;
 }
 
-#install-linux-package-dialog .cr-dialog-text {
+.cr-dialog-container:not(.files-ng) #install-linux-package-dialog .cr-dialog-text {
   min-height: 30px;
 }
 
@@ -2826,20 +3069,41 @@ body.files-ng #list-container li .detail-thumbnail {
   user-select: text;
 }
 
-.install-linux-package-details-label {
+.files-ng .install-linux-package-details-frame {
+  margin-top: 16px;
+}
+
+.cr-dialog-container:not(.files-ng) .install-linux-package-details-label {
   color: #5a5a5a;
   font-weight: 500;
   margin-bottom: 10px;
 }
 
-.install-linux-package-detail-label {
+.cr-dialog-container.files-ng .install-linux-package-details-label {
+  margin-bottom: 10px;
+}
+
+.cr-dialog-container:not(.files-ng) .install-linux-package-detail-label {
   color: #5a5a5a;
   display: inline;
   font-weight: 500;
   margin-inline-end: 5px;
 }
 
-.install-linux-package-detail-value {
+.cr-dialog-container.files-ng .install-linux-package-detail-label {
+  color: var(--cros-default-text-color);
+  display: inline;
+  margin-inline-end: 5px;
+}
+
+.cr-dialog-container:not(.files-ng) .install-linux-package-detail-value {
+  display: inline;
+  margin-bottom: 5px;
+  white-space: pre-wrap;
+}
+
+.cr-dialog-container.files-ng .install-linux-package-detail-value {
+  color: var(--cros-default-text-color-secondary);
   display: inline;
   margin-bottom: 5px;
   white-space: pre-wrap;
@@ -2912,14 +3176,20 @@ list.autocomplete-suggestions > [lead] {
   margin-inline-end: 50px;
 }
 
-#suggest-app-dialog {
+.cr-dialog-container:not(.files-ng) #suggest-app-dialog {
   background-color: #fff;
   border: 0;
   padding: 0;
   width: auto;
 }
 
-.suggest-apps-dialog-title.cr-dialog-title {
+.cr-dialog-container.files-ng #suggest-app-dialog.cr-dialog-frame {
+  max-width: unset !important;
+  min-width: unset !important;
+  width: 735px;
+}
+
+.cr-dialog-container:not(.files-ng) .suggest-apps-dialog-title.cr-dialog-title {
   /* Entire height: 44px (content-box 22px + padding 11px * 2) */
   font-size: 16px;
   line-height: 22px;
@@ -2927,12 +3197,12 @@ list.autocomplete-suggestions > [lead] {
   padding: 11px 18px;
 }
 
-.suggest-apps-dialog-text.cr-dialog-text {
+.cr-dialog-container:not(.files-ng) .suggest-apps-dialog-text.cr-dialog-text {
   margin: 0;
   padding: 0 20px 10px;
 }
 
-.cr-dialog-frame.error-dialog-frame {
+.cr-dialog-container:not(.files-ng) .cr-dialog-frame.error-dialog-frame {
   width: 300px;
 }
 
@@ -2956,41 +3226,6 @@ list.autocomplete-suggestions > [lead] {
 
 .error-dialog-frame .cr-dialog-text {
   text-align: center;
-}
-
-#multi-profile-share-dialog .cr-dialog-title {
-  margin-bottom: 0;
-}
-
-#multi-profile-share-dialog .cr-dialog-text {
-  line-height: 18px;
-  margin-top: 0;
-}
-
-#multi-profile-share-dialog .mail-label {
-  padding-inline-end: 16px;
-}
-
-#multi-profile-share-dialog .mail-label::after {
-  content: ':';
-}
-
-#multi-profile-share-dialog .share-line {
-  margin: 8px 16px;
-}
-
-#conflict-confirm-dialog .cr-dialog-buttons {
-  align-items: baseline;
-  display: flex;
-}
-
-#conflict-confirm-dialog input[type=checkbox] {
-  margin-inline-start: -2px;
-  width: auto;
-}
-
-#conflict-confirm-dialog label {
-  flex: 1 0 auto;
 }
 
 /* Feedback panels */

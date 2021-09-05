@@ -41,6 +41,7 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
+#include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
@@ -403,10 +404,12 @@ ResourceLoader::ResourceLoader(ResourceFetcher* fetcher,
   auto& request = resource_->GetResourceRequest();
   auto request_context = request.GetRequestContext();
   if (!RequestContextObserveResponse(request_context)) {
-    if (FrameScheduler* frame_scheduler = fetcher->GetFrameScheduler()) {
-      feature_handle_for_scheduler_ = frame_scheduler->RegisterFeature(
-          GetFeatureFromRequestContextType(request_context),
-          {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+    if (auto* frame_or_worker_scheduler =
+            fetcher->GetFrameOrWorkerScheduler()) {
+      feature_handle_for_scheduler_ =
+          frame_or_worker_scheduler->RegisterFeature(
+              GetFeatureFromRequestContextType(request_context),
+              {SchedulingPolicy::RecordMetricsForBackForwardCache()});
     }
   }
 
@@ -552,7 +555,7 @@ void ResourceLoader::DidFinishLoadingBody() {
 }
 
 void ResourceLoader::DidFailLoadingBody() {
-  DidFail(ResourceError::Failure(resource_->Url()), 0, 0, 0);
+  DidFail(WebURLError(ResourceError::Failure(resource_->Url())), 0, 0, 0);
 }
 
 void ResourceLoader::DidCancelLoadingBody() {
@@ -703,8 +706,13 @@ bool ResourceLoader::WillFollowRedirect(
     network::mojom::ReferrerPolicy new_referrer_policy,
     const WebString& new_method,
     const WebURLResponse& passed_redirect_response,
-    bool& report_raw_headers) {
+    bool& report_raw_headers,
+    std::vector<std::string>* removed_headers) {
   DCHECK(!passed_redirect_response.IsNull());
+  if (removed_headers) {
+    FindClientHintsToRemove(Context().GetFeaturePolicy(),
+                            GURL(new_url.GetString().Utf8()), removed_headers);
+  }
 
   if (is_cache_aware_loading_activated_) {
     // Fail as cache miss if cached response is a redirect.
@@ -730,6 +738,8 @@ bool ResourceLoader::WillFollowRedirect(
   // The following parameters never change during the lifetime of a request.
   mojom::RequestContextType request_context =
       initial_request.GetRequestContext();
+  network::mojom::RequestDestination request_destination =
+      initial_request.GetRequestDestination();
   network::mojom::RequestMode request_mode = initial_request.GetMode();
   network::mojom::CredentialsMode credentials_mode =
       initial_request.GetCredentialsMode();
@@ -750,7 +760,8 @@ bool ResourceLoader::WillFollowRedirect(
     // CanRequest() checks only enforced CSP, so check report-only here to
     // ensure that violations are sent.
     Context().CheckCSPForRequest(
-        request_context, new_url, options, reporting_disposition,
+        request_context, request_destination, new_url, options,
+        reporting_disposition,
         ResourceRequest::RedirectStatus::kFollowedRedirect);
 
     base::Optional<ResourceRequestBlockedReason> blocked_reason =
@@ -759,7 +770,8 @@ bool ResourceLoader::WillFollowRedirect(
             reporting_disposition,
             ResourceRequest::RedirectStatus::kFollowedRedirect);
 
-    if (Context().CalculateIfAdSubresource(*new_request, resource_type))
+    if (Context().CalculateIfAdSubresource(*new_request, resource_type,
+                                           options.initiator_info))
       new_request->SetIsAdResource();
 
     if (blocked_reason) {
@@ -956,6 +968,8 @@ void ResourceLoader::DidReceiveResponseInternal(
   // The following parameters never change during the lifetime of a request.
   mojom::RequestContextType request_context =
       initial_request.GetRequestContext();
+  network::mojom::RequestDestination request_destination =
+      initial_request.GetRequestDestination();
   network::mojom::RequestMode request_mode = initial_request.GetMode();
 
   const ResourceLoaderOptions& options = resource_->Options();
@@ -1032,7 +1046,8 @@ void ResourceLoader::DidReceiveResponseInternal(
     // CanRequest() below only checks enforced policies: check report-only
     // here to ensure violations are sent.
     Context().CheckCSPForRequest(
-        request_context, response_url, options, ReportingDisposition::kReport,
+        request_context, request_destination, response_url, options,
+        ReportingDisposition::kReport,
         ResourceRequest::RedirectStatus::kFollowedRedirect);
 
     base::Optional<ResourceRequestBlockedReason> blocked_reason =
@@ -1089,14 +1104,14 @@ void ResourceLoader::DidReceiveResponseInternal(
         response.ResponseTime(), should_use_isolated_code_cache_, this);
   }
 
-  if (FrameScheduler* frame_scheduler = fetcher_->GetFrameScheduler()) {
+  if (auto* frame_or_worker_scheduler = fetcher_->GetFrameOrWorkerScheduler()) {
     if (response.CacheControlContainsNoCache()) {
-      frame_scheduler->RegisterStickyFeature(
+      frame_or_worker_scheduler->RegisterStickyFeature(
           SchedulingPolicy::Feature::kSubresourceHasCacheControlNoCache,
           {SchedulingPolicy::RecordMetricsForBackForwardCache()});
     }
     if (response.CacheControlContainsNoStore()) {
-      frame_scheduler->RegisterStickyFeature(
+      frame_or_worker_scheduler->RegisterStickyFeature(
           SchedulingPolicy::Feature::kSubresourceHasCacheControlNoStore,
           {SchedulingPolicy::RecordMetricsForBackForwardCache()});
     }

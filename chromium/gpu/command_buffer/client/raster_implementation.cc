@@ -91,6 +91,47 @@ namespace {
 
 const uint32_t kMaxTransferCacheEntrySizeForTransferBuffer = 1024;
 
+class ScopedSharedMemoryPtr {
+ public:
+  ScopedSharedMemoryPtr(size_t size,
+                        TransferBufferInterface* transfer_buffer,
+                        MappedMemoryManager* mapped_memory,
+                        RasterCmdHelper* helper) {
+    // Prefer transfer buffer but fall back to MappedMemory if there's not
+    // enough free space.
+    if (transfer_buffer->GetFreeSize() < size) {
+      scoped_mapped_ptr_.emplace(size, helper, mapped_memory);
+    } else {
+      scoped_transfer_ptr_.emplace(size, helper, transfer_buffer);
+    }
+  }
+  ~ScopedSharedMemoryPtr() = default;
+
+  GLuint size() {
+    return scoped_transfer_ptr_ ? scoped_transfer_ptr_->size()
+                                : scoped_mapped_ptr_->size();
+  }
+
+  GLint shm_id() {
+    return scoped_transfer_ptr_ ? scoped_transfer_ptr_->shm_id()
+                                : scoped_mapped_ptr_->shm_id();
+  }
+
+  GLuint offset() {
+    return scoped_transfer_ptr_ ? scoped_transfer_ptr_->offset()
+                                : scoped_mapped_ptr_->offset();
+  }
+
+  void* address() {
+    return scoped_transfer_ptr_ ? scoped_transfer_ptr_->address()
+                                : scoped_mapped_ptr_->address();
+  }
+
+ private:
+  base::Optional<ScopedMappedMemoryPtr> scoped_mapped_ptr_;
+  base::Optional<ScopedTransferBufferPtr> scoped_transfer_ptr_;
+};
+
 }  // namespace
 
 // Helper to copy data to the GPU service over the transfer cache.
@@ -1076,9 +1117,67 @@ void RasterImplementation::WritePixels(const gpu::Mailbox& dest_mailbox,
                                        int dst_x_offset,
                                        int dst_y_offset,
                                        GLenum texture_target,
+                                       GLuint row_bytes,
                                        const SkImageInfo& src_info,
                                        const void* src_pixels) {
-  NOTREACHED();
+  DCHECK_GE(row_bytes, src_info.minRowBytes());
+
+  // Get the size of the SkColorSpace while maintaining 8-byte alignment.
+  GLuint pixels_offset = 0;
+  if (src_info.colorSpace()) {
+    pixels_offset = base::bits::Align(
+        src_info.colorSpace()->writeToMemory(nullptr), sizeof(uint64_t));
+  }
+
+  GLuint src_size = src_info.computeByteSize(row_bytes);
+  GLuint total_size =
+      pixels_offset + base::bits::Align(src_size, sizeof(uint64_t));
+
+  ScopedSharedMemoryPtr scoped_shared_memory(total_size, transfer_buffer_,
+                                             mapped_memory_.get(), helper());
+  GLint shm_id = scoped_shared_memory.shm_id();
+  GLuint shm_offset = scoped_shared_memory.offset();
+  void* address = scoped_shared_memory.address();
+
+  if (src_info.colorSpace()) {
+    size_t bytes_written = src_info.colorSpace()->writeToMemory(address);
+    DCHECK_LE(bytes_written, pixels_offset);
+  }
+  memcpy(static_cast<uint8_t*>(address) + pixels_offset, src_pixels, src_size);
+
+  helper_->WritePixelsINTERNALImmediate(
+      dst_x_offset, dst_y_offset, src_info.width(), src_info.height(),
+      row_bytes, src_info.colorType(), src_info.alphaType(), shm_id, shm_offset,
+      pixels_offset, dest_mailbox.name);
+}
+
+namespace {
+constexpr size_t kNumMailboxes = 4;
+}  // namespace
+
+void RasterImplementation::ConvertYUVMailboxesToRGB(
+    const gpu::Mailbox& dest_mailbox,
+    SkYUVColorSpace planes_yuv_color_space,
+    const gpu::Mailbox& y_plane_mailbox,
+    const gpu::Mailbox& u_plane_mailbox,
+    const gpu::Mailbox& v_plane_mailbox) {
+  gpu::Mailbox mailboxes[kNumMailboxes] = {y_plane_mailbox, u_plane_mailbox,
+                                           v_plane_mailbox, dest_mailbox};
+  helper_->ConvertYUVMailboxesToRGBINTERNALImmediate(
+      planes_yuv_color_space, GL_FALSE, reinterpret_cast<GLbyte*>(mailboxes));
+}
+
+void RasterImplementation::ConvertNV12MailboxesToRGB(
+    const gpu::Mailbox& dest_mailbox,
+    SkYUVColorSpace planes_yuv_color_space,
+    const gpu::Mailbox& y_plane_mailbox,
+    const gpu::Mailbox& uv_planes_mailbox) {
+  // We send an empty Mailbox in place of the v plane because NV12 combine the u
+  // and v planes.
+  gpu::Mailbox mailboxes[kNumMailboxes] = {y_plane_mailbox, uv_planes_mailbox,
+                                           gpu::Mailbox(), dest_mailbox};
+  helper_->ConvertYUVMailboxesToRGBINTERNALImmediate(
+      planes_yuv_color_space, GL_TRUE, reinterpret_cast<GLbyte*>(mailboxes));
 }
 
 void RasterImplementation::BeginRasterCHROMIUM(

@@ -43,6 +43,10 @@ const char kAllowSyncXHRInPageDismissal[] = "allow-sync-xhr-in-page-dimissal";
 // This is used in blimp to emulate android fonts on linux.
 const char kAndroidFontsPath[]          = "android-fonts-path";
 
+// Allows app cache to be forced on, even when gated by an origin trial.
+// TODO(enne): remove this once app cache has been removed.
+const char kAppCacheForceEnabled[] = "app-cache-force-enabled";
+
 // Set blink settings. Format is <name>[=<value],<name>[=<value>],...
 // The names are declared in Settings.json5. For boolean type, use "true",
 // "false", or omit '=<value>' part to set to true. For enum type, use the int
@@ -62,6 +66,9 @@ const char kBrowserSubprocessPath[]         = "browser-subprocess-path";
 // used by the content shell and also disables features that can make tests
 // flaky [like monitoring of memory pressure]).
 const char kBrowserTest[] = "browser-test";
+
+// Causes the Conversion Measurement API to run without delays or noise.
+const char kConversionsDebugMode[] = "conversions-debug-mode";
 
 // Sets the tile size used by composited layers.
 const char kDefaultTileWidth[]              = "default-tile-width";
@@ -84,6 +91,9 @@ const char kDisable3DAPIs[]                 = "disable-3d-apis";
 
 // Disable gpu-accelerated 2d canvas.
 const char kDisableAccelerated2dCanvas[]    = "disable-accelerated-2d-canvas";
+
+// Enable in-progress canvas 2d API features.
+const char kEnableNewCanvas2DAPI[] = "new-canvas-2d-api";
 
 // Disables hardware acceleration of video decode, where available.
 const char kDisableAcceleratedVideoDecode[] =
@@ -346,6 +356,24 @@ const char kEnableBlinkFeatures[]           = "enable-blink-features";
 // just a keyboard. See https://crbug.com/977390 for links to i2i.
 const char kEnableCaretBrowsing[] = "enable-caret-browsing";
 
+// Flag that turns on a group of experimental/newly added cookie-related
+// features together, as a convenience for e.g. testing, to avoid having to set
+// multiple switches individually which may be error-prone (not to mention
+// tedious). There is not a corresponding switch to disable all these features,
+// because that is discouraged, and for testing purposes you'd need to switch
+// them off individually to identify the problematic feature anyway.
+//
+// At present this turns on:
+//   net::features::kCookiesWithoutSameSiteMustBeSecure
+//   net::features::kSameSiteByDefaultCookies
+//   net::features::kSameSiteDefaultChecksMethodRigorously
+// It will soon also turn on:
+//   content_settings::kImprovedCookieControls
+//   content_settings::kImprovedCookieControlsForThirdPartyCookieBlocking
+//   net::features::kSchemefulSameSite
+const char kEnableExperimentalCookieFeatures[] =
+    "enable-experimental-cookie-features";
+
 // Enables experimental WebAssembly features.
 const char kEnableExperimentalWebAssemblyFeatures[] =
     "enable-experimental-webassembly-features";
@@ -479,9 +507,6 @@ const char kDisableOopRasterization[] = "disable-oop-rasterization";
 // Turns on out of process raster for the renderer whenever gpu raster
 // would have been used.  Enables the chromium_raster_transport extension.
 const char kEnableOopRasterization[] = "enable-oop-rasterization";
-
-// Turns on skia deferred display list for out of process raster.
-const char kEnableOopRasterizationDDL[] = "enable-oop-rasterization-ddl";
 
 // Pins the default referrer policy to the pre-M80 value of
 // no-referrer-when-downgrade.
@@ -840,6 +865,10 @@ const char kUtilityProcess[]                = "utility";
 
 // Causes the utility process to display a dialog on launch.
 const char kUtilityStartupDialog[] = "utility-startup-dialog";
+
+// This switch indicates the type of a utility process. It is not used by Chrome
+// but is added to the command line for debugging and profiling purposes.
+const char kUtilitySubType[] = "utility-sub-type";
 
 // In debug builds, asserts that the stream of input events is valid.
 const char kValidateInputEventStream[] = "validate-input-event-stream";

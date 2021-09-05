@@ -6,18 +6,36 @@
 class TestCrostiniBrowserProxy extends TestBrowserProxy {
   constructor() {
     super([
-      'requestCrostiniInstallerView', 'requestRemoveCrostini',
-      'getCrostiniSharedPathsDisplayText', 'getCrostiniSharedUsbDevices',
-      'setCrostiniUsbDeviceShared', 'removeCrostiniSharedPath',
-      'exportCrostiniContainer', 'importCrostiniContainer',
+      'requestCrostiniInstallerView',
+      'requestRemoveCrostini',
+      'getCrostiniSharedPathsDisplayText',
+      'getCrostiniSharedUsbDevices',
+      'setCrostiniUsbDeviceShared',
+      'removeCrostiniSharedPath',
+      'exportCrostiniContainer',
+      'importCrostiniContainer',
       'requestCrostiniContainerUpgradeView',
       'requestCrostiniUpgraderDialogStatus',
-      'requestCrostiniContainerUpgradeAvailable', 'addCrostiniPortForward',
-      'getCrostiniDiskInfo', 'resizeCrostiniDisk',
-      'checkCrostiniMicSharingStatus'
+      'requestCrostiniContainerUpgradeAvailable',
+      'addCrostiniPortForward',
+      'getCrostiniDiskInfo',
+      'resizeCrostiniDisk',
+      'checkCrostiniMicSharingStatus',
+      'addCrostiniPortForward',
+      'removeCrostiniPortForward',
+      'removeAllCrostiniPortForwards',
+      'activateCrostiniPortForward',
+      'deactivateCrostiniPortForward',
+      'getCrostiniActivePorts',
+      'checkCrostiniIsRunning',
+      'shutdownCrostini',
+      'setCrostiniMicSharingEnabled',
+      'getCrostiniMicSharingEnabled',
     ]);
     this.sharedUsbDevices = [];
     this.removeSharedPathResult = true;
+    this.crostiniMicSharingEnabled = false;
+    this.crostiniIsRunning = true;
     this.methodCalls_ = {};
   }
 
@@ -115,8 +133,30 @@ class TestCrostiniBrowserProxy extends TestBrowserProxy {
   }
 
   /** @override */
-  getCrostiniDiskInfo(vmName) {
-    this.methodCalled('getCrostiniDiskInfo', vmName);
+  removeCrostiniPortForward(vmName, containerName, portNumber, protocolIndex) {
+    this.methodCalled(
+        'removeCrostiniPortForward', vmName, containerName, portNumber,
+        protocolIndex);
+    return Promise.resolve(true);
+  }
+
+  /** @override */
+  activateCrostiniPortForward(
+      vmName, containerName, portNumber, protocolIndex) {
+    this.methodCalled(
+        'activateCrostiniPortForward', vmName, containerName, portNumber,
+        protocolIndex);
+    return Promise.resolve(true);
+  }
+
+  /** @override */
+  removeAllCrostiniPortForwards(vmName, containerName) {
+    this.methodCalled('removeAllCrostiniPortForwards');
+  }
+
+  /** @override */
+  getCrostiniDiskInfo(vmName, requestFullInfo) {
+    this.methodCalled('getCrostiniDiskInfo', vmName, requestFullInfo);
     return this.getNewPromiseFor('getCrostiniDiskInfo');
   }
 
@@ -129,6 +169,47 @@ class TestCrostiniBrowserProxy extends TestBrowserProxy {
   /** @override */
   checkCrostiniMicSharingStatus(proposedValue) {
     this.methodCalled('checkCrostiniMicSharingStatus', proposedValue);
-    return Promise.resolve(!proposedValue);
+    return Promise.resolve(
+        proposedValue !== this.crostiniMicSharingEnabled &&
+        this.crostiniIsRunning);
+  }
+
+  /** @override */
+  deactivateCrostiniPortForward(
+      vmName, containerName, portNumber, protocolIndex) {
+    this.methodCalled(
+        'deactivateCrostiniPortForward', vmName, containerName, portNumber,
+        protocolIndex);
+    return Promise.resolve(true);
+  }
+
+  /** @override */
+  getCrostiniActivePorts() {
+    this.methodCalled('getCrostiniActivePorts');
+    return Promise.resolve(new Array());
+  }
+
+  /** @override */
+  checkCrostiniIsRunning() {
+    this.methodCalled('checkCrostiniIsRunning');
+    return Promise.resolve(true);
+  }
+
+  /** @override */
+  shutdownCrostini() {
+    this.methodCalled('shutdownCrostini');
+    this.crostiniIsRunning = false;
+  }
+
+  /** @override */
+  setCrostiniMicSharingEnabled(enabled) {
+    this.methodCalled('setCrostiniMicSharingEnabled');
+    this.crostiniMicSharingEnabled = enabled;
+  }
+
+  /** @override */
+  getCrostiniMicSharingEnabled() {
+    this.methodCalled('getCrostiniMicSharingEnabled');
+    return Promise.resolve(this.CrostiniMicSharingEnabled);
   }
 }

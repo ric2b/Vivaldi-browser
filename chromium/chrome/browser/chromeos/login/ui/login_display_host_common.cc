@@ -15,6 +15,7 @@
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/web_kiosk_controller.h"
+#include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
@@ -74,6 +75,16 @@ void LoginDisplayHostCommon::Finalize(base::OnceClosure completion_callback) {
   OnFinalize();
 }
 
+void LoginDisplayHostCommon::FinalizeImmediately() {
+  CHECK(!is_finalizing_);
+  CHECK(!shutting_down_);
+  is_finalizing_ = true;
+  shutting_down_ = true;
+  OnFinalize();
+  Cleanup();
+  delete this;
+}
+
 AppLaunchController* LoginDisplayHostCommon::GetAppLaunchController() {
   return app_launch_controller_.get();
 }
@@ -105,6 +116,11 @@ void LoginDisplayHostCommon::StartSignInScreen() {
   connector->ScheduleServiceInitialization(
       kPolicyServiceInitializationDelayMilliseconds);
 
+  // Inform wizard controller that login screen has started.
+  // TODO(crbug.com/1064271): Move this to OnStartSignInScreen().
+  if (WizardController::default_controller())
+    WizardController::default_controller()->LoginScreenStarted();
+
   // Run UI-specific logic.
   OnStartSignInScreen();
 
@@ -128,7 +144,7 @@ void LoginDisplayHostCommon::StartAppLaunch(const std::string& app_id,
   // Wait for the |CrosSettings| to become either trusted or permanently
   // untrusted.
   const CrosSettingsProvider::TrustedStatus status =
-      CrosSettings::Get()->PrepareTrustedValues(base::Bind(
+      CrosSettings::Get()->PrepareTrustedValues(base::BindOnce(
           &LoginDisplayHostCommon::StartAppLaunch, weak_factory_.GetWeakPtr(),
           app_id, diagnostic_mode, is_auto_launch));
   if (status == CrosSettingsProvider::TEMPORARILY_UNTRUSTED)
@@ -181,8 +197,8 @@ void LoginDisplayHostCommon::StartWebKiosk(const AccountId& account_id) {
   // untrusted.
   const CrosSettingsProvider::TrustedStatus status =
       CrosSettings::Get()->PrepareTrustedValues(
-          base::Bind(&LoginDisplayHostCommon::StartWebKiosk,
-                     weak_factory_.GetWeakPtr(), account_id));
+          base::BindOnce(&LoginDisplayHostCommon::StartWebKiosk,
+                         weak_factory_.GetWeakPtr(), account_id));
   if (status == CrosSettingsProvider::TEMPORARILY_UNTRUSTED)
     return;
 
@@ -294,11 +310,9 @@ void LoginDisplayHostCommon::OnAuthPrewarmDone() {
 void LoginDisplayHostCommon::ShutdownDisplayHost() {
   if (shutting_down_)
     return;
-
-  ProfileHelper::Get()->ClearSigninProfile(base::DoNothing());
   shutting_down_ = true;
-  registrar_.RemoveAll();
-  BrowserList::RemoveObserver(this);
+
+  Cleanup();
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
@@ -324,6 +338,11 @@ void LoginDisplayHostCommon::ShowGaiaDialogCommon(
     }
     LoadSigninWallpaper();
   }
+}
+void LoginDisplayHostCommon::Cleanup() {
+  ProfileHelper::Get()->ClearSigninProfile(base::DoNothing());
+  registrar_.RemoveAll();
+  BrowserList::RemoveObserver(this);
 }
 
 }  // namespace chromeos

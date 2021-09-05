@@ -3,6 +3,7 @@
 #include "base/path_service.h"
 #include "base/vivaldi_paths.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "content/public/test/browser_test.h"
 
 using base::PathService;
 

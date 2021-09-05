@@ -128,7 +128,8 @@ scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
 
   auto block_size = ComputeBlockSizeForFragment(
       ConstraintSpace(), Style(), border_padding_,
-      max_row_size.block_size + border_scrollbar_padding_.BlockSum());
+      max_row_size.block_size + border_scrollbar_padding_.BlockSum(),
+      border_box_size.inline_size);
   container_builder_.SetBlockSize(block_size);
 
   NGOutOfFlowLayoutPart(
@@ -140,41 +141,39 @@ scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
   return container_builder_.ToBoxFragment();
 }
 
-base::Optional<MinMaxSizes> NGMathRowLayoutAlgorithm::ComputeMinMaxSizes(
-    const MinMaxSizesInput& input) const {
-  base::Optional<MinMaxSizes> sizes =
-      CalculateMinMaxSizesIgnoringChildren(Node(), border_scrollbar_padding_);
-  if (sizes)
-    return sizes;
+MinMaxSizesResult NGMathRowLayoutAlgorithm::ComputeMinMaxSizes(
+    const MinMaxSizesInput& child_input) const {
+  if (auto result = CalculateMinMaxSizesIgnoringChildren(
+          Node(), border_scrollbar_padding_))
+    return *result;
 
-  sizes.emplace();
-  LayoutUnit child_percentage_resolution_block_size =
-      CalculateChildPercentageBlockSizeForMinMax(
-          ConstraintSpace(), Node(), border_padding_,
-          input.percentage_resolution_block_size);
-
-  MinMaxSizesInput child_input(child_percentage_resolution_block_size);
+  MinMaxSizes sizes;
+  bool depends_on_percentage_block_size = false;
 
   for (NGLayoutInputNode child = Node().FirstChild(); child;
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
-    MinMaxSizes child_min_max_sizes =
+    MinMaxSizesResult child_result =
         ComputeMinAndMaxContentContribution(Style(), child, child_input);
     NGBoxStrut child_margins = ComputeMinMaxMargins(Style(), child);
-    child_min_max_sizes += child_margins.InlineSum();
-    sizes->max_size += child_min_max_sizes.max_size;
-    sizes->min_size += child_min_max_sizes.min_size;
+    child_result.sizes += child_margins.InlineSum();
+
+    sizes += child_result.sizes;
+    depends_on_percentage_block_size |=
+        child_result.depends_on_percentage_block_size;
 
     // TODO(rbuis): Operators can add lspace and rspace.
   }
-  sizes->max_size = std::max(sizes->max_size, sizes->min_size);
 
   // Due to negative margins, it is possible that we calculated a negative
   // intrinsic width. Make sure that we never return a negative width.
-  sizes->Encompass(LayoutUnit());
-  *sizes += border_scrollbar_padding_.InlineSum();
-  return sizes;
+  sizes.Encompass(LayoutUnit());
+
+  DCHECK_LE(sizes.min_size, sizes.max_size);
+  sizes += border_scrollbar_padding_.InlineSum();
+
+  return {sizes, depends_on_percentage_block_size};
 }
 
 }  // namespace blink

@@ -50,7 +50,7 @@ class MediaHistoryFeedItemsTable : public MediaHistoryTableBase {
       delete;
 
  private:
-  friend class MediaHistoryStoreInternal;
+  friend class MediaHistoryStore;
 
   explicit MediaHistoryFeedItemsTable(
       scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner);
@@ -74,10 +74,18 @@ class MediaHistoryFeedItemsTable : public MediaHistoryTableBase {
   MediaHistoryKeyedService::PendingSafeSearchCheckList
   GetPendingSafeSearchCheckItems();
 
-  // Stores the safe search result for |feed_item_id| and returns true if
+  // Stores the safe search result for |feed_item_id| and returns the ID of the
+  // feed if successful.
+  base::Optional<int64_t> StoreSafeSearchResult(
+      int64_t feed_item_id,
+      media_feeds::mojom::SafeSearchResult result);
+
+  // Increments the shown count for the feed item and returns true if
   // successful.
-  bool StoreSafeSearchResult(int64_t feed_item_id,
-                             media_feeds::mojom::SafeSearchResult result);
+  bool IncrementShownCount(const int64_t feed_item_id);
+
+  // Marks the feed item as clicked and returns true if successful.
+  bool MarkAsClicked(const int64_t feed_item_id);
 };
 
 }  // namespace media_history

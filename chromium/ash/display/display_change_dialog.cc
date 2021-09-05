@@ -36,18 +36,18 @@ DisplayChangeDialog::DisplayChangeDialog(
     base::string16 timeout_message_with_placeholder,
     base::OnceClosure on_accept_callback,
     CancelCallback on_cancel_callback)
-    : window_title_(std::move(window_title)),
-      timeout_message_with_placeholder_(
+    : timeout_message_with_placeholder_(
           std::move(timeout_message_with_placeholder)),
       on_accept_callback_(std::move(on_accept_callback)),
       on_cancel_callback_(std::move(on_cancel_callback)) {
-  DialogDelegate::SetButtonLabel(
-      ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_ASH_CONFIRM_BUTTON));
+  SetTitle(window_title);
+  SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                 l10n_util::GetStringUTF16(IDS_ASH_CONFIRM_BUTTON));
 
-  DialogDelegate::SetAcceptCallback(base::BindOnce(
-      &DisplayChangeDialog::OnConfirmButtonClicked, base::Unretained(this)));
-  DialogDelegate::SetCancelCallback(base::BindOnce(
-      &DisplayChangeDialog::OnCancelButtonClicked, base::Unretained(this)));
+  SetAcceptCallback(base::BindOnce(&DisplayChangeDialog::OnConfirmButtonClicked,
+                                   base::Unretained(this)));
+  SetCancelCallback(base::BindOnce(&DisplayChangeDialog::OnCancelButtonClicked,
+                                   base::Unretained(this)));
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBorder(views::CreateEmptyBorder(
@@ -83,10 +83,6 @@ void DisplayChangeDialog::OnCancelButtonClicked() {
 
 ui::ModalType DisplayChangeDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
-}
-
-base::string16 DisplayChangeDialog::GetWindowTitle() const {
-  return window_title_;
 }
 
 gfx::Size DisplayChangeDialog::CalculatePreferredSize() const {

@@ -37,7 +37,10 @@ update_target("//base:base_static") {
   if (!defined(deps)) {
     deps = []
   }
-  deps += ["//base:logging_buildflags"]
+  deps += [
+    "//base:debugging_buildflags",
+    "//base:logging_buildflags",
+  ]
 }
 
 update_target("//chrome:visual_elements_resources") {

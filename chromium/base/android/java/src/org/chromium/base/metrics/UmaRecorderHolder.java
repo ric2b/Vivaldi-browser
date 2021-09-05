@@ -4,74 +4,63 @@
 
 package org.chromium.base.metrics;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-
-import javax.annotation.concurrent.GuardedBy;
 
 /** Holds the {@link CachingUmaRecorder} used by {@link RecordHistogram}. */
 public class UmaRecorderHolder {
+    private UmaRecorderHolder() {}
+
     /** The instance held by this class. */
     private static CachingUmaRecorder sRecorder = new CachingUmaRecorder();
 
-    /**
-     * {@code null}, unless recording is currently disabled for testing. Exposed for use in peer
-     * classes {e.g. AnimationFrameTimeHistogram}.
-     * <p>
-     * Use {@link #setDisabledForTests(boolean)} to set this value.
-     * <p>
-     * TODO(bttk@chromium.org): Fix dependency in AnimationFrameTimeHistogram, make this field
-     *     private and rename to sDisabledForTestBy
-     */
-    @VisibleForTesting
-    @Nullable
-    public static Throwable sDisabledBy;
+    /** Allow calling onLibraryLoaded() */
+    private static boolean sAllowNativeUmaRecorder = true;
 
-    /** Lock for {@code sDisabledDelegateForTest}. */
-    private static final Object sLock = new Object();
-
-    /** The delegate disabled by {@link #setDisabledForTests(boolean)}. */
-    @GuardedBy("sLock")
-    @Nullable
-    private static UmaRecorder sDisabledDelegateForTest;
-
-    /** Returns the {@link CachingUmaRecorder}. */
-    /* package */ static CachingUmaRecorder get() {
+    /** Returns the held {@link UmaRecorder}. */
+    public static UmaRecorder get() {
         return sRecorder;
     }
 
-    /** Starts forwarding metrics to the native code. Returns after the cache has been flushed. */
+    /**
+     * Set a new {@link UmaRecorder} delegate for the {@link CachingUmaRecorder}.
+     * Returns after the cache has been flushed to the new delegate.
+     * <p>
+     * It should be used in processes that don't or haven't loaded native yet. This should never
+     * be called after calling {@link #onLibraryLoaded()}.
+     *
+     * @param recorder the new UmaRecorder that metrics will be forwarded to.
+     */
+    public static void setNonNativeDelegate(UmaRecorder recorder) {
+        UmaRecorder previous = sRecorder.setDelegate(recorder);
+        assert !(previous instanceof NativeUmaRecorder)
+            : "A NativeUmaRecorder has already been set";
+    }
+
+    /**
+     * Disallow calling onLibraryLoaded() to set a {@link NativeUmaRecorder}.
+     * <p>
+     * Can be used in processes that don't load native library to make sure that a native recorder
+     * is never set to avoid possible breakage.
+     */
+    public static void setAllowNativeUmaRecorder(boolean allow) {
+        sAllowNativeUmaRecorder = allow;
+    }
+
+    /**
+     * Starts forwarding metrics to the native code. Returns after the cache has been flushed.
+     */
     public static void onLibraryLoaded() {
-        synchronized (sLock) {
-            if (sDisabledBy == null) {
-                sRecorder.setDelegate(new NativeUmaRecorder());
-            } else {
-                // If metrics are disabled for test, use native when metrics get restored.
-                sDisabledDelegateForTest = new NativeUmaRecorder();
-            }
-        }
+        assert sAllowNativeUmaRecorder : "Setting NativeUmaRecorder is not allowed";
+        sRecorder.setDelegate(new NativeUmaRecorder());
     }
 
     /**
      * Tests may need to disable metrics. The value should be reset after the test done, to avoid
-     * carrying over state to unrelated tests. <p> In JUnit tests this can be done automatically
-     * using {@link org.chromium.base.metrics.test.DisableHistogramsRule}.
+     * carrying over state to unrelated tests.
+     *
+     * @deprecated This method does nothing.
      */
     @VisibleForTesting
-    public static void setDisabledForTests(boolean disabled) {
-        synchronized (sLock) {
-            if (disabled) {
-                if (sDisabledBy != null) {
-                    throw new IllegalStateException(
-                            "Histograms are already disabled.", sDisabledBy);
-                }
-                sDisabledBy = new Throwable();
-                sDisabledDelegateForTest = sRecorder.setDelegate(new NoopUmaRecorder());
-            } else {
-                sDisabledBy = null;
-                sRecorder.setDelegate(sDisabledDelegateForTest);
-                sDisabledDelegateForTest = null;
-            }
-        }
-    }
+    @Deprecated
+    public static void setDisabledForTests(boolean disabled) {}
 }

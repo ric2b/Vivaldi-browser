@@ -17,13 +17,15 @@ import org.junit.runner.RunWith;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.browserservices.ui.SharedActivityCoordinator;
+import org.chromium.chrome.browser.customtabs.CustomTabOrientationController;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
 import org.chromium.chrome.browser.dependency_injection.ModuleOverridesRule;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.webapps.WebApkInfoBuilder;
+import org.chromium.chrome.test.util.browser.webapps.WebApkIntentDataProviderBuilder;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.HashSet;
@@ -97,8 +99,9 @@ public class WebApkInitializationTest {
 
     /**
      * Test that {@link WebappActionsNotificationManager},
-     * {@link WebappDisclosureSnackbarController} and {@link WebApkActivityLifecycleUmaTracker} are
-     * constructed when a WebAPK Activity is launched.
+     * {@link WebappDisclosureSnackbarController}, {@link WebApkActivityLifecycleUmaTracker} and
+     * {@link CustomTabOrientationController} are constructed when a {@link WebApkActivity} is
+     * launched.
      */
     @Test
     @LargeTest
@@ -106,10 +109,11 @@ public class WebApkInitializationTest {
     public void testInitialization() throws TimeoutException {
         EmbeddedTestServer embeddedTestServer =
                 mActivityRule.getEmbeddedTestServerRule().getServer();
-        WebApkInfoBuilder webApkInfoBuilder = new WebApkInfoBuilder(
-                "org.chromium.webapk.for.testing",
-                embeddedTestServer.getURL("/chrome/test/data/banners/manifest_test_page.html"));
-        mActivityRule.startWebApkActivity(webApkInfoBuilder.build());
+        WebApkIntentDataProviderBuilder intentDataProviderBuilder =
+                new WebApkIntentDataProviderBuilder("org.chromium.webapk.for.testing",
+                        embeddedTestServer.getURL(
+                                "/chrome/test/data/banners/manifest_test_page.html"));
+        mActivityRule.startWebApkActivity(intentDataProviderBuilder.build());
 
         Set<String> registeredObserverClassNames =
                 mTrackingActivityLifecycleDispatcher.getRegisteredObserverClassNames();
@@ -119,6 +123,10 @@ public class WebApkInitializationTest {
                 WebappDisclosureSnackbarController.class.getName()));
         assertTrue(registeredObserverClassNames.contains(
                 WebApkActivityLifecycleUmaTracker.class.getName()));
+        assertTrue(registeredObserverClassNames.contains(
+                CustomTabOrientationController.class.getName()));
+        assertTrue(
+                registeredObserverClassNames.contains(SharedActivityCoordinator.class.getName()));
 
         // Test that WebappActiveTabUmaTracker is hooked up.
         assertTrue(0 < RecordHistogram.getHistogramTotalCountForTesting(

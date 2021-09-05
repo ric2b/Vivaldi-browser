@@ -338,6 +338,13 @@ Polymer({
    */
   pinDialogResultReported_: false,
 
+  /**
+   * Emulate click on the primary action button when it is visible and enabled.
+   * @type {boolean}
+   * @private
+   */
+  clickPrimaryActionButtonForTesting_: false,
+
   /** @override */
   ready() {
     this.authenticator_ = new cr.login.Authenticator(this.getSigninFrame_());
@@ -388,6 +395,8 @@ Polymer({
     this.authenticator_.missingGaiaInfoCallback =
         this.missingGaiaInfo_.bind(this);
     this.authenticator_.samlApiUsedCallback = this.samlApiUsed_.bind(this);
+    this.authenticator_.recordSAMLProviderCallback =
+        this.recordSAMLProvider_.bind(this);
     this.authenticator_.getIsSamlUserPasswordlessCallback =
         this.getIsSamlUserPasswordless_.bind(this);
 
@@ -1013,6 +1022,7 @@ Polymer({
    */
   onSetPrimaryActionEnabled_(e) {
     this.primaryActionButtonEnabled_ = e.detail;
+    this.maybeClickPrimaryActionButtonForTesting_();
   },
 
   /**
@@ -1029,6 +1039,7 @@ Polymer({
    */
   onSetPrimaryActionLabel_(e) {
     this.primaryActionButtonLabel_ = e.detail;
+    this.maybeClickPrimaryActionButtonForTesting_();
   },
 
   /**
@@ -1193,6 +1204,15 @@ Polymer({
    */
   samlApiUsed_(isThirdPartyIdP) {
     chrome.send('usingSAMLAPI', [isThirdPartyIdP]);
+  },
+
+  /**
+   * Record SAML Provider that has signed-in
+   * @param {string} X509Certificate is a x509certificate in pem format
+   * @private
+   */
+  recordSAMLProvider_(X509Certificate) {
+    chrome.send('recordSAMLProvider', [X509Certificate]);
   },
 
   /**
@@ -1371,6 +1391,7 @@ Polymer({
     this.loadingFrameContents_ = true;
     this.startLoadingTimer_();
     const offlineLogin = this.$['offline-gaia'];
+    offlineLogin.reset();
     if ('enterpriseDisplayDomain' in params)
       offlineLogin.domain = params['enterpriseDisplayDomain'];
     if ('emailDomain' in params)
@@ -1636,6 +1657,23 @@ Polymer({
    */
   showOverlay_(navigationEnabled, isSamlSsoVisible) {
     return !navigationEnabled || isSamlSsoVisible;
+  },
+
+  clickPrimaryButtonForTesting() {
+    this.clickPrimaryActionButtonForTesting_ = true;
+    this.maybeClickPrimaryActionButtonForTesting_();
+  },
+
+  maybeClickPrimaryActionButtonForTesting_() {
+    if (!this.clickPrimaryActionButtonForTesting_)
+      return;
+
+    const button = this.$['primary-action-button'];
+    if (button.hidden || button.disabled)
+      return;
+
+    this.clickPrimaryActionButtonForTesting_ = false;
+    button.click();
   },
 });
 })();

@@ -60,6 +60,7 @@ using calendar::NotificationToCreate;
 using calendar::RecurrenceExceptionRow;
 using calendar::RecurrenceExceptionRows;
 using vivaldi::calendar::Account;
+using vivaldi::calendar::AccountType;
 using vivaldi::calendar::Calendar;
 using vivaldi::calendar::CreateEventsResults;
 using vivaldi::calendar::CreateInviteRow;
@@ -115,6 +116,53 @@ std::unique_ptr<std::vector<RecurrenceException>> CreateRecurrenceException(
   return new_exceptions;
 }
 
+int MapAccountType(const AccountType& account_type) {
+  int type = 0;
+  switch (account_type) {
+    case vivaldi::calendar::ACCOUNT_TYPE_LOCAL:
+      type = 0;
+      break;
+    case vivaldi::calendar::ACCOUNT_TYPE_VIVALDI:
+      type = 1;
+      break;
+    case vivaldi::calendar::ACCOUNT_TYPE_GOOGLE:
+      type = 2;
+      break;
+    case vivaldi::calendar::ACCOUNT_TYPE_CALDAV:
+      type = 3;
+      break;
+    case vivaldi::calendar::ACCOUNT_TYPE_ICAL:
+      type = 4;
+      break;
+    case vivaldi::calendar::ACCOUNT_TYPE_NONE:
+      type = 0;
+      break;
+  }
+  return type;
+}
+
+AccountType MapAccountTypeFromDb(int type) {
+  AccountType account_type = vivaldi::calendar::ACCOUNT_TYPE_LOCAL;
+  switch (type) {
+    case calendar::ACCOUNT_TYPE_LOCAL:
+      account_type = vivaldi::calendar::ACCOUNT_TYPE_LOCAL;
+      break;
+    case calendar::ACCOUNT_TYPE_VIVALDINET:
+      account_type = vivaldi::calendar::ACCOUNT_TYPE_VIVALDI;
+      break;
+    case calendar::ACCOUNT_TYPE_GOOGLE:
+      account_type = vivaldi::calendar::ACCOUNT_TYPE_GOOGLE;
+      break;
+    case calendar::ACCOUNT_TYPE_CALDAV:
+      account_type = vivaldi::calendar::ACCOUNT_TYPE_CALDAV;
+      break;
+    case calendar::ACCOUNT_TYPE_ICAL:
+      account_type = vivaldi::calendar::ACCOUNT_TYPE_ICAL;
+      break;
+  }
+  return account_type;
+}
+
 Notification CreateNotification(const NotificationRow& row) {
   Notification notification;
   notification.id = base::NumberToString(row.id);
@@ -164,6 +212,7 @@ std::unique_ptr<std::vector<Invite>> CreateInvites(const InviteRows& invites) {
 Calendar GetCalendarItem(const CalendarRow& row) {
   Calendar calendar;
   calendar.id = base::NumberToString(row.id());
+  calendar.account_id = base::NumberToString(row.account_id());
   calendar.name = base::UTF16ToUTF8(row.name());
   calendar.description.reset(
       new std::string(base::UTF16ToUTF8(row.description())));
@@ -172,9 +221,6 @@ Calendar GetCalendarItem(const CalendarRow& row) {
   calendar.active.reset(new bool(row.active()));
   calendar.iconindex.reset(new int(row.iconindex()));
   calendar.color.reset(new std::string(row.color()));
-  calendar.username.reset(new std::string(base::UTF16ToUTF8(row.username())));
-  calendar.type.reset(new int(row.type()));
-  calendar.interval.reset(new int(row.interval()));
   calendar.last_checked.reset(
       new double(MilliSecondsFromTime(row.last_checked())));
   calendar.timezone.reset(new std::string(row.timezone()));
@@ -195,7 +241,10 @@ Account GetAccountType(const AccountRow& row) {
   Account account;
   account.id = base::NumberToString(row.id);
   account.name = base::UTF16ToUTF8(row.name);
+  account.username = base::UTF16ToUTF8(row.username);
+  account.account_type = MapAccountTypeFromDb(row.account_type);
   account.url = row.url.spec();
+  account.interval.reset(new int(row.interval));
   return account;
 }
 
@@ -343,8 +392,8 @@ void CalendarEventRouter::OnNotificationChanged(
   DispatchEvent(OnNotificationChanged::kEventName, std::move(args));
 }
 
-void CalendarEventRouter::OnCalendarDataChanged(CalendarService* service) {
-  std::unique_ptr<base::ListValue> args;
+void CalendarEventRouter::OnCalendarModified(CalendarService* service) {
+  std::unique_ptr<base::ListValue> args(new base::ListValue);
   DispatchEvent(OnCalendarDataChanged::kEventName, std::move(args));
 }
 
@@ -387,6 +436,7 @@ CalendarAPI::CalendarAPI(content::BrowserContext* context)
   event_router->RegisterObserver(this, OnCalendarRemoved::kEventName);
   event_router->RegisterObserver(this, OnCalendarChanged::kEventName);
   event_router->RegisterObserver(this, OnNotificationChanged::kEventName);
+  event_router->RegisterObserver(this, OnCalendarDataChanged::kEventName);
 }
 
 CalendarAPI::~CalendarAPI() {}
@@ -413,8 +463,6 @@ void CalendarAPI::OnListenerAdded(const EventListenerInfo& details) {
 CalendarService* CalendarAsyncFunction::GetCalendarService() {
   return CalendarServiceFactory::GetForProfile(GetProfile());
 }
-
-CalendarGetAllEventsFunction::~CalendarGetAllEventsFunction() {}
 
 ExtensionFunction::ResponseAction CalendarGetAllEventsFunction::Run() {
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -610,6 +658,8 @@ calendar::EventRow GetEventRow(const vivaldi::calendar::CreateDetails& event) {
   if (event.timezone.get()) {
     row.set_timezone(*event.timezone);
   }
+
+  row.set_is_template(event.is_template);
 
   return row;
 }
@@ -892,21 +942,17 @@ std::unique_ptr<vivaldi::calendar::Calendar> CreateVivaldiCalendar(
       new vivaldi::calendar::Calendar());
 
   calendar->id = base::NumberToString(result.id());
+  calendar->account_id = base::NumberToString(result.account_id());
   calendar->name = base::UTF16ToUTF8(result.name());
 
   calendar->description.reset(
       new std::string(base::UTF16ToUTF8(result.description())));
-  calendar->url.reset(new std::string(result.url().spec()));
   calendar->orderindex.reset(new int(result.orderindex()));
   calendar->color.reset(new std::string(result.color()));
   calendar->hidden.reset(new bool(result.hidden()));
   calendar->ctag.reset(new std::string(result.ctag()));
   calendar->active.reset(new bool(result.active()));
   calendar->iconindex.reset(new int(result.iconindex()));
-  calendar->username.reset(
-      new std::string(base::UTF16ToUTF8(result.username())));
-  calendar->type.reset(new int(result.type()));
-  calendar->interval.reset(new int(result.interval()));
   calendar->last_checked.reset(
       new double(MilliSecondsFromTime(result.last_checked())));
   calendar->timezone.reset(new std::string(result.timezone()));
@@ -940,11 +986,6 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
     createCalendar.set_description(description);
   }
 
-  if (params->calendar.url.get()) {
-    std::string url = *params->calendar.url.get();
-    createCalendar.set_url(GURL(url));
-  }
-
   if (params->calendar.orderindex.get()) {
     int orderindex = *params->calendar.orderindex.get();
     createCalendar.set_orderindex(orderindex);
@@ -963,22 +1004,6 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
   if (params->calendar.active.get()) {
     bool active = *params->calendar.active.get();
     createCalendar.set_active(active);
-  }
-
-  if (params->calendar.username.get()) {
-    base::string16 username =
-        base::UTF8ToUTF16(*params->calendar.username.get());
-    createCalendar.set_username(username);
-  }
-
-  if (params->calendar.type.get()) {
-    int type = *params->calendar.type.get();
-    createCalendar.set_type(type);
-  }
-
-  if (params->calendar.interval.get()) {
-    int interval = *params->calendar.interval.get();
-    createCalendar.set_interval(interval);
   }
 
   if (params->calendar.last_checked.get()) {
@@ -1065,11 +1090,6 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
     updatedCalendar.updateFields |= calendar::CALENDAR_DESCRIPTION;
   }
 
-  if (params->changes.url.get()) {
-    updatedCalendar.url = GURL(*params->changes.url);
-    updatedCalendar.updateFields |= calendar::CALENDAR_URL;
-  }
-
   if (params->changes.orderindex.get()) {
     updatedCalendar.orderindex = *params->changes.orderindex;
     updatedCalendar.updateFields |= calendar::CALENDAR_ORDERINDEX;
@@ -1095,24 +1115,9 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
     updatedCalendar.updateFields |= calendar::CALENDAR_ICONINDEX;
   }
 
-  if (params->changes.username.get()) {
-    updatedCalendar.username = base::UTF8ToUTF16(*params->changes.username);
-    updatedCalendar.updateFields |= calendar::CALENDAR_USERNAME;
-  }
-
   if (params->changes.ctag.get()) {
     updatedCalendar.ctag = *params->changes.ctag;
     updatedCalendar.updateFields |= calendar::CALENDAR_CTAG;
-  }
-
-  if (params->changes.type.get()) {
-    updatedCalendar.type = *params->changes.type;
-    updatedCalendar.updateFields |= calendar::CALENDAR_TYPE;
-  }
-
-  if (params->changes.interval.get()) {
-    updatedCalendar.interval = *params->changes.interval;
-    updatedCalendar.updateFields |= calendar::CALENDAR_INTERVAL;
   }
 
   if (params->changes.last_checked.get()) {
@@ -1200,23 +1205,23 @@ void CalendarGetAllEventTypesFunction::GetAllEventTypesComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::Create::Params> params(
-      vivaldi::calendar::Create::Params::Create(*args_));
+  std::unique_ptr<vivaldi::calendar::EventTypeCreate::Params> params(
+      vivaldi::calendar::EventTypeCreate::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   calendar::EventTypeRow create_event_type;
 
   base::string16 name;
-  name = base::UTF8ToUTF16(params->calendar.name);
+  name = base::UTF8ToUTF16(params->event_type.name);
   create_event_type.set_name(name);
 
-  if (params->calendar.color.get()) {
-    std::string color = *params->calendar.color;
+  if (params->event_type.color.get()) {
+    std::string color = *params->event_type.color;
     create_event_type.set_color(color);
   }
 
-  if (params->calendar.iconindex.get()) {
-    int iconindex = *params->calendar.iconindex;
+  if (params->event_type.iconindex.get()) {
+    int iconindex = *params->event_type.iconindex;
     create_event_type.set_iconindex(iconindex);
   }
 
@@ -1633,8 +1638,14 @@ ExtensionFunction::ResponseAction CalendarCreateAccountFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   AccountRow row;
-  row.name = base::UTF8ToUTF16(params->name);
-  row.url = GURL(params->url);
+  row.name = base::UTF8ToUTF16(params->to_create.name);
+  row.url = GURL(params->to_create.url);
+  row.account_type = MapAccountType(params->to_create.account_type);
+
+  if (params->to_create.interval) {
+    row.interval = *params->to_create.interval;
+  }
+  row.username = base::UTF8ToUTF16(params->to_create.username);
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   model->CreateAccount(
@@ -1714,9 +1725,26 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
     row.updateFields |= calendar::ACCOUNT_NAME;
   }
 
+  if (params->changes.username.get()) {
+    base::string16 username;
+    username = base::UTF8ToUTF16(*params->changes.username);
+    row.username = username;
+    row.updateFields |= calendar::ACCOUNT_USERNAME;
+  }
+
   if (params->changes.url.get()) {
     row.url = GURL(*params->changes.url);
     row.updateFields |= calendar::ACCOUNT_URL;
+  }
+
+  if (params->changes.account_type) {
+    row.account_type = MapAccountType(params->changes.account_type);
+    row.updateFields |= calendar::ACCOUNT_TYPE;
+  }
+
+  if (params->changes.interval.get()) {
+    row.interval = *params->changes.interval;
+    row.updateFields |= calendar::ACCOUNT_INTERVAL;
   }
 
   model->UpdateAccount(
@@ -1730,7 +1758,7 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
 void CalendarUpdateAccountFunction::UpdateAccountComplete(
     std::shared_ptr<calendar::UpdateAccountResult> results) {
   if (!results->success) {
-    Respond(Error("Error updateing account"));
+    Respond(Error("Error updating account"));
   } else {
     vivaldi::calendar::Account account = GetAccountType(results->updatedRow);
     Respond(ArgumentList(
@@ -1759,6 +1787,36 @@ void CalendarGetAllAccountsFunction::GetAllAccountsComplete(
 
   Respond(ArgumentList(
       vivaldi::calendar::GetAllAccounts::Results::Create(accountList)));
+}
+
+ExtensionFunction::ResponseAction CalendarGetAllEventTemplatesFunction::Run() {
+  CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
+
+  model->GetAllEventTemplates(
+      base::Bind(
+          &CalendarGetAllEventTemplatesFunction::GetAllEventTemplatesComplete,
+          this),
+      &task_tracker_);
+
+  return RespondLater();  // GetAllEventTemplatesComplete() will be called
+                          // asynchronously.
+}
+
+void CalendarGetAllEventTemplatesFunction::GetAllEventTemplatesComplete(
+    std::shared_ptr<calendar::EventQueryResults> results) {
+  EventList eventList;
+
+  if (results && !results->empty()) {
+    for (calendar::EventQueryResults::EventResultVector::const_iterator
+             iterator = results->begin();
+         iterator != results->end(); ++iterator) {
+      eventList.push_back(std::move(
+          *base::WrapUnique((CreateVivaldiEvent(**iterator).release()))));
+    }
+  }
+
+  Respond(ArgumentList(
+      vivaldi::calendar::GetAllEventTemplates::Results::Create(eventList)));
 }
 
 }  //  namespace extensions

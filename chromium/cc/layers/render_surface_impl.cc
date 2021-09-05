@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/strings/stringprintf.h"
 #include "cc/base/math_util.h"
 #include "cc/debug/debug_colors.h"
@@ -108,10 +108,6 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
 
 SkBlendMode RenderSurfaceImpl::BlendMode() const {
   return OwningEffectNode()->blend_mode;
-}
-
-bool RenderSurfaceImpl::UsesDefaultBlendMode() const {
-  return BlendMode() == SkBlendMode::kSrcOver;
 }
 
 SkColor RenderSurfaceImpl::GetDebugBorderColor() const {

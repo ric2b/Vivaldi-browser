@@ -582,7 +582,6 @@ sk_sp<SkImage> ImageBitmap::GetSkImageFromDecoder(
 
 ImageBitmap::ImageBitmap(ImageElementBase* image,
                          base::Optional<IntRect> crop_rect,
-                         Document* document,
                          const ImageBitmapOptions* options) {
   scoped_refptr<Image> input = image->CachedImage()->GetImage();
   DCHECK(!input->IsTextureBacked());
@@ -653,7 +652,6 @@ ImageBitmap::ImageBitmap(ImageElementBase* image,
 
 ImageBitmap::ImageBitmap(HTMLVideoElement* video,
                          base::Optional<IntRect> crop_rect,
-                         Document* document,
                          const ImageBitmapOptions* options) {
   ParsedOptions parsed_options =
       ParseOptions(options, crop_rect, video->BitmapSourceSize());
@@ -923,7 +921,8 @@ void ImageBitmap::ResolvePromiseOnOriginalThread(
     ScriptPromiseResolver* resolver,
     bool origin_clean,
     std::unique_ptr<ParsedOptions> parsed_options,
-    sk_sp<SkImage> skia_image) {
+    sk_sp<SkImage> skia_image,
+    const ImageOrientationEnum orientation) {
   if (!skia_image) {
     resolver->Reject(
         ScriptValue(resolver->GetScriptState()->GetIsolate(),
@@ -931,7 +930,8 @@ void ImageBitmap::ResolvePromiseOnOriginalThread(
     return;
   }
   scoped_refptr<StaticBitmapImage> image =
-      UnacceleratedStaticBitmapImage::Create(std::move(skia_image));
+      UnacceleratedStaticBitmapImage::Create(std::move(skia_image),
+                                             orientation);
   DCHECK(IsMainThread());
   if (!parsed_options->premultiply_alpha) {
     image = GetImageWithAlphaDisposition(std::move(image), kUnpremultiplyAlpha);
@@ -958,7 +958,8 @@ void ImageBitmap::RasterizeImageOnBackgroundThread(
     sk_sp<PaintRecord> paint_record,
     const IntRect& dst_rect,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
-    WTF::CrossThreadOnceFunction<void(sk_sp<SkImage>)> callback) {
+    WTF::CrossThreadOnceFunction<void(sk_sp<SkImage>,
+                                      const ImageOrientationEnum)> callback) {
   DCHECK(!IsMainThread());
   SkImageInfo info =
       SkImageInfo::MakeN32Premul(dst_rect.Width(), dst_rect.Height());
@@ -970,12 +971,12 @@ void ImageBitmap::RasterizeImageOnBackgroundThread(
   }
   PostCrossThreadTask(
       *task_runner, FROM_HERE,
-      CrossThreadBindOnce(std::move(callback), std::move(skia_image)));
+      CrossThreadBindOnce(std::move(callback), std::move(skia_image),
+                          kDefaultImageOrientation));
 }
 
 ScriptPromise ImageBitmap::CreateAsync(ImageElementBase* image,
                                        base::Optional<IntRect> crop_rect,
-                                       Document* document,
                                        ScriptState* script_state,
                                        const ImageBitmapOptions* options) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -1070,15 +1071,17 @@ Vector<uint8_t> ImageBitmap::CopyBitmapData() {
 unsigned ImageBitmap::width() const {
   if (!image_)
     return 0;
-  DCHECK_GT(image_->width(), 0);
-  return image_->width();
+  IntSize size = image_->SizeRespectingOrientation();
+  DCHECK_GT(size.Width(), 0);
+  return size.Width();
 }
 
 unsigned ImageBitmap::height() const {
   if (!image_)
     return 0;
-  DCHECK_GT(image_->height(), 0);
-  return image_->height();
+  IntSize size = image_->SizeRespectingOrientation();
+  DCHECK_GT(size.Height(), 0);
+  return size.Height();
 }
 
 bool ImageBitmap::IsAccelerated() const {
@@ -1094,7 +1097,6 @@ IntSize ImageBitmap::Size() const {
 }
 
 ScriptPromise ImageBitmap::CreateImageBitmap(ScriptState* script_state,
-                                             EventTarget& event_target,
                                              base::Optional<IntRect> crop_rect,
                                              const ImageBitmapOptions* options,
                                              ExceptionState& exception_state) {

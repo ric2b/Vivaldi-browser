@@ -7,14 +7,18 @@
 #include <memory>
 
 #include "base/json/json_string_value_serializer.h"
+#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "components/policy/core/common/policy_loader_ios_constants.h"
+#include "components/policy/policy_constants.h"
+#include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/chrome_switches.h"
 #import "ios/chrome/browser/policy/policy_app_interface.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #include "ios/chrome/test/earl_grey/chrome_test_case.h"
 #include "ios/testing/earl_grey/app_launch_configuration.h"
+#include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -33,11 +37,16 @@ std::unique_ptr<base::Value> GetPlatformPolicy(const std::string& key) {
 }
 
 // Returns an AppLaunchConfiguration containing the given policy data.
-// |policyData| must be in XML format.
-AppLaunchConfiguration GenerateAppLaunchConfiguration(std::string policy_data) {
+// |policy_data| must be in XML format. |policy_data| is passed to the
+// application regardless of whether |disable_policy| is true or false..
+AppLaunchConfiguration GenerateAppLaunchConfiguration(std::string policy_data,
+                                                      bool disable_policy) {
   AppLaunchConfiguration config;
-  config.additional_args.push_back(std::string("--") +
-                                   switches::kEnableEnterprisePolicy);
+
+  if (disable_policy) {
+    config.additional_args.push_back(std::string("--") +
+                                     switches::kDisableEnterprisePolicy);
+  }
 
   // Remove whitespace from the policy data, because the XML parser does not
   // tolerate newlines.
@@ -77,20 +86,20 @@ AppLaunchConfiguration GenerateAppLaunchConfiguration(std::string policy_data) {
                            "    <key>SearchSuggestEnabled</key>"
                            "    <false/>"
                            "</dict>";
-  return GenerateAppLaunchConfiguration(policyData);
+  return GenerateAppLaunchConfiguration(policyData, /*disable_policy=*/false);
 }
 
 // Tests the values of policies that were explicitly set.
 - (void)testPolicyExplicitlySet {
   std::unique_ptr<base::Value> searchValue =
-      GetPlatformPolicy("DefaultSearchProviderName");
+      GetPlatformPolicy(policy::key::kDefaultSearchProviderName);
   GREYAssertTrue(searchValue && searchValue->is_string(),
                  @"searchValue was not of type string");
   GREYAssertEqual(searchValue->GetString(), "Test",
                   @"searchValue had an unexpected value");
 
   std::unique_ptr<base::Value> suggestValue =
-      GetPlatformPolicy("SearchSuggestEnabled");
+      GetPlatformPolicy(policy::key::kSearchSuggestEnabled);
   GREYAssertTrue(suggestValue && suggestValue->is_bool(),
                  @"suggestValue was not of type bool");
   GREYAssertFalse(suggestValue->GetBool(),
@@ -101,7 +110,7 @@ AppLaunchConfiguration GenerateAppLaunchConfiguration(std::string policy_data) {
 // set.
 - (void)testPolicyNotSet {
   std::unique_ptr<base::Value> blocklistValue =
-      GetPlatformPolicy("URLBlacklist");
+      GetPlatformPolicy(policy::key::kURLBlacklist);
   GREYAssertTrue(blocklistValue && blocklistValue->is_none(),
                  @"blocklistValue was unexpectedly present");
 }
@@ -140,16 +149,56 @@ AppLaunchConfiguration GenerateAppLaunchConfiguration(std::string policy_data) {
                            "    <key>DefaultSearchProviderName</key>"
                            "    <string>Test</string>"
                            "</dict>";
-  return GenerateAppLaunchConfiguration(policyData);
+  return GenerateAppLaunchConfiguration(policyData, /*disable_policy=*/false);
 }
 
 // Tests that policies are not loaded unless kPolicyLoaderIOSLoadPolicyKey is
 // set.
 - (void)testLoadPolicyKeyNotSet {
   std::unique_ptr<base::Value> searchValue =
-      GetPlatformPolicy("DefaultSearchProviderName");
+      GetPlatformPolicy(policy::key::kDefaultSearchProviderName);
   GREYAssertTrue(searchValue && searchValue->is_none(),
-                 @"searchValue was unexpectedly present");
+                 @"searchValue was unexpectedly set");
+}
+
+@end
+
+// Test case that uses the production platform policy provider and explicitly
+// disables policy.
+@interface PolicyDisabledTestCase : ChromeTestCase
+@end
+
+@implementation PolicyDisabledTestCase
+
+- (AppLaunchConfiguration)appConfigurationForTestCase {
+  const std::string loadPolicyKey =
+      base::SysNSStringToUTF8(kPolicyLoaderIOSLoadPolicyKey);
+  std::string policyData = "<dict>"
+                           "    <key>" +
+                           loadPolicyKey +
+                           "    </key>"
+                           "    <true/>"
+                           "    <key>DefaultSearchProviderName</key>"
+                           "    <string>Test</string>"
+                           "</dict>";
+  return GenerateAppLaunchConfiguration(policyData, /*disable_policy=*/true);
+}
+
+// Tests that about:policy is not available when policy is disabled. Also serves
+// as a test that the browser does not crash on startup with policy disabled.
+- (void)testAboutPolicyNotAvailable {
+  [ChromeEarlGrey loadURL:GURL("chrome://policy")];
+  [ChromeEarlGrey
+      waitForWebStateContainingText:l10n_util::GetStringUTF8(
+                                        IDS_ERRORPAGES_HEADING_NOT_AVAILABLE)];
+}
+
+// Tests that policies are not loaded when policy is disabled.
+- (void)testPoliciesAreNotLoaded {
+  std::unique_ptr<base::Value> searchValue =
+      GetPlatformPolicy(policy::key::kDefaultSearchProviderName);
+  GREYAssertTrue(searchValue && searchValue->is_none(),
+                 @"searchValue was unexpectedly set");
 }
 
 @end

@@ -9,6 +9,7 @@
 GEN('#include "chromeos/components/help_app_ui/test/help_app_ui_browsertest.h"');
 
 GEN('#include "chromeos/constants/chromeos_features.h"');
+GEN('#include "content/public/test/browser_test.h"');
 
 const HOST_ORIGIN = 'chrome://help-app';
 
@@ -73,6 +74,13 @@ TEST_F('HelpAppUIBrowserTest', 'HasChromeSchemeURL', () => {
   testDone();
 });
 
+// Tests that we have localised information in the HTML like title and lang.
+TEST_F('HelpAppUIBrowserTest', 'HasTitleAndLang', () => {
+  assertEquals(document.documentElement.lang, 'en');
+  assertEquals(document.title, 'Explore');
+  testDone();
+});
+
 // Tests that trusted context can successfully send a request to open the
 // feedback dialog and receive a response.
 TEST_F('HelpAppUIBrowserTest', 'CanOpenFeedbackDialog', async () => {
@@ -89,5 +97,13 @@ TEST_F('HelpAppUIBrowserTest', 'GuestCanOpenFeedbackDialog', async () => {
 
   // No error message from opening feedback dialog.
   assertEquals(result.errorMessage, '');
+  testDone();
+});
+
+// Test cases injected into the guest context.
+// See implementations in help_app_guest_ui_browsertest.js.
+
+TEST_F('HelpAppUIBrowserTest', 'GuestHasLang', async () => {
+  await driver.runTestInGuest('GuestHasLang');
   testDone();
 });

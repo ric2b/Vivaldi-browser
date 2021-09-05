@@ -22,15 +22,15 @@
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/blink/public/common/feature_policy/document_policy.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
-#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
-#include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/mojom/ad_tagging/ad_frame.mojom-forward.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-forward.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom.h"
@@ -57,6 +57,7 @@ CONTENT_EXPORT extern const base::Feature kCrashReporting;
 }  // namespace features
 
 namespace net {
+class IsolationInfo;
 class NetworkIsolationKey;
 }
 
@@ -74,6 +75,9 @@ class RenderProcessHost;
 class RenderViewHost;
 class RenderWidgetHostView;
 class SiteInstance;
+class BrowserContext;
+class StoragePartition;
+class WebUI;
 
 // The interface provides a communication conduit with a frame in the renderer.
 class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
@@ -125,10 +129,20 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns the SiteInstance grouping all RenderFrameHosts that have script
   // access to this RenderFrameHost, and must therefore live in the same
   // process.
+  // Associated SiteInstance never changes.
   virtual SiteInstance* GetSiteInstance() = 0;
 
   // Returns the process for this frame.
+  // Associated RenderProcessHost never changes.
   virtual RenderProcessHost* GetProcess() = 0;
+
+  // Returns a StoragePartition associated with this RenderFrameHost.
+  // Associated StoragePartition never changes.
+  virtual StoragePartition* GetStoragePartition() = 0;
+
+  // Returns the user browser context associated with this RenderFrameHost.
+  // Associated BrowserContext never changes.
+  virtual BrowserContext* GetBrowserContext() = 0;
 
   // Returns the RenderWidgetHostView that can be used to control focus and
   // visibility for this frame.
@@ -183,11 +197,12 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // never used to look up the FrameTreeNode instance.
   virtual base::UnguessableToken GetDevToolsFrameToken() = 0;
 
-  // Returns the embedding token for this frame that is used by a remote parent
-  // to uniquely identify it. This will be null if the frame
-  // - is not embedded by a parent
-  // - is a local child
-  // - is not the current RFH (for example, when pending deletion)
+  // Returns the embedding token for the current document in this
+  // RenderFrameHost. This token is used by a remote parent to uniquely identify
+  // it. The token will be changed when a new document commits in this
+  // RenderFrameHost. This will be null if the document is:
+  // - not embedded by a parent
+  // - a local child
   virtual base::Optional<base::UnguessableToken> GetEmbeddingToken() = 0;
 
   // Returns the assigned name of the frame, the name of the iframe tag
@@ -218,7 +233,14 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Returns the network isolation key used for subresources from the currently
   // committed navigation. It's set on commit and does not change until the next
   // navigation is committed.
+  //
+  // TODO(mmenke): Remove this in favor of GetIsolationInfoForSubresoruces().
   virtual const net::NetworkIsolationKey& GetNetworkIsolationKey() = 0;
+
+  // Returns the IsolationInfo used for subresources from the currently
+  // committed navigation. It's set on commit and does not change until the next
+  // navigation is committed.
+  virtual const net::IsolationInfo& GetIsolationInfoForSubresources() = 0;
 
   // Returns the associated widget's native view.
   virtual gfx::NativeView GetNativeView() = 0;
@@ -348,6 +370,10 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual void SendInterventionReport(const std::string& id,
                                       const std::string& message) = 0;
 
+  // Returns the WebUI object associated wit this RenderFrameHost or nullptr
+  // otherwise.
+  virtual WebUI* GetWebUI() = 0;
+
   // Tell the render frame to enable a set of javascript bindings. The argument
   // should be a combination of values from BindingsPolicy.
   virtual void AllowBindings(int binding_flags) = 0;
@@ -362,6 +388,10 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
                                 const std::string& value) = 0;
 
 #if defined(OS_ANDROID)
+  // Returns the Java object of this instance.
+  virtual base::android::ScopedJavaLocalRef<jobject>
+  GetJavaRenderFrameHost() = 0;
+
   // Returns an InterfaceProvider for Java-implemented interfaces that are
   // scoped to this RenderFrameHost. This provides access to interfaces
   // implemented in Java in the browser process to C++ code in the browser
@@ -380,18 +410,6 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual bool GetSuddenTerminationDisablerState(
       blink::mojom::SuddenTerminationDisablerType disabler_type) = 0;
 
-  // Returns true if the given |threshold_value| is below the threshold value
-  // specified in the policy for |feature| for this RenderFrameHost. See
-  // third_party/blink/public/common/feature_policy/feature_policy.h for how to
-  // compare values of different types. Use this in the browser process to
-  // determine whether access to a feature is allowed.
-  //
-  // TODO(chenleihu): remove this method when policy with non-boolean value
-  // fully migrated to document policy. After the migration, feature policy
-  // feature will only only hold boolean type value, and this method signature
-  // will no longer be needed.
-  virtual bool IsFeatureEnabled(blink::mojom::FeaturePolicyFeature feature,
-                                blink::PolicyValue threshold_value) = 0;
   // Returns true if the queried FeaturePolicyFeature is allowed by
   // feature policy.
   virtual bool IsFeatureEnabled(blink::mojom::FeaturePolicyFeature feature) = 0;
@@ -444,7 +462,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // The effective flags include those which have been set by a
   // Content-Security-Policy header, in addition to those which are set by the
   // embedding frame.
-  virtual bool IsSandboxed(blink::mojom::WebSandboxFlags flags) = 0;
+  virtual bool IsSandboxed(network::mojom::WebSandboxFlags flags) = 0;
 
   // Calls |FlushForTesting()| on Network Service and FrameNavigationControl
   // related interfaces to make sure all in-flight mojo messages have been
@@ -485,9 +503,9 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
 
   // Returns the type of frame owner element for the FrameTreeNode associated
   // with this RenderFrameHost (e.g., <iframe>, <object>, etc). Note that it
-  // returns blink::FrameOwnerElementType::kNone if the RenderFrameHost is a
-  // main frame.
-  virtual blink::FrameOwnerElementType GetFrameOwnerElementType() = 0;
+  // returns blink::mojom::FrameOwnerElementType::kNone if the RenderFrameHost
+  // is a main frame.
+  virtual blink::mojom::FrameOwnerElementType GetFrameOwnerElementType() = 0;
 
   // Returns the transient bit of the User Activation v2 state of the
   // FrameTreeNode associated with this RenderFrameHost.
@@ -522,17 +540,37 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // Perform security checks on Web Authentication requests. These can be
   // called by other |Authenticator| mojo interface implementations in the
   // browser process so that they don't have to duplicate security policies.
+  // For requests originating from the render process, |effective_origin| will
+  // be the same as the last committed origin. However, for request originating
+  // from the browser process, this may be different.
   virtual blink::mojom::AuthenticatorStatus
   PerformGetAssertionWebAuthSecurityChecks(
-      const std::string& relying_party_id) = 0;
+      const std::string& relying_party_id,
+      const url::Origin& effective_origin) = 0;
   virtual blink::mojom::AuthenticatorStatus
   PerformMakeCredentialWebAuthSecurityChecks(
-      const std::string& relying_party_id) = 0;
+      const std::string& relying_party_id,
+      const url::Origin& effective_origin) = 0;
 
   // Tells the host that this is part of setting up a WebXR DOM Overlay. This
   // starts a short timer that permits entering fullscreen mode, similar to a
   // recent orientation change.
   virtual void SetIsXrOverlaySetup() = 0;
+
+  // Returns true if this RenderFrameHost is currently stored in the
+  // back-forward cache.
+  //
+  // TODO(hajimehoshi): Introduce an enum value for lifecycle states and replace
+  // IsInBackForwardCache with the enum values and a new function like
+  // DidChangeLifecycleState.
+  virtual bool IsInBackForwardCache() = 0;
+
+  // Return the UKM source id for the page load (last committed cross-document
+  // non-bfcache navigation in the main frame).
+  // This id typically has an associated PageLoad UKM event.
+  // Note: this can be called on any frame, but this id for all subframes is the
+  // same as the id for the main frame.
+  virtual ukm::SourceId GetPageUkmSourceId() = 0;
 
  private:
   // This interface should only be implemented inside content.

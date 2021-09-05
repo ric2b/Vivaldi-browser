@@ -5,6 +5,7 @@
 #include "chromeos/components/sync_wifi/local_network_collector_impl.h"
 
 #include "base/guid.h"
+#include "chromeos/components/sync_wifi/network_eligibility_checker.h"
 #include "chromeos/components/sync_wifi/network_identifier.h"
 #include "chromeos/components/sync_wifi/network_type_conversions.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
@@ -124,48 +125,14 @@ std::string LocalNetworkCollectorImpl::InitializeRequest() {
 
 bool LocalNetworkCollectorImpl::IsEligible(
     const network_config::mojom::NetworkStatePropertiesPtr& network) {
-  if (!network) {
-    return false;
-  }
-
-  if (network->type != network_config::mojom::NetworkType::kWiFi) {
-    return false;
-  }
-
-  if (!network->connectable) {
-    NET_LOG(EVENT) << NetworkGuidId(network->guid)
-                   << " is not eligible, it is not connectable.";
-    return false;
-  }
-
-  if (network->source != network_config::mojom::OncSource::kUser) {
-    NET_LOG(EVENT) << NetworkGuidId(network->guid)
-                   << " is not eligible, was not configured by user.";
+  if (!network || network->type != network_config::mojom::NetworkType::kWiFi) {
     return false;
   }
 
   const network_config::mojom::WiFiStatePropertiesPtr& wifi_properties =
       network->type_state->get_wifi();
-  if (wifi_properties->security !=
-          network_config::mojom::SecurityType::kWepPsk &&
-      wifi_properties->security !=
-          network_config::mojom::SecurityType::kWpaPsk) {
-    NET_LOG(EVENT) << NetworkGuidId(network->guid)
-                   << " is not eligible, security type not supported: "
-                   << wifi_properties->security;
-    return false;
-  }
-
-  base::TimeDelta timestamp =
-      network_metadata_store_->GetLastConnectedTimestamp(network->guid);
-  if (timestamp.is_zero()) {
-    NET_LOG(EVENT) << NetworkGuidId(network->guid)
-                   << " is not eligible, never connected.";
-    return false;
-  }
-
-  NET_LOG(EVENT) << NetworkGuidId(network->guid) << " is eligible for sync.";
-  return true;
+  return IsEligibleForSync(network->guid, network->connectable, network->source,
+                           wifi_properties->security, /*log_result=*/true);
 }
 
 void LocalNetworkCollectorImpl::StartGetNetworkDetails(
@@ -177,7 +144,7 @@ void LocalNetworkCollectorImpl::StartGetNetworkDetails(
       SecurityTypeProtoFromMojo(network->type_state->get_wifi()->security));
   base::TimeDelta timestamp =
       network_metadata_store_->GetLastConnectedTimestamp(network->guid);
-  proto.set_last_update_timestamp(timestamp.InMilliseconds());
+  proto.set_last_connected_timestamp(timestamp.InMilliseconds());
   cros_network_config_->GetManagedProperties(
       network->guid,
       base::BindOnce(&LocalNetworkCollectorImpl::OnGetManagedPropertiesResult,
@@ -199,10 +166,10 @@ void LocalNetworkCollectorImpl::OnGetManagedPropertiesResult(
   proto.mutable_proxy_configuration()->CopyFrom(
       ProxyConfigurationProtoFromMojo(properties->proxy_settings));
 
-  if (properties->saved_ip_config &&
-      properties->saved_ip_config->name_servers) {
+  if (properties->static_ip_config &&
+      properties->static_ip_config->name_servers) {
     for (const std::string& nameserver :
-         *(properties->saved_ip_config->name_servers)) {
+         properties->static_ip_config->name_servers->active_value) {
       proto.add_custom_dns(nameserver);
     }
   }

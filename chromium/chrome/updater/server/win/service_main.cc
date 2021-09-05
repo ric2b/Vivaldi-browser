@@ -18,8 +18,11 @@
 #include <type_traits>
 
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/win/scoped_com_initializer.h"
+#include "chrome/updater/server/win/com_classes.h"
+#include "chrome/updater/server/win/com_classes_legacy.h"
 #include "chrome/updater/server/win/server.h"
 #include "chrome/updater/win/constants.h"
 

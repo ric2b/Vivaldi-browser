@@ -30,8 +30,6 @@ namespace {
 // This only includes OS_WIN included SandboxType values.
 std::string GetSandboxTypeInEnglish(content::SandboxType sandbox_type) {
   switch (sandbox_type) {
-    case content::SandboxType::kInvalid:
-      return "Invalid";
     case content::SandboxType::kNoSandbox:
       return "Unsandboxed";
     case content::SandboxType::kNoSandboxAndElevatedPrivileges:
@@ -54,14 +52,16 @@ std::string GetSandboxTypeInEnglish(content::SandboxType sandbox_type) {
       return "Print Compositor";
     case content::SandboxType::kAudio:
       return "Audio";
-    case content::SandboxType::kSoda:
-      return "SODA";
+    case content::SandboxType::kSpeechRecognition:
+      return "Speech Recognition";
     case content::SandboxType::kProxyResolver:
       return "Proxy Resolver";
     case content::SandboxType::kPdfConversion:
       return "PDF Conversion";
     case content::SandboxType::kSharingService:
       return "Sharing";
+    case content::SandboxType::kVideoCapture:
+      return "Video Capture";
   }
 }
 
@@ -149,8 +149,8 @@ void SandboxHandler::FetchBrowserChildProcessesCompleted(
   browser_processes_ = std::move(browser_processes);
 
   service_manager::SandboxWin::GetPolicyDiagnostics(
-      base::Bind(&SandboxHandler::FetchSandboxDiagnosticsCompleted,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&SandboxHandler::FetchSandboxDiagnosticsCompleted,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 // This runs nested inside SandboxWin so we get out quickly.

@@ -19,7 +19,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
-#include "base/strings/strcat.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
@@ -52,7 +51,6 @@
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/user_share.h"
 #include "components/version_info/version_info_values.h"
-#include "crypto/ec_private_key.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if defined(OS_CHROMEOS)
@@ -69,15 +67,15 @@ namespace {
 // decryption, or the version of Chrome being too old. This enum is used to
 // back a UMA histogram, and should therefore be treated as append-only.
 enum SyncInitialState {
-  CAN_START,                // Sync can attempt to start up.
-  NOT_SIGNED_IN,            // There is no signed in user.
-  NOT_REQUESTED,            // The user turned off sync.
-  NOT_REQUESTED_NOT_SETUP,  // The user turned off sync and setup completed
-                            // is false. Might indicate a stop-and-clear.
-  NEEDS_CONFIRMATION,       // The user must confirm sync settings.
-  NOT_ALLOWED_BY_POLICY,    // Sync is disallowed by enterprise policy.
-  NOT_ALLOWED_BY_PLATFORM,  // Sync is disallowed by the platform.
-  SYNC_INITIAL_STATE_LIMIT
+  CAN_START = 0,                // Sync can attempt to start up.
+  NOT_SIGNED_IN = 1,            // There is no signed in user.
+  NOT_REQUESTED = 2,            // The user turned off sync.
+  NOT_REQUESTED_NOT_SETUP = 3,  // The user turned off sync and setup completed
+                                // is false. Might indicate a stop-and-clear.
+  NEEDS_CONFIRMATION = 4,       // The user must confirm sync settings.
+  NOT_ALLOWED_BY_POLICY = 5,    // Sync is disallowed by enterprise policy.
+  OBSOLETE_NOT_ALLOWED_BY_PLATFORM = 6,
+  kMaxValue = OBSOLETE_NOT_ALLOWED_BY_PLATFORM
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -104,12 +102,6 @@ void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
                  ProfileSyncService::DISABLE_REASON_ENTERPRISE_POLICY)) {
     sync_state = NOT_ALLOWED_BY_POLICY;
   } else if (disable_reasons.Has(
-                 ProfileSyncService::DISABLE_REASON_PLATFORM_OVERRIDE)) {
-    // This case means Android's "MasterSync" toggle. However, that is not
-    // plumbed into ProfileSyncService until after this method, so we never get
-    // here. See http://crbug.com/568771.
-    sync_state = NOT_ALLOWED_BY_PLATFORM;
-  } else if (disable_reasons.Has(
                  ProfileSyncService::DISABLE_REASON_USER_CHOICE)) {
     if (first_setup_complete) {
       sync_state = NOT_REQUESTED;
@@ -119,8 +111,7 @@ void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
   } else if (!first_setup_complete) {
     sync_state = NEEDS_CONFIRMATION;
   }
-  UMA_HISTOGRAM_ENUMERATION("Sync.InitialState", sync_state,
-                            SYNC_INITIAL_STATE_LIMIT);
+  base::UmaHistogramEnumeration("Sync.InitialState", sync_state);
 }
 
 constexpr char kSyncUnrecoverableErrorHistogram[] = "Sync.UnrecoverableErrors";
@@ -243,6 +234,8 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
       crypto_(
           base::BindRepeating(&ProfileSyncService::NotifyObservers,
                               base::Unretained(this)),
+          base::BindRepeating(&ProfileSyncService::OnRequiredUserActionChanged,
+                              base::Unretained(this)),
           base::BindRepeating(&ProfileSyncService::ReconfigureDueToPassphrase,
                               base::Unretained(this)),
           &sync_prefs_,
@@ -261,7 +254,8 @@ ProfileSyncService::ProfileSyncService(InitParams init_params)
           base::BindRepeating(&CreateHttpBridgeFactory)),
       start_behavior_(init_params.start_behavior),
       passphrase_prompt_triggered_by_version_(false),
-      is_stopping_and_clearing_(false) {
+      is_stopping_and_clearing_(false),
+      should_record_trusted_vault_error_shown_on_startup_(true) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(sync_client_);
   DCHECK(IsLocalSyncEnabled() || identity_manager_ != nullptr);
@@ -713,7 +707,6 @@ void ProfileSyncService::ShutdownImpl(ShutdownReason reason) {
 
   // First, we spin down the engine to stop change processing as soon as
   // possible.
-  base::Time shutdown_start_time = base::Time::Now();
   engine_->StopSyncingForShutdown();
 
   // Stop all data type controllers, if needed. Note that until Stop completes,
@@ -739,9 +732,6 @@ void ProfileSyncService::ShutdownImpl(ShutdownReason reason) {
   engine_->Shutdown(reason);
   engine_.reset();
 
-  base::TimeDelta shutdown_time = base::Time::Now() - shutdown_start_time;
-  UMA_HISTOGRAM_TIMES("Sync.Shutdown.BackendDestroyedTime", shutdown_time);
-
   sync_enabled_weak_factory_.InvalidateWeakPtrs();
 
   startup_controller_->Reset();
@@ -750,7 +740,6 @@ void ProfileSyncService::ShutdownImpl(ShutdownReason reason) {
   crypto_.Reset();
   expect_sync_configuration_aborted_ = false;
   last_snapshot_ = SyncCycleSnapshot();
-  last_keystore_key_.clear();
 
   if (!IsLocalSyncEnabled()) {
     auth_manager_->ConnectionClosed();
@@ -971,7 +960,6 @@ void ProfileSyncService::OnEngineInitialized(
     const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
     const std::string& birthday,
     const std::string& bag_of_chips,
-    const std::string& last_keystore_key,
     bool success) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -1000,8 +988,6 @@ void ProfileSyncService::OnEngineInitialized(
   // Save initialization data to preferences.
   sync_prefs_.SetBirthday(birthday);
   sync_prefs_.SetBagOfChips(bag_of_chips);
-
-  last_keystore_key_ = last_keystore_key;
 
   if (protocol_event_observers_.might_have_observers()) {
     engine_->RequestBufferedProtocolEventsAndEnableForwarding();
@@ -1051,12 +1037,10 @@ void ProfileSyncService::OnEngineInitialized(
 }
 
 void ProfileSyncService::OnSyncCycleCompleted(
-    const SyncCycleSnapshot& snapshot,
-    const std::string& last_keystore_key) {
+    const SyncCycleSnapshot& snapshot) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   last_snapshot_ = snapshot;
-  last_keystore_key_ = last_keystore_key;
 
   UpdateLastSyncedTime();
   if (!snapshot.poll_finish_time().is_null())
@@ -1256,17 +1240,6 @@ base::Time ProfileSyncService::GetAuthErrorTime() const {
 
 bool ProfileSyncService::RequiresClientUpgrade() const {
   return last_actionable_error_.action == UPGRADE_CLIENT;
-}
-
-std::unique_ptr<crypto::ECPrivateKey>
-ProfileSyncService::GetExperimentalAuthenticationKey() const {
-  std::string secret = GetExperimentalAuthenticationSecret();
-  if (secret.empty()) {
-    return nullptr;
-  }
-
-  return crypto::ECPrivateKey::DeriveFromSecret(
-      base::as_bytes(base::make_span(secret)));
 }
 
 bool ProfileSyncService::CanConfigureDataTypes(
@@ -1471,8 +1444,13 @@ void ProfileSyncService::ConfigureDataTypeManager(ConfigureReason reason) {
 }
 
 ModelTypeSet ProfileSyncService::GetModelTypesForTransportOnlyMode() const {
-  ModelTypeSet allowed_types = {USER_CONSENTS, SECURITY_EVENTS,
-                                SHARING_MESSAGE};
+  ModelTypeSet allowed_types = {
+      SECURITY_EVENTS,
+      SHARING_MESSAGE,
+      SUPERVISED_USER_SETTINGS,
+      SUPERVISED_USER_WHITELISTS,
+      USER_CONSENTS,
+  };
 
   if (autofill_enable_account_wallet_storage_) {
     if (!GetUserSettings()->IsUsingSecondaryPassphrase() ||
@@ -2115,30 +2093,17 @@ void ProfileSyncService::ReconfigureDueToPassphrase(ConfigureReason reason) {
   NotifyObservers();
 }
 
-std::string ProfileSyncService::GetExperimentalAuthenticationSecretForTest()
-    const {
-  return GetExperimentalAuthenticationSecret();
-}
-
-std::string ProfileSyncService::GetExperimentalAuthenticationSecret() const {
-  // Dependent fields are first populated when the sync engine is initialized,
-  // when usually all except keystore keys are guaranteed to be available.
-  // Keystore keys are usually available initially too, but in rare cases they
-  // should arrive in later sync cycles.
-  // GAIA ID is not available with local sync enabled.
-  if (last_keystore_key_.empty() || IsLocalSyncEnabled()) {
-    return std::string();
+void ProfileSyncService::OnRequiredUserActionChanged() {
+  if (should_record_trusted_vault_error_shown_on_startup_ &&
+      crypto_.IsTrustedVaultKeyRequiredStateKnown() && IsSyncFeatureEnabled()) {
+    should_record_trusted_vault_error_shown_on_startup_ = false;
+    if (crypto_.GetPassphraseType() ==
+        PassphraseType::kTrustedVaultPassphrase) {
+      base::UmaHistogramBoolean(
+          "Sync.TrustedVaultErrorShownOnStartup",
+          user_settings_->IsTrustedVaultKeyRequiredForPreferredDataTypes());
+    }
   }
-
-  // A separator is not strictly needed but it's adopted here as good practice.
-  const std::string kSeparator("|");
-  const std::string gaia_id = GetAuthenticatedAccountInfo().gaia;
-  const std::string birthday = sync_prefs_.GetBirthday();
-  DCHECK(!gaia_id.empty());
-  DCHECK(!birthday.empty());
-
-  return base::StrCat(
-      {gaia_id, kSeparator, birthday, kSeparator, last_keystore_key_});
 }
 
 }  // namespace syncer

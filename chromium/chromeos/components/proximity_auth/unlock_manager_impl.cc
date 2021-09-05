@@ -183,7 +183,7 @@ UnlockManagerImpl::UnlockManagerImpl(
   chromeos::PowerManagerClient::Get()->AddObserver(this);
 
   if (device::BluetoothAdapterFactory::IsBluetoothSupported()) {
-    device::BluetoothAdapterFactory::GetAdapter(
+    device::BluetoothAdapterFactory::Get()->GetAdapter(
         base::BindOnce(&UnlockManagerImpl::OnBluetoothAdapterInitialized,
                        weak_ptr_factory_.GetWeakPtr()));
   }
@@ -444,8 +444,9 @@ void UnlockManagerImpl::SuspendImminent(
 void UnlockManagerImpl::SuspendDone(const base::TimeDelta& sleep_duration) {
   bluetooth_suspension_recovery_timer_->Start(
       FROM_HERE, kBluetoothAdapterResumeMaxDuration,
-      base::Bind(&UnlockManagerImpl::OnBluetoothAdapterPresentAndPoweredChanged,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(
+          &UnlockManagerImpl::OnBluetoothAdapterPresentAndPoweredChanged,
+          weak_ptr_factory_.GetWeakPtr()));
 
   // The next scan after resuming is expected to be triggered by calling
   // SetRemoteDeviceLifeCycle().

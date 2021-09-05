@@ -4,12 +4,10 @@
 
 package org.chromium.chrome.browser.signin;
 
+import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -36,11 +34,13 @@ import org.chromium.chrome.browser.consent_auditor.ConsentAuditorFeature;
 import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.signin.account_picker.AccountPickerCoordinator;
 import org.chromium.chrome.browser.sync.SyncUserDataWiper;
 import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountManagerResult;
 import org.chromium.components.signin.AccountTrackerService;
+import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.ChildAccountStatus;
 import org.chromium.components.signin.GmsAvailabilityException;
@@ -59,7 +59,7 @@ import java.util.List;
  * derived classes.
  */
 public abstract class SigninFragmentBase
-        extends Fragment implements AccountPickerDialogFragment.Callback {
+        extends Fragment implements AccountPickerCoordinator.Listener {
     private static final String TAG = "SigninFragmentBase";
 
     private static final String SETTINGS_LINK_OPEN = "<LINK1>";
@@ -221,18 +221,9 @@ public abstract class SigninFragmentBase
 
         mConsentTextTracker = new ConsentTextTracker(getResources());
 
-        ProfileDataCache.BadgeConfig badgeConfig = null;
-        if (ChildAccountStatus.isChild(mChildAccountStatus)) {
-            Bitmap badge =
-                    BitmapFactory.decodeResource(getResources(), R.drawable.ic_account_child_20dp);
-            int badgePositionX = getResources().getDimensionPixelOffset(R.dimen.badge_position_x);
-            int badgePositionY = getResources().getDimensionPixelOffset(R.dimen.badge_position_y);
-            int badgeBorderSize = getResources().getDimensionPixelSize(R.dimen.badge_border_size);
-            badgeConfig = new ProfileDataCache.BadgeConfig(
-                    badge, new Point(badgePositionX, badgePositionY), badgeBorderSize);
-        }
-        mProfileDataCache = new ProfileDataCache(getActivity(),
-                getResources().getDimensionPixelSize(R.dimen.user_picture_size), badgeConfig);
+        mProfileDataCache = ProfileDataCache.createProfileDataCache(getActivity(),
+                ChildAccountStatus.isChild(mChildAccountStatus) ? R.drawable.ic_account_child_20dp
+                                                                : 0);
         // By default this is set to true so that when system back button is pressed user action
         // is recorded in onDestroy().
         mRecordUndoSignin = true;
@@ -506,6 +497,7 @@ public abstract class SigninFragmentBase
     @Override
     public void onAccountSelected(String accountName, boolean isDefaultAccount) {
         selectAccount(accountName, isDefaultAccount);
+        getAccountPickerDialogFragment().dismissAllowingStateLoss();
     }
 
     @Override
@@ -581,13 +573,13 @@ public abstract class SigninFragmentBase
     }
 
     private void triggerUpdateAccounts() {
-        AccountManagerFacadeProvider.getInstance().getGoogleAccountNames(this::updateAccounts);
+        AccountManagerFacadeProvider.getInstance().getGoogleAccounts(this::updateAccounts);
     }
 
-    private void updateAccounts(AccountManagerResult<List<String>> maybeAccountNames) {
+    private void updateAccounts(AccountManagerResult<List<Account>> accounts) {
         if (!mResumed) return;
 
-        mAccountNames = getAccountNames(maybeAccountNames);
+        mAccountNames = getAccountNames(accounts);
         mHasGmsError = mAccountNames == null;
         mView.getAcceptButton().setEnabled(!mHasGmsError);
         if (mHasGmsError) return;
@@ -630,9 +622,9 @@ public abstract class SigninFragmentBase
     }
 
     @Nullable
-    private List<String> getAccountNames(AccountManagerResult<List<String>> maybeAccountNames) {
+    private List<String> getAccountNames(AccountManagerResult<List<Account>> accounts) {
         try {
-            List<String> result = maybeAccountNames.get();
+            List<String> result = AccountUtils.toAccountNames(accounts.get());
             dismissGmsErrorDialog();
             dismissGmsUpdatingDialog();
             return result;

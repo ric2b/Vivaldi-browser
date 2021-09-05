@@ -10,6 +10,7 @@
 #include "base/observer_list.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/cookie_controls_enforcement.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "url/gurl.h"
@@ -24,16 +25,7 @@ namespace policy {
 class PolicyChangeRegistrar;
 }
 
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.content_settings
-enum class CookieControlsEnforcement {
-  kNoEnforcement = 0,
-  kEnforcedByPolicy = 1,
-  kEnforcedByExtension = 2,
-  kEnforcedByCookieSetting = 3,
-  kMaxValue = kEnforcedByCookieSetting,
-};
-
-// // Handles the global state for cookie settings changes and observation.
+// Handles the global state for cookie settings changes and observation.
 class CookieControlsService : public KeyedService {
  public:
   class Observer : public base::CheckedObserver {

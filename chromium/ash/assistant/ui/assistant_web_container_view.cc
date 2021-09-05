@@ -10,15 +10,16 @@
 
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
-#include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/ui/assistant_web_view_delegate.h"
 #include "ash/assistant/util/deep_link_util.h"
 #include "ash/public/cpp/assistant/assistant_web_view_factory.h"
+#include "ash/public/cpp/assistant/controller/assistant_controller.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/window/caption_button_layout_constants.h"
 
 namespace ash {
@@ -35,18 +36,12 @@ constexpr int kMinWindowMarginDip = 48;
 }  // namespace
 
 AssistantWebContainerView::AssistantWebContainerView(
-    AssistantViewDelegate* assistant_view_delegate,
     AssistantWebViewDelegate* web_container_view_delegate)
-    : assistant_view_delegate_(assistant_view_delegate),
-      web_container_view_delegate_(web_container_view_delegate) {
+    : web_container_view_delegate_(web_container_view_delegate) {
   InitLayout();
 }
 
 AssistantWebContainerView::~AssistantWebContainerView() = default;
-
-const char* AssistantWebContainerView::GetClassName() const {
-  return "AssistantWebContainerView";
-}
 
 gfx::Size AssistantWebContainerView::CalculatePreferredSize() const {
   const int non_client_frame_view_height =
@@ -81,11 +76,11 @@ void AssistantWebContainerView::DidStopLoading() {
   // We should only respond to the |DidStopLoading| event the first time, to add
   // the view for contents to our view hierarchy and perform other one-time view
   // initializations.
-  if (contents_view_->parent())
+  if (!contents_view_)
     return;
 
   contents_view_->SetPreferredSize(GetPreferredSize());
-  AddChildView(contents_view_.get());
+  contents_view_ptr_ = AddChildView(std::move(contents_view_));
   SetFocusBehavior(FocusBehavior::ALWAYS);
 }
 
@@ -102,12 +97,12 @@ void AssistantWebContainerView::DidSuppressNavigation(
   // browser.
   if (assistant::util::IsDeepLinkUrl(url) ||
       disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB) {
-    assistant_view_delegate_->OpenUrlFromView(url);
+    AssistantController::Get()->OpenUrl(url);
     return;
   }
 
   // Otherwise we'll allow our WebContents to navigate freely.
-  contents_view_->Navigate(url);
+  ContentsView()->Navigate(url);
 }
 
 void AssistantWebContainerView::DidChangeCanGoBack(bool can_go_back) {
@@ -117,7 +112,7 @@ void AssistantWebContainerView::DidChangeCanGoBack(bool can_go_back) {
 }
 
 bool AssistantWebContainerView::GoBack() {
-  return contents_view_ && contents_view_->GoBack();
+  return ContentsView() && ContentsView()->GoBack();
 }
 
 void AssistantWebContainerView::OpenUrl(const GURL& url) {
@@ -129,17 +124,16 @@ void AssistantWebContainerView::OpenUrl(const GURL& url) {
 
   contents_view_ = AssistantWebViewFactory::Get()->Create(contents_params);
 
-  // We retain ownership of |contents_view_| as it is only added to the view
-  // hierarchy once loading stops and we want to ensure that it is cleaned up in
-  // the rare chance that that never occurs.
-  contents_view_->set_owned_by_client();
-
   // We observe |contents_view_| so that we can handle events from the
   // underlying WebContents.
-  contents_view_->AddObserver(this);
+  ContentsView()->AddObserver(this);
 
   // Navigate to the specified |url|.
-  contents_view_->Navigate(url);
+  ContentsView()->Navigate(url);
+}
+
+AssistantWebView* AssistantWebContainerView::ContentsView() {
+  return contents_view_ptr_ ? contents_view_ptr_ : contents_view_.get();
 }
 
 void AssistantWebContainerView::InitLayout() {
@@ -156,15 +150,17 @@ void AssistantWebContainerView::InitLayout() {
 }
 
 void AssistantWebContainerView::RemoveContents() {
-  if (!contents_view_)
+  if (!contents_view_ptr_)
     return;
-
-  RemoveChildView(contents_view_.get());
 
   SetFocusBehavior(FocusBehavior::NEVER);
 
-  contents_view_->RemoveObserver(this);
-  contents_view_.reset();
+  RemoveChildViewT(contents_view_ptr_)->RemoveObserver(this);
+  contents_view_ptr_ = nullptr;
 }
+
+BEGIN_METADATA(AssistantWebContainerView)
+METADATA_PARENT_CLASS(views::WidgetDelegateView)
+END_METADATA()
 
 }  // namespace ash

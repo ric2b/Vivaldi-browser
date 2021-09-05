@@ -15,9 +15,9 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "content/common/ax_serialization_utils.h"
 #include "content/public/common/content_features.h"
 #include "content/renderer/accessibility/ax_image_annotator.h"
-#include "content/renderer/accessibility/blink_ax_enum_conversion.h"
 #include "content/renderer/accessibility/render_accessibility_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_frame_proxy.h"
@@ -550,6 +550,10 @@ WebAXObject BlinkAXTreeSource::GetNull() const {
   return WebAXObject();
 }
 
+std::string BlinkAXTreeSource::GetDebugString(blink::WebAXObject node) const {
+  return node.ToString(true).Utf8();
+}
+
 void BlinkAXTreeSource::SerializeNode(WebAXObject src,
                                       AXContentNodeData* dst) const {
 #if DCHECK_IS_ON()
@@ -559,8 +563,12 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
   blink::WebDisallowTransitionScope disallow(&document);
 #endif
 
+  // TODO(crbug.com/1068668): AX onion soup - finish migrating the rest of
+  // this function inside of AXObject::Serialize and removing
+  // unneeded WebAXObject interfaces.
+  src.Serialize(dst);
+
   dst->role = src.Role();
-  AXStateFromBlink(src, dst);
   dst->id = src.AxID();
 
   TRACE_EVENT1("accessibility", "BlinkAXTreeSource::SerializeNode", "role",
@@ -573,8 +581,7 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
   src.GetRelativeBounds(offset_container, bounds_in_container,
                         container_transform, &clips_children);
   dst->relative_bounds.bounds = bounds_in_container;
-#if !defined(OS_ANDROID) && !defined(OS_MACOSX)
-  if (src.Equals(root())) {
+  if (content::AXShouldIncludePageScaleFactorInRoot() && src.Equals(root())) {
     WebView* web_view = render_frame_->GetRenderView()->GetWebView();
     std::unique_ptr<gfx::Transform> container_transform_gfx =
         std::make_unique<gfx::Transform>(container_transform);
@@ -584,14 +591,10 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
         -web_view->VisualViewportOffset().OffsetFromOrigin());
     if (!container_transform_gfx->IsIdentity())
       dst->relative_bounds.transform = std::move(container_transform_gfx);
-  } else if (!container_transform.isIdentity())
+  } else if (!container_transform.isIdentity()) {
     dst->relative_bounds.transform =
         base::WrapUnique(new gfx::Transform(container_transform));
-#else
-  if (!container_transform.isIdentity())
-    dst->relative_bounds.transform =
-        base::WrapUnique(new gfx::Transform(container_transform));
-#endif  // !defined(OS_ANDROID) && !defined(OS_MACOSX)
+  }
   if (!offset_container.IsDetached())
     dst->relative_bounds.offset_container_id = offset_container.AxID();
   if (clips_children)
@@ -958,7 +961,7 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
         dst->role == ax::mojom::Role::kSlider ||
         dst->role == ax::mojom::Role::kSpinButton ||
         (dst->role == ax::mojom::Role::kSplitter &&
-         src.CanSetFocusAttribute())) {
+         dst->HasState(ax::mojom::State::kFocusable))) {
       float value;
       if (src.ValueForRange(&value))
         dst->AddFloatAttribute(ax::mojom::FloatAttribute::kValueForRange,
@@ -983,8 +986,7 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
       }
     }
 
-    if (dst->role == ax::mojom::Role::kDialog ||
-        dst->role == ax::mojom::Role::kAlertDialog) {
+    if (ui::IsDialog(dst->role)) {
       dst->AddBoolAttribute(ax::mojom::BoolAttribute::kModal, src.IsModal());
     }
 
@@ -994,42 +996,32 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
 
     const bool is_table_like_role = ui::IsTableLike(dst->role);
     if (is_table_like_role) {
-      int column_count = src.ColumnCount();
-      int row_count = src.RowCount();
-      if (column_count > 0 && row_count > 0) {
-        dst->AddIntAttribute(ax::mojom::IntAttribute::kTableColumnCount,
-                             column_count);
-        dst->AddIntAttribute(ax::mojom::IntAttribute::kTableRowCount,
-                             row_count);
-      }
-
       int aria_colcount = src.AriaColumnCount();
-      if (aria_colcount)
+      if (aria_colcount) {
         dst->AddIntAttribute(ax::mojom::IntAttribute::kAriaColumnCount,
                              aria_colcount);
+      }
 
       int aria_rowcount = src.AriaRowCount();
-      if (aria_rowcount)
+      if (aria_rowcount) {
         dst->AddIntAttribute(ax::mojom::IntAttribute::kAriaRowCount,
                              aria_rowcount);
+      }
     }
 
     if (ui::IsTableRow(dst->role)) {
-      dst->AddIntAttribute(ax::mojom::IntAttribute::kTableRowIndex,
-                           src.RowIndex());
       WebAXObject header = src.RowHeader();
-      if (!header.IsDetached())
+      if (!header.IsDetached()) {
+        // TODO(accessibility): these should be computed by ui::AXTableInfo and
+        // removed here.
         dst->AddIntAttribute(ax::mojom::IntAttribute::kTableRowHeaderId,
                              header.AxID());
+      }
     }
 
     if (ui::IsCellOrTableHeader(dst->role)) {
-      dst->AddIntAttribute(ax::mojom::IntAttribute::kTableCellColumnIndex,
-                           src.CellColumnIndex());
       dst->AddIntAttribute(ax::mojom::IntAttribute::kTableCellColumnSpan,
                            src.CellColumnSpan());
-      dst->AddIntAttribute(ax::mojom::IntAttribute::kTableCellRowIndex,
-                           src.CellRowIndex());
       dst->AddIntAttribute(ax::mojom::IntAttribute::kTableCellRowSpan,
                            src.CellRowSpan());
     }
@@ -1038,9 +1030,10 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
       // aria-rowindex and aria-colindex are supported on cells, headers and
       // rows.
       int aria_rowindex = src.AriaRowIndex();
-      if (aria_rowindex)
+      if (aria_rowindex) {
         dst->AddIntAttribute(ax::mojom::IntAttribute::kAriaCellRowIndex,
                              aria_rowindex);
+      }
 
       int aria_colindex = src.AriaColumnIndex();
       if (aria_colindex) {
@@ -1124,7 +1117,8 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
       if (src.IsEditableRoot())
         dst->AddBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot, true);
 
-      if (src.IsControl() && !src.IsRichlyEditable()) {
+      if (src.IsControl() &&
+          !dst->HasState(ax::mojom::State::kRichlyEditable)) {
         // Only for simple input controls -- rich editable areas use AXTreeData.
           dst->AddIntAttribute(ax::mojom::IntAttribute::kTextSelStart,
                                src.SelectionStart());
@@ -1148,9 +1142,13 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
     if (src.HasAriaAttribute())
       dst->AddBoolAttribute(ax::mojom::BoolAttribute::kHasAriaAttribute, true);
 
-    // Frames and iframes.
+    // Frames and iframes:
+    // If there are children, the fallback content has been rendered and should
+    // be used instead. For example, the fallback content may be rendered if
+    // there was an error loading an <object>. In that case, only expose the
+    // children. A node should not have both children and a child tree.
     WebFrame* frame = WebFrame::FromFrameOwnerElement(element);
-    if (frame)
+    if (frame && !src.ChildCount())
       dst->child_routing_id = RenderFrame::GetRoutingIdForWebFrame(frame);
   }
 

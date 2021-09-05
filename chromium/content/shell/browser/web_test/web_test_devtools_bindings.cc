@@ -16,7 +16,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/shell/browser/shell.h"
-#include "content/shell/browser/web_test/blink_test_controller.h"
+#include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/common/web_test/web_test_switches.h"
 #include "net/base/filename_util.h"
 
@@ -52,8 +52,8 @@ class WebTestDevToolsBindings::SecondaryObserver : public WebContentsObserver {
 
   // WebContentsObserver implementation.
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override {
-    if (BlinkTestController::Get())
-      BlinkTestController::Get()->HandleNewRenderFrameHost(render_frame_host);
+    if (WebTestControlHost::Get())
+      WebTestControlHost::Get()->HandleNewRenderFrameHost(render_frame_host);
   }
 
  private:
@@ -99,7 +99,6 @@ void WebTestDevToolsBindings::NavigateDevToolsFrontend() {
   params.transition_type = ui::PageTransitionFromInt(
       ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
   web_contents()->GetController().LoadURLWithParams(params);
-  web_contents()->Focus();
 }
 
 void WebTestDevToolsBindings::Attach() {
@@ -119,18 +118,6 @@ WebTestDevToolsBindings::WebTestDevToolsBindings(
 }
 
 WebTestDevToolsBindings::~WebTestDevToolsBindings() {}
-
-void WebTestDevToolsBindings::RenderProcessGone(
-    base::TerminationStatus status) {
-  if (BlinkTestController::Get())
-    BlinkTestController::Get()->DevToolsProcessCrashed();
-}
-
-void WebTestDevToolsBindings::RenderFrameCreated(
-    RenderFrameHost* render_frame_host) {
-  if (BlinkTestController::Get())
-    BlinkTestController::Get()->HandleNewRenderFrameHost(render_frame_host);
-}
 
 void WebTestDevToolsBindings::DocumentAvailableInMainFrame() {
   ShellDevToolsBindings::Attach();

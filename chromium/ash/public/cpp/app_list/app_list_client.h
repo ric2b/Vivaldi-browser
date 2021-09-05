@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <memory>
 #include <string>
 
@@ -22,6 +23,7 @@
 namespace ash {
 
 class AppListController;
+class AppListNotifier;
 
 // A client interface implemented in Chrome to handle calls from Ash.
 // These include:
@@ -118,7 +120,7 @@ class ASH_PUBLIC_EXPORT AppListClient {
   // Invoked when a "quick setting" is changed.
   virtual void OnQuickSettingsChanged(
       const std::string& setting_name,
-      const std::vector<std::pair<std::string, int>>& values) = 0;
+      const std::map<std::string, int>& values) = 0;
   // Updated when item with |id| is set to |visible|. Only sent if
   // |notify_visibility_change| was set on the SearchResultMetadata.
   virtual void OnSearchResultVisibilityChanged(const std::string& id,
@@ -131,10 +133,17 @@ class ASH_PUBLIC_EXPORT AppListClient {
       mojo::PendingReceiver<content::mojom::NavigableContentsFactory>
           receiver) = 0;
 
+  // TODO(crbug.com/1076270): This method exists for chrome-side logging of UI
+  // actions, and can be folded into the AppListNotifier once it is
+  // complete.
   virtual void NotifySearchResultsForLogging(
       const base::string16& trimmed_query,
       const SearchResultIdWithPositionIndices& results,
       int position_index) = 0;
+
+  // Returns the AppListNotifier instance owned by this client. Depending on the
+  // implementation, this can return nullptr.
+  virtual AppListNotifier* GetNotifier() = 0;
 
  protected:
   virtual ~AppListClient() = default;

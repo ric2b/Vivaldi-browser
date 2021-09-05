@@ -28,8 +28,7 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   ~AVFMediaPipeline() override;
 
   // PlatformMediaPipeline implementation.
-  void Initialize(ipc_data_source::Reader source_reader,
-                  ipc_data_source::Info source_info,
+  void Initialize(ipc_data_source::Info source_info,
                   InitializeCB initialize_cb) override;
   void ReadMediaData(IPCDecodingBuffer buffer) override;
   void WillSeek() override {}

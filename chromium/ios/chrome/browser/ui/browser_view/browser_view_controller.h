@@ -14,22 +14,11 @@
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_delegate.h"
 #import "ios/public/provider/chrome/browser/voice/logo_animation_controller.h"
 
+@protocol ActivityServicePositioner;
 class Browser;
-class ChromeBrowserState;
-class FullscreenController;
-@protocol ApplicationCommands;
-@protocol BrowserCommands;
-@protocol BrowsingDataCommands;
 @class BrowserContainerViewController;
 @class BrowserViewControllerDependencyFactory;
-@protocol FindInPageCommands;
-@protocol PasswordBreachCommands;
-@protocol PopupMenuCommands;
-@protocol FakeboxFocuser;
-@protocol SnackbarCommands;
-@class TabModel;
 @class ToolbarAccessoryPresenter;
-@protocol ToolbarCommands;
 
 // The top-level view controller for the browser UI. Manages other controllers
 // which implement the interface.
@@ -57,34 +46,8 @@ class FullscreenController;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
-@property(nonatomic, readonly) id<ApplicationCommands,
-                                  BrowserCommands,
-                                  BrowsingDataCommands,
-                                  FindInPageCommands,
-                                  PasswordBreachCommands,
-                                  PopupMenuCommands,
-                                  FakeboxFocuser,
-                                  SnackbarCommands,
-                                  ToolbarCommands>
-    dispatcher;
-
-// The top-level browser container view.
-@property(nonatomic, strong, readonly) UIView* contentArea;
-
-// Invisible button used to dismiss the keyboard.
-@property(nonatomic, strong) UIButton* typingShield;
-
 // Returns whether or not text to speech is playing.
 @property(nonatomic, assign, readonly, getter=isPlayingTTS) BOOL playingTTS;
-
-// The Browser's TabModel.
-@property(nonatomic, weak, readonly) TabModel* tabModel;
-
-// The Browser's ChromeBrowserState.
-@property(nonatomic, assign, readonly) ChromeBrowserState* browserState;
-
-// The FullscreenController.
-@property(nonatomic, assign) FullscreenController* fullscreenController;
 
 // The container used for infobar banner overlays.
 @property(nonatomic, strong)
@@ -98,11 +61,12 @@ class FullscreenController;
 @property(nonatomic, strong)
     ToolbarAccessoryPresenter* toolbarAccessoryPresenter;
 
+// Positioner for activity services attached to the toolbar.
+@property(nonatomic, readonly) id<ActivityServicePositioner>
+    activityServicePositioner;
+
 // Whether the receiver is currently the primary BVC.
 - (void)setPrimary:(BOOL)primary;
-
-// Called when the typing shield is tapped.
-- (void)shieldWasTapped:(id)sender;
 
 // Called when the user explicitly opens the tab switcher.
 - (void)userEnteredTabSwitcher;

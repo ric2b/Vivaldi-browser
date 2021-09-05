@@ -4,11 +4,13 @@
 
 package org.chromium.weblayer_private;
 
+import android.graphics.Bitmap;
 import android.graphics.RectF;
 import android.os.Build;
 import android.os.RemoteException;
 import android.text.TextUtils;
 import android.util.AndroidRuntimeException;
+import android.util.Pair;
 import android.util.SparseArray;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -26,12 +28,14 @@ import org.chromium.components.autofill.AutofillProviderImpl;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
+import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.components.find_in_page.FindInPageBridge;
 import org.chromium.components.find_in_page.FindMatchRectsDetails;
 import org.chromium.components.find_in_page.FindResultBar;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.ViewEventSink;
 import org.chromium.content_public.browser.Visibility;
@@ -41,10 +45,12 @@ import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
+import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFindInPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFullscreenCallbackClient;
+import org.chromium.weblayer_private.interfaces.IMediaCaptureCallbackClient;
 import org.chromium.weblayer_private.interfaces.INavigationControllerClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.ITab;
@@ -53,7 +59,9 @@ import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Implementation of ITab.
@@ -61,6 +69,8 @@ import java.util.List;
 @JNINamespace("weblayer")
 public final class TabImpl extends ITab.Stub {
     private static int sNextId = 1;
+    // Map from id to TabImpl.
+    private static final Map<Integer, TabImpl> sTabMap = new HashMap<Integer, TabImpl>();
     private long mNativeTab;
 
     private ProfileImpl mProfile;
@@ -70,7 +80,7 @@ public final class TabImpl extends ITab.Stub {
     private NavigationControllerImpl mNavigationController;
     private ErrorPageCallbackProxy mErrorPageCallbackProxy;
     private FullscreenCallbackProxy mFullscreenCallbackProxy;
-    private ViewAndroidDelegate mViewAndroidDelegate;
+    private TabViewAndroidDelegate mViewAndroidDelegate;
     // BrowserImpl this TabImpl is in. This is only null during creation.
     private BrowserImpl mBrowser;
     /**
@@ -78,6 +88,7 @@ public final class TabImpl extends ITab.Stub {
      * updateFromBrowser() is invoked.
      */
     private AutofillProvider mAutofillProvider;
+    private MediaStreamManager mMediaStreamManager;
     private NewTabCallbackProxy mNewTabCallbackProxy;
     private ITabClient mClient;
     private final int mId;
@@ -93,8 +104,13 @@ public final class TabImpl extends ITab.Stub {
     private FindInPageBridge mFindInPageBridge;
     private FindResultBar mFindResultBar;
     // See usage note in {@link #onFindResultAvailable}.
-    boolean mWaitingForMatchRects;
+    private boolean mWaitingForMatchRects;
+    private InterceptNavigationDelegateClientImpl mInterceptNavigationDelegateClient;
     private InterceptNavigationDelegateImpl mInterceptNavigationDelegate;
+
+    private boolean mPostContainerViewInitDone;
+
+    private AccessibilityUtil.Observer mAccessibilityObserver;
 
     private static class InternalAccessDelegateImpl
             implements ViewEventSink.InternalAccessDelegate {
@@ -117,6 +133,44 @@ public final class TabImpl extends ITab.Stub {
         public void onScrollChanged(int lPix, int tPix, int oldlPix, int oldtPix) {}
     }
 
+    private class TabViewAndroidDelegate extends ViewAndroidDelegate {
+        private boolean mIgnoreRenderer;
+
+        TabViewAndroidDelegate() {
+            super(null);
+        }
+
+        /**
+         * Causes {@link onTopControlsChanged()} and {@link onBottomControlsChanged()} to be
+         * ignored.
+         * @param ignoreRenderer whether to ignore renderer-initiated updates to the controls state.
+         */
+        public void setIgnoreRendererUpdates(boolean ignoreRenderer) {
+            mIgnoreRenderer = ignoreRenderer;
+        }
+
+        @Override
+        public void onTopControlsChanged(
+                int topControlsOffsetY, int topContentOffsetY, int topControlsMinHeightOffsetY) {
+            BrowserViewController viewController = getViewController();
+            if (viewController != null && !mIgnoreRenderer) {
+                viewController.onTopControlsChanged(topControlsOffsetY, topContentOffsetY);
+            }
+        }
+        @Override
+        public void onBottomControlsChanged(
+                int bottomControlsOffsetY, int bottomControlsMinHeightOffsetY) {
+            BrowserViewController viewController = getViewController();
+            if (viewController != null && !mIgnoreRenderer) {
+                viewController.onBottomControlsChanged(bottomControlsOffsetY);
+            }
+        }
+    }
+
+    public static TabImpl getTabById(int tabId) {
+        return sTabMap.get(tabId);
+    }
+
     public TabImpl(ProfileImpl profile, WindowAndroid windowAndroid) {
         mId = ++sNextId;
         init(profile, windowAndroid, TabImplJni.get().createTab(profile.getNativeProfile(), this));
@@ -135,17 +189,8 @@ public final class TabImpl extends ITab.Stub {
     private void init(ProfileImpl profile, WindowAndroid windowAndroid, long nativeTab) {
         mProfile = profile;
         mNativeTab = nativeTab;
-        mWebContents = TabImplJni.get().getWebContents(mNativeTab, TabImpl.this);
-        mViewAndroidDelegate = new ViewAndroidDelegate(null) {
-            @Override
-            public void onTopControlsChanged(int topControlsOffsetY, int topContentOffsetY,
-                    int topControlsMinHeightOffsetY) {
-                BrowserViewController viewController = getViewController();
-                if (viewController != null) {
-                    viewController.onTopControlsChanged(topControlsOffsetY, topContentOffsetY);
-                }
-            }
-        };
+        mWebContents = TabImplJni.get().getWebContents(mNativeTab);
+        mViewAndroidDelegate = new TabViewAndroidDelegate();
         mWebContents.initialize("", mViewAndroidDelegate, new InternalAccessDelegateImpl(),
                 windowAndroid, WebContents.createDefaultInternalsHolder());
 
@@ -159,6 +204,8 @@ public final class TabImpl extends ITab.Stub {
         };
         mWebContents.addObserver(mWebContentsObserver);
 
+        mMediaStreamManager = new MediaStreamManager(this);
+
         mBrowserControlsDelegates = new ArrayList<BrowserControlsVisibilityDelegate>();
         mBrowserControlsVisibility = new ComposedBrowserControlsVisibilityDelegate();
         for (int i = 0; i < ImplControlsVisibilityReason.REASON_COUNT; ++i) {
@@ -170,7 +217,28 @@ public final class TabImpl extends ITab.Stub {
         mConstraintsUpdatedCallback = (constraints) -> onBrowserControlsStateUpdated(constraints);
         mBrowserControlsVisibility.addObserver(mConstraintsUpdatedCallback);
 
-        mInterceptNavigationDelegate = new InterceptNavigationDelegateImpl(this);
+        mInterceptNavigationDelegateClient = new InterceptNavigationDelegateClientImpl(this);
+        mInterceptNavigationDelegate =
+                new InterceptNavigationDelegateImpl(mInterceptNavigationDelegateClient);
+        mInterceptNavigationDelegateClient.initializeWithDelegate(mInterceptNavigationDelegate);
+        sTabMap.put(mId, this);
+
+        mAccessibilityObserver = (boolean enabled) -> {
+            setBrowserControlsVisibilityConstraint(ImplControlsVisibilityReason.ACCESSIBILITY,
+                    enabled ? BrowserControlsState.SHOWN : BrowserControlsState.BOTH);
+        };
+        // addObserver() calls to observer when added.
+        WebLayerAccessibilityUtil.get().addObserver(mAccessibilityObserver);
+    }
+
+    private void doInitAfterSettingContainerView() {
+        if (mPostContainerViewInitDone) return;
+
+        mPostContainerViewInitDone = true;
+        SelectionPopupController controller =
+                SelectionPopupController.fromWebContents(mWebContents);
+        controller.setActionModeCallback(new ActionModeCallback(mWebContents));
+        controller.setSelectionClient(SelectionClient.createSmartSelectionClient(mWebContents));
     }
 
     public ProfileImpl getProfile() {
@@ -187,15 +255,16 @@ public final class TabImpl extends ITab.Stub {
     public void attachToBrowser(BrowserImpl browser) {
         mBrowser = browser;
         updateFromBrowser();
-        SelectionPopupController controller =
-                SelectionPopupController.fromWebContents(mWebContents);
-        controller.setActionModeCallback(new ActionModeCallback(mWebContents));
     }
 
     public void updateFromBrowser() {
         mWebContents.setTopLevelNativeWindow(mBrowser.getWindowAndroid());
         mViewAndroidDelegate.setContainerView(mBrowser.getViewAndroidDelegateContainerView());
+        doInitAfterSettingContainerView();
         updateWebContentsVisibility();
+
+        boolean attached = (mBrowser.getContext() != null);
+        mInterceptNavigationDelegateClient.onActivityAttachmentChanged(attached);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             SelectionPopupController selectionController =
@@ -204,18 +273,23 @@ public final class TabImpl extends ITab.Stub {
                 // The Context and ViewContainer in which Autofill was previously operating have
                 // gone away, so tear down |mAutofillProvider|.
                 mAutofillProvider = null;
+                TabImplJni.get().onAutofillProviderChanged(mNativeTab, null);
                 selectionController.setNonSelectionActionModeCallback(null);
             } else {
-                // Set up |mAutofillProvider| to operate in the new Context.
-                mAutofillProvider = new AutofillProviderImpl(
-                        mBrowser.getContext(), mBrowser.getViewAndroidDelegateContainerView());
+                if (mAutofillProvider == null) {
+                    // Set up |mAutofillProvider| to operate in the new Context. It's safe to assume
+                    // the context won't change unless it is first nulled out, since the fragment
+                    // must be detached before it can be reattached to a new Context.
+                    mAutofillProvider = new AutofillProviderImpl(
+                            mBrowser.getContext(), mBrowser.getAutofillView(), "WebLayer");
+                    TabImplJni.get().onAutofillProviderChanged(mNativeTab, mAutofillProvider);
+                }
+                mAutofillProvider.onContainerViewChanged(mBrowser.getAutofillView());
                 mAutofillProvider.setWebContents(mWebContents);
 
                 selectionController.setNonSelectionActionModeCallback(
                         new AutofillActionModeCallback(mBrowser.getContext(), mAutofillProvider));
             }
-
-            TabImplJni.get().onAutofillProviderChanged(mNativeTab, mAutofillProvider);
         }
     }
 
@@ -253,11 +327,12 @@ public final class TabImpl extends ITab.Stub {
     /**
      * Called when this TabImpl becomes the active TabImpl.
      */
-    public void onDidGainActive(long topControlsContainerViewHandle) {
+    public void onDidGainActive(
+            long topControlsContainerViewHandle, long bottomControlsContainerViewHandle) {
         // attachToFragment() must be called before activate().
         assert mBrowser != null;
-        TabImplJni.get().setTopControlsContainerView(
-                mNativeTab, TabImpl.this, topControlsContainerViewHandle);
+        TabImplJni.get().setBrowserControlsContainerViews(
+                mNativeTab, topControlsContainerViewHandle, bottomControlsContainerViewHandle);
         updateWebContentsVisibility();
         mWebContents.onShow();
     }
@@ -269,7 +344,7 @@ public final class TabImpl extends ITab.Stub {
         hideFindInPageUiAndNotifyClient();
         mWebContents.onHide();
         updateWebContentsVisibility();
-        TabImplJni.get().setTopControlsContainerView(mNativeTab, TabImpl.this, 0);
+        TabImplJni.get().setBrowserControlsContainerViews(mNativeTab, 0, 0);
     }
 
     /**
@@ -469,6 +544,21 @@ public final class TabImpl extends ITab.Stub {
         return TabImplJni.get().getGuid(mNativeTab);
     }
 
+    @Override
+    public void captureScreenShot(float scale, IObjectWrapper valueCallback) {
+        StrictModeWorkaround.apply();
+        ValueCallback<Pair<Bitmap, Integer>> unwrappedCallback =
+                (ValueCallback<Pair<Bitmap, Integer>>) ObjectWrapper.unwrap(
+                        valueCallback, ValueCallback.class);
+        TabImplJni.get().captureScreenShot(mNativeTab, scale, unwrappedCallback);
+    }
+
+    @CalledByNative
+    private static void runCaptureScreenShotCallback(
+            ValueCallback<Pair<Bitmap, Integer>> callback, Bitmap bitmap, int errorCode) {
+        callback.onReceiveValue(Pair.create(bitmap, errorCode));
+    }
+
     @CalledByNative
     private static RectF createRectF(float x, float y, float right, float bottom) {
         return new RectF(x, y, right, bottom);
@@ -524,7 +614,40 @@ public final class TabImpl extends ITab.Stub {
         }
     }
 
+    @Override
+    public void setMediaCaptureCallbackClient(IMediaCaptureCallbackClient client) {
+        mMediaStreamManager.setClient(client);
+    }
+
+    @Override
+    public void stopMediaCapturing() {
+        mMediaStreamManager.stopStreaming();
+    }
+
+    @CalledByNative
+    private void handleCloseFromWebContents() throws RemoteException {
+        // On clients < 84 WebContents-initiated tab closing was delegated to the client; this flow
+        // should not be used, as the client will not be expecting it.
+        assert WebLayerFactoryImpl.getClientMajorVersion() >= 84;
+
+        if (getBrowser() == null) return;
+        getBrowser().destroyTab(this);
+    }
+
     public void destroy() {
+        // Ensure that this method isn't called twice.
+        assert mInterceptNavigationDelegate != null;
+
+        if (WebLayerFactoryImpl.getClientMajorVersion() >= 84) {
+            // Notify the client that this instance is being destroyed to prevent it from calling
+            // back into this object if the embedder mistakenly tries to do so.
+            try {
+                mClient.onTabDestroyed();
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
+        }
+
         if (mTabCallbackProxy != null) {
             mTabCallbackProxy.destroy();
             mTabCallbackProxy = null;
@@ -542,8 +665,13 @@ public final class TabImpl extends ITab.Stub {
             mNewTabCallbackProxy = null;
         }
 
-        mInterceptNavigationDelegate.onTabDestroyed();
+        mInterceptNavigationDelegateClient.destroy();
         mInterceptNavigationDelegate = null;
+
+        mMediaStreamManager.destroy();
+        mMediaStreamManager = null;
+
+        sTabMap.remove(mId);
 
         // ObservableSupplierImpl.addObserver() posts a task to notify the observer, ensure the
         // callback isn't run after destroy() is called (otherwise we'll get crashes as the native
@@ -555,6 +683,8 @@ public final class TabImpl extends ITab.Stub {
         mWebContents.removeObserver(mWebContentsObserver);
         TabImplJni.get().deleteTab(mNativeTab);
         mNativeTab = 0;
+
+        WebLayerAccessibilityUtil.get().removeObserver(mAccessibilityObserver);
     }
 
     @CalledByNative
@@ -593,13 +723,43 @@ public final class TabImpl extends ITab.Stub {
                 ObjectWrapper.wrap(nonEmptyOrNull(params.getSrcUrl())));
     }
 
+    @CalledByNative
+    private void onForceBrowserControlsShown() {
+        // At this time, the only place HIDDEN is used is fullscreen, in which case we don't show
+        // the controls.
+        if (mBrowserControlsVisibility.get() == BrowserControlsState.HIDDEN) return;
+
+        if (mBrowser.getActiveTab() != this) return;
+
+        onBrowserControlsStateUpdated(mBrowserControlsVisibility.get());
+    }
+
     private void onBrowserControlsStateUpdated(int state) {
-        TabImplJni.get().updateBrowserControlsState(mNativeTab, state);
         // If something has overridden the FIP's SHOWN constraint, cancel FIP. This causes FIP to
         // dismiss when entering fullscreen.
         if (state != BrowserControlsState.SHOWN) {
             hideFindInPageUiAndNotifyClient();
         }
+
+        // Don't animate when hiding the controls.
+        boolean animate = state != BrowserControlsState.HIDDEN;
+
+        // If the renderer is not controlling the offsets (possiblye hung or crashed). Then this
+        // needs to force the controls to show (because notification from the renderer will not
+        // happen). For js dialogs, the renderer's update will come when the dialog is hidden, and
+        // since that animates from 0 height, it causes a flicker since the override is already set
+        // to fully show. Thus, disable animation.
+        if (state == BrowserControlsState.SHOWN && mBrowser != null
+                && mBrowser.getActiveTab() == this
+                && !TabImplJni.get().isRendererControllingBrowserControlsOffsets(mNativeTab)) {
+            mViewAndroidDelegate.setIgnoreRendererUpdates(true);
+            getViewController().showControls();
+            animate = false;
+        } else {
+            mViewAndroidDelegate.setIgnoreRendererUpdates(false);
+        }
+
+        TabImplJni.get().updateBrowserControlsState(mNativeTab, state, animate);
     }
 
     /**
@@ -615,13 +775,17 @@ public final class TabImpl extends ITab.Stub {
         long createTab(long profile, TabImpl caller);
         void setJavaImpl(long nativeTabImpl, TabImpl impl);
         void onAutofillProviderChanged(long nativeTabImpl, AutofillProvider autofillProvider);
-        void setTopControlsContainerView(
-                long nativeTabImpl, TabImpl caller, long nativeTopControlsContainerView);
+        void setBrowserControlsContainerViews(long nativeTabImpl,
+                long nativeTopBrowserControlsContainerView,
+                long nativeBottomBrowserControlsContainerView);
         void deleteTab(long tab);
-        WebContents getWebContents(long nativeTabImpl, TabImpl caller);
+        WebContents getWebContents(long nativeTabImpl);
         void executeScript(long nativeTabImpl, String script, boolean useSeparateIsolate,
                 Callback<String> callback);
-        void updateBrowserControlsState(long nativeTabImpl, int newConstraint);
+        void updateBrowserControlsState(long nativeTabImpl, int newConstraint, boolean animate);
         String getGuid(long nativeTabImpl);
+        void captureScreenShot(long nativeTabImpl, float scale,
+                ValueCallback<Pair<Bitmap, Integer>> valueCallback);
+        boolean isRendererControllingBrowserControlsOffsets(long nativeTabImpl);
     }
 }

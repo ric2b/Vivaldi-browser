@@ -11,7 +11,6 @@
 #include "components/viz/common/quads/selection.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
-#include "content/public/common/input_event_ack_state.h"
 #include "content/public/common/page_visibility_state.h"
 #include "ipc/ipc_message_macros.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
@@ -20,7 +19,7 @@
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "third_party/blink/public/platform/web_text_autosizer_page_info.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
@@ -28,8 +27,6 @@
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
 
-IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventAckState,
-                          content::INPUT_EVENT_ACK_STATE_MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::RequestContextType,
                           blink::mojom::RequestContextType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ResourceType,
@@ -42,9 +39,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::ContentSecurityPolicyType,
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(ui::mojom::CursorType,
                               ui::mojom::CursorType::kNull,
                               ui::mojom::CursorType::kMaxValue)
-IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebInputEvent::Type,
-                              blink::WebInputEvent::kTypeFirst,
-                              blink::WebInputEvent::kTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebImeTextSpan::Type,
                           blink::WebImeTextSpan::Type::kMisspellingSuggestion)
 IPC_ENUM_TRAITS_MAX_VALUE(ui::mojom::ImeTextSpanThickness,

@@ -61,16 +61,12 @@ WebNode WebHitTestResult::GetNode() const {
   return WebNode(private_->Result().InnerNode());
 }
 
-gfx::Point WebHitTestResult::LocalPoint() const {
-  return RoundedIntPoint(private_->Result().LocalPoint());
-}
-
-gfx::Point WebHitTestResult::LocalPointWithoutContentBoxOffset() const {
-  IntPoint local_point = RoundedIntPoint(private_->Result().LocalPoint());
+gfx::PointF WebHitTestResult::LocalPointWithoutContentBoxOffset() const {
+  FloatPoint local_point = FloatPoint(private_->Result().LocalPoint());
   LayoutObject* object = private_->Result().GetLayoutObject();
   if (object->IsBox()) {
     LayoutBox* box = ToLayoutBox(object);
-    local_point.MoveBy(-RoundedIntPoint(box->PhysicalContentBoxOffset()));
+    local_point.MoveBy(-FloatPoint(box->PhysicalContentBoxOffset()));
   }
   return local_point;
 }

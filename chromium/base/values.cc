@@ -13,10 +13,11 @@
 #include <utility>
 
 #include "base/bit_cast.h"
+#include "base/check_op.h"
 #include "base/containers/checked_iterators.h"
 #include "base/json/json_writer.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -540,16 +541,16 @@ Value* Value::SetStringKey(StringPiece key, StringPiece value) {
   return SetKeyInternal(key, std::make_unique<Value>(value));
 }
 
+Value* Value::SetStringKey(StringPiece key, StringPiece16 value) {
+  return SetKeyInternal(key, std::make_unique<Value>(value));
+}
+
 Value* Value::SetStringKey(StringPiece key, const char* value) {
   return SetKeyInternal(key, std::make_unique<Value>(value));
 }
 
 Value* Value::SetStringKey(StringPiece key, std::string&& value) {
   return SetKeyInternal(key, std::make_unique<Value>(std::move(value)));
-}
-
-Value* Value::SetStringKey(StringPiece key, StringPiece16 value) {
-  return SetKeyInternal(key, std::make_unique<Value>(value));
 }
 
 bool Value::RemoveKey(StringPiece key) {

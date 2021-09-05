@@ -22,11 +22,11 @@
 #include "chromecast/browser/devtools/remote_debugging_server.h"
 #include "chromecast/browser/queryable_data_host_cast.h"
 #include "chromecast/common/mojom/activity_url_filter.mojom.h"
-#include "chromecast/common/mojom/media_playback_options.mojom.h"
 #include "chromecast/common/mojom/on_load_script_injector.mojom.h"
 #include "chromecast/common/mojom/queryable_data_store.mojom.h"
 #include "chromecast/common/queryable_data.h"
 #include "chromecast/net/connectivity_checker.h"
+#include "components/media_control/mojom/media_playback_options.mojom.h"
 #include "content/public/browser/message_port_provider.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -389,27 +389,6 @@ void CastWebContentsImpl::RemoveBeforeLoadJavaScript(base::StringPiece id) {
   }
 }
 
-// TODO(crbug.com/803242): Deprecated and will be shortly removed.
-void CastWebContentsImpl::PostMessageToMainFrame(
-    const std::string& target_origin,
-    const std::string& data,
-    std::vector<mojo::ScopedMessagePipeHandle> channels) {
-  DCHECK(!data.empty());
-
-  base::string16 data_utf16;
-  data_utf16 = base::UTF8ToUTF16(data);
-
-  // If origin is set as wildcard, no origin scoping would be applied.
-  constexpr char kWildcardOrigin[] = "*";
-  base::Optional<base::string16> target_origin_utf16;
-  if (target_origin != kWildcardOrigin)
-    target_origin_utf16 = base::UTF8ToUTF16(target_origin);
-
-  content::MessagePortProvider::PostMessageToFrame(
-      web_contents(), base::string16(), target_origin_utf16, data_utf16,
-      std::move(channels));
-}
-
 void CastWebContentsImpl::PostMessageToMainFrame(
     const std::string& target_origin,
     const std::string& data,
@@ -452,6 +431,24 @@ void CastWebContentsImpl::RemoveObserver(CastWebContents::Observer* observer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(observer);
   observer_list_.RemoveObserver(observer);
+}
+
+void CastWebContentsImpl::SetEnabledForRemoteDebugging(bool enabled) {
+  DCHECK(remote_debugging_server_);
+
+  if (enabled && !enabled_for_dev_) {
+    LOG(INFO) << "Enabling dev console for CastWebContentsImpl";
+    remote_debugging_server_->EnableWebContentsForDebugging(web_contents_);
+  } else if (!enabled && enabled_for_dev_) {
+    LOG(INFO) << "Disabling dev console for CastWebContentsImpl";
+    remote_debugging_server_->DisableWebContentsForDebugging(web_contents_);
+  }
+  enabled_for_dev_ = enabled;
+
+  // Propagate setting change to inner contents.
+  for (auto& inner : inner_contents_) {
+    inner->SetEnabledForRemoteDebugging(enabled);
+  }
 }
 
 service_manager::BinderRegistry* CastWebContentsImpl::binder_registry() {
@@ -512,7 +509,7 @@ void CastWebContentsImpl::RenderFrameCreated(
       feature_manager_remote.BindNewPipeAndPassReceiver());
   feature_manager_remote->ConfigureFeatures(GetRendererFeatures());
 
-  mojo::AssociatedRemote<chromecast::shell::mojom::MediaPlaybackOptions>
+  mojo::AssociatedRemote<components::media_control::mojom::MediaPlaybackOptions>
       media_playback_options;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &media_playback_options);
@@ -970,6 +967,9 @@ void CastWebContentsImpl::MediaStartedPlaying(
     const content::MediaPlayerId& id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   metrics::CastMetricsHelper::GetInstance()->LogMediaPlay();
+  for (Observer& observer : observer_list_) {
+    observer.MediaPlaybackChanged(true /* media_playing */);
+  }
 }
 
 void CastWebContentsImpl::MediaStoppedPlaying(
@@ -978,6 +978,9 @@ void CastWebContentsImpl::MediaStoppedPlaying(
     content::WebContentsObserver::MediaStoppedReason reason) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   metrics::CastMetricsHelper::GetInstance()->LogMediaPause();
+  for (Observer& observer : observer_list_) {
+    observer.MediaPlaybackChanged(false /* media_playing */);
+  }
 }
 
 void CastWebContentsImpl::TracePageLoadBegin(const GURL& url) {
@@ -996,7 +999,7 @@ void CastWebContentsImpl::DisableDebugging() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!enabled_for_dev_ || !web_contents_)
     return;
-  LOG(INFO) << "Disabling dev console for " << web_contents_->GetVisibleURL();
+  LOG(INFO) << "Disabling dev console for CastWebContentsImpl";
   remote_debugging_server_->DisableWebContentsForDebugging(web_contents_);
 }
 

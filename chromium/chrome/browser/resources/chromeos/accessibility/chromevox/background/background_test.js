@@ -1725,6 +1725,12 @@ TEST_F('ChromeVoxBackgroundTest', 'GestureGranularity', function() {
   this.runWithLoadedTree(
       `
     <p>This is a test</p>
+    <h2>hello</h2>
+    <a href="#">greetings</a>
+    <h2>here</h2>
+    <button>and</button>
+    <a href="#">there</a>
+    <button>world</button>
   `,
       function(root) {
         const doGesture = (gesture) => {
@@ -1749,16 +1755,41 @@ TEST_F('ChromeVoxBackgroundTest', 'GestureGranularity', function() {
             .expectSpeech('i')
 
             .call(doGesture('swipeLeft3'))
+            .expectSpeech('Form field control')
+            .call(doGesture('swipeDown1'))
+            .expectSpeech('and', 'Button')
+            .call(doGesture('swipeUp1'))
+            .expectSpeech('world', 'Button')
+
+            .call(doGesture('swipeLeft3'))
+            .expectSpeech('Link')
+            .call(doGesture('swipeDown1'))
+            .expectSpeech('greetings', 'Link')
+            .call(doGesture('swipeUp1'))
+            .expectSpeech('there', 'Link')
+
+            .call(doGesture('swipeLeft3'))
+            .expectSpeech('Heading')
+            .call(doGesture('swipeDown1'))
+            .expectSpeech('hello', 'Heading 2')
+            .call(doGesture('swipeUp1'))
+            .expectSpeech('here', 'Heading 2')
+            .call(doGesture('swipeUp1'))
+            .expectSpeech('hello', 'Heading 2')
+
+            .call(doGesture('swipeLeft3'))
             .expectSpeech('Line')
             .call(doGesture('swipeUp1'))
             .expectSpeech('This is a test')
 
             .call(doGesture('swipeRight3'))
+            .expectSpeech('Heading')
+            .call(doGesture('swipeRight3'))
+            .expectSpeech('Link')
+            .call(doGesture('swipeRight3'))
+            .expectSpeech('Form field control')
+            .call(doGesture('swipeRight3'))
             .expectSpeech('Character')
-            .call(doGesture('swipeRight3'))
-            .expectSpeech('Word')
-            .call(doGesture('swipeRight3'))
-            .expectSpeech('Line')
 
             .replay();
       });
@@ -2500,4 +2531,39 @@ TEST_F('ChromeVoxBackgroundTest', 'OutputEmptyQueueMode', function() {
         .expectSpeechWithQueueMode('test', QueueMode.CATEGORY_FLUSH)
         .replay();
   });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'SetAccessibilityFocus', function() {
+  this.runWithLoadedTree('<p>Text.</p><button>Button</button>', function(root) {
+    const node = root.find({role: RoleType.BUTTON});
+
+    node.addEventListener(EventType.FOCUS, this.newCallback(function() {
+      chrome.automation.getAccessibilityFocus((focusedNode) => {
+        assertEquals(node, focusedNode);
+      });
+    }));
+
+    node.focus();
+  });
+});
+
+TEST_F('ChromeVoxBackgroundTest', 'MenuItemRadio', function() {
+  const mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(
+      `
+    <ul role="menu" tabindex="0" autofocus>
+      <li role="menuitemradio" aria-checked="true">Small</li>
+      <li role="menuitemradio" aria-checked="false">Medium</li>
+      <li role="menuitemradio" aria-checked="false">Large</li>
+    </ul>
+  `,
+      function(root) {
+        mockFeedback.expectSpeech('Menu', 'with 3 items')
+            .call(doCmd('nextObject'))
+            .expectSpeech('Small, menu item radio button selected', ' 1 of 3 ')
+            .call(doCmd('nextObject'))
+            .expectSpeech(
+                'Medium, menu item radio button unselected', ' 2 of 3 ')
+            .replay();
+      });
 });

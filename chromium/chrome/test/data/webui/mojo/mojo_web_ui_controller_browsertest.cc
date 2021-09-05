@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/public/test/browser_test.h"
 #include "ui/webui/mojo_web_ui_controller.h"
 
 #include "base/memory/ref_counted_memory.h"
@@ -26,7 +27,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/test_utils.h"
-#include "services/service_manager/public/cpp/binder_map.h"
+#include "mojo/public/cpp/bindings/binder_map.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
@@ -182,8 +183,7 @@ class MojoWebUIControllerBrowserTest : public InProcessBrowserTest {
 
     void RegisterBrowserInterfaceBindersForFrame(
         content::RenderFrameHost* render_frame_host,
-        service_manager::BinderMapWithContext<content::RenderFrameHost*>* map)
-        override {
+        mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override {
       ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
           render_frame_host, map);
       chrome::internal::RegisterWebUIControllerInterfaceBinder<
@@ -239,6 +239,8 @@ IN_PROC_BROWSER_TEST_F(MojoWebUIControllerBrowserTest,
                             "})()"));
 
   content::ScopedAllowRendererCrashes allow;
+  content::RenderProcessHostWatcher watcher(web_contents,
+      content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
 
   // Attempt to get a remote for a disallowed interface.
   EXPECT_FALSE(content::EvalJs(web_contents,
@@ -248,6 +250,8 @@ IN_PROC_BROWSER_TEST_F(MojoWebUIControllerBrowserTest,
                                "  return resp.value;"
                                "})()")
                    .error.empty());
+  watcher.Wait();
+  EXPECT_FALSE(watcher.did_exit_normally());
   EXPECT_TRUE(web_contents->IsCrashed());
 }
 

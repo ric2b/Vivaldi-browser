@@ -6,19 +6,24 @@
 #define COMPONENTS_FEED_CORE_V2_FEED_STREAM_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_runner_util.h"
+#include "base/version.h"
 #include "components/feed/core/common/enums.h"
 #include "components/feed/core/common/user_classifier.h"
 #include "components/feed/core/proto/v2/wire/response.pb.h"
 #include "components/feed/core/v2/enums.h"
+#include "components/feed/core/v2/protocol_translator.h"
 #include "components/feed/core/v2/public/feed_stream_api.h"
 #include "components/feed/core/v2/request_throttler.h"
+#include "components/feed/core/v2/scheduling.h"
 #include "components/feed/core/v2/stream_model.h"
+#include "components/feed/core/v2/tasks/load_more_task.h"
 #include "components/feed/core/v2/tasks/load_stream_task.h"
 #include "components/offline_pages/task/task_queue.h"
 
@@ -30,10 +35,12 @@ class TickClock;
 }  // namespace base
 
 namespace feed {
-class FeedStore;
-class StreamModel;
 class FeedNetwork;
+class FeedStore;
+class MetricsReporter;
 class RefreshTaskScheduler;
+class StreamModel;
+class SurfaceUpdater;
 struct StreamModelUpdateRequest;
 
 // Implements FeedStreamApi. |FeedStream| additionally exposes functionality
@@ -49,17 +56,8 @@ class FeedStream : public FeedStreamApi,
     virtual bool IsEulaAccepted() = 0;
     // Returns true if the device is offline.
     virtual bool IsOffline() = 0;
-  };
-
-  // An observer of stream events for testing and for tracking metrics.
-  // Concrete implementation should have no observable effects on the Feed.
-  class EventObserver {
-   public:
-    virtual void OnLoadStream(LoadStreamStatus load_from_store_status,
-                              LoadStreamStatus final_status) = 0;
-    virtual void OnMaybeTriggerRefresh(TriggerType trigger,
-                                       bool clear_all_before_refresh) = 0;
-    virtual void OnClearAll(base::TimeDelta time_since_last_clear) = 0;
+    virtual DisplayMetrics GetDisplayMetrics() = 0;
+    virtual std::string GetLanguageTag() = 0;
   };
 
   // Forwards to |feed::TranslateWireResponse()| by default. Can be overridden
@@ -68,21 +66,38 @@ class FeedStream : public FeedStreamApi,
    public:
     WireResponseTranslator() = default;
     ~WireResponseTranslator() = default;
-    virtual std::unique_ptr<StreamModelUpdateRequest> TranslateWireResponse(
+    virtual RefreshResponseData TranslateWireResponse(
         feedwire::Response response,
-        base::TimeDelta response_time,
+        StreamModelUpdateRequest::Source source,
         base::Time current_time);
   };
 
+  class Metadata {
+   public:
+    explicit Metadata(FeedStore* store);
+    ~Metadata();
+
+    void Populate(feedstore::Metadata metadata);
+
+    std::string GetConsistencyToken() const;
+    void SetConsistencyToken(std::string consistency_token);
+
+    LocalActionId GetNextActionId();
+
+   private:
+    FeedStore* store_;
+    feedstore::Metadata metadata_;
+  };
+
   FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
-             EventObserver* stream_event_observer,
+             MetricsReporter* metrics_reporter,
              Delegate* delegate,
              PrefService* profile_prefs,
              FeedNetwork* feed_network,
              FeedStore* feed_store,
              const base::Clock* clock,
              const base::TickClock* tick_clock,
-             scoped_refptr<base::SequencedTaskRunner> background_task_runner);
+             const ChromeInfo& chrome_info);
   ~FeedStream() override;
 
   FeedStream(const FeedStream&) = delete;
@@ -97,18 +112,40 @@ class FeedStream : public FeedStreamApi,
   void DetachSurface(SurfaceInterface*) override;
   void SetArticlesListVisible(bool is_visible) override;
   bool IsArticlesListVisible() override;
+  void ExecuteRefreshTask() override;
+  void LoadMore(SurfaceId surface_id,
+                base::OnceCallback<void(bool)> callback) override;
   void ExecuteOperations(
       std::vector<feedstore::DataOperation> operations) override;
   EphemeralChangeId CreateEphemeralChange(
       std::vector<feedstore::DataOperation> operations) override;
   bool CommitEphemeralChange(EphemeralChangeId id) override;
   bool RejectEphemeralChange(EphemeralChangeId id) override;
+  DebugStreamData GetDebugStreamData() override;
+  void ForceRefreshForDebugging() override;
+  std::string DumpStateForDebugging() override;
+
+  void ReportSliceViewed(SurfaceId surface_id,
+                         const std::string& slice_id) override;
+  void ReportNavigationStarted() override;
+  void ReportPageLoaded() override;
+  void ReportOpenAction(const std::string& slice_id) override;
+  void ReportOpenInNewTabAction(const std::string& slice_id) override;
+  void ReportOpenInNewIncognitoTabAction() override;
+  void ReportSendFeedbackAction() override;
+  void ReportLearnMoreAction() override;
+  void ReportDownloadAction() override;
+  void ReportRemoveAction() override;
+  void ReportNotInterestedInAction() override;
+  void ReportManageInterestsAction() override;
+  void ReportContextMenuOpened() override;
+  void ReportStreamScrolled(int distance_dp) override;
 
   // offline_pages::TaskQueue::Delegate.
   void OnTaskQueueIsIdle() override;
 
   // StreamModel::StoreObserver.
-  void OnStoreChange(const StreamModel::StoreUpdate& update) override;
+  void OnStoreChange(StreamModel::StoreUpdate update) override;
 
   // Event indicators. These functions are called from an external source
   // to indicate an event.
@@ -116,8 +153,8 @@ class FeedStream : public FeedStreamApi,
   // Called when Chrome's EULA has been accepted. This should happen when
   // Delegate::IsEulaAccepted() changes from false to true.
   void OnEulaAccepted();
-  // Invoked when Chrome is foregrounded.
-  void OnEnterForeground();
+  // Invoked when Chrome is backgrounded.
+  void OnEnterBackground();
   // The user signed in to Chrome.
   void OnSignedIn();
   // The user signed out of Chrome.
@@ -126,68 +163,86 @@ class FeedStream : public FeedStreamApi,
   void OnHistoryDeleted();
   // Chrome's cached data was cleared.
   void OnCacheDataCleared();
-  // Invoked by RefreshTaskScheduler's scheduled task.
-  void ExecuteRefreshTask();
 
   // State shared for the sake of implementing FeedStream. Typically these
   // functions are used by tasks.
 
   void LoadModel(std::unique_ptr<StreamModel> model);
 
+  void SetRequestSchedule(RequestSchedule schedule);
+
+  // Store/upload an action and update the consistency token. |callback| is
+  // called with |true| if the consistency token was written to the store.
+  void UploadAction(
+      feedwire::FeedAction action,
+      bool upload_now,
+      base::OnceCallback<void(UploadActionsTask::Result)> callback);
+
   FeedNetwork* GetNetwork() { return feed_network_; }
   FeedStore* GetStore() { return store_; }
-
-  // Returns the computed UserClass for the active user.
-  UserClass GetUserClass();
+  RequestThrottler* GetRequestThrottler() { return &request_throttler_; }
+  Metadata* GetMetadata() { return &metadata_; }
 
   // Returns the time of the last content fetch.
   base::Time GetLastFetchTime();
 
+  bool HasSurfaceAttached() const;
+
+  // Determines if we should attempt loading the stream or refreshing at all.
+  // Returns |LoadStreamStatus::kNoStatus| if loading may be attempted.
+  LoadStreamStatus ShouldAttemptLoad(bool model_loading = false);
+
   // Determines if a FeedQuery request can be made. If successful,
   // returns |LoadStreamStatus::kNoStatus| and acquires throttler quota.
   // Otherwise returns the reason.
-  LoadStreamStatus ShouldMakeFeedQueryRequest();
+  LoadStreamStatus ShouldMakeFeedQueryRequest(bool is_load_more = false);
 
-  // Loads |model|. Should be used for testing in place of typical model
-  // loading from network or storage.
-  void LoadModelForTesting(std::unique_ptr<StreamModel> model);
-  offline_pages::TaskQueue* GetTaskQueueForTesting();
-  void UnloadModelForTesting() { UnloadModel(); }
+  // Unloads the model. Surfaces are not updated, and will remain frozen until a
+  // model load is requested.
+  void UnloadModel();
+
+  // Triggers a stream load. The load will be aborted if |ShouldAttemptLoad()|
+  // is not true.
+  void TriggerStreamLoad();
 
   // Returns the model if it is loaded, or null otherwise.
   StreamModel* GetModel() { return model_.get(); }
 
-  const base::Clock* GetClock() { return clock_; }
+  const base::Clock* GetClock() const { return clock_; }
+  const base::TickClock* GetTickClock() const { return tick_clock_; }
+  RequestMetadata GetRequestMetadata() const;
 
   WireResponseTranslator* GetWireResponseTranslator() const {
     return wire_response_translator_;
   }
 
+  // Testing functionality.
+  offline_pages::TaskQueue* GetTaskQueueForTesting();
+  // Loads |model|. Should be used for testing in place of typical model
+  // loading from network or storage.
+  void LoadModelForTesting(std::unique_ptr<StreamModel> model);
   void SetWireResponseTranslatorForTesting(
       WireResponseTranslator* wire_response_translator) {
     wire_response_translator_ = wire_response_translator;
   }
-
   void SetIdleCallbackForTesting(base::RepeatingClosure idle_callback);
-  void SetUserClassifierForTesting(
-      std::unique_ptr<UserClassifier> user_classifier);
 
  private:
-  class SurfaceUpdater;
   class ModelStoreChangeMonitor;
-  void MaybeTriggerRefresh(TriggerType trigger,
-                           bool clear_all_before_refresh = false);
-  void TriggerStreamLoad();
-  void UnloadModel();
+  // A single function task to delete stored feed data and force a refresh.
+  // To only be called from within a |Task|.
+  void ForceRefreshForDebuggingTask();
 
-  void LoadStreamTaskComplete(LoadStreamTask::Result result);
+  void InitialStreamLoadComplete(LoadStreamTask::Result result);
+  void LoadMoreComplete(LoadMoreTask::Result result);
+  void BackgroundRefreshComplete(LoadStreamTask::Result result);
 
   void ClearAll();
 
   // Unowned.
 
   RefreshTaskScheduler* refresh_task_scheduler_;
-  EventObserver* stream_event_observer_;
+  MetricsReporter* metrics_reporter_;
   Delegate* delegate_;
   PrefService* profile_prefs_;
   FeedNetwork* feed_network_;
@@ -196,7 +251,7 @@ class FeedStream : public FeedStreamApi,
   const base::TickClock* tick_clock_;
   WireResponseTranslator* wire_response_translator_;
 
-  scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
+  ChromeInfo chrome_info_;
 
   offline_pages::TaskQueue task_queue_;
   // Whether the model is being loaded. Used to prevent multiple simultaneous
@@ -208,13 +263,11 @@ class FeedStream : public FeedStreamApi,
   // |UnloadModel()|.
   std::unique_ptr<StreamModel> model_;
 
-  // Set of (unowned) attached surfaces.
-  base::ObserverList<SurfaceInterface> surfaces_;
-
   // Mutable state.
-  std::unique_ptr<UserClassifier> user_classifier_;
   RequestThrottler request_throttler_;
   base::TimeTicks suppress_refreshes_until_;
+  std::vector<base::OnceCallback<void(bool)>> load_more_complete_callbacks_;
+  Metadata metadata_;
 
   // To allow tests to wait on task queue idle.
   base::RepeatingClosure idle_callback_;

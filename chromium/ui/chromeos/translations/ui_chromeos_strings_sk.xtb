@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">nemecká klávesnica</translation>
 <translation id="1972984168337863910">Rozbaliť panely so spätnou väzbou týkajúcou sa súborov</translation>
 <translation id="1984603991036629094">Arménska fonetická klávesnica</translation>
+<translation id="1995337122023280937">Prejsť na umiestnenie súboru</translation>
 <translation id="2001796770603320721">Spravovať na Disku</translation>
 <translation id="2009067268969781306">Formátovaním kľúča odstránite všetky dáta, ktoré sú v ňom uložené. Túto akciu nie je možné vrátiť späť.</translation>
 <translation id="2028997212275086731">Archív vo formáte RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Disk Google je nedostupný. <ph name="BEGIN_LINK" />Odhláste sa<ph name="END_LINK" /> a znova sa prihláste.</translation>
 <translation id="2649120831653069427">Dúhovka</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Umiestnenie súboru</translation>
 <translation id="2672394958563893062">Vyskytla sa chyba. Kliknutím spustíte prehrávanie od začiatku.</translation>
 <translation id="2676946222714718093">Prehráva sa na zariadení</translation>
 <translation id="2735698359135166290">Rumunská štandardná klávesnica</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826">Počet chýb: <ph name="COUNT" />.</translation>
 <translation id="3519867315646775981">Prepis (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugalčina</translation>
+<translation id="3524311639100184459">Upozornenie: Tieto súbory sú dočasné a môžu byť automaticky odstránené na uvoľnenie priestoru na disku.  <ph name="BEGIN_LINK" />Ďalšie informácie<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Priečinok</translation>
 <translation id="3549797760399244642">Prejsť na adresu drive.google.com...</translation>
 <translation id="357479282490346887">Litovčina</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Prehrávač zvuku</translation>
 <translation id="4002066346123236978">Názov</translation>
+<translation id="4065397611279318371">Ak chcete otvárať súbory pomocou aplikácií <ph name="APP_NAME" />, najprv ich presuňte do priečinka <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Metóda vstupu kantončiny</translation>
 <translation id="4072248638558688893">Tamilská klávesnica (fonetický prepis)</translation>
 <translation id="4124935795427217608">Jednorožec</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Automatická oprava</translation>
 <translation id="4881695831933465202">Otvoriť</translation>
 <translation id="4886021172213954916">Tamilská klávesnica (písací stroj)</translation>
+<translation id="4892969127351273348">Nedá sa otvoriť pomocou aplikácie <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Môžete začať zálohovať (počet: <ph name="FILE_COUNT" />)</translation>
 <translation id="4924638091161556692">Pevné</translation>
 <translation id="4935975195727477204">Kvet gazánie</translation>
@@ -500,6 +505,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="6806699711453372963">Správa zdieľania v systéme Linux</translation>
 <translation id="6808193438228982088">Líška</translation>
 <translation id="6820687829547641339">Archív vo formáte Tar komprimovaný metódou Gzip</translation>
+<translation id="6823166707458800069">Všetky súbory uložené v tomto priečinku sa automaticky zálohujú online.</translation>
 <translation id="6825883775269213504">Ruština</translation>
 <translation id="6827236167376090743">Toto video sa bude prehrávať počas neurčitej doby.</translation>
 <translation id="6847101934483209767">Položka <ph name="ENTRY_NAME" /> bola odstránená z výberu.</translation>
@@ -556,6 +562,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="7417705661718309329">Mapa Google</translation>
 <translation id="7419631653042041064">katalánska klávesnica</translation>
 <translation id="7434823369735508263">americká klávesnica s rozložením klávesov dvorak</translation>
+<translation id="7447678886297481665">Súbory v tomto priečinku sú iba na čítanie. Niektoré aktivity nie sú podporované.</translation>
 <translation id="7460898608667578234">Ukrajinčina</translation>
 <translation id="7474889694310679759">kanadskoanglická klávesnica</translation>
 <translation id="7489215562877293245">Počet nájdených: <ph name="FILE_COUNT" />

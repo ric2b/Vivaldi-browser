@@ -110,6 +110,7 @@ update_target("//content/common:common") {
 
 update_target("//media:media") {
   sources = [
+    "//vivaldi/platform_media/gpu/data_source/ipc_data_source.cc",
     "//vivaldi/platform_media/gpu/data_source/ipc_data_source.h",
     "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.cc",
     "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.h",
@@ -174,8 +175,6 @@ update_target("//media:media") {
       "//vivaldi/platform_media/gpu/pipeline/win/platform_media_pipeline_win.cc",
       "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.cc",
       "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.h",
-      "//vivaldi/platform_media/gpu/pipeline/win/source_reader_worker.cc",
-      "//vivaldi/platform_media/gpu/pipeline/win/source_reader_worker.h",
     ]
 
     libs += [

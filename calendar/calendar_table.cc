@@ -13,10 +13,10 @@
 
 #include "app/vivaldi_resources.h"
 #include "base/strings/utf_string_conversions.h"
+#include "calendar/account_type.h"
 #include "calendar/calendar_type.h"
 #include "sql/statement.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "calendar/calendar_type.h"
 
 namespace calendar {
 
@@ -45,16 +45,12 @@ bool CalendarTable::CreateCalendarTable() {
       "account_id INTEGER NOT NULL,"
       "name LONGVARCHAR,"
       "description LONGVARCHAR,"
-      "url LONGVARCHAR,"
       "ctag VARCHAR,"
       "orderindex INTEGER DEFAULT 0,"
       "color VARCHAR DEFAULT '#AAAAAAFF' NOT NULL,"
       "hidden INTEGER DEFAULT 0,"
       "active INTEGER DEFAULT 0,"
       "iconindex INTEGER DEFAULT 0,"
-      "username LONGVARCHAR,"
-      "type INTEGER DEFAULT 0,"
-      "interval INTEGER DEFAULT 0,"
       "last_checked INTEGER NOT NULL,"
       "timezone LONGVARCHAR,"
       "created INTEGER,"
@@ -66,13 +62,14 @@ bool CalendarTable::CreateCalendarTable() {
   return res;
 }
 
-bool CalendarTable::CreateDefaultCalendar() {
+bool CalendarTable::CreateDefaultCalendar(AccountID account_id) {
   if (DoesAnyCalendarExist())
     return false;
 
   CalendarRow row;
   row.set_name(l10n_util::GetStringUTF16(IDS_DEFAULT_CALENDAR_NAME));
-  row.set_color("#C2EBAE");
+  row.set_color("#4FACF2");
+  row.set_account_id(account_id);
   CalendarID id = CreateCalendar(row);
   if (id)
     return true;
@@ -80,38 +77,24 @@ bool CalendarTable::CreateDefaultCalendar() {
   return false;
 }
 
-// static
-std::string CalendarTable::GURLToDatabaseURL(const GURL& gurl) {
-  GURL::Replacements replacements;
-  replacements.ClearUsername();
-  replacements.ClearPassword();
-
-  return (gurl.ReplaceComponents(replacements)).spec();
-}
-
 CalendarID CalendarTable::CreateCalendar(CalendarRow row) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "INSERT INTO calendar "
-      "(account_id, name, description, url, ctag, "
+      "(account_id, name, description, ctag, "
       "orderindex, color, hidden, active, iconindex, "
-      "username, type, interval, last_checked, timezone,  "
-      "created, last_modified) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+      "last_checked, timezone, created, last_modified) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   int column_index = 0;
-  statement.BindInt64(column_index++ , row.account_id());
+  statement.BindInt64(column_index++, row.account_id());
   statement.BindString16(column_index++, row.name());
   statement.BindString16(column_index++, row.description());
-  statement.BindString(column_index++, GURLToDatabaseURL(row.url()));
   statement.BindString(column_index++, row.ctag());
   statement.BindInt(column_index++, row.orderindex());
   statement.BindString(column_index++, row.color());
   statement.BindInt(column_index++, row.hidden() ? 1 : 0);
   statement.BindInt(column_index++, row.active() ? 1 : 0);
   statement.BindInt(column_index++, row.iconindex());
-  statement.BindString16(column_index++, row.username());
-  statement.BindInt(column_index++, row.type());
-  statement.BindInt(column_index++, row.interval());
   statement.BindInt64(column_index++, row.last_checked().ToInternalValue());
 
   statement.BindString(column_index++, row.timezone());
@@ -129,8 +112,8 @@ bool CalendarTable::GetAllCalendars(CalendarRows* calendars) {
   sql::Statement s(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "SELECT id, account_id, name, description, "
-      "url, ctag, orderindex, color, hidden, active, iconindex, "
-      "username, type, interval, last_checked, timezone, "
+      " ctag, orderindex, color, hidden, active, iconindex, "
+      "last_checked, timezone, "
       "created, last_modified FROM calendar"));
   while (s.Step()) {
     CalendarRow calendar;
@@ -144,25 +127,23 @@ bool CalendarTable::GetAllCalendars(CalendarRows* calendars) {
 bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
                                                       "UPDATE calendar SET \
-        name=?, description=?, url=?, ctag=?, orderindex=?, color=?, hidden=?, \
-        active=?, iconindex=?, username=?, type=?, interval=?, last_checked=?, \
+        name=?, description=?, ctag=?, orderindex=?, color=?, hidden=?, \
+        active=?, iconindex=?, last_checked=?, \
         timezone=?  WHERE id=?"));
-  statement.BindString16(0, calendar.name());
-  statement.BindString16(1, calendar.description());
-  statement.BindString(2, GURLToDatabaseURL(calendar.url()));
-  statement.BindString(3, calendar.ctag());
-  statement.BindInt(4, calendar.orderindex());
-  statement.BindString(5, calendar.color());
-  statement.BindInt(6, calendar.hidden() ? 1 : 0);
-  statement.BindInt(7, calendar.active() ? 1 : 0);
-  statement.BindInt(8, calendar.iconindex());
-  statement.BindString16(9, calendar.username());
-  statement.BindInt(10, calendar.type());
-  statement.BindInt(11, calendar.interval());
-  statement.BindInt64(12, calendar.last_checked().ToInternalValue());
-  statement.BindString(13, calendar.timezone());
+  int column_index = 0;
+  statement.BindString16(column_index++, calendar.name());
+  statement.BindString16(column_index++, calendar.description());
+  statement.BindString(column_index++, calendar.ctag());
+  statement.BindInt(column_index++, calendar.orderindex());
+  statement.BindString(column_index++, calendar.color());
+  statement.BindInt(column_index++, calendar.hidden() ? 1 : 0);
+  statement.BindInt(column_index++, calendar.active() ? 1 : 0);
+  statement.BindInt(column_index++, calendar.iconindex());
+  statement.BindInt64(column_index++,
+                      calendar.last_checked().ToInternalValue());
+  statement.BindString(column_index++, calendar.timezone());
 
-  statement.BindInt64(14, calendar.id());
+  statement.BindInt64(column_index++, calendar.id());
 
   return statement.Run();
 }
@@ -196,16 +177,12 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   AccountID account_id = statement.ColumnInt64(column_index++);
   base::string16 name = statement.ColumnString16(column_index++);
   base::string16 description = statement.ColumnString16(column_index++);
-  std::string url = statement.ColumnString(column_index++);
   std::string ctag = statement.ColumnString(column_index++);
   int orderindex = statement.ColumnInt(column_index++);
   std::string color = statement.ColumnString(column_index++);
   bool hidden = statement.ColumnInt(column_index++) != 0;
   bool active = statement.ColumnInt(column_index++) != 0;
   int iconindex = statement.ColumnInt(column_index++);
-  base::string16 username = statement.ColumnString16(column_index++);
-  int type = statement.ColumnInt(column_index++);
-  int interval = statement.ColumnInt(column_index++);
   base::Time last_checked =
       base::Time::FromInternalValue(statement.ColumnInt64(column_index++));
   std::string timezone = statement.ColumnString(column_index++);
@@ -214,21 +191,22 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   calendar->set_account_id(account_id);
   calendar->set_name(name);
   calendar->set_description(description);
-  calendar->set_url(GURL(url));
   calendar->set_ctag(ctag);
   calendar->set_orderindex(orderindex);
   calendar->set_color(color);
   calendar->set_hidden(hidden);
   calendar->set_active(active);
   calendar->set_iconindex(iconindex);
-  calendar->set_username(username);
-  calendar->set_type(type);
-  calendar->set_interval(interval);
   calendar->set_last_checked(last_checked);
   calendar->set_timezone(timezone);
 }
 
 bool CalendarTable::DoesCalendarIdExist(CalendarID calendar_id) {
+  // NOTE(arnar@vivaldi.com): Special calendar_id for event templates
+  if (calendar_id == -10) {
+    return true;
+  }
+
   sql::Statement statement(
       GetDB().GetUniqueStatement("select count(*) as count from calendar \
         WHERE id=?"));
@@ -250,26 +228,16 @@ bool CalendarTable::DoesAnyCalendarExist() {
   return statement.ColumnInt(0) > 0;
 }
 
-// Updates to version 3. Adds columns type, interval, last_checked
+// Updates to version 3. Adds columns last_checked
 bool CalendarTable::MigrateCalendarToVersion3() {
   if (!GetDB().DoesTableExist("calendar")) {
     NOTREACHED() << "Calendar table should exist before migration";
     return false;
   }
 
-  if (!GetDB().DoesColumnExist("calendar", "type") &&
-      !GetDB().DoesColumnExist("calendar", "interval") &&
-      !GetDB().DoesColumnExist("calendar", "last_checked")) {
-    // Old versions don't have the type, interval and last_checked column, we
+  if (!GetDB().DoesColumnExist("calendar", "last_checked")) {
+    // Old versions don't have the last_checked column, we
     // modify the table to add that field.
-    if (!GetDB().Execute("ALTER TABLE calendar "
-                         "ADD COLUMN type INTEGER DEFAULT 0 NOT NULL"))
-      return false;
-
-    if (!GetDB().Execute("ALTER TABLE calendar "
-                         "ADD COLUMN interval INTEGER DEFAULT 0 not NULL"))
-      return false;
-
     if (!GetDB().Execute("ALTER TABLE calendar "
                          "ADD COLUMN last_checked INTEGER DEFAULT 0 not NULL"))
       return false;

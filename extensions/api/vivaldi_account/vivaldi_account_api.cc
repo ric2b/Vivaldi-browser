@@ -170,7 +170,7 @@ ExtensionFunction::ResponseAction VivaldiAccountLoginFunction::Run() {
 
   auto* account_manager =
       ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!account_manager)
     return RespondNow(Error("Account manager is unavailable"));
 
@@ -182,7 +182,7 @@ ExtensionFunction::ResponseAction VivaldiAccountLoginFunction::Run() {
 ExtensionFunction::ResponseAction VivaldiAccountLogoutFunction::Run() {
   auto* account_manager =
       ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!account_manager)
     return RespondNow(Error("Account manager is unavailable"));
   account_manager->Logout();
@@ -192,13 +192,13 @@ ExtensionFunction::ResponseAction VivaldiAccountLogoutFunction::Run() {
 ExtensionFunction::ResponseAction VivaldiAccountGetStateFunction::Run() {
   auto* account_manager =
       ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!account_manager)
     return RespondNow(Error("Account manager is unavailable"));
 
   return RespondNow(
       ArgumentList(vivaldi::vivaldi_account::GetState::Results::Create(
-          GetState(Profile::FromBrowserContext(context_)))));
+          GetState(Profile::FromBrowserContext(browser_context())))));
 }
 
 }  // namespace extensions

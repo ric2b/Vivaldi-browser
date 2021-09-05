@@ -43,26 +43,21 @@ CSSImageValue::CSSImageValue(const AtomicString& raw_value,
                              const KURL& url,
                              const Referrer& referrer,
                              OriginClean origin_clean,
+                             bool is_ad_related,
                              StyleImage* image)
     : CSSValue(kImageClass),
       relative_url_(raw_value),
       referrer_(referrer),
       absolute_url_(url.GetString()),
       cached_image_(image),
-      origin_clean_(origin_clean) {}
-
-CSSImageValue::CSSImageValue(const AtomicString& absolute_url,
-                             OriginClean origin_clean)
-    : CSSValue(kImageClass),
-      relative_url_(absolute_url),
-      absolute_url_(absolute_url),
-      origin_clean_(OriginClean::kFalse) {}
+      origin_clean_(origin_clean),
+      is_ad_related_(is_ad_related) {}
 
 CSSImageValue::~CSSImageValue() = default;
 
 StyleImage* CSSImageValue::CacheImage(
     const Document& document,
-    FetchParameters::ImageRequestOptimization image_request_optimization,
+    FetchParameters::ImageRequestBehavior image_request_behavior,
     CrossOriginAttributeValue cross_origin) {
   if (!cached_image_) {
     if (absolute_url_.IsEmpty())
@@ -71,10 +66,13 @@ StyleImage* CSSImageValue::CacheImage(
     resource_request.SetReferrerPolicy(
         ReferrerPolicyResolveDefault(referrer_.referrer_policy));
     resource_request.SetReferrerString(referrer_.referrer);
+    if (is_ad_related_)
+      resource_request.SetIsAdResource();
     ResourceLoaderOptions options;
     options.initiator_info.name = initiator_name_.IsEmpty()
                                       ? fetch_initiator_type_names::kCSS
                                       : initiator_name_;
+    options.initiator_info.referrer = referrer_.referrer;
     FetchParameters params(std::move(resource_request), options);
 
     if (cross_origin != kCrossOriginAttributeNotSet) {
@@ -83,7 +81,7 @@ StyleImage* CSSImageValue::CacheImage(
     }
 
     bool is_lazily_loaded =
-        image_request_optimization == FetchParameters::kDeferImageLoad &&
+        image_request_behavior == FetchParameters::kDeferImageLoad &&
         // Only http/https images are eligible to be lazily loaded.
         params.Url().ProtocolIsInHTTPFamily();
     if (is_lazily_loaded) {

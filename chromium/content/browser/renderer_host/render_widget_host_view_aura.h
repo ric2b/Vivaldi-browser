@@ -136,15 +136,16 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void TransformPointToRootSurface(gfx::PointF* point) override;
   gfx::Rect GetBoundsInRootWindow() override;
   void WheelEventAck(const blink::WebMouseWheelEvent& event,
-                     InputEventAckState ack_result) override;
+                     blink::mojom::InputEventResultState ack_result) override;
   void GestureEventAck(const blink::WebGestureEvent& event,
-                       InputEventAckState ack_result) override;
+                       blink::mojom::InputEventResultState ack_result) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
-  void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
-                              InputEventAckState ack_result) override;
+  void ProcessAckedTouchEvent(
+      const TouchEventWithLatencyInfo& touch,
+      blink::mojom::InputEventResultState ack_result) override;
   std::unique_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget()
       override;
-  InputEventAckState FilterInputEvent(
+  blink::mojom::InputEventResultState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate,
@@ -673,12 +674,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   uint32_t latest_capture_sequence_number_ = 0u;
 
   // The pointer type of the most recent gesture/mouse/touch event.
-  ui::EventPointerType last_pointer_type_ =
-      ui::EventPointerType::POINTER_TYPE_UNKNOWN;
+  ui::EventPointerType last_pointer_type_ = ui::EventPointerType::kUnknown;
   // The pointer type that caused the most recent focus. This value will be
   // incorrect if the focus was not triggered by a user gesture.
   ui::EventPointerType last_pointer_type_before_focus_ =
-      ui::EventPointerType::POINTER_TYPE_UNKNOWN;
+      ui::EventPointerType::kUnknown;
 
   bool is_first_navigation_ = true;
   viz::LocalSurfaceIdAllocation inset_surface_id_allocation_;

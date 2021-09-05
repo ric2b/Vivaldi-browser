@@ -6,7 +6,9 @@
 
 #include <string>
 
+#include "base/check.h"
 #include "base/feature_list.h"
+#include "base/notreached.h"
 #include "services/service_manager/sandbox/features.h"
 #include "services/service_manager/sandbox/switches.h"
 
@@ -28,6 +30,12 @@ bool IsUnsandboxedSandboxType(SandboxType sandbox_type) {
 #endif
     case SandboxType::kAudio:
       return !IsAudioSandboxEnabled();
+    case SandboxType::kVideoCapture:
+#if defined(OS_FUCHSIA)
+      return false;
+#else
+      return true;
+#endif
     case SandboxType::kNetwork:
 #if defined(OS_MACOSX)
       return false;
@@ -35,7 +43,6 @@ bool IsUnsandboxedSandboxType(SandboxType sandbox_type) {
       return !base::FeatureList::IsEnabled(
           service_manager::features::kNetworkServiceSandbox);
 #endif  // defined(OS_MACOSX)
-    case SandboxType::kInvalid:
     case SandboxType::kRenderer:
     case SandboxType::kUtility:
     case SandboxType::kGpu:
@@ -54,7 +61,10 @@ bool IsUnsandboxedSandboxType(SandboxType sandbox_type) {
 #if !defined(OS_MACOSX)
     case SandboxType::kSharingService:
 #endif
-    case SandboxType::kSoda:
+#if defined(OS_LINUX)
+    case SandboxType::kZygoteIntermediateSandbox:
+#endif
+    case SandboxType::kSpeechRecognition:
       return false;
   }
 }
@@ -101,6 +111,7 @@ void SetCommandLineFlagsForSandboxType(base::CommandLine* command_line,
     case SandboxType::kCdm:
     case SandboxType::kPrintCompositor:
     case SandboxType::kAudio:
+    case SandboxType::kVideoCapture:
 #if defined(OS_WIN)
     case SandboxType::kXrCompositing:
     case SandboxType::kProxyResolver:
@@ -112,7 +123,7 @@ void SetCommandLineFlagsForSandboxType(base::CommandLine* command_line,
 #if !defined(OS_MACOSX)
     case SandboxType::kSharingService:
 #endif
-    case SandboxType::kSoda:
+    case SandboxType::kSpeechRecognition:
       DCHECK(command_line->GetSwitchValueASCII(switches::kProcessType) ==
              switches::kUtilityProcess);
       DCHECK(!command_line->HasSwitch(switches::kServiceSandboxType));
@@ -122,12 +133,16 @@ void SetCommandLineFlagsForSandboxType(base::CommandLine* command_line,
       break;
 #if defined(OS_FUCHSIA)
     case SandboxType::kWebContext:
+      break;
 #endif  // defined(OS_FUCHSIA)
 #if defined(OS_MACOSX)
     case SandboxType::kNaClLoader:
-#endif  // defined(OS_MACOSX)
-    case SandboxType::kInvalid:
       break;
+#endif  // defined(OS_MACOSX)
+#if defined(OS_LINUX)
+    case SandboxType::kZygoteIntermediateSandbox:
+      break;
+#endif
   }
 }
 
@@ -163,13 +178,32 @@ SandboxType SandboxTypeFromCommandLine(const base::CommandLine& command_line) {
   if (process_type == switches::kPpapiPluginProcess)
     return SandboxType::kPpapi;
 
+  // NaCl tests on all platforms use the loader process.
+  if (process_type == switches::kNaClLoaderProcess) {
 #if defined(OS_MACOSX)
-  if (process_type == switches::kNaClLoaderProcess)
     return SandboxType::kNaClLoader;
+#else
+    return SandboxType::kUtility;
+#endif
+  }
+
+  if (process_type == switches::kNaClBrokerProcess)
+    return SandboxType::kNoSandbox;
+
+#if defined(OS_LINUX)
+  // Intermediate process gains a sandbox later.
+  if (process_type == switches::kZygoteProcessType)
+    return SandboxType::kZygoteIntermediateSandbox;
 #endif
 
-  // This is a process which we don't know about.
-  return SandboxType::kInvalid;
+  if (process_type == switches::kCloudPrintServiceProcess)
+    return SandboxType::kNoSandbox;
+
+  CHECK(false)
+      << "Command line does not provide a valid sandbox configuration: "
+      << command_line.GetCommandLineString();
+  NOTREACHED();
+  return SandboxType::kNoSandbox;
 }
 
 std::string StringFromUtilitySandboxType(SandboxType sandbox_type) {
@@ -188,12 +222,14 @@ std::string StringFromUtilitySandboxType(SandboxType sandbox_type) {
       return switches::kUtilitySandbox;
     case SandboxType::kAudio:
       return switches::kAudioSandbox;
+    case SandboxType::kVideoCapture:
+      return switches::kVideoCaptureSandbox;
 #if !defined(OS_MACOSX)
     case SandboxType::kSharingService:
       return switches::kSharingServiceSandbox;
 #endif
-    case SandboxType::kSoda:
-      return switches::kSodaSandbox;
+    case SandboxType::kSpeechRecognition:
+      return switches::kSpeechRecognitionSandbox;
 #if defined(OS_WIN)
     case SandboxType::kXrCompositing:
       return switches::kXrCompositingSandbox;
@@ -218,7 +254,9 @@ std::string StringFromUtilitySandboxType(SandboxType sandbox_type) {
 #if defined(OS_FUCHSIA)
     case SandboxType::kWebContext:
 #endif  // defined(OS_FUCHSIA)
-    case SandboxType::kInvalid:
+#if defined(OS_LINUX)
+    case SandboxType::kZygoteIntermediateSandbox:
+#endif
       NOTREACHED();
       return std::string();
   }
@@ -252,8 +290,10 @@ SandboxType UtilitySandboxTypeFromString(const std::string& sandbox_string) {
 #endif
   if (sandbox_string == switches::kAudioSandbox)
     return SandboxType::kAudio;
-  if (sandbox_string == switches::kSodaSandbox)
-    return SandboxType::kSoda;
+  if (sandbox_string == switches::kSpeechRecognitionSandbox)
+    return SandboxType::kSpeechRecognition;
+  if (sandbox_string == switches::kVideoCaptureSandbox)
+    return SandboxType::kVideoCapture;
 #if defined(OS_CHROMEOS)
   if (sandbox_string == switches::kImeSandbox)
     return SandboxType::kIme;

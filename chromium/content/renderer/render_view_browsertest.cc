@@ -18,6 +18,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -108,10 +109,10 @@
 #include "url/url_constants.h"
 
 #if defined(OS_ANDROID)
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_device.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #endif
 
 #if defined(OS_WIN)
@@ -124,14 +125,12 @@
 #include "ui/events/test/events_test_utils.h"
 #include "ui/events/test/events_test_utils_x11.h"
 #include "ui/events/x/x11_event_translation.h"
-#include "ui/gfx/x/x11.h"
+#include "ui/gfx/x/x11.h"  // nogncheck
 #endif
 
 #if defined(USE_OZONE)
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #endif
-
-#include "url/url_constants.h"
 
 using base::TimeDelta;
 using blink::WebFrame;
@@ -206,8 +205,8 @@ FrameReplicationState ReconstructReplicationStateForTesting(
   blink::WebLocalFrame* frame = test_render_frame->GetWebFrame();
 
   FrameReplicationState result;
-  // can't recover result.scope - no way to get WebTreeScopeType via public
-  // blink API...
+  // can't recover result.scope - no way to get blink::mojom::TreeScopeType via
+  // public blink API...
   result.name = frame->AssignedName().Utf8();
   result.unique_name = test_render_frame->unique_name();
   result.frame_policy.sandbox_flags = frame->EffectiveSandboxFlagsForTesting();
@@ -392,7 +391,7 @@ class RenderViewImplTest : public RenderViewTest {
     NativeWebKeyboardEvent keyup_event(*event3);
     SendNativeKeyEvent(keyup_event);
 
-    long c = DomCodeToUsLayoutCharacter(
+    base::char16 c = DomCodeToUsLayoutCharacter(
         UsLayoutKeyboardCodeToDomCode(static_cast<ui::KeyboardCode>(key_code)),
         flags);
     output->assign(1, static_cast<base::char16>(c));
@@ -418,7 +417,7 @@ class RenderViewImplTest : public RenderViewTest {
     NativeWebKeyboardEvent keyup_web_event(keyup_event);
     SendNativeKeyEvent(keyup_web_event);
 
-    long c = DomCodeToUsLayoutCharacter(
+    base::char16 c = DomCodeToUsLayoutCharacter(
         UsLayoutKeyboardCodeToDomCode(static_cast<ui::KeyboardCode>(key_code)),
         flags);
     output->assign(1, static_cast<base::char16>(c));
@@ -579,7 +578,8 @@ TEST_F(RenderViewImplTest, IsPinchGestureActivePropagatesToProxies) {
           root_web_frame->FirstChild()->NextSibling()->ToWebLocalFrame()));
   ASSERT_TRUE(child_frame_2);
   child_frame_1->Unload(kProxyRoutingId, true,
-                        ReconstructReplicationStateForTesting(child_frame_1));
+                        ReconstructReplicationStateForTesting(child_frame_1),
+                        base::UnguessableToken::Create());
   EXPECT_TRUE(root_web_frame->FirstChild()->IsWebRemoteFrame());
   RenderFrameProxy* child_proxy_1 = RenderFrameProxy::FromWebFrame(
       root_web_frame->FirstChild()->ToWebRemoteFrame());
@@ -602,7 +602,8 @@ TEST_F(RenderViewImplTest, IsPinchGestureActivePropagatesToProxies) {
   // and registering of a new RenderFrameProxy, which should pick up the
   // existing setting.
   child_frame_2->Unload(kProxyRoutingId + 1, true,
-                        ReconstructReplicationStateForTesting(child_frame_2));
+                        ReconstructReplicationStateForTesting(child_frame_2),
+                        base::UnguessableToken::Create());
   EXPECT_TRUE(root_web_frame->FirstChild()->NextSibling()->IsWebRemoteFrame());
   RenderFrameProxy* child_proxy_2 = RenderFrameProxy::FromWebFrame(
       root_web_frame->FirstChild()->NextSibling()->ToWebRemoteFrame());
@@ -858,7 +859,14 @@ class RenderViewImplUpdateTitleTest : public RenderViewImplTest {
   }
 };
 
-TEST_F(RenderViewImplUpdateTitleTest, OnNavigationLoadDataWithBaseURL) {
+#if defined(OS_ANDROID)
+// Failing on Android: http://crbug.com/1080328
+#define MAYBE_OnNavigationLoadDataWithBaseURL \
+  DISABLED_OnNavigationLoadDataWithBaseURL
+#else
+#define MAYBE_OnNavigationLoadDataWithBaseURL OnNavigationLoadDataWithBaseURL
+#endif
+TEST_F(RenderViewImplUpdateTitleTest, MAYBE_OnNavigationLoadDataWithBaseURL) {
   auto common_params = CreateCommonNavigationParams();
   common_params->url = GURL("data:text/html,");
   common_params->navigation_type = mojom::NavigationType::DIFFERENT_DOCUMENT;
@@ -891,7 +899,7 @@ TEST_F(RenderViewImplTest, BeginNavigation) {
   blink::WebSecurityOrigin requestor_origin =
       blink::WebSecurityOrigin::Create(GURL("http://foo.com"));
 
-  // Navigations to normal HTTP URLs can be handled locally.
+  // Navigations to normal HTTP URLs.
   blink::WebURLRequest request(GURL("http://foo.com"));
   request.SetMode(network::mojom::RequestMode::kNavigate);
   request.SetCredentialsMode(network::mojom::CredentialsMode::kInclude);
@@ -910,10 +918,16 @@ TEST_F(RenderViewImplTest, BeginNavigation) {
   // stop and be sent to the browser.
   EXPECT_TRUE(frame()->IsBrowserSideNavigationPending());
 
-  // Verify that form posts to WebUI URLs will be sent to the browser process.
+  // Form posts to WebUI URLs.
   auto form_navigation_info = std::make_unique<blink::WebNavigationInfo>();
   form_navigation_info->url_request = blink::WebURLRequest(GetWebUIURL("foo"));
   form_navigation_info->url_request.SetHttpMethod("POST");
+  form_navigation_info->url_request.SetMode(
+      network::mojom::RequestMode::kNavigate);
+  form_navigation_info->url_request.SetRedirectMode(
+      network::mojom::RedirectMode::kManual);
+  form_navigation_info->url_request.SetRequestContext(
+      blink::mojom::RequestContextType::INTERNAL);
   blink::WebHTTPBody post_body;
   post_body.Initialize();
   post_body.AppendData("blah");
@@ -930,10 +944,16 @@ TEST_F(RenderViewImplTest, BeginNavigation) {
   EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
       FrameHostMsg_OpenURL::ID));
 
-  // Verify that popup links to WebUI URLs also are sent to browser.
+  // Popup links to WebUI URLs.
   blink::WebURLRequest popup_request(GetWebUIURL("foo"));
   auto popup_navigation_info = std::make_unique<blink::WebNavigationInfo>();
   popup_navigation_info->url_request = blink::WebURLRequest(GetWebUIURL("foo"));
+  popup_navigation_info->url_request.SetMode(
+      network::mojom::RequestMode::kNavigate);
+  popup_navigation_info->url_request.SetRedirectMode(
+      network::mojom::RedirectMode::kManual);
+  popup_navigation_info->url_request.SetRequestContext(
+      blink::mojom::RequestContextType::INTERNAL);
   popup_navigation_info->url_request.SetRequestorOrigin(requestor_origin);
   popup_navigation_info->frame_type =
       blink::mojom::RequestContextFrameType::kAuxiliary;
@@ -984,9 +1004,14 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
   blink::WebSecurityOrigin requestor_origin =
       blink::WebSecurityOrigin::Create(GURL("http://foo.com"));
 
-  // Navigations to normal HTTP URLs will be sent to browser process.
+  // Navigations to normal HTTP URLs.
   auto navigation_info = std::make_unique<blink::WebNavigationInfo>();
   navigation_info->url_request = blink::WebURLRequest(GURL("http://foo.com"));
+  navigation_info->url_request.SetMode(network::mojom::RequestMode::kNavigate);
+  navigation_info->url_request.SetRedirectMode(
+      network::mojom::RedirectMode::kManual);
+  navigation_info->url_request.SetRequestContext(
+      blink::mojom::RequestContextType::INTERNAL);
   navigation_info->url_request.SetRequestorOrigin(requestor_origin);
   navigation_info->frame_type =
       blink::mojom::RequestContextFrameType::kTopLevel;
@@ -998,9 +1023,15 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
   EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
       FrameHostMsg_OpenURL::ID));
 
-  // Navigations to WebUI URLs will also be sent to browser process.
+  // Navigations to WebUI URLs.
   auto webui_navigation_info = std::make_unique<blink::WebNavigationInfo>();
   webui_navigation_info->url_request = blink::WebURLRequest(GetWebUIURL("foo"));
+  webui_navigation_info->url_request.SetMode(
+      network::mojom::RequestMode::kNavigate);
+  webui_navigation_info->url_request.SetRedirectMode(
+      network::mojom::RedirectMode::kManual);
+  webui_navigation_info->url_request.SetRequestContext(
+      blink::mojom::RequestContextType::INTERNAL);
   webui_navigation_info->url_request.SetRequestorOrigin(requestor_origin);
   webui_navigation_info->frame_type =
       blink::mojom::RequestContextFrameType::kTopLevel;
@@ -1012,10 +1043,16 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
   EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
       FrameHostMsg_OpenURL::ID));
 
-  // Verify that form posts to data URLs will be sent to the browser process.
+  // Form posts to data URLs.
   auto data_navigation_info = std::make_unique<blink::WebNavigationInfo>();
   data_navigation_info->url_request =
       blink::WebURLRequest(GURL("data:text/html,foo"));
+  data_navigation_info->url_request.SetMode(
+      network::mojom::RequestMode::kNavigate);
+  data_navigation_info->url_request.SetRedirectMode(
+      network::mojom::RedirectMode::kManual);
+  data_navigation_info->url_request.SetRequestContext(
+      blink::mojom::RequestContextType::INTERNAL);
   data_navigation_info->url_request.SetRequestorOrigin(requestor_origin);
   data_navigation_info->url_request.SetHttpMethod("POST");
   blink::WebHTTPBody post_body;
@@ -1033,15 +1070,17 @@ TEST_F(RenderViewImplTest, BeginNavigationForWebUI) {
   EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
       FrameHostMsg_OpenURL::ID));
 
-  // Verify that a popup that creates a view first and then navigates to a
-  // normal HTTP URL will be sent to the browser process, even though the
-  // new view does not have any enabled_bindings_.
+  // A popup that creates a view first and then navigates to a
+  // normal HTTP URL.
   blink::WebURLRequest popup_request(GURL("http://foo.com"));
   popup_request.SetRequestorOrigin(requestor_origin);
+  popup_request.SetMode(network::mojom::RequestMode::kNavigate);
+  popup_request.SetRedirectMode(network::mojom::RedirectMode::kManual);
+  popup_request.SetRequestContext(blink::mojom::RequestContextType::INTERNAL);
   blink::WebView* new_web_view = view()->CreateView(
       GetMainFrame(), popup_request, blink::WebWindowFeatures(), "foo",
       blink::kWebNavigationPolicyNewForegroundTab,
-      blink::mojom::WebSandboxFlags::kNone,
+      network::mojom::WebSandboxFlags::kNone,
       blink::FeaturePolicy::FeatureState(),
       blink::AllocateSessionStorageNamespaceId());
   RenderViewImpl* new_view = RenderViewImpl::FromWebView(new_web_view);
@@ -1080,7 +1119,8 @@ TEST_F(RenderViewImplScaleFactorTest, DeviceEmulationWithOOPIF) {
   ASSERT_TRUE(child_frame);
 
   child_frame->Unload(kProxyRoutingId + 1, true,
-                      ReconstructReplicationStateForTesting(child_frame));
+                      ReconstructReplicationStateForTesting(child_frame),
+                      base::UnguessableToken::Create());
   EXPECT_TRUE(web_frame->FirstChild()->IsWebRemoteFrame());
   RenderFrameProxy* child_proxy = RenderFrameProxy::FromWebFrame(
       web_frame->FirstChild()->ToWebRemoteFrame());
@@ -1123,7 +1163,8 @@ TEST_F(RenderViewImplTest, OriginReplicationForUnload) {
   content::FrameReplicationState replication_state =
       ReconstructReplicationStateForTesting(child_frame);
   replication_state.origin = url::Origin::Create(GURL("http://foo.com"));
-  child_frame->Unload(kProxyRoutingId, true, replication_state);
+  child_frame->Unload(kProxyRoutingId, true, replication_state,
+                      base::UnguessableToken::Create());
 
   // The child frame should now be a WebRemoteFrame.
   EXPECT_TRUE(web_frame->FirstChild()->IsWebRemoteFrame());
@@ -1140,7 +1181,8 @@ TEST_F(RenderViewImplTest, OriginReplicationForUnload) {
   TestRenderFrame* child_frame2 =
       static_cast<TestRenderFrame*>(RenderFrame::FromWebFrame(
           web_frame->FirstChild()->NextSibling()->ToWebLocalFrame()));
-  child_frame2->Unload(kProxyRoutingId + 1, true, replication_state);
+  child_frame2->Unload(kProxyRoutingId + 1, true, replication_state,
+                       base::UnguessableToken::Create());
   EXPECT_TRUE(web_frame->FirstChild()->NextSibling()->IsWebRemoteFrame());
   EXPECT_TRUE(
       web_frame->FirstChild()->NextSibling()->GetSecurityOrigin().IsOpaque());
@@ -1167,7 +1209,8 @@ TEST_F(RenderViewImplEnableZoomForDSFTest,
   content::FrameReplicationState replication_state =
       ReconstructReplicationStateForTesting(frame());
   // replication_state.origin = url::Origin(GURL("http://foo.com"));
-  frame()->Unload(kProxyRoutingId, true, replication_state);
+  frame()->Unload(kProxyRoutingId, true, replication_state,
+                  base::UnguessableToken::Create());
   EXPECT_TRUE(view()->GetWebView()->MainFrame()->IsWebRemoteFrame());
 
   // Do the remote-to-local transition for the proxy, which is to create a
@@ -1186,12 +1229,28 @@ TEST_F(RenderViewImplEnableZoomForDSFTest,
       mojom::CreateFrameWidgetParams::New();
   widget_params->routing_id = kProxyRoutingId + 2;
   widget_params->visual_properties = test_visual_properties;
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidget> blink_frame_widget;
+  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+      blink_frame_widget_receiver =
+          blink_frame_widget
+              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> blink_frame_widget_host;
+  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidgetHost>
+      blink_frame_widget_host_receiver =
+          blink_frame_widget_host
+              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+
+  widget_params->frame_widget = std::move(blink_frame_widget_receiver);
+  widget_params->frame_widget_host = blink_frame_widget_host.Unbind();
+
   RenderFrameImpl::CreateFrame(
       routing_id, std::move(stub_interface_provider),
       std::move(stub_browser_interface_broker), kProxyRoutingId,
       MSG_ROUTING_NONE, MSG_ROUTING_NONE, MSG_ROUTING_NONE,
-      base::UnguessableToken::Create(), replication_state,
-      compositor_deps_.get(), std::move(widget_params),
+      base::UnguessableToken::Create(), base::UnguessableToken::Create(),
+      replication_state, compositor_deps_.get(), std::move(widget_params),
       blink::mojom::FrameOwnerProperties::New(),
       /*has_committed_real_load=*/true);
   TestRenderFrame* provisional_frame =
@@ -1240,7 +1299,8 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
   // Unload the child frame.
   FrameReplicationState replication_state =
       ReconstructReplicationStateForTesting(child_frame);
-  child_frame->Unload(kProxyRoutingId, true, replication_state);
+  child_frame->Unload(kProxyRoutingId, true, replication_state,
+                      base::UnguessableToken::Create());
   EXPECT_TRUE(web_frame->FirstChild()->IsWebRemoteFrame());
 
   // Do the first step of a remote-to-local transition for the child proxy,
@@ -1257,7 +1317,8 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
       routing_id, std::move(stub_interface_provider),
       std::move(stub_browser_interface_broker), kProxyRoutingId,
       MSG_ROUTING_NONE, frame()->GetRoutingID(), MSG_ROUTING_NONE,
-      base::UnguessableToken::Create(), replication_state, nullptr,
+      base::UnguessableToken::Create(), base::UnguessableToken::Create(),
+      replication_state, nullptr,
       /*widget_params=*/nullptr, blink::mojom::FrameOwnerProperties::New(),
       /*has_committed_real_load=*/true);
   {
@@ -1294,7 +1355,8 @@ TEST_F(RenderViewImplEnableZoomForDSFTest,
   TestRenderFrame* main_frame =
       static_cast<TestRenderFrame*>(view()->GetMainRenderFrame());
   main_frame->Unload(kProxyRoutingId, true,
-                     ReconstructReplicationStateForTesting(main_frame));
+                     ReconstructReplicationStateForTesting(main_frame),
+                     base::UnguessableToken::Create());
   EXPECT_TRUE(view()->GetWebView()->MainFrame()->IsWebRemoteFrame());
 }
 
@@ -1478,15 +1540,65 @@ TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsAndInputPanelPolicy) {
   // panel policy to auto.
   ExecuteJavaScriptForTests(
       "const editContext = new EditContext(); "
-      "editContext.focus();editContext.inputPanelPolicy=\"auto\";editContext."
-      "updateLayout(new DOMRect(10, 20, 30, 40), new DOMRect(10,20, 1, 5));");
-  base::RunLoop().RunUntilIdle();
+      "editContext.focus();editContext.inputPanelPolicy=\"auto\"; "
+      "const control_bound = new DOMRect(10, 20, 30, 40); "
+      "const selection_bound = new DOMRect(10, 20, 1, 5); "
+      "editContext.updateLayout(control_bound, selection_bound);");
+  // This RunLoop is waiting for EditContext to be created and layout bounds
+  // to be updated in the EditContext.
+  base::RunLoop run_loop;
+  base::PostTask(FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
+
   // Update the IME status and verify if our IME backend sends an IPC message
   // to notify layout bounds of the EditContext.
   main_widget()->UpdateTextInputState();
   auto params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
   EXPECT_EQ(true, std::get<0>(params).show_ime_if_needed);
   blink::WebRect edit_context_control_bounds_expected(10, 20, 30, 40);
+  blink::WebRect edit_context_selection_bounds_expected(10, 20, 1, 5);
+  main_widget()->ConvertViewportToWindow(&edit_context_control_bounds_expected);
+  main_widget()->ConvertViewportToWindow(
+      &edit_context_selection_bounds_expected);
+  blink::WebRect actual_active_element_control_bounds(
+      std::get<0>(params).edit_context_control_bounds.value());
+  blink::WebRect actual_active_element_selection_bounds(
+      std::get<0>(params).edit_context_selection_bounds.value());
+  EXPECT_EQ(edit_context_control_bounds_expected,
+            actual_active_element_control_bounds);
+  EXPECT_EQ(edit_context_selection_bounds_expected,
+            actual_active_element_selection_bounds);
+}
+
+TEST_F(RenderViewImplTest, EditContextGetLayoutBoundsWithFloatingValues) {
+  // Load an HTML page.
+  LoadHTML(
+      "<html>"
+      "<head>"
+      "</head>"
+      "<body>"
+      "</body>"
+      "</html>");
+  render_thread_->sink().ClearMessages();
+  // Create an EditContext with control and selection bounds and set input
+  // panel policy to auto.
+  ExecuteJavaScriptForTests(
+      "const editContext = new EditContext(); "
+      "editContext.focus();editContext.inputPanelPolicy=\"auto\"; "
+      "const control_bound = new DOMRect(10.14, 20.25, 30.15, 40.50); "
+      "const selection_bound = new DOMRect(10, 20, 1, 5); "
+      "editContext.updateLayout(control_bound, selection_bound);");
+  // This RunLoop is waiting for EditContext to be created and layout bounds
+  // to be updated in the EditContext.
+  base::RunLoop run_loop;
+  base::PostTask(FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
+  // Update the IME status and verify if our IME backend sends an IPC message
+  // to notify layout bounds of the EditContext.
+  main_widget()->UpdateTextInputState();
+  auto params = ProcessAndReadIPC<WidgetHostMsg_TextInputStateChanged>();
+  EXPECT_EQ(true, std::get<0>(params).show_ime_if_needed);
+  blink::WebRect edit_context_control_bounds_expected(10, 20, 31, 41);
   blink::WebRect edit_context_selection_bounds_expected(10, 20, 1, 5);
   main_widget()->ConvertViewportToWindow(&edit_context_control_bounds_expected);
   main_widget()->ConvertViewportToWindow(
@@ -1515,7 +1627,10 @@ TEST_F(RenderViewImplTest, ActiveElementGetLayoutBounds) {
   // Create an EditContext with control and selection bounds and set input
   // panel policy to auto.
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
-  base::RunLoop().RunUntilIdle();
+  // This RunLoop is waiting for focus to be processed for the active element.
+  base::RunLoop run_loop;
+  base::PostTask(FROM_HERE, run_loop.QuitClosure());
+  run_loop.Run();
   // Update the IME status and verify if our IME backend sends an IPC message
   // to notify layout bounds of the EditContext.
   main_widget()->UpdateTextInputState();
@@ -1762,7 +1877,7 @@ TEST_F(RenderViewImplTest, ContextMenu) {
 
   // Create a right click in the center of the iframe. (I'm hoping this will
   // make this a bit more robust in case of some other formatting or other bug.)
-  WebMouseEvent mouse_event(WebInputEvent::kMouseDown,
+  WebMouseEvent mouse_event(WebInputEvent::Type::kMouseDown,
                             WebInputEvent::kNoModifiers, ui::EventTimeForNow());
   mouse_event.button = WebMouseEvent::Button::kRight;
   mouse_event.SetPositionInWidget(250, 250);
@@ -1771,7 +1886,7 @@ TEST_F(RenderViewImplTest, ContextMenu) {
   SendWebMouseEvent(mouse_event);
 
   // Now simulate the corresponding up event which should display the menu
-  mouse_event.SetType(WebInputEvent::kMouseUp);
+  mouse_event.SetType(WebInputEvent::Type::kMouseUp);
   SendWebMouseEvent(mouse_event);
 
   EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
@@ -1788,7 +1903,7 @@ TEST_F(RenderViewImplTest, AndroidContextMenuSelectionOrdering) {
 
   // Create a long press in the center of the iframe. (I'm hoping this will
   // make this a bit more robust in case of some other formatting or other bug.)
-  WebGestureEvent gesture_event(WebInputEvent::kGestureLongPress,
+  WebGestureEvent gesture_event(WebInputEvent::Type::kGestureLongPress,
                                 WebInputEvent::kNoModifiers,
                                 ui::EventTimeForNow());
   gesture_event.SetPositionInWidget(gfx::PointF(250, 250));
@@ -2183,7 +2298,8 @@ class RendererErrorPageTest : public RenderViewImplTest {
   class TestContentRendererClient : public ContentRendererClient {
    public:
     bool ShouldSuppressErrorPage(RenderFrame* render_frame,
-                                 const GURL& url) override {
+                                 const GURL& url,
+                                 int error_code) override {
       return url == "http://example.com/suppress";
     }
 
@@ -2609,7 +2725,8 @@ TEST_F(RenderViewImplTest, DispatchBeforeUnloadCanDetachFrame) {
 
         // Unloads the main frame.
         frame()->OnMessageReceived(UnfreezableFrameMsg_Unload(
-            frame()->GetRoutingID(), 1, false, FrameReplicationState()));
+            frame()->GetRoutingID(), 1, false, FrameReplicationState(),
+            base::UnguessableToken::Create()));
 
         was_callback_run = true;
         run_loop.Quit();

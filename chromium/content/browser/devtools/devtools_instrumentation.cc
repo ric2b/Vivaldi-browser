@@ -3,12 +3,14 @@
 // found in the LICENSE file.
 #include "content/browser/devtools/devtools_instrumentation.h"
 
+#include "base/strings/stringprintf.h"
 #include "components/download/public/common/download_create_info.h"
 #include "components/download/public/common/download_item.h"
 #include "content/browser/devtools/browser_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_url_loader_interceptor.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/devtools/protocol/fetch_handler.h"
+#include "content/browser/devtools/protocol/log_handler.h"
 #include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/devtools/protocol/page_handler.h"
 #include "content/browser/devtools/protocol/security_handler.h"
@@ -25,6 +27,7 @@
 #include "net/base/load_flags.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/http/http_request_headers.h"
+#include "net/quic/quic_transport_client.h"
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
@@ -89,7 +92,7 @@ void OnResetNavigationRequest(NavigationRequest* navigation_request) {
   // Traverse frame chain all the way to the top and report to all
   // page handlers that the navigation completed.
   for (FrameTreeNode* node = navigation_request->frame_tree_node(); node;
-       node = node->parent()) {
+       node = FrameTreeNode::From(node->parent())) {
     DispatchToAgents(node, &protocol::PageHandler::NavigationReset,
                      navigation_request);
   }
@@ -213,7 +216,7 @@ std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
     NavigationHandle* navigation_handle) {
   FrameTreeNode* frame_tree_node =
       NavigationRequest::From(navigation_handle)->frame_tree_node();
-  FrameTreeNode* parent = frame_tree_node->parent();
+  FrameTreeNode* parent = FrameTreeNode::From(frame_tree_node->parent());
   if (!parent) {
     if (WebContentsImpl::FromFrameTreeNode(frame_tree_node)->IsPortal() &&
         WebContentsImpl::FromFrameTreeNode(frame_tree_node)
@@ -280,6 +283,21 @@ void ApplyNetworkRequestOverrides(FrameTreeNode* frame_tree_node,
   }
 
   begin_params->headers = headers.ToString();
+}
+
+bool ApplyUserAgentMetadataOverrides(
+    FrameTreeNode* frame_tree_node,
+    base::Optional<blink::UserAgentMetadata>* override_out) {
+  DevToolsAgentHostImpl* agent_host =
+      RenderFrameDevToolsAgentHost::GetFor(frame_tree_node);
+  if (!agent_host)
+    return false;
+
+  bool result = false;
+  for (auto* emulation : protocol::EmulationHandler::ForAgentHost(agent_host))
+    result = emulation->ApplyUserAgentMetadataOverrides(override_out) || result;
+
+  return result;
 }
 
 namespace {
@@ -611,7 +629,7 @@ void OnCorsPreflightRequestCompleted(
 }
 
 namespace {
-blink::mojom::SameSiteCookieIssueDetailsPtr BuildSameSiteCookieIssueDetails(
+std::vector<blink::mojom::SameSiteCookieExclusionReason> BuildExclusionReasons(
     net::CanonicalCookie::CookieInclusionStatus status) {
   std::vector<blink::mojom::SameSiteCookieExclusionReason> exclusion_reasons;
   if (status.HasExclusionReason(
@@ -625,7 +643,11 @@ blink::mojom::SameSiteCookieIssueDetailsPtr BuildSameSiteCookieIssueDetails(
     exclusion_reasons.push_back(blink::mojom::SameSiteCookieExclusionReason::
                                     ExcludeSameSiteNoneInsecure);
   }
+  return exclusion_reasons;
+}
 
+std::vector<blink::mojom::SameSiteCookieWarningReason> BuildWarningReasons(
+    net::CanonicalCookie::CookieInclusionStatus status) {
   std::vector<blink::mojom::SameSiteCookieWarningReason> warning_reasons;
   if (status.HasWarningReason(
           net::CanonicalCookie::CookieInclusionStatus::
@@ -643,64 +665,98 @@ blink::mojom::SameSiteCookieIssueDetailsPtr BuildSameSiteCookieIssueDetails(
     warning_reasons.push_back(blink::mojom::SameSiteCookieWarningReason::
                                   WarnSameSiteUnspecifiedLaxAllowUnsafe);
   }
-  if (status.HasWarningReason(
-          net::CanonicalCookie::CookieInclusionStatus::
-              WARN_SAMESITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL)) {
-    warning_reasons.push_back(blink::mojom::SameSiteCookieWarningReason::
-                                  WarnSameSiteCrossSchemeSecureUrlMethodUnsafe);
-  }
+
+  // If schemeful messages are disabled, don't add a warning for them.
+  if (!base::FeatureList::IsEnabled(features::kCookieDeprecationMessages))
+    return warning_reasons;
+
+  // There can only be one of the following warnings.
   if (status.HasWarningReason(net::CanonicalCookie::CookieInclusionStatus::
-                                  WARN_SAMESITE_LAX_CROSS_SCHEME_SECURE_URL)) {
+                                  WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE)) {
     warning_reasons.push_back(blink::mojom::SameSiteCookieWarningReason::
-                                  WarnSameSiteCrossSchemeSecureUrlLax);
-  }
-  if (status.HasWarningReason(
-          net::CanonicalCookie::CookieInclusionStatus::
-              WARN_SAMESITE_STRICT_CROSS_SCHEME_SECURE_URL)) {
+                                  WarnSameSiteStrictLaxDowngradeStrict);
+  } else if (status.HasWarningReason(
+                 net::CanonicalCookie::CookieInclusionStatus::
+                     WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE)) {
     warning_reasons.push_back(blink::mojom::SameSiteCookieWarningReason::
-                                  WarnSameSiteCrossSchemeSecureUrlStrict);
-  }
-  if (status.HasWarningReason(
-          net::CanonicalCookie::CookieInclusionStatus::
-              WARN_SAMESITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL)) {
-    warning_reasons.push_back(
-        blink::mojom::SameSiteCookieWarningReason::
-            WarnSameSiteCrossSchemeInsecureUrlMethodUnsafe);
-  }
-  if (status.HasWarningReason(
-          net::CanonicalCookie::CookieInclusionStatus::
-              WARN_SAMESITE_LAX_CROSS_SCHEME_INSECURE_URL)) {
+                                  WarnSameSiteStrictCrossDowngradeStrict);
+  } else if (status.HasWarningReason(
+                 net::CanonicalCookie::CookieInclusionStatus::
+                     WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE)) {
     warning_reasons.push_back(blink::mojom::SameSiteCookieWarningReason::
-                                  WarnSameSiteCrossSchemeInsecureUrlLax);
-  }
-  if (status.HasWarningReason(
-          net::CanonicalCookie::CookieInclusionStatus::
-              WARN_SAMESITE_STRICT_CROSS_SCHEME_INSECURE_URL)) {
+                                  WarnSameSiteStrictCrossDowngradeLax);
+  } else if (status.HasWarningReason(
+                 net::CanonicalCookie::CookieInclusionStatus::
+                     WARN_LAX_CROSS_DOWNGRADE_STRICT_SAMESITE)) {
     warning_reasons.push_back(blink::mojom::SameSiteCookieWarningReason::
-                                  WarnSameSiteCrossSchemeInsecureUrlStrict);
+                                  WarnSameSiteLaxCrossDowngradeStrict);
+  } else if (status.HasWarningReason(
+                 net::CanonicalCookie::CookieInclusionStatus::
+                     WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE)) {
+    warning_reasons.push_back(blink::mojom::SameSiteCookieWarningReason::
+                                  WarnSameSiteLaxCrossDowngradeLax);
   }
 
-  return blink::mojom::SameSiteCookieIssueDetails::New(
-      std::move(exclusion_reasons), std::move(warning_reasons));
+  return warning_reasons;
 }
 }  // namespace
 
-void ReportSameSiteCookieIssue(RenderFrameHostImpl* render_frame_host_impl,
-                               const net::CookieWithStatus& excluded_cookie,
-                               const GURL& url,
-                               const GURL& site_for_cookies) {
-  auto details = blink::mojom::InspectorIssueDetails::New();
-  details->sameSiteCookieIssueDetails =
-      BuildSameSiteCookieIssueDetails(excluded_cookie.status);
-  auto resources = blink::mojom::AffectedResources::New();
-  resources->cookies.push_back(blink::mojom::AffectedCookie::New(
+void ReportSameSiteCookieIssue(
+    RenderFrameHostImpl* render_frame_host_impl,
+    const net::CookieWithStatus& excluded_cookie,
+    const GURL& url,
+    const net::SiteForCookies& site_for_cookies,
+    blink::mojom::SameSiteCookieOperation operation,
+    const base::Optional<std::string>& devtools_request_id) {
+  blink::mojom::AffectedRequestPtr affected_request;
+  if (devtools_request_id) {
+    // We can report the url here, because if devtools_request_id is set, the
+    // url is the url of the request.
+    affected_request =
+        blink::mojom::AffectedRequest::New(*devtools_request_id, url.spec());
+  }
+  auto affected_cookie = blink::mojom::AffectedCookie::New(
       excluded_cookie.cookie.Name(), excluded_cookie.cookie.Path(),
-      excluded_cookie.cookie.Domain(), site_for_cookies));
+      excluded_cookie.cookie.Domain());
+  auto details = blink::mojom::InspectorIssueDetails::New();
+  base::Optional<GURL> optional_site_for_cookies_url;
+  if (!site_for_cookies.IsNull()) {
+    optional_site_for_cookies_url = site_for_cookies.RepresentativeUrl();
+  }
+  details->sameSiteCookieIssueDetails =
+      blink::mojom::SameSiteCookieIssueDetails::New(
+          std::move(affected_cookie),
+          BuildExclusionReasons(excluded_cookie.status),
+          BuildWarningReasons(excluded_cookie.status), operation,
+          optional_site_for_cookies_url, url, std::move(affected_request));
 
   render_frame_host_impl->AddInspectorIssue(
       blink::mojom::InspectorIssueInfo::New(
           blink::mojom::InspectorIssueCode::kSameSiteCookieIssue,
-          std::move(details), std::move(resources)));
+          std::move(details)));
+}
+
+void OnQuicTransportHandshakeFailed(
+    RenderFrameHostImpl* frame,
+    const GURL& url,
+    const base::Optional<net::QuicTransportError>& error) {
+  FrameTreeNode* ftn = frame->frame_tree_node();
+  if (!ftn)
+    return;
+  std::string text = base::StringPrintf(
+      "Failed to establish a connection to %s", url.spec().c_str());
+  if (error) {
+    text += ": ";
+    text += net::QuicTransportErrorToString(*error);
+  }
+  text += ".";
+  auto entry = protocol::Log::LogEntry::Create()
+                   .SetSource(protocol::Log::LogEntry::SourceEnum::Network)
+                   .SetLevel(protocol::Log::LogEntry::LevelEnum::Error)
+                   .SetText(text)
+                   .SetTimestamp(base::Time::Now().ToDoubleT() * 1000.0)
+                   .Build();
+  DispatchToAgents(ftn, &protocol::LogHandler::EntryAdded, std::move(entry));
 }
 
 }  // namespace devtools_instrumentation

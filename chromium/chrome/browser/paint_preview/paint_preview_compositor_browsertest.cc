@@ -22,6 +22,7 @@
 #include "components/paint_preview/public/paint_preview_compositor_service.h"
 #include "components/services/paint_preview_compositor/public/mojom/paint_preview_compositor.mojom.h"
 #include "content/public/browser/service_process_host.h"
+#include "content/public/test/browser_test.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -43,6 +44,19 @@ std::unique_ptr<PaintPreviewCompositorClientImpl> ToCompositorClientImpl(
     std::unique_ptr<PaintPreviewCompositorClient> client) {
   return std::unique_ptr<PaintPreviewCompositorClientImpl>(
       reinterpret_cast<PaintPreviewCompositorClientImpl*>(client.release()));
+}
+
+bool IsBoundAndConnected(PaintPreviewCompositorClientImpl* compositor) {
+  base::RunLoop loop;
+  bool out;
+  compositor->IsBoundAndConnected(base::BindOnce(
+      [](base::OnceClosure quit, bool* out, bool success) {
+        *out = success;
+        std::move(quit).Run();
+      },
+      loop.QuitClosure(), base::Unretained(&out)));
+  loop.Run();
+  return out;
 }
 
 }  // namespace
@@ -110,7 +124,7 @@ IN_PROC_BROWSER_TEST_F(PaintPreviewCompositorBrowserTest, CompositorCreate) {
   EXPECT_TRUE(compositor_service->HasActiveClients());
   EXPECT_TRUE(base::Contains(compositor_service->ActiveClientsForTesting(),
                              compositor->Token()));
-  EXPECT_TRUE(compositor->IsBoundAndConnected());
+  EXPECT_TRUE(IsBoundAndConnected(compositor.get()));
   compositor.reset();
 
   EXPECT_FALSE(compositor_service->HasActiveClients());
@@ -133,7 +147,8 @@ IN_PROC_BROWSER_TEST_F(PaintPreviewCompositorBrowserTest,
   EXPECT_EQ(1U, compositor_service->ActiveClientsForTesting().size());
   EXPECT_TRUE(base::Contains(compositor_service->ActiveClientsForTesting(),
                              compositor_0->Token()));
-  EXPECT_TRUE(compositor_0->IsBoundAndConnected());
+
+  EXPECT_TRUE(IsBoundAndConnected(compositor_0.get()));
 
   base::RunLoop loop_1;
   auto compositor_1 = ToCompositorClientImpl(
@@ -143,7 +158,7 @@ IN_PROC_BROWSER_TEST_F(PaintPreviewCompositorBrowserTest,
   EXPECT_EQ(2U, compositor_service->ActiveClientsForTesting().size());
   EXPECT_TRUE(base::Contains(compositor_service->ActiveClientsForTesting(),
                              compositor_1->Token()));
-  EXPECT_TRUE(compositor_1->IsBoundAndConnected());
+  EXPECT_TRUE(IsBoundAndConnected(compositor_1.get()));
   EXPECT_NE(compositor_0->Token(), compositor_1->Token());
 
   compositor_0.reset();
@@ -173,7 +188,7 @@ IN_PROC_BROWSER_TEST_F(PaintPreviewCompositorBrowserTest,
   EXPECT_TRUE(compositor_service->HasActiveClients());
   EXPECT_TRUE(base::Contains(compositor_service->ActiveClientsForTesting(),
                              compositor->Token()));
-  EXPECT_TRUE(compositor->IsBoundAndConnected());
+  EXPECT_TRUE(IsBoundAndConnected(compositor.get()));
 
   base::RunLoop disconnect_loop;
   compositor->SetDisconnectHandler(disconnect_loop.QuitClosure());
@@ -181,7 +196,7 @@ IN_PROC_BROWSER_TEST_F(PaintPreviewCompositorBrowserTest,
   // Kill before releasing active compositors.
   compositor_service.reset();
   disconnect_loop.Run();
-  EXPECT_FALSE(compositor->IsBoundAndConnected());
+  EXPECT_FALSE(IsBoundAndConnected(compositor.get()));
 }
 
 }  // namespace paint_preview

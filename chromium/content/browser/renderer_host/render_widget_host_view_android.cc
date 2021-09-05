@@ -188,8 +188,8 @@ std::string CompressAndSaveBitmap(const std::string& dir,
   }
 
   base::FilePath screenshot_path;
-  base::ScopedFILE out_file(
-      base::CreateAndOpenTemporaryFileInDir(screenshot_dir, &screenshot_path));
+  base::ScopedFILE out_file(base::CreateAndOpenTemporaryStreamInDir(
+      screenshot_dir, &screenshot_path));
   if (!out_file) {
     LOG(ERROR) << "Failed to create temporary screenshot file";
     return std::string();
@@ -197,6 +197,7 @@ std::string CompressAndSaveBitmap(const std::string& dir,
   unsigned int bytes_written =
       fwrite(reinterpret_cast<const char*>(data.data()), 1, data.size(),
              out_file.get());
+  out_file.reset();  // Explicitly close before a possible Delete below.
 
   // If there were errors, don't leave a partial file around.
   if (bytes_written != data.size()) {
@@ -230,8 +231,6 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       using_viz_for_webview_(features::IsUsingVizForWebView()),
       synchronous_compositor_client_(nullptr),
       observing_root_window_(false),
-      fallback_cursor_mode_enabled_(
-          base::FeatureList::IsEnabled(features::kFallbackCursorMode)),
       prev_top_shown_pix_(0.f),
       prev_top_controls_translate_(0.f),
       prev_bottom_shown_pix_(0.f),
@@ -861,7 +860,7 @@ bool RenderWidgetHostViewAndroid::OnTouchEvent(
   blink::WebTouchEvent web_event = ui::CreateWebTouchEventFromMotionEvent(
       event, result.moved_beyond_slop_region /* may_cause_scrolling */,
       false /* hovering */);
-  if (web_event.GetType() == blink::WebInputEvent::kUndefined)
+  if (web_event.GetType() == blink::WebInputEvent::Type::kUndefined)
     return false;
 
   ui::LatencyInfo latency_info(ui::SourceEventType::TOUCH);
@@ -1336,7 +1335,7 @@ bool RenderWidgetHostViewAndroid::UpdateControls(
       prev_bottom_controls_min_height_offset_pix_);
 
   if (bottom_changed || !controls_initialized_)
-    view_.OnBottomControlsChanged(bottom_translate, bottom_shown_pix,
+    view_.OnBottomControlsChanged(bottom_translate,
                                   bottom_min_height_offset_pix);
   prev_bottom_shown_pix_ = bottom_shown_pix;
   prev_bottom_controls_translate_ = bottom_translate;
@@ -1550,11 +1549,13 @@ gfx::Rect RenderWidgetHostViewAndroid::GetBoundsInRootWindow() {
 }
 
 void RenderWidgetHostViewAndroid::ProcessAckedTouchEvent(
-    const TouchEventWithLatencyInfo& touch, InputEventAckState ack_result) {
-  const bool event_consumed = ack_result == INPUT_EVENT_ACK_STATE_CONSUMED;
+    const TouchEventWithLatencyInfo& touch,
+    blink::mojom::InputEventResultState ack_result) {
+  const bool event_consumed =
+      ack_result == blink::mojom::InputEventResultState::kConsumed;
   gesture_provider_.OnTouchEventAck(
       touch.event.unique_touch_event_id, event_consumed,
-      InputEventAckStateIsSetNonBlocking(ack_result));
+      InputEventResultStateIsSetNonBlocking(ack_result));
   if (touch.event.touch_start_or_first_touch_move && event_consumed &&
       host()->delegate() && host()->delegate()->GetInputEventRouter()) {
     host()
@@ -1567,7 +1568,7 @@ void RenderWidgetHostViewAndroid::ProcessAckedTouchEvent(
 
 void RenderWidgetHostViewAndroid::GestureEventAck(
     const blink::WebGestureEvent& event,
-    InputEventAckState ack_result) {
+    blink::mojom::InputEventResultState ack_result) {
   if (overscroll_controller_)
     overscroll_controller_->OnGestureEventAck(event, ack_result);
   mouse_wheel_phase_handler_.GestureEventAck(event, ack_result);
@@ -1584,33 +1585,13 @@ void RenderWidgetHostViewAndroid::GestureEventAck(
 
 void RenderWidgetHostViewAndroid::ChildDidAckGestureEvent(
     const blink::WebGestureEvent& event,
-    InputEventAckState ack_result) {
+    blink::mojom::InputEventResultState ack_result) {
   if (gesture_listener_manager_)
     gesture_listener_manager_->GestureEventAck(event, ack_result);
 }
 
-bool RenderWidgetHostViewAndroid::OnUnconsumedKeyboardEventAck(
-    const NativeWebKeyboardEventWithLatencyInfo& event) {
-  return fallback_cursor_mode_enabled_ &&
-         event.event.GetType() == blink::WebInputEvent::kKeyDown &&
-         view_.OnUnconsumedKeyboardEventAck(event.event.native_key_code);
-}
-
-void RenderWidgetHostViewAndroid::FallbackCursorModeLockCursor(bool left,
-                                                               bool right,
-                                                               bool up,
-                                                               bool down) {
-  DCHECK(fallback_cursor_mode_enabled_);
-  view_.FallbackCursorModeLockCursor(left, right, up, down);
-}
-
-void RenderWidgetHostViewAndroid::FallbackCursorModeSetCursorVisibility(
-    bool visible) {
-  DCHECK(fallback_cursor_mode_enabled_);
-  view_.FallbackCursorModeSetCursorVisibility(visible);
-}
-
-InputEventAckState RenderWidgetHostViewAndroid::FilterInputEvent(
+blink::mojom::InputEventResultState
+RenderWidgetHostViewAndroid::FilterInputEvent(
     const blink::WebInputEvent& input_event) {
   if (overscroll_controller_ &&
       blink::WebInputEvent::IsGestureEventType(input_event.GetType())) {
@@ -1622,32 +1603,32 @@ InputEventAckState RenderWidgetHostViewAndroid::FilterInputEvent(
       // overscrolling mode is not |OVERSCROLL_NONE|. The early fling
       // termination generates a GSE which completes the overscroll action.
       if (gesture_event.GetType() ==
-              blink::WebInputEvent::kGestureScrollUpdate &&
+              blink::WebInputEvent::Type::kGestureScrollUpdate &&
           gesture_event.data.scroll_update.inertial_phase ==
               blink::WebGestureEvent::InertialPhaseState::kMomentum) {
         host_->StopFling();
       }
 
-      return INPUT_EVENT_ACK_STATE_CONSUMED;
+      return blink::mojom::InputEventResultState::kConsumed;
     }
   }
 
   if (gesture_listener_manager_ &&
       gesture_listener_manager_->FilterInputEvent(input_event)) {
-    return INPUT_EVENT_ACK_STATE_CONSUMED;
+    return blink::mojom::InputEventResultState::kConsumed;
   }
 
   if (!host())
-    return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+    return blink::mojom::InputEventResultState::kNotConsumed;
 
-  if (input_event.GetType() == blink::WebInputEvent::kGestureTapDown ||
-      input_event.GetType() == blink::WebInputEvent::kTouchStart) {
+  if (input_event.GetType() == blink::WebInputEvent::Type::kGestureTapDown ||
+      input_event.GetType() == blink::WebInputEvent::Type::kTouchStart) {
     GpuProcessHost::CallOnIO(GPU_PROCESS_KIND_SANDBOXED,
                              false /* force_create */,
                              base::BindOnce(&WakeUpGpu));
   }
 
-  return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+  return blink::mojom::InputEventResultState::kNotConsumed;
 }
 
 BrowserAccessibilityManager*
@@ -1699,8 +1680,8 @@ void RenderWidgetHostViewAndroid::SendKeyEvent(
     text_suggestion_host_->OnKeyEvent();
 
   ui::LatencyInfo latency_info;
-  if (event.GetType() == blink::WebInputEvent::kRawKeyDown ||
-      event.GetType() == blink::WebInputEvent::kChar) {
+  if (event.GetType() == blink::WebInputEvent::Type::kRawKeyDown ||
+      event.GetType() == blink::WebInputEvent::Type::kChar) {
     latency_info.set_source_event_type(ui::SourceEventType::KEY_PRESS);
   }
   latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT);
@@ -1713,16 +1694,16 @@ void RenderWidgetHostViewAndroid::SendMouseEvent(
   blink::WebInputEvent::Type webMouseEventType =
       ui::ToWebMouseEventType(motion_event.GetAction());
 
-  if (webMouseEventType == blink::WebInputEvent::kUndefined)
+  if (webMouseEventType == blink::WebInputEvent::Type::kUndefined)
     return;
 
-  if (webMouseEventType == blink::WebInputEvent::kMouseDown)
+  if (webMouseEventType == blink::WebInputEvent::Type::kMouseDown)
     UpdateMouseState(action_button, motion_event.GetX(0), motion_event.GetY(0));
 
   int click_count = 0;
 
-  if (webMouseEventType == blink::WebInputEvent::kMouseDown ||
-      webMouseEventType == blink::WebInputEvent::kMouseUp)
+  if (webMouseEventType == blink::WebInputEvent::Type::kMouseDown ||
+      webMouseEventType == blink::WebInputEvent::Type::kMouseUp)
     click_count = (action_button == ui::MotionEventAndroid::BUTTON_PRIMARY)
                       ? left_click_count_
                       : 1;
@@ -1792,7 +1773,7 @@ void RenderWidgetHostViewAndroid::SendGestureEvent(
     overscroll_controller_->Enable();
 
   if (!host() || !host()->delegate() ||
-      event.GetType() == blink::WebInputEvent::kUndefined) {
+      event.GetType() == blink::WebInputEvent::Type::kUndefined) {
     return;
   }
 
@@ -1801,17 +1782,17 @@ void RenderWidgetHostViewAndroid::SendGestureEvent(
   if (touch_selection_controller_ &&
       event.SourceDevice() == blink::WebGestureDevice::kTouchscreen) {
     switch (event.GetType()) {
-      case blink::WebInputEvent::kGestureLongPress:
+      case blink::WebInputEvent::Type::kGestureLongPress:
         touch_selection_controller_->HandleLongPressEvent(
             event.TimeStamp(), event.PositionInWidget());
         break;
 
-      case blink::WebInputEvent::kGestureTap:
+      case blink::WebInputEvent::Type::kGestureTap:
         touch_selection_controller_->HandleTapEvent(event.PositionInWidget(),
                                                     event.data.tap.tap_count);
         break;
 
-      case blink::WebInputEvent::kGestureScrollBegin:
+      case blink::WebInputEvent::Type::kGestureScrollBegin:
         touch_selection_controller_->OnScrollBeginEvent();
         break;
 
@@ -1823,19 +1804,21 @@ void RenderWidgetHostViewAndroid::SendGestureEvent(
   ui::LatencyInfo latency_info =
       ui::WebInputEventTraits::CreateLatencyInfoForWebGestureEvent(event);
   if (event.SourceDevice() == blink::WebGestureDevice::kTouchscreen) {
-    if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+    if (event.GetType() == blink::WebInputEvent::Type::kGestureScrollBegin) {
       // If there is a current scroll going on and a new scroll that isn't
       // wheel based, send a synthetic wheel event with kPhaseEnded to cancel
       // the current scroll.
       mouse_wheel_phase_handler_.DispatchPendingWheelEndEvent();
-    } else if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd) {
+    } else if (event.GetType() ==
+               blink::WebInputEvent::Type::kGestureScrollEnd) {
       // Make sure that the next wheel event will have phase = |kPhaseBegan|.
       // This is for maintaining the correct phase info when some of the wheel
       // events get ignored while a touchscreen scroll is going on.
       mouse_wheel_phase_handler_.IgnorePendingWheelEndEvent();
     }
 
-  } else if (event.GetType() == blink::WebInputEvent::kGestureFlingStart &&
+  } else if (event.GetType() ==
+                 blink::WebInputEvent::Type::kGestureFlingStart &&
              event.SourceDevice() == blink::WebGestureDevice::kTouchpad) {
     // Ignore the pending wheel end event to avoid sending a wheel event with
     // kPhaseEnded before a GFS.
@@ -2047,7 +2030,7 @@ void RenderWidgetHostViewAndroid::OnGestureEvent(
   // stop providing shift meta values to synthetic MotionEvents. This prevents
   // unintended shift+click interpretation of all accessibility clicks.
   // See crbug.com/443247.
-  if (web_gesture.GetType() == blink::WebInputEvent::kGestureTap &&
+  if (web_gesture.GetType() == blink::WebInputEvent::Type::kGestureTap &&
       web_gesture.GetModifiers() == blink::WebInputEvent::kShiftKey) {
     web_gesture.SetModifiers(blink::WebInputEvent::kNoModifiers);
   }
@@ -2137,24 +2120,6 @@ void RenderWidgetHostViewAndroid::OnActivityStarted() {
   ShowInternal();
 }
 
-void RenderWidgetHostViewAndroid::OnCursorVisibilityChanged(bool visible) {
-  DCHECK(observing_root_window_);
-  // The fallback_cursor_mode check should really happen higher up in the
-  // stack. We do it here because the call comes from Java ui/touchless which
-  // can't access the value of the blink Feature.
-  if (host() && fallback_cursor_mode_enabled_)
-    host()->OnCursorVisibilityStateChanged(visible);
-}
-
-void RenderWidgetHostViewAndroid::OnFallbackCursorModeToggled(bool is_on) {
-  DCHECK(observing_root_window_);
-  // The fallback_cursor_mode check should really happen higher up in the
-  // stack. We do it here because the call comes from Java ui/touchless which
-  // can't access the value of the blink Feature.
-  if (host() && fallback_cursor_mode_enabled_)
-    host()->OnFallbackCursorModeToggled(is_on);
-}
-
 void RenderWidgetHostViewAndroid::OnLostResources() {
   EvictDelegatedFrame();
 }
@@ -2204,7 +2169,7 @@ void RenderWidgetHostViewAndroid::OnStylusSelectTap(base::TimeTicks time,
   // Treat the stylus tap as a long press, activating either a word selection or
   // context menu depending on the targetted content.
   blink::WebGestureEvent long_press = WebGestureEventBuilder::Build(
-      blink::WebInputEvent::kGestureLongPress, time, x, y);
+      blink::WebInputEvent::Type::kGestureLongPress, time, x, y);
   SendGestureEvent(long_press);
 }
 

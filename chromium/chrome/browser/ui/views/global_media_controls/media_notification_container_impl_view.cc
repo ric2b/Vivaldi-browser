@@ -210,6 +210,13 @@ void MediaNotificationContainerImplView::OnExpanded(bool expanded) {
     observer.OnContainerExpanded(expanded);
 }
 
+void MediaNotificationContainerImplView::OnMediaSessionInfoChanged(
+    const media_session::mojom::MediaSessionInfoPtr& session_info) {
+  is_playing_ =
+      session_info && session_info->playback_state ==
+                          media_session::mojom::MediaPlaybackState::kPlaying;
+}
+
 void MediaNotificationContainerImplView::OnMediaSessionMetadataChanged() {
   for (auto& observer : observers_)
     observer.OnContainerMetadataChanged();
@@ -226,6 +233,9 @@ void MediaNotificationContainerImplView::OnVisibleActionsChanged(
            actions,
            media_session::mojom::MediaSessionAction::kExitPictureInPicture));
   ForceExpandedState();
+
+  for (auto& observer : observers_)
+    observer.OnContainerActionsChanged();
 }
 
 void MediaNotificationContainerImplView::OnMediaArtworkChanged(

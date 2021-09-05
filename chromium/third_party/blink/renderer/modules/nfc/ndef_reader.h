@@ -5,7 +5,6 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_NFC_NDEF_READER_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_NFC_NDEF_READER_H_
 
-#include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/nfc.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
@@ -14,9 +13,12 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
 
+class AbortSignal;
 class ExecutionContext;
 class NFCProxy;
 class NDEFScanOptions;
@@ -59,21 +61,29 @@ class MODULES_EXPORT NDEFReader : public EventTargetWithInlineData,
   // ExecutionContextLifecycleObserver overrides.
   void ContextDestroyed() override;
 
-  void Abort(ScriptPromiseResolver*);
+  void Abort(AbortSignal* signal);
 
   NFCProxy* GetNfcProxy() const;
 
+  void OnScanRequestCompleted(device::mojom::blink::NDEFErrorPtr error);
+
   // Permission handling
-  void OnRequestPermission(ScriptPromiseResolver* resolver,
-                           const NDEFScanOptions* options,
+  void OnRequestPermission(const NDEFScanOptions* options,
                            mojom::blink::PermissionStatus status);
   mojom::blink::PermissionService* GetPermissionService();
-  mojo::Remote<mojom::blink::PermissionService> permission_service_;
+  HeapMojoRemote<mojom::blink::PermissionService,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      permission_service_;
 
   // |resolver_| is kept here to handle Mojo connection failures because in that
   // case the callback passed to Watch() won't be called and
   // mojo::WrapCallbackWithDefaultInvokeIfNotRun() is forbidden in Blink.
   Member<ScriptPromiseResolver> resolver_;
+
+  // Currently AbortSignal has no method to remove an algorithm so this
+  // field tracks the most recently configured AbortSignal so that others
+  // can be ignored.
+  Member<AbortSignal> signal_;
 };
 
 }  // namespace blink

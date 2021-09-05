@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/signin_interaction/signin_interaction_coordinator.h"
 
+#include "base/check_op.h"
 #import "base/ios/block_types.h"
-#include "base/logging.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
@@ -71,7 +71,7 @@
 
     __weak SigninInteractionCoordinator* weakSelf = self;
     self.coordinator.signinCompletion =
-        ^(SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
+        ^(SigninCoordinatorResult signinResult, SigninCompletionInfo*) {
           if (completion) {
             completion(signinResult == SigninCoordinatorResultSuccess);
           }
@@ -110,7 +110,7 @@
 
     __weak SigninInteractionCoordinator* weakSelf = self;
     self.coordinator.signinCompletion =
-        ^(SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
+        ^(SigninCoordinatorResult signinResult, SigninCompletionInfo*) {
           if (completion) {
             completion(signinResult == SigninCoordinatorResultSuccess);
           }
@@ -145,7 +145,7 @@
 
   __weak SigninInteractionCoordinator* weakSelf = self;
   self.coordinator.signinCompletion =
-      ^(SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
+      ^(SigninCoordinatorResult signinResult, SigninCompletionInfo*) {
         if (completion) {
           completion(signinResult == SigninCoordinatorResultSuccess);
         }
@@ -160,6 +160,31 @@
     (UIViewController*)viewController {
   self.presentingViewController = viewController;
   [self showAdvancedSigninSettings];
+}
+
+- (void)
+    showTrustedVaultReauthenticationWithPresentingViewController:
+        (UIViewController*)viewController
+                                                retrievalTrigger:
+                                                    (syncer::
+                                                         KeyRetrievalTriggerForUMA)
+                                                        retrievalTrigger {
+  DCHECK(!self.signinCompletion);
+  DCHECK(!self.presentingViewController);
+  DCHECK(!self.coordinator);
+  self.presentingViewController = viewController;
+  self.coordinator = [SigninCoordinator
+      trustedVaultReAuthenticationCoordiantorWithBaseViewController:
+          viewController
+                                                            browser:self.browser
+                                                   retrievalTrigger:
+                                                       retrievalTrigger];
+  __weak SigninInteractionCoordinator* weakSelf = self;
+  self.coordinator.signinCompletion =
+      ^(SigninCoordinatorResult, SigninCompletionInfo*) {
+        [weakSelf trustedVaultReauthenticationDone];
+      };
+  [self.coordinator start];
 }
 
 - (void)cancel {
@@ -178,7 +203,13 @@
 
 - (void)abortAndDismissSettingsViewAnimated:(BOOL)animated
                                  completion:(ProceduralBlock)completion {
-  DCHECK(!self.controller);
+  if (self.controller) {
+    [self.controller cancel];
+    if (completion) {
+      completion();
+    }
+    return;
+  }
   SigninCoordinatorInterruptAction action =
       animated ? SigninCoordinatorInterruptActionDismissWithAnimation
                : SigninCoordinatorInterruptActionDismissWithoutAnimation;
@@ -230,8 +261,8 @@
   DCHECK(!self.alertCoordinator);
   DCHECK(self.topViewController);
   DCHECK(![self.topViewController presentedViewController]);
-  self.alertCoordinator =
-      ErrorCoordinator(error, dismissAction, self.topViewController);
+  self.alertCoordinator = ErrorCoordinator(
+      error, dismissAction, self.topViewController, self.browser);
   [self.alertCoordinator start];
 }
 
@@ -309,7 +340,7 @@
                                                       browser:self.browser];
   __weak SigninInteractionCoordinator* weakSelf = self;
   self.coordinator.signinCompletion =
-      ^(SigninCoordinatorResult signinResult, ChromeIdentity* identity) {
+      ^(SigninCoordinatorResult signinResult, SigninCompletionInfo*) {
         [weakSelf advancedSigninDoneWithSigninResult:signinResult];
       };
   [self.coordinator start];
@@ -327,6 +358,7 @@
   DCHECK(!self.controller);
   DCHECK(!self.topViewController);
   DCHECK(!self.alertCoordinator);
+  self.presentingViewController = nil;
   if (self.signinCompletion) {
     self.signinCompletion(success);
     self.signinCompletion = nil;
@@ -346,6 +378,13 @@
     }
   };
   [self.coordinator interruptWithAction:action completion:interruptCompletion];
+}
+
+- (void)trustedVaultReauthenticationDone {
+  DCHECK(self.coordinator);
+  [self.coordinator stop];
+  self.coordinator = nil;
+  self.presentingViewController = nil;
 }
 
 @end

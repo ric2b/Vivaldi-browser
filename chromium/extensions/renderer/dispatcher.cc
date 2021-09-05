@@ -648,9 +648,9 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
       (extension->is_extension() || extension->is_platform_app())) {
     int resource_id = extension->is_platform_app() ? IDR_PLATFORM_APP_CSS
                                                    : IDR_EXTENSION_FONTS_CSS;
-    std::string stylesheet = ui::ResourceBundle::GetSharedInstance()
-                                 .GetRawDataResource(resource_id)
-                                 .as_string();
+    std::string stylesheet =
+        ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
+            resource_id);
     base::ReplaceFirstSubstringAfterOffset(
         &stylesheet, 0, "$FONTFAMILY", system_font_family_);
     base::ReplaceFirstSubstringAfterOffset(
@@ -667,11 +667,10 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
   if (extension && extension->is_extension() &&
       OptionsPageInfo::ShouldUseChromeStyle(extension) &&
       effective_document_url == OptionsPageInfo::GetOptionsPage(extension)) {
-    base::StringPiece extension_css =
-        ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
+    std::string extension_css =
+        ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
             IDR_EXTENSION_CSS);
-    frame->GetDocument().InsertStyleSheet(
-        WebString::FromUTF8(extension_css.data(), extension_css.length()));
+    frame->GetDocument().InsertStyleSheet(WebString::FromUTF8(extension_css));
   }
 }
 

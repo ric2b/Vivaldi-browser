@@ -8,17 +8,37 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "net/dns/mock_host_resolver.h"
+#include "services/network/public/cpp/cross_origin_opener_policy.h"
 #include "services/network/public/cpp/features.h"
-#include "services/network/public/mojom/cross_origin_opener_policy.mojom.h"
 
 namespace content {
 
 namespace {
+
+network::CrossOriginOpenerPolicy CoopSameOrigin() {
+  network::CrossOriginOpenerPolicy coop;
+  coop.value = network::mojom::CrossOriginOpenerPolicyValue::kSameOrigin;
+  return coop;
+}
+
+network::CrossOriginOpenerPolicy CoopSameOriginAllowPopups() {
+  network::CrossOriginOpenerPolicy coop;
+  coop.value =
+      network::mojom::CrossOriginOpenerPolicyValue::kSameOriginAllowPopups;
+  return coop;
+}
+
+network::CrossOriginOpenerPolicy CoopUnsafeNone() {
+  network::CrossOriginOpenerPolicy coop;
+  // Using the default value.
+  return coop;
+}
 
 class CrossOriginOpenerPolicyBrowserTest : public ContentBrowserTest {
  public:
@@ -27,6 +47,7 @@ class CrossOriginOpenerPolicyBrowserTest : public ContentBrowserTest {
     std::vector<base::Feature> features;
     feature_list_.InitWithFeatures(
         {network::features::kCrossOriginOpenerPolicy,
+         network::features::kCrossOriginOpenerPolicyReporting,
          network::features::kCrossOriginEmbedderPolicy},
         {});
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -69,8 +90,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), starting_page));
 
   RenderFrameHostImpl* main_frame = current_frame_host();
-  main_frame->set_cross_origin_opener_policy(
-      network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+  main_frame->set_cross_origin_opener_policy(CoopSameOrigin());
 
   ShellAddedObserver shell_observer;
   RenderFrameHostImpl* iframe = main_frame->child_at(0)->current_frame_host();
@@ -82,10 +102,8 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
           ->root()
           ->current_frame_host();
 
-  EXPECT_EQ(main_frame->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
-  EXPECT_EQ(popup_frame->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+  EXPECT_EQ(main_frame->cross_origin_opener_policy(), CoopSameOrigin());
+  EXPECT_EQ(popup_frame->cross_origin_opener_policy(), CoopSameOrigin());
 }
 
 IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
@@ -95,8 +113,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), starting_page));
 
   RenderFrameHostImpl* main_frame = current_frame_host();
-  main_frame->set_cross_origin_opener_policy(
-      network::mojom::CrossOriginOpenerPolicy::kSameOriginAllowPopups);
+  main_frame->set_cross_origin_opener_policy(CoopSameOriginAllowPopups());
 
   ShellAddedObserver shell_observer;
   RenderFrameHostImpl* iframe = main_frame->child_at(0)->current_frame_host();
@@ -109,9 +126,9 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
           ->current_frame_host();
 
   EXPECT_EQ(main_frame->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kSameOriginAllowPopups);
+            CoopSameOriginAllowPopups());
   EXPECT_EQ(popup_frame->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kSameOriginAllowPopups);
+            CoopSameOriginAllowPopups());
 }
 
 IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
@@ -121,8 +138,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), starting_page));
 
   RenderFrameHostImpl* main_frame = current_frame_host();
-  main_frame->set_cross_origin_opener_policy(
-      network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+  main_frame->set_cross_origin_opener_policy(CoopSameOrigin());
 
   ShellAddedObserver shell_observer;
   RenderFrameHostImpl* iframe = main_frame->child_at(0)->current_frame_host();
@@ -134,10 +150,8 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
           ->root()
           ->current_frame_host();
 
-  EXPECT_EQ(main_frame->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
-  EXPECT_EQ(popup_frame->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kUnsafeNone);
+  EXPECT_EQ(main_frame->cross_origin_opener_policy(), CoopSameOrigin());
+  EXPECT_EQ(popup_frame->cross_origin_opener_policy(), CoopUnsafeNone());
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -148,8 +162,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_TRUE(NavigateToURL(shell(), starting_page));
 
   RenderFrameHostImpl* main_frame = current_frame_host();
-  main_frame->set_cross_origin_opener_policy(
-      network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+  main_frame->set_cross_origin_opener_policy(CoopSameOrigin());
 
   ShellAddedObserver new_shell_observer;
   RenderFrameHostImpl* iframe = main_frame->child_at(0)->current_frame_host();
@@ -212,7 +225,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
       "a.com", "/cross-origin-opener-policy_csp_sandboxed.html"));
   EXPECT_TRUE(NavigateToURL(shell(), starting_page));
   EXPECT_NE(current_frame_host()->active_sandbox_flags(),
-            blink::mojom::WebSandboxFlags::kNone)
+            network::mojom::WebSandboxFlags::kNone)
       << "Document should be sandboxed.";
 
   GURL next_page(https_server()->GetURL(
@@ -229,7 +242,7 @@ class CrossOriginPolicyHeadersObserver : public WebContentsObserver {
   explicit CrossOriginPolicyHeadersObserver(
       WebContents* web_contents,
       network::mojom::CrossOriginEmbedderPolicyValue expected_coep,
-      network::mojom::CrossOriginOpenerPolicy expected_coop)
+      network::CrossOriginOpenerPolicy expected_coop)
       : WebContentsObserver(web_contents),
         expected_coep_(expected_coep),
         expected_coop_(expected_coop) {}
@@ -240,25 +253,27 @@ class CrossOriginPolicyHeadersObserver : public WebContentsObserver {
     // Verify that the COOP/COEP headers were parsed.
     NavigationRequest* navigation_request =
         static_cast<NavigationRequest*>(navigation_handle);
-    CHECK(navigation_request->response()->cross_origin_embedder_policy.value ==
+    CHECK(navigation_request->response()
+              ->parsed_headers->cross_origin_embedder_policy.value ==
           expected_coep_);
-    CHECK(navigation_request->response()->cross_origin_opener_policy ==
-          expected_coop_);
+    CHECK(navigation_request->response()
+              ->parsed_headers->cross_origin_opener_policy == expected_coop_);
   }
 
   void DidFinishNavigation(NavigationHandle* navigation_handle) override {
     // Verify that the COOP/COEP headers were parsed.
     NavigationRequest* navigation_request =
         static_cast<NavigationRequest*>(navigation_handle);
-    CHECK(navigation_request->response()->cross_origin_embedder_policy.value ==
+    CHECK(navigation_request->response()
+              ->parsed_headers->cross_origin_embedder_policy.value ==
           expected_coep_);
-    CHECK(navigation_request->response()->cross_origin_opener_policy ==
-          expected_coop_);
+    CHECK(navigation_request->response()
+              ->parsed_headers->cross_origin_opener_policy == expected_coop_);
   }
 
  private:
   network::mojom::CrossOriginEmbedderPolicyValue expected_coep_;
-  network::mojom::CrossOriginOpenerPolicy expected_coop_;
+  network::CrossOriginOpenerPolicy expected_coop_;
 };
 
 IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
@@ -271,7 +286,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
   CrossOriginPolicyHeadersObserver obs(
       web_contents(),
       network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp,
-      network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+      CoopSameOrigin());
 
   EXPECT_TRUE(
       NavigateToURL(shell(), redirect_initial_page, redirect_final_page));
@@ -290,7 +305,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), coop_page));
   EXPECT_EQ(current_frame_host()->GetSiteInstance(), initial_site_instance);
   EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kUnsafeNone);
+            CoopUnsafeNone());
 }
 
 IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
@@ -317,10 +332,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_EQ(iframe_rfh->GetLastCommittedURL(), iframe_navigation_url);
   EXPECT_EQ(iframe_rfh->GetSiteInstance(), non_coop_iframe_site_instance);
 
-  // TODO(pmeuleman, ahemery): Don't store COOP on subframes as it will not be
-  // used anyway.
-  EXPECT_EQ(iframe_rfh->cross_origin_opener_policy(),
-            network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+  EXPECT_EQ(iframe_rfh->cross_origin_opener_policy(), CoopUnsafeNone());
 }
 
 IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
@@ -363,7 +375,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
     EXPECT_FALSE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+              CoopSameOrigin());
 
     // The COOP page should no longer have any RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
@@ -413,7 +425,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
     EXPECT_FALSE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+              CoopSameOrigin());
 
     // The COOP page should no longer have any RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
@@ -473,7 +485,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
     EXPECT_FALSE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              network::mojom::CrossOriginOpenerPolicy::kUnsafeNone);
+              CoopUnsafeNone());
 
     // The non COOP page should no longer have any RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
@@ -531,7 +543,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
     EXPECT_FALSE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              network::mojom::CrossOriginOpenerPolicy::kUnsafeNone);
+              CoopUnsafeNone());
 
     // The non COOP page should no longer have any RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
@@ -591,7 +603,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
     EXPECT_TRUE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+              CoopSameOrigin());
 
     // TODO(pmeuleman): The COOP page should still have RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
@@ -649,7 +661,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
     EXPECT_TRUE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              network::mojom::CrossOriginOpenerPolicy::kSameOrigin);
+              CoopSameOrigin());
 
     // TODO(pmeuleman): The COOP page should still have RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
@@ -790,6 +802,128 @@ IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_TRUE(NavigateToURL(shell(), final_page));
   EXPECT_EQ(current_frame_host()->GetProcess(),
             popup_webcontents->GetMainFrame()->GetProcess());
+}
+
+IN_PROC_BROWSER_TEST_F(CrossOriginOpenerPolicyBrowserTest,
+                       SpeculativeRfhsAndCoop) {
+  GURL non_coop_page(https_server()->GetURL("/title1.html"));
+  GURL coop_page(https_server()->GetURL("/page_with_coop_and_coep.html"));
+
+  // Non-COOP into non-COOP.
+  {
+    // Start on a non COOP page.
+    EXPECT_TRUE(NavigateToURL(shell(), non_coop_page));
+    scoped_refptr<SiteInstance> initial_site_instance(
+        current_frame_host()->GetSiteInstance());
+
+    // Navigate to a non COOP page.
+    TestNavigationManager non_coop_navigation(web_contents(), non_coop_page);
+    shell()->LoadURL(non_coop_page);
+    EXPECT_TRUE(non_coop_navigation.WaitForRequestStart());
+
+    // TODO(ahemery): RenderDocument will always create a Speculative RFH.
+    // Update these expectations to test the speculative RFH's SI relation when
+    // RenderDocument lands.
+    EXPECT_FALSE(web_contents()
+                     ->GetFrameTree()
+                     ->root()
+                     ->render_manager()
+                     ->speculative_frame_host());
+
+    non_coop_navigation.WaitForNavigationFinished();
+
+    EXPECT_TRUE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
+        initial_site_instance.get()));
+    EXPECT_EQ(current_frame_host()->cross_origin_opener_policy().value,
+              network::mojom::CrossOriginOpenerPolicyValue::kUnsafeNone);
+  }
+
+  // Non-COOP into COOP.
+  {
+    // Start on a non COOP page.
+    EXPECT_TRUE(NavigateToURL(shell(), non_coop_page));
+    scoped_refptr<SiteInstance> initial_site_instance(
+        current_frame_host()->GetSiteInstance());
+
+    // Navigate to a COOP page.
+    TestNavigationManager coop_navigation(web_contents(), coop_page);
+    shell()->LoadURL(coop_page);
+    EXPECT_TRUE(coop_navigation.WaitForRequestStart());
+
+    // TODO(ahemery): RenderDocument will always create a Speculative RFH.
+    // Update these expectations to test the speculative RFH's SI relation when
+    // RenderDocument lands.
+    EXPECT_FALSE(web_contents()
+                     ->GetFrameTree()
+                     ->root()
+                     ->render_manager()
+                     ->speculative_frame_host());
+
+    coop_navigation.WaitForNavigationFinished();
+
+    EXPECT_FALSE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
+        initial_site_instance.get()));
+    EXPECT_EQ(current_frame_host()->cross_origin_opener_policy().value,
+              network::mojom::CrossOriginOpenerPolicyValue::kSameOrigin);
+  }
+
+  // COOP into non-COOP.
+  {
+    // Start on a COOP page.
+    EXPECT_TRUE(NavigateToURL(shell(), coop_page));
+    scoped_refptr<SiteInstance> initial_site_instance(
+        current_frame_host()->GetSiteInstance());
+
+    // Navigate to a non COOP page.
+    TestNavigationManager non_coop_navigation(web_contents(), non_coop_page);
+    shell()->LoadURL(non_coop_page);
+    EXPECT_TRUE(non_coop_navigation.WaitForRequestStart());
+
+    // TODO(ahemery): RenderDocument will always create a Speculative RFH.
+    // Update these expectations to test the speculative RFH's SI relation when
+    // RenderDocument lands.
+    EXPECT_FALSE(web_contents()
+                     ->GetFrameTree()
+                     ->root()
+                     ->render_manager()
+                     ->speculative_frame_host());
+
+    non_coop_navigation.WaitForNavigationFinished();
+
+    EXPECT_FALSE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
+        initial_site_instance.get()));
+    EXPECT_EQ(current_frame_host()->cross_origin_opener_policy().value,
+              network::mojom::CrossOriginOpenerPolicyValue::kUnsafeNone);
+  }
+
+  // COOP into COOP.
+  {
+    // Start on a COOP page.
+    EXPECT_TRUE(NavigateToURL(shell(), coop_page));
+    scoped_refptr<SiteInstance> initial_site_instance(
+        current_frame_host()->GetSiteInstance());
+
+    // Navigate to a COOP page.
+    TestNavigationManager coop_navigation(web_contents(), coop_page);
+    shell()->LoadURL(coop_page);
+    EXPECT_TRUE(coop_navigation.WaitForRequestStart());
+
+    // TODO(ahemery): RenderDocument will always create a Speculative RFH.
+    // Update these expectations to test the speculative RFH's SI relation when
+    // RenderDocument lands.
+    EXPECT_FALSE(web_contents()
+                     ->GetFrameTree()
+                     ->root()
+                     ->render_manager()
+                     ->speculative_frame_host());
+
+    coop_navigation.WaitForNavigationFinished();
+
+    EXPECT_TRUE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
+        initial_site_instance.get()));
+    EXPECT_EQ(current_frame_host()->cross_origin_opener_policy().value,
+              network::mojom::CrossOriginOpenerPolicyValue::kSameOrigin);
+  }
 }
 
 }  // namespace

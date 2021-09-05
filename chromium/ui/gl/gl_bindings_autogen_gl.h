@@ -1039,6 +1039,11 @@ typedef void(GL_BINDING_CALL* glImportMemoryFdEXTProc)(GLuint memory,
                                                        GLuint64 size,
                                                        GLenum handleType,
                                                        GLint fd);
+typedef void(GL_BINDING_CALL* glImportMemoryWin32HandleEXTProc)(
+    GLuint memory,
+    GLuint64 size,
+    GLenum handleType,
+    void* handle);
 typedef void(GL_BINDING_CALL* glImportMemoryZirconHandleANGLEProc)(
     GLuint memory,
     GLuint64 size,
@@ -1047,6 +1052,10 @@ typedef void(GL_BINDING_CALL* glImportMemoryZirconHandleANGLEProc)(
 typedef void(GL_BINDING_CALL* glImportSemaphoreFdEXTProc)(GLuint semaphore,
                                                           GLenum handleType,
                                                           GLint fd);
+typedef void(GL_BINDING_CALL* glImportSemaphoreWin32HandleEXTProc)(
+    GLuint semaphore,
+    GLenum handleType,
+    void* handle);
 typedef void(GL_BINDING_CALL* glImportSemaphoreZirconHandleANGLEProc)(
     GLuint semaphore,
     GLenum handleType,
@@ -1925,6 +1934,7 @@ struct ExtensionsGL {
   bool b_GL_APPLE_sync;
   bool b_GL_APPLE_vertex_array_object;
   bool b_GL_ARB_ES2_compatibility;
+  bool b_GL_ARB_base_instance;
   bool b_GL_ARB_blend_func_extended;
   bool b_GL_ARB_clear_texture;
   bool b_GL_ARB_draw_buffers;
@@ -1942,6 +1952,7 @@ struct ExtensionsGL {
   bool b_GL_ARB_sync;
   bool b_GL_ARB_texture_multisample;
   bool b_GL_ARB_texture_storage;
+  bool b_GL_ARB_texture_swizzle;
   bool b_GL_ARB_timer_query;
   bool b_GL_ARB_transform_feedback2;
   bool b_GL_ARB_vertex_array_object;
@@ -1967,15 +1978,19 @@ struct ExtensionsGL {
   bool b_GL_EXT_map_buffer_range;
   bool b_GL_EXT_memory_object;
   bool b_GL_EXT_memory_object_fd;
+  bool b_GL_EXT_memory_object_win32;
   bool b_GL_EXT_multisampled_render_to_texture;
   bool b_GL_EXT_occlusion_query_boolean;
   bool b_GL_EXT_robustness;
   bool b_GL_EXT_semaphore;
   bool b_GL_EXT_semaphore_fd;
+  bool b_GL_EXT_semaphore_win32;
   bool b_GL_EXT_shader_image_load_store;
   bool b_GL_EXT_texture_buffer;
   bool b_GL_EXT_texture_buffer_object;
+  bool b_GL_EXT_texture_format_BGRA8888;
   bool b_GL_EXT_texture_storage;
+  bool b_GL_EXT_texture_swizzle;
   bool b_GL_EXT_timer_query;
   bool b_GL_EXT_transform_feedback;
   bool b_GL_EXT_unpack_subimage;
@@ -2281,8 +2296,10 @@ struct ProcsGL {
       glGetVertexAttribPointervRobustANGLEFn;
   glHintProc glHintFn;
   glImportMemoryFdEXTProc glImportMemoryFdEXTFn;
+  glImportMemoryWin32HandleEXTProc glImportMemoryWin32HandleEXTFn;
   glImportMemoryZirconHandleANGLEProc glImportMemoryZirconHandleANGLEFn;
   glImportSemaphoreFdEXTProc glImportSemaphoreFdEXTFn;
+  glImportSemaphoreWin32HandleEXTProc glImportSemaphoreWin32HandleEXTFn;
   glImportSemaphoreZirconHandleANGLEProc glImportSemaphoreZirconHandleANGLEFn;
   glInsertEventMarkerEXTProc glInsertEventMarkerEXTFn;
   glInvalidateFramebufferProc glInvalidateFramebufferFn;
@@ -3419,6 +3436,10 @@ class GL_EXPORT GLApi {
                                      GLuint64 size,
                                      GLenum handleType,
                                      GLint fd) = 0;
+  virtual void glImportMemoryWin32HandleEXTFn(GLuint memory,
+                                              GLuint64 size,
+                                              GLenum handleType,
+                                              void* handle) = 0;
   virtual void glImportMemoryZirconHandleANGLEFn(GLuint memory,
                                                  GLuint64 size,
                                                  GLenum handleType,
@@ -3426,6 +3447,9 @@ class GL_EXPORT GLApi {
   virtual void glImportSemaphoreFdEXTFn(GLuint semaphore,
                                         GLenum handleType,
                                         GLint fd) = 0;
+  virtual void glImportSemaphoreWin32HandleEXTFn(GLuint semaphore,
+                                                 GLenum handleType,
+                                                 void* handle) = 0;
   virtual void glImportSemaphoreZirconHandleANGLEFn(GLuint semaphore,
                                                     GLenum handleType,
                                                     GLuint handle) = 0;
@@ -4615,10 +4639,14 @@ class GL_EXPORT GLApi {
   ::gl::g_current_gl_context->glGetVertexAttribPointervRobustANGLEFn
 #define glHint ::gl::g_current_gl_context->glHintFn
 #define glImportMemoryFdEXT ::gl::g_current_gl_context->glImportMemoryFdEXTFn
+#define glImportMemoryWin32HandleEXT \
+  ::gl::g_current_gl_context->glImportMemoryWin32HandleEXTFn
 #define glImportMemoryZirconHandleANGLE \
   ::gl::g_current_gl_context->glImportMemoryZirconHandleANGLEFn
 #define glImportSemaphoreFdEXT \
   ::gl::g_current_gl_context->glImportSemaphoreFdEXTFn
+#define glImportSemaphoreWin32HandleEXT \
+  ::gl::g_current_gl_context->glImportSemaphoreWin32HandleEXTFn
 #define glImportSemaphoreZirconHandleANGLE \
   ::gl::g_current_gl_context->glImportSemaphoreZirconHandleANGLEFn
 #define glInsertEventMarkerEXT \

@@ -8,12 +8,15 @@
 #include "build/build_config.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
+#include "components/content_settings/renderer/content_settings_agent_impl.h"
 #include "components/error_page/common/error.h"
+#include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "content/public/renderer/render_thread.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "weblayer/common/features.h"
 #include "weblayer/renderer/error_page_helper.h"
 #include "weblayer/renderer/weblayer_render_frame_observer.h"
+#include "weblayer/renderer/weblayer_render_thread_observer.h"
 
 #if defined(OS_ANDROID)
 #include "components/android_system_error_page/error_page_populator.h"
@@ -64,6 +67,10 @@ void ContentRendererClientImpl::RenderThreadStarted() {
   }
 #endif
 
+  content::RenderThread* thread = content::RenderThread::Get();
+  weblayer_observer_ = std::make_unique<WebLayerRenderThreadObserver>();
+  thread->AddObserver(weblayer_observer_.get());
+
   browser_interface_broker_ =
       blink::Platform::Current()->GetBrowserInterfaceBroker();
 }
@@ -78,7 +85,15 @@ void ContentRendererClientImpl::RenderFrameCreated(
       new autofill::PasswordAutofillAgent(
           render_frame, render_frame_observer->associated_interfaces());
   new autofill::AutofillAgent(render_frame, password_autofill_agent, nullptr,
+                              nullptr,
                               render_frame_observer->associated_interfaces());
+  auto* agent = new content_settings::ContentSettingsAgentImpl(
+      render_frame, false /* should_whitelist */,
+      std::make_unique<content_settings::ContentSettingsAgentImpl::Delegate>());
+  if (weblayer_observer_)
+    agent->SetContentSettingRules(weblayer_observer_->content_setting_rules());
+
+  new page_load_metrics::MetricsRenderFrameObserver(render_frame);
 
 #if defined(OS_ANDROID)
   // |SpellCheckProvider| manages its own lifetime (and destroys itself when the
@@ -94,10 +109,11 @@ bool ContentRendererClientImpl::HasErrorPage(int http_status_code) {
 
 bool ContentRendererClientImpl::ShouldSuppressErrorPage(
     content::RenderFrame* render_frame,
-    const GURL& url) {
+    const GURL& url,
+    int error_code) {
   auto* error_page_helper = ErrorPageHelper::GetForFrame(render_frame);
   if (error_page_helper)
-    return error_page_helper->ShouldSuppressErrorPage();
+    return error_page_helper->ShouldSuppressErrorPage(error_code);
   return false;
 }
 

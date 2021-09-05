@@ -42,7 +42,6 @@
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 
 class Profile;
 

@@ -37,6 +37,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHDownloadInfoBarDownloadsAreFasterFeature,
     &kIPHEphemeralTabFeature,
     &kIPHFeedCardMenuFeature,
+    &kIPHHomepagePromoCardFeature,
     &kIPHIdentityDiscFeature,
     &kIPHKeyboardAccessoryAddressFillingFeature,
     &kIPHKeyboardAccessoryPasswordFillingFeature,
@@ -49,6 +50,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHTabGroupsDragAndDropFeature,
     &kIPHTranslateMenuButtonFeature,
     &kIPHExploreSitesTileFeature,
+    &kIPHFeedHeaderMenuFeature,
 #endif  // defined(OS_ANDROID)
 #if defined(OS_IOS)
     &kIPHBottomToolbarTipFeature,

@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Teklatu alemana</translation>
 <translation id="1972984168337863910">Zabaldu fitxategien oharren panelak</translation>
 <translation id="1984603991036629094">Teklatu armeniar fonetikoa</translation>
+<translation id="1995337122023280937">Joan fitxategiaren kokapenera</translation>
 <translation id="2001796770603320721">Kudeatu Drive-n</translation>
 <translation id="2009067268969781306">Unitatea formateatuz gero, bertan gordetako datu guztiak ezabatuko dira. Ezin da desegin ekintza hori.</translation>
 <translation id="2028997212275086731">RAR fitxategia</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Ezin izan da Google Drive-rekin konektatu. <ph name="BEGIN_LINK" />Amaitu saioa<ph name="END_LINK" /> eta hasi saioa berriro.</translation>
 <translation id="2649120831653069427">Arrain koloretsua</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Fitxategiaren kokapena</translation>
 <translation id="2672394958563893062">Errore bat gertatu da. Berriro hasieratik hasteko, sakatu hau.</translation>
 <translation id="2676946222714718093">Hemen erreproduzitzen:</translation>
 <translation id="2735698359135166290">Errumanierako teklatu estandarra</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> errore.</translation>
 <translation id="3519867315646775981">Transliterazioa (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugaldarra</translation>
+<translation id="3524311639100184459">Kontuz: fitxategi hauek aldi baterakoak dira eta agian automatikoki ezabatuko dira diskoan tokia egiteko.  <ph name="BEGIN_LINK" />Lortu informazio gehiago<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Karpeta</translation>
 <translation id="3549797760399244642">Joan drive.google.com webgunera…</translation>
 <translation id="357479282490346887">Lituaniarra</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwia</translation>
 <translation id="3966388904776714213">Audio erreproduzigailua</translation>
 <translation id="4002066346123236978">Izena</translation>
+<translation id="4065397611279318371">Fitxategiak <ph name="APP_NAME" /> aplikazioekin irekitzeko, eraman itzazu lehenik <ph name="SHARED_DIRECTORY_LABEL" /> karpetara.</translation>
 <translation id="4070370845051020638">Idazketa-metodo kantondarra</translation>
 <translation id="4072248638558688893">Teklatu tamildarra (fonetikoa)</translation>
 <translation id="4124935795427217608">Adarbakarra</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Konpondu automatikoki</translation>
 <translation id="4881695831933465202">Ireki</translation>
 <translation id="4886021172213954916">Teklatu tamildarra (idazmakina)</translation>
+<translation id="4892969127351273348">Ezin da ireki <ph name="APP_NAME" /> aplikazioarekin</translation>
 <translation id="4905417359854579806">Hauen babeskopia egiteko prest: <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Finkatu egin da</translation>
 <translation id="4935975195727477204">Lorea</translation>
@@ -471,7 +476,7 @@
 <translation id="6358884629796491903">Dragoia</translation>
 <translation id="637062427944097960">Fitxategi hau beste mahaigain batean ireki da. Ikusteko, joan <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) kontura.</translation>
 <translation id="6395575651121294044"><ph name="NUMBER_OF_FILES" /> elementu</translation>
-<translation id="6398765197997659313">Irten pantaila osotik</translation>
+<translation id="6398765197997659313">Irten pantaila osoko modutik</translation>
 <translation id="642282551015776456">Izena ezin da erabili fitxategi- edo karpeta-izen gisa</translation>
 <translation id="6462109140674788769">Teklatu greziarra</translation>
 <translation id="6466492211071551451">Teklatu irlandarra</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Kudeatu Linux-ekin partekatzeko aukera</translation>
 <translation id="6808193438228982088">Azeria</translation>
 <translation id="6820687829547641339">Gzip bidez konprimatutako .tar artxiboa</translation>
+<translation id="6823166707458800069">Automatikoki egingo da karpeta honetan gordetako fitxategi guztien babeskopia.</translation>
 <translation id="6825883775269213504">Errusiarra</translation>
 <translation id="6827236167376090743">Bideo hau etengabe erreproduzituko da.</translation>
 <translation id="6847101934483209767">Kendu da <ph name="ENTRY_NAME" /> hautapenetik.</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Google mapa</translation>
 <translation id="7419631653042041064">Teklatu katalana</translation>
 <translation id="7434823369735508263">Erresuma Batuko Dvorak teklatua</translation>
+<translation id="7447678886297481665">Karpeta honetako fitxategiak irakurtzeko soilik dira. Jarduera batzuk ez dira onartzen.</translation>
 <translation id="7460898608667578234">Ukrainarra</translation>
 <translation id="7474889694310679759">Teklatu ingeles kanadarra</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> aurkitu dira

@@ -13,6 +13,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -21,6 +22,7 @@
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "content/browser/browsing_data/browsing_data_filter_builder_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -31,6 +33,7 @@
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/cpp/features.h"
@@ -67,30 +70,30 @@ base::OnceClosure RunsOrPostOnCurrentTaskRunner(base::OnceClosure closure) {
 // it matches |predicate|. If |origin_type_mask| contains embedder-specific
 // datatypes, |embedder_matcher| must not be null; the decision for those
 // datatypes will be delegated to it.
-bool DoesOriginMatchMaskAndURLs(
+bool DoesOriginMatchMaskAndPredicate(
     int origin_type_mask,
-    base::OnceCallback<bool(const GURL&)> predicate,
+    base::OnceCallback<bool(const url::Origin&)> predicate,
     const BrowsingDataRemoverDelegate::EmbedderOriginTypeMatcher&
         embedder_matcher,
     const url::Origin& origin,
     storage::SpecialStoragePolicy* policy) {
-  if (predicate && !std::move(predicate).Run(origin.GetURL()))
+  if (predicate && !std::move(predicate).Run(origin))
     return false;
 
   const std::vector<std::string>& schemes = url::GetWebStorageSchemes();
   bool is_web_scheme = base::Contains(schemes, origin.scheme());
 
   // If a websafe origin is unprotected, it matches iff UNPROTECTED_WEB.
-  if ((!policy || !policy->IsStorageProtected(origin.GetURL())) &&
+  if ((origin_type_mask & BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB) &&
       is_web_scheme &&
-      (origin_type_mask & BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB)) {
+      (!policy || !policy->IsStorageProtected(origin.GetURL()))) {
     return true;
   }
   origin_type_mask &= ~BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB;
 
   // Hosted applications (protected and websafe origins) iff PROTECTED_WEB.
-  if (policy && policy->IsStorageProtected(origin.GetURL()) && is_web_scheme &&
-      (origin_type_mask & BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB)) {
+  if ((origin_type_mask & BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB) &&
+      is_web_scheme && policy && policy->IsStorageProtected(origin.GetURL())) {
     return true;
   }
   origin_type_mask &= ~BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
@@ -157,9 +160,9 @@ bool BrowsingDataRemoverImpl::DoesOriginMatchMaskForTesting(
   if (embedder_delegate_)
     embedder_matcher = embedder_delegate_->GetOriginTypeMatcher();
 
-  return DoesOriginMatchMaskAndURLs(origin_type_mask, base::NullCallback(),
-                                    std::move(embedder_matcher), origin,
-                                    policy);
+  return DoesOriginMatchMaskAndPredicate(origin_type_mask, base::NullCallback(),
+                                         std::move(embedder_matcher), origin,
+                                         policy);
 }
 
 void BrowsingDataRemoverImpl::Remove(const base::Time& delete_begin,
@@ -300,15 +303,18 @@ void BrowsingDataRemoverImpl::RemoveImpl(
 
   //////////////////////////////////////////////////////////////////////////////
   // INITIALIZATION
-  base::RepeatingCallback<bool(const GURL& url)> filter =
-      filter_builder->BuildGeneralFilter();
+  base::RepeatingCallback<bool(const GURL&)> url_filter =
+      filter_builder->BuildUrlFilter();
+  base::RepeatingCallback<bool(const url::Origin&)> origin_filter =
+      static_cast<BrowsingDataFilterBuilderImpl*>(filter_builder)
+          ->BuildOriginFilter();
 
   // Some backends support a filter that |is_null()| to make complete deletion
   // more efficient.
-  base::RepeatingCallback<bool(const GURL&)> nullable_filter =
+  base::RepeatingCallback<bool(const GURL&)> nullable_url_filter =
       filter_builder->IsEmptyBlacklist()
           ? base::RepeatingCallback<bool(const GURL&)>()
-          : filter;
+          : url_filter;
 
   //////////////////////////////////////////////////////////////////////////////
   // DATA_TYPE_DOWNLOADS
@@ -317,7 +323,7 @@ void BrowsingDataRemoverImpl::RemoveImpl(
     base::RecordAction(UserMetricsAction("ClearBrowsingData_Downloads"));
     DownloadManager* download_manager =
         BrowserContext::GetDownloadManager(browser_context_);
-    download_manager->RemoveDownloadsByURLAndTime(filter, delete_begin_,
+    download_manager->RemoveDownloadsByURLAndTime(url_filter, delete_begin_,
                                                   delete_end_);
   }
 
@@ -378,6 +384,10 @@ void BrowsingDataRemoverImpl::RemoveImpl(
     storage_partition_remove_mask |=
         StoragePartition::REMOVE_DATA_MASK_PLUGIN_PRIVATE_DATA;
   }
+  if (remove_mask & DATA_TYPE_CONVERSIONS) {
+    storage_partition_remove_mask |=
+        StoragePartition::REMOVE_DATA_MASK_CONVERSIONS;
+  }
 
   StoragePartition* storage_partition;
   if (storage_partition_for_testing_) {
@@ -423,8 +433,8 @@ void BrowsingDataRemoverImpl::RemoveImpl(
 
     storage_partition->ClearData(
         storage_partition_remove_mask, quota_storage_remove_mask,
-        base::BindRepeating(&DoesOriginMatchMaskAndURLs, origin_type_mask_,
-                            filter, std::move(embedder_matcher)),
+        base::BindRepeating(&DoesOriginMatchMaskAndPredicate, origin_type_mask_,
+                            origin_filter, std::move(embedder_matcher)),
         std::move(deletion_filter), perform_storage_cleanup, delete_begin_,
         delete_end_,
         CreateTaskCompletionClosure(TracingDataType::kStoragePartition));
@@ -449,9 +459,20 @@ void BrowsingDataRemoverImpl::RemoveImpl(
         delete_begin, delete_end, filter_builder->BuildNetworkServiceFilter(),
         CreateTaskCompletionClosureForMojo(TracingDataType::kHttpCache));
 
-    storage_partition->ClearCodeCaches(
-        delete_begin, delete_end, nullable_filter,
-        CreateTaskCompletionClosureForMojo(TracingDataType::kCodeCaches));
+    if (base::FeatureList::IsEnabled(
+            features::kCodeCacheDeletionWithoutFilter)) {
+      // Experimentally perform blacklist deletions without filter and skip
+      // origin specific deletions. See crbug.com/1040039#26.
+      if (filter_builder->GetMode() == BrowsingDataFilterBuilder::BLACKLIST) {
+        storage_partition->ClearCodeCaches(
+            delete_begin, delete_end, /*filter=*/base::NullCallback(),
+            CreateTaskCompletionClosureForMojo(TracingDataType::kCodeCaches));
+      }
+    } else {
+      storage_partition->ClearCodeCaches(
+          delete_begin, delete_end, nullable_url_filter,
+          CreateTaskCompletionClosureForMojo(TracingDataType::kCodeCaches));
+    }
 
     // TODO(crbug.com/1985971) : Implement filtering for NetworkHistory.
     if (filter_builder->GetMode() == BrowsingDataFilterBuilder::BLACKLIST) {
@@ -464,6 +485,23 @@ void BrowsingDataRemoverImpl::RemoveImpl(
 
     // Clears the PrefetchedSignedExchangeCache of all RenderFrameHostImpls.
     RenderFrameHostImpl::ClearAllPrefetchedSignedExchangeCache();
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Prototype Trust Token API (https://github.com/wicg/trust-token-api).
+
+  // We don't support clearing data for specific time ranges because much Trust
+  // Tokens state (e.g. issuers associated with each top-level origin) has no
+  // notion of associated creation time. Consequently, like for reporting and
+  // network error logging below, a data removal request for certain
+  // sites/origins that has the Trust Tokens type in scope will clear all Trust
+  // Tokens data associated with the requested sites/origins.
+  if (remove_mask & DATA_TYPE_TRUST_TOKENS) {
+    network::mojom::NetworkContext* network_context =
+        storage_partition->GetNetworkContext();
+    network_context->ClearTrustTokenData(
+        filter_builder->BuildNetworkServiceFilter(),
+        CreateTaskCompletionClosureForMojo(TracingDataType::kTrustTokens));
   }
 
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -598,12 +636,6 @@ void BrowsingDataRemoverImpl::Notify() {
     } else {
       base::UmaHistogramMediumTimes(
           "History.ClearBrowsingData.Duration.TimeRangeDeletion", delta);
-    }
-    // TODO(dullweber): Remove this metric after M83.
-    if (!task.delete_begin.is_null() || !task.delete_end.is_max() ||
-        !task.filter_builder->IsEmptyBlacklist()) {
-      base::UmaHistogramMediumTimes(
-          "History.ClearBrowsingData.Duration.PartialDeletion", delta);
     }
   } else {
     base::UmaHistogramMediumTimes(

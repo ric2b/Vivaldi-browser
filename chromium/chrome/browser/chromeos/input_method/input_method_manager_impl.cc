@@ -29,9 +29,9 @@
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
+#include "chrome/browser/chromeos/input_method/assistive_window_controller.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
-#include "chrome/browser/chromeos/input_method/suggestion_window_controller.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -845,7 +845,9 @@ bool InputMethodManagerImpl::StateImpl::InputMethodIsActivated(
 }
 
 void InputMethodManagerImpl::StateImpl::EnableInputView() {
-  input_view_url = current_input_method.input_view_url();
+  if (!input_view_url_overridden) {
+    input_view_url = current_input_method.input_view_url();
+  }
 }
 
 void InputMethodManagerImpl::StateImpl::DisableInputView() {
@@ -854,6 +856,16 @@ void InputMethodManagerImpl::StateImpl::DisableInputView() {
 
 const GURL& InputMethodManagerImpl::StateImpl::GetInputViewUrl() const {
   return input_view_url;
+}
+
+void InputMethodManagerImpl::StateImpl::OverrideInputViewUrl(const GURL& url) {
+  input_view_url = url;
+  input_view_url_overridden = true;
+}
+
+void InputMethodManagerImpl::StateImpl::ResetInputViewUrl() {
+  input_view_url = current_input_method.input_view_url();
+  input_view_url_overridden = false;
 }
 
 void InputMethodManagerImpl::StateImpl::ConnectMojoManager(
@@ -885,7 +897,7 @@ void InputMethodManagerImpl::ReconfigureIMFramework(
   // indicator is used by only keyboard layout input methods.
   if (state_.get() == state) {
     MaybeInitializeCandidateWindowController();
-    MaybeInitializeSuggestionWindowController();
+    MaybeInitializeAssistiveWindowController();
   }
 }
 
@@ -902,7 +914,7 @@ void InputMethodManagerImpl::SetState(
     // candidate window, infolist and mode indicator.  Note, mode
     // indicator is used by only keyboard layout input methods.
     MaybeInitializeCandidateWindowController();
-    MaybeInitializeSuggestionWindowController();
+    MaybeInitializeAssistiveWindowController();
 
     // Always call ChangeInputMethodInternal even when the input method id
     // remain unchanged, because onActivate event needs to be sent to IME
@@ -939,13 +951,11 @@ InputMethodManagerImpl::InputMethodManagerImpl(
   const InputMethodDescriptors& descriptors =
       component_extension_ime_manager_->GetAllIMEAsInputMethodDescriptor();
   util_.ResetInputMethods(descriptors);
-  chromeos::UserAddingScreen::Get()->AddObserver(this);
 }
 
 InputMethodManagerImpl::~InputMethodManagerImpl() {
   if (candidate_window_controller_.get())
     candidate_window_controller_->RemoveObserver(this);
-  chromeos::UserAddingScreen::Get()->RemoveObserver(this);
 }
 
 void InputMethodManagerImpl::RecordInputMethodUsage(
@@ -1002,19 +1012,11 @@ void InputMethodManagerImpl::SetUISessionState(UISessionState new_ui_session) {
   if (ui_session_ == STATE_TERMINATING) {
     if (candidate_window_controller_.get())
       candidate_window_controller_.reset();
-    if (suggestion_window_controller_.get())
-      suggestion_window_controller_.reset();
+    if (assistive_window_controller_.get()) {
+      assistive_window_controller_.reset();
+      ui::IMEBridge::Get()->SetAssistiveWindowHandler(nullptr);
+    }
   }
-}
-
-void InputMethodManagerImpl::OnUserAddingStarted() {
-  if (ui_session_ == STATE_BROWSER_SCREEN)
-    SetUISessionState(STATE_SECONDARY_LOGIN_SCREEN);
-}
-
-void InputMethodManagerImpl::OnUserAddingFinished() {
-  if (ui_session_ == STATE_SECONDARY_LOGIN_SCREEN)
-    SetUISessionState(STATE_BROWSER_SCREEN);
 }
 
 std::unique_ptr<InputMethodDescriptors>
@@ -1233,9 +1235,9 @@ void InputMethodManagerImpl::SetCandidateWindowControllerForTesting(
   candidate_window_controller_->AddObserver(this);
 }
 
-void InputMethodManagerImpl::SetSuggestionWindowControllerForTesting(
-    SuggestionWindowController* suggestion_window_controller) {
-  suggestion_window_controller_.reset(suggestion_window_controller);
+void InputMethodManagerImpl::SetAssistiveWindowControllerForTesting(
+    AssistiveWindowController* assistive_window_controller) {
+  assistive_window_controller_.reset(assistive_window_controller);
 }
 
 void InputMethodManagerImpl::SetImeKeyboardForTesting(ImeKeyboard* keyboard) {
@@ -1299,12 +1301,13 @@ void InputMethodManagerImpl::MaybeInitializeCandidateWindowController() {
   candidate_window_controller_->AddObserver(this);
 }
 
-void InputMethodManagerImpl::MaybeInitializeSuggestionWindowController() {
-  if (suggestion_window_controller_.get())
+void InputMethodManagerImpl::MaybeInitializeAssistiveWindowController() {
+  if (assistive_window_controller_.get())
     return;
 
-  suggestion_window_controller_.reset(
-      SuggestionWindowController::CreateSuggestionWindowController());
+  assistive_window_controller_ = std::make_unique<AssistiveWindowController>();
+  ui::IMEBridge::Get()->SetAssistiveWindowHandler(
+      assistive_window_controller_.get());
 }
 
 void InputMethodManagerImpl::NotifyImeMenuItemsChanged(
@@ -1343,7 +1346,7 @@ void InputMethodManagerImpl::OverrideKeyboardKeyset(
   if (keyset == chromeos::input_method::ImeKeyset::kNone) {
     // Resets the url as the input method default url and notify the hash
     // changed to VK.
-    state_->input_view_url = state_->current_input_method.input_view_url();
+    state_->ResetInputViewUrl();
     ReloadKeyboard();
     return;
   }
@@ -1387,8 +1390,7 @@ void InputMethodManagerImpl::OverrideKeyboardKeyset(
 
   GURL::Replacements replacements;
   replacements.SetRefStr(overridden_ref);
-  state_->input_view_url = url.ReplaceComponents(replacements);
-
+  state_->OverrideInputViewUrl(url.ReplaceComponents(replacements));
   ReloadKeyboard();
 }
 

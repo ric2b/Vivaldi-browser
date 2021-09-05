@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "components/performance_manager/graph/frame_node_impl.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/performance_manager_impl.h"
 #include "components/performance_manager/performance_manager_registry_impl.h"
@@ -66,6 +67,19 @@ base::WeakPtr<PageNode> PerformanceManager::GetPageNodeForWebContents(
 }
 
 // static
+base::WeakPtr<FrameNode> PerformanceManager::GetFrameNodeForRenderFrameHost(
+    content::RenderFrameHost* rfh) {
+  DCHECK(rfh);
+  auto* wc = content::WebContents::FromRenderFrameHost(rfh);
+  PerformanceManagerTabHelper* helper =
+      PerformanceManagerTabHelper::FromWebContents(wc);
+  if (!helper)
+    return nullptr;
+
+  return helper->GetFrameNode(rfh)->GetWeakPtr();
+}
+
+// static
 void PerformanceManager::AddObserver(
     PerformanceManagerMainThreadObserver* observer) {
   PerformanceManagerRegistryImpl::GetInstance()->AddObserver(observer);
@@ -75,6 +89,24 @@ void PerformanceManager::AddObserver(
 void PerformanceManager::RemoveObserver(
     PerformanceManagerMainThreadObserver* observer) {
   PerformanceManagerRegistryImpl::GetInstance()->RemoveObserver(observer);
+}
+
+// static
+void PerformanceManager::AddMechanism(
+    PerformanceManagerMainThreadMechanism* mechanism) {
+  PerformanceManagerRegistryImpl::GetInstance()->AddMechanism(mechanism);
+}
+
+// static
+void PerformanceManager::RemoveMechanism(
+    PerformanceManagerMainThreadMechanism* mechanism) {
+  PerformanceManagerRegistryImpl::GetInstance()->RemoveMechanism(mechanism);
+}
+
+// static
+bool PerformanceManager::HasMechanism(
+    PerformanceManagerMainThreadMechanism* mechanism) {
+  return PerformanceManagerRegistryImpl::GetInstance()->HasMechanism(mechanism);
 }
 
 }  // namespace performance_manager

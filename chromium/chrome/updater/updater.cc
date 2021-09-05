@@ -28,6 +28,7 @@
 
 #if defined(OS_MACOSX)
 #include "chrome/updater/mac/setup/install_app.h"
+#include "chrome/updater/mac/setup/swap_app.h"
 #include "chrome/updater/server/mac/server.h"
 #endif
 
@@ -40,6 +41,9 @@
 // directory of the build.
 // - To debug, append the following arguments to any updater command line:
 //    --enable-logging --vmodule=*/chrome/updater/*=2.
+// - To run the `updater --install` from the `out` directory of the build,
+//   use --install-from-out-dir command line switch in addition to other
+//   arguments for --install.
 
 namespace updater {
 
@@ -96,6 +100,11 @@ int HandleUpdaterCommands(const base::CommandLine* command_line) {
 
   if (command_line->HasSwitch(kInstallSwitch))
     return AppInstallInstance()->Run();
+
+#if defined(OS_MACOSX)
+  if (command_line->HasSwitch(kSwapUpdaterSwitch))
+    return AppSwapUpdaterInstance()->Run();
+#endif  // OS_MACOSX
 
   if (command_line->HasSwitch(kUninstallSwitch))
     return AppUninstallInstance()->Run();

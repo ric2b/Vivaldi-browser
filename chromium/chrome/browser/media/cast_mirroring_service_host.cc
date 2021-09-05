@@ -39,6 +39,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/viz/public/mojom/gpu.mojom.h"
 #include "ui/display/display.h"
@@ -209,7 +210,6 @@ void CastMirroringServiceHost::Start(
       mirroring_service_.BindNewPipeAndPassReceiver(),
       content::ServiceProcessHost::Options()
           .WithDisplayName("Mirroring Service")
-          .WithSandboxType(service_manager::SandboxType::kUtility)
           .Pass());
   mojo::PendingRemote<mojom::ResourceProvider> provider;
   resource_provider_receiver.Bind(provider.InitWithNewPipeAndPassReceiver());
@@ -311,13 +311,11 @@ void CastMirroringServiceHost::CreateAudioStream(
              mojo::PendingReceiver<media::mojom::AudioInputStreamClient>
                  client_receiver,
              media::mojom::ReadOnlyAudioDataPipePtr data_pipe) {
-            // TODO(crbug.com/1015488): Remove |initially_muted| argument from
-            // mojom::AudioStreamCreatorClient::StreamCreated().
             mojo::Remote<mojom::AudioStreamCreatorClient> audio_client(
                 std::move(client));
-            audio_client->StreamCreated(
-                std::move(stream), std::move(client_receiver),
-                std::move(data_pipe), false /* initially_muted */);
+            audio_client->StreamCreated(std::move(stream),
+                                        std::move(client_receiver),
+                                        std::move(data_pipe));
           },
           base::Passed(&client)));
 }

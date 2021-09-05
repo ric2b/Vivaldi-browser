@@ -13,7 +13,6 @@
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/navigator_impl.h"
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/navigation_params.h"
@@ -26,6 +25,7 @@
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_render_widget_host.h"
+#include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -34,13 +34,13 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
+#include "third_party/blink/public/mojom/frame/tree_scope_type.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "third_party/blink/public/platform/web_mixed_content_context_type.h"
-#include "third_party/blink/public/web/web_tree_scope_type.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -63,14 +63,18 @@ TestRenderFrameHost::TestRenderFrameHost(
     RenderFrameHostDelegate* delegate,
     FrameTree* frame_tree,
     FrameTreeNode* frame_tree_node,
-    int32_t routing_id)
+    int32_t routing_id,
+    const base::UnguessableToken& frame_token,
+    RenderFrameHostImpl::LifecycleState lifecyle_state)
     : RenderFrameHostImpl(site_instance,
                           std::move(render_view_host),
                           delegate,
                           frame_tree,
                           frame_tree_node,
                           routing_id,
-                          /*renderer_initiated_creation=*/false),
+                          frame_token,
+                          /*renderer_initiated_creation=*/false,
+                          lifecyle_state),
       child_creation_observer_(delegate ? delegate->GetAsWebContents()
                                         : nullptr),
       simulate_history_list_was_cleared_(false),
@@ -130,13 +134,13 @@ void TestRenderFrameHost::InitializeRenderFrameIfNeeded() {
 TestRenderFrameHost* TestRenderFrameHost::AppendChild(
     const std::string& frame_name) {
   std::string frame_unique_name = base::GenerateGUID();
-  OnCreateChildFrame(GetProcess()->GetNextRoutingID(),
-                     CreateStubInterfaceProviderReceiver(),
-                     CreateStubBrowserInterfaceBrokerReceiver(),
-                     blink::WebTreeScopeType::kDocument, frame_name,
-                     frame_unique_name, false, base::UnguessableToken::Create(),
-                     blink::FramePolicy(), blink::mojom::FrameOwnerProperties(),
-                     blink::FrameOwnerElementType::kIframe);
+  OnCreateChildFrame(
+      GetProcess()->GetNextRoutingID(), CreateStubInterfaceProviderReceiver(),
+      CreateStubBrowserInterfaceBrokerReceiver(),
+      blink::mojom::TreeScopeType::kDocument, frame_name, frame_unique_name,
+      false, base::UnguessableToken::Create(), base::UnguessableToken::Create(),
+      blink::FramePolicy(), blink::mojom::FrameOwnerProperties(),
+      blink::mojom::FrameOwnerElementType::kIframe);
   return static_cast<TestRenderFrameHost*>(
       child_creation_observer_.last_created_frame());
 }
@@ -217,19 +221,17 @@ void TestRenderFrameHost::SimulateUnloadACK() {
   OnUnloadACK();
 }
 
-// TODO(loonybear): Add a test for non-bool type PolicyValue.
 void TestRenderFrameHost::SimulateFeaturePolicyHeader(
     blink::mojom::FeaturePolicyFeature feature,
     const std::vector<url::Origin>& allowlist) {
   blink::ParsedFeaturePolicy header(1);
   header[0].feature = feature;
-  header[0].fallback_value = blink::PolicyValue(false);
-  header[0].opaque_value = blink::PolicyValue(false);
+  header[0].fallback_value = false;
+  header[0].opaque_value = false;
   for (const auto& origin : allowlist) {
-    header[0].values.insert(std::pair<url::Origin, blink::PolicyValue>(
-        origin, blink::PolicyValue(true)));
+    header[0].allowed_origins.push_back(origin);
   }
-  DidSetFramePolicyHeaders(blink::mojom::WebSandboxFlags::kNone, header,
+  DidSetFramePolicyHeaders(network::mojom::WebSandboxFlags::kNone, header,
                            {} /* dp_header */);
 }
 
@@ -298,8 +300,7 @@ void TestRenderFrameHost::SendNavigateWithParamsAndInterfaceParams(
   if (navigation_request() && !navigation_request()->GetResponseHeaders()) {
     scoped_refptr<net::HttpResponseHeaders> response_headers =
         new net::HttpResponseHeaders(std::string());
-    response_headers->AddHeader(std::string("Content-Type: ") +
-                                params->contents_mime_type);
+    response_headers->SetHeader("Content-Type", params->contents_mime_type);
     navigation_request()->set_response_headers_for_testing(response_headers);
   }
 
@@ -324,6 +325,7 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
 
   mojom::BeginNavigationParamsPtr begin_params =
       mojom::BeginNavigationParams::New(
+          MSG_ROUTING_NONE /* initiator_routing_id */,
           std::string() /* headers */, net::LOAD_NORMAL,
           false /* skip_service_worker */,
           blink::mojom::RequestContextType::HYPERLINK,
@@ -335,8 +337,8 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
           std::string() /* searchable_form_encoding */,
           GURL() /* client_side_redirect_url */,
           base::nullopt /* devtools_initiator_info */,
-          false /* attach_same_site_cookies */,
-          nullptr /* trust_token_params */);
+          false /* force_ignore_site_for_cookies */,
+          nullptr /* trust_token_params */, base::nullopt /* impression */);
   auto common_params = CreateCommonNavigationParams();
   common_params->url = url;
   common_params->initiator_origin = GetLastCommittedOrigin();
@@ -428,6 +430,8 @@ void TestRenderFrameHost::PrepareForCommitInternal(
       is_signed_exchange_inner_response;
   response->connection_info = connection_info;
   response->ssl_info = ssl_info;
+  response->load_timing.send_start = base::TimeTicks::Now();
+  response->load_timing.receive_headers_start = base::TimeTicks::Now();
   // TODO(carlosk): Ideally, it should be possible someday to
   // fully commit the navigation at this call to CallOnResponseStarted.
   url_loader->CallOnResponseStarted(std::move(response));
@@ -490,7 +494,7 @@ TestRenderFrameHost::CreateWebBluetoothServiceForTesting() {
 }
 
 void TestRenderFrameHost::SendFramePolicy(
-    blink::mojom::WebSandboxFlags sandbox_flags,
+    network::mojom::WebSandboxFlags sandbox_flags,
     const blink::ParsedFeaturePolicy& fp_header,
     const blink::DocumentPolicy::FeatureState& dp_header) {
   DidSetFramePolicyHeaders(sandbox_flags, fp_header, dp_header);

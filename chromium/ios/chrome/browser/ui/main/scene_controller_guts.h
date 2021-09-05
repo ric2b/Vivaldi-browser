@@ -11,14 +11,8 @@
 #import "ios/chrome/browser/procedural_block_types.h"
 #import "ios/chrome/browser/ui/tab_grid/tab_switcher.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 
-@class BrowserViewWrangler;
-
-@protocol SceneControllerGuts <WebStateListObserving>
-
-- (void)startUpChromeUIPostCrash:(BOOL)isPostCrashLaunch
-                 needRestoration:(BOOL)needsRestoration;
+@protocol SceneControllerGuts
 
 - (void)dismissModalsAndOpenSelectedTabInMode:
             (ApplicationModeForTabOpening)targetMode
@@ -27,16 +21,10 @@
                                dismissOmnibox:(BOOL)dismissOmnibox
                                    completion:(ProceduralBlock)completion;
 
-// Testing only.
-- (void)showFirstRunUI;
-- (void)setTabSwitcher:(id<TabSwitcher>)switcher;
-- (id<TabSwitcher>)tabSwitcher;
-- (BOOL)isTabSwitcherActive;
-
-- (void)dismissModalDialogsWithCompletion:(ProceduralBlock)completion
-                           dismissOmnibox:(BOOL)dismissOmnibox;
-
 #pragma mark - iOS 12 compat
+
+- (void)startUpChromeUIPostCrash:(BOOL)isPostCrashLaunch
+                 needRestoration:(BOOL)needsRestoration;
 
 // Method called on SceneController when the scene disconnects. Exposed here for
 // iOS 12 compatibility.

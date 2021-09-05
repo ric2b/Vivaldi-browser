@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
 
 #include "components/paint_preview/common/paint_preview_tracker.h"
-#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -36,7 +36,8 @@ LocalFrameView* RemoteFrameView::ParentFrameView() const {
     return nullptr;
 
   HTMLFrameOwnerElement* owner = remote_frame_->DeprecatedLocalOwner();
-  if (owner && owner->OwnerType() == FrameOwnerElementType::kPortal)
+  if (owner &&
+      owner->OwnerType() == mojom::blink::FrameOwnerElementType::kPortal)
     return owner->GetDocument().GetFrame()->View();
 
   // |is_attached_| is only set from AttachToLayout(), which ensures that the
@@ -53,7 +54,8 @@ LocalFrameView* RemoteFrameView::ParentLocalRootFrameView() const {
     return nullptr;
 
   HTMLFrameOwnerElement* owner = remote_frame_->DeprecatedLocalOwner();
-  if (owner && owner->OwnerType() == FrameOwnerElementType::kPortal)
+  if (owner &&
+      owner->OwnerType() == mojom::blink::FrameOwnerElementType::kPortal)
     return owner->GetDocument().GetFrame()->LocalFrameRoot().View();
 
   // |is_attached_| is only set from AttachToLayout(), which ensures that the
@@ -189,7 +191,10 @@ void RemoteFrameView::PropagateFrameRects() {
   if (LocalFrameView* parent = ParentFrameView()) {
     screen_space_rect = parent->ConvertToRootFrame(screen_space_rect);
   }
-  remote_frame_->Client()->FrameRectsChanged(frame_rect, screen_space_rect);
+  // NOTE(andre@vivaldi.com) : Only set size if this is visible. See VB-51618
+  if (IsSelfVisible()) {
+    remote_frame_->Client()->FrameRectsChanged(frame_rect, screen_space_rect);
+  }
 }
 
 void RemoteFrameView::Paint(GraphicsContext& context,
@@ -241,6 +246,10 @@ void RemoteFrameView::Hide() {
 
 void RemoteFrameView::Show() {
   SetSelfVisible(true);
+  // Added by Vivaldi as we are lazy and only send rects when needed.
+  if (ParentFrameView() && ParentFrameView()->IsVisible()) {
+    PropagateFrameRects();
+  }
   UpdateFrameVisibility(
       !last_intersection_state_.viewport_intersection.IsEmpty());
 }

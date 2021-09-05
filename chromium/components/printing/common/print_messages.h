@@ -97,16 +97,6 @@ struct PrintHostMsg_PreviewIds {
   int request_id;
   int ui_id;
 };
-
-struct PrintHostMsg_SetOptionsFromDocument_Params {
-  PrintHostMsg_SetOptionsFromDocument_Params();
-  ~PrintHostMsg_SetOptionsFromDocument_Params();
-
-  bool is_scaling_disabled;
-  int copies;
-  printing::DuplexMode duplex;
-  printing::PageRanges page_ranges;
-};
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 #endif  // INTERNAL_COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_
@@ -219,20 +209,6 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_TRAITS_BEGIN(PrintHostMsg_PreviewIds)
   IPC_STRUCT_TRAITS_MEMBER(request_id)
   IPC_STRUCT_TRAITS_MEMBER(ui_id)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(PrintHostMsg_SetOptionsFromDocument_Params)
-  // Specifies whether print scaling is enabled or not.
-  IPC_STRUCT_TRAITS_MEMBER(is_scaling_disabled)
-
-  // Specifies number of copies to be printed.
-  IPC_STRUCT_TRAITS_MEMBER(copies)
-
-  // Specifies paper handling option.
-  IPC_STRUCT_TRAITS_MEMBER(duplex)
-
-  // Specifies page range to be printed.
-  IPC_STRUCT_TRAITS_MEMBER(page_ranges)
 IPC_STRUCT_TRAITS_END()
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
@@ -455,11 +431,6 @@ IPC_MESSAGE_ROUTED1(PrintHostMsg_PrintingFailed,
                     int /* document cookie */)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-// Tell the browser print preview failed.
-IPC_MESSAGE_ROUTED2(PrintHostMsg_PrintPreviewFailed,
-                    int /* document cookie */,
-                    PrintHostMsg_PreviewIds /* ids */)
-
 // Tell the browser print preview was cancelled.
 IPC_MESSAGE_ROUTED2(PrintHostMsg_PrintPreviewCancelled,
                     int /* document cookie */,
@@ -480,11 +451,6 @@ IPC_SYNC_MESSAGE_ROUTED0_0(PrintHostMsg_SetupScriptedPrintPreview)
 // loaded such that the renderer can determine whether it is modifiable or not.
 IPC_MESSAGE_ROUTED1(PrintHostMsg_ShowScriptedPrintPreview,
                     bool /* is_modifiable */)
-
-// Notify the browser to set print presets based on source PDF document.
-IPC_MESSAGE_ROUTED2(PrintHostMsg_SetOptionsFromDocument,
-                    PrintHostMsg_SetOptionsFromDocument_Params /* params */,
-                    PrintHostMsg_PreviewIds /* ids */)
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 #endif  // COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_

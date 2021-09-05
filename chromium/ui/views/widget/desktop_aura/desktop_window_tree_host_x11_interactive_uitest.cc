@@ -11,6 +11,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/x/test/x11_property_change_waiter.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/platform/x11/x11_event_source.h"
@@ -19,8 +20,7 @@
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/views/controls/textfield/textfield.h"
-#include "ui/views/test/views_interactive_ui_test_base.h"
-#include "ui/views/test/x11_property_change_waiter.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 
 namespace views {
@@ -28,16 +28,17 @@ namespace views {
 namespace {
 
 // Blocks till |window| gets activated.
-class ActivationWaiter : public X11PropertyChangeWaiter {
+class ActivationWaiter : public ui::X11PropertyChangeWaiter {
  public:
   explicit ActivationWaiter(XID window)
-      : X11PropertyChangeWaiter(ui::GetX11RootWindow(), "_NET_ACTIVE_WINDOW"),
+      : ui::X11PropertyChangeWaiter(ui::GetX11RootWindow(),
+                                    "_NET_ACTIVE_WINDOW"),
         window_(window) {}
 
   ~ActivationWaiter() override = default;
 
  private:
-  // X11PropertyChangeWaiter:
+  // ui::X11PropertyChangeWaiter:
   bool ShouldKeepOnWaiting(XEvent* event) override {
     XID xid = 0;
     ui::GetXIDProperty(ui::GetX11RootWindow(), "_NET_ACTIVE_WINDOW", &xid);
@@ -108,23 +109,22 @@ void DispatchMouseMotionEvent(DesktopWindowTreeHostX11* desktop_host,
 
 }  // namespace
 
-class DesktopWindowTreeHostX11Test : public ViewsInteractiveUITestBase {
+class DesktopWindowTreeHostX11Test : public test::DesktopWidgetTestInteractive {
  public:
   DesktopWindowTreeHostX11Test() = default;
   ~DesktopWindowTreeHostX11Test() override = default;
 
-  // testing::Test
+  // DesktopWidgetTestInteractive
   void SetUp() override {
-    ViewsInteractiveUITestBase::SetUp();
-
     // Make X11 synchronous for our display connection. This does not force the
     // window manager to behave synchronously.
     XSynchronize(gfx::GetXDisplay(), x11::True);
+    DesktopWidgetTestInteractive::SetUp();
   }
 
   void TearDown() override {
     XSynchronize(gfx::GetXDisplay(), x11::False);
-    ViewsInteractiveUITestBase::TearDown();
+    DesktopWidgetTestInteractive::TearDown();
   }
 
  private:
@@ -235,6 +235,12 @@ TEST_F(DesktopWindowTreeHostX11Test, CaptureEventForwarding) {
 
 TEST_F(DesktopWindowTreeHostX11Test, InputMethodFocus) {
   std::unique_ptr<Widget> widget(CreateWidget(gfx::Rect(100, 100, 100, 100)));
+
+  // Waiter should be created as early as possible so that PropertyNotify has
+  // time to be set before widget is activated.
+  ActivationWaiter waiter(
+      widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
+
   std::unique_ptr<Textfield> textfield(new Textfield);
   textfield->SetBounds(0, 0, 200, 20);
   widget->GetRootView()->AddChildView(textfield.get());
@@ -247,11 +253,6 @@ TEST_F(DesktopWindowTreeHostX11Test, InputMethodFocus) {
   // EXPECT_EQ(ui::TEXT_INPUT_TYPE_NONE,
   //           widget->GetInputMethod()->GetTextInputType());
 
-  // Waiter should be created before widget->Activate is called. Otherwise,
-  // there is a race, and waiter might not be able to set property changes mask
-  // on time and miss the events.
-  ActivationWaiter waiter(
-      widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
   widget->Activate();
   waiter.Wait();
 

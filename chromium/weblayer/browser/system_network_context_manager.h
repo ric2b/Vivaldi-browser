@@ -6,7 +6,6 @@
 #define WEBLAYER_BROWSER_SYSTEM_NETWORK_CONTEXT_MANAGER_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "content/public/browser/cors_exempt_headers.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -36,6 +35,10 @@ class SystemNetworkContextManager {
 
   static network::mojom::NetworkContextParamsPtr
   CreateDefaultNetworkContextParams(const std::string& user_agent);
+
+  static void ConfigureDefaultNetworkContextParams(
+      network::mojom::NetworkContextParams* network_context_params,
+      const std::string& user_agent);
 
   ~SystemNetworkContextManager();
 

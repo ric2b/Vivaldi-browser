@@ -7,6 +7,7 @@
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
@@ -21,14 +22,11 @@
 #include "net/base/escape.h"
 #include "net/base/mime_util.h"
 #include "third_party/zlib/google/compression_utils.h"
+#include "ui/webui/webui_allowlist.h"
 
 namespace {
-// TODO(crbug.com/846546): Initially set to load crosh, but change to
-// terminal when it is available.
 constexpr base::FilePath::CharType kTerminalRoot[] =
     FILE_PATH_LITERAL("/usr/share/chromeos-assets/crosh_builtin");
-constexpr base::FilePath::CharType kDefaultFile[] =
-    FILE_PATH_LITERAL("html/crosh.html");
 constexpr char kDefaultMime[] = "text/html";
 
 void ReadFile(const std::string& relative_path,
@@ -79,12 +77,35 @@ void ReadFile(const std::string& relative_path,
 }
 }  // namespace
 
-TerminalSource::TerminalSource(Profile* profile) : profile_(profile) {}
+// static
+std::unique_ptr<TerminalSource> TerminalSource::ForCrosh(Profile* profile) {
+  return base::WrapUnique(new TerminalSource(
+      profile, chrome::kChromeUIUntrustedCroshURL, "html/crosh.html"));
+}
+
+// static
+std::unique_ptr<TerminalSource> TerminalSource::ForTerminal(Profile* profile) {
+  return base::WrapUnique(new TerminalSource(
+      profile, chrome::kChromeUIUntrustedTerminalURL, "html/terminal.html"));
+}
+
+TerminalSource::TerminalSource(Profile* profile,
+                               std::string source,
+                               std::string default_file)
+    : profile_(profile), source_(source), default_file_(default_file) {
+  auto* webui_allowlist = WebUIAllowlist::GetOrCreate(profile);
+  const url::Origin terminal_origin = url::Origin::Create(GURL(source));
+  CHECK(!terminal_origin.opaque());
+  webui_allowlist->RegisterAutoGrantedPermission(
+      terminal_origin, ContentSettingsType::NOTIFICATIONS);
+  webui_allowlist->RegisterAutoGrantedPermission(
+      terminal_origin, ContentSettingsType::CLIPBOARD_READ_WRITE);
+}
 
 TerminalSource::~TerminalSource() = default;
 
 std::string TerminalSource::GetSource() {
-  return chrome::kChromeUIUntrustedTerminalURL;
+  return source_;
 }
 
 #if !BUILDFLAG(OPTIMIZE_WEBUI)
@@ -100,7 +121,7 @@ void TerminalSource::StartDataRequest(
   // skip first '/' in path.
   std::string path = url.path().substr(1);
   if (path.empty())
-    path = kDefaultFile;
+    path = default_file_;
 
   // Replace $i8n{themeColor} in *.html.
   if (base::EndsWith(path, ".html", base::CompareCase::INSENSITIVE_ASCII)) {

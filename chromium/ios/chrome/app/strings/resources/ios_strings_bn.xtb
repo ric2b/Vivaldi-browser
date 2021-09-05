@@ -3,6 +3,7 @@
 <translationbundle lang="bn">
 <translation id="1005230401424685968">YYYY</translation>
 <translation id="1016495303386450659">আইটেম আপডেট হয়েছে</translation>
+<translation id="1044891598689252897">সাইট স্বাভাবিকভাবেই কাজ করবে</translation>
 <translation id="1047726139967079566">এই পৃষ্ঠাটি বুকমার্ক করুন...</translation>
 <translation id="1049743911850919806">ছদ্মবেশী</translation>
 <translation id="1063454504051558093">অন্য পাসওয়ার্ড ব্যবহার করুন...</translation>
@@ -47,10 +48,12 @@
 <translation id="145015347812617860"><ph name="COUNT" />টি আইটেম</translation>
 <translation id="1491277525950327607">সেটিং টগল করতে দুবার আলতো চাপুন</translation>
 <translation id="1509486075633541495">ওয়েবসাইটে সাইন-ইন করুন</translation>
+<translation id="1509960214886564027">একাধিক সাইটের ফিচারগুলি কাজ নাও করতে পারে</translation>
 <translation id="152234381334907219">কখনও সংরক্ষিত হয়নি</translation>
 <translation id="1540800554400757039">ঠিকানা ১</translation>
 <translation id="1545749641540134597">QR কোড স্ক্যান করুন</translation>
 <translation id="1552525382687785070">আপনার অ্যাডমিনিস্ট্রেটর সিঙ্ক 'বন্ধ' করে দিয়েছে</translation>
+<translation id="1554477036522844996">নতুন উইন্ডো</translation>
 <translation id="1580783302095112590">মেল পাঠানো হয়েছে৷</translation>
 <translation id="1582732959743469162">এর ফলে আপনি এখন যা ডাউনলোড করছেন সেগুলি সব বন্ধ হয়ে যাবে।</translation>
 <translation id="1605658421715042784">ছবি কপি করুন</translation>
@@ -95,12 +98,15 @@
 <translation id="213900355088104901">গোপনে ব্রাউজ করার জন্য ছদ্মবেশী ট্যাব খুলুন</translation>
 <translation id="2139867232736819575">আপনার কপি করা টেক্সট সার্চ করুন</translation>
 <translation id="2149973817440762519">বুকমার্ক সম্পাদনা করুন</translation>
+<translation id="2175927920773552910">QR কোড</translation>
 <translation id="2179182049312275900">যেকোনও সময় সেটিংস থেকে আপনি সিঙ্ক চালু করতে পারেন।</translation>
 <translation id="2198757192731523470">সার্চ, বিজ্ঞাপন এবং অন্যান্য Google পরিষেবাকে আপনার মতো করে সাজিয়ে নিতে Google আপনার ইতিহাস ব্যবহার করতে পারে।</translation>
 <translation id="2218443599109088993">ছোট করে দেখুন</translation>
 <translation id="2230173723195178503">Webpage loaded</translation>
 <translation id="2239626343334228536">ব্রাউজিং ডেটা মোছা হচ্ছে…</translation>
+<translation id="2245545499420671379">ছদ্মবেশী মোডে থার্ড-পার্টি কুকি ব্লক করুন</translation>
 <translation id="2257567812274161158">সিঙ্ক কাজ করছে না।</translation>
+<translation id="225943865679747347">ত্রুটি কোড: <ph name="ERROR_CODE" /></translation>
 <translation id="2267753748892043616">অ্যাকাউন্ট যোগ করুন</translation>
 <translation id="2268044343513325586">রিফাইন করুন</translation>
 <translation id="2273327106802955778">‘আরও’ মেনু</translation>
@@ -111,11 +117,12 @@
 <translation id="2359043044084662842">অনুবাদ করুন</translation>
 <translation id="2359808026110333948">চালিয়ে যান</translation>
 <translation id="2360196772093551345">মোবাইল সাইটের জন্য অনুরোধ করুন</translation>
+<translation id="2379896346847637748">নতুন উইন্ডোতে খুলুন</translation>
 <translation id="2381405137052800939">প্রাথমিক বিষয়াদি</translation>
 <translation id="2386793615875593361">১টি নির্বাচিত</translation>
+<translation id="2421004566762153674">থার্ড-পার্টি কুকি ব্লক করুন</translation>
 <translation id="2421044535038393232">এডিট করতে থাকুন</translation>
 <translation id="2435457462613246316">পাসওয়ার্ড দেখান</translation>
-<translation id="2481538920734869610">অ্যাকাউন্ট যোগ করুন</translation>
 <translation id="2497852260688568942">আপনার প্রশাসকের দ্বারা সিঙ্ক অক্ষম করা হয়েছে</translation>
 <translation id="2500374554657206846">পাসওয়ার্ড সেভ করার বিকল্প</translation>
 <translation id="2523363575747517183">এই ওয়েবসাইটটি ক্রমাগত অন্য অ্যাপ্লিকেশন খোলার চেষ্টা করছে।</translation>
@@ -152,6 +159,7 @@
 <translation id="285960592395650245">আবার ডাউনলোডের চেষ্টা করুন</translation>
 <translation id="2870560284913253234">সাইট</translation>
 <translation id="2871695793448672541">লুকানো, পাসওয়ার্ড</translation>
+<translation id="2876369937070532032">নিরাপত্তা সংক্রান্ত কোনও ঝুঁকি থাকলে, আপনার দেখা কিছু পৃষ্ঠার ইউআরএল Google-কে পাঠায়</translation>
 <translation id="288655811176831528">ট্যাব বন্ধ করুন</translation>
 <translation id="2898963176829412617">নতুন ফোল্ডার...</translation>
 <translation id="2916171785467530738">সার্চ এবং ইউআরএলগুলি নিজে থেকে সম্পূর্ণ হতে দিন</translation>
@@ -171,6 +179,7 @@
 <translation id="3161291298470460782">এর ফলে আপনি অ্যাকাউন্ট থেকে সাইন-আউট হয়ে যাবেন, সিঙ্ক করার সুবিধা বন্ধ হয়ে যাবে এবং এই ডিভাইস থেকে Chrome-এর সমস্ত ডেটা মুছে যাবে। আপনি যেসব ডেটা সিঙ্ক করেছেন, সেগুলি আপনার Google অ্যাকাউন্টেই থেকে যাবে।</translation>
 <translation id="3175081911749765310">ওয়েব পরিষেবা</translation>
 <translation id="3178650076442119961">আজ ব্যবহার করা হয়েছে</translation>
+<translation id="3181954750937456830">নিরাপদ ব্রাউজিং (বিপজ্জনক সাইট থেকে আপনাকে এবং আপনার ডিভাইসকে রক্ষা করে)</translation>
 <translation id="3207960819495026254">বুকমার্ক করা হয়েছে</translation>
 <translation id="3224641773458703735">পাসওয়ার্ড এক্সপোর্ট করার জন্য আপনার ডিভাইসে আপনাকে অবশ্যই একটি পাসকোড সেট করতে হবে।</translation>
 <translation id="3240426699337459095">লিঙ্ক কপি করা হয়েছে</translation>
@@ -193,7 +202,6 @@
 <translation id="3469166899695866866">ডাউনলোড বন্ধ করবেন?</translation>
 <translation id="3470502288861289375">অনুলিপি করা হচ্ছে...</translation>
 <translation id="3474624961160222204"><ph name="NAME" /> হিসাবে চালিয়ে যান</translation>
-<translation id="3474649192738347024">ফর্মগুলি পূরণ করা হয়েছে৷</translation>
 <translation id="3478058380795961209">মেয়াদপূর্তির মাস</translation>
 <translation id="3482959374254649722">আপনার ট্যাবগুলি সিঙ্ক করা হচ্ছে ...</translation>
 <translation id="3484946776651937681">ডাউনলোডগুলি খুলুন</translation>
@@ -305,7 +313,6 @@
 <translation id="4979397965658815378">আপনার সব ডিভাইসে আপনার বুকমার্ক, পাসওয়ার্ড, ইতিহাস এবং অন্যান্য সেটিংস পেতে আপনার Google অ্যাকাউন্টে সাইন-ইন করুন</translation>
 <translation id="5005498671520578047">পাসওয়ার্ড কপি করুন</translation>
 <translation id="5010803260590204777">ব্যক্তিগতভাবে ওয়েব ব্রাউজ করার জন্য একটি ছদ্মবেশী ট্যাব খুলুন।</translation>
-<translation id="5039020240289137291">থার্ড-পার্টি কুকি ব্লক করা হচ্ছে</translation>
 <translation id="5039804452771397117">অনুমতি দিন</translation>
 <translation id="5059136629401106827">ঠিক আছে</translation>
 <translation id="5062321486222145940">Google ড্রাইভ ইনস্টল করুন</translation>
@@ -365,7 +372,7 @@
 <translation id="5869029295770560994">ঠিক আছে, বুঝেছি</translation>
 <translation id="5871497086027727873">১টি আইটেম সরানো হয়েছে</translation>
 <translation id="5897956970858271241">কপি করা লিঙ্কে যান</translation>
-<translation id="5911030830365207728">Google অনুবাদ</translation>
+<translation id="5911030830365207728">Google Translate</translation>
 <translation id="5913600720976431809">পৃষ্ঠা অনুবাদ করার বিকল্প</translation>
 <translation id="5938160824633642847">আপনার ডিভাইসে পর্যাপ্ত জায়গা নেই। জায়গা খালি করে আবার চেষ্টা করুন।</translation>
 <translation id="5948291296578561264">এর ফলে আপনি ফটো লাইব্রেরিতে ফটো সেভ করতে পারবেন।</translation>
@@ -419,12 +426,14 @@
 
 আপনার সিঙ্ক পাসফ্রেজের মাধ্যমে আপনার ডেটা <ph name="TIME" /> এ এনক্রিপটেড হয়েছে। সিঙ্ক শুরু করতে এটি লিখুন।</translation>
 <translation id="6418346271604475326">পিডিএফ প্রস্তুত হচ্ছে</translation>
+<translation id="6426067060178468363">কুকি ব্যবহার করার অনুমতি দিন</translation>
 <translation id="6434591244308415567">কোনও সমস্যা হয়েছে। পরে আবার চেষ্টা করুন।</translation>
 <translation id="6445051938772793705">দেশ</translation>
 <translation id="6445981559479772097">বার্তা পাঠানো হয়েছে৷</translation>
 <translation id="6447842834002726250">কুকিজ</translation>
 <translation id="6464071786529933911">নতুন ছদ্মবেশী ট্যাবে খুলুন</translation>
 <translation id="6476800141292307438">পৃষ্ঠাটি <ph name="LANGUAGE" /> ভাষাতে অনুবাদ হচ্ছে। স্ক্রিনের নিচের দিকে বিকল্পগুলি দেওয়া আছে।</translation>
+<translation id="648164694371393720">যাচাইকরণের সময় সমস্যা হয়েছে</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" />টি আইটেম মোছা হয়েছে</translation>
 <translation id="6561262006871132942">বড় করে দেখুন</translation>
 <translation id="6610002944194042868">অনুবাদের বিকল্প</translation>
@@ -432,6 +441,7 @@
 <translation id="6638511529934826365">টেক্সট জুম করা…</translation>
 <translation id="6642362222295953972">আগে থেকে থাকা ট্যাবে পাল্টান</translation>
 <translation id="6643016212128521049">সাফ করুন</translation>
+<translation id="6645899968535965230">QR কোড: <ph name="PAGE_TITLE" /></translation>
 <translation id="6656103420185847513">ফোল্ডার সম্পাদনা করুন</translation>
 <translation id="6657585470893396449">পাসওয়ার্ড</translation>
 <translation id="6668619169535738264">বুকমার্ক এডিট করুন</translation>
@@ -477,11 +487,11 @@
 <translation id="7136892417564438900">ক্যামেরা অনুপলব্ধ</translation>
 <translation id="7159472599653637159">মোবাইল সাইটের জন্য অনুরোধ করুন</translation>
 <translation id="7173114856073700355">সেটিংস খুলুন</translation>
+<translation id="7189598951263744875">শেয়ার করুন...</translation>
 <translation id="7192050974311852563">লগ করা শুরু করুন</translation>
 <translation id="7203585745079012652">আবার উত্তরগুলি বলে</translation>
 <translation id="7265758999917665941">এই সাইটের জন্য কখনই নয়</translation>
 <translation id="7272437679830969316">আপনার পরিচয় যাচাই করা যাবে না। পাসওয়ার্ড কপি করা হয়নি।</translation>
-<translation id="7285236536143823449">হ্যাঁ, আমি রাজি</translation>
 <translation id="7291368939935408496">পাসওয়ার্ড তৈরি করা হচ্ছে...</translation>
 <translation id="7293171162284876153">সিঙ্ক চালু করতে "আপনার Chrome ডেটা সিঙ্ক করুন" বিকল্পটি চালু করুন।</translation>
 <translation id="7336264872878993241"><ph name="PERCENT" /> শতাংশ ডাউনলোড হয়েছে</translation>
@@ -497,6 +507,7 @@
 <translation id="7460314822154045102">ক্যামেরা ব্যবহার করুন</translation>
 <translation id="7464701184726199289">এটি সব ডিভাইস থেকে সিঙ্ক হওয়া ডেটা সাফ করবে। সংরক্ষিত সাইটের সেটিংস মোছা হবে না এবং আপনার ব্রাউজিং অভ্যাস প্রতিফলিত হতে পারে। <ph name="BEGIN_LINK" />আরও জানুন<ph name="END_LINK" /></translation>
 <translation id="7472734401283673885">কোম্পানির নাম:</translation>
+<translation id="7473891865547856676">না থাক</translation>
 <translation id="7481312909269577407">ফরওয়ার্ড</translation>
 <translation id="750493650310597496">০টি নির্বাচিত</translation>
 <translation id="7514365320538308">ডাউনলোড করুন</translation>
@@ -514,11 +525,12 @@
 
 যেহেতু <ph name="HOSTED_DOMAIN" /> আপনার অ্যাকাউন্ট ম্যানেজ করে, তাই সাইন-আউট করে নিলেই, Chrome-এ থাকা আপনার সমস্ত ডেটা এই ডিভাইস থেকে মুছে যাবে। আপনি যেসব ডেটা সিঙ্ক করেছেন, সেগুলি আপনার Google অ্যাকাউন্টেই থেকে যাবে।</translation>
 <translation id="7772032839648071052">পাসফ্রেজ নিশ্চিত করুন</translation>
+<translation id="7778472311864276518">এই ডিভাইস থেকে অ্যাকাউন্ট সরান</translation>
 <translation id="7781011649027948662">পৃষ্ঠাটি অনুবাদ করতে চান?</translation>
 <translation id="7781829728241885113">গতকাল</translation>
 <translation id="778855399387580014">নতুন Chrome ট্যাবে সার্চ করা শুরু করুন।</translation>
 <translation id="7791543448312431591">জুড়ুন</translation>
-<translation id="780301667611848630">না থাক</translation>
+<translation id="7828557259026017104">আপনার ব্রাউজ করা ওয়েবসাইটের তৈরি করা ফাইলগুলিকে 'কুকি' বলা হয়। সাইট আপনার পছন্দগুলি মনে রাখতে, কুকি ব্যবহার করে। অন্যান্য সাইট 'থার্ড-পার্টি কুকি' তৈরি করে। এই সাইটগুলিতে বিজ্ঞাপন এবং ছবির মতো কিছু কন্টেন্ট থাকে, যেগুলি আপনার ভিজিট করা ওয়েবপেজে আপনি দেখতে পান।</translation>
 <translation id="7840771868269352570">আপনার বেছে নেওয়া আইটেমগুলি সরানো হবে।</translation>
 <translation id="7856733331829174190">ডাউনলোড করা যায়নি</translation>
 <translation id="7859704718976024901">ব্রাউজিং ইতিহাস</translation>
@@ -531,6 +543,7 @@
 <translation id="7961015016161918242">কখনই নয়</translation>
 <translation id="7971521879845308059">পপ-আপগুলি অবরুদ্ধ করুন</translation>
 <translation id="7982789257301363584">নেটওয়ার্ক</translation>
+<translation id="7993619969781047893">কিছু কিছু সাইটের ফিচারগুলি কাজ নাও করতে পারে</translation>
 <translation id="800361585186029508">Google Chrome-এ ইনপুট করা ইউআরএলগুলি খোলে।</translation>
 <translation id="8007420562015504427">নতুন ছদ্মবেশী ট্যাবে সার্চ করুন</translation>
 <translation id="8019783059653722575">এটি আপনাকে ফটো সংরক্ষণ এবং আপলোড করতে দেয়।</translation>
@@ -543,6 +556,7 @@
 <translation id="8076014560081431679">সংরক্ষিত সাইটের সেটিংস মোছা হবে না এবং আপনার ব্রাউজিং অভ্যাস প্রতিফলিত হতে পারে। <ph name="BEGIN_LINK" />আরও জানুন<ph name="END_LINK" /></translation>
 <translation id="8114753159095730575">ফাইল ডাউনলোড করা যাবে। স্ক্রিনের নিচের দিকে বিকল্পগুলি উপলভ্য।</translation>
 <translation id="8131740175452115882">নিশ্চিত হন</translation>
+<translation id="8174524257672181687">সব সাইটের কুকি ব্লক করুন (সাজেস্ট করা হচ্ছে না)</translation>
 <translation id="8197543752516192074">পৃষ্ঠাটি অনুবাদ করুন</translation>
 <translation id="8205564605687841303">বাতিল করুন</translation>
 <translation id="8225985093977202398">ক্যাশ করা ছবি এবং ফাইল</translation>
@@ -588,6 +602,7 @@
 <translation id="8870413625673593573">সম্প্রতি বন্ধ হয়েছে</translation>
 <translation id="8881801611828450202">এই ইমেজটির জন্য <ph name="SEARCH_ENGINE" />-এ খুঁজুন</translation>
 <translation id="8909135823018751308">শেয়ার করুন...</translation>
+<translation id="8917490105272468696">হ্যাঁ, আমি রাজি</translation>
 <translation id="895541991026785598">কোনও সমস্যা অভিযোগ করুন</translation>
 <translation id="8976382372951310360">সহায়তা</translation>
 <translation id="8981454092730389528">Google অ্যাক্টিভিটির নিয়ন্ত্রণগুলি</translation>

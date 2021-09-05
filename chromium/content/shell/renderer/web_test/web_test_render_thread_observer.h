@@ -9,27 +9,22 @@
 
 #include "base/macros.h"
 #include "content/public/renderer/render_thread_observer.h"
-#include "content/shell/common/web_test.mojom.h"
+#include "content/shell/common/web_test/web_test.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 
-namespace test_runner {
-class TestInterfaces;
-}
-
 namespace content {
+class TestInterfaces;
 
 class WebTestRenderThreadObserver : public RenderThreadObserver,
-                                    public mojom::WebTestControl {
+                                    public mojom::WebTestRenderThread {
  public:
   static WebTestRenderThreadObserver* GetInstance();
 
   WebTestRenderThreadObserver();
   ~WebTestRenderThreadObserver() override;
 
-  test_runner::TestInterfaces* test_interfaces() const {
-    return test_interfaces_.get();
-  }
+  TestInterfaces* test_interfaces() const { return test_interfaces_.get(); }
 
   // content::RenderThreadObserver:
   void RegisterMojoInterfaces(
@@ -38,17 +33,17 @@ class WebTestRenderThreadObserver : public RenderThreadObserver,
       blink::AssociatedInterfaceRegistry* associated_interfaces) override;
 
  private:
-  // mojom::WebTestControl implementation.
+  // mojom::WebTestRenderThread implementation.
   void ReplicateWebTestRuntimeFlagsChanges(
       base::Value changed_layout_test_runtime_flags) override;
 
-  // Helper to bind this class as the mojom::WebTestControl.
-  void OnWebTestControlAssociatedRequest(
-      mojo::PendingAssociatedReceiver<mojom::WebTestControl> receiver);
+  // Helper to bind this class as the mojom::WebTestRenderThread.
+  void OnWebTestRenderThreadAssociatedRequest(
+      mojo::PendingAssociatedReceiver<mojom::WebTestRenderThread> receiver);
 
-  std::unique_ptr<test_runner::TestInterfaces> test_interfaces_;
+  std::unique_ptr<TestInterfaces> test_interfaces_;
 
-  mojo::AssociatedReceiver<mojom::WebTestControl> receiver_{this};
+  mojo::AssociatedReceiver<mojom::WebTestRenderThread> receiver_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WebTestRenderThreadObserver);
 };

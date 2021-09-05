@@ -7,6 +7,7 @@
 
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
@@ -33,11 +34,15 @@ struct FrameLoadRequest;
 class CORE_EXPORT RemoteFrame final : public Frame,
                                       public mojom::blink::RemoteFrame {
  public:
+  // Returns the RemoteFrame for the given |frame_token|.
+  static RemoteFrame* FromFrameToken(const base::UnguessableToken& frame_token);
+
   // For a description of |inheriting_agent_factory| go see the comment on the
   // Frame constructor.
   RemoteFrame(RemoteFrameClient*,
               Page&,
               FrameOwner*,
+              const base::UnguessableToken& frame_token,
               WindowAgentFactory* inheriting_agent_factory,
               InterfaceRegistry*,
               AssociatedInterfaceProvider*);
@@ -89,7 +94,7 @@ class CORE_EXPORT RemoteFrame final : public Frame,
       const ParsedFeaturePolicy& parsed_header,
       const FeaturePolicy::FeatureState&);
 
-  void SetReplicatedSandboxFlags(mojom::blink::WebSandboxFlags);
+  void SetReplicatedSandboxFlags(network::mojom::blink::WebSandboxFlags);
   void SetInsecureRequestPolicy(mojom::blink::InsecureRequestPolicy);
   void SetInsecureNavigationsSet(const WebVector<unsigned>&);
 
@@ -130,7 +135,7 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void IntrinsicSizingInfoOfChildChanged(
       mojom::blink::IntrinsicSizingInfoPtr sizing_info) override;
   void DidSetFramePolicyHeaders(
-      mojom::blink::WebSandboxFlags,
+      network::mojom::blink::WebSandboxFlags,
       const WTF::Vector<ParsedFeaturePolicyDeclaration>&) override;
   // Updates the snapshotted policy attributes (sandbox flags and feature policy
   // container policy) in the frame's FrameOwner. This is used when this frame's

@@ -5,9 +5,10 @@
 #include "skia/ext/benchmarking_canvas.h"
 
 #include <memory>
+#include <sstream>
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -289,7 +290,7 @@ std::unique_ptr<base::Value> AsValue(const SkPath& path) {
       "gPtOffsetPerVerb size mismatch");
 
   std::unique_ptr<base::ListValue> verbs_val(new base::ListValue());
-  SkPath::Iter iter(const_cast<SkPath&>(path), false);
+  SkPath::RawIter iter(const_cast<SkPath&>(path));
   SkPoint points[4];
 
   for (SkPath::Verb verb = iter.next(points); verb != SkPath::kDone_Verb;
@@ -428,9 +429,11 @@ void BenchmarkingCanvas::willRestore() {
   INHERITED::willRestore();
 }
 
-void BenchmarkingCanvas::didConcat44(const SkScalar m[16]) {
+void BenchmarkingCanvas::didConcat44(const SkM44& m) {
+  SkScalar values[16];
+  m.getColMajor(values);
   AutoOp op(this, "Concat44");
-  op.addParam("column-major", AsListValue(m, 16));
+  op.addParam("column-major", AsListValue(values, 16));
 
   INHERITED::didConcat44(m);
 }

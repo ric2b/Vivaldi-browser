@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/numerics/checked_math.h"
 #include "base/single_thread_task_runner.h"
@@ -705,7 +705,8 @@ bool PepperGraphics2DHost::PrepareTransferableResource(
                           viz::ResourceFormatToClosestSkColorType(true, format),
                           kUnknown_SkAlphaType);
     ri->WaitSyncTokenCHROMIUM(in_sync_token.GetConstData());
-    ri->WritePixels(gpu_mailbox, 0, 0, texture_target, src_info, src);
+    ri->WritePixels(gpu_mailbox, 0, 0, texture_target, src_info.minRowBytes(),
+                    src_info, src);
 
     gpu::SyncToken out_sync_token;
     ri->GenUnverifiedSyncTokenCHROMIUM(out_sync_token.GetData());

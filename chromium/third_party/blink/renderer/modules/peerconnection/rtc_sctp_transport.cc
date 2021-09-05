@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/sctp_transport_proxy.h"
@@ -30,20 +30,15 @@ String TransportStateToString(webrtc::SctpTransportState state) {
       // only be visible after reaching "connecting" state.
       NOTREACHED();
       return String("new");
-      break;
     case webrtc::SctpTransportState::kConnecting:
       return String("connecting");
-      break;
     case webrtc::SctpTransportState::kConnected:
       return String("connected");
-      break;
     case webrtc::SctpTransportState::kClosed:
       return String("closed");
-      break;
     default:
       NOTREACHED();
       return String("failed");
-      break;
   }
 }
 
@@ -55,7 +50,7 @@ std::unique_ptr<SctpTransportProxy> CreateProxy(
     scoped_refptr<base::SingleThreadTaskRunner> worker_thread) {
   DCHECK(main_thread);
   DCHECK(worker_thread);
-  LocalFrame* frame = Document::From(context)->GetFrame();
+  LocalFrame* frame = To<LocalDOMWindow>(context)->GetFrame();
   DCHECK(frame);
   return SctpTransportProxy::Create(*frame, main_thread, worker_thread,
                                     native_transport, delegate);
@@ -68,8 +63,7 @@ RTCSctpTransport::RTCSctpTransport(
     rtc::scoped_refptr<webrtc::SctpTransportInterface> native_transport)
     : RTCSctpTransport(context,
                        native_transport,
-                       Document::From(context)->GetFrame()->GetTaskRunner(
-                           TaskType::kNetworking),
+                       context->GetTaskRunner(TaskType::kNetworking),
                        PeerConnectionDependencyFactory::GetInstance()
                            ->GetWebRtcWorkerTaskRunner()) {}
 
@@ -110,15 +104,6 @@ base::Optional<int16_t> RTCSctpTransport::maxChannels() const {
   if (!current_state_.MaxChannels())
     return base::nullopt;
   return current_state_.MaxChannels().value();
-}
-
-int16_t RTCSctpTransport::maxChannels(bool& isNull) const {
-  if (!current_state_.MaxChannels()) {
-    isNull = true;
-    return 0;
-  }
-  isNull = false;
-  return *current_state_.MaxChannels();
 }
 
 RTCDtlsTransport* RTCSctpTransport::transport() const {

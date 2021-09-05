@@ -4,19 +4,25 @@
 
 #include "chrome/browser/chromeos/web_applications/chrome_help_app_ui_delegate.h"
 
+#include <string>
+
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/tablet_mode.h"
-#include "ash/public/mojom/assistant_state_controller.mojom.h"
 #include "base/system/sys_info.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/assistant/assistant_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/common/pref_names.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/components/help_app_ui/url_constants.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "url/gurl.h"
@@ -26,20 +32,22 @@ ChromeHelpAppUIDelegate::ChromeHelpAppUIDelegate(content::WebUI* web_ui)
 
 base::Optional<std::string> ChromeHelpAppUIDelegate::OpenFeedbackDialog() {
   Profile* profile = Profile::FromWebUI(web_ui_);
-  // TODO(crbug/1045222): Additional strings are blank right now while we decide
-  // on the language and relevant information we want feedback to include.
-  // Note that category_tag is the name of the listnr bucket we want our
-  // reports to end up in. I.e DESKTOP_TAB_GROUPS.
-  chrome::ShowFeedbackPage(
-      GURL(chromeos::kChromeUIHelpAppURL), profile,
-      chrome::kFeedbackSourceHelpApp, std::string() /* description_template */,
-      std::string() /* description_placeholder_text */,
-      std::string() /* category_tag */, std::string() /* extra_diagnostics */);
+  constexpr char kHelpAppFeedbackCategoryTag[] = "FromHelpApp";
+  // We don't change the default description, or add extra diagnostics so those
+  // are empty strings.
+  chrome::ShowFeedbackPage(GURL(chromeos::kChromeUIHelpAppURL), profile,
+                           chrome::kFeedbackSourceHelpApp,
+                           std::string() /* description_template */,
+                           std::string() /* description_placeholder_text */,
+                           kHelpAppFeedbackCategoryTag /* category_tag */,
+                           std::string() /* extra_diagnostics */);
   return base::nullopt;
 }
 
 void ChromeHelpAppUIDelegate::PopulateLoadTimeData(
     content::WebUIDataSource* source) {
+  source->AddLocalizedString("getHelpName", IDS_GENIUS_APP_NAME);
+  source->AddString("appLocale", g_browser_process->GetApplicationLocale());
   // Add strings that can be pulled in.
   source->AddString("boardName", base::SysInfo::GetLsbReleaseBoard());
   source->AddString("chromeOSVersion", base::SysInfo::OperatingSystemVersion());
@@ -58,6 +66,13 @@ void ChromeHelpAppUIDelegate::PopulateLoadTimeData(
   Profile* profile = Profile::FromWebUI(web_ui_);
   PrefService* pref_service = profile->GetPrefs();
 
+  // Add state from the OOBE flow.
+  source->AddBoolean(
+      "shouldShowGetStarted",
+      pref_service->GetBoolean(prefs::kHelpAppShouldShowGetStarted));
+  source->AddBoolean(
+      "tabletModeDuringOOBE",
+      pref_service->GetBoolean(prefs::kHelpAppTabletModeDuringOobe));
   // Checks if any of the MultiDevice features (e.g. Instant Tethering,
   // Messages, Smart Lock) is allowed on this device.
   source->AddBoolean(
@@ -68,14 +83,14 @@ void ChromeHelpAppUIDelegate::PopulateLoadTimeData(
   // Checks if there are active touch screens.
   source->AddBoolean(
       "hasTouchScreen",
-      ui::DeviceDataManager::GetInstance()->GetTouchscreenDevices().empty());
+      !ui::DeviceDataManager::GetInstance()->GetTouchscreenDevices().empty());
   // Checks if the Google Assistant is allowed on this device by going through
   // policies.
-  ash::mojom::AssistantAllowedState assistant_allowed_state =
+  chromeos::assistant::AssistantAllowedState assistant_allowed_state =
       assistant::IsAssistantAllowedForProfile(profile);
-  source->AddBoolean(
-      "assistantAllowed",
-      assistant_allowed_state == ash::mojom::AssistantAllowedState::ALLOWED);
+  source->AddBoolean("assistantAllowed",
+                     assistant_allowed_state ==
+                         chromeos::assistant::AssistantAllowedState::ALLOWED);
   source->AddBoolean(
       "assistantEnabled",
       ash::AssistantState::Get()->settings_enabled().value_or(false));
@@ -83,4 +98,17 @@ void ChromeHelpAppUIDelegate::PopulateLoadTimeData(
                      arc::IsArcPlayStoreEnabledForProfile(profile));
   source->AddBoolean("pinEnabled",
                      chromeos::quick_unlock::IsPinEnabled(pref_service));
+
+  // Data about what type of account/login this is.
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  source->AddBoolean("isManagedDevice",
+                     profile->GetProfilePolicyConnector()->IsManaged());
+  source->AddInteger("userType", user_manager->GetActiveUser()->GetType());
+  source->AddBoolean("isEphemeralUser",
+                     user_manager->IsCurrentUserNonCryptohomeDataEphemeral());
+
+  // Hardcoding the version number of first 84 dev.
+  bool is_new_in_84 = profile->WasCreatedByVersionOrLater("84.0.4129.0");
+  // Show a notice that the app has changed to users that are not new.
+  source->AddBoolean("shouldShowMigrationNotice", !is_new_in_84);
 }

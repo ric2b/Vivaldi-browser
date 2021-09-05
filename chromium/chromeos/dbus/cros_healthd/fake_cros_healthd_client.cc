@@ -62,5 +62,26 @@ void FakeCrosHealthdClient::SetProbeTelemetryInfoResponseForTesting(
   fake_service_.SetProbeTelemetryInfoResponseForTesting(info);
 }
 
+void FakeCrosHealthdClient::EmitAcInsertedEventForTesting() {
+  // Flush the receiver, so any pending observers are registered before the
+  // event is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.EmitAcInsertedEventForTesting();
+}
+
+void FakeCrosHealthdClient::EmitAdapterAddedEventForTesting() {
+  // Flush the receiver, so any pending observers are registered before the
+  // event is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.EmitAdapterAddedEventForTesting();
+}
+
+void FakeCrosHealthdClient::EmitLidClosedEventForTesting() {
+  // Flush the receiver, so any pending observers are registered before the
+  // event is emitted.
+  receiver_.FlushForTesting();
+  fake_service_.EmitLidClosedEventForTesting();
+}
+
 }  // namespace cros_healthd
 }  // namespace chromeos

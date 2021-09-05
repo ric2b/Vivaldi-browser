@@ -6,6 +6,7 @@
 #include "app/vivaldi_constants.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/platform_locale_settings.h"
 #include "components/prefs/pref_service.h"
 #include "components/request_filter/request_filter_manager.h"
@@ -27,24 +28,34 @@ namespace vivaldi {
 
 bool HandleVivaldiURLRewrite(GURL* url,
                              content::BrowserContext* browser_context) {
-  // Don't touch non-vivaldi schemes
-  if (!url->SchemeIs(vivaldi::kVivaldiUIScheme))
-    return false;
-
-  GURL::Replacements replacements;
-  replacements.SetSchemeStr(content::kChromeUIScheme);
-  *url = url->ReplaceComponents(replacements);
-
+  if (url->SchemeIs(vivaldi::kVivaldiUIScheme)) {
+    // If we get here, it means a vivaldi: url not handled in js was
+    // entered. Since we do not have vivaldi: as a valid scheme in chromium,
+    // we change it to chrome:
+    GURL::Replacements replacements;
+    replacements.SetSchemeStr(content::kChromeUIScheme);
+    *url = url->ReplaceComponents(replacements);
+    return true;
+  }
+  // Rewrite chrome://newtab
+  if (url->SchemeIs(content::kChromeUIScheme) &&
+      url->host() == chrome::kChromeUINewTabHost) {
+    // Rewrite the url to our startpage.
+    *url = GURL(kVivaldiNewTabURL);
+    return true;
+  }
   return false;
 }
+
 }  // namespace vivaldi
 
 void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(
     content::BrowserURLHandler* handler) {
   // rewrite vivaldi: links to long links, and reverse
-  // TODO(pettern): Enable later when the js rewrites are gone
-  handler->AddHandlerPair(&vivaldi::HandleVivaldiURLRewrite,
-                          content::BrowserURLHandler::null_handler());
+  if (vivaldi::IsVivaldiRunning()) {
+    handler->AddHandlerPair(&vivaldi::HandleVivaldiURLRewrite,
+                            content::BrowserURLHandler::null_handler());
+  }
 }
 
 void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(

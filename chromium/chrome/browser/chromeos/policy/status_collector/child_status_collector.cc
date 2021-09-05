@@ -17,9 +17,9 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
-#include "base/logging.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -187,8 +187,8 @@ void ChildStatusCollector::UpdateReportingSettings() {
   // back when they are available.
   if (chromeos::CrosSettingsProvider::TRUSTED !=
       cros_settings_->PrepareTrustedValues(
-          base::BindRepeating(&ChildStatusCollector::UpdateReportingSettings,
-                              weak_factory_.GetWeakPtr()))) {
+          base::BindOnce(&ChildStatusCollector::UpdateReportingSettings,
+                         weak_factory_.GetWeakPtr()))) {
     return;
   }
 
@@ -228,7 +228,7 @@ void ChildStatusCollector::OnUsageTimeStateChange(
 }
 
 void ChildStatusCollector::UpdateChildUsageTime() {
-  Time now = GetCurrentTime();
+  Time now = clock_->Now();
   Time reset_time = activity_storage_->GetBeginningOfDay(now);
   if (reset_time > now)
     reset_time -= TimeDelta::FromDays(1);

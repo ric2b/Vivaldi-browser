@@ -207,6 +207,14 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
+			<string>Email Address URL</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mailto</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
 			<string>Vivaldi</string>
 			<key>CFBundleURLSchemes</key>
 			<array>

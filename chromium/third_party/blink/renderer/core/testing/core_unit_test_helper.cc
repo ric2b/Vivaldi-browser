@@ -26,7 +26,8 @@ LocalFrame* SingleChildLocalFrameClient::CreateFrame(
       MakeGarbageCollected<LocalFrameClientWithParent>(parent_frame);
   child_ = MakeGarbageCollected<LocalFrame>(
       child_client, *parent_frame->GetPage(), owner_element,
-      &parent_frame->window_agent_factory(), nullptr);
+      base::UnguessableToken::Create(), &parent_frame->window_agent_factory(),
+      nullptr);
   child_->CreateView(IntSize(500, 500), Color::kTransparent);
   child_->Init();
 
@@ -49,9 +50,9 @@ void RenderingTestChromeClient::InjectGestureScrollEvent(
   // would be added to the event queue and handled asynchronously but immediate
   // handling is sufficient to test scrollbar dragging.
   std::unique_ptr<WebGestureEvent> gesture_event =
-      ui::GenerateInjectedScrollGesture(injected_type, base::TimeTicks::Now(),
-                                        device, gfx::PointF(0, 0), delta,
-                                        granularity);
+      WebGestureEvent::GenerateInjectedScrollGesture(
+          injected_type, base::TimeTicks::Now(), device, gfx::PointF(0, 0),
+          delta, granularity);
   if (injected_type == WebInputEvent::Type::kGestureScrollBegin) {
     gesture_event->data.scroll_begin.scrollable_area_element_id =
         scrollable_area_element_id.GetStableId();

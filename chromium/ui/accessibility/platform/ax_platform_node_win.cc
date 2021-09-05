@@ -30,11 +30,12 @@
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_active_popup.h"
+#include "ui/accessibility/ax_constants.mojom.h"
+#include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_mode_observer.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_node_position.h"
 #include "ui/accessibility/ax_role_properties.h"
-#include "ui/accessibility/ax_text_utils.h"
 #include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
@@ -710,7 +711,7 @@ void AXPlatformNodeWin::FireUiaTextEditTextChangedEvent(
     return;
   }
 
-  long index = 0;
+  LONG index = 0;
   HRESULT hr =
       SafeArrayPutElement(changed_data.Get(), &index, composition_text.Get());
 
@@ -997,8 +998,8 @@ IFACEMETHODIMP AXPlatformNodeWin::get_accDefaultAction(VARIANT var_id,
     return S_FALSE;
   }
 
-  base::string16 action_verb = ActionVerbToLocalizedString(
-      static_cast<ax::mojom::DefaultActionVerb>(action));
+  base::string16 action_verb = base::UTF8ToUTF16(
+      ui::ToLocalizedString(static_cast<ax::mojom::DefaultActionVerb>(action)));
   if (action_verb.empty()) {
     *def_action = nullptr;
     return S_FALSE;
@@ -1370,10 +1371,11 @@ IFACEMETHODIMP AXPlatformNodeWin::get_attributes(BSTR* attributes) {
 IFACEMETHODIMP AXPlatformNodeWin::get_indexInParent(LONG* index_in_parent) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_INDEX_IN_PARENT);
   COM_OBJECT_VALIDATE_1_ARG(index_in_parent);
-  *index_in_parent = GetIndexInParent();
-  if (*index_in_parent < 0)
+  base::Optional<int> index = GetIndexInParent();
+  if (!index.has_value())
     return E_FAIL;
 
+  *index_in_parent = index.value();
   return S_OK;
 }
 
@@ -1763,18 +1765,20 @@ IFACEMETHODIMP AXPlatformNodeWin::Expand() {
 
 ExpandCollapseState AXPlatformNodeWin::ComputeExpandCollapseState() const {
   const AXNodeData& data = GetData();
-  const bool is_menu_button = data.GetHasPopup() == ax::mojom::HasPopup::kMenu;
-  const bool is_expanded_menu_button =
-      is_menu_button &&
-      data.GetCheckedState() == ax::mojom::CheckedState::kTrue;
-  const bool is_collapsed_menu_button =
-      is_menu_button &&
-      data.GetCheckedState() != ax::mojom::CheckedState::kTrue;
 
-  if (data.HasState(ax::mojom::State::kExpanded) || is_expanded_menu_button) {
+  // Since a menu button implies there is a popup and it is either expanded or
+  // collapsed, and it should not support ExpandCollapseState_LeafNode.
+  // According to the UIA spec, ExpandCollapseState_LeafNode indicates that the
+  // element neither expands nor collapses.
+  if (data.IsMenuButton()) {
+    if (data.IsButtonPressed())
+      return ExpandCollapseState_Expanded;
+    return ExpandCollapseState_Collapsed;
+  }
+
+  if (data.HasState(ax::mojom::State::kExpanded)) {
     return ExpandCollapseState_Expanded;
-  } else if (data.HasState(ax::mojom::State::kCollapsed) ||
-             is_collapsed_menu_button) {
+  } else if (data.HasState(ax::mojom::State::kCollapsed)) {
     return ExpandCollapseState_Collapsed;
   } else {
     return ExpandCollapseState_LeafNode;
@@ -1877,6 +1881,9 @@ IFACEMETHODIMP AXPlatformNodeWin::get_RowCount(int* result) {
 
   base::Optional<int> row_count = GetTableAriaRowCount();
   if (!row_count)
+    row_count = GetTableRowCount();
+
+  if (!row_count || *row_count == ax::mojom::kUnknownAriaColumnOrRowCount)
     return E_UNEXPECTED;
   *result = *row_count;
   return S_OK;
@@ -1888,7 +1895,12 @@ IFACEMETHODIMP AXPlatformNodeWin::get_ColumnCount(int* result) {
 
   base::Optional<int> column_count = GetTableAriaColumnCount();
   if (!column_count)
+    column_count = GetTableColumnCount();
+
+  if (!column_count ||
+      *column_count == ax::mojom::kUnknownAriaColumnOrRowCount) {
     return E_UNEXPECTED;
+  }
   *result = *column_count;
   return S_OK;
 }
@@ -2131,15 +2143,10 @@ IFACEMETHODIMP AXPlatformNodeWin::GetSelection(SAFEARRAY** result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_SELECTION_GETSELECTION);
   UIA_VALIDATE_CALL_1_ARG(result);
 
-  std::vector<AXPlatformNodeWin*> selected_children;
-  LONG child_count = GetDelegate()->GetChildCount();
-  for (LONG i = 0; i < child_count; ++i) {
-    auto* child = static_cast<AXPlatformNodeWin*>(
-        FromNativeViewAccessible(GetDelegate()->ChildAtIndex(i)));
-    DCHECK(child);
-    if (child->GetData().GetBoolAttribute(ax::mojom::BoolAttribute::kSelected))
-      selected_children.push_back(child);
-  }
+  std::vector<AXPlatformNodeBase*> selected_children;
+  int max_items = GetMaxSelectableItems();
+  if (max_items)
+    GetSelectedItems(max_items, &selected_children);
 
   LONG selected_children_count = selected_children.size();
   *result = SafeArrayCreateVector(VT_UNKNOWN, 0, selected_children_count);
@@ -2147,9 +2154,10 @@ IFACEMETHODIMP AXPlatformNodeWin::GetSelection(SAFEARRAY** result) {
     return E_OUTOFMEMORY;
 
   for (LONG i = 0; i < selected_children_count; ++i) {
+    AXPlatformNodeWin* children =
+        static_cast<AXPlatformNodeWin*>(selected_children[i]);
     HRESULT hr = SafeArrayPutElement(
-        *result, &i,
-        static_cast<IRawElementProviderSimple*>(selected_children[i]));
+        *result, &i, static_cast<IRawElementProviderSimple*>(children));
     if (FAILED(hr)) {
       SafeArrayDestroy(*result);
       *result = nullptr;
@@ -4166,15 +4174,10 @@ IFACEMETHODIMP AXPlatformNodeWin::GetPropertyValue(PROPERTYID property_id,
     }
 
     case UIA_LabeledByPropertyId:
-      for (int32_t id : data.GetIntListAttribute(
-               ax::mojom::IntListAttribute::kLabelledbyIds)) {
-        auto* node_win = GetDelegate()->GetFromNodeID(id);
-        if (IsValidUiaRelationTarget(node_win)) {
-          result->vt = VT_UNKNOWN;
-          result->punkVal = node_win->GetNativeViewAccessible();
-          result->punkVal->AddRef();
-          break;
-        }
+      if (AXPlatformNodeWin* node = ComputeUIALabeledBy()) {
+        result->vt = VT_UNKNOWN;
+        result->punkVal = node->GetNativeViewAccessible();
+        result->punkVal->AddRef();
       }
       break;
 
@@ -4473,9 +4476,6 @@ STDMETHODIMP AXPlatformNodeWin::InternalQueryInterface(
 
 HRESULT AXPlatformNodeWin::GetTextAttributeValue(TEXTATTRIBUTEID attribute_id,
                                                  VARIANT* result) {
-  // This should only be called on nodes actually in the tree
-  DCHECK(!GetDelegate()->IsChildOfLeaf());
-
   switch (attribute_id) {
     case UIA_BackgroundColorAttributeId:
       V_VT(result) = VT_I4;
@@ -4735,8 +4735,10 @@ int AXPlatformNodeWin::MSAARole() {
 
   switch (GetData().role) {
     case ax::mojom::Role::kAlert:
-    case ax::mojom::Role::kAlertDialog:
       return ROLE_SYSTEM_ALERT;
+
+    case ax::mojom::Role::kAlertDialog:
+      return ROLE_SYSTEM_DIALOG;
 
     case ax::mojom::Role::kAnchor:
       return ROLE_SYSTEM_LINK;
@@ -5222,6 +5224,7 @@ int AXPlatformNodeWin::MSAARole() {
       // hierarchy, matching the HWND.
       return ROLE_SYSTEM_PANE;
 
+    case ax::mojom::Role::kImeCandidate:
     case ax::mojom::Role::kIgnored:
     case ax::mojom::Role::kKeyboard:
     case ax::mojom::Role::kNone:
@@ -5777,6 +5780,10 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
 
     case ax::mojom::Role::kImageMap:
       return L"document";
+
+    case ax::mojom::Role::kImeCandidate:
+      // Internal role, not used on Windows.
+      return L"group";
 
     case ax::mojom::Role::kInputTime:
       return L"group";
@@ -6705,6 +6712,7 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
     case ax::mojom::Role::kPane:
     case ax::mojom::Role::kWindow:
     case ax::mojom::Role::kIgnored:
+    case ax::mojom::Role::kImeCandidate:
     case ax::mojom::Role::kKeyboard:
     case ax::mojom::Role::kNone:
     case ax::mojom::Role::kPresentational:
@@ -6714,6 +6722,68 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
 
   NOTREACHED();
   return UIA_DocumentControlTypeId;
+}
+
+AXPlatformNodeWin* AXPlatformNodeWin::ComputeUIALabeledBy() {
+  // Not all control types expect a value for this property.
+  if (!CanHaveUIALabeledBy())
+    return nullptr;
+
+  // This property only accepts static text elements to be returned. Find the
+  // first static text used to label this node.
+  for (int32_t id : GetData().GetIntListAttribute(
+           ax::mojom::IntListAttribute::kLabelledbyIds)) {
+    auto* node_win =
+        static_cast<AXPlatformNodeWin*>(GetDelegate()->GetFromNodeID(id));
+    if (!node_win)
+      continue;
+
+    // If this node is a static text, then simply return the node itself.
+    if (IsValidUiaRelationTarget(node_win) &&
+        node_win->GetData().role == ax::mojom::Role::kStaticText) {
+      return node_win;
+    }
+
+    // Otherwise, find the first static text node in its descendants.
+    for (auto iter = node_win->GetDelegate()->ChildrenBegin();
+         *iter != *node_win->GetDelegate()->ChildrenEnd(); ++(*iter)) {
+      AXPlatformNodeWin* child = static_cast<AXPlatformNodeWin*>(
+          AXPlatformNode::FromNativeViewAccessible(
+              iter->GetNativeViewAccessible()));
+      if (IsValidUiaRelationTarget(child) &&
+          child->GetData().role == ax::mojom::Role::kStaticText) {
+        return child;
+      }
+    }
+  }
+
+  return nullptr;
+}
+
+bool AXPlatformNodeWin::CanHaveUIALabeledBy() {
+  // Not all control types expect a value for this property. See
+  // https://docs.microsoft.com/en-us/windows/win32/winauto/uiauto-supportinguiautocontroltypes
+  // for a complete list of control types. Each one of them has specific
+  // expectations regarding the UIA_LabeledByPropertyId.
+  switch (ComputeUIAControlType()) {
+    case UIA_ButtonControlTypeId:
+    case UIA_CheckBoxControlTypeId:
+    case UIA_DataItemControlTypeId:
+    case UIA_MenuControlTypeId:
+    case UIA_MenuBarControlTypeId:
+    case UIA_RadioButtonControlTypeId:
+    case UIA_ScrollBarControlTypeId:
+    case UIA_SeparatorControlTypeId:
+    case UIA_StatusBarControlTypeId:
+    case UIA_TabItemControlTypeId:
+    case UIA_TextControlTypeId:
+    case UIA_ToolBarControlTypeId:
+    case UIA_ToolTipControlTypeId:
+    case UIA_TreeItemControlTypeId:
+      return false;
+    default:
+      return true;
+  }
 }
 
 bool AXPlatformNodeWin::IsNameExposed() const {
@@ -6901,8 +6971,19 @@ bool AXPlatformNodeWin::ShouldHideChildrenForUIA() const {
     // TODO(bebeaudr): We might be able to remove ax::mojom::Role::kLink once
     // http://crbug.com/1054514 is fixed. Links should not have to hide their
     // children.
+    // TODO(virens): |kPdfActionableHighlight| needs to follow a fix similar to
+    // links. At present Pdf highlghts have text nodes as children. But, we may
+    // enable pdf highlights to have complex children like links based on user
+    // feedback.
     case ax::mojom::Role::kLink:
+      // Links with a single text-only child should hide their subtree.
+      if (GetChildCount() == 1) {
+        AXPlatformNodeBase* only_child = GetFirstChild();
+        return only_child && only_child->IsTextOnlyObject();
+      }
+      return false;
     case ax::mojom::Role::kTextField:
+    case ax::mojom::Role::kPdfActionableHighlight:
       return true;
     default:
       return false;
@@ -7133,6 +7214,7 @@ base::Optional<DWORD> AXPlatformNodeWin::MojoEventToMSAAEvent(
       return EVENT_SYSTEM_ALERT;
     case ax::mojom::Event::kCheckedStateChanged:
     case ax::mojom::Event::kExpandedChanged:
+    case ax::mojom::Event::kStateChanged:
       return EVENT_OBJECT_STATECHANGE;
     case ax::mojom::Event::kFocus:
     case ax::mojom::Event::kFocusContext:
@@ -7209,6 +7291,9 @@ base::Optional<PROPERTYID> AXPlatformNodeWin::MojoEventToUIAProperty(
       return UIA_ControllerForPropertyId;
     case ax::mojom::Event::kCheckedStateChanged:
       return UIA_ToggleToggleStatePropertyId;
+    case ax::mojom::Event::kRowCollapsed:
+    case ax::mojom::Event::kRowExpanded:
+      return UIA_ExpandCollapseExpandCollapseStatePropertyId;
     default:
       return base::nullopt;
   }

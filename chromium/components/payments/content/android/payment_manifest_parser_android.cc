@@ -13,7 +13,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/numerics/safe_conversions.h"
 #include "components/payments/content/android/jni_headers/PaymentManifestParser_jni.h"
 #include "components/payments/content/developer_console_logger.h"
@@ -35,37 +35,35 @@ class ParseCallback {
   // Copies payment method manifest into Java.
   void OnPaymentMethodManifestParsed(
       const std::vector<GURL>& web_app_manifest_urls,
-      const std::vector<url::Origin>& supported_origins,
-      bool all_origins_supported) {
+      const std::vector<url::Origin>& supported_origins) {
     DCHECK_GE(100U, web_app_manifest_urls.size());
     DCHECK_GE(100000U, supported_origins.size());
     JNIEnv* env = base::android::AttachCurrentThread();
 
-    if (web_app_manifest_urls.empty() && supported_origins.empty() &&
-        !all_origins_supported) {
+    if (web_app_manifest_urls.empty() && supported_origins.empty()) {
       // Can trigger synchronous deletion of PaymentManifestParserAndroid.
       Java_ManifestParseCallback_onManifestParseFailure(env, jcallback_);
       return;
     }
 
-    base::android::ScopedJavaLocalRef<jobjectArray> juris =
-        Java_PaymentManifestParser_createUriArray(env,
+    base::android::ScopedJavaLocalRef<jobjectArray> jurls =
+        Java_PaymentManifestParser_createUrlArray(env,
                                                   web_app_manifest_urls.size());
 
     for (size_t i = 0; i < web_app_manifest_urls.size(); ++i) {
-      bool is_valid_uri = Java_PaymentManifestParser_addUri(
-          env, juris, base::checked_cast<int>(i),
+      bool is_valid_uri = Java_PaymentManifestParser_addUrl(
+          env, jurls, base::checked_cast<int>(i),
           base::android::ConvertUTF8ToJavaString(
               env, web_app_manifest_urls[i].spec()));
       DCHECK(is_valid_uri);
     }
 
     base::android::ScopedJavaLocalRef<jobjectArray> jorigins =
-        Java_PaymentManifestParser_createUriArray(env,
+        Java_PaymentManifestParser_createUrlArray(env,
                                                   supported_origins.size());
 
     for (size_t i = 0; i < supported_origins.size(); ++i) {
-      bool is_valid_uri = Java_PaymentManifestParser_addUri(
+      bool is_valid_uri = Java_PaymentManifestParser_addUrl(
           env, jorigins, base::checked_cast<int>(i),
           base::android::ConvertUTF8ToJavaString(
               env, supported_origins[i].Serialize()));
@@ -74,7 +72,7 @@ class ParseCallback {
 
     // Can trigger synchronous deletion of PaymentManifestParserAndroid.
     Java_ManifestParseCallback_onPaymentMethodManifestParseSuccess(
-        env, jcallback_, juris, jorigins, all_origins_supported);
+        env, jcallback_, jurls, jorigins);
   }
 
   // Copies web app manifest into Java.

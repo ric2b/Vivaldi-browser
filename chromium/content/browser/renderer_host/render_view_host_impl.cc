@@ -89,7 +89,9 @@
 #include "ui/base/pointer/pointer_device.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/display/display.h"
 #include "ui/display/display_switches.h"
+#include "ui/display/screen.h"
 #include "ui/events/blink/blink_features.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/color_space.h"
@@ -136,6 +138,25 @@ void GetFontInfo(gfx::win::SystemFont system_font,
   *size = font.GetFontSize();
 }
 #endif  // OS_WIN
+
+#if defined(OS_ANDROID)
+float GetDeviceScaleAdjustment(int min_width) {
+  static const float kMinFSM = 1.05f;
+  static const int kWidthForMinFSM = 320;
+  static const float kMaxFSM = 1.3f;
+  static const int kWidthForMaxFSM = 800;
+
+  if (min_width <= kWidthForMinFSM)
+    return kMinFSM;
+  if (min_width >= kWidthForMaxFSM)
+    return kMaxFSM;
+
+  // The font scale multiplier varies linearly between kMinFSM and kMaxFSM.
+  float ratio = static_cast<float>(min_width - kWidthForMinFSM) /
+                (kWidthForMaxFSM - kWidthForMinFSM);
+  return ratio * (kMaxFSM - kMinFSM) + kMinFSM;
+}
+#endif
 
 }  // namespace
 
@@ -257,8 +278,10 @@ RenderViewHostImpl::RenderViewHostImpl(
   input_device_change_observer_ =
       std::make_unique<InputDeviceChangeObserver>(this);
 
-  page_lifecycle_state_manager_ =
-      std::make_unique<PageLifecycleStateManager>(this);
+  bool initially_visible = !GetWidget()->delegate()->IsHidden();
+  page_lifecycle_state_manager_ = std::make_unique<PageLifecycleStateManager>(
+      this, initially_visible ? blink::mojom::PageVisibilityState::kVisible
+                              : blink::mojom::PageVisibilityState::kHidden);
 
   GetWidget()->set_owner_delegate(this);
 }
@@ -310,6 +333,7 @@ SiteInstanceImpl* RenderViewHostImpl::GetSiteInstance() {
 bool RenderViewHostImpl::CreateRenderView(
     int opener_frame_route_id,
     int proxy_route_id,
+    const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token,
     const FrameReplicationState& replicated_frame_state,
     bool window_was_created_with_opener) {
@@ -339,7 +363,8 @@ bool RenderViewHostImpl::CreateRenderView(
     DCHECK(main_rfh);
   }
 
-  GetWidget()->set_renderer_initialized(true);
+  GetWidget()->SetRendererInitialized(
+      true, RenderWidgetHostImpl::RendererInitializer::kCreateRenderView);
 
   mojom::CreateViewParamsPtr params = mojom::CreateViewParams::New();
   params->renderer_preferences =
@@ -366,6 +391,7 @@ bool RenderViewHostImpl::CreateRenderView(
     std::tie(params->frame_widget_host, params->frame_widget) =
         main_rfh->GetRenderWidgetHost()->BindNewFrameWidgetInterfaces();
   }
+  params->main_frame_frame_token = frame_token;
   params->session_storage_namespace_id =
       delegate_->GetSessionStorageNamespace(instance_.get())->id();
   // Ensure the RenderView sets its opener correctly.
@@ -378,6 +404,7 @@ bool RenderViewHostImpl::CreateRenderView(
   if (main_rfh) {
     params->has_committed_real_load =
         main_rfh->frame_tree_node()->has_committed_real_load();
+    DCHECK_EQ(params->main_frame_frame_token, main_rfh->frame_token());
   }
   params->devtools_main_frame_token = devtools_frame_token;
   // GuestViews in the same StoragePartition need to find each other's frames.
@@ -447,6 +474,11 @@ void RenderViewHostImpl::LeaveBackForwardCache(
 
 void RenderViewHostImpl::SetIsFrozen(bool frozen) {
   page_lifecycle_state_manager_->SetIsFrozen(frozen);
+}
+
+void RenderViewHostImpl::SetVisibility(
+    blink::mojom::PageVisibilityState visibility) {
+  page_lifecycle_state_manager_->SetVisibility(visibility);
 }
 
 bool RenderViewHostImpl::IsRenderViewLive() {
@@ -521,6 +553,8 @@ const WebPreferences RenderViewHostImpl::ComputeWebPreferences() {
 
   prefs.accelerated_2d_canvas_enabled =
       !command_line.HasSwitch(switches::kDisableAccelerated2dCanvas);
+  prefs.new_canvas_2d_api_enabled =
+      command_line.HasSwitch(switches::kEnableNewCanvas2DAPI);
   prefs.antialiased_2d_canvas_disabled =
       command_line.HasSwitch(switches::kDisable2dCanvasAntialiasing);
   prefs.antialiased_clips_2d_canvas_enabled =
@@ -622,6 +656,14 @@ const WebPreferences RenderViewHostImpl::ComputeWebPreferences() {
   // `media_controls_enabled` is `true` by default.
   if (delegate_->HasPersistentVideo())
     prefs.media_controls_enabled = false;
+
+#if defined(OS_ANDROID)
+  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  gfx::Size size = display.GetSizeInPixel();
+  int min_width = size.width() < size.height() ? size.width() : size.height();
+  prefs.device_scale_adjustment = GetDeviceScaleAdjustment(
+      static_cast<int>(min_width / display.device_scale_factor()));
+#endif  // OS_ANDROID
 
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
   return prefs;
@@ -929,7 +971,7 @@ RenderViewHostImpl::GetAssociatedPageBroadcast() {
 
 void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  if (mouse_event.GetType() == WebInputEvent::kMouseWheel &&
+  if (mouse_event.GetType() == WebInputEvent::Type::kMouseWheel &&
       GetWidget()->IsIgnoringInputEvents()) {
     delegate_->OnIgnoredUIEvent();
   }
@@ -938,7 +980,7 @@ void RenderViewHostImpl::RenderWidgetDidForwardMouseEvent(
 bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     const NativeWebKeyboardEvent& key_event) {
   if (GetWidget()->IsIgnoringInputEvents()) {
-    if (key_event.GetType() == WebInputEvent::kRawKeyDown)
+    if (key_event.GetType() == WebInputEvent::Type::kRawKeyDown)
       delegate_->OnIgnoredUIEvent();
     return false;
   }

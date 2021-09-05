@@ -38,7 +38,8 @@ class NGInlineCursorTest : public NGLayoutTest,
 
   Vector<String> SiblingsToDebugStringList(const NGInlineCursor& start) {
     Vector<String> list;
-    for (NGInlineCursor cursor(start); cursor; cursor.MoveToNextSibling())
+    for (NGInlineCursor cursor(start); cursor;
+         cursor.MoveToNextSkippingChildren())
       list.push_back(ToDebugString(cursor));
     return list;
   }
@@ -48,7 +49,8 @@ class NGInlineCursorTest : public NGLayoutTest,
   void TestPrevoiusSibling(const NGInlineCursor& start) {
     if (start.IsPaintFragmentCursor()) {
       Vector<const NGPaintFragment*> forwards;
-      for (NGInlineCursor cursor(start); cursor; cursor.MoveToNextSibling())
+      for (NGInlineCursor cursor(start); cursor;
+           cursor.MoveToNextSkippingChildren())
         forwards.push_back(cursor.CurrentPaintFragment());
       Vector<const NGPaintFragment*> backwards;
       for (NGInlineBackwardCursor cursor(start); cursor;
@@ -60,7 +62,8 @@ class NGInlineCursorTest : public NGLayoutTest,
     }
     DCHECK(start.IsItemCursor());
     Vector<const NGFragmentItem*> forwards;
-    for (NGInlineCursor cursor(start); cursor; cursor.MoveToNextSibling())
+    for (NGInlineCursor cursor(start); cursor;
+         cursor.MoveToNextSkippingChildren())
       forwards.push_back(cursor.CurrentItem());
     Vector<const NGFragmentItem*> backwards;
     for (NGInlineBackwardCursor cursor(start); cursor;
@@ -74,7 +77,7 @@ class NGInlineCursorTest : public NGLayoutTest,
     if (cursor.Current().IsLineBox())
       return "#linebox";
 
-    if (cursor.Current().IsGeneratedTextType()) {
+    if (cursor.Current().IsLayoutGeneratedText()) {
       StringBuilder result;
       result.Append("#'");
       result.Append(cursor.CurrentText());
@@ -183,7 +186,7 @@ TEST_P(NGInlineCursorTest, ContainingLine) {
   ASSERT_TRUE(line1.Current().IsLineBox());
 
   NGInlineCursor line2(line1);
-  line2.MoveToNextSibling();
+  line2.MoveToNextSkippingChildren();
   ASSERT_TRUE(line2.Current().IsLineBox());
 
   cursor.MoveTo(*block_flow.FirstChild());
@@ -211,16 +214,13 @@ TEST_P(NGInlineCursorTest, CulledInlineWithAtomicInline) {
       "<b id=culled>abc<div style=display:inline>ABC<br>XYZ</div>xyz</b>"
       "</div>");
   NGInlineCursor cursor;
-  cursor.MoveTo(*GetLayoutObjectByElementId("culled"));
+  cursor.MoveToIncludingCulledInline(*GetLayoutObjectByElementId("culled"));
   Vector<String> list;
   while (cursor) {
     list.push_back(ToDebugString(cursor));
     cursor.MoveToNextForSameLayoutObject();
   }
-  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
-    EXPECT_THAT(list, ElementsAre("#culled", "#culled"));
-  else
-    EXPECT_THAT(list, ElementsAre("abc", "ABC", "", "XYZ", "xyz"));
+  EXPECT_THAT(list, ElementsAre("abc", "ABC", "", "XYZ", "xyz"));
 }
 
 // We should not have float:right fragment, because it isn't in-flow in
@@ -232,16 +232,13 @@ TEST_P(NGInlineCursorTest, CulledInlineWithFloat) {
       "<b id=culled>abc<div style=float:right></div>xyz</b>"
       "</div>");
   NGInlineCursor cursor;
-  cursor.MoveTo(*GetLayoutObjectByElementId("culled"));
+  cursor.MoveToIncludingCulledInline(*GetLayoutObjectByElementId("culled"));
   Vector<String> list;
   while (cursor) {
     list.push_back(ToDebugString(cursor));
     cursor.MoveToNextForSameLayoutObject();
   }
-  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
-    EXPECT_THAT(list, ElementsAre("#culled"));
-  else
-    EXPECT_THAT(list, ElementsAre("abc", "xyz"));
+  EXPECT_THAT(list, ElementsAre("abc", "xyz"));
 }
 
 TEST_P(NGInlineCursorTest, CulledInlineWithRoot) {
@@ -249,16 +246,13 @@ TEST_P(NGInlineCursorTest, CulledInlineWithRoot) {
     <div id="root"><a id="a"><b>abc</b><br><i>xyz</i></a></div>
   )HTML");
   const LayoutObject* layout_inline_a = GetLayoutObjectByElementId("a");
-  cursor.MoveTo(*layout_inline_a);
+  cursor.MoveToIncludingCulledInline(*layout_inline_a);
   Vector<String> list;
   while (cursor) {
     list.push_back(ToDebugString(cursor));
     cursor.MoveToNextForSameLayoutObject();
   }
-  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
-    EXPECT_THAT(list, ElementsAre("#a", "#a"));
-  else
-    EXPECT_THAT(list, ElementsAre("abc", "", "xyz"));
+  EXPECT_THAT(list, ElementsAre("abc", "", "xyz"));
 }
 
 TEST_P(NGInlineCursorTest, CulledInlineWithoutRoot) {
@@ -267,16 +261,13 @@ TEST_P(NGInlineCursorTest, CulledInlineWithoutRoot) {
   )HTML");
   const LayoutObject* layout_inline_a = GetLayoutObjectByElementId("a");
   NGInlineCursor cursor;
-  cursor.MoveTo(*layout_inline_a);
+  cursor.MoveToIncludingCulledInline(*layout_inline_a);
   Vector<String> list;
   while (cursor) {
     list.push_back(ToDebugString(cursor));
     cursor.MoveToNextForSameLayoutObject();
   }
-  if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
-    EXPECT_THAT(list, ElementsAre("#a", "#a"));
-  else
-    EXPECT_THAT(list, ElementsAre("abc", "", "xyz"));
+  EXPECT_THAT(list, ElementsAre("abc", "", "xyz"));
 }
 
 TEST_P(NGInlineCursorTest, FirstChild) {

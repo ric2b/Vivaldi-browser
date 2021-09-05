@@ -491,15 +491,8 @@ void NGPaintFragment::AssociateWithLayoutObject(
   DCHECK(layout_object->IsInline());
   DCHECK(PhysicalFragment().IsInline());
 
-#if DCHECK_IS_ON()
-  // Check we don't add the same fragment twice.
-  for (const NGPaintFragment* fragment :
-       FragmentRange(layout_object->FirstInlineFragment())) {
-    DCHECK_NE(this, fragment);
-  }
-#endif
-
   auto add_result = last_fragment_map->insert(layout_object, this);
+  NGPaintFragment* last_fragment;
   if (add_result.is_new_entry) {
     NGPaintFragment* first_fragment = layout_object->FirstInlineFragment();
     if (!first_fragment) {
@@ -507,16 +500,15 @@ void NGPaintFragment::AssociateWithLayoutObject(
       return;
     }
     // This |layout_object| was fragmented across multiple blocks.
-    DCHECK_EQ(layout_object, first_fragment->GetLayoutObject());
-    NGPaintFragment* last_fragment = first_fragment->LastForSameLayoutObject();
-    last_fragment->next_for_same_layout_object_ = this;
-    return;
+    last_fragment = first_fragment->LastForSameLayoutObject();
+  } else {
+    last_fragment = add_result.stored_value->value;
+    DCHECK(last_fragment) << layout_object;
+    add_result.stored_value->value = this;
   }
-  NGPaintFragment* last_fragment = add_result.stored_value->value;
-  DCHECK(last_fragment) << layout_object;
   DCHECK_EQ(layout_object, last_fragment->GetLayoutObject());
+  DCHECK_NE(this, last_fragment);
   last_fragment->next_for_same_layout_object_ = this;
-  add_result.stored_value->value = this;
 }
 
 // TODO(kojii): Consider unifying this with
@@ -796,101 +788,6 @@ const NGPaintFragment* NGPaintFragment::Root() const {
   return root;
 }
 
-void NGPaintFragment::DirtyLinesFromChangedChild(LayoutObject* child) {
-  if (!RuntimeEnabledFeatures::LayoutNGLineCacheEnabled())
-    return;
-
-  // This function should be called on every child that has
-  // |IsInLayoutNGInlineFormattingContext()|, meaning it was once collected into
-  // |NGInlineNode|.
-  //
-  // New LayoutObjects will be handled in the next |CollectInline()|.
-  DCHECK(child && child->IsInLayoutNGInlineFormattingContext());
-
-  if (child->IsInline() || child->IsFloatingOrOutOfFlowPositioned())
-    MarkLineBoxesDirtyFor(*child);
-}
-
-void NGPaintFragment::MarkLineBoxesDirtyFor(const LayoutObject& layout_object) {
-  DCHECK(RuntimeEnabledFeatures::LayoutNGLineCacheEnabled());
-  DCHECK(layout_object.IsInline() ||
-         layout_object.IsFloatingOrOutOfFlowPositioned())
-      << layout_object;
-
-  // Since |layout_object| isn't in fragment tree, check preceding siblings.
-  // Note: Once we reuse lines below dirty lines, we should check next siblings.
-  for (LayoutObject* previous = layout_object.PreviousSibling(); previous;
-       previous = previous->PreviousSibling()) {
-    // If the previoius object had never been laid out, it should have already
-    // marked the line box dirty.
-    if (!previous->EverHadLayout())
-      return;
-
-    if (previous->IsFloatingOrOutOfFlowPositioned())
-      continue;
-
-    // |previous| may not be in inline formatting context, e.g. <object>.
-    if (TryMarkLastLineBoxDirtyFor(*previous))
-      return;
-  }
-
-  // There is no siblings, try parent. If it's a non-atomic inline (e.g., span),
-  // mark dirty for it, but if it's an atomic inline (e.g., inline block), do
-  // not propagate across inline formatting context boundary.
-  const LayoutObject& parent = *layout_object.Parent();
-  if (parent.IsInline() && !parent.IsAtomicInlineLevel())
-    return MarkLineBoxesDirtyFor(parent);
-
-  // The |layout_object| is inserted into an empty block.
-  // Mark the first line box dirty.
-  if (const NGPaintFragment* paint_fragment = parent.PaintFragment()) {
-    if (NGPaintFragment* first_line = paint_fragment->FirstLineBox()) {
-      first_line->is_dirty_inline_ = true;
-      return;
-    }
-  }
-}
-
-void NGPaintFragment::MarkContainingLineBoxDirty() {
-  DCHECK(RuntimeEnabledFeatures::LayoutNGLineCacheEnabled());
-  DCHECK(PhysicalFragment().IsInline() || PhysicalFragment().IsLineBox());
-  for (NGPaintFragment* fragment :
-       NGPaintFragmentTraversal::InclusiveAncestorsOf(*this)) {
-    if (fragment->is_dirty_inline_)
-      return;
-    fragment->is_dirty_inline_ = true;
-    if (fragment->PhysicalFragment().IsLineBox())
-      return;
-  }
-  NOTREACHED() << this;  // Should have a line box ancestor.
-}
-
-bool NGPaintFragment::TryMarkFirstLineBoxDirtyFor(
-    const LayoutObject& layout_object) {
-  if (!layout_object.IsInLayoutNGInlineFormattingContext())
-    return false;
-  // Once we reuse lines below dirty lines, we should mark lines for all
-  // inline fragments.
-  if (NGPaintFragment* const fragment = layout_object.FirstInlineFragment()) {
-    fragment->MarkContainingLineBoxDirty();
-    return true;
-  }
-  return false;
-}
-
-bool NGPaintFragment::TryMarkLastLineBoxDirtyFor(
-    const LayoutObject& layout_object) {
-  if (!layout_object.IsInLayoutNGInlineFormattingContext())
-    return false;
-  // Once we reuse lines below dirty lines, we should mark lines for all
-  // inline fragments.
-  if (NGPaintFragment* const fragment = layout_object.FirstInlineFragment()) {
-    fragment->LastForSameLayoutObject()->MarkContainingLineBoxDirty();
-    return true;
-  }
-  return false;
-}
-
 void NGPaintFragment::SetShouldDoFullPaintInvalidationRecursively() {
   if (LayoutObject* layout_object = GetMutableLayoutObject()) {
     layout_object->StyleRef().ClearCachedPseudoElementStyles();
@@ -1037,6 +934,25 @@ PositionWithAffinity NGPaintFragment::PositionForPointInInlineLevelBox(
     if (auto child_position =
             PositionForPointInChild(*closest_child_before, point))
       return child_position.value();
+  }
+
+  if (PhysicalFragment().IsLineBox()) {
+    // There are no inline items to hit in this line box, e.g. <span> with
+    // size and border. We try in lines before |this| line in the block.
+    // See editing/selection/last-empty-inline.html
+    NGInlineCursor cursor(*Parent());
+    cursor.MoveTo(*this);
+    const PhysicalOffset point_in_line = point - OffsetInContainerBlock();
+    for (;;) {
+      cursor.MoveToPreviousLine();
+      if (!cursor)
+        break;
+      const NGPaintFragment& line = *cursor.CurrentPaintFragment();
+      const PhysicalOffset adjusted_point =
+          point_in_line + line.OffsetInContainerBlock();
+      if (auto position = line.PositionForPointInInlineLevelBox(adjusted_point))
+        return position;
+    }
   }
 
   return PositionWithAffinity();

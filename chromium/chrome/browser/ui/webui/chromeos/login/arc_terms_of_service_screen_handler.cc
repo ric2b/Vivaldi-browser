@@ -70,8 +70,6 @@ ArcTermsOfServiceScreenHandler::~ArcTermsOfServiceScreenHandler() {
 void ArcTermsOfServiceScreenHandler::RegisterMessages() {
   BaseScreenHandler::RegisterMessages();
 
-  AddCallback("arcTermsOfServiceSkip",
-              &ArcTermsOfServiceScreenHandler::HandleSkip);
   AddCallback("arcTermsOfServiceAccept",
               &ArcTermsOfServiceScreenHandler::HandleAccept);
 }
@@ -201,6 +199,13 @@ void ArcTermsOfServiceScreenHandler::DeclareLocalizedValues(
   builder->Add("oobeModalDialogClose", IDS_CHROMEOS_OOBE_CLOSE_DIALOG);
   builder->Add("arcOverlayLoading", IDS_ARC_POPUP_HELP_LOADING);
   builder->Add("arcLearnMoreText", IDS_ARC_OPT_IN_DIALOG_LEARN_MORE_LINK_TEXT);
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kArcTosHostForTests)) {
+    builder->Add("arcTosHostNameForTesting",
+                 base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+                     switches::kArcTosHostForTests));
+  }
 }
 
 void ArcTermsOfServiceScreenHandler::OnMetricsModeChanged(bool enabled,
@@ -323,12 +328,6 @@ void ArcTermsOfServiceScreenHandler::DoShow() {
   // ToS then prefs::kArcEnabled is automatically reset in ArcSessionManager.
   arc::SetArcPlayStoreEnabledForProfile(profile, true);
 
-  // Hide the Skip button in the ToS screen.
-  // TODO(crbug.com/1059048) Remove this when the ToS screen no longer has
-  // the skip button altogether. We call it all the time now so we can
-  // remove a Chrome OS flag.
-  CallJS("login.ArcTermsOfServiceScreen.hideSkipButton");
-
   action_taken_ = false;
 
   ShowScreen(kScreenId);
@@ -421,23 +420,6 @@ void ArcTermsOfServiceScreenHandler::RecordConsents(
     consent_auditor->RecordArcGoogleLocationServiceConsent(
         account_id, location_service_consent);
   }
-}
-
-void ArcTermsOfServiceScreenHandler::HandleSkip(
-    const std::string& tos_content) {
-  DCHECK(!arc::IsArcDemoModeSetupFlow());
-
-  if (!NeedDispatchEventOnAction())
-    return;
-
-  // Record consents as not accepted for consents that are under user control
-  // when the user skips ARC setup.
-  RecordConsents(tos_content, !arc_managed_, /*tos_accepted=*/false,
-                 !backup_restore_managed_, /*backup_accepted=*/false,
-                 !location_services_managed_, /*location_accepted=*/false);
-
-  for (auto& observer : observer_list_)
-    observer.OnSkip();
 }
 
 void ArcTermsOfServiceScreenHandler::HandleAccept(

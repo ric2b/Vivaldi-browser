@@ -14,7 +14,7 @@ class NotesAttachmentDataClassHandler : public VivaldiDataClassHandler {
 
   ~NotesAttachmentDataClassHandler() override;
 
-  bool GetData(const std::string& data_id,
+  void GetData(const std::string& data_id,
                content::URLDataSource::GotDataCallback callback) override;
 
  private:

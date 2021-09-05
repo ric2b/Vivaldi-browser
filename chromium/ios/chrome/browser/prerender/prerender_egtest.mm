@@ -6,6 +6,7 @@
 #import "ios/testing/earl_grey/earl_grey_test.h"
 
 #include "base/bind.h"
+#include "base/ios/ios_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"

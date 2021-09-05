@@ -15,10 +15,10 @@
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -676,7 +676,7 @@ class CacheStorageCacheTest : public testing::Test {
         std::vector<std::string>() /* cors_exposed_header_names */,
         nullptr /* side_data_blob */,
         nullptr /* side_data_blob_for_cache_put */,
-        std::vector<network::mojom::ContentSecurityPolicyPtr>(),
+        network::mojom::ParsedHeaders::New(),
         false /* loaded_with_credentials */);
   }
 
@@ -2260,7 +2260,7 @@ TEST_F(CacheStorageCacheTest, VerifyOpaqueSizePadding) {
   EXPECT_NE(opaque_padding, current_padding);
 
   // Now reset opaque side data back to zero.
-  const std::string expected_side_data2 = "";
+  const std::string expected_side_data2;
   scoped_refptr<net::IOBuffer> buffer2 =
       base::MakeRefCounted<net::StringIOBuffer>(expected_side_data2);
   EXPECT_TRUE(WriteSideData(opaque_request->url, response_time, buffer2,

@@ -163,6 +163,7 @@ class VivaldiAccountManager : public KeyedService,
   base::ObserverList<Observer> observers_;
 
   AccountInfo account_info_;
+  std::string device_id_;
   std::string access_token_;
   base::Time token_received_time_;
   std::string refresh_token_;

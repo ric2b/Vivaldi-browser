@@ -16,10 +16,20 @@
 namespace {
 
 #if defined(OS_ANDROID)
-const char kClientDataHeader[] = "X-CCT-Client-Data";
+const char kCCTClientDataHeader[] = "X-CCT-Client-Data";
 #endif
 
 }  // namespace
+
+// static
+void GoogleURLLoaderThrottle::UpdateCorsExemptHeader(
+    network::mojom::NetworkContextParams* params) {
+  params->cors_exempt_header_list.push_back(
+      safe_search_util::kGoogleAppsAllowedDomains);
+#if defined(OS_ANDROID)
+  params->cors_exempt_header_list.push_back(kCCTClientDataHeader);
+#endif
+}
 
 GoogleURLLoaderThrottle::GoogleURLLoaderThrottle(
 #if defined(OS_ANDROID)
@@ -61,14 +71,16 @@ void GoogleURLLoaderThrottle::WillStartRequest(
 
   if (!dynamic_params_.allowed_domains_for_apps.empty() &&
       request->url.DomainIs("google.com")) {
-    request->headers.SetHeader(safe_search_util::kGoogleAppsAllowedDomains,
-                               dynamic_params_.allowed_domains_for_apps);
+    request->cors_exempt_headers.SetHeader(
+        safe_search_util::kGoogleAppsAllowedDomains,
+        dynamic_params_.allowed_domains_for_apps);
   }
 
 #if defined(OS_ANDROID)
   if (!client_data_header_.empty() &&
       google_util::IsGoogleAssociatedDomainUrl(request->url)) {
-    request->headers.SetHeader(kClientDataHeader, client_data_header_);
+    request->cors_exempt_headers.SetHeader(kCCTClientDataHeader,
+                                           client_data_header_);
   }
 #endif
 }
@@ -78,7 +90,8 @@ void GoogleURLLoaderThrottle::WillRedirectRequest(
     const network::mojom::URLResponseHead& response_head,
     bool* /* defer */,
     std::vector<std::string>* to_be_removed_headers,
-    net::HttpRequestHeaders* modified_headers) {
+    net::HttpRequestHeaders* modified_headers,
+    net::HttpRequestHeaders* modified_cors_exempt_headers) {
   // URLLoaderThrottles can only change the redirect URL when the network
   // service is enabled. The non-network service path handles this in
   // ChromeNetworkDelegate.
@@ -99,14 +112,15 @@ void GoogleURLLoaderThrottle::WillRedirectRequest(
 
   if (!dynamic_params_.allowed_domains_for_apps.empty() &&
       redirect_info->new_url.DomainIs("google.com")) {
-    modified_headers->SetHeader(safe_search_util::kGoogleAppsAllowedDomains,
-                                dynamic_params_.allowed_domains_for_apps);
+    modified_cors_exempt_headers->SetHeader(
+        safe_search_util::kGoogleAppsAllowedDomains,
+        dynamic_params_.allowed_domains_for_apps);
   }
 
 #if defined(OS_ANDROID)
   if (!client_data_header_.empty() &&
       !google_util::IsGoogleAssociatedDomainUrl(redirect_info->new_url)) {
-    to_be_removed_headers->push_back(kClientDataHeader);
+    to_be_removed_headers->push_back(kCCTClientDataHeader);
   }
 #endif
 }
@@ -124,8 +138,7 @@ void GoogleURLLoaderThrottle::WillProcessResponse(
         !response_head->headers->HasHeaderValue("x-frame-options", "deny") &&
         !response_head->headers->HasHeaderValue("x-frame-options",
                                                 "sameorigin")) {
-      response_head->headers->RemoveHeader("x-frame-options");
-      response_head->headers->AddHeader("x-frame-options: sameorigin");
+      response_head->headers->AddHeader("x-frame-options", "sameorigin");
     }
   }
 }

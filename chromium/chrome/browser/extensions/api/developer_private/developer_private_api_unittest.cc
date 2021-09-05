@@ -58,7 +58,6 @@
 #include "extensions/common/value_builder.h"
 #include "extensions/test/test_extension_dir.h"
 #include "services/data_decoder/data_decoder_service.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/test/test_connector_factory.h"
 
 namespace extensions {
@@ -416,7 +415,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateReload) {
   scoped_refptr<const Extension> unloaded_extension =
       registry_observer.WaitForExtensionUnloaded();
   EXPECT_EQ(extension, unloaded_extension);
-  const Extension* reloaded_extension =
+  scoped_refptr<const Extension> reloaded_extension =
       registry_observer.WaitForExtensionLoaded();
   EXPECT_EQ(extension_id, reloaded_extension->id());
 }
@@ -760,7 +759,8 @@ TEST_F(DeveloperPrivateApiUnitTest, LoadUnpackedRetryId) {
                                                    "\"retryGuid\": \"%s\"}]",
                                                    retry_guid.c_str()),
                                 profile());
-    const Extension* extension = observer.WaitForExtensionLoaded();
+    scoped_refptr<const Extension> extension =
+        observer.WaitForExtensionLoaded();
     ASSERT_TRUE(extension);
     EXPECT_EQ(extension->path(), path);
   }
@@ -895,7 +895,8 @@ TEST_F(DeveloperPrivateApiUnitTest, ReloadBadExtensionToLoadUnpackedRetry) {
                                 "retryGuid": "%s"}])",
                            retry_guid.c_str());
     api_test_utils::RunFunction(function.get(), args, profile());
-    const Extension* extension = observer.WaitForExtensionLoaded();
+    scoped_refptr<const Extension> extension =
+        observer.WaitForExtensionLoaded();
     ASSERT_TRUE(extension);
     EXPECT_EQ(extension->path(), path);
     EXPECT_TRUE(registry()->enabled_extensions().Contains(id));
@@ -943,7 +944,8 @@ TEST_F(DeveloperPrivateApiUnitTest,
     function->SetRenderFrameHost(web_contents->GetMainFrame());
     TestExtensionRegistryObserver observer(registry());
     api_test_utils::RunFunction(function.get(), kLoadUnpackedArgs, profile());
-    const Extension* extension = observer.WaitForExtensionLoaded();
+    scoped_refptr<const Extension> extension =
+        observer.WaitForExtensionLoaded();
     ASSERT_TRUE(extension);
     EXPECT_EQ(extension->path(), path);
   }
@@ -1327,7 +1329,8 @@ TEST_F(DeveloperPrivateApiUnitTest, InstallDroppedFileCrx) {
   TestExtensionRegistryObserver observer(registry());
   ASSERT_TRUE(api_test_utils::RunFunction(function.get(), "[]", profile()))
       << function->GetError();
-  const Extension* extension = observer.WaitForExtensionInstalled();
+  scoped_refptr<const Extension> extension =
+      observer.WaitForExtensionInstalled();
   ASSERT_TRUE(extension);
   EXPECT_EQ("foo", extension->name());
 }
@@ -1350,7 +1353,8 @@ TEST_F(DeveloperPrivateApiUnitTest, InstallDroppedFileUserScript) {
   TestExtensionRegistryObserver observer(registry());
   ASSERT_TRUE(api_test_utils::RunFunction(function.get(), "[]", profile()))
       << function->GetError();
-  const Extension* extension = observer.WaitForExtensionInstalled();
+  scoped_refptr<const Extension> extension =
+      observer.WaitForExtensionInstalled();
   ASSERT_TRUE(extension);
   EXPECT_EQ("My user script", extension->name());
 }
@@ -1475,14 +1479,7 @@ TEST_F(DeveloperPrivateApiUnitTest, RemoveHostPermission) {
   EXPECT_FALSE(modifier.HasGrantedHostPermission(kMapsGoogleCom));
 }
 
-// This test is flaky on chromeos.
-// https://crbug.com/937355
-#if defined(OS_CHROMEOS)
-#define MAYBE_UpdateHostAccess DISABLED_UpdateHostAccess
-#else
-#define MAYBE_UpdateHostAccess UpdateHostAccess
-#endif
-TEST_F(DeveloperPrivateApiUnitTest, MAYBE_UpdateHostAccess) {
+TEST_F(DeveloperPrivateApiUnitTest, UpdateHostAccess) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("test").AddPermission("<all_urls>").Build();
   service()->AddExtension(extension.get());
@@ -1775,7 +1772,8 @@ TEST_F(DeveloperPrivateApiUnitTest, InstallDroppedFileZip) {
   TestExtensionRegistryObserver observer(registry());
   ASSERT_TRUE(api_test_utils::RunFunction(function.get(), "[]", profile()))
       << function->GetError();
-  const Extension* extension = observer.WaitForExtensionInstalled();
+  scoped_refptr<const Extension> extension =
+      observer.WaitForExtensionInstalled();
   ASSERT_TRUE(extension);
   EXPECT_EQ("Simple Empty Extension", extension->name());
 }

@@ -42,11 +42,11 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
+import org.chromium.chrome.browser.tab.RedirectHandlerTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabAssociatedApp;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tab.TabRedirectHandler;
 import org.chromium.chrome.browser.tab_activity_glue.ReparentingDelegateFactory;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParams;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
@@ -359,10 +359,6 @@ public class CustomTabActivityTabController
         RecordHistogram.recordEnumeratedHistogram("CustomTabs.WebContentsStateOnLaunch",
                 WebContentsState.PRERENDERED_WEBCONTENTS, WebContentsState.NUM_ENTRIES);
         TabAssociatedApp.from(tab).setAppId(mConnection.getClientPackageNameForSession(mSession));
-        if (mIntentDataProvider.shouldEnableEmbeddedMediaExperience()) {
-            // Configures web preferences for viewing downloaded media.
-            if (tab.getWebContents() != null) tab.getWebContents().notifyRendererPreferenceUpdate();
-        }
         initializeTab(tab);
         return tab;
     }
@@ -422,7 +418,7 @@ public class CustomTabActivityTabController
     }
 
     private void initializeTab(Tab tab) {
-        TabRedirectHandler.from(tab).updateIntent(mIntent);
+        RedirectHandlerTabHelper.updateIntentInTab(tab, mIntent);
         tab.getView().requestFocus();
 
         // TODO(pshmakov): invert these dependencies.

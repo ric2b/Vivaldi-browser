@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions;
 
-import android.os.Debug;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -12,7 +11,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.ui.modelutil.ModelListAdapter;
 
 /**
- * ModelListAdapter for SuggestionList.
+ * ModelListAdapter for ListView based OmniboxSuggestionsDropdown.
  */
 class OmniboxSuggestionsListAdapter extends ModelListAdapter {
     OmniboxSuggestionsListAdapter(ModelList data) {
@@ -29,12 +28,10 @@ class OmniboxSuggestionsListAdapter extends ModelListAdapter {
     @Override
     protected View createView(ViewGroup parent, int typeId) {
         try (TraceEvent tracing =
-                        TraceEvent.scoped("OmniboxSuggestionsList.CreateView", "type:" + typeId)) {
-            final long start = Debug.threadCpuTimeNanos();
-            View v = super.createView(parent, typeId);
-            final long end = Debug.threadCpuTimeNanos();
-            SuggestionsMetrics.recordSuggestionViewCreateTime(start, end);
-            return v;
+                        TraceEvent.scoped("OmniboxSuggestionsList.CreateView", "type:" + typeId);
+                SuggestionsMetrics.TimingMetric metric =
+                        SuggestionsMetrics.recordSuggestionViewCreateTime()) {
+            return super.createView(parent, typeId);
         }
     }
 }

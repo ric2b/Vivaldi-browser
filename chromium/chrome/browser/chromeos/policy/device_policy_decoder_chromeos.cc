@@ -787,6 +787,12 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
           std::make_unique<base::Value>(container.report_backlight_info()),
           nullptr);
     }
+    if (container.has_report_app_info()) {
+      policies->Set(key::kReportDeviceAppInfo, POLICY_LEVEL_MANDATORY,
+                    POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                    std::make_unique<base::Value>(container.report_app_info()),
+                    nullptr);
+    }
   }
 
   if (policy.has_device_heartbeat_settings()) {
@@ -1526,15 +1532,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                   nullptr);
   }
 
-  if (policy.has_minimum_chrome_version_enforced()) {
-    const em::StringPolicyProto& container(
-        policy.minimum_chrome_version_enforced());
-    if (container.has_value()) {
-      SetJsonDevicePolicy(key::kMinimumChromeVersionEnforced, container.value(),
-                          policies);
-    }
-  }
-
   if (policy.has_unaffiliated_arc_allowed()) {
     const em::UnaffiliatedArcAllowedProto& container(
         policy.unaffiliated_arc_allowed());
@@ -1661,16 +1658,20 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
 
-  if (policy.has_device_wilco_dtc_allowed()) {
-    const em::DeviceWilcoDtcAllowedProto& container(
-        policy.device_wilco_dtc_allowed());
-    if (container.has_device_wilco_dtc_allowed()) {
-      policies->Set(
-          key::kDeviceWilcoDtcAllowed, POLICY_LEVEL_MANDATORY,
-          POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-          std::make_unique<base::Value>(container.device_wilco_dtc_allowed()),
-          nullptr);
-    }
+  if (policy.has_device_wilco_dtc_allowed() &&
+      policy.device_wilco_dtc_allowed().has_device_wilco_dtc_allowed()) {
+    VLOG(2) << "Set Wilco DTC allowed to "
+            << policy.device_wilco_dtc_allowed().device_wilco_dtc_allowed();
+    policies->Set(
+        key::kDeviceWilcoDtcAllowed, POLICY_LEVEL_MANDATORY,
+        POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+        std::make_unique<base::Value>(
+            policy.device_wilco_dtc_allowed().device_wilco_dtc_allowed()),
+        nullptr);
+  } else {
+    VLOG(2) << "No Wilco DTC allowed policy: "
+            << policy.has_device_wilco_dtc_allowed() << " "
+            << policy.device_wilco_dtc_allowed().has_device_wilco_dtc_allowed();
   }
 
   if (policy.has_device_wifi_allowed()) {
@@ -1716,14 +1717,19 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
   }
 
-  if (policy.has_device_dock_mac_address_source()) {
-    const em::DeviceDockMacAddressSourceProto& container(
-        policy.device_dock_mac_address_source());
-    if (container.has_source()) {
-      policies->Set(key::kDeviceDockMacAddressSource, POLICY_LEVEL_MANDATORY,
-                    POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                    std::make_unique<base::Value>(container.source()), nullptr);
-    }
+  if (policy.has_device_dock_mac_address_source() &&
+      policy.device_dock_mac_address_source().has_source()) {
+    VLOG(2) << "Set dock MAC address source to "
+            << policy.device_dock_mac_address_source().source();
+    policies->Set(key::kDeviceDockMacAddressSource, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
+                  std::make_unique<base::Value>(
+                      policy.device_dock_mac_address_source().source()),
+                  nullptr);
+  } else {
+    VLOG(2) << "No dock MAC address source policy: "
+            << policy.has_device_dock_mac_address_source() << " "
+            << policy.device_dock_mac_address_source().has_source();
   }
 
   if (policy.has_device_advanced_battery_charge_mode()) {
@@ -1788,6 +1794,19 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
           std::make_unique<base::Value>(container.enabled()), nullptr);
     }
   }
+
+  if (policy.has_device_crostini_arc_adb_sideloading_allowed()) {
+    const em::DeviceCrostiniArcAdbSideloadingAllowedProto& container(
+        policy.device_crostini_arc_adb_sideloading_allowed());
+    if (container.has_mode()) {
+      std::unique_ptr<base::Value> value(DecodeIntegerValue(container.mode()));
+      if (value) {
+        policies->Set(key::kDeviceCrostiniArcAdbSideloadingAllowed,
+                      POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                      POLICY_SOURCE_CLOUD, std::move(value), nullptr);
+      }
+    }
+  }
 }
 
 }  // namespace
@@ -1799,7 +1818,7 @@ base::Optional<base::Value> DecodeJsonStringAndNormalize(
   base::JSONReader::ValueWithError value_with_error =
       base::JSONReader::ReadAndReturnValueWithError(
           json_string, base::JSON_ALLOW_TRAILING_COMMAS);
-  if (value_with_error.error_code != base::JSONReader::JSON_NO_ERROR) {
+  if (!value_with_error.value) {
     *error = "Invalid JSON string: " + value_with_error.error_message;
     return base::nullopt;
   }

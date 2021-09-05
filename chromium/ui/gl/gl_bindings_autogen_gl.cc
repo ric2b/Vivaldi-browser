@@ -309,6 +309,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       gfx::HasExtension(extensions, "GL_APPLE_vertex_array_object");
   ext.b_GL_ARB_ES2_compatibility =
       gfx::HasExtension(extensions, "GL_ARB_ES2_compatibility");
+  ext.b_GL_ARB_base_instance =
+      gfx::HasExtension(extensions, "GL_ARB_base_instance");
   ext.b_GL_ARB_blend_func_extended =
       gfx::HasExtension(extensions, "GL_ARB_blend_func_extended");
   ext.b_GL_ARB_clear_texture =
@@ -341,6 +343,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       gfx::HasExtension(extensions, "GL_ARB_texture_multisample");
   ext.b_GL_ARB_texture_storage =
       gfx::HasExtension(extensions, "GL_ARB_texture_storage");
+  ext.b_GL_ARB_texture_swizzle =
+      gfx::HasExtension(extensions, "GL_ARB_texture_swizzle");
   ext.b_GL_ARB_timer_query =
       gfx::HasExtension(extensions, "GL_ARB_timer_query");
   ext.b_GL_ARB_transform_feedback2 =
@@ -391,6 +395,8 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
       gfx::HasExtension(extensions, "GL_EXT_memory_object");
   ext.b_GL_EXT_memory_object_fd =
       gfx::HasExtension(extensions, "GL_EXT_memory_object_fd");
+  ext.b_GL_EXT_memory_object_win32 =
+      gfx::HasExtension(extensions, "GL_EXT_memory_object_win32");
   ext.b_GL_EXT_multisampled_render_to_texture =
       gfx::HasExtension(extensions, "GL_EXT_multisampled_render_to_texture");
   ext.b_GL_EXT_occlusion_query_boolean =
@@ -399,14 +405,20 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   ext.b_GL_EXT_semaphore = gfx::HasExtension(extensions, "GL_EXT_semaphore");
   ext.b_GL_EXT_semaphore_fd =
       gfx::HasExtension(extensions, "GL_EXT_semaphore_fd");
+  ext.b_GL_EXT_semaphore_win32 =
+      gfx::HasExtension(extensions, "GL_EXT_semaphore_win32");
   ext.b_GL_EXT_shader_image_load_store =
       gfx::HasExtension(extensions, "GL_EXT_shader_image_load_store");
   ext.b_GL_EXT_texture_buffer =
       gfx::HasExtension(extensions, "GL_EXT_texture_buffer");
   ext.b_GL_EXT_texture_buffer_object =
       gfx::HasExtension(extensions, "GL_EXT_texture_buffer_object");
+  ext.b_GL_EXT_texture_format_BGRA8888 =
+      gfx::HasExtension(extensions, "GL_EXT_texture_format_BGRA8888");
   ext.b_GL_EXT_texture_storage =
       gfx::HasExtension(extensions, "GL_EXT_texture_storage");
+  ext.b_GL_EXT_texture_swizzle =
+      gfx::HasExtension(extensions, "GL_EXT_texture_swizzle");
   ext.b_GL_EXT_timer_query =
       gfx::HasExtension(extensions, "GL_EXT_timer_query");
   ext.b_GL_EXT_transform_feedback =
@@ -950,7 +962,7 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
             GetGLProcAddress("glDrawArraysInstancedANGLE"));
   }
 
-  if (ver->IsAtLeastGL(4u, 2u)) {
+  if (ver->IsAtLeastGL(4u, 2u) || ext.b_GL_ARB_base_instance) {
     fn.glDrawArraysInstancedBaseInstanceANGLEFn =
         reinterpret_cast<glDrawArraysInstancedBaseInstanceANGLEProc>(
             GetGLProcAddress("glDrawArraysInstancedBaseInstance"));
@@ -999,7 +1011,7 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
             GetGLProcAddress("glDrawElementsInstancedANGLE"));
   }
 
-  if (ver->IsAtLeastGL(4u, 2u)) {
+  if (ver->IsAtLeastGL(4u, 2u) || ext.b_GL_ARB_base_instance) {
     fn.glDrawElementsInstancedBaseVertexBaseInstanceANGLEFn = reinterpret_cast<
         glDrawElementsInstancedBaseVertexBaseInstanceANGLEProc>(
         GetGLProcAddress("glDrawElementsInstancedBaseVertexBaseInstance"));
@@ -1833,6 +1845,12 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
         GetGLProcAddress("glImportMemoryFdEXT"));
   }
 
+  if (ext.b_GL_EXT_memory_object_win32) {
+    fn.glImportMemoryWin32HandleEXTFn =
+        reinterpret_cast<glImportMemoryWin32HandleEXTProc>(
+            GetGLProcAddress("glImportMemoryWin32HandleEXT"));
+  }
+
   if (ext.b_GL_ANGLE_memory_object_fuchsia) {
     fn.glImportMemoryZirconHandleANGLEFn =
         reinterpret_cast<glImportMemoryZirconHandleANGLEProc>(
@@ -1842,6 +1860,12 @@ void DriverGL::InitializeDynamicBindings(const GLVersionInfo* ver,
   if (ext.b_GL_EXT_semaphore_fd) {
     fn.glImportSemaphoreFdEXTFn = reinterpret_cast<glImportSemaphoreFdEXTProc>(
         GetGLProcAddress("glImportSemaphoreFdEXT"));
+  }
+
+  if (ext.b_GL_EXT_semaphore_win32) {
+    fn.glImportSemaphoreWin32HandleEXTFn =
+        reinterpret_cast<glImportSemaphoreWin32HandleEXTProc>(
+            GetGLProcAddress("glImportSemaphoreWin32HandleEXT"));
   }
 
   if (ext.b_GL_ANGLE_semaphore_fuchsia) {
@@ -4699,6 +4723,13 @@ void GLApiBase::glImportMemoryFdEXTFn(GLuint memory,
   driver_->fn.glImportMemoryFdEXTFn(memory, size, handleType, fd);
 }
 
+void GLApiBase::glImportMemoryWin32HandleEXTFn(GLuint memory,
+                                               GLuint64 size,
+                                               GLenum handleType,
+                                               void* handle) {
+  driver_->fn.glImportMemoryWin32HandleEXTFn(memory, size, handleType, handle);
+}
+
 void GLApiBase::glImportMemoryZirconHandleANGLEFn(GLuint memory,
                                                   GLuint64 size,
                                                   GLenum handleType,
@@ -4711,6 +4742,12 @@ void GLApiBase::glImportSemaphoreFdEXTFn(GLuint semaphore,
                                          GLenum handleType,
                                          GLint fd) {
   driver_->fn.glImportSemaphoreFdEXTFn(semaphore, handleType, fd);
+}
+
+void GLApiBase::glImportSemaphoreWin32HandleEXTFn(GLuint semaphore,
+                                                  GLenum handleType,
+                                                  void* handle) {
+  driver_->fn.glImportSemaphoreWin32HandleEXTFn(semaphore, handleType, handle);
 }
 
 void GLApiBase::glImportSemaphoreZirconHandleANGLEFn(GLuint semaphore,
@@ -8304,6 +8341,15 @@ void TraceGLApi::glImportMemoryFdEXTFn(GLuint memory,
   gl_api_->glImportMemoryFdEXTFn(memory, size, handleType, fd);
 }
 
+void TraceGLApi::glImportMemoryWin32HandleEXTFn(GLuint memory,
+                                                GLuint64 size,
+                                                GLenum handleType,
+                                                void* handle) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "TraceGLAPI::glImportMemoryWin32HandleEXT")
+  gl_api_->glImportMemoryWin32HandleEXTFn(memory, size, handleType, handle);
+}
+
 void TraceGLApi::glImportMemoryZirconHandleANGLEFn(GLuint memory,
                                                    GLuint64 size,
                                                    GLenum handleType,
@@ -8318,6 +8364,14 @@ void TraceGLApi::glImportSemaphoreFdEXTFn(GLuint semaphore,
                                           GLint fd) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "TraceGLAPI::glImportSemaphoreFdEXT")
   gl_api_->glImportSemaphoreFdEXTFn(semaphore, handleType, fd);
+}
+
+void TraceGLApi::glImportSemaphoreWin32HandleEXTFn(GLuint semaphore,
+                                                   GLenum handleType,
+                                                   void* handle) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
+                                "TraceGLAPI::glImportSemaphoreWin32HandleEXT")
+  gl_api_->glImportSemaphoreWin32HandleEXTFn(semaphore, handleType, handle);
 }
 
 void TraceGLApi::glImportSemaphoreZirconHandleANGLEFn(GLuint semaphore,
@@ -12817,6 +12871,17 @@ void LogGLApi::glImportMemoryFdEXTFn(GLuint memory,
   gl_api_->glImportMemoryFdEXTFn(memory, size, handleType, fd);
 }
 
+void LogGLApi::glImportMemoryWin32HandleEXTFn(GLuint memory,
+                                              GLuint64 size,
+                                              GLenum handleType,
+                                              void* handle) {
+  GL_SERVICE_LOG("glImportMemoryWin32HandleEXT"
+                 << "(" << memory << ", " << size << ", "
+                 << GLEnums::GetStringEnum(handleType) << ", "
+                 << static_cast<const void*>(handle) << ")");
+  gl_api_->glImportMemoryWin32HandleEXTFn(memory, size, handleType, handle);
+}
+
 void LogGLApi::glImportMemoryZirconHandleANGLEFn(GLuint memory,
                                                  GLuint64 size,
                                                  GLenum handleType,
@@ -12835,6 +12900,16 @@ void LogGLApi::glImportSemaphoreFdEXTFn(GLuint semaphore,
                  << "(" << semaphore << ", "
                  << GLEnums::GetStringEnum(handleType) << ", " << fd << ")");
   gl_api_->glImportSemaphoreFdEXTFn(semaphore, handleType, fd);
+}
+
+void LogGLApi::glImportSemaphoreWin32HandleEXTFn(GLuint semaphore,
+                                                 GLenum handleType,
+                                                 void* handle) {
+  GL_SERVICE_LOG("glImportSemaphoreWin32HandleEXT"
+                 << "(" << semaphore << ", "
+                 << GLEnums::GetStringEnum(handleType) << ", "
+                 << static_cast<const void*>(handle) << ")");
+  gl_api_->glImportSemaphoreWin32HandleEXTFn(semaphore, handleType, handle);
 }
 
 void LogGLApi::glImportSemaphoreZirconHandleANGLEFn(GLuint semaphore,
@@ -16860,6 +16935,13 @@ void NoContextGLApi::glImportMemoryFdEXTFn(GLuint memory,
   NoContextHelper("glImportMemoryFdEXT");
 }
 
+void NoContextGLApi::glImportMemoryWin32HandleEXTFn(GLuint memory,
+                                                    GLuint64 size,
+                                                    GLenum handleType,
+                                                    void* handle) {
+  NoContextHelper("glImportMemoryWin32HandleEXT");
+}
+
 void NoContextGLApi::glImportMemoryZirconHandleANGLEFn(GLuint memory,
                                                        GLuint64 size,
                                                        GLenum handleType,
@@ -16871,6 +16953,12 @@ void NoContextGLApi::glImportSemaphoreFdEXTFn(GLuint semaphore,
                                               GLenum handleType,
                                               GLint fd) {
   NoContextHelper("glImportSemaphoreFdEXT");
+}
+
+void NoContextGLApi::glImportSemaphoreWin32HandleEXTFn(GLuint semaphore,
+                                                       GLenum handleType,
+                                                       void* handle) {
+  NoContextHelper("glImportSemaphoreWin32HandleEXT");
 }
 
 void NoContextGLApi::glImportSemaphoreZirconHandleANGLEFn(GLuint semaphore,

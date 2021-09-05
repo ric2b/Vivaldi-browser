@@ -21,6 +21,7 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/autofill/core/common/password_form.h"
+#include "content/public/test/browser_test.h"
 #include "importer/imported_notes_entry.h"
 
 #include "testing/gtest/include/gtest/gtest.h"

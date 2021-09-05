@@ -8,12 +8,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -45,7 +46,7 @@
 #include "chrome/browser/chromeos/policy/remote_commands/affiliated_remote_commands_invalidator.h"
 #include "chrome/browser/chromeos/policy/scheduled_update_checker/device_scheduled_update_checker.h"
 #include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
-#include "chrome/browser/chromeos/policy/system_proxy_settings_policy_handler.h"
+#include "chrome/browser/chromeos/policy/system_proxy_manager.h"
 #include "chrome/browser/chromeos/policy/tpm_auto_update_mode_policy_handler.h"
 #include "chrome/browser/chromeos/printing/bulk_printers_calculator_factory.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -277,9 +278,8 @@ void BrowserPolicyConnectorChromeOS::Init(
             policy::DeviceWilcoDtcConfigurationExternalDataHandler>(
             GetPolicyService()));
   }
-  system_proxy_settings_policy_handler_ =
-      std::make_unique<SystemProxySettingsPolicyHandler>(
-          chromeos::CrosSettings::Get());
+  system_proxy_manager_ =
+      std::make_unique<SystemProxyManager>(chromeos::CrosSettings::Get());
 }
 
 void BrowserPolicyConnectorChromeOS::PreShutdown() {
@@ -292,6 +292,8 @@ void BrowserPolicyConnectorChromeOS::PreShutdown() {
 }
 
 void BrowserPolicyConnectorChromeOS::Shutdown() {
+  device_cert_provisioning_scheduler_.reset();
+
   // NetworkCertLoader may be not initialized in tests.
   if (chromeos::NetworkCertLoader::IsInitialized()) {
     chromeos::NetworkCertLoader::Get()->SetDevicePolicyCertificateProvider(
@@ -440,6 +442,14 @@ void BrowserPolicyConnectorChromeOS::OnDeviceCloudPolicyManagerConnected() {
   device_cloud_policy_initializer_->Shutdown();
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
       FROM_HERE, std::move(device_cloud_policy_initializer_));
+
+  // TODO(miersh) Move to BrowserPolicyConnectorChromeOS::Init() when
+  // CertProvisioningScheduler does not depend on SignIn Profile.
+  if (!device_cert_provisioning_scheduler_) {
+    device_cert_provisioning_scheduler_ = chromeos::cert_provisioning::
+        CertProvisioningScheduler::CreateDeviceCertProvisioningScheduler(
+            affiliated_invalidation_service_provider_.get());
+  }
 }
 
 void BrowserPolicyConnectorChromeOS::OnDeviceCloudPolicyManagerDisconnected() {
@@ -460,7 +470,7 @@ BrowserPolicyConnectorChromeOS::CreatePolicyProviders() {
 void BrowserPolicyConnectorChromeOS::SetTimezoneIfPolicyAvailable() {
   typedef chromeos::CrosSettingsProvider Provider;
   Provider::TrustedStatus result =
-      chromeos::CrosSettings::Get()->PrepareTrustedValues(base::Bind(
+      chromeos::CrosSettings::Get()->PrepareTrustedValues(base::BindOnce(
           &BrowserPolicyConnectorChromeOS::SetTimezoneIfPolicyAvailable,
           weak_ptr_factory_.GetWeakPtr()));
 

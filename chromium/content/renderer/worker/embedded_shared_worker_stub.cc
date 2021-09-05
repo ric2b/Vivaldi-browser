@@ -18,6 +18,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
+#include "third_party/blink/public/common/messaging/message_port_descriptor.h"
 #include "third_party/blink/public/mojom/devtools/devtools_agent.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "third_party/blink/public/platform/web_fetch_client_settings_object.h"
@@ -185,7 +186,6 @@ EmbeddedSharedWorkerStub::CreateWorkerFetchContext() {
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-07#section-2.1.2
   worker_fetch_context->set_site_for_cookies(
       net::SiteForCookies::FromUrl(url_));
-  worker_fetch_context->set_origin_url(url_.GetOrigin());
 
   DCHECK(response_override_);
   worker_fetch_context->SetResponseOverrideForMainScript(
@@ -202,7 +202,7 @@ void EmbeddedSharedWorkerStub::ConnectToChannel(
 }
 
 void EmbeddedSharedWorkerStub::Connect(int connection_request_id,
-                                       mojo::ScopedMessagePipeHandle port) {
+                                       blink::MessagePortDescriptor port) {
   blink::MessagePortChannel channel(std::move(port));
   if (running_) {
     ConnectToChannel(connection_request_id, std::move(channel));

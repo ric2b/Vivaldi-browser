@@ -175,9 +175,8 @@ UserCloudPolicyManagerChromeOS::UserCloudPolicyManagerChromeOS(
     DCHECK_EQ(enforcement_type_, PolicyEnforcement::kPolicyRequired);
     policy_refresh_timeout_.Start(
         FROM_HERE, policy_refresh_timeout,
-        base::BindRepeating(
-            &UserCloudPolicyManagerChromeOS::OnPolicyRefreshTimeout,
-            base::Unretained(this)));
+        base::BindOnce(&UserCloudPolicyManagerChromeOS::OnPolicyRefreshTimeout,
+                       base::Unretained(this)));
   }
 
   // Register for notification that profile creation is complete - this is used
@@ -224,12 +223,7 @@ void UserCloudPolicyManagerChromeOS::Connect(
   // fully initialized (required so we can perform the initial policy load).
   std::unique_ptr<CloudPolicyClient> cloud_policy_client =
       std::make_unique<CloudPolicyClient>(
-          std::string() /* machine_id */, std::string() /* machine_model */,
-          std::string() /* brand_code */,
-          std::string() /* ethernet_mac_address */,
-          std::string() /* dock_mac_address */,
-          std::string() /* manufacture_date */, device_management_service,
-          system_url_loader_factory, nullptr /* signing_service */,
+          device_management_service, system_url_loader_factory,
           chromeos::GetDeviceDMTokenForUserPolicyGetter(account_id_));
   CreateComponentCloudPolicyService(
       dm_protocol::kChromeExtensionPolicyType, component_policy_cache_path_,
@@ -776,7 +770,8 @@ void UserCloudPolicyManagerChromeOS::StartReportSchedulerIfReady(
   }
 
   report_scheduler_ = std::make_unique<enterprise_reporting::ReportScheduler>(
-      client(), std::make_unique<enterprise_reporting::ReportGenerator>());
+      client(), std::make_unique<enterprise_reporting::ReportGenerator>(),
+      profile_);
 
   report_scheduler_->OnDMTokenUpdated();
 }

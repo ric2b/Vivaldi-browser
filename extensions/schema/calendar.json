@@ -5,6 +5,12 @@
     "description": "Use the <code>vivaldi.calendar</code> API to manipulate calendar events.",
     "types": [
       {
+        "id": "AccountType",
+        "type": "string",
+        "enum": [ "local", "vivaldi", "google", "caldav", "ical"],
+        "description": "The account type. Maps to int in db: 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal."
+      },
+      {
         "id": "RecurrenceException",
         "type": "object",
         "description": "A object describing how an instance of event recurrence is changed.",
@@ -152,12 +158,10 @@
         "properties": {
           "id": {
             "type": "string",
-            "optional": false,
             "description": "The id of the invite."
           },
           "event_id": {
             "type": "string",
-            "optional": false,
             "description": "The id of the event that this invite applies to."
           },
           "name": {
@@ -167,7 +171,6 @@
           },
           "address": {
             "type": "string",
-            "optional": false,
             "description": "The address of the contact to send the invite to."
           },
           "sent": {
@@ -203,7 +206,6 @@
           },
           "title": {
             "type": "string",
-            "optional": false,
             "description": "Title of event."
           },
           "description": {
@@ -478,6 +480,10 @@
             "type": "string",
             "optional": true,
             "description": "The timezone of the event to create."
+          },
+          "is_template": {
+            "type": "boolean",
+            "description": "Is  the event a template or not."
           }
         }
       },
@@ -556,18 +562,12 @@
           },
           "name": {
             "type": "string",
-            "optional": false,
             "description": "The name of the calendar to be created."
           },
           "description": {
             "type": "string",
             "optional": true,
             "description": "The description of the calendar to be created."
-          },
-          "url": {
-            "type": "string",
-            "optional": true,
-            "description": "The URL of a remote calendar."
           },
           "orderindex": {
             "type": "integer",
@@ -593,21 +593,6 @@
             "type": "boolean",
             "optional": true,
             "description": "If this CalDAV calendar should be polled."
-          },
-          "username": {
-            "type": "string",
-            "optional": true,
-            "description": "The CalDav authentication username."
-          },
-          "type": {
-            "type": "integer",
-            "optional": true,
-            "description": "The type of calendar. 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal."
-          },
-          "interval": {
-            "type": "integer",
-            "optional": true,
-            "description": "The interval how often this calendar should poll. In seconds."
           },
           "lastChecked": {
             "type": "number",
@@ -644,11 +629,6 @@
             "optional": true,
             "description": "The calendar description."
           },
-          "url": {
-            "type": "string",
-            "optional": true,
-            "description": "The URL of a remote calendar."
-          },
           "orderindex": {
             "type": "integer",
             "optional": true,
@@ -679,21 +659,6 @@
             "optional": true,
             "description": "The ctag field of the CalDAV calendar."
           },
-          "username": {
-            "type": "string",
-            "optional": true,
-            "description": "The CalDav authentication username."
-          },
-          "type": {
-            "type": "integer",
-            "optional": true,
-            "description": "The type of calendar. 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal."
-          },
-          "interval": {
-            "type": "integer",
-            "optional": true,
-            "description": "The interval how often this calendar should poll. In seconds."
-          },
           "lastChecked": {
             "type": "number",
             "optional": true,
@@ -706,7 +671,6 @@
           }
         }
       },
-
       {
         "id": "updateCalendar",
         "type": "object",
@@ -727,11 +691,6 @@
             "optional": true,
             "description": "The calendar description."
           },
-          "url": {
-            "type": "string",
-            "optional": true,
-            "description": "The URL of a remote calendar."
-          },
           "orderindex": {
             "type": "integer",
             "optional": true,
@@ -762,21 +721,6 @@
             "optional": true,
             "description": "The ctag field of the CalDAV calendar."
           },
-          "username": {
-            "type": "string",
-            "optional": true,
-            "description": "The CalDav authentication username."
-          },
-          "type": {
-            "type": "integer",
-            "optional": true,
-            "description": "The type of calendar. 0: Local. 1: Vivaldi.net calendar. 2: Google Calendar. 3: CalDAV.  4: Read only iCal."
-          },
-          "interval": {
-            "type": "integer",
-            "optional": true,
-            "description": "The interval how often this calendar should poll. In seconds."
-          },
           "lastChecked": {
             "type": "number",
             "optional": true,
@@ -786,6 +730,69 @@
             "type": "string",
             "optional": true,
             "description": "The timezone of the calendar."
+          }
+        }
+      },
+      {
+        "id": "updatedAccount",
+        "type": "object",
+        "description": "Object to update calendar.",
+        "properties": {
+          "name": {
+            "name": "The updated name of the account.",
+            "type": "string",
+            "optional": true
+          },
+          "username": {
+            "name": "The user name of the account.",
+            "type": "string",
+            "optional": true
+          },
+          "url": {
+            "description": "The updated url of the account.",
+            "type": "string",
+            "optional": true
+          },
+          "account_type": {
+            "description": "The type of account.",
+            "type": "string",
+            "$ref": "AccountType",
+            "optional": true
+          },
+          "interval": {
+            "type": "integer",
+            "optional": true,
+            "description": "The interval how often this account should poll. In seconds."
+          }
+        }
+      },
+      {
+        "id": "createdAccount",
+        "type": "object",
+        "description": "Object to create calendar.",
+        "properties": {
+          "name": {
+            "name": "The name of the account to create.",
+            "type": "string"
+          },
+          "username": {
+            "name": "The user name of the account to create.",
+            "type": "string"
+          },
+          "url": {
+            "description": "The url of the account to create.",
+            "type": "string"
+          },
+          "account_type": {
+            "description": "The type of account.",
+            "type": "string",
+            "$ref": "AccountType",
+            "optional": true
+          },
+          "interval": {
+            "type": "integer",
+            "optional": true,
+            "description": "The interval how often this account should poll. In seconds."
           }
         }
       },
@@ -802,10 +809,26 @@
             "type": "string",
             "description": "Name of the account."
           },
+          "username": {
+            "type": "string",
+            "name": "description",
+            "description": "The username of the account."
+          },
           "url": {
             "type": "string",
             "name": "description",
             "description": "The base url of the account."
+          },
+          "account_type": {
+            "description": "The type of account.",
+            "type": "string",
+            "$ref": "AccountType",
+            "optional": true
+          },
+          "interval": {
+            "type": "integer",
+            "optional": true,
+            "description": "The interval how often this account should poll. In seconds."
           }
         }
       }
@@ -1182,7 +1205,7 @@
         "parameters": [
           {
             "$ref": "CreateEventType",
-            "name": "event"
+            "name": "event_type"
           },
           {
             "type": "function",
@@ -1325,7 +1348,7 @@
               },
               "delay": {
                 "type": "integer",
-                "optional":  true,
+                "optional": true,
                 "description": "The notification will fire after delay minutes from now. Can not be used together with when."
               }
             }
@@ -1376,7 +1399,6 @@
             "properties": {
               "event_id": {
                 "type": "string",
-                "optional": false,
                 "description": "The event id of the event to create the invite for."
               },
               "address": {
@@ -1510,13 +1532,8 @@
         "parameters": [
           {
             "type": "string",
-            "name": "name",
-            "description": "The name of the account."
-          },
-          {
-            "type": "string",
-            "name": "url",
-            "description": "The url of the account."
+            "name": "toCreate",
+            "$ref": "createdAccount"
           },
           {
             "type": "function",
@@ -1545,20 +1562,8 @@
             "name": "id"
           },
           {
-            "type": "object",
             "name": "changes",
-            "properties": {
-              "name": {
-                "name": "The updated name of the account.",
-                "type": "string",
-                "optional": true
-              },
-              "url": {
-                "description": "The updated url of the account.",
-                "type": "string",
-                "optional": true
-              }
-            }
+            "$ref": "updatedAccount"
           },
           {
             "type": "function",
@@ -1596,6 +1601,26 @@
               {
                 "name": "result",
                 "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getAllEventTemplates",
+        "type": "function",
+        "description": "Retrieves all event templates.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": {
+                  "$ref": "CalendarEvent"
+                }
               }
             ]
           }

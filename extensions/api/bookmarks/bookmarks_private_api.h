@@ -6,7 +6,6 @@
 #include <set>
 
 #include "chrome/browser/extensions/api/bookmarks/bookmarks_api.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 
@@ -116,7 +115,7 @@ class BookmarksPrivateEmptyTrashFunction : public BookmarksFunction {
   ~BookmarksPrivateEmptyTrashFunction() override = default;
 
   // BookmarksFunction:
-  bool RunOnReady() override;
+  ResponseValue RunOnReady() override;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateEmptyTrashFunction);
 };
@@ -151,7 +150,7 @@ class BookmarksPrivateIsCustomThumbnailFunction : public BookmarksFunction {
 
  private:
   // BookmarksFunction:
-  bool RunOnReady() override;
+  ResponseValue RunOnReady() override;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateIsCustomThumbnailFunction);
 };

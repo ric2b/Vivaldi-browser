@@ -99,6 +99,10 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   std::unique_ptr<const base::FieldTrial::EntropyProvider>
   CreateLowEntropyProvider();
 
+  // Whether or not consent state has been determined, regardless of whether
+  // it is positive or negative.
+  bool IsConsentDetermined() const;
+
   // EnabledStateProvider
   bool IsConsentGiven() const override;
   bool IsReportingEnabled() const override;
@@ -135,11 +139,11 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   }
 
  protected:
-  // Called by Initialize() to allow embedder specific initialization.
-  virtual void InitInternal() = 0;
-
   // Called by MaybeStartMetrics() to allow embedder specific initialization.
   virtual void OnMetricsStart() = 0;
+
+  // Called by MaybeStartMetrics() when metrics collection failed to start.
+  virtual void OnMetricsNotStarted() = 0;
 
   // Returns the metrics sampling rate, to be used by IsInSample(). This is a
   // per mille value, so this integer must always be in the inclusive range [0,
@@ -176,10 +180,6 @@ class AndroidMetricsServiceClient : public MetricsServiceClient,
   // mille values are handled. Including package names in logs may be privacy
   // sensitive, see https://crbug.com/969803.
   virtual int GetPackageNameLimitRatePerMille() = 0;
-
-  // Whether or not MetricsService::OnApplicationNotIdle should be called for
-  // notifications.
-  virtual bool ShouldWakeMetricsService() = 0;
 
   // Called by CreateMetricsService, allows the embedder to register additional
   // MetricsProviders. Does nothing by default.

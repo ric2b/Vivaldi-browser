@@ -6,6 +6,7 @@
     ],
     "services": [
       "fuchsia.accessibility.semantics.SemanticsManager",
+      "fuchsia.camera3.DeviceWatcher",
       "fuchsia.device.NameProvider",
       "fuchsia.fonts.Provider",
       "fuchsia.intl.PropertyProvider",
@@ -19,6 +20,7 @@
       "fuchsia.netstack.Netstack",
       "fuchsia.posix.socket.Provider",
       "fuchsia.process.Launcher",
+      "fuchsia.sys.Launcher",
       "fuchsia.sysmem.Allocator",
       "fuchsia.ui.input.ImeService",
       "fuchsia.ui.input.ImeVisibilityService",

@@ -32,6 +32,8 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LoaderErrors;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeBaseAppCompatActivity;
 import org.chromium.chrome.browser.IntentHandler;
@@ -42,6 +44,7 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcherImpl;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
@@ -78,7 +81,8 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
     private long mOnCreateTimestampUptimeMs;
 
     private ActivityWindowAndroid mWindowAndroid;
-    private ModalDialogManager mModalDialogManager;
+    private final ObservableSupplierImpl<ModalDialogManager> mModalDialogManagerSupplier =
+            new ObservableSupplierImpl<>();
     private Bundle mSavedInstanceState;
     private int mCurrentOrientation;
     private boolean mDestroyed;
@@ -111,9 +115,9 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
             mWindowAndroid = null;
         }
 
-        if (mModalDialogManager != null) {
-            mModalDialogManager.destroy();
-            mModalDialogManager = null;
+        if (mModalDialogManagerSupplier.get() != null) {
+            mModalDialogManagerSupplier.get().destroy();
+            mModalDialogManagerSupplier.set(null);
         }
 
         super.onDestroy();
@@ -157,18 +161,27 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
 
     @Override
     public final void setContentViewAndLoadLibrary(Runnable onInflationCompleteCallback) {
-        // Start loading libraries before triggerLayoutInflation(). This "hides" library loading
-        // behind UI inflation and prevents stalling UI thread. See https://crbug.com/796957 for
-        // details. Note that for optimal performance AsyncInitTaskRunner.startBackgroundTasks()
-        // needs to start warmup renderer only after library is loaded.
+        boolean enableInstantStart = TabUiFeatureUtilities.supportInstantStart(isTablet());
+        mOnInflationCompleteCallback = onInflationCompleteCallback;
+        if (enableInstantStart) {
+            triggerLayoutInflation();
+        }
+
+        // Start loading libraries. It happens before triggerLayoutInflation() for regular startup,
+        // but after triggerLayoutInflation() for instant start because we prioritize a Java UI and
+        // not rendering web content. This "hides" library loading behind UI inflation and prevents
+        // stalling UI thread. See https://crbug.com/796957 for details. Note that for optimal
+        // performance AsyncInitTaskRunner.startBackgroundTasks() needs to start warmup renderer
+        // only after library is loaded.
 
         if (!mStartupDelayed) {
             // Kick off long running IO tasks that can be done in parallel.
             mNativeInitializationController.startBackgroundTasks(shouldAllocateChildConnection());
         }
 
-        mOnInflationCompleteCallback = onInflationCompleteCallback;
-        triggerLayoutInflation();
+        if (!enableInstantStart) {
+            triggerLayoutInflation();
+        }
         if (mLaunchBehindWorkaround != null) mLaunchBehindWorkaround.onSetContentView();
     }
 
@@ -218,8 +231,11 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
             if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())) return;
             String url = IntentHandler.getUrlFromIntent(intent);
             if (url == null) return;
+            // TODO(https://crbug.com/1041781): Use the current profile (i.e., regular profile or
+            // incognito profile) instead of always using regular profile. It is wrong and needs to
+            // be fixed.
             WarmupManager.getInstance().maybePreconnectUrlAndSubResources(
-                    Profile.getLastUsedProfile(), url);
+                    Profile.getLastUsedRegularProfile(), url);
         } finally {
             TraceEvent.end("maybePreconnect");
         }
@@ -316,7 +332,7 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
         if (mWindowAndroid != null) {
             getWindowAndroid().restoreInstanceState(getSavedInstanceState());
         }
-        mModalDialogManager = createModalDialogManager();
+        mModalDialogManagerSupplier.set(createModalDialogManager());
 
         mStartupDelayed = shouldDelayBrowserStartup();
         ChromeBrowserInitializer.getInstance().handlePreNativeStartup(this);
@@ -364,6 +380,12 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
         mNativeInitializationController.startBackgroundTasks(shouldAllocateChildConnection());
 
         if (mFirstDrawComplete) onFirstDrawComplete();
+    }
+
+    @VisibleForTesting
+    public void startDelayedNativeInitializationForTests() {
+        mStartupDelayed = true;
+        startDelayedNativeInitialization();
     }
 
     /**
@@ -542,16 +564,29 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
         return mDestroyed || isFinishing();
     }
 
+    /**
+     * Every child class wanting to perform tasks on configuration changed should override
+     * {@link #performOnConfigurationChanged(Configuration)} instead.
+     * @param newConfig The new configuration.
+     */
     @Override
-    public void onConfigurationChanged(Configuration newConfig) {
+    public final void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        performOnConfigurationChanged(newConfig);
         mLifecycleDispatcher.dispatchOnConfigurationChanged(newConfig);
     }
+
+    /**
+     * Handle an {@link #onConfigurationChanged(Configuration)} event.
+     * @param newConfig The new configuration.
+     */
+    @CallSuper
+    public void performOnConfigurationChanged(Configuration newConfig) {}
 
     @Override
     public void onMultiWindowModeChanged(boolean inMultiWindowMode) {
         super.onMultiWindowModeChanged(inMultiWindowMode);
-        mMultiWindowModeStateDispatcher.dipatchMultiWindowModeChanged(inMultiWindowMode);
+        mMultiWindowModeStateDispatcher.dispatchMultiWindowModeChanged(inMultiWindowMode);
     }
 
     @Override
@@ -608,14 +643,15 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
      */
     @Override
     public ModalDialogManager getModalDialogManager() {
-        return mModalDialogManager;
+        // TODO(jinsukkim): Remove this method in favor of getModalDialogManagerSupplier below.
+        return mModalDialogManagerSupplier.get();
     }
 
     /**
-     * Overrides the originally created modal dialog manager.
+     * @return The supplier of {@link ModalDialogManager} that manages the display of modal dialogs.
      */
-    public void overrideModalDialogManager(ModalDialogManager modalDialogManager) {
-        mModalDialogManager = modalDialogManager;
+    public ObservableSupplier<ModalDialogManager> getModalDialogManagerSupplier() {
+        return mModalDialogManagerSupplier;
     }
 
     /**
@@ -661,6 +697,14 @@ public abstract class AsyncInitializationActivity extends ChromeBaseAppCompatAct
         super.onWindowFocusChanged(hasFocus);
 
         mLifecycleDispatcher.dispatchOnWindowFocusChanged(hasFocus);
+    }
+
+    @CallSuper
+    @Override
+    public void recreate() {
+        super.recreate();
+
+        mLifecycleDispatcher.dispatchOnRecreate();
     }
 
     /**

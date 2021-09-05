@@ -26,6 +26,7 @@ import org.chromium.ui.widget.ButtonCompat;
  */
 class QrCodeScanView {
     public interface PermissionPrompter { void promptForCameraPermission(); }
+
     public interface PermissionPromptAllowedChecker { Boolean canPromptForPermission(); }
 
     private final Context mContext;
@@ -60,11 +61,10 @@ class QrCodeScanView {
 
     private View createPermissionView(Context context, PermissionPrompter permissionPrompter) {
         View permissionView = (View) LayoutInflater.from(context).inflate(
-                org.chromium.chrome.browser.share.qrcode.R.layout.qrcode_permission_layout, null,
-                false);
+                org.chromium.chrome.browser.share.R.layout.qrcode_permission_layout, null, false);
 
         ButtonCompat cameraPermissionPrompt = permissionView.findViewById(
-                org.chromium.chrome.browser.share.qrcode.R.id.ask_for_permission);
+                org.chromium.chrome.browser.share.R.id.ask_for_permission);
         cameraPermissionPrompt.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -76,8 +76,7 @@ class QrCodeScanView {
 
     private View createCameraErrorView(Context context) {
         return (View) LayoutInflater.from(context).inflate(
-                org.chromium.chrome.browser.share.qrcode.R.layout.qrcode_camera_error_layout, null,
-                false);
+                org.chromium.chrome.browser.share.R.layout.qrcode_camera_error_layout, null, false);
     }
 
     private final ErrorCallback mCameraErrorCallback = new ErrorCallback() {
@@ -114,16 +113,16 @@ class QrCodeScanView {
     }
 
     /**
-     * Creates a view that opens the settings page for the app and allows the user to
-     * to update permissions including give the app camera permission.
+     * Creates a view that opens the settings page for the app and allows the user to to update
+     * permissions including give the app camera permission.
      */
     private View createOpenSettingsView(Context context) {
         View openSettingsView = (View) LayoutInflater.from(context).inflate(
-                org.chromium.chrome.browser.share.qrcode.R.layout.qrcode_open_settings_layout, null,
+                org.chromium.chrome.browser.share.R.layout.qrcode_open_settings_layout, null,
                 false);
 
         ButtonCompat cameraPermissionPrompt = openSettingsView.findViewById(
-                org.chromium.chrome.browser.share.qrcode.R.id.open_settings_button);
+                org.chromium.chrome.browser.share.R.id.open_settings_button);
         cameraPermissionPrompt.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -151,10 +150,8 @@ class QrCodeScanView {
     }
 
     /**
-     * Update the view based on the latest environment:
-     * - app is in the foreground
-     * - user has given camera permission
-     * - user can be prompted for camera permission
+     * Update the view based on the latest environment: - app is in the foreground - user has given
+     * camera permission - user can be prompted for camera permission
      */
     private void updateView() {
         // The scan tab is not in the foreground so don't do any rendering.
@@ -179,7 +176,7 @@ class QrCodeScanView {
      * to let the user know if the permission has been permanently denied.
      *
      * @param canPromptForPermission Indicates whether the user can be prompted for camera
-     * permission
+     *            permission
      */
     public void canPromptForPermissionChanged(Boolean canPromptForPermission) {
         mCanPromptForPermission = canPromptForPermission;
@@ -240,7 +237,7 @@ class QrCodeScanView {
     /** Displays the camera error dialog. */
     private void displayCameraErrorDialog(String errorString) {
         TextView cameraErrorTextView = (TextView) mCameraErrorView.findViewById(
-                org.chromium.chrome.browser.share.qrcode.R.id.qrcode_camera_error_text);
+                org.chromium.chrome.browser.share.R.id.qrcode_camera_error_text);
         cameraErrorTextView.setText(errorString);
 
         mView.removeAllViews();

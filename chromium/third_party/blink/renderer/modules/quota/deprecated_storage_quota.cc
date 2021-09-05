@@ -38,7 +38,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_estimate.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_quota_callback.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_usage_callback.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/modules/quota/dom_error.h"
@@ -123,7 +122,8 @@ void DeprecatedStorageQuota::EnqueueStorageErrorCallback(
                            WrapPersistent(DOMError::Create(exception_code))));
 }
 
-DeprecatedStorageQuota::DeprecatedStorageQuota(Type type) : type_(type) {}
+DeprecatedStorageQuota::DeprecatedStorageQuota(Type type)
+    : type_(type), quota_host_(nullptr) {}
 
 void DeprecatedStorageQuota::queryUsageAndQuota(
     ScriptState* script_state,
@@ -187,9 +187,7 @@ void DeprecatedStorageQuota::requestQuota(
       WTF::Bind(&RequestStorageQuotaCallback, WrapPersistent(success_callback),
                 WrapPersistent(error_callback));
 
-  Document& document = Document::From(*execution_context);
-  const SecurityOrigin* security_origin = document.GetSecurityOrigin();
-  if (security_origin->IsOpaque()) {
+  if (execution_context->GetSecurityOrigin()->IsOpaque()) {
     // Unique origins cannot store persistent state.
     std::move(callback).Run(mojom::blink::QuotaStatusCode::kErrorAbort, 0, 0);
     return;
@@ -203,9 +201,14 @@ void DeprecatedStorageQuota::requestQuota(
               0, 0));
 }
 
+void DeprecatedStorageQuota::Trace(Visitor* visitor) {
+  visitor->Trace(quota_host_);
+  ScriptWrappable::Trace(visitor);
+}
+
 mojom::blink::QuotaManagerHost* DeprecatedStorageQuota::GetQuotaHost(
     ExecutionContext* execution_context) {
-  if (!quota_host_) {
+  if (!quota_host_.is_bound()) {
     ConnectToQuotaManagerHost(
         execution_context,
         quota_host_.BindNewPipeAndPassReceiver(execution_context->GetTaskRunner(

@@ -264,6 +264,13 @@ var GetLineStartOffsets = requireNative(
 
 /**
  * @param {string} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of the node.
+ * @return {?string} The computed name of this node.
+ */
+var GetName = natives.GetName;
+
+/**
+ * @param {string} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @param {string} attr The name of a string attribute.
  * @return {?string} The value of this attribute, or undefined if the tree,
@@ -472,6 +479,20 @@ var GetTableCellAriaColumnIndex = natives.GetTableCellAriaColumnIndex;
 var GetTableCellAriaRowIndex = natives.GetTableCellAriaRowIndex;
 
 /**
+ * @param {string} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {number} column count for this cell's table. 0 if not in a table.
+ */
+var GetTableColumnCount = natives.GetTableColumnCount;
+
+/**
+ * @param {string} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {number} Row count for this cell's table. 0 if not in a table.
+ */
+var GetTableRowCount = natives.GetTableRowCount;
+
+/**
  * @param {string} axTreeId The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
  * @return {string} Detected language for this node.
@@ -501,6 +522,12 @@ var GetWordStartOffsets = natives.GetWordStartOffsets;
  * @return {!Array<number>}
  */
 var GetWordEndOffsets = natives.GetWordEndOffsets;
+
+/**
+ * @param {string} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ */
+var SetAccessibilityFocus = natives.SetAccessibilityFocus;
 
 /**
  * @param {string} axTreeID The id of the accessibility tree.
@@ -700,6 +727,9 @@ AutomationNodeImpl.prototype = {
     return GetNameFrom(this.treeID, this.id);
   },
 
+  get name() {
+    return GetName(this.treeID, this.id);
+  },
 
   get descriptionFrom() {
     return GetDescriptionFrom(this.treeID, this.id);
@@ -785,6 +815,14 @@ AutomationNodeImpl.prototype = {
 
   get tableCellAriaRowIndex() {
     return GetTableCellAriaRowIndex(this.treeID, this.id);
+  },
+
+  get tableColumnCount() {
+    return GetTableColumnCount(this.treeID, this.id);
+  },
+
+  get tableRowCount() {
+    return GetTableRowCount(this.treeID, this.id);
   },
 
   get nonInlineTextWordStarts() {
@@ -901,6 +939,10 @@ AutomationNodeImpl.prototype = {
     this.performAction_('scrollRight', {}, opt_callback);
   },
 
+  setAccessibilityFocus: function() {
+    SetAccessibilityFocus(this.treeID, this.id);
+  },
+
   setSelection: function(startIndex, endIndex) {
     if (this.state.editable) {
       this.performAction_('setSelection',
@@ -1003,7 +1045,7 @@ AutomationNodeImpl.prototype = {
              attributes: this.attributes };
   },
 
-  dispatchEvent: function(eventType, eventFrom, mouseX, mouseY) {
+  dispatchEvent: function(eventType, eventFrom, mouseX, mouseY, intents) {
     var path = [];
     var parent = this.parent;
     while (parent) {
@@ -1013,6 +1055,7 @@ AutomationNodeImpl.prototype = {
     var event = new AutomationEvent(eventType, this.wrapper, eventFrom);
     event.mouseX = mouseX;
     event.mouseY = mouseY;
+    event.intents = intents;
 
     // Dispatch the event through the propagation path in three phases:
     // - capturing: starting from the root and going down to the target's parent
@@ -1036,7 +1079,7 @@ AutomationNodeImpl.prototype = {
       var childID = GetChildIDAtIndex(this.treeID, this.id, i).nodeId;
       $Array.push(childIDs, childID);
     }
-    var name = GetStringAttribute(this.treeID, this.id, 'name');
+    var name = GetName(this.treeID, this.id);
 
     var result = 'node id=' + this.id +
         ' role=' + this.role +
@@ -1231,7 +1274,6 @@ var stringAttributes = [
     'language',
     'liveRelevant',
     'liveStatus',
-    'name',
     'placeholder',
     'roleDescription',
     'textInputType',
@@ -1240,8 +1282,9 @@ var stringAttributes = [
     'value'];
 
 var boolAttributes = [
-  'busy', 'clickable', 'containerLiveAtomic', 'containerLiveBusy', 'liveAtomic',
-  'modal', 'scrollable', 'selected', 'supportsTextLocation'
+  'busy', 'clickable', 'containerLiveAtomic', 'containerLiveBusy',
+  'editableRoot', 'liveAtomic', 'modal', 'scrollable', 'selected',
+  'supportsTextLocation'
 ];
 
 var intAttributes = [
@@ -1259,12 +1302,8 @@ var intAttributes = [
     'setSize',
     'tableCellColumnSpan',
     'tableCellRowSpan',
-    'tableColumnCount',
     'ariaColumnCount',
-    'tableColumnIndex',
-    'tableRowCount',
     'ariaRowCount',
-    'tableRowIndex',
     'textSelEnd',
     'textSelStart'];
 
@@ -1685,7 +1724,7 @@ AutomationRootNodeImpl.prototype = {
       var targetNodeImpl = privates(targetNode).impl;
       targetNodeImpl.dispatchEvent(
           eventParams.eventType, eventParams.eventFrom,
-          eventParams.mouseX, eventParams.mouseY);
+          eventParams.mouseX, eventParams.mouseY, eventParams.intents);
 
       if (eventParams.actionRequestID != -1) {
         this.onActionResult(eventParams.actionRequestID, targetNode);
@@ -1778,6 +1817,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'scrollDown',
     'scrollLeft',
     'scrollRight',
+    'setAccessibilityFocus',
     'setSelection',
     'setSequentialFocusNavigationStartingPoint',
     'setValue',
@@ -1814,6 +1854,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
         'lineThrough',
         'location',
         'markers',
+        'name',
         'nameFrom',
         'nextSibling',
         'nonInlineTextWordEnds',
@@ -1831,6 +1872,8 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
         'tableCellColumnIndex',
         'tableCellRowHeaders',
         'tableCellRowIndex',
+        'tableColumnCount',
+        'tableRowCount',
         'unclippedLocation',
         'underline',
       ]),

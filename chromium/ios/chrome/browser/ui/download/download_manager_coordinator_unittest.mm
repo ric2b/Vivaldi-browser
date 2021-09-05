@@ -15,11 +15,15 @@
 #import "base/test/ios/wait_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
+#import "ios/chrome/browser/download/confirm_download_closing_overlay.h"
+#import "ios/chrome/browser/download/confirm_download_replacing_overlay.h"
 #include "ios/chrome/browser/download/download_directory_util.h"
 #include "ios/chrome/browser/download/download_manager_metric_names.h"
 #import "ios/chrome/browser/download/download_manager_tab_helper.h"
 #import "ios/chrome/browser/download/external_app_util.h"
 #include "ios/chrome/browser/main/test_browser.h"
+#import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
+#import "ios/chrome/browser/overlays/public/web_content_area/alert_overlay.h"
 #import "ios/chrome/browser/ui/download/download_manager_view_controller.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -340,6 +344,7 @@ TEST_F(DownloadManagerCoordinatorTest, Close) {
   DownloadManagerViewController* viewController =
       base_view_controller_.childViewControllers.firstObject;
   ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+  ASSERT_EQ(0, user_action_tester_.GetActionCount("IOSDownloadClose"));
   @autoreleasepool {
     // This call will retain coordinator, which should outlive thread bundle.
     [viewController.delegate
@@ -357,6 +362,7 @@ TEST_F(DownloadManagerCoordinatorTest, Close) {
       1);
   histogram_tester_.ExpectTotalCount("Download.IOSDownloadFileUIGoogleDrive",
                                      0);
+  EXPECT_EQ(1, user_action_tester_.GetActionCount("IOSDownloadClose"));
 }
 
 // Tests presenting Install Google Drive dialog. Coordinator presents StoreKit
@@ -377,6 +383,8 @@ TEST_F(DownloadManagerCoordinatorTest, InstallDrive) {
   // button changes it's alpha.
   ASSERT_EQ(1.0f, viewController.installDriveButton.superview.alpha);
 
+  ASSERT_EQ(
+      0, user_action_tester_.GetActionCount("IOSDownloadInstallGoogleDrive"));
   @autoreleasepool {
     // This call will retain coordinator, which should outlive thread bundle.
     [viewController.delegate
@@ -393,8 +401,10 @@ TEST_F(DownloadManagerCoordinatorTest, InstallDrive) {
     return viewController.installDriveButton.superview.alpha == 0.0f;
   }));
 
-  // Simulate Google Drive app installation and verify that expected user action
-  // has been recorded.
+  // Simulate Google Drive app installation and verify that expected histograms
+  // have been recorded.
+  EXPECT_EQ(
+      1, user_action_tester_.GetActionCount("IOSDownloadInstallGoogleDrive"));
   histogram_tester_.ExpectTotalCount("Download.IOSDownloadFileUIGoogleDrive",
                                      0);
   // SKStoreProductViewController uses UIApplication, so it's not possible to
@@ -438,6 +448,8 @@ TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
         EXPECT_EQ(open_in_controller.excludedActivityTypes.count, 2.0);
       });
 
+  ASSERT_EQ(0, user_action_tester_.GetActionCount("IOSDownloadOpenIn"));
+
   // Present Open In... menu.
   @autoreleasepool {
     // These calls will retain coordinator, which should outlive thread bundle.
@@ -470,6 +482,7 @@ TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
       1);
   histogram_tester_.ExpectTotalCount("Download.IOSDownloadFileUIGoogleDrive",
                                      1);
+  EXPECT_EQ(1, user_action_tester_.GetActionCount("IOSDownloadOpenIn"));
 }
 
 // Tests destroying download task for in progress download.
@@ -562,6 +575,7 @@ TEST_F(DownloadManagerCoordinatorTest, QuitDuringInProgressDownload) {
 // should present the confirmation dialog.
 TEST_F(DownloadManagerCoordinatorTest, CloseInProgressDownload) {
   web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
+  task.SetWebState(&web_state_);
   task.Start(std::make_unique<net::URLFetcherStringWriter>());
   coordinator_.downloadTask = &task;
   [coordinator_ start];
@@ -570,62 +584,89 @@ TEST_F(DownloadManagerCoordinatorTest, CloseInProgressDownload) {
   DownloadManagerViewController* viewController =
       base_view_controller_.childViewControllers.firstObject;
   ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+  ASSERT_EQ(0, user_action_tester_.GetActionCount(
+                   "IOSDownloadTryCloseWhenInProgress"));
+
+  OverlayRequestQueue* queue = OverlayRequestQueue::FromWebState(
+      &web_state_, OverlayModality::kWebContentArea);
+  ASSERT_EQ(0U, queue->size());
   @autoreleasepool {
     // This call will retain coordinator, which should outlive thread bundle.
     [viewController.delegate
         downloadManagerViewControllerDidClose:viewController];
   }
-  // Verify that UIAlert is presented.
-  ASSERT_TRUE([base_view_controller_.presentedViewController
-      isKindOfClass:[UIAlertController class]]);
-  UIAlertController* alert = base::mac::ObjCCast<UIAlertController>(
-      base_view_controller_.presentedViewController);
-  EXPECT_NSEQ(@"Stop Download?", alert.title);
-  EXPECT_FALSE(alert.message);
+  // Verify that confirm request was sent.
+  ASSERT_EQ(1U, queue->size());
+
+  alert_overlays::AlertRequest* config =
+      queue->front_request()->GetConfig<alert_overlays::AlertRequest>();
+  ASSERT_TRUE(config);
+  EXPECT_NSEQ(@"Stop Download?", config->title());
+  EXPECT_FALSE(config->message());
+  ASSERT_EQ(2U, config->button_configs().size());
+  EXPECT_NSEQ(@"Stop", config->button_configs()[0].title);
+  EXPECT_EQ(kDownloadCloseActionName,
+            config->button_configs()[0].user_action_name);
+  EXPECT_NSEQ(@"Continue", config->button_configs()[1].title);
+  EXPECT_EQ(kDownloadDoNotCloseActionName,
+            config->button_configs()[1].user_action_name);
 
   // Stop to avoid holding a dangling pointer to destroyed task.
+  queue->CancelAllRequests();
   @autoreleasepool {
     // task_environment_ has to outlive the coordinator. Dismissing coordinator
     // retains are autoreleases it.
     [coordinator_ stop];
   }
 
-  // |stop| should dismiss the alert.
-  ASSERT_TRUE(
-      WaitUntilConditionOrTimeout(base::test::ios::kWaitForUIElementTimeout, ^{
-        return !base_view_controller_.presentedViewController;
-      }));
+  EXPECT_EQ(0U, queue->size());
+  EXPECT_EQ(1, user_action_tester_.GetActionCount(
+                   "IOSDownloadTryCloseWhenInProgress"));
+  EXPECT_EQ(0, user_action_tester_.GetActionCount(kDownloadCloseActionName));
+  EXPECT_EQ(0,
+            user_action_tester_.GetActionCount(kDownloadDoNotCloseActionName));
 }
 
 // Tests downloadManagerTabHelper:decidePolicyForDownload:completionHandler:.
 // Coordinator should present the confirmation dialog.
 TEST_F(DownloadManagerCoordinatorTest, DecidePolicyForDownload) {
   web::FakeDownloadTask task(GURL(kTestUrl), kTestMimeType);
+  task.SetWebState(&web_state_);
+  coordinator_.downloadTask = &task;
+
+  OverlayRequestQueue* queue = OverlayRequestQueue::FromWebState(
+      &web_state_, OverlayModality::kWebContentArea);
+  ASSERT_EQ(0U, queue->size());
   [coordinator_ downloadManagerTabHelper:&tab_helper_
                  decidePolicyForDownload:&task
                        completionHandler:^(NewDownloadPolicy){
                        }];
 
-  // Verify that UIAlert is presented.
-  ASSERT_TRUE([base_view_controller_.presentedViewController
-      isKindOfClass:[UIAlertController class]]);
-  UIAlertController* alert = base::mac::ObjCCast<UIAlertController>(
-      base_view_controller_.presentedViewController);
-  EXPECT_NSEQ(@"Start New Download?", alert.title);
-  EXPECT_NSEQ(@"This will stop all progress for your current download.",
-              alert.message);
+  // Verify that confirm request was sent.
+  ASSERT_EQ(1U, queue->size());
 
+  alert_overlays::AlertRequest* config =
+      queue->front_request()->GetConfig<alert_overlays::AlertRequest>();
+  ASSERT_TRUE(config);
+  EXPECT_NSEQ(@"Start New Download?", config->title());
+  EXPECT_NSEQ(@"This will stop all progress for your current download.",
+              config->message());
+  ASSERT_EQ(2U, config->button_configs().size());
+  EXPECT_NSEQ(@"OK", config->button_configs()[0].title);
+  EXPECT_EQ(kDownloadReplaceActionName,
+            config->button_configs()[0].user_action_name);
+  EXPECT_NSEQ(@"Cancel", config->button_configs()[1].title);
+  EXPECT_EQ(kDownloadDoNotReplaceActionName,
+            config->button_configs()[1].user_action_name);
+
+  queue->CancelAllRequests();
   @autoreleasepool {
     // task_environment_ has to outlive the coordinator. Dismissing coordinator
     // retains are autoreleases it.
     [coordinator_ stop];
   }
 
-  // |stop| should dismiss the alert.
-  ASSERT_TRUE(
-      WaitUntilConditionOrTimeout(base::test::ios::kWaitForUIElementTimeout, ^{
-        return !base_view_controller_.presentedViewController;
-      }));
+  EXPECT_EQ(0U, queue->size());
 }
 
 // Tests starting the download. Verifies that download task is started and its
@@ -660,8 +701,9 @@ TEST_F(DownloadManagerCoordinatorTest, StartDownload) {
   EXPECT_TRUE(download_dir.IsParent(file));
 
   histogram_tester_.ExpectTotalCount("Download.IOSDownloadFileInBackground", 0);
-  ASSERT_EQ(0,
+  EXPECT_EQ(0,
             user_action_tester_.GetActionCount("MobileDownloadRetryDownload"));
+  EXPECT_EQ(1, user_action_tester_.GetActionCount("IOSDownloadStartDownload"));
 }
 
 // Tests retrying the download. Verifies that kDownloadManagerRetryDownload UMA
@@ -677,6 +719,7 @@ TEST_F(DownloadManagerCoordinatorTest, RetryingDownload) {
   DownloadManagerViewController* viewController =
       base_view_controller_.childViewControllers.firstObject;
   ASSERT_EQ([DownloadManagerViewController class], [viewController class]);
+  ASSERT_EQ(0, user_action_tester_.GetActionCount("IOSDownloadStartDownload"));
   @autoreleasepool {
     // This call will retain coordinator, which should outlive thread bundle.
     [viewController.delegate
@@ -684,6 +727,7 @@ TEST_F(DownloadManagerCoordinatorTest, RetryingDownload) {
   }
   task.SetErrorCode(net::ERR_INTERNET_DISCONNECTED);
   task.SetDone(true);
+  ASSERT_EQ(1, user_action_tester_.GetActionCount("IOSDownloadStartDownload"));
 
   @autoreleasepool {
     // This call will retain coordinator, which should outlive thread bundle.
@@ -708,7 +752,7 @@ TEST_F(DownloadManagerCoordinatorTest, RetryingDownload) {
       static_cast<base::HistogramBase::Sample>(
           DownloadFileInBackground::FailedWithoutBackgrounding),
       1);
-  ASSERT_EQ(1,
+  EXPECT_EQ(1,
             user_action_tester_.GetActionCount("MobileDownloadRetryDownload"));
 }
 

@@ -21,7 +21,7 @@ enum OobeScreenPriority {
   SCREEN_ENABLE_DEBUGGING,
   SCREEN_ADB_SIDELOADING,
   SCREEN_UPDATE_REQUIRED,
-  DEFAULT = 100
+  DEFAULT
 };
 
 struct StaticOobeScreenId;
@@ -66,12 +66,8 @@ struct OobeScreen {
   constexpr static StaticOobeScreenId SCREEN_ACTIVE_DIRECTORY_PASSWORD_CHANGE{
       "ad-password-change"};
 
-  // Special "first screen" that initiates login flow.
-  constexpr static StaticOobeScreenId SCREEN_SPECIAL_LOGIN{"login"};
   // Special "first screen" that initiates full OOBE flow.
   constexpr static StaticOobeScreenId SCREEN_SPECIAL_OOBE{"oobe"};
-  // Special test value that commands not to create any window yet.
-  constexpr static StaticOobeScreenId SCREEN_TEST_NO_WINDOW{"test:nowindow"};
 
   constexpr static StaticOobeScreenId SCREEN_UNKNOWN{"unknown"};
 };

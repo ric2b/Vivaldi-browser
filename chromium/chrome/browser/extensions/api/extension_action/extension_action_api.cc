@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extensions_container.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
@@ -38,6 +37,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/image_util.h"
@@ -112,10 +112,9 @@ void ExtensionActionAPI::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-bool ExtensionActionAPI::ShowExtensionActionPopup(
+bool ExtensionActionAPI::ShowExtensionActionPopupForAPICall(
     const Extension* extension,
-    Browser* browser,
-    bool grant_active_tab_permissions) {
+    Browser* browser) {
   ExtensionAction* extension_action =
       ExtensionActionManager::Get(browser_context_)->GetExtensionAction(
           *extension);
@@ -131,8 +130,8 @@ bool ExtensionActionAPI::ShowExtensionActionPopup(
   // The ExtensionsContainer could be null if, e.g., this is a popup window with
   // no toolbar.
   return extensions_container &&
-         extensions_container->ShowToolbarActionPopup(
-             extension->id(), grant_active_tab_permissions);
+         extensions_container->ShowToolbarActionPopupForAPICall(
+             extension->id());
 }
 
 void ExtensionActionAPI::NotifyChange(ExtensionAction* extension_action,
@@ -530,8 +529,8 @@ ExtensionFunction::ResponseAction BrowserActionOpenPopupFunction::Run() {
   // fixed.
   if (!browser || !browser->window()->IsActive() ||
       !browser->window()->IsToolbarVisible() ||
-      !ExtensionActionAPI::Get(profile)->ShowExtensionActionPopup(
-          extension_.get(), browser, false)) {
+      !ExtensionActionAPI::Get(profile)->ShowExtensionActionPopupForAPICall(
+          extension_.get(), browser)) {
     return RespondNow(Error(kOpenPopupError));
   }
 

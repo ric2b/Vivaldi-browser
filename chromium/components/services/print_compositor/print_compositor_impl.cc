@@ -5,13 +5,16 @@
 #include "components/services/print_compositor/print_compositor_impl.h"
 
 #include <algorithm>
+#include <cstring>
 #include <tuple>
 #include <utility>
 
+#include "base/debug/alias.h"
 #include "base/logging.h"
 #include "base/memory/discardable_memory.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/discardable_memory/client/client_discardable_shared_memory_manager.h"
@@ -39,16 +42,34 @@
 
 namespace printing {
 
+namespace {
+
+// TODO(https://crbug.com/1078170): Remove this. It's a sentinel value to
+// check for stack corruption before the stack unwinds at the end of the
+// constructor below.
+const char kStackPadding[] =
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!";
+
+}  // namespace
+
 PrintCompositorImpl::PrintCompositorImpl(
     mojo::PendingReceiver<mojom::PrintCompositor> receiver,
     bool initialize_environment,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner)
     : io_task_runner_(std::move(io_task_runner)) {
+  // TODO(https://crbug.com/1078170): Remove this.
+  char stack_padding[64];
+  strcpy(stack_padding, kStackPadding);
+  base::debug::Alias(stack_padding);
+
   if (receiver)
     receiver_.Bind(std::move(receiver));
 
-  if (!initialize_environment)
+  if (!initialize_environment) {
+    // TODO(https://crbug.com/1078170): Remove this.
+    CHECK_EQ(stack_padding, std::string(kStackPadding));
     return;
+  }
 
 #if defined(OS_WIN)
   // Initialize direct write font proxy so skia can use it.
@@ -74,6 +95,9 @@ PrintCompositorImpl::PrintCompositorImpl(
   // policy setup.
   DCHECK(SkFontMgr::RefDefault()->countFamilies());
 #endif
+
+  // TODO(https://crbug.com/1078170): Remove this.
+  CHECK_EQ(stack_padding, std::string(kStackPadding));
 }
 
 PrintCompositorImpl::~PrintCompositorImpl() {
@@ -161,6 +185,7 @@ void PrintCompositorImpl::CompositePageToPdf(
     base::ReadOnlySharedMemoryRegion serialized_content,
     const ContentToFrameMap& subframe_content_map,
     mojom::PrintCompositor::CompositePageToPdfCallback callback) {
+  TRACE_EVENT0("print", "PrintCompositorImpl::CompositePageToPdf");
   if (docinfo_)
     docinfo_->pages_provided++;
   HandleCompositionRequest(frame_guid, std::move(serialized_content),
@@ -172,6 +197,7 @@ void PrintCompositorImpl::CompositeDocumentToPdf(
     base::ReadOnlySharedMemoryRegion serialized_content,
     const ContentToFrameMap& subframe_content_map,
     mojom::PrintCompositor::CompositeDocumentToPdfCallback callback) {
+  TRACE_EVENT0("print", "PrintCompositorImpl::CompositeDocumentToPdf");
   DCHECK(!docinfo_);
   HandleCompositionRequest(frame_guid, std::move(serialized_content),
                            subframe_content_map, std::move(callback));
@@ -325,6 +351,8 @@ mojom::PrintCompositor::Status PrintCompositorImpl::CompositeToPdf(
     base::ReadOnlySharedMemoryMapping shared_mem,
     const ContentToFrameMap& subframe_content_map,
     base::ReadOnlySharedMemoryRegion* region) {
+  TRACE_EVENT0("print", "PrintCompositorImpl::CompositeToPdf");
+
   if (!shared_mem.IsValid()) {
     DLOG(ERROR) << "CompositeToPdf: Invalid input.";
     return mojom::PrintCompositor::Status::kHandleMapError;
@@ -353,6 +381,7 @@ mojom::PrintCompositor::Status PrintCompositorImpl::CompositeToPdf(
       MakePdfDocument(creator_, ui::AXTreeUpdate(), &wstream);
 
   for (const auto& page : pages) {
+    TRACE_EVENT0("print", "PrintCompositorImpl::CompositeToPdf draw page");
     SkCanvas* canvas = doc->beginPage(page.fSize.width(), page.fSize.height());
     canvas->drawPicture(page.fPicture);
     doc->endPage();
@@ -381,24 +410,6 @@ mojom::PrintCompositor::Status PrintCompositorImpl::CompositeToPdf(
   }
 
   wstream.copyToAndReset(region_mapping.mapping.memory());
-  *region = std::move(region_mapping.region);
-  return mojom::PrintCompositor::Status::kSuccess;
-}
-
-mojom::PrintCompositor::Status PrintCompositorImpl::CompleteDocumentToPdf(
-    base::ReadOnlySharedMemoryRegion* region) {
-  docinfo_->doc->close();
-
-  base::MappedReadOnlyRegion region_mapping =
-      base::ReadOnlySharedMemoryRegion::Create(
-          docinfo_->compositor_stream.bytesWritten());
-  if (!region_mapping.IsValid()) {
-    DLOG(ERROR)
-        << "CompleteDocumentToPdf: Cannot create new shared memory region.";
-    return mojom::PrintCompositor::Status::kHandleMapError;
-  }
-
-  docinfo_->compositor_stream.copyToAndReset(region_mapping.mapping.memory());
   *region = std::move(region_mapping.region);
   return mojom::PrintCompositor::Status::kSuccess;
 }
@@ -448,8 +459,24 @@ void PrintCompositorImpl::FulfillRequest(
 
 void PrintCompositorImpl::CompleteDocumentRequest(
     CompleteDocumentToPdfCallback callback) {
+  mojom::PrintCompositor::Status status;
   base::ReadOnlySharedMemoryRegion region;
-  auto status = CompleteDocumentToPdf(&region);
+
+  docinfo_->doc->close();
+
+  base::MappedReadOnlyRegion region_mapping =
+      base::ReadOnlySharedMemoryRegion::Create(
+          docinfo_->compositor_stream.bytesWritten());
+  if (region_mapping.IsValid()) {
+    docinfo_->compositor_stream.copyToAndReset(region_mapping.mapping.memory());
+    region = std::move(region_mapping.region);
+    status = mojom::PrintCompositor::Status::kSuccess;
+  } else {
+    DLOG(ERROR) << "CompleteDocumentRequest: "
+                << "Cannot create new shared memory region.";
+    status = mojom::PrintCompositor::Status::kHandleMapError;
+  }
+
   std::move(callback).Run(status, std::move(region));
 }
 

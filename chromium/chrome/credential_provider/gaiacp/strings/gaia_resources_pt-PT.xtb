@@ -15,11 +15,11 @@
 <translation id="399130515869721714">Não é possível abrir o ecrã de início de sessão do Google porque ocorreu um problema com a instalação do Chrome neste dispositivo. Contacte o seu administrador.</translation>
 <translation id="4057329986137569701">Ocorreu um erro interno.</translation>
 <translation id="4267670563222825190">Não foi possível encontrar qualquer utilizador do domínio para a sua conta. Contacte o seu administrador.</translation>
-<translation id="4706454071748629324">Falha ao adicionar um novo utilizador. Este computador apenas permite a criação de um utilizador através de uma conta profissional.</translation>
 <translation id="4744575902940448763">Não foi possível sincronizar a palavra-passe da sua conta profissional com o seu perfil do Windows porque as atualizações de palavras-passe no dispositivo estão restringidas pela sua entidade. Contacte o seu administrador para obter ajuda.</translation>
 <translation id="5186761973554910131">Nome de computador inválido fornecido durante a tentativa de alteração da palavra-passe. Contacte o seu administrador.</translation>
 <translation id="5265714013989877288">Não é possível continuar porque ocorreu um erro ao alterar a palavra-passe do Windows. Contacte o seu administrador.</translation>
-<translation id="6033715878377252112">Assistente do Google Credential Provider para Windows</translation>
+<translation id="5581861273642234526">Este dispositivo já tem outra conta profissional associada. Inicie sessão com a sua conta do Windows.</translation>
+<translation id="6033715878377252112">Assistente Google Credential Provider para Windows</translation>
 <translation id="6149399665202317746">Google Credential Provider para Windows</translation>
 <translation id="6243062314475217481">A palavra-passe da sua conta profissional não corresponde aos requisitos de complexidade do Windows. Contacte o seu administrador para obter ajuda.</translation>
 <translation id="6463752215771576050">Não é possível inscrever este computador para gestão empresarial.  Inicie sessão com uma conta profissional diferente.</translation>

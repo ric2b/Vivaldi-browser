@@ -13,14 +13,16 @@ namespace blink {
 CSSAnimation::CSSAnimation(ExecutionContext* execution_context,
                            AnimationTimeline* timeline,
                            AnimationEffect* content,
+                           int animation_index,
                            const String& animation_name)
     : Animation(execution_context, timeline, content),
+      animation_index_(animation_index),
       animation_name_(animation_name),
       ignore_css_play_state_(false) {
   // The owning_element does not always equal to the target element of an
   // animation. The following spec gives an example:
   // https://drafts.csswg.org/css-animations-2/#owning-element-section
-  owning_element_ = To<KeyframeEffect>(effect())->target();
+  owning_element_ = To<KeyframeEffect>(effect())->EffectTarget();
 }
 
 String CSSAnimation::playState() const {

@@ -219,19 +219,20 @@ base::Optional<SkColor> SkColorFromColorId(
       return GetSeparatorColor("GtkSeparator#separator.horizontal");
 
     // Button
+    case ui::NativeTheme::kColorId_ButtonColor:
+      return GetBgColor("GtkButton#button");
     case ui::NativeTheme::kColorId_ButtonEnabledColor:
     case ui::NativeTheme::kColorId_ButtonUncheckedColor:
       return GetFgColor("GtkButton#button.text-button GtkLabel");
     case ui::NativeTheme::kColorId_ButtonDisabledColor:
       return GetFgColor("GtkButton#button.text-button:disabled GtkLabel");
-    case ui::NativeTheme::kColorId_ButtonPressedShade:
-      return SK_ColorTRANSPARENT;
     // TODO(thomasanderson): Add this once this CL lands:
     // https://chromium-review.googlesource.com/c/chromium/src/+/2053144
     // case ui::NativeTheme::kColorId_ButtonHoverColor:
     //   return GetBgColor("GtkButton#button:hover");
 
     // ProminentButton
+    case ui::NativeTheme::kColorId_ButtonCheckedColor:
     case ui::NativeTheme::kColorId_ProminentButtonColor:
     case ui::NativeTheme::kColorId_ProminentButtonFocusedColor:
       return GetBgColor(
@@ -320,6 +321,7 @@ base::Optional<SkColor> SkColorFromColorId(
 
     // Trees and Tables (implemented on GTK using the same class)
     case ui::NativeTheme::kColorId_TableBackground:
+    case ui::NativeTheme::kColorId_TableBackgroundAlternate:
     case ui::NativeTheme::kColorId_TreeBackground:
       return GetBgColor(
           "GtkTreeView#treeview.view GtkTreeView#treeview.view.cell");
@@ -374,10 +376,13 @@ base::Optional<SkColor> SkColorFromColorId(
       return fallback_theme->GetSystemColor(color_id);
     }
 
-    case ui::NativeTheme::kColorId_DefaultIconColor:
+    case ui::NativeTheme::kColorId_MenuIconColor:
       if (GtkCheckVersion(3, 20))
         return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem #radio");
       return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem.radio");
+
+    case ui::NativeTheme::kColorId_DefaultIconColor:
+      return GetFgColor("GtkButton#button.flat.scale GtkImage#image");
 
     case ui::NativeTheme::kColorId_NumColors:
       NOTREACHED();

@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Tysk tastatur</translation>
 <translation id="1972984168337863910">Udvid paneler med feedback til filer</translation>
 <translation id="1984603991036629094">Armensk fonetisk tastatur</translation>
+<translation id="1995337122023280937">Gå til filplacering</translation>
 <translation id="2001796770603320721">Administrer i Drev</translation>
 <translation id="2009067268969781306">Formatering af et drev sletter alle de data, der er gemt på det. Denne handling kan ikke fortrydes.</translation>
 <translation id="2028997212275086731">RAR-arkiv</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Der kunne ikke oprettes forbindelse til Google Drev. <ph name="BEGIN_LINK" />Log ud <ph name="END_LINK" />, og log ind igen.</translation>
 <translation id="2649120831653069427">Regnbuefisk</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Filplacering</translation>
 <translation id="2672394958563893062">Der opstod en fejl. Klik her for at starte forfra.</translation>
 <translation id="2676946222714718093">Afspilles i</translation>
 <translation id="2735698359135166290">Rumænsk standardtastatur</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> fejl.</translation>
 <translation id="3519867315646775981">Translitteration (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugisisk</translation>
+<translation id="3524311639100184459">Advarsel! Disse filer er midlertidige og kan slettes automatisk for at frigøre diskplads.  <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Mappe</translation>
 <translation id="3549797760399244642">Gå til drive.google.com...</translation>
 <translation id="357479282490346887">Litauisk</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Audio Player</translation>
 <translation id="4002066346123236978">Titel</translation>
+<translation id="4065397611279318371">Hvis du vil åbne filer med <ph name="APP_NAME" />-apps, skal du først flytte dem til mappen <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Kantonesisk indtastningsmetode</translation>
 <translation id="4072248638558688893">Tamilsk tastatur (fonetisk)</translation>
 <translation id="4124935795427217608">Enhjørning</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Automatisk justering</translation>
 <translation id="4881695831933465202">Åbn</translation>
 <translation id="4886021172213954916">Tamilsk tastatur (skrivemaskine)</translation>
+<translation id="4892969127351273348">Det er ikke muligt at åbne filen med <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> er klar til at blive sikkerhedskopieret</translation>
 <translation id="4924638091161556692">Justeret</translation>
 <translation id="4935975195727477204">Blomst</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Administrer Linux-deling</translation>
 <translation id="6808193438228982088">Ræv</translation>
 <translation id="6820687829547641339">Gzip-komprimeret tar-arkiv</translation>
+<translation id="6823166707458800069">Alle filer, der er gemt i denne mappe, sikkerhedskopieres automatisk online.</translation>
 <translation id="6825883775269213504">Russisk</translation>
 <translation id="6827236167376090743">Denne video vil spille lige til juleaften.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> blev fjernet fra det valgte.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Google-kort</translation>
 <translation id="7419631653042041064">Catalansk tastatur</translation>
 <translation id="7434823369735508263">Britisk (Dvorak) tastatur</translation>
+<translation id="7447678886297481665">Filer i denne mappe er skrivebeskyttet. Det er ikke alle aktiviteter, der understøttes.</translation>
 <translation id="7460898608667578234">ukrainsk</translation>
 <translation id="7474889694310679759">Canadisk (engelsk) tastatur</translation>
 <translation id="7489215562877293245">Der blev fundet <ph name="FILE_COUNT" />

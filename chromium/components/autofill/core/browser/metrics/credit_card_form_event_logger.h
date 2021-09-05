@@ -16,7 +16,7 @@
 #include "components/autofill/core/browser/metrics/form_events.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/sync_utils.h"
-#include "components/autofill/core/common/signatures_util.h"
+#include "components/autofill/core/common/signatures.h"
 
 namespace autofill {
 
@@ -42,8 +42,12 @@ class CreditCardFormEventLogger : public FormEventLoggerBase {
 
   ~CreditCardFormEventLogger() override;
 
-  inline void set_is_context_secure(bool is_context_secure) {
+  void set_is_context_secure(bool is_context_secure) {
     is_context_secure_ = is_context_secure;
+  }
+
+  void set_has_server_nickname(bool has_server_nickname) {
+    has_server_nickname_ = has_server_nickname;
   }
 
   void OnDidSelectCardSuggestion(const CreditCard& credit_card,
@@ -90,7 +94,14 @@ class CreditCardFormEventLogger : public FormEventLoggerBase {
   bool is_context_secure_ = false;
   UnmaskAuthFlowType current_authentication_flow_;
   bool has_logged_masked_server_card_suggestion_selected_ = false;
+  bool has_logged_suggestion_selected_timestamp_ = false;
   bool logged_suggestion_filled_was_masked_server_card_ = false;
+  base::TimeTicks first_suggestion_shown_timestamp_;
+
+  // True when ANY of the masked server cards has a nickname. Note that,
+  // depending on the experimental setup, the user may not be shown the
+  // nickname.
+  bool has_server_nickname_ = false;
 
   // Weak references.
   PersonalDataManager* personal_data_manager_;

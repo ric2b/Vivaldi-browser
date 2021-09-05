@@ -4,7 +4,6 @@
 
 #include "chrome/browser/permissions/crowd_deny_safe_browsing_request.h"
 
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/post_task.h"
@@ -104,9 +103,8 @@ TEST_F(CrowdDenySafeBrowsingRequestTest, Spammy) {
   test_metadata.api_permissions.emplace("ORANGES");
   fake_database_manager()->SetSimulatedMetadataForUrl(kTestURL, test_metadata);
 
-  StartRequestForOriginAndExpectVerdict(
-      url::Origin::Create(kTestURL),
-      Verdict::kKnownToShowUnsolicitedNotificationPermissionRequests);
+  StartRequestForOriginAndExpectVerdict(url::Origin::Create(kTestURL),
+                                        Verdict::kUnacceptable);
   StartRequestForOriginAndExpectVerdict(
       url::Origin::Create(GURL(kTestOriginBar)), Verdict::kAcceptable);
 }

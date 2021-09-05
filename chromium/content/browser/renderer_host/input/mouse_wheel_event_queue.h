@@ -13,9 +13,8 @@
 #include "base/trace_event/trace_event.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
-#include "content/public/common/input_event_ack_source.h"
-#include "content/public/common/input_event_ack_state.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 
 namespace content {
 
@@ -42,15 +41,16 @@ class CONTENT_EXPORT MouseWheelEventQueueClient {
  public:
   using MouseWheelEventHandledCallback =
       base::OnceCallback<void(const MouseWheelEventWithLatencyInfo& ack_event,
-                              InputEventAckSource ack_source,
-                              InputEventAckState ack_result)>;
+                              blink::mojom::InputEventResultSource ack_source,
+                              blink::mojom::InputEventResultState ack_result)>;
   virtual ~MouseWheelEventQueueClient() {}
   virtual void SendMouseWheelEventImmediately(
       const MouseWheelEventWithLatencyInfo& event,
       MouseWheelEventHandledCallback callback) = 0;
-  virtual void OnMouseWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
-                                    InputEventAckSource ack_source,
-                                    InputEventAckState ack_result) = 0;
+  virtual void OnMouseWheelEventAck(
+      const MouseWheelEventWithLatencyInfo& event,
+      blink::mojom::InputEventResultSource ack_source,
+      blink::mojom::InputEventResultState ack_result) = 0;
   virtual void ForwardGestureEventWithLatencyInfo(
       const blink::WebGestureEvent& event,
       const ui::LatencyInfo& latency_info) = 0;
@@ -58,7 +58,19 @@ class CONTENT_EXPORT MouseWheelEventQueueClient {
   virtual bool IsAutoscrollInProgress() = 0;
 };
 
-// A queue for throttling and coalescing mouse wheel events.
+// A queue for throttling and coalescing mouse wheel events. This class tracks
+// wheel events sent to the renderer and receives their ACKs. If the ACK
+// reports the event went unconsumed by the renderer, this class will generate
+// a sequence of gesture scroll events.
+//
+// Within a sequence, wheel events are initially forwarded using a blocking
+// dispatch. This means that further wheel events are queued and scroll event
+// generation will wait (i.e.  block) until the in-flight wheel event is ACKed.
+// Once a wheel event goes unconsumed, and scrolling begins, dispatch of
+// subsequent wheel events becomes non-blocking. This means the wheel event
+// will be ACKed by the browser immediately after being dispatched. This will
+// cause scroll events to follow the wheel immediately and new wheel events
+// will be dispatched immediately rather than queueing.
 class CONTENT_EXPORT MouseWheelEventQueue {
  public:
   // The |client| must outlive the MouseWheelEventQueue.
@@ -93,8 +105,8 @@ class CONTENT_EXPORT MouseWheelEventQueue {
   // Notifies the queue that a mouse wheel event has been processed by the
   // renderer.
   void ProcessMouseWheelAck(const MouseWheelEventWithLatencyInfo& ack_event,
-                            InputEventAckSource ack_source,
-                            InputEventAckState ack_result);
+                            blink::mojom::InputEventResultSource ack_source,
+                            blink::mojom::InputEventResultState ack_result);
 
   void TryForwardNextEventToRenderer();
   void SendScrollEnd(blink::WebGestureEvent update_event, bool synthetic);
@@ -104,7 +116,8 @@ class CONTENT_EXPORT MouseWheelEventQueue {
 
   // True if gesture scroll events can be generated for the wheel event sent for
   // ack.
-  bool CanGenerateGestureScroll(InputEventAckState ack_result) const;
+  bool CanGenerateGestureScroll(
+      blink::mojom::InputEventResultState ack_result) const;
 
   MouseWheelEventQueueClient* client_;
 

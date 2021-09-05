@@ -21,6 +21,7 @@
 #include "content/browser/accessibility/browser_accessibility_win.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/base/win/accessibility_ids_win.h"
@@ -666,8 +667,9 @@ IFACEMETHODIMP BrowserAccessibilityComWin::doAction(LONG action_index) {
     return E_FAIL;
 
   if (!owner()->HasIntAttribute(ax::mojom::IntAttribute::kDefaultActionVerb) ||
-      action_index != 0)
+      action_index != 0) {
     return E_INVALIDARG;
+  }
 
   Manager()->DoDefaultAction(*owner());
   return S_OK;
@@ -708,8 +710,8 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_name(LONG action_index,
     return E_INVALIDARG;
   }
 
-  base::string16 action_verb = ui::ActionVerbToUnlocalizedString(
-      static_cast<ax::mojom::DefaultActionVerb>(action));
+  base::string16 action_verb = base::UTF8ToUTF16(
+      ui::ToString(static_cast<ax::mojom::DefaultActionVerb>(action)));
   if (action_verb.empty() || action_verb == L"none") {
     *name = nullptr;
     return S_FALSE;
@@ -739,8 +741,8 @@ BrowserAccessibilityComWin::get_localizedName(LONG action_index,
     return E_INVALIDARG;
   }
 
-  base::string16 action_verb = ui::ActionVerbToLocalizedString(
-      static_cast<ax::mojom::DefaultActionVerb>(action));
+  base::string16 action_verb = base::UTF8ToUTF16(
+      ui::ToLocalizedString(static_cast<ax::mojom::DefaultActionVerb>(action)));
   if (action_verb.empty()) {
     *localized_name = nullptr;
     return S_FALSE;
@@ -1669,15 +1671,22 @@ bool BrowserAccessibilityComWin::IsListBoxOptionOrMenuListOption() {
 }
 
 void BrowserAccessibilityComWin::FireNativeEvent(LONG win_event_type) const {
-  if (owner()->IsChildOfLeaf())
+  // We only allow events on descendants of a platform leaf when that platform
+  // leaf is a popup button parent of a menu list popup. On Windows, the menu
+  // list popup is not part of the tree when its parent is collapsed but events
+  // should be fired anyway.
+  if (owner()->IsChildOfLeaf() &&
+      !owner()->GetCollapsedMenuListPopUpButtonAncestor()) {
     return;
+  }
+
   Manager()->ToBrowserAccessibilityManagerWin()->FireWinAccessibilityEvent(
       win_event_type, owner());
 }
 
 BrowserAccessibilityComWin* ToBrowserAccessibilityComWin(
     BrowserAccessibility* obj) {
-  if (!obj || !obj->IsNative())
+  if (!obj)
     return nullptr;
   auto* result = static_cast<BrowserAccessibilityWin*>(obj)->GetCOM();
   return result;

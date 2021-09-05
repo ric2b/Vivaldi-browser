@@ -14,6 +14,7 @@
 #include "components/password_manager/core/browser/leak_detection/mock_leak_detection_check_factory.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "components/password_manager/ios/credential_manager_util.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "ios/chrome/browser/passwords/test/test_password_manager_client.h"
 #include "ios/web/public/navigation/navigation_item.h"
 #include "ios/web/public/navigation/navigation_manager.h"
@@ -112,9 +113,6 @@ class CredentialManagerTest : public CredentialManagerBaseTest {
     LoadHtmlAndInject(@"<html></html>");
     UpdateSslStatus(net::CERT_STATUS_IS_EV, web::SECURITY_STYLE_AUTHENTICATED,
                     web::SSLStatus::NORMAL_CONTENT);
-
-    ON_CALL(*client_, OnCredentialManagerUsed())
-        .WillByDefault(testing::Return(true));
 
     password_credential_form_1_.username_value = base::ASCIIToUTF16("id1");
     password_credential_form_1_.display_name = base::ASCIIToUTF16("Name One");
@@ -278,10 +276,6 @@ TEST_F(CredentialManagerTest, TryToStoreCredentialFromInsecureContext) {
   // Expect that user will NOT be prompted to save or update password.
   EXPECT_CALL(*client_, PromptUserToSavePasswordPtr(_)).Times(0);
 
-  // Expect that PasswordManagerClient method used by
-  // CredentialManagerImpl::Store will not be called.
-  EXPECT_CALL(*client_, OnCredentialManagerUsed()).Times(0);
-
   // Call API method |store|.
   ExecuteJavaScript(
       @"var credential = new PasswordCredential({"
@@ -398,10 +392,6 @@ TEST_F(CredentialManagerTest, TryToGetCredentialFromInsecureContext) {
   LoadHtml(@"<html></html>", GURL(kHttpWebOrigin));
   LoadHtmlAndInject(@"<html></html>");
   client_->set_current_url(GURL(kHttpWebOrigin));
-
-  // Expect that PasswordManagerClient method used by
-  // CredentialManagerImpl::Get will not be called.
-  EXPECT_CALL(*client_, OnCredentialManagerUsed()).Times(0);
 
   // Call API method |get|.
   ExecuteJavaScript(

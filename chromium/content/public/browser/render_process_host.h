@@ -13,6 +13,7 @@
 #include <string>
 
 #include "base/callback_list.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/containers/id_map.h"
 #include "base/process/kill.h"
 #include "base/process/process.h"
@@ -540,6 +541,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // RenderProcessHostImpl::AddCorbExceptionForPlugin).
   virtual void CleanupNetworkServicePluginExceptionsUponDestruction() = 0;
 
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+  // Ask the renderer process to dump its profiling data to disk. Invokes
+  // |callback| once this has completed.
+  virtual void DumpProfilingData(base::OnceClosure callback) {}
+#endif
+
   // Static management functions -----------------------------------------------
 
   // Possibly start an unbound, spare RenderProcessHost. A subsequent creation
@@ -595,7 +602,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // the current site), in which case we should ensure there is only one
   // RenderProcessHost per site for the entire browser context.
   static bool ShouldUseProcessPerSite(content::BrowserContext* browser_context,
-                                      const GURL& url);
+                                      const GURL& site_url);
 
   // Returns true if the caller should attempt to use an existing
   // RenderProcessHost rather than creating a new one.

@@ -38,10 +38,13 @@
 #include "base/timer/elapsed_timer.h"
 #include "net/cookies/site_for_cookies.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/mojom/trust_tokens.mojom-blink.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/media_value_change.h"
@@ -101,13 +104,12 @@ class ChromeClient;
 class Comment;
 class CompositorAnimationTimeline;
 class ComputedAccessibleNode;
-class DisplayLockContext;
+class DisplayLockDocumentState;
 class ElementIntersectionObserverData;
 class WindowAgent;
 class WindowAgentFactory;
 class ComputedStyle;
 class ConsoleMessage;
-class InspectorIssue;
 class ContextFeatures;
 class CookieJar;
 class V0CustomElementMicrotaskRunQueue;
@@ -127,7 +129,6 @@ class DocumentAnimations;
 class DocumentTimeline;
 class DocumentType;
 class DOMFeaturePolicy;
-class DoubleSize;
 class Element;
 class ElementDataCache;
 class ElementRegistrationOptions;
@@ -155,9 +156,7 @@ class HTMLScriptElementOrSVGScriptElement;
 class HitTestRequest;
 class HttpRefreshScheduler;
 class IdleRequestOptions;
-class IntersectionObserver;
 class IntersectionObserverController;
-class IntersectionObserverEntry;
 class LayoutView;
 class LazyLoadImageObserver;
 class LiveNodeListBase;
@@ -178,7 +177,6 @@ class ProcessingInstruction;
 class PropertyRegistry;
 class QualifiedName;
 class Range;
-class ResizeObserverController;
 class ResourceFetcher;
 class RootScrollerController;
 class ScriptValue;
@@ -217,6 +215,7 @@ struct AnnotatedRegionValue;
 struct FocusParams;
 struct IconURL;
 struct PhysicalOffset;
+struct WebPrintPageDescription;
 
 using MouseEventWithHitTestResults = EventWithHitTestResults<WebMouseEvent>;
 
@@ -308,34 +307,11 @@ class CORE_EXPORT Document : public ContainerNode,
   // should move to LocalDOMWindow.
   ContentSecurityPolicy* GetContentSecurityPolicyForWorld();
   LocalDOMWindow* ExecutingWindow() const;
-  String UserAgent() const;
-  // TODO(https://crbug.com/880986): Implement Document's HTTPS state in more
-  // spec-conformant way.
-  HttpsState GetHttpsState() const {
-    return CalculateHttpsState(GetSecurityOrigin());
-  }
   bool CanExecuteScripts(ReasonForCallingCanExecuteScripts);
   String OutgoingReferrer() const;
   network::mojom::ReferrerPolicy GetReferrerPolicy() const;
-  CoreProbeSink* GetProbeSink();
   BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker();
   FrameOrWorkerScheduler* GetScheduler();
-  void CountPotentialFeaturePolicyViolation(
-      mojom::blink::FeaturePolicyFeature) const;
-  void ReportFeaturePolicyViolation(
-      mojom::blink::FeaturePolicyFeature,
-      mojom::blink::PolicyDisposition,
-      const String& message = g_empty_string,
-      // If source_file is set to empty string,
-      // current JS file would be used as source_file instead.
-      const String& source_file = g_empty_string) const;
-  void ReportDocumentPolicyViolation(
-      mojom::blink::DocumentPolicyFeature,
-      mojom::blink::PolicyDisposition disposition,
-      const String& message = g_empty_string,
-      // If source_file is set to empty string,
-      // current JS file would be used as source_file instead.
-      const String& source_file = g_empty_string) const;
 
   // FeaturePolicyParserDelegate override
   // TODO(crbug.com/1029822) FeaturePolicyParserDelegate overrides, these
@@ -345,38 +321,12 @@ class CORE_EXPORT Document : public ContainerNode,
   bool FeaturePolicyFeatureObserved(
       mojom::blink::FeaturePolicyFeature feature) override;
 
+  bool DocumentPolicyFeatureObserved(
+      mojom::blink::DocumentPolicyFeature feature);
+
   SecurityContext& GetSecurityContext() { return security_context_; }
   const SecurityContext& GetSecurityContext() const {
     return security_context_;
-  }
-
-  // TODO(crbug.com/1029822): Temporary cast helpers while ExecutionContext is
-  // migrating to LocalDOMWindow. Callsite that permanently need to convert a
-  // Document to an ExecutionContext should use either GetExecutionContext() as
-  // inherited from Node, or domWindow().
-  // Downcasts will cast to a LocalDOMWindow, then use
-  // LocalDOMWindow::document() if the Document is what is actually needed.
-  ExecutionContext* ToExecutionContext();
-  const ExecutionContext* ToExecutionContext() const;
-  static Document* From(ExecutionContext* context) {
-    return context ? &From(*context) : nullptr;
-  }
-  static Document& From(ExecutionContext& context);
-  static const Document* From(const ExecutionContext* context) {
-    return context ? &From(*context) : nullptr;
-  }
-  static const Document& From(const ExecutionContext& context);
-  static Document* DynamicFrom(ExecutionContext* context) {
-    return context && context->IsDocument() ? From(context) : nullptr;
-  }
-  static Document* DynamicFrom(ExecutionContext& context) {
-    return context.IsDocument() ? &From(context) : nullptr;
-  }
-  static const Document* DynamicFrom(const ExecutionContext* context) {
-    return context && context->IsDocument() ? From(context) : nullptr;
-  }
-  static const Document* DynamicFrom(const ExecutionContext& context) {
-    return context.IsDocument() ? &From(context) : nullptr;
   }
 
   // TODO(crbug.com/1029822): Temporary helpers to access ExecutionContext
@@ -385,8 +335,8 @@ class CORE_EXPORT Document : public ContainerNode,
   const SecurityOrigin* GetSecurityOrigin() const;
   SecurityOrigin* GetMutableSecurityOrigin();
   ContentSecurityPolicy* GetContentSecurityPolicy() const;
-  mojom::blink::WebSandboxFlags GetSandboxFlags() const;
-  bool IsSandboxed(mojom::blink::WebSandboxFlags mask) const;
+  network::mojom::blink::WebSandboxFlags GetSandboxFlags() const;
+  bool IsSandboxed(network::mojom::blink::WebSandboxFlags mask) const;
   PublicURLManager& GetPublicURLManager();
   bool IsContextPaused() const;
   bool IsContextDestroyed() const;
@@ -402,14 +352,7 @@ class CORE_EXPORT Document : public ContainerNode,
   bool IsFeatureEnabled(
       mojom::blink::FeaturePolicyFeature,
       ReportOptions report_on_failure = ReportOptions::kDoNotReport,
-      const String& message = g_empty_string,
-      const String& source_file = g_empty_string) const;
-  bool IsFeatureEnabled(
-      mojom::blink::FeaturePolicyFeature,
-      PolicyValue threshold_value,
-      ReportOptions report_on_failure = ReportOptions::kDoNotReport,
-      const String& message = g_empty_string,
-      const String& source_file = g_empty_string) const;
+      const String& message = g_empty_string) const;
   bool IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature,
       ReportOptions report_option = ReportOptions::kDoNotReport,
@@ -679,6 +622,11 @@ class CORE_EXPORT Document : public ContainerNode,
     kRunPostLayoutTasksSynchronously,
   };
   void UpdateStyleAndLayoutForNode(const Node*, DocumentUpdateReason);
+  void IncLayoutCallsCounter() { ++layout_calls_counter_; }
+  void IncLayoutCallsCounterNG() { ++layout_calls_counter_ng_; }
+  void IncLayoutBlockCounter() { ++layout_blocks_counter_; }
+  void IncLayoutBlockCounterNG() { ++layout_blocks_counter_ng_; }
+
   scoped_refptr<const ComputedStyle> StyleForPage(int page_index);
 
   // Ensures that location-based data will be valid for a given node.
@@ -695,16 +643,11 @@ class CORE_EXPORT Document : public ContainerNode,
   // Returns true if page box (margin boxes and page borders) is visible.
   bool IsPageBoxVisible(int page_index);
 
-  // Returns the preferred page size and margins in pixels, assuming 96
-  // pixels per inch. pageSize, marginTop, marginRight, marginBottom,
-  // marginLeft must be initialized to the default values that are used if
-  // auto is specified.
-  void PageSizeAndMarginsInPixels(int page_index,
-                                  DoubleSize& page_size,
-                                  int& margin_top,
-                                  int& margin_right,
-                                  int& margin_bottom,
-                                  int& margin_left);
+  // Gets the description for the specified page. This includes preferred page
+  // size and margins in pixels, assuming 96 pixels per inch. The size and
+  // margins must be initialized to the default values that are used if auto is
+  // specified.
+  void GetPageDescription(int page_index, WebPrintPageDescription*);
 
   ResourceFetcher* Fetcher() const { return fetcher_.Get(); }
 
@@ -1079,11 +1022,6 @@ class CORE_EXPORT Document : public ContainerNode,
   ElementIntersectionObserverData&
   EnsureDocumentExplicitRootIntersectionObserverData();
 
-  ResizeObserverController* GetResizeObserverController() const {
-    return resize_observer_controller_;
-  }
-  ResizeObserverController& EnsureResizeObserverController();
-
   // Returns the owning element in the parent document. Returns nullptr if
   // this is the top level document or the owner is remote.
   HTMLFrameOwnerElement* LocalOwner() const;
@@ -1117,10 +1055,6 @@ class CORE_EXPORT Document : public ContainerNode,
   }
   String lastModified() const;
 
-  Element* FindInPageRoot() const { return find_in_page_root_.Get(); }
-
-  void SetFindInPageRoot(Element* find_in_page_root);
-
   // The cookieURL is used to query the cookie database for this document's
   // cookies. For example, if the cookie URL is http://example.com, we'll
   // use the non-Secure cookies for example.com when computing
@@ -1134,6 +1068,7 @@ class CORE_EXPORT Document : public ContainerNode,
   const KURL& CookieURL() const { return cookie_url_; }
   void SetCookieURL(const KURL& url) { cookie_url_ = url; }
 
+  // Returns null if the document is not attached to a frame.
   scoped_refptr<const SecurityOrigin> TopFrameOrigin() const;
 
   net::SiteForCookies SiteForCookies() const;
@@ -1148,6 +1083,15 @@ class CORE_EXPORT Document : public ContainerNode,
   // may otherwise be blocked.
   ScriptPromise hasStorageAccess(ScriptState* script_state) const;
   ScriptPromise requestStorageAccess(ScriptState* script_state);
+
+  // Sends a query via Mojo to ask whether the user has any trust tokens. This
+  // can reject on permissions errors (e.g. associating |issuer| with the
+  // top-level origin would exceed the top-level origin's limit on the number of
+  // associated issuers) or on other internal errors (e.g. the network service
+  // is unavailable).
+  ScriptPromise hasTrustToken(ScriptState* script_state,
+                              const String& issuer,
+                              ExceptionState&);
 
   // The following implements the rule from HTML 4 for what valid names are.
   // To get this right for all the XML cases, we probably have to improve this
@@ -1334,9 +1278,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void DispatchEventsForPrinting();
 
-  bool HasFullscreenSupplement() const { return has_fullscreen_supplement_; }
-  void SetHasFullscreenSupplement() { has_fullscreen_supplement_ = true; }
-
   void exitPointerLock();
   Element* PointerLockElement() const;
 
@@ -1450,8 +1391,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void DidAssociateFormControl(Element*);
 
   void AddConsoleMessage(ConsoleMessage* message,
-                         bool discard_duplicates = false);
-  void AddInspectorIssue(InspectorIssue*);
+                         bool discard_duplicates = false) const;
 
   LocalFrame* ExecutingFrame();
 
@@ -1525,8 +1465,10 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool IsInMainFrame() const;
 
-  const PropertyRegistry* GetPropertyRegistry() const;
-  PropertyRegistry* GetPropertyRegistry();
+  const PropertyRegistry* GetPropertyRegistry() const {
+    return property_registry_;
+  }
+  PropertyRegistry& EnsurePropertyRegistry();
 
   // Used to notify the embedder when the user edits the value of a
   // text field in a non-secure context.
@@ -1624,45 +1566,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   void ProcessJavaScriptUrl(const KURL&, network::mojom::CSPDisposition);
 
-  // Functions to keep count of display locks in this document.
-  void IncrementDisplayLockBlockingAllActivation();
-  void DecrementDisplayLockBlockingAllActivation();
-  int DisplayLockBlockingAllActivationCount() const;
-
-  void AddLockedDisplayLock();
-  void RemoveLockedDisplayLock();
-  int LockedDisplayLockCount() const;
-
-  void AddDisplayLockContext(DisplayLockContext*);
-  void RemoveDisplayLockContext(DisplayLockContext*);
-  int DisplayLockCount() const;
-  void NotifySelectionRemovedFromDisplayLocks();
-
-  // Manage the element's observation for display lock activation.
-  void RegisterDisplayLockActivationObservation(Element*);
-  void UnregisterDisplayLockActivationObservation(Element*);
-
-  class ScopedForceActivatableDisplayLocks {
-    STACK_ALLOCATED();
-
-   public:
-    ScopedForceActivatableDisplayLocks(ScopedForceActivatableDisplayLocks&&);
-    ~ScopedForceActivatableDisplayLocks();
-
-    ScopedForceActivatableDisplayLocks& operator=(
-        ScopedForceActivatableDisplayLocks&&);
-
-   private:
-    friend Document;
-    ScopedForceActivatableDisplayLocks(Document*);
-
-    Document* document_;
-  };
-
-  ScopedForceActivatableDisplayLocks GetScopedForceActivatableLocks();
-  bool ActivatableDisplayLocksForced() const {
-    return activatable_display_locks_forced_ > 0;
-  }
+  DisplayLockDocumentState& GetDisplayLockDocumentState() const;
 
   // Deferred compositor commits are disallowed by default, and are only allowed
   // for same-origin navigations to an html document fetched with http.
@@ -1729,11 +1633,6 @@ class CORE_EXPORT Document : public ContainerNode,
   void UpdateForcedColors();
   bool InForcedColorsMode() const;
 
-  // Returns true if the subframe document is cross-site to the main frame. If
-  // we can't tell whether the document was ever cross-site or not (e.g. it is
-  // not the active Document in a browsing context), return false.
-  bool IsCrossSiteSubframe() const;
-
   // Capture the toggle event during parsing either by HTML parser or XML
   // parser.
   void SetToggleDuringParsing(bool toggle_during_parsing) {
@@ -1769,7 +1668,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void ApplyScrollRestorationLogic();
 
   void MarkHasFindInPageRequest();
-  void MarkHasFindInPageSubtreeVisibilityActiveMatch();
+  void MarkHasFindInPageContentVisibilityActiveMatch();
 
   void CancelPendingJavaScriptUrls();
 
@@ -1787,6 +1686,9 @@ class CORE_EXPORT Document : public ContainerNode,
   FontPreloadManager& GetFontPreloadManager() { return font_preload_manager_; }
   void FontPreloadingFinishedOrTimedOut();
 
+  void SetFindInPageActiveMatchNode(Node*);
+  const Node* GetFindInPageActiveMatchNode() const;
+
  protected:
   void ClearXMLVersion() { xml_version_ = String(); }
 
@@ -1798,6 +1700,7 @@ class CORE_EXPORT Document : public ContainerNode,
   }
 
  private:
+  friend class DocumentTest;
   friend class IgnoreDestructiveWriteCountIncrementer;
   friend class ThrowOnDynamicMarkupInsertionCountIncrementer;
   friend class IgnoreOpensDuringUnloadCountIncrementer;
@@ -1933,10 +1836,9 @@ class CORE_EXPORT Document : public ContainerNode,
                                    Element* new_focused_element);
   void DisplayNoneChangedForFrame();
 
-  IntersectionObserver& EnsureDisplayLockActivationObserver();
-
-  void ProcessDisplayLockActivationObservation(
-      const HeapVector<Member<IntersectionObserverEntry>>&);
+  // Handles a connection error to |has_trust_tokens_answerer_| by rejecting all
+  // pending promises created by |hasTrustToken|.
+  void HasTrustTokensAnswererConnectionError();
 
   DocumentLifecycle lifecycle_;
 
@@ -1970,11 +1872,6 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<HttpRefreshScheduler> http_refresh_scheduler_;
 
   bool well_formed_;
-
-  // When doing find-in-page and we need to calculate style & layout tree for
-  // invisible nodes, this variable will be set with the invisible root for
-  // the currently processed block in find-in-page.
-  WeakMember<Element> find_in_page_root_;
 
   // Document URLs.
   KURL url_;  // Document.URL: The URL from which this document was retrieved.
@@ -2149,9 +2046,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   LayoutView* layout_view_;
 
-  // For early return in Fullscreen::fromIfExists()
-  bool has_fullscreen_supplement_;
-
   // The last element in |top_layer_elements_| is topmost in the top layer
   // stack and is thus the one that will be visually on top.
   HeapVector<Member<Element>> top_layer_elements_;
@@ -2201,7 +2095,6 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<CanvasFontCache> canvas_font_cache_;
 
   Member<IntersectionObserverController> intersection_observer_controller_;
-  Member<ResizeObserverController> resize_observer_controller_;
 
   int node_count_;
 
@@ -2248,14 +2141,19 @@ class CORE_EXPORT Document : public ContainerNode,
   // The number of canvas elements on the document
   int num_canvases_ = 0;
 
-  // Number of display locks in this document that block all activation.
-  int display_lock_blocking_all_activation_count_ = 0;
-  // Number of locked display locks in the document.
-  int locked_display_lock_count_ = 0;
-  // All of this document's display lock contexts.
-  HeapHashSet<WeakMember<DisplayLockContext>> display_lock_contexts_;
-  // If non-zero, then the activatable locks have been globally forced.
-  int activatable_display_locks_forced_ = 0;
+  // The number of LayoutObject::UpdateLayout() calls for both of the legacy
+  // layout and LayoutNG.
+  uint32_t layout_calls_counter_ = 0;
+
+  // The number of LayoutObject::UpdateLayout() calls for LayoutNG.
+  uint32_t layout_calls_counter_ng_ = 0;
+
+  // The number of LayoutBlock instances for both of the legacy layout
+  // and LayoutNG.
+  uint32_t layout_blocks_counter_ = 0;
+
+  // The number of LayoutNGMixin<LayoutBlock> instances
+  uint32_t layout_blocks_counter_ng_ = 0;
 
   bool deferred_compositor_commit_is_allowed_ = false;
 
@@ -2267,17 +2165,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
 #if DCHECK_IS_ON()
   // Allow traversal of Shadow DOM V0 traversal with dirty distribution.
-  // Required for marking ancestors style-child-dirty for FlatTreeStyleRecalc.
+  // Required for marking ancestors style-child-dirty.
   bool allow_dirty_shadow_v0_traversal_ = false;
 #endif
 
   Member<NavigationInitiatorImpl> navigation_initiator_;
   Member<LazyLoadImageObserver> lazy_load_image_observer_;
-
-  // Tracks which features have already been potentially violated in this
-  // document. This helps to count them only once per page load.
-  // We don't use std::bitset to avoid to include feature_policy.mojom-blink.h.
-  mutable Vector<bool> potentially_violated_features_;
 
   // Pending feature policy headers to send to browser after DidCommitNavigation
   // IPC.
@@ -2294,6 +2187,8 @@ class CORE_EXPORT Document : public ContainerNode,
   // them multiple times.
   // The size of this vector is 0 until FeaturePolicyFeatureObserved is called.
   Vector<bool> parsed_feature_policies_;
+
+  Vector<bool> parsed_document_policies_;
 
   AtomicString override_last_modified_;
 
@@ -2332,7 +2227,7 @@ class CORE_EXPORT Document : public ContainerNode,
   HeapObserverList<SynchronousMutationObserver>
       synchronous_mutation_observer_list_;
 
-  Member<IntersectionObserver> display_lock_activation_observer_;
+  Member<DisplayLockDocumentState> display_lock_document_state_;
 
   bool in_forced_colors_mode_;
 
@@ -2346,7 +2241,25 @@ class CORE_EXPORT Document : public ContainerNode,
   // storage or not.
   HeapMojoRemote<mojom::blink::PermissionService> permission_service_;
 
+  // Mojo remote used to answer API calls asking whether the user has trust
+  // tokens (https://github.com/wicg/trust-token-api). The other endpoint
+  // is in the network service, which may crash and restart. To handle this:
+  //   1. |pending_has_trust_tokens_resolvers_| keeps track of promises
+  // depending on |has_trust_tokens_answerer_|'s answers;
+  //   2. |HasTrustTokensAnswererConnectionError| handles connection errors by
+  // rejecting all pending promises and clearing the pending set.
+  HeapMojoRemote<network::mojom::blink::HasTrustTokensAnswerer>
+      has_trust_tokens_answerer_;
+
+  // In order to be able to answer promises when the Mojo remote disconnects,
+  // maintain all pending promises here, deleting them on successful completion
+  // or on connection error, whichever comes first.
+  HeapHashSet<Member<ScriptPromiseResolver>>
+      pending_has_trust_tokens_resolvers_;
+
   FontPreloadManager font_preload_manager_;
+
+  WeakMember<Node> find_in_page_active_match_node_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

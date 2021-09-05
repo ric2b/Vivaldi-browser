@@ -127,6 +127,45 @@ public class Navigation extends IClientNavigation.Stub {
     }
 
     /**
+     * Whether this navigation resulted in a download. Returns false if this navigation did not
+     * result in a download, or if download status is not yet known for this navigation.  Download
+     * status is determined for a navigation when processing final (post redirect) HTTP response
+     * headers. This means the only time the embedder can know if it's a download is in
+     * NavigationCallback.onNavigationFailed.
+     *
+     * @since 84
+     */
+    public boolean isDownload() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mNavigationImpl.isDownload();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Whether this navigation was stopped before it could complete because
+     * NavigationController.stop() was called.
+     *
+     * @since 84
+     */
+    public boolean wasStopCalled() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mNavigationImpl.wasStopCalled();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
      * Sets a header for a network request. If a header with the specified name exists it is
      * overwritten. This method can only be called at two times, from
      * {@link NavigationCallback.onNavigationStarted} and {@link
@@ -148,6 +187,31 @@ public class Navigation extends IClientNavigation.Stub {
         }
         try {
             mNavigationImpl.setRequestHeader(name, value);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Sets the user-agent string that applies to the current navigation. This user-agent is not
+     * sticky, it applies to this navigation only (and any redirects or resources that are loaded).
+     * This method may only be called from {@link NavigationCallback.onNavigationStarted}.
+     *
+     * @param value The user-agent string. The value must not contain '\0', '\n' or '\r'. An empty
+     * string results in the default user-agent string.
+     *
+     * @throws IllegalArgumentException If supplied an invalid value.
+     * @throws IllegalStateException If not called during start.
+     *
+     * @since 84
+     */
+    public void setUserAgentString(@NonNull String value) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mNavigationImpl.setUserAgentString(value);
         } catch (RemoteException e) {
             throw new APICallException(e);
         }

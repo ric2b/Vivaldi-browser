@@ -4,6 +4,12 @@
 
 import("//ios/build/chrome_build.gni")
 
+source_set("scene_testing") {
+  sources = [ "scene_controller_testing.h" ]
+  deps = [ "//ios/chrome/browser:utils" ]
+  libs = [ "UIKit.framework" ]
+}
+
 source_set("scene_guts") {
   sources = [ "scene_controller_guts.h" ]
   deps = [
@@ -31,6 +37,7 @@ source_set("scene") {
   deps = [
     ":main",
     ":scene_guts",
+    ":scene_testing",
     "//base",
     "//components/signin/public/identity_manager",
     "//components/url_formatter",
@@ -49,6 +56,7 @@ source_set("scene") {
     "//ios/chrome/browser/first_run",
     "//ios/chrome/browser/main",
     "//ios/chrome/browser/ntp:features",
+    "//ios/chrome/browser/ntp_snippets:ntp_snippets",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/snapshots",
     "//ios/chrome/browser/tabs:tabs",
@@ -68,6 +76,7 @@ source_set("scene") {
     "//ios/chrome/browser/ui/util:multiwindow_util",
     "//ios/chrome/browser/url_loading",
     "//ios/chrome/browser/web_state_list",
+    "//ios/chrome/browser/window_activities",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/mailto",
     "//ios/public/provider/chrome/browser/signin",
@@ -109,7 +118,6 @@ source_set("main") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/tabs:tabs_internal",
     "//ios/chrome/browser/ui/alert_coordinator",
-    "//ios/chrome/browser/ui/app_launcher",
     "//ios/chrome/browser/ui/autofill",
     "//ios/chrome/browser/ui/browser_container",
     "//ios/chrome/browser/ui/browser_view",
@@ -123,6 +131,7 @@ source_set("main") {
     "//ios/chrome/browser/ui/recent_tabs",
     "//ios/chrome/browser/ui/snackbar",
     "//ios/chrome/browser/ui/translate:legacy_translate",
+    "//ios/chrome/browser/ui/util:multiwindow_util",
     "//ios/chrome/browser/url_loading",
     "//ios/chrome/browser/web",
     "//ios/chrome/browser/web:tab_helper_delegates",
@@ -132,7 +141,7 @@ source_set("main") {
     "//net",
   ]
 
-  if (ios_enable_multi_window) {
+  if (ios_enable_multi_window || ios_enable_scene_startup) {
     deps += [ "//ios/chrome/app/resources:base_scene_storyboard" ]
   }
 
@@ -152,14 +161,18 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/bookmarks/test",
+    "//ios/chrome/app:app_internal",
+    "//ios/chrome/app/startup",
     "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/main",
     "//ios/chrome/browser/main:test_support",
+    "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/browser_view",
     "//ios/chrome/test:block_cleanup_test",
     "//ios/web/public/test",
     "//testing/gtest",
+    "//third_party/ocmock",
   ]
 }

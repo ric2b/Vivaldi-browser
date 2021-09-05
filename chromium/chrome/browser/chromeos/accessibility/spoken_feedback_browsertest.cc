@@ -20,6 +20,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
@@ -36,10 +37,10 @@
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "extensions/browser/extension_host.h"
-#include "extensions/browser/process_manager.h"
+#include "extensions/browser/browsertest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/views/widget/widget.h"
@@ -106,7 +107,8 @@ void LoggedInSpokenFeedbackTest::SendKeyPressWithSearchAndControlAndShift(
 
 void LoggedInSpokenFeedbackTest::SendStickyKeyCommand() {
   // To avoid flakes in sending keys, execute the command directly in js.
-  RunJavaScriptInChromeVoxBackgroundPage(
+  extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
+      browser()->profile(), extension_misc::kChromeVoxExtensionId,
       "CommandHandler.onCommand('toggleStickyMode');");
 }
 
@@ -115,20 +117,12 @@ void LoggedInSpokenFeedbackTest::SendMouseMoveTo(const gfx::Point& location) {
       ASSERT_TRUE(ui_controls::SendMouseMove(location.x(), location.y())));
 }
 
-void LoggedInSpokenFeedbackTest::RunJavaScriptInChromeVoxBackgroundPage(
-    const std::string& script) {
-  extensions::ExtensionHost* host =
-      extensions::ProcessManager::Get(browser()->profile())
-          ->GetBackgroundHostForExtension(
-              extension_misc::kChromeVoxExtensionId);
-  content::ExecuteScriptAsync(host->host_contents(), script);
-}
-
 void LoggedInSpokenFeedbackTest::SimulateTouchScreenInChromeVox() {
   // ChromeVox looks at whether 'ontouchstart' exists to know whether
   // or not it should respond to hover events. Fake it so that touch
   // exploration events get spoken.
-  RunJavaScriptInChromeVoxBackgroundPage(
+  extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
+      browser()->profile(), extension_misc::kChromeVoxExtensionId,
       "window.ontouchstart = function() {};");
 }
 
@@ -142,7 +136,8 @@ void LoggedInSpokenFeedbackTest::DisableEarcons() {
   // running the test locally, but seems to cause crashes
   // (http://crbug.com/396507). Work around this by just telling
   // ChromeVox to not ever play earcons (prerecorded sound effects).
-  RunJavaScriptInChromeVoxBackgroundPage(
+  extensions::browsertest_util::ExecuteScriptInBackgroundPageNoWait(
+      browser()->profile(), extension_misc::kChromeVoxExtensionId,
       "ChromeVox.earcons.playEarcon = function() {};");
 }
 
@@ -152,7 +147,15 @@ void LoggedInSpokenFeedbackTest::EnableChromeVox() {
   ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 
   AccessibilityManager::Get()->EnableSpokenFeedback(true);
+
+  // AccessibilityManager sends a warmup utterance prior to actually loading
+  // ChromeVox.
+  sm_.ExpectSpeech("");
+
+  // The next utterance comes from ChromeVox signaling it is ready.
   sm_.ExpectSpeechPattern("*");
+
+  // Injects js to disable earcons.
   sm_.Call([this]() { DisableEarcons(); });
 }
 
@@ -529,6 +532,12 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxFindInPage) {
   // Press Search+/ to enter ChromeVox's "find in page".
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_OEM_2); });
   sm_.ExpectSpeech("Find in page");
+  sm_.ExpectSpeech("Search");
+  sm_.ExpectSpeech(
+      "Type to search the page. Press enter to jump to the result, up or down "
+      "arrows to browse results, keep typing to change your search, or escape "
+      "to cancel.");
+
   sm_.Replay();
 }
 
@@ -742,6 +751,62 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ResetTtsSettings) {
   sm_.Replay();
 }
 
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SmartStickyMode) {
+  EnableChromeVox();
+  sm_.Call([this]() {
+    ui_test_utils::NavigateToURL(browser(),
+                                 GURL("data:text/html,<p>start</p><input "
+                                      "autofocus type='text'><p>end</p>"));
+  });
+
+  // The input is autofocused.
+  sm_.ExpectSpeech("Edit text");
+
+  // First, navigate with sticky mode on.
+  sm_.Call([this]() { SendStickyKeyCommand(); });
+  sm_.ExpectSpeech("Sticky mode enabled");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
+  sm_.ExpectSpeech("end");
+
+  // Jump to beginning.
+  sm_.Call([this]() { SendKeyPressWithSearchAndControl(ui::VKEY_LEFT); });
+  sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
+  sm_.ExpectSpeech("start");
+
+  // The nextEditText command is explicitly excluded from toggling.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_E); });
+  sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
+  sm_.ExpectSpeech("end");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_LEFT); });
+  sm_.ExpectSpeech("Sticky mode disabled");
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_LEFT); });
+  sm_.ExpectSpeech("Sticky mode enabled");
+  sm_.ExpectSpeech("start");
+
+  // Now, navigate with sticky mode off.
+  sm_.Call([this]() { SendStickyKeyCommand(); });
+  sm_.ExpectSpeech("Sticky mode disabled");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectNextSpeechIsNotPattern("Sticky mode *abled");
+  sm_.ExpectSpeech("end");
+
+  sm_.Replay();
+}
+
 //
 // Spoken feedback tests of the out-of-box experience.
 //
@@ -764,7 +829,13 @@ class OobeSpokenFeedbackTest : public OobeBaseTest {
   DISALLOW_COPY_AND_ASSIGN(OobeSpokenFeedbackTest);
 };
 
-IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, SpokenFeedbackInOobe) {
+#if defined(MEMORY_SANITIZER)
+// Times out under MSan: https://crbug.com/1071693
+#define MAYBE_SpokenFeedbackInOobe DISABLED_SpokenFeedbackInOobe
+#else
+#define MAYBE_SpokenFeedbackInOobe SpokenFeedbackInOobe
+#endif
+IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, MAYBE_SpokenFeedbackInOobe) {
   ui_controls::EnableUIControls();
   ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
   AccessibilityManager::Get()->EnableSpokenFeedback(true);

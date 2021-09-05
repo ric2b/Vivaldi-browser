@@ -7,7 +7,6 @@ import("//build/config/chromecast_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
-import("//build/config/jumbo.gni")
 import("//build/config/linux/gtk/gtk.gni")
 import("//build/config/ui.gni")
 import("//chrome/browser/buildflags.gni")
@@ -29,7 +28,7 @@ import("//ui/views/features.gni")
 
 # Use a static library here because many test binaries depend on this but don't
 # require many files from it. This makes linking more efficient.
-jumbo_static_library("ui") {
+static_library("ui") {
   sources = [
     "accelerator_utils.h",
     "app_list/app_list_util.cc",
@@ -122,6 +121,8 @@ jumbo_static_library("ui") {
     "native_file_system_dialogs.h",
     "navigation_correction_tab_observer.cc",
     "navigation_correction_tab_observer.h",
+    "page_info/chrome_page_info_client.cc",
+    "page_info/chrome_page_info_client.h",
     "page_info/chrome_page_info_delegate.cc",
     "page_info/chrome_page_info_delegate.h",
     "page_info/chrome_page_info_ui_delegate.cc",
@@ -137,7 +138,6 @@ jumbo_static_library("ui") {
     "passwords/password_generation_popup_controller_impl.cc",
     "passwords/password_generation_popup_controller_impl.h",
     "passwords/password_generation_popup_observer.h",
-    "passwords/password_generation_popup_view.cc",
     "passwords/password_generation_popup_view.h",
     "passwords/settings/password_manager_porter.cc",
     "passwords/settings/password_manager_porter.h",
@@ -207,8 +207,6 @@ jumbo_static_library("ui") {
     "webui/autofill_and_password_manager_internals/internals_ui_handler.h",
     "webui/autofill_and_password_manager_internals/password_manager_internals_ui.cc",
     "webui/autofill_and_password_manager_internals/password_manager_internals_ui.h",
-    "webui/chrome_url_disabled_ui.cc",
-    "webui/chrome_url_disabled_ui.h",
     "webui/chrome_web_ui_controller_factory.cc",
     "webui/chrome_web_ui_controller_factory.h",
     "webui/components/components_handler.cc",
@@ -255,8 +253,6 @@ jumbo_static_library("ui") {
     "webui/log_web_ui_url.h",
     "webui/media/media_engagement_ui.cc",
     "webui/media/media_engagement_ui.h",
-    "webui/media/media_feeds_ui.cc",
-    "webui/media/media_feeds_ui.h",
     "webui/media/media_history_ui.cc",
     "webui/media/media_history_ui.h",
     "webui/media/webrtc_logs_ui.cc",
@@ -417,6 +413,7 @@ jumbo_static_library("ui") {
     "//chrome/browser/ui/webui/usb_internals:mojo_bindings",
     "//chrome/common",
     "//chrome/common/net",
+    "//chrome/common/search:mojo_bindings",
     "//chrome/installer/util:with_no_strings",
     "//chrome/services/qrcode_generator/public/cpp",
     "//chrome/services/qrcode_generator/public/mojom",
@@ -431,8 +428,12 @@ jumbo_static_library("ui") {
     "//components/browsing_data/core",
     "//components/captive_portal/content",
     "//components/captive_portal/core:buildflags",
+    "//components/client_hints/browser",
     "//components/consent_auditor/",
+    "//components/content_settings/browser",
+    "//components/content_settings/common:mojom",
     "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
     "//components/country_codes",
     "//components/crx_file",
     "//components/data_reduction_proxy/core/browser",
@@ -455,7 +456,7 @@ jumbo_static_library("ui") {
     "//components/flags_ui",
     "//components/gcm_driver",
     "//components/google/core/common",
-    "//components/heap_profiling",
+    "//components/heap_profiling/multi_process",
     "//components/history/content/browser",
     "//components/history/core/browser",
     "//components/history/core/common",
@@ -467,7 +468,7 @@ jumbo_static_library("ui") {
     "//components/keyed_service/core",
     "//components/language/core/browser",
     "//components/language/core/common",
-    "//components/lookalikes",
+    "//components/lookalikes/core",
     "//components/metrics_services_manager",
     "//components/navigation_metrics",
     "//components/net_log",
@@ -508,6 +509,7 @@ jumbo_static_library("ui") {
     "//components/safe_browsing/core/common:safe_browsing_prefs",
     "//components/safe_browsing/core/db:database_manager",
     "//components/safe_browsing/core/db:util",
+    "//components/schema_org/common:improved_mojom",
     "//components/search",
     "//components/search_engines",
     "//components/security_interstitials/content:security_interstitial_page",
@@ -583,6 +585,7 @@ jumbo_static_library("ui") {
     "//third_party/zlib",
     "//ui/accessibility",
     "//ui/base",
+    "//ui/base:data_exchange",
     "//ui/base/clipboard",
     "//ui/base/ime",
     "//ui/compositor",
@@ -618,15 +621,23 @@ jumbo_static_library("ui") {
 
   if (is_android) {
     deps += [
+      "//chrome/app:chromium_strings",
       "//chrome/browser/ui/webui/explore_sites_internals:mojo_bindings",
       "//chrome/browser/ui/webui/snippets_internals:mojo_bindings",
       "//components/browser_ui/util/android",
+      "//components/security_state/content/android",
     ]
     if (enable_feed_in_chrome) {
       deps += [ "//chrome/browser/ui/webui/feed_internals:mojo_bindings" ]
     }
   } else {
     # !is_android
+
+    sources += [
+      "webui/media/media_feeds_ui.cc",
+      "webui/media/media_feeds_ui.h",
+    ]
+
     deps += [ "//components/autofill/content/browser/webauthn" ]
   }
 
@@ -741,10 +752,6 @@ jumbo_static_library("ui") {
       "android/omnibox/omnibox_view_util.h",
       "android/overlay/overlay_window_android.cc",
       "android/overlay/overlay_window_android.h",
-      "android/page_info/connection_info_popup_android.cc",
-      "android/page_info/connection_info_popup_android.h",
-      "android/page_info/page_info_controller_android.cc",
-      "android/page_info/page_info_controller_android.h",
       "android/passwords/credential_leak_dialog_view_android.cc",
       "android/passwords/credential_leak_dialog_view_android.h",
       "android/passwords/manual_filling_view_android.cc",
@@ -808,8 +815,13 @@ jumbo_static_library("ui") {
         "webui/feed_internals/feed_internals_page_handler.h",
         "webui/feed_internals/feed_internals_ui.cc",
         "webui/feed_internals/feed_internals_ui.h",
+        "webui/feed_internals/feedv2_internals_page_handler.cc",
+        "webui/feed_internals/feedv2_internals_page_handler.h",
       ]
-      deps += [ "//components/feed/core/common:feed_core_common" ]
+      deps += [
+        "//components/feed/core/common:feed_core_common",
+        "//components/feed/core/v2:feed_core_v2",
+      ]
     }
 
     if (enable_password_change_in_leaked_dialog) {
@@ -919,6 +931,7 @@ jumbo_static_library("ui") {
       "browser_window.h",
       "browser_window_state.cc",
       "browser_window_state.h",
+      "caption_bubble_controller.h",
       "chrome_pages.cc",
       "chrome_pages.h",
       "chrome_web_modal_dialog_manager_delegate.cc",
@@ -1081,8 +1094,12 @@ jumbo_static_library("ui") {
       "passwords/bubble_controllers/generation_confirmation_bubble_controller.h",
       "passwords/bubble_controllers/items_bubble_controller.cc",
       "passwords/bubble_controllers/items_bubble_controller.h",
+      "passwords/bubble_controllers/move_to_account_store_bubble_controller.cc",
+      "passwords/bubble_controllers/move_to_account_store_bubble_controller.h",
       "passwords/bubble_controllers/password_bubble_controller_base.cc",
       "passwords/bubble_controllers/password_bubble_controller_base.h",
+      "passwords/bubble_controllers/post_save_compromised_bubble_controller.cc",
+      "passwords/bubble_controllers/post_save_compromised_bubble_controller.h",
       "passwords/bubble_controllers/save_unsynced_credentials_locally_bubble_controller.cc",
       "passwords/bubble_controllers/save_unsynced_credentials_locally_bubble_controller.h",
       "passwords/bubble_controllers/save_update_bubble_controller.cc",
@@ -1128,6 +1145,8 @@ jumbo_static_library("ui") {
       "search/ntp_user_data_logger.cc",
       "search/ntp_user_data_logger.h",
       "search/ntp_user_data_types.h",
+      "search/omnibox_mojo_utils.cc",
+      "search/omnibox_mojo_utils.h",
       "search/omnibox_utils.cc",
       "search/omnibox_utils.h",
       "search/search_ipc_router.cc",
@@ -1228,6 +1247,8 @@ jumbo_static_library("ui") {
       "task_manager/task_manager_table_model.h",
       "thumbnails/thumbnail_image.cc",
       "thumbnails/thumbnail_image.h",
+      "thumbnails/thumbnail_readiness_tracker.cc",
+      "thumbnails/thumbnail_readiness_tracker.h",
       "thumbnails/thumbnail_tab_helper.cc",
       "thumbnails/thumbnail_tab_helper.h",
       "toolbar/app_menu_icon_controller.cc",
@@ -1258,6 +1279,8 @@ jumbo_static_library("ui") {
       "uma_browsing_activity_observer.h",
       "unload_controller.cc",
       "unload_controller.h",
+      "views/eye_dropper/eye_dropper.cc",
+      "views/eye_dropper/eye_dropper.h",
       "webui/app_launcher_login_handler.cc",
       "webui/app_launcher_login_handler.h",
       "webui/app_management/app_management_page_handler.cc",
@@ -1270,8 +1293,6 @@ jumbo_static_library("ui") {
       "webui/bookmarks/bookmarks_ui.h",
       "webui/chrome_web_contents_handler.cc",
       "webui/chrome_web_contents_handler.h",
-      "webui/constrained_web_dialog_delegate_base.cc",
-      "webui/constrained_web_dialog_delegate_base.h",
       "webui/devtools_ui.cc",
       "webui/devtools_ui.h",
       "webui/devtools_ui_data_source.cc",
@@ -1348,8 +1369,6 @@ jumbo_static_library("ui") {
       "webui/policy_indicator_localized_strings_provider.h",
       "webui/profile_info_watcher.cc",
       "webui/profile_info_watcher.h",
-      "webui/recent_site_settings_helper.cc",
-      "webui/recent_site_settings_helper.h",
       "webui/settings/about_handler.cc",
       "webui/settings/about_handler.h",
       "webui/settings/accessibility_main_handler.cc",
@@ -1382,6 +1401,8 @@ jumbo_static_library("ui") {
       "webui/settings/profile_info_handler.h",
       "webui/settings/protocol_handlers_handler.cc",
       "webui/settings/protocol_handlers_handler.h",
+      "webui/settings/recent_site_settings_helper.cc",
+      "webui/settings/recent_site_settings_helper.h",
       "webui/settings/reset_settings_handler.cc",
       "webui/settings/reset_settings_handler.h",
       "webui/settings/safe_browsing_handler.cc",
@@ -1412,6 +1433,8 @@ jumbo_static_library("ui") {
       "webui/settings/shared_settings_localized_strings_provider.h",
       "webui/settings/site_settings_handler.cc",
       "webui/settings/site_settings_handler.h",
+      "webui/settings/site_settings_helper.cc",
+      "webui/settings/site_settings_helper.h",
       "webui/settings_utils.cc",
       "webui/settings_utils.h",
       "webui/signin/login_ui_service.cc",
@@ -1420,8 +1443,6 @@ jumbo_static_library("ui") {
       "webui/signin/login_ui_service_factory.h",
       "webui/signin/signin_utils.cc",
       "webui/signin/signin_utils.h",
-      "webui/site_settings_helper.cc",
-      "webui/site_settings_helper.h",
       "webui/sync_file_system_internals/dump_database_handler.cc",
       "webui/sync_file_system_internals/dump_database_handler.h",
       "webui/sync_file_system_internals/extension_statuses_handler.cc",
@@ -1460,9 +1481,9 @@ jumbo_static_library("ui") {
       "//chrome/browser/ui/color:mixers",
       "//chrome/browser/ui/webui/app_management:mojo_bindings",
       "//chrome/common:buildflags",
-      "//chrome/common:search_mojom",
       "//chrome/common/media_router/mojom:media_router",
       "//chrome/common/search:generate_chrome_colors_info",
+      "//chrome/common/search:mojo_bindings",
       "//chrome/common/themes:autogenerated_theme_util",
       "//chrome/services/app_service/public/cpp:app_update",
       "//chrome/services/app_service/public/mojom",
@@ -1471,6 +1492,7 @@ jumbo_static_library("ui") {
       "//components/network_session_configurator/common",
       "//components/page_load_metrics/browser",
       "//components/profile_metrics",
+      "//components/safety_check",
       "//components/search_provider_logos",
       "//components/ui_metrics",
       "//components/url_formatter",
@@ -1482,6 +1504,7 @@ jumbo_static_library("ui") {
       "//device/fido",
       "//services/device/public/mojom",
       "//services/metrics/public/cpp:metrics_cpp",
+      "//services/preferences/public/mojom:mojom",
       "//third_party/blink/public/common:headers",
       "//third_party/libaddressinput",
       "//third_party/libaddressinput:strings",
@@ -1535,7 +1558,6 @@ jumbo_static_library("ui") {
   if (is_chromeos) {
     assert(enable_extensions)
     assert(toolkit_views)
-    never_build_jumbo = true
     sources += [
       "app_list/app_sync_ui_state.cc",
       "app_list/app_sync_ui_state.h",
@@ -1554,10 +1576,8 @@ jumbo_static_library("ui") {
       "app_list/search/launcher_search/launcher_search_result.h",
       "ash/accessibility/accessibility_controller_client.cc",
       "ash/accessibility/accessibility_controller_client.h",
-      "ash/ambient/photo_client.cc",
-      "ash/ambient/photo_client.h",
-      "ash/ambient/photo_controller_impl.cc",
-      "ash/ambient/photo_controller_impl.h",
+      "ash/ambient/ambient_client_impl.cc",
+      "ash/ambient/ambient_client_impl.h",
       "ash/arc_chrome_actions_client.cc",
       "ash/arc_chrome_actions_client.h",
       "ash/arc_custom_tab_modal_dialog_host.cc",
@@ -1713,6 +1733,8 @@ jumbo_static_library("ui") {
       "views/platform_keys_certificate_selector_chromeos.h",
       "views/profiles/profile_indicator_icon.cc",
       "views/profiles/profile_indicator_icon.h",
+      "webui/chrome_url_disabled_ui.cc",
+      "webui/chrome_url_disabled_ui.h",
 
       # On chromeos, file manager extension handles the file open/save dialog.
       "views/select_file_dialog_extension.cc",
@@ -1723,6 +1745,8 @@ jumbo_static_library("ui") {
       "views/touch_selection_menu_chromeos.h",
       "views/touch_selection_menu_runner_chromeos.cc",
       "views/touch_selection_menu_runner_chromeos.h",
+      "webui/certificate_provisioning_ui_handler.cc",
+      "webui/certificate_provisioning_ui_handler.h",
       "webui/chromeos/account_manager_error_ui.cc",
       "webui/chromeos/account_manager_error_ui.h",
       "webui/chromeos/account_manager_welcome_dialog.cc",
@@ -1830,6 +1854,8 @@ jumbo_static_library("ui") {
       "webui/chromeos/login/base_webui_handler.h",
       "webui/chromeos/login/core_oobe_handler.cc",
       "webui/chromeos/login/core_oobe_handler.h",
+      "webui/chromeos/login/debug/debug_overlay_handler.cc",
+      "webui/chromeos/login/debug/debug_overlay_handler.h",
       "webui/chromeos/login/demo_preferences_screen_handler.cc",
       "webui/chromeos/login/demo_preferences_screen_handler.h",
       "webui/chromeos/login/demo_setup_screen_handler.cc",
@@ -1976,8 +2002,12 @@ jumbo_static_library("ui") {
       "webui/help/help_utils_chromeos.h",
       "webui/help/version_updater_chromeos.cc",
       "webui/help/version_updater_chromeos.h",
+      "webui/settings/chromeos/about_section.cc",
+      "webui/settings/chromeos/about_section.h",
       "webui/settings/chromeos/accessibility_handler.cc",
       "webui/settings/chromeos/accessibility_handler.h",
+      "webui/settings/chromeos/accessibility_section.cc",
+      "webui/settings/chromeos/accessibility_section.h",
       "webui/settings/chromeos/account_manager_handler.cc",
       "webui/settings/chromeos/account_manager_handler.h",
       "webui/settings/chromeos/ambient_mode_handler.cc",
@@ -1986,61 +2016,103 @@ jumbo_static_library("ui") {
       "webui/settings/chromeos/android_apps_handler.h",
       "webui/settings/chromeos/app_management/app_management_page_handler_factory.cc",
       "webui/settings/chromeos/app_management/app_management_page_handler_factory.h",
+      "webui/settings/chromeos/apps_section.cc",
+      "webui/settings/chromeos/apps_section.h",
+      "webui/settings/chromeos/bluetooth_section.cc",
+      "webui/settings/chromeos/bluetooth_section.h",
       "webui/settings/chromeos/calculator/size_calculator.cc",
       "webui/settings/chromeos/calculator/size_calculator.h",
       "webui/settings/chromeos/change_picture_handler.cc",
       "webui/settings/chromeos/change_picture_handler.h",
+      "webui/settings/chromeos/constants/constants_util.cc",
+      "webui/settings/chromeos/constants/constants_util.h",
+      "webui/settings/chromeos/constants/routes_util.cc",
+      "webui/settings/chromeos/constants/routes_util.h",
       "webui/settings/chromeos/crostini_handler.cc",
       "webui/settings/chromeos/crostini_handler.h",
+      "webui/settings/chromeos/crostini_section.cc",
+      "webui/settings/chromeos/crostini_section.h",
       "webui/settings/chromeos/cups_printers_handler.cc",
       "webui/settings/chromeos/cups_printers_handler.h",
       "webui/settings/chromeos/date_time_handler.cc",
       "webui/settings/chromeos/date_time_handler.h",
+      "webui/settings/chromeos/date_time_section.cc",
+      "webui/settings/chromeos/date_time_section.h",
+      "webui/settings/chromeos/device_display_handler.cc",
+      "webui/settings/chromeos/device_display_handler.h",
+      "webui/settings/chromeos/device_dlc_handler.cc",
+      "webui/settings/chromeos/device_dlc_handler.h",
       "webui/settings/chromeos/device_keyboard_handler.cc",
       "webui/settings/chromeos/device_keyboard_handler.h",
       "webui/settings/chromeos/device_pointer_handler.cc",
       "webui/settings/chromeos/device_pointer_handler.h",
       "webui/settings/chromeos/device_power_handler.cc",
       "webui/settings/chromeos/device_power_handler.h",
+      "webui/settings/chromeos/device_section.cc",
+      "webui/settings/chromeos/device_section.h",
       "webui/settings/chromeos/device_storage_handler.cc",
       "webui/settings/chromeos/device_storage_handler.h",
       "webui/settings/chromeos/device_stylus_handler.cc",
       "webui/settings/chromeos/device_stylus_handler.h",
+      "webui/settings/chromeos/files_section.cc",
+      "webui/settings/chromeos/files_section.h",
       "webui/settings/chromeos/fingerprint_handler.cc",
       "webui/settings/chromeos/fingerprint_handler.h",
       "webui/settings/chromeos/google_assistant_handler.cc",
       "webui/settings/chromeos/google_assistant_handler.h",
       "webui/settings/chromeos/internet_handler.cc",
       "webui/settings/chromeos/internet_handler.h",
-      "webui/settings/chromeos/internet_strings_provider.cc",
-      "webui/settings/chromeos/internet_strings_provider.h",
+      "webui/settings/chromeos/internet_section.cc",
+      "webui/settings/chromeos/internet_section.h",
       "webui/settings/chromeos/kerberos_accounts_handler.cc",
       "webui/settings/chromeos/kerberos_accounts_handler.h",
+      "webui/settings/chromeos/languages_section.cc",
+      "webui/settings/chromeos/languages_section.h",
+      "webui/settings/chromeos/main_section.cc",
+      "webui/settings/chromeos/main_section.h",
       "webui/settings/chromeos/multidevice_handler.cc",
       "webui/settings/chromeos/multidevice_handler.h",
-      "webui/settings/chromeos/os_settings_localized_strings_provider.cc",
-      "webui/settings/chromeos/os_settings_localized_strings_provider.h",
-      "webui/settings/chromeos/os_settings_localized_strings_provider_factory.cc",
-      "webui/settings/chromeos/os_settings_localized_strings_provider_factory.h",
-      "webui/settings/chromeos/os_settings_per_page_strings_provider.cc",
-      "webui/settings/chromeos/os_settings_per_page_strings_provider.h",
+      "webui/settings/chromeos/multidevice_section.cc",
+      "webui/settings/chromeos/multidevice_section.h",
+      "webui/settings/chromeos/os_settings_features_util.cc",
+      "webui/settings/chromeos/os_settings_features_util.h",
+      "webui/settings/chromeos/os_settings_manager.cc",
+      "webui/settings/chromeos/os_settings_manager.h",
+      "webui/settings/chromeos/os_settings_manager_factory.cc",
+      "webui/settings/chromeos/os_settings_manager_factory.h",
+      "webui/settings/chromeos/os_settings_section.cc",
+      "webui/settings/chromeos/os_settings_section.h",
+      "webui/settings/chromeos/os_settings_sections.cc",
+      "webui/settings/chromeos/os_settings_sections.h",
       "webui/settings/chromeos/os_settings_ui.cc",
       "webui/settings/chromeos/os_settings_ui.h",
       "webui/settings/chromeos/parental_controls_handler.cc",
       "webui/settings/chromeos/parental_controls_handler.h",
+      "webui/settings/chromeos/people_section.cc",
+      "webui/settings/chromeos/people_section.h",
+      "webui/settings/chromeos/personalization_section.cc",
+      "webui/settings/chromeos/personalization_section.h",
       "webui/settings/chromeos/plugin_vm_handler.cc",
       "webui/settings/chromeos/plugin_vm_handler.h",
       "webui/settings/chromeos/pref_names.cc",
       "webui/settings/chromeos/pref_names.h",
+      "webui/settings/chromeos/printing_section.cc",
+      "webui/settings/chromeos/printing_section.h",
+      "webui/settings/chromeos/privacy_section.cc",
+      "webui/settings/chromeos/privacy_section.h",
       "webui/settings/chromeos/quick_unlock_handler.cc",
       "webui/settings/chromeos/quick_unlock_handler.h",
+      "webui/settings/chromeos/reset_section.cc",
+      "webui/settings/chromeos/reset_section.h",
       "webui/settings/chromeos/search/search_concept.h",
       "webui/settings/chromeos/search/search_handler.cc",
       "webui/settings/chromeos/search/search_handler.h",
-      "webui/settings/chromeos/search/search_handler_factory.cc",
-      "webui/settings/chromeos/search/search_handler_factory.h",
+      "webui/settings/chromeos/search/search_tag_registry.cc",
+      "webui/settings/chromeos/search/search_tag_registry.h",
       "webui/settings/chromeos/search/settings_user_action_tracker.cc",
       "webui/settings/chromeos/search/settings_user_action_tracker.h",
+      "webui/settings/chromeos/search_section.cc",
+      "webui/settings/chromeos/search_section.h",
       "webui/settings/chromeos/server_printer_url_util.cc",
       "webui/settings/chromeos/server_printer_url_util.h",
       "webui/settings/chromeos/wallpaper_handler.cc",
@@ -2073,9 +2145,9 @@ jumbo_static_library("ui") {
       "//chrome/browser/ui/webui/chromeos/crostini_installer:mojo_bindings",
       "//chrome/browser/ui/webui/chromeos/crostini_upgrader:mojo_bindings",
       "//chrome/browser/ui/webui/chromeos/machine_learning:mojo_bindings",
+      "//chrome/browser/ui/webui/settings/chromeos/constants:mojom",
       "//chrome/browser/ui/webui/settings/chromeos/search:mojo_bindings",
       "//chrome/services/file_util/public/cpp",
-      "//chrome/services/local_search_service",
       "//chromeos",
       "//chromeos/assistant:buildflags",
       "//chromeos/audio",
@@ -2095,19 +2167,22 @@ jumbo_static_library("ui") {
       "//chromeos/dbus/audio",
       "//chromeos/dbus/cryptohome",
       "//chromeos/dbus/cryptohome:cryptohome_proto",
+      "//chromeos/dbus/dlcservice:dlcservice",
       "//chromeos/dbus/kerberos:kerberos_proto",
       "//chromeos/dbus/power",
       "//chromeos/dbus/session_manager",
       "//chromeos/dbus/system_clock",
+      "//chromeos/dbus/upstart",
       "//chromeos/disks",
       "//chromeos/login/auth",
       "//chromeos/login/login_state",
       "//chromeos/login/session",
       "//chromeos/network",
       "//chromeos/resources:resources_grit",
-      "//chromeos/services/assistant/public:feature_flags",
+      "//chromeos/services/assistant/public/cpp",
       "//chromeos/services/assistant/public/mojom",
-      "//chromeos/services/assistant/public/proto:proto",
+      "//chromeos/services/assistant/public/proto",
+      "//chromeos/services/assistant/public/shared",
       "//chromeos/services/cellular_setup",
       "//chromeos/services/cellular_setup/public/mojom",
       "//chromeos/services/machine_learning/public/cpp",
@@ -2153,18 +2228,6 @@ jumbo_static_library("ui") {
     if (use_cras) {
       defines += [ "USE_CRAS" ]
     }
-
-    if (enable_cros_libassistant) {
-      sources += [
-        "ash/ambient/backdrop/photo_client_impl.cc",
-        "ash/ambient/backdrop/photo_client_impl.h",
-      ]
-
-      deps += [
-        "//chromeos/assistant/internal/ambient",
-        "//chromeos/assistant/internal/proto/google3",
-      ]
-    }
   }
 
   if (is_win || is_mac || is_desktop_linux || is_chromeos) {
@@ -2186,10 +2249,13 @@ jumbo_static_library("ui") {
       "avatar_button_error_controller_delegate.h",
       "frame/window_frame_util.cc",
       "frame/window_frame_util.h",
+      "passwords/account_storage_auth_helper.cc",
+      "passwords/account_storage_auth_helper.h",
       "signin_reauth_popup_delegate.cc",
       "signin_reauth_popup_delegate.h",
       "signin_view_controller.cc",
       "signin_view_controller.h",
+      "signin_view_controller_delegate.cc",
       "signin_view_controller_delegate.h",
       "tab_contents/chrome_web_contents_view_handle_drop.cc",
       "tab_contents/chrome_web_contents_view_handle_drop.h",
@@ -2235,6 +2301,7 @@ jumbo_static_library("ui") {
     sources += [
       "bookmarks/bookmark_bubble_sign_in_delegate.cc",
       "bookmarks/bookmark_bubble_sign_in_delegate.h",
+      "profile_picker.h",
       "startup/default_browser_infobar_delegate.cc",
       "startup/default_browser_infobar_delegate.h",
       "startup/default_browser_prompt.cc",
@@ -2248,6 +2315,8 @@ jumbo_static_library("ui") {
       "views/external_protocol_dialog.h",
       "views/profiles/badged_profile_photo.cc",
       "views/profiles/badged_profile_photo.h",
+      "views/profiles/profile_picker_view.cc",
+      "views/profiles/profile_picker_view.h",
       "views/profiles/user_manager_view.cc",
       "views/profiles/user_manager_view.h",
       "webui/app_launcher_page_ui.cc",
@@ -2264,6 +2333,8 @@ jumbo_static_library("ui") {
       "webui/settings/system_handler.h",
       "webui/signin/inline_login_handler_impl.cc",
       "webui/signin/inline_login_handler_impl.h",
+      "webui/signin/profile_picker_ui.cc",
+      "webui/signin/profile_picker_ui.h",
       "webui/signin/signin_create_profile_handler.cc",
       "webui/signin/signin_create_profile_handler.h",
       "webui/signin/signin_email_confirmation_dialog.cc",
@@ -2310,13 +2381,6 @@ jumbo_static_library("ui") {
         "webui/signin/dice_turn_sync_on_helper_delegate_impl.h",
       ]
     }
-  }
-
-  if (is_win || is_mac || is_chromeos) {
-    sources += [
-      "webui/cast/cast_ui.cc",
-      "webui/cast/cast_ui.h",
-    ]
   }
 
   if (is_win || is_mac) {
@@ -2482,7 +2546,6 @@ jumbo_static_library("ui") {
       "views/frame/native_browser_frame_factory_mac.mm",
       "views/tab_contents/chrome_web_contents_view_delegate_views_mac.h",
       "views/tab_contents/chrome_web_contents_view_delegate_views_mac.mm",
-      "views/tabs/window_finder_mac.mm",
       "web_contents_sizer.mm",
       "webui/help/version_updater_mac.h",
       "webui/help/version_updater_mac.mm",
@@ -2529,6 +2592,8 @@ jumbo_static_library("ui") {
       "views/color_chooser_win.cc",
       "views/critical_notification_bubble_view.cc",
       "views/critical_notification_bubble_view.h",
+      "views/eye_dropper/eye_dropper_win.cc",
+      "views/eye_dropper/eye_dropper_win.h",
       "views/frame/browser_desktop_window_tree_host.h",
       "views/frame/browser_desktop_window_tree_host_win.cc",
       "views/frame/browser_desktop_window_tree_host_win.h",
@@ -2552,7 +2617,6 @@ jumbo_static_library("ui") {
       "views/status_icons/status_tray_state_changer_win.h",
       "views/status_icons/status_tray_win.cc",
       "views/status_icons/status_tray_win.h",
-      "views/tabs/window_finder_win.cc",
       "views/try_chrome_dialog_win/arrow_border.cc",
       "views/try_chrome_dialog_win/arrow_border.h",
       "views/try_chrome_dialog_win/button_layout.cc",
@@ -2584,6 +2648,7 @@ jumbo_static_library("ui") {
       "//chrome/browser/ui/startup:buildflags",
       "//chrome/browser/win/conflicts:module_info",
       "//chrome/credential_provider/common:common_constants",
+      "//chrome/services/util_win/public/mojom:mojom",
       "//components/search_engines",
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
@@ -2670,7 +2735,6 @@ jumbo_static_library("ui") {
         "views/javascript_app_modal_event_blocker_x11.cc",
         "views/javascript_app_modal_event_blocker_x11.h",
       ]
-      configs += [ "//build/config/linux:x11" ]
       deps += [
         "//components/dbus/menu",
         "//ui/events/devices",
@@ -2714,23 +2778,14 @@ jumbo_static_library("ui") {
     if (use_aura) {
       deps += [ "//third_party/fontconfig" ]
     }
-
-    # WindowFinder implementation selection is a bit tricky, so do all here
-    # to get it right and prevent ODR violations.
-    if (is_chromeos) {
-      sources += [ "views/tabs/window_finder_chromeos.cc" ]
-    } else if (use_x11) {
-      sources += [ "views/tabs/window_finder_x11.cc" ]
-    } else {
-      assert(use_ozone)
-      sources += [ "views/tabs/window_finder_ozone.cc" ]
-    }
   }
 
   if (is_chromeos) {
     sources += [
       "views/parent_permission_dialog_view.cc",
       "views/parent_permission_dialog_view.h",
+      "views/supervised_user/extension_install_blocked_by_parent_dialog_view.cc",
+      "views/supervised_user/extension_install_blocked_by_parent_dialog_view.h",
     ]
   }
 
@@ -2774,6 +2829,8 @@ jumbo_static_library("ui") {
       "translate/translate_bubble_test_utils.h",
       "views/accessibility/caption_bubble.cc",
       "views/accessibility/caption_bubble.h",
+      "views/accessibility/caption_bubble_controller_views.cc",
+      "views/accessibility/caption_bubble_controller_views.h",
       "views/accessibility/invert_bubble_view.cc",
       "views/accessibility/invert_bubble_view.h",
       "views/accessibility/non_accessible_image_view.cc",
@@ -2998,8 +3055,6 @@ jumbo_static_library("ui") {
       "views/frame/system_menu_model_delegate.h",
       "views/frame/tab_strip_region_view.cc",
       "views/frame/tab_strip_region_view.h",
-      "views/frame/terminal_system_app_menu_button_chromeos.cc",
-      "views/frame/terminal_system_app_menu_button_chromeos.h",
       "views/frame/toolbar_button_provider.h",
       "views/frame/top_container_background.cc",
       "views/frame/top_container_background.h",
@@ -3140,6 +3195,10 @@ jumbo_static_library("ui") {
       "views/omnibox/omnibox_popup_contents_view.h",
       "views/omnibox/omnibox_result_view.cc",
       "views/omnibox/omnibox_result_view.h",
+      "views/omnibox/omnibox_row_view.cc",
+      "views/omnibox/omnibox_row_view.h",
+      "views/omnibox/omnibox_suggestion_button_row_view.cc",
+      "views/omnibox/omnibox_suggestion_button_row_view.h",
       "views/omnibox/omnibox_tab_switch_button.cc",
       "views/omnibox/omnibox_tab_switch_button.h",
       "views/omnibox/omnibox_text_view.cc",
@@ -3204,6 +3263,8 @@ jumbo_static_library("ui") {
       "views/passwords/credentials_item_view.h",
       "views/passwords/manage_passwords_icon_views.cc",
       "views/passwords/manage_passwords_icon_views.h",
+      "views/passwords/move_to_account_store_bubble_view.cc",
+      "views/passwords/move_to_account_store_bubble_view.h",
       "views/passwords/password_auto_sign_in_view.cc",
       "views/passwords/password_auto_sign_in_view.h",
       "views/passwords/password_bubble_view_base.cc",
@@ -3220,6 +3281,8 @@ jumbo_static_library("ui") {
       "views/passwords/password_save_update_view.h",
       "views/passwords/password_save_update_with_account_store_view.cc",
       "views/passwords/password_save_update_with_account_store_view.h",
+      "views/passwords/post_save_compromised_bubble_view.cc",
+      "views/passwords/post_save_compromised_bubble_view.h",
       "views/payments/contact_info_editor_view_controller.cc",
       "views/payments/contact_info_editor_view_controller.h",
       "views/payments/credit_card_editor_view_controller.cc",
@@ -3288,8 +3351,6 @@ jumbo_static_library("ui") {
       "views/relaunch_notification/relaunch_required_timer.h",
       "views/relaunch_notification/relaunch_required_timer_internal.cc",
       "views/relaunch_notification/relaunch_required_timer_internal.h",
-      "views/relaunch_notification/wall_clock_timer.cc",
-      "views/relaunch_notification/wall_clock_timer.h",
       "views/sad_tab_view.cc",
       "views/sad_tab_view.h",
       "views/safe_browsing/deep_scanning_failure_modal_dialog.cc",
@@ -3382,6 +3443,7 @@ jumbo_static_library("ui") {
       "views/tabs/tab_style_views.h",
       "views/tabs/tab_width_constraints.cc",
       "views/tabs/tab_width_constraints.h",
+      "views/tabs/window_finder.cc",
       "views/tabs/window_finder.h",
       "views/task_manager_view.cc",
       "views/task_manager_view.h",
@@ -3442,8 +3504,8 @@ jumbo_static_library("ui") {
       "views/web_apps/web_app_origin_text.h",
       "views/web_apps/web_app_uninstall_dialog_view.cc",
       "views/web_apps/web_app_uninstall_dialog_view.h",
-      "views/webauthn/authenticator_ble_pin_entry_sheet_view.cc",
-      "views/webauthn/authenticator_ble_pin_entry_sheet_view.h",
+      "views/webauthn/authenticator_bio_enrollment_sheet_view.cc",
+      "views/webauthn/authenticator_bio_enrollment_sheet_view.h",
       "views/webauthn/authenticator_client_pin_entry_sheet_view.cc",
       "views/webauthn/authenticator_client_pin_entry_sheet_view.h",
       "views/webauthn/authenticator_client_pin_entry_view.cc",
@@ -3458,20 +3520,18 @@ jumbo_static_library("ui") {
       "views/webauthn/authenticator_select_account_sheet_view.h",
       "views/webauthn/authenticator_transport_selector_sheet_view.cc",
       "views/webauthn/authenticator_transport_selector_sheet_view.h",
-      "views/webauthn/ble_device_selection_sheet_view.cc",
-      "views/webauthn/ble_device_selection_sheet_view.h",
-      "views/webauthn/ble_pin_entry_view.cc",
-      "views/webauthn/ble_pin_entry_view.h",
       "views/webauthn/hover_list_view.cc",
       "views/webauthn/hover_list_view.h",
+      "views/webauthn/ring_progress_bar.cc",
+      "views/webauthn/ring_progress_bar.h",
       "views/webauthn/sheet_view_factory.cc",
       "views/webauthn/sheet_view_factory.h",
+      "views/webauthn/webauthn_hover_button.cc",
+      "views/webauthn/webauthn_hover_button.h",
       "webauthn/account_hover_list_model.cc",
       "webauthn/account_hover_list_model.h",
       "webauthn/authenticator_request_sheet_model.cc",
       "webauthn/authenticator_request_sheet_model.h",
-      "webauthn/ble_device_hover_list_model.cc",
-      "webauthn/ble_device_hover_list_model.h",
       "webauthn/hover_list_model.h",
       "webauthn/other_transports_menu_model.cc",
       "webauthn/other_transports_menu_model.h",
@@ -3484,6 +3544,7 @@ jumbo_static_library("ui") {
     ]
 
     deps += [
+      "//base/util/timer",
       "//chrome/browser/ui/views",
       "//chrome/common/qr_code_generator",
       "//components/constrained_window",
@@ -3570,13 +3631,11 @@ jumbo_static_library("ui") {
           "views/chrome_browser_main_extra_parts_views_linux.h",
         ]
         if (use_gtk) {
-          deps += [
-            "//ui/gtk",
-          ]
+          deps += [ "//ui/gtk" ]
           if (use_x11) {
             deps += [
               "//ui/gfx/x",
-              "//ui/gtk:x",
+              "//ui/gtk/x",
             ]
           }
           if (use_ozone) {
@@ -3713,6 +3772,8 @@ jumbo_static_library("ui") {
       "app_list/app_list_model_updater.cc",
       "app_list/app_list_model_updater.h",
       "app_list/app_list_model_updater_observer.h",
+      "app_list/app_list_notifier_impl.cc",
+      "app_list/app_list_notifier_impl.h",
       "app_list/app_list_syncable_service.cc",
       "app_list/app_list_syncable_service.h",
       "app_list/app_list_syncable_service_factory.cc",
@@ -3775,12 +3836,8 @@ jumbo_static_library("ui") {
       "app_list/crostini/crostini_app_icon.h",
       "app_list/extension_app_context_menu.cc",
       "app_list/extension_app_context_menu.h",
-      "app_list/extension_app_item.cc",
-      "app_list/extension_app_item.h",
       "app_list/extension_app_utils.cc",
       "app_list/extension_app_utils.h",
-      "app_list/internal_app/internal_app_context_menu.cc",
-      "app_list/internal_app/internal_app_context_menu.h",
       "app_list/internal_app/internal_app_metadata.cc",
       "app_list/internal_app/internal_app_metadata.h",
       "app_list/md_icon_normalizer.cc",
@@ -3815,6 +3872,8 @@ jumbo_static_library("ui") {
       "app_list/search/arc/arc_playstore_search_provider.h",
       "app_list/search/arc/arc_playstore_search_result.cc",
       "app_list/search/arc/arc_playstore_search_result.h",
+      "app_list/search/assistant_search_provider.cc",
+      "app_list/search/assistant_search_provider.h",
       "app_list/search/chrome_search_result.cc",
       "app_list/search/chrome_search_result.h",
       "app_list/search/common/file_icon_util.cc",
@@ -3839,10 +3898,14 @@ jumbo_static_library("ui") {
       "app_list/search/omnibox_provider.h",
       "app_list/search/omnibox_result.cc",
       "app_list/search/omnibox_result.h",
+      "app_list/search/os_settings_provider.cc",
+      "app_list/search/os_settings_provider.h",
       "app_list/search/search_controller.cc",
       "app_list/search/search_controller.h",
       "app_list/search/search_controller_factory.cc",
       "app_list/search/search_controller_factory.h",
+      "app_list/search/search_metrics_observer.cc",
+      "app_list/search/search_metrics_observer.h",
       "app_list/search/search_provider.cc",
       "app_list/search/search_provider.h",
       "app_list/search/search_resource_manager.cc",
@@ -3899,10 +3962,6 @@ jumbo_static_library("ui") {
       "ash/assistant/assistant_client_impl.h",
       "ash/assistant/assistant_context_util.cc",
       "ash/assistant/assistant_context_util.h",
-      "ash/assistant/assistant_image_downloader.cc",
-      "ash/assistant/assistant_image_downloader.h",
-      "ash/assistant/assistant_service_connection.cc",
-      "ash/assistant/assistant_service_connection.h",
       "ash/assistant/assistant_setup.cc",
       "ash/assistant/assistant_setup.h",
       "ash/assistant/assistant_state_client.cc",
@@ -3924,6 +3983,10 @@ jumbo_static_library("ui") {
       "ash/assistant/proactive_suggestions_client_impl.h",
       "ash/assistant/proactive_suggestions_loader.cc",
       "ash/assistant/proactive_suggestions_loader.h",
+      "ash/assistant/search_and_assistant_enabled_checker.cc",
+      "ash/assistant/search_and_assistant_enabled_checker.h",
+      "ash/image_downloader_impl.cc",
+      "ash/image_downloader_impl.h",
       "ash/launcher/app_service/app_service_app_window_arc_tracker.cc",
       "ash/launcher/app_service/app_service_app_window_arc_tracker.h",
       "ash/launcher/app_service/app_service_app_window_crostini_tracker.cc",
@@ -3998,12 +4061,12 @@ jumbo_static_library("ui") {
       "views/plugin_vm/plugin_vm_installer_view.h",
     ]
     deps += [
-      # TODO(wutao): Put new icons resources to ash/public/cpp/vector_icons/
-      # when UX provides them.
       "//ash/app_list",
+      "//ash/assistant/model",
+      "//ash/assistant/util",
       "//ash/public/cpp",
       "//ash/public/cpp/app_list/vector_icons",
-      "//ash/resources/vector_icons",
+      "//ash/public/cpp/vector_icons",
       "//chrome/browser/chromeos/crostini:crostini_installer_types_mojom",
       "//chrome/browser/ui/app_list/search/cros_action_history:cros_action_proto",
       "//chrome/browser/ui/app_list/search/search_result_ranker:app_launch_event_logger_proto",
@@ -4076,6 +4139,8 @@ jumbo_static_library("ui") {
       "extensions/extension_message_bubble_factory.h",
       "extensions/extension_removal_watcher.cc",
       "extensions/extension_removal_watcher.h",
+      "extensions/extension_settings_overridden_dialog.cc",
+      "extensions/extension_settings_overridden_dialog.h",
       "extensions/extensions_container.h",
       "extensions/hosted_app_browser_controller.cc",
       "extensions/hosted_app_browser_controller.h",
@@ -4085,8 +4150,9 @@ jumbo_static_library("ui") {
       "extensions/installation_error_infobar_delegate.h",
       "extensions/settings_api_bubble_helpers.cc",
       "extensions/settings_api_bubble_helpers.h",
-      "extensions/terminal_system_app_menu_model_chromeos.cc",
-      "extensions/terminal_system_app_menu_model_chromeos.h",
+      "extensions/settings_overridden_dialog_controller.h",
+      "extensions/settings_overridden_params_providers.cc",
+      "extensions/settings_overridden_params_providers.h",
       "views/extensions/browser_action_drag_data.cc",
       "views/extensions/browser_action_drag_data.h",
       "views/extensions/extension_action_platform_delegate_views.cc",
@@ -4103,6 +4169,8 @@ jumbo_static_library("ui") {
       "views/extensions/media_galleries_dialog_views.h",
       "views/extensions/media_gallery_checkbox_view.cc",
       "views/extensions/media_gallery_checkbox_view.h",
+      "views/extensions/settings_overridden_dialog_view.cc",
+      "views/extensions/settings_overridden_dialog_view.h",
       "web_applications/app_browser_controller.cc",
       "web_applications/app_browser_controller.h",
       "web_applications/system_web_app_ui_utils.cc",
@@ -4174,8 +4242,8 @@ jumbo_static_library("ui") {
   }
   if (enable_print_preview) {
     sources += [
-      "webui/print_preview/cloud_printer_handler.cc",
-      "webui/print_preview/cloud_printer_handler.h",
+      "webui/print_preview/cloud_print_signin.cc",
+      "webui/print_preview/cloud_print_signin.h",
       "webui/print_preview/extension_printer_handler.cc",
       "webui/print_preview/extension_printer_handler.h",
       "webui/print_preview/pdf_printer_handler.cc",
@@ -4184,6 +4252,8 @@ jumbo_static_library("ui") {
       "webui/print_preview/policy_settings.h",
       "webui/print_preview/print_preview_handler.cc",
       "webui/print_preview/print_preview_handler.h",
+      "webui/print_preview/print_preview_metrics.cc",
+      "webui/print_preview/print_preview_metrics.h",
       "webui/print_preview/print_preview_ui.cc",
       "webui/print_preview/print_preview_ui.h",
       "webui/print_preview/print_preview_utils.cc",
@@ -4193,6 +4263,7 @@ jumbo_static_library("ui") {
     ]
     deps += [
       "//components/printing/common:mojo_interfaces",
+      "//printing/mojom",
       "//services/device/public/cpp/usb",
       "//services/device/public/mojom:usb",
     ]
@@ -4351,19 +4422,19 @@ static_library("test_support") {
     ]
     sources += [
       "extensions/extension_action_test_helper.h",
+      "views/extensions/extension_action_test_helper_mac.mm",
+      "views/extensions/extension_action_test_helper_views.cc",
+      "views/extensions/extension_action_test_helper_views.h",
       "views/extensions/extensions_menu_test_util.cc",
       "views/extensions/extensions_menu_test_util.h",
       "views/find_bar_host_unittest_util_views.cc",
       "views/payments/test_chrome_payment_request_delegate.cc",
       "views/payments/test_chrome_payment_request_delegate.h",
-      "views/toolbar/extension_action_test_helper_mac.mm",
-      "views/toolbar/extension_action_test_helper_views.cc",
-      "views/toolbar/extension_action_test_helper_views.h",
       "views/webauthn/authenticator_request_dialog_view_test_api.cc",
       "views/webauthn/authenticator_request_dialog_view_test_api.h",
     ]
     if (use_aura) {
-      sources += [ "views/toolbar/extension_action_test_helper_aura.cc" ]
+      sources += [ "views/extensions/extension_action_test_helper_aura.cc" ]
       deps += [
         "//ui/aura",
         "//ui/wm",
@@ -4443,8 +4514,14 @@ if (is_chromeos) {
 }
 
 if (is_android) {
-  java_cpp_enum("cookie_controls_enforcement_javagen") {
-    sources = [ "cookie_controls/cookie_controls_service.h" ]
+  java_cpp_enum("infobar_android_enums") {
+    sources = [ "android/infobars/infobar_android.h" ]
+  }
+
+  android_library("infobar_android_enums_java") {
+    deps = [ "//third_party/android_deps:androidx_annotation_annotation_java" ]
+
+    srcjar_deps = [ ":infobar_android_enums" ]
   }
 
   java_cpp_enum("tab_model_enums_java") {

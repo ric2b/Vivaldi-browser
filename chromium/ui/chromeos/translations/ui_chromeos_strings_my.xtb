@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">ဂျာမန် ကီးဘုတ်</translation>
 <translation id="1972984168337863910">ဖိုင်တုံ့ပြန်မှု အကန့်များ ချဲ့ပြရန်</translation>
 <translation id="1984603991036629094">အားမေနီးယား Phonetic ကီးဘုတ်</translation>
+<translation id="1995337122023280937">ဖိုင်တည်နေရာသို့ သွားရန်</translation>
 <translation id="2001796770603320721">Drive တွင် စီမံပါ</translation>
 <translation id="2009067268969781306">ဒရိုက်ဗ်တစ်ခုကို ဖော်မက်ချခြင်းသည် ၎င်းပေါ်ရှိ ဒေတာများအားလုံးကို ဖျက်လိုက်ပါမည်။ ဤလုပ်ဆောင်ချက်ကို ပြန်ပြင်၍ မရပါ။</translation>
 <translation id="2028997212275086731">RAR စနစ်ဖြင့် ချုံ့ထားသော ဖိုင်မှတ်တမ်း</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Drive အားမချိတ်ဆက် နိုင်ပါ။ ကျေးဇူးပြု၍ <ph name="BEGIN_LINK" />ထွက်<ph name="END_LINK" /> ကာ ပြန်ဝင်ပါ။</translation>
 <translation id="2649120831653069427">သက်တန့်ငါး</translation>
 <translation id="2661146741306740526">၁၆x၉</translation>
+<translation id="2664412712123763093">ဖိုင်တည်နေရာ</translation>
 <translation id="2672394958563893062">အမှား ကြုံခဲ့သည်။ အစမှ ပြန်လည်စတင်ရန် ကလစ်ပါ။</translation>
 <translation id="2676946222714718093">ဖွင့်ပြနေသည်က</translation>
 <translation id="2735698359135166290">ရူမေနီးယား ပုံမှန် ကီးဘုတ်</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> အမှားများ။</translation>
 <translation id="3519867315646775981">အက္ခရာဖလှယ်မှု (shalom ← שלום)</translation>
 <translation id="3522708245912499433">ပေါ်တူဂီ</translation>
+<translation id="3524311639100184459">သတိ- ဤဖိုင်များသည် ယာယီဖြစ်ပြီး ဒစ်ခ်နေရာလွတ်ပြုလုပ်ရန် အလိုအလျောက် ဖျက်နိုင်ပါသည်။  <ph name="BEGIN_LINK" />ပိုမိုလေ့လာရန်<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ဖိုင်တွဲ</translation>
 <translation id="3549797760399244642">drive.google.com သို့သွားရန်...</translation>
 <translation id="357479282490346887">လီသွေနီယံ</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">NOTHING</translation>
 <translation id="3966388904776714213">အသံဖွင့် ကိရိယာ</translation>
 <translation id="4002066346123236978">ခေါင်းစဉ်</translation>
+<translation id="4065397611279318371">ဖိုင်များကို <ph name="APP_NAME" /> အက်ပ်များဖြင့် ဖွင့်ရန် ၎င်းတို့ကို <ph name="SHARED_DIRECTORY_LABEL" /> ဖိုင်တွဲသို့ ဦးစွာရွှေ့ပါ။</translation>
 <translation id="4070370845051020638">ကွမ်တုံးထည့်သွင်းမှုနည်းလမ်း</translation>
 <translation id="4072248638558688893">တမီးလ် ကီးဘုတ် (Phonetic)</translation>
 <translation id="4124935795427217608">သိင်္ဂဿမြင်း</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">အော်တို-ညှိပေး</translation>
 <translation id="4881695831933465202">ဖွင့်</translation>
 <translation id="4886021172213954916">တမီးလ် ကီးဘုတ် (လက်နှိပ်စက်)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> ဖြင့် ဖွင့်၍မရပါ</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> ကို မိတ္ထူပွားရန် အသင့်ဖြစ်ပါပြီ</translation>
 <translation id="4924638091161556692">ဖြေရှင်းပြီး</translation>
 <translation id="4935975195727477204">ဂါဇာနီယာပန်း</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Linux မျှဝေခြင်းကို စီမံရန်</translation>
 <translation id="6808193438228982088">မြေခွေး</translation>
 <translation id="6820687829547641339">Gzip စနစ်ဖြင့် ချုံ့ထားသော tar ဖိုင်မှတ်တမ်း</translation>
+<translation id="6823166707458800069">ဤဖိုင်တွဲတွင်သိမ်းထားသည့် ဖိုင်အားလုံးကို အွန်လိုင်းတွင် အလိုအလျောက် အရန်သိမ်းသည်။</translation>
 <translation id="6825883775269213504">ရုရှား</translation>
 <translation id="6827236167376090743">ဤဗီဒီယိုများကို နွားများအိမ်ပြန်လာသည်အထိ ဖွင့်ထားမည်ဖြစ်သည်။</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> ကို ရွေးချယ်မှုမှ ဖယ်ရှားထားသည်။</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Google မြေပုံ</translation>
 <translation id="7419631653042041064">ကာတာလန် ကီးဘုတ်</translation>
 <translation id="7434823369735508263">UK Dvorak ကီးဘုတ်</translation>
+<translation id="7447678886297481665">ဤဖိုင်တွဲအတွင်းရှိ ဖိုင်များက ဖတ်ရန်သီးသန့် ဖြစ်သည်။ လုပ်ဆောင်ချက်အချို့ကို မပံ့ပိုးပါ။</translation>
 <translation id="7460898608667578234">ယူကရိန်းနီးယန်း</translation>
 <translation id="7474889694310679759">ကနေဒါ အင်္ဂလိပ် ကီးဘုတ်</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> တွေ့ပါသည်

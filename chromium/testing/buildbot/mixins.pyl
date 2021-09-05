@@ -28,7 +28,7 @@
 #     },
 #   },
 #   'coverage_data': {
-#     'isolate_coverage_data': True,
+#     'isolate_profile_data': True,
 #   },
 # }
 #
@@ -179,6 +179,24 @@
       'service_account': 'chrome-tester@chops-service-accounts.iam.gserviceaccount.com',
     },
   },
+  'chromeos-amd64-generic': {
+    'swarming': {
+      'dimensions': {
+        'kvm': '1',
+        'os': 'Ubuntu-16.04',
+        'pool': 'chromium.tests.cros.vm.template',
+      },
+    },
+  },
+  'chromeos-kevin': {
+    'swarming': {
+      'dimensions': {
+        'os': 'ChromeOS',
+        'device_type': 'kevin',
+        'pool': 'chrome-cros-dut.template',
+      },
+    },
+  },
   # TODO(crbug.com/812428): Remove this mixin after all test pools have migrated
   # to using templates.
   'chromium-template-pool': {
@@ -198,8 +216,15 @@
       'service_account': 'chromium-tester@chops-service-accounts.iam.gserviceaccount.com',
     },
   },
-  'code-coverage': {
-    'isolate_coverage_data': True,
+  'dawn_end2end_gpu_test': {
+    '$mixin_append': {
+      'args': [
+        '--use-gpu-in-tests',
+        # Dawn test retries deliberately disabled to prevent flakiness.
+        '--test-launcher-retry-limit=0',
+        '--exclusive-device-type-preference=discrete,integrated',
+      ],
+    },
   },
   'docker': {
     'swarming': {
@@ -267,17 +292,13 @@
       ],
     },
   },
+  'isolate_profile_data': {
+    'isolate_profile_data': True,
+  },
   'kitkat': {
     'swarming': {
       'dimensions': {
         'device_os': 'KTU84P',
-      },
-    },
-  },
-  'kitkat_generic': {
-    'swarming': {
-      'dimensions': {
-        'device_os': 'K',
       },
     },
   },
@@ -379,6 +400,13 @@
   'lollipop': {
     'swarming': {
       'dimensions': {
+        'device_os': 'LMY48M',
+      },
+    },
+  },
+  'lollipop_generic': {
+    'swarming': {
+      'dimensions': {
         'device_os': 'L',
       },
     },
@@ -426,7 +454,7 @@
   'mac_10.15_beta': {
     'swarming': {
       'dimensions': {
-        'os': 'Mac-10.15',
+        'os': 'Mac-10.15.5',
       },
     },
   },
@@ -442,7 +470,7 @@
     'swarming': {
       'dimensions': {
         'gpu': '8086:0a2e',
-        'os': 'Mac-10.13.6',
+        'os': 'Mac-10.15.4',
       },
     },
   },
@@ -630,12 +658,12 @@
   'skia_gold_test': {
     '$mixin_append': {
       'args': [
-        '--git-revision', '${got_revision}',
+        '--git-revision=${got_revision}',
       ],
       'precommit_args': [
-        '--gerrit-issue', '${patch_issue}',
-        '--gerrit-patchset', '${patch_set}',
-        '--buildbucket-id', '${buildbucket_build_id}',
+        '--gerrit-issue=${patch_issue}',
+        '--gerrit-patchset=${patch_set}',
+        '--buildbucket-id=${buildbucket_build_id}',
       ],
     }
   },
@@ -685,16 +713,16 @@
   'win10_intel_hd_630_experimental': {
     'swarming': {
       'dimensions': {
-        'gpu': '8086:5912-26.20.100.7870',
+        'gpu': '8086:5912-26.20.100.7870|8086:5912-26.20.100.8141|8086:3e92-26.20.100.8141',
         'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu.template',
+        'pool': 'chromium.tests.gpu.experimental.template',
       },
     },
   },
   'win10_intel_hd_630_stable': {
     'swarming': {
       'dimensions': {
-        'gpu': '8086:5912-24.20.100.6286',
+        'gpu': '8086:5912-24.20.100.6286|8086:5912-26.20.100.8141|8086:3e92-26.20.100.8141',
         'os': 'Windows-10',
         'pool': 'chromium.tests.gpu.template',
       },
@@ -788,11 +816,17 @@
       },
     },
   },
-  'xcode_11c29': {
+  'xcode_11e146': {
+    '$mixin_append': {
+      'args': [
+        '--xcode-build-version',
+        '11e146'
+      ],
+    },
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_11c29',
+          'name': 'xcode_ios_11e146',
           'path': 'Xcode.app',
         },
       ],

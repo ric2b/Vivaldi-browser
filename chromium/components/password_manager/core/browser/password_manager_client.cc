@@ -8,6 +8,8 @@
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
+#include "components/signin/public/base/signin_metrics.h"
+#include "url/origin.h"
 
 namespace password_manager {
 
@@ -26,10 +28,6 @@ bool PasswordManagerClient::IsFillingFallbackEnabled(const GURL& url) const {
 void PasswordManagerClient::PostHSTSQueryForHost(const GURL& origin,
                                                  HSTSCallback callback) const {
   std::move(callback).Run(HSTSResult::kError);
-}
-
-bool PasswordManagerClient::OnCredentialManagerUsed() {
-  return true;
 }
 
 void PasswordManagerClient::ShowTouchToFill(PasswordManagerDriver* driver) {}
@@ -59,11 +57,12 @@ void PasswordManagerClient::NotifyUserCredentialsWereLeaked(
     const GURL& origin,
     const base::string16& username) {}
 
-void PasswordManagerClient::TriggerReauthForAccount(
-    const CoreAccountId& account_id,
+void PasswordManagerClient::TriggerReauthForPrimaryAccount(
     base::OnceCallback<void(ReauthSucceeded)> reauth_callback) {
   std::move(reauth_callback).Run(ReauthSucceeded(false));
 }
+
+void PasswordManagerClient::TriggerSignIn(signin_metrics::AccessPoint) {}
 
 SyncState PasswordManagerClient::GetPasswordSyncState() const {
   return NOT_SYNCING;

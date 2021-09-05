@@ -121,9 +121,7 @@ class CORE_EXPORT NGPhysicalFragment
   bool IsRenderedLegend() const {
     return IsBox() && BoxType() == NGBoxType::kRenderedLegend;
   }
-  bool IsMathMLFraction() const {
-    return IsBox() && is_generated_text_or_math_fraction_;
-  }
+  bool IsMathMLFraction() const { return IsBox() && is_math_fraction_; }
 
   // Return true if this fragment corresponds directly to an entry in the CSS
   // box tree [1]. Note that anonymous blocks also exist in the CSS box
@@ -167,9 +165,6 @@ class CORE_EXPORT NGPhysicalFragment
   // |LayoutObject| after this fragment was placed. See comments in
   // |LayoutNGBlockFlow::UpdateBlockLayout()| and crbug.com/788590
   bool IsPlacedByLayoutNG() const;
-
-  // Return true if this is the first fragment generated from a node.
-  bool IsFirstForNode() const { return is_first_for_node_; }
 
   // The accessors in this class shouldn't be used by layout code directly,
   // instead should be accessed by the NGFragmentBase classes. These accessors
@@ -244,7 +239,15 @@ class CORE_EXPORT NGPhysicalFragment
   }
 
   bool IsFragmentationContextRoot() const {
-    return !IsColumnBox() && IsBlockFlow() && Style().SpecifiesColumns();
+    // We have no bit that tells us whether this is a fragmentation context
+    // root, so some additional checking is necessary here, to make sure that
+    // we're actually establishing one. We check that we're not a custom layout
+    // box, as specifying columns on such a box has no effect. Note that
+    // specifying columns together with a display value of e.g. 'flex', 'grid'
+    // or 'table' also has no effect, but we don't need to check for that here,
+    // since such display types don't create a block flow (block container).
+    return IsCSSBox() && Style().SpecifiesColumns() && IsBlockFlow() &&
+           !layout_object_->IsLayoutNGCustom();
   }
 
   // Return whether we can traverse this fragment and its children directly, for
@@ -281,6 +284,11 @@ class CORE_EXPORT NGPhysicalFragment
   // function should be eliminiated over time.
   LayoutObject* GetMutableLayoutObject() const {
     return IsCSSBox() ? layout_object_ : nullptr;
+  }
+  // Similar to |GetLayoutObject|, but returns the |LayoutObject| of its
+  // container for |!IsCSSBox()| fragments instead of |nullptr|.
+  const LayoutObject* GetSelfOrContainerLayoutObject() const {
+    return layout_object_;
   }
 
   const FragmentData* GetFragmentData() const;
@@ -385,7 +393,6 @@ class CORE_EXPORT NGPhysicalFragment
   const unsigned sub_type_ : 3;  // NGBoxType, NGTextType, or NGLineBoxType
   const unsigned style_variant_ : 2;  // NGStyleVariant
   const unsigned is_hidden_for_paint_ : 1;
-  unsigned is_first_for_node_ : 1;
 
   // The following bitfields are only to be used by NGPhysicalContainerFragment
   // (it's defined here to save memory, since that class has no bitfields).
@@ -409,6 +416,8 @@ class CORE_EXPORT NGPhysicalFragment
   unsigned border_edge_ : 4;  // NGBorderEdges::Physical
   unsigned has_borders_ : 1;
   unsigned has_padding_ : 1;
+  unsigned is_math_fraction_ : 1;
+  unsigned is_first_for_node_ : 1;
 
   // The following are only used by NGPhysicalBoxFragment but are initialized
   // for all types to allow methods using them to be inlined.
@@ -417,10 +426,6 @@ class CORE_EXPORT NGPhysicalFragment
   unsigned is_painted_atomically_ : 1;
   unsigned has_baseline_ : 1;
   unsigned has_last_baseline_ : 1;
-
-  // The following bitfield is shared between NGPhysicalTextFragment and
-  // NGPhysicalBoxFragment.
-  unsigned is_generated_text_or_math_fraction_ : 1;
 
   // The following bitfields are only to be used by NGPhysicalTextFragment
   // (it's defined here to save memory, since that class has no bitfields).

@@ -1,0 +1,24 @@
+import("//components/vector_icons/vector_icons.gni")
+
+aggregate_vector_icons("vivaldi_vector_icons") {
+  icon_directory = "."
+  icons = []
+
+  if (!is_android) {
+    icons += [
+      "vivaldi_mute.icon",
+      "vivaldi_mute_muted.icon"
+    ]
+  }
+}
+
+source_set("vector_icons") {
+  sources = get_target_outputs(":vivaldi_vector_icons")
+
+  deps = [
+    ":vivaldi_vector_icons",
+    "//base",
+    "//skia",
+    "//ui/gfx",
+  ]
+}

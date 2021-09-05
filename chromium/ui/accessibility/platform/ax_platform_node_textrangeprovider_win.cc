@@ -213,20 +213,27 @@ HRESULT AXPlatformNodeTextRangeProviderWin::ExpandToEnclosingUnit(
       end_ = start_->CreateNextFormatEndPosition(
           AXBoundaryBehavior::StopIfAlreadyAtBoundary);
       break;
-    case TextUnit_Word:
+    case TextUnit_Word: {
+      AXPositionInstance start_backup = start_->Clone();
       start_ = start_->CreatePreviousWordStartPosition(
           AXBoundaryBehavior::StopIfAlreadyAtBoundary);
+      // Since we use AXBoundaryBehavior::StopIfAlreadyAtBoundary, the only case
+      // possible where CreatePreviousWordStartPosition can return a
+      // NullPosition is when it's called on a node before the first word
+      // boundary. This can happen when the document starts with nodes that have
+      // no word boundaries, like whitespaces and punctuation. When it happens,
+      // move the position back to the start of the document.
+      if (start_->IsNullPosition())
+        start_ = start_backup->CreatePositionAtStartOfDocument();
+
       // Since start_ is already located at a word boundary, we need to cross it
-      // in order to move to the next one (stopping at the last anchor's end).
+      // in order to move to the next one. Because Windows ATs behave
+      // undesirably when the start and end endpoints are not in the same anchor
+      // (for character and word navigation), stop at anchor boundary.
       end_ = start_->CreateNextWordStartPosition(
-          AXBoundaryBehavior::StopAtLastAnchorBoundary);
-      // Because Windows ATs behave undesirably when the start and end endpoints
-      // are not in the same anchor (for character and word navigation), make
-      // sure to bring back the end endpoint to the end of the start's anchor.
-      if (start_->anchor_id() != end_->anchor_id()) {
-        end_ = start_->CreatePositionAtEndOfAnchor();
-      }
+          AXBoundaryBehavior::StopAtAnchorBoundary);
       break;
+    }
     case TextUnit_Line:
       start_ = start_->CreateBoundaryStartPosition(
           AXBoundaryBehavior::StopIfAlreadyAtBoundary,
@@ -265,6 +272,8 @@ HRESULT AXPlatformNodeTextRangeProviderWin::ExpandToEnclosingUnit(
     default:
       return UIA_E_NOTSUPPORTED;
   }
+  DCHECK(!start_->IsNullPosition());
+  DCHECK(!end_->IsNullPosition());
   return S_OK;
 }
 
@@ -562,7 +571,8 @@ HRESULT AXPlatformNodeTextRangeProviderWin::GetEnclosingElement(
     return UIA_E_ELEMENTNOTAVAILABLE;
 
   while (enclosing_node->GetData().IsIgnored() ||
-         enclosing_node->GetData().role == ax::mojom::Role::kInlineTextBox) {
+         enclosing_node->GetData().role == ax::mojom::Role::kInlineTextBox ||
+         enclosing_node->IsChildOfLeaf()) {
     AXPlatformNodeWin* parent = static_cast<AXPlatformNodeWin*>(
         AXPlatformNode::FromNativeViewAccessible(enclosing_node->GetParent()));
     DCHECK(parent);

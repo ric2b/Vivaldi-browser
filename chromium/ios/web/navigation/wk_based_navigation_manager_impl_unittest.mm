@@ -147,7 +147,7 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndex) {
   EXPECT_EQ(GURL("http://www.0.com"), item->GetURL());
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                            item->GetTransitionType()));
-  EXPECT_EQ(UserAgentType::MOBILE, item->GetUserAgentType());
+  EXPECT_EQ(UserAgentType::MOBILE, item->GetUserAgentForInheritance());
   EXPECT_FALSE(item->GetTimestamp().is_null());
 }
 
@@ -166,7 +166,7 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndexWithPreviousItem) {
   EXPECT_EQ(GURL("http://www.2.com"), item2->GetURL());
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                            item2->GetTransitionType()));
-  EXPECT_EQ(UserAgentType::MOBILE, item2->GetUserAgentType());
+  EXPECT_EQ(UserAgentType::MOBILE, item2->GetUserAgentForInheritance());
   EXPECT_EQ(GURL("http://www.1.com"), item2->GetReferrer().url);
   EXPECT_FALSE(item2->GetTimestamp().is_null());
 
@@ -175,7 +175,7 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndexWithPreviousItem) {
   EXPECT_EQ(GURL("http://www.1.com"), item1->GetURL());
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                            item1->GetTransitionType()));
-  EXPECT_EQ(UserAgentType::MOBILE, item1->GetUserAgentType());
+  EXPECT_EQ(UserAgentType::MOBILE, item1->GetUserAgentForInheritance());
   EXPECT_EQ(GURL("http://www.0.com"), item1->GetReferrer().url);
   EXPECT_FALSE(item1->GetTimestamp().is_null());
 
@@ -184,7 +184,7 @@ TEST_F(WKBasedNavigationManagerTest, SyncAfterItemAtIndexWithPreviousItem) {
   EXPECT_EQ(GURL("http://www.0.com"), item0->GetURL());
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                            item0->GetTransitionType()));
-  EXPECT_EQ(UserAgentType::MOBILE, item0->GetUserAgentType());
+  EXPECT_EQ(UserAgentType::MOBILE, item0->GetUserAgentForInheritance());
   EXPECT_FALSE(item0->GetTimestamp().is_null());
 }
 
@@ -242,7 +242,8 @@ TEST_F(WKBasedNavigationManagerTest, GetItemAtIndexAfterCommitPending) {
   EXPECT_EQ(GURL("http://www.0.com"), item->GetURL());
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_TYPED,
                                            item->GetTransitionType()));
-  EXPECT_EQ(UserAgentType::DESKTOP, item->GetUserAgentType());
+  EXPECT_EQ(UserAgentType::DESKTOP, item->GetUserAgentType(nil));
+  EXPECT_EQ(UserAgentType::DESKTOP, item->GetUserAgentForInheritance());
 
   // Simulate a second main frame navigation.
   manager_->AddPendingItem(
@@ -265,7 +266,7 @@ TEST_F(WKBasedNavigationManagerTest, GetItemAtIndexAfterCommitPending) {
   EXPECT_EQ(GURL("http://www.1.com"), item1->GetURL());
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                            item1->GetTransitionType()));
-  EXPECT_EQ(UserAgentType::MOBILE, item1->GetUserAgentType());
+  EXPECT_EQ(UserAgentType::MOBILE, item1->GetUserAgentForInheritance());
   EXPECT_EQ(GURL("http://www.0.com"), item1->GetReferrer().url);
 
   // This item is created by CommitPendingItem.
@@ -274,7 +275,8 @@ TEST_F(WKBasedNavigationManagerTest, GetItemAtIndexAfterCommitPending) {
   EXPECT_EQ(GURL("http://www.2.com"), item2->GetURL());
   EXPECT_TRUE(ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_TYPED,
                                            item2->GetTransitionType()));
-  EXPECT_EQ(UserAgentType::DESKTOP, item2->GetUserAgentType());
+  EXPECT_EQ(UserAgentType::DESKTOP, item2->GetUserAgentType(nil));
+  EXPECT_EQ(UserAgentType::DESKTOP, item2->GetUserAgentForInheritance());
   EXPECT_EQ(GURL(""), item2->GetReferrer().url);
 }
 

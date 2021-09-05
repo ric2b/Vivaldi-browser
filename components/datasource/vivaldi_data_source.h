@@ -3,9 +3,9 @@
 #ifndef COMPONENTS_DATASOURCE_VIVALDI_DATA_SOURCE_H_
 #define COMPONENTS_DATASOURCE_VIVALDI_DATA_SOURCE_H_
 
-#include <map>
 #include <memory>
 #include <string>
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -33,10 +33,9 @@ class VivaldiDataClassHandler {
   VivaldiDataClassHandler() = default;
   virtual ~VivaldiDataClassHandler() = default;
 
-  // Returns false on early failure, true otherwise. If false is returned,
-  // there is no need to call the callback as the callee will handle the failure
-  // condition.
-  virtual bool GetData(
+  // The callback must be called on all code paths including any
+  // failures.
+  virtual void GetData(
       const std::string& data_id,
       content::URLDataSource::GotDataCallback callback) = 0;
 };
@@ -54,25 +53,19 @@ class VivaldiDataSource : public content::URLDataSource {
       content::URLDataSource::GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) override;
   bool AllowCaching() override;
-  bool ShouldServiceRequest(const GURL& url,
-                            content::ResourceContext* resource_context,
-                            int render_process_id) override;
-  scoped_refptr<base::SingleThreadTaskRunner> TaskRunnerForRequestPath(
-      const std::string& path) override;
 
  protected:
   bool IsCSSRequest(const std::string& path) const;
 
-  std::map<const std::string, std::unique_ptr<VivaldiDataClassHandler>>
+  // Use flat_map, not std::map, as it allows to find a value by StringPiece
+  // without allocating a temporary std::string.
+  base::flat_map<std::string, std::unique_ptr<VivaldiDataClassHandler>>
       data_class_handlers_;
 
-  // Fallback image to send on failure
-  scoped_refptr<base::RefCountedMemory> fallback_image_data_;
-
  private:
-  void ExtractRequestTypeAndData(const std::string& path,
-                                 std::string& type,
-                                 std::string& data) const;
+  void ExtractRequestTypeAndData(base::StringPiece path,
+                                 base::StringPiece& type,
+                                 base::StringPiece& data) const;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiDataSource);
 };

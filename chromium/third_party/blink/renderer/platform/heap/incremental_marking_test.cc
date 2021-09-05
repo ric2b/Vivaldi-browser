@@ -55,38 +55,13 @@ class BackingVisitor : public Visitor {
       EXPECT_TRUE(header->TryMark());
   }
 
-  bool VisitEphemeronKeyValuePair(
-      const void* key,
-      const void* value,
-      EphemeronTracingCallback key_trace_callback,
-      EphemeronTracingCallback value_trace_callback) final {
-    const bool key_is_dead = key_trace_callback(this, key);
-    if (key_is_dead)
-      return true;
-    const bool value_is_dead = value_trace_callback(this, value);
-    DCHECK(!value_is_dead);
-    return false;
+  void VisitEphemeron(const void* key,
+                      const void* value,
+                      TraceCallback value_trace_callback) final {
+    if (!HeapObjectHeader::FromPayload(key)->IsMarked())
+      return;
+    value_trace_callback(this, value);
   }
-
-  // Unused overrides.
-  void VisitWeak(const void* object,
-                 const void* object_weak_ref,
-                 TraceDescriptor desc,
-                 WeakCallback callback) final {}
-  void VisitBackingStoreStrongly(const void* object,
-                                 const void* const* object_slot,
-                                 TraceDescriptor desc) final {}
-  void VisitBackingStoreWeakly(const void*,
-                               const void* const*,
-                               TraceDescriptor,
-                               TraceDescriptor,
-                               WeakCallback,
-                               const void*) final {}
-  void VisitBackingStoreOnly(const void*, const void* const*) final {}
-  void RegisterBackingStoreCallback(const void* slot,
-                                    MovingObjectCallback) final {}
-  void RegisterWeakCallback(WeakCallback, const void*) final {}
-  void Visit(const TraceWrapperV8Reference<v8::Value>&) final {}
 
  private:
   Vector<void*>* objects_;
@@ -1373,7 +1348,8 @@ using ObjectRegistry = HeapHashMap<void*, Member<RegisteringMixin>>;
 class RegisteringMixin : public GarbageCollectedMixin {
  public:
   explicit RegisteringMixin(ObjectRegistry* registry) {
-    HeapObjectHeader* header = GetHeapObjectHeader();
+    HeapObjectHeader* header = HeapObjectHeader::FromTraceDescriptor(
+        TraceTrait<RegisteringMixin>::GetTraceDescriptor(this));
     const void* uninitialized_value = BlinkGC::kNotFullyConstructedObject;
     EXPECT_EQ(uninitialized_value, header);
     registry->insert(reinterpret_cast<void*>(this), this);
@@ -1437,7 +1413,9 @@ TEST_F(IncrementalMarkingTest, WriteBarrierDuringMixinConstruction) {
 TEST_F(IncrementalMarkingTest, OverrideAfterMixinConstruction) {
   ObjectRegistry registry;
   RegisteringMixin* mixin = MakeGarbageCollected<RegisteringObject>(&registry);
-  HeapObjectHeader* header = mixin->GetHeapObjectHeader();
+  HeapObjectHeader* header = HeapObjectHeader::FromTraceDescriptor(
+      TraceTrait<RegisteringMixin>::GetTraceDescriptor(mixin));
+
   const void* uninitialized_value = BlinkGC::kNotFullyConstructedObject;
   EXPECT_NE(uninitialized_value, header);
 }
@@ -1543,7 +1521,7 @@ TEST_F(IncrementalMarkingTest, WeakHashMapHeapCompaction) {
   driver.FinishGC();
 
   // Weak callback should register the slot.
-  EXPECT_EQ(driver.GetHeapCompactLastFixupCount(), 2u);
+  EXPECT_EQ(1u, driver.GetHeapCompactLastFixupCount());
 }
 
 TEST_F(IncrementalMarkingTest, ConservativeGCWhileCompactionScheduled) {
@@ -1555,10 +1533,10 @@ TEST_F(IncrementalMarkingTest, ConservativeGCWhileCompactionScheduled) {
   ThreadState::Current()->EnableCompactionForNextGCForTesting();
   driver.Start();
   driver.FinishSteps();
-  ThreadState::Current()->CollectGarbage(
+  ThreadState::Current()->CollectGarbageForTesting(
       BlinkGC::CollectionType::kMajor, BlinkGC::kHeapPointersOnStack,
       BlinkGC::kAtomicMarking, BlinkGC::kConcurrentAndLazySweeping,
-      BlinkGC::GCReason::kConservativeGC);
+      BlinkGC::GCReason::kForcedGCForTesting);
 
   // Heap compaction should be canceled if incremental marking finishes with a
   // conservative GC.

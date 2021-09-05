@@ -7,23 +7,24 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/macros.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/cdm/renderer/external_clear_key_key_system_properties.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "content/public/test/test_service.mojom.h"
-#include "content/shell/common/power_monitor_test.mojom.h"
 #include "content/shell/common/power_monitor_test_impl.h"
 #include "content/shell/common/shell_switches.h"
-#include "content/shell/renderer/shell_render_view_observer.h"
+#include "content/shell/renderer/shell_render_frame_observer.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "net/base/net_errors.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/service_manager/sandbox/sandbox.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/web/web_testing_support.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -104,6 +105,10 @@ class TestRendererServiceImpl : public mojom::TestService {
     NOTREACHED();
   }
 
+  void IsProcessSandboxed(IsProcessSandboxedCallback callback) override {
+    std::move(callback).Run(service_manager::Sandbox::IsProcessSandboxed());
+  }
+
   mojo::Receiver<mojom::TestService> receiver_;
 
   DISALLOW_COPY_AND_ASSIGN(TestRendererServiceImpl);
@@ -138,8 +143,11 @@ void ShellContentRendererClient::ExposeInterfacesToBrowser(
                base::ThreadTaskRunnerHandle::Get());
 }
 
-void ShellContentRendererClient::RenderViewCreated(RenderView* render_view) {
-  new ShellRenderViewObserver(render_view);
+void ShellContentRendererClient::RenderFrameCreated(RenderFrame* render_frame) {
+  // TODO(danakj): The ShellRenderFrameObserver is doing stuff only for
+  // browser tests. If we only create that for browser tests then the override
+  // of this method in WebTestContentRendererClient would not be needed.
+  new ShellRenderFrameObserver(render_frame);
 }
 
 bool ShellContentRendererClient::HasErrorPage(int http_status_code) {

@@ -141,26 +141,71 @@ void CrostiniHandler::RegisterMessages() {
       "checkCrostiniMicSharingStatus",
       base::BindRepeating(&CrostiniHandler::HandleCheckCrostiniMicSharingStatus,
                           weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "removeCrostiniPortForward",
+      base::BindRepeating(&CrostiniHandler::HandleRemoveCrostiniPortForward,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "removeAllCrostiniPortForwards",
+      base::BindRepeating(&CrostiniHandler::HandleRemoveAllCrostiniPortForwards,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "activateCrostiniPortForward",
+      base::BindRepeating(&CrostiniHandler::HandleActivateCrostiniPortForward,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "deactivateCrostiniPortForward",
+      base::BindRepeating(&CrostiniHandler::HandleDeactivateCrostiniPortForward,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "getCrostiniActivePorts",
+      base::BindRepeating(&CrostiniHandler::HandleGetCrostiniActivePorts,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "checkCrostiniIsRunning",
+      base::BindRepeating(&CrostiniHandler::HandleCheckCrostiniIsRunning,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "shutdownCrostini",
+      base::BindRepeating(&CrostiniHandler::HandleShutdownCrostini,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "setCrostiniMicSharingEnabled",
+      base::BindRepeating(&CrostiniHandler::HandleSetCrostiniMicSharingEnabled,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
+      "getCrostiniMicSharingEnabled",
+      base::BindRepeating(&CrostiniHandler::HandleGetCrostiniMicSharingEnabled,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CrostiniHandler::OnJavascriptAllowed() {
   auto* crostini_manager = crostini::CrostiniManager::GetForProfile(profile_);
   crostini_manager->AddCrostiniDialogStatusObserver(this);
   crostini_manager->AddCrostiniContainerPropertiesObserver(this);
+  crostini_manager->AddContainerStartedObserver(this);
+  crostini_manager->AddContainerShutdownObserver(this);
+  crostini_manager->AddCrostiniMicSharingEnabledObserver(this);
   if (chromeos::CrosUsbDetector::Get()) {
     chromeos::CrosUsbDetector::Get()->AddUsbDeviceObserver(this);
   }
   crostini::CrostiniExportImport::GetForProfile(profile_)->AddObserver(this);
+  crostini::CrostiniPortForwarder::GetForProfile(profile_)->AddObserver(this);
 }
 
 void CrostiniHandler::OnJavascriptDisallowed() {
   auto* crostini_manager = crostini::CrostiniManager::GetForProfile(profile_);
   crostini_manager->RemoveCrostiniDialogStatusObserver(this);
   crostini_manager->RemoveCrostiniContainerPropertiesObserver(this);
+  crostini_manager->RemoveContainerStartedObserver(this);
+  crostini_manager->RemoveContainerShutdownObserver(this);
+  crostini_manager->RemoveCrostiniMicSharingEnabledObserver(this);
   if (chromeos::CrosUsbDetector::Get()) {
     chromeos::CrosUsbDetector::Get()->RemoveUsbDeviceObserver(this);
   }
   crostini::CrostiniExportImport::GetForProfile(profile_)->RemoveObserver(this);
+  crostini::CrostiniPortForwarder::GetForProfile(profile_)->RemoveObserver(
+      this);
 }
 
 void CrostiniHandler::HandleRequestCrostiniInstallerView(
@@ -243,6 +288,8 @@ base::Value CrostiniDiskInfoToValue(
   disk_value.SetBoolKey("succeeded", true);
   disk_value.SetBoolKey("canResize", disk_info->can_resize);
   disk_value.SetBoolKey("isUserChosenSize", disk_info->is_user_chosen_size);
+  disk_value.SetBoolKey("isLowSpaceAvailable",
+                        disk_info->is_low_space_available);
   disk_value.SetIntKey("defaultIndex", disk_info->default_index);
   base::Value ticks(base::Value::Type::LIST);
   for (const auto& tick : disk_info->ticks) {
@@ -451,8 +498,8 @@ void CrostiniHandler::HandleQueryArcAdbRequest(const base::ListValue* args) {
 
   chromeos::SessionManagerClient* client =
       chromeos::SessionManagerClient::Get();
-  client->QueryAdbSideload(base::Bind(&CrostiniHandler::OnQueryAdbSideload,
-                                      weak_ptr_factory_.GetWeakPtr()));
+  client->QueryAdbSideload(base::BindOnce(&CrostiniHandler::OnQueryAdbSideload,
+                                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CrostiniHandler::HandleCrostiniUpgraderDialogStatusRequest(
@@ -472,6 +519,12 @@ void CrostiniHandler::HandleCrostiniContainerUpgradeAvailableRequest(
   OnContainerOsReleaseChanged(crostini::DefaultContainerId(), can_upgrade);
 }
 
+void CrostiniHandler::OnActivePortsChanged(const base::ListValue& activePorts) {
+  // Other side listens with cr.addWebUIListener
+  FireWebUIListener("crostini-port-forwarder-active-ports-changed",
+                    activePorts);
+}
+
 void CrostiniHandler::HandleAddCrostiniPortForward(
     const base::ListValue* args) {
   CHECK_EQ(6U, args->GetList().size());
@@ -488,6 +541,85 @@ void CrostiniHandler::HandleAddCrostiniPortForward(
       port_number,
       static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
       std::move(label),
+      base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
+}
+
+void CrostiniHandler::HandleRemoveCrostiniPortForward(
+    const base::ListValue* args) {
+  CHECK_EQ(5U, args->GetSize());
+  std::string callback_id;
+  CHECK(args->GetString(0, &callback_id));
+  std::string vm_name;
+  CHECK(args->GetString(1, &vm_name));
+  std::string container_name;
+  CHECK(args->GetString(2, &container_name));
+  int port_number;
+  CHECK(args->GetInteger(3, &port_number));
+  int protocol_type;
+  CHECK(args->GetInteger(4, &protocol_type));
+
+  crostini::CrostiniPortForwarder::GetForProfile(profile_)->RemovePort(
+      crostini::ContainerId(std::move(vm_name), std::move(container_name)),
+      port_number,
+      static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
+      base::Bind(&CrostiniHandler::OnPortForwardComplete,
+                 weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
+}
+
+void CrostiniHandler::HandleRemoveAllCrostiniPortForwards(
+    const base::ListValue* args) {
+  CHECK_EQ(2U, args->GetSize());
+  const auto& args_list = args->GetList();
+  std::string vm_name = args_list[0].GetString();
+  std::string container_name = args_list[1].GetString();
+
+  crostini::CrostiniPortForwarder::GetForProfile(profile_)->RemoveAllPorts(
+      crostini::ContainerId(std::move(vm_name), std::move(container_name)));
+}
+
+void CrostiniHandler::HandleActivateCrostiniPortForward(
+    const base::ListValue* args) {
+  CHECK_EQ(5U, args->GetSize());
+
+  std::string callback_id;
+  CHECK(args->GetString(0, &callback_id));
+  std::string vm_name;
+  CHECK(args->GetString(1, &vm_name));
+  std::string container_name;
+  CHECK(args->GetString(2, &container_name));
+  int port_number;
+  CHECK(args->GetInteger(3, &port_number));
+  int protocol_type;
+  CHECK(args->GetInteger(4, &protocol_type));
+
+  crostini::CrostiniPortForwarder::GetForProfile(profile_)->ActivatePort(
+      crostini::ContainerId(std::move(vm_name), std::move(container_name)),
+      port_number,
+      static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
+      base::Bind(&CrostiniHandler::OnPortForwardComplete,
+                 weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
+}
+
+void CrostiniHandler::HandleDeactivateCrostiniPortForward(
+    const base::ListValue* args) {
+  CHECK_EQ(5U, args->GetSize());
+
+  std::string callback_id;
+  CHECK(args->GetString(0, &callback_id));
+  std::string vm_name;
+  CHECK(args->GetString(1, &vm_name));
+  std::string container_name;
+  CHECK(args->GetString(2, &container_name));
+  int port_number;
+  CHECK(args->GetInteger(3, &port_number));
+  int protocol_type;
+  CHECK(args->GetInteger(4, &protocol_type));
+
+  crostini::CrostiniPortForwarder::GetForProfile(profile_)->DeactivatePort(
+      crostini::ContainerId(std::move(vm_name), std::move(container_name)),
+      port_number,
+      static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
       base::Bind(&CrostiniHandler::OnPortForwardComplete,
                  weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
 }
@@ -506,13 +638,14 @@ void CrostiniHandler::ResolveGetCrostiniDiskInfoCallback(
 
 void CrostiniHandler::HandleGetCrostiniDiskInfo(const base::ListValue* args) {
   AllowJavascript();
-  CHECK_EQ(2U, args->GetList().size());
+  CHECK_EQ(3U, args->GetList().size());
   std::string callback_id = args->GetList()[0].GetString();
   std::string vm_name = args->GetList()[1].GetString();
+  bool full_info = args->GetList()[2].GetBool();
   crostini::disk::GetDiskInfo(
       base::BindOnce(&CrostiniHandler::ResolveGetCrostiniDiskInfoCallback,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)),
-      profile_, std::move(vm_name));
+      profile_, std::move(vm_name), full_info);
 }
 
 void CrostiniHandler::HandleResizeCrostiniDisk(const base::ListValue* args) {
@@ -540,11 +673,80 @@ void CrostiniHandler::HandleCheckCrostiniMicSharingStatus(
   bool proposed_value = args->GetList()[1].GetBool();
   bool requiresRestart =
       crostini::IsCrostiniRunning(profile_) &&
-      profile_->GetPrefs()->GetBoolean(
-          crostini::prefs::kCrostiniMicSharingAtLastLaunch) != proposed_value;
+      crostini::CrostiniManager::GetForProfile(profile_)
+              ->crostini_mic_sharing_enabled() != proposed_value;
 
   ResolveJavascriptCallback(base::Value(std::move(callback_id)),
                             base::Value(requiresRestart));
+}
+
+void CrostiniHandler::HandleGetCrostiniActivePorts(
+    const base::ListValue* args) {
+  AllowJavascript();
+  CHECK_EQ(1U, args->GetList().size());
+
+  std::string callback_id = args->GetList()[0].GetString();
+
+  ResolveJavascriptCallback(
+      base::Value(callback_id),
+      crostini::CrostiniPortForwarder::GetForProfile(profile_)
+          ->GetActivePorts());
+}
+
+void CrostiniHandler::HandleCheckCrostiniIsRunning(
+    const base::ListValue* args) {
+  AllowJavascript();
+  CHECK_EQ(1U, args->GetList().size());
+
+  std::string callback_id = args->GetList()[0].GetString();
+
+  ResolveJavascriptCallback(base::Value(callback_id),
+                            base::Value(crostini::IsCrostiniRunning(profile_)));
+}
+
+void CrostiniHandler::OnContainerStarted(
+    const crostini::ContainerId& container_id) {
+  FireWebUIListener("crostini-status-changed", base::Value(true));
+}
+
+void CrostiniHandler::OnContainerShutdown(
+    const crostini::ContainerId& container_id) {
+  FireWebUIListener("crostini-status-changed", base::Value(false));
+}
+
+void CrostiniHandler::HandleShutdownCrostini(const base::ListValue* args) {
+  CHECK_EQ(0U, args->GetList().size());
+
+  const std::string vm_name = "termina";
+
+  crostini::CrostiniManager::GetForProfile(profile_)->StopVm(
+      std::move(vm_name), std::move(base::DoNothing()));
+}
+
+void CrostiniHandler::OnCrostiniMicSharingEnabledChanged(bool enabled) {
+  FireWebUIListener("crostini-mic-sharing-enabled-changed",
+                    base::Value(enabled));
+}
+
+void CrostiniHandler::HandleSetCrostiniMicSharingEnabled(
+    const base::ListValue* args) {
+  CHECK_EQ(1U, args->GetList().size());
+  bool enabled = args->GetList()[0].GetBool();
+
+  crostini::CrostiniManager::GetForProfile(profile_)
+      ->SetCrostiniMicSharingEnabled(enabled);
+}
+
+void CrostiniHandler::HandleGetCrostiniMicSharingEnabled(
+    const base::ListValue* args) {
+  CHECK_EQ(1U, args->GetList().size());
+
+  std::string callback_id = args->GetList()[0].GetString();
+
+  ResolveJavascriptCallback(
+      base::Value(callback_id),
+      base::Value(crostini::CrostiniManager::GetForProfile(profile_)
+                      ->crostini_mic_sharing_enabled()));
 }
 
 }  // namespace settings

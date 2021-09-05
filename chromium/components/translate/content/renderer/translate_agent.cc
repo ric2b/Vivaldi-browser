@@ -7,11 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/json/string_escape.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -184,10 +185,10 @@ std::string TranslateAgent::GetOriginalPageLanguage() {
   return ExecuteScriptAndGetStringResult("cr.googleTranslate.sourceLang");
 }
 
-base::TimeDelta TranslateAgent::AdjustDelay(int delayInMs) {
-  // Just converts |delayInMs| without any modification in practical cases.
-  // Tests will override this function to return modified value.
-  return base::TimeDelta::FromMilliseconds(delayInMs);
+base::TimeDelta TranslateAgent::AdjustDelay(int delay_in_milliseconds) {
+  // Just converts |delay_in_milliseconds| without any modification in practical
+  // cases. Tests will override this function to return modified value.
+  return base::TimeDelta::FromMilliseconds(delay_in_milliseconds);
 }
 
 void TranslateAgent::ExecuteScript(const std::string& script) {
@@ -277,6 +278,11 @@ int64_t TranslateAgent::ExecuteScriptAndGetIntegerResult(
 }
 
 // mojom::TranslateAgent implementations.
+void TranslateAgent::GetWebLanguageDetectionDetails(
+    GetWebLanguageDetectionDetailsCallback callback) {
+  NOTREACHED() << "This interface supported by PerFrameTranslateAgent";
+}
+
 void TranslateAgent::TranslateFrame(const std::string& translate_script,
                                     const std::string& source_lang,
                                     const std::string& target_lang,

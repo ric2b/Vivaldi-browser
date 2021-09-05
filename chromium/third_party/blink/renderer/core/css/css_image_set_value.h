@@ -49,7 +49,7 @@ class CSSImageSetValue : public CSSValueList {
   StyleImage* CacheImage(
       const Document&,
       float device_scale_factor,
-      FetchParameters::ImageRequestOptimization,
+      FetchParameters::ImageRequestBehavior,
       CrossOriginAttributeValue = kCrossOriginAttributeNotSet);
 
   String CustomCSSText() const;
@@ -77,9 +77,10 @@ class CSSImageSetValue : public CSSValueList {
     return first.scale_factor < second.scale_factor;
   }
 
-  float cached_scale_factor_;
   Member<StyleImage> cached_image_;
+  float cached_scale_factor_;
 
+  bool is_ad_related_ = false;
   CSSParserMode parser_mode_;
   Vector<ImageWithScale> images_in_set_;
 };

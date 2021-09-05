@@ -41,14 +41,6 @@ ui::ModalType MultiprofilesIntroDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;
 }
 
-base::string16 MultiprofilesIntroDialog::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_ASH_MULTIPROFILES_INTRO_HEADLINE);
-}
-
-bool MultiprofilesIntroDialog::ShouldShowCloseButton() const {
-  return false;
-}
-
 gfx::Size MultiprofilesIntroDialog::CalculatePreferredSize() const {
   return gfx::Size(
       kDefaultWidth,
@@ -60,13 +52,15 @@ MultiprofilesIntroDialog::MultiprofilesIntroDialog(OnAcceptCallback on_accept)
           l10n_util::GetStringUTF16(IDS_ASH_DIALOG_DONT_SHOW_AGAIN))),
       on_accept_(std::move(on_accept)) {
   never_show_again_checkbox_->SetChecked(true);
-  DialogDelegate::SetAcceptCallback(base::BindOnce(
+  SetTitle(l10n_util::GetStringUTF16(IDS_ASH_MULTIPROFILES_INTRO_HEADLINE));
+  SetShowCloseButton(false);
+  SetAcceptCallback(base::BindOnce(
       [](MultiprofilesIntroDialog* dialog) {
         std::move(dialog->on_accept_)
             .Run(true, dialog->never_show_again_checkbox_->GetChecked());
       },
       base::Unretained(this)));
-  DialogDelegate::SetCancelCallback(base::BindOnce(
+  SetCancelCallback(base::BindOnce(
       [](MultiprofilesIntroDialog* dialog) {
         std::move(dialog->on_accept_).Run(false, false);
       },

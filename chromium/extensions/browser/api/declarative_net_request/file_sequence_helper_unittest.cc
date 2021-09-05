@@ -15,7 +15,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
 #include "components/crx_file/id_util.h"
-#include "components/version_info/version_info.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/parse_info.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_source.h"
@@ -26,7 +25,6 @@
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/test_utils.h"
-#include "extensions/common/features/feature_channel.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -62,9 +60,9 @@ struct TestCase {
 
 class FileSequenceHelperTest : public ExtensionsTest {
  public:
-  FileSequenceHelperTest() : channel_(::version_info::Channel::UNKNOWN) {}
+  FileSequenceHelperTest() = default;
 
-  // ExtensonsTest overrides:
+  // ExtensionsTest overrides:
   void SetUp() override {
     ExtensionsTest::SetUp();
     helper_ = std::make_unique<FileSequenceHelper>();
@@ -182,9 +180,6 @@ class FileSequenceHelperTest : public ExtensionsTest {
   }
 
  private:
-  // Run this on the trunk channel to ensure the API is available.
-  ScopedCurrentChannel channel_;
-
   std::unique_ptr<FileSequenceHelper> helper_;
 
   // Required to use DataDecoder's JSON parsing for re-indexing.
@@ -240,10 +235,8 @@ TEST_F(FileSequenceHelperTest, RulesetFormatVersionMismatch) {
   TestLoadRulesets(test_cases);
 
   // Now simulate a flatbuffer version mismatch.
-  const int kIndexedRulesetFormatVersion = 100;
-  std::string old_version_header = GetVersionHeaderForTesting();
-  SetIndexedRulesetFormatVersionForTesting(kIndexedRulesetFormatVersion);
-  ASSERT_NE(old_version_header, GetVersionHeaderForTesting());
+  ScopedIncrementRulesetVersion scoped_version_change =
+      CreateScopedIncrementRulesetVersionForTesting();
 
   // Version mismatch will cause reindexing and updated checksums.
   for (auto& test_case : test_cases) {
@@ -311,9 +304,8 @@ TEST_F(FileSequenceHelperTest, UpdateDynamicRules) {
     api_rules.clear();
     api_rules.push_back(GetAPIRule(rule));
 
-    ParseInfo info;
     int rule_id = kMinValidID + 1;
-    info.SetError(ParseResult::ERROR_EMPTY_RULE_PRIORITY, &rule_id);
+    ParseInfo info(ParseResult::ERROR_EMPTY_RULE_PRIORITY, &rule_id);
     TestAddDynamicRules(source.Clone(), std::move(api_rules),
                         ReadJSONRulesResult::Status::kSuccess,
                         UpdateDynamicRulesStatus::kErrorInvalidRules,

@@ -31,7 +31,6 @@
 #include "chrome/test/chromedriver/chrome/geoposition.h"
 #include "chrome/test/chromedriver/chrome/javascript_dialog_manager.h"
 #include "chrome/test/chromedriver/chrome/status.h"
-#include "chrome/test/chromedriver/chrome/version.h"
 #include "chrome/test/chromedriver/chrome/web_view.h"
 #include "chrome/test/chromedriver/chrome_launcher.h"
 #include "chrome/test/chromedriver/command_listener.h"
@@ -59,7 +58,9 @@ const int k3GThroughput = 750 * 1024;
 const int k2GLatency = 300;
 const int k2GThroughput = 250 * 1024;
 
-Status EvaluateScriptAndIgnoreResult(Session* session, std::string expression) {
+Status EvaluateScriptAndIgnoreResult(Session* session,
+                                     std::string expression,
+                                     const bool awaitPromise = false) {
   WebView* web_view = nullptr;
   Status status = session->GetTargetWindow(&web_view);
   if (status.IsError())
@@ -74,7 +75,7 @@ Status EvaluateScriptAndIgnoreResult(Session* session, std::string expression) {
   }
   std::string frame_id = session->GetCurrentFrameId();
   std::unique_ptr<base::Value> result;
-  return web_view->EvaluateScript(frame_id, expression, &result);
+  return web_view->EvaluateScript(frame_id, expression, awaitPromise, &result);
 }
 
 }  // namespace
@@ -1107,15 +1108,15 @@ Status ExecuteSetNetworkConnection(Session* session,
 Status ExecuteGetWindowPosition(Session* session,
                                 const base::DictionaryValue& params,
                                 std::unique_ptr<base::Value>* value) {
-  int x, y;
-  Status status = session->chrome->GetWindowPosition(session->window, &x, &y);
+  Chrome::WindowRect windowRect;
+  Status status = session->chrome->GetWindowRect(session->window, &windowRect);
 
   if (status.IsError())
     return status;
 
   base::DictionaryValue position;
-  position.SetInteger("x", x);
-  position.SetInteger("y", y);
+  position.SetInteger("x", windowRect.x);
+  position.SetInteger("y", windowRect.y);
   value->reset(position.DeepCopy());
   return Status(kOk);
 }
@@ -1128,24 +1129,24 @@ Status ExecuteSetWindowPosition(Session* session,
   if (!params.GetDouble("x", &x) || !params.GetDouble("y", &y))
     return Status(kInvalidArgument, "missing or invalid 'x' or 'y'");
 
-  return session->chrome->SetWindowPosition(session->window,
-                                            static_cast<int>(x),
-                                            static_cast<int>(y));
+  base::DictionaryValue rect_params;
+  rect_params.SetInteger("x", static_cast<int>(x));
+  rect_params.SetInteger("y", static_cast<int>(y));
+  return session->chrome->SetWindowRect(session->window, rect_params);
 }
 
 Status ExecuteGetWindowSize(Session* session,
                             const base::DictionaryValue& params,
                             std::unique_ptr<base::Value>* value) {
-  int width, height;
+  Chrome::WindowRect windowRect;
+  Status status = session->chrome->GetWindowRect(session->window, &windowRect);
 
-  Status status =
-      session->chrome->GetWindowSize(session->window, &width, &height);
   if (status.IsError())
     return status;
 
   base::DictionaryValue size;
-  size.SetInteger("width", width);
-  size.SetInteger("height", height);
+  size.SetInteger("width", windowRect.width);
+  size.SetInteger("height", windowRect.height);
   value->reset(size.DeepCopy());
   return Status(kOk);
 }
@@ -1159,9 +1160,10 @@ Status ExecuteSetWindowSize(Session* session,
       !params.GetDouble("height", &height))
     return Status(kInvalidArgument, "missing or invalid 'width' or 'height'");
 
-  return session->chrome->SetWindowSize(session->window,
-                                        static_cast<int>(width),
-                                        static_cast<int>(height));
+  base::DictionaryValue rect_params;
+  rect_params.SetInteger("width", static_cast<int>(width));
+  rect_params.SetInteger("height", static_cast<int>(height));
+  return session->chrome->SetWindowRect(session->window, rect_params);
 }
 
 Status ExecuteGetAvailableLogTypes(Session* session,

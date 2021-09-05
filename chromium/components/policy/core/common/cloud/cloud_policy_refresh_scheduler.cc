@@ -325,6 +325,7 @@ void CloudPolicyRefreshScheduler::ScheduleRefresh() {
     case DM_STATUS_SERVICE_DEPROVISIONED:
     case DM_STATUS_SERVICE_DOMAIN_MISMATCH:
     case DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE:
+    case DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
       // Need a re-registration, no use in retrying.
       CancelRefresh();
       return;

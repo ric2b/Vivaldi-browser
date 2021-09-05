@@ -68,7 +68,6 @@ BrowserPluginGuest::BrowserPluginGuest(bool has_render_view,
       attached_(false),
       browser_plugin_instance_id_(browser_plugin::kInstanceIDNone),
       focused_(false),
-      mouse_locked_(false),
       is_full_page_plugin_(false),
       has_render_view_(has_render_view),
       is_in_destruction_(false),
@@ -88,11 +87,6 @@ int BrowserPluginGuest::LoadURLWithParams(
     const NavigationController::LoadURLParams& load_params) {
   GetWebContents()->GetController().LoadURLWithParams(load_params);
   return MSG_ROUTING_NONE;
-}
-
-void BrowserPluginGuest::SizeContents(const gfx::Size& new_size) {
-  // TODO(wjmaclean): Verify whether this is used via WebContentsViewChildFrame.
-  GetWebContents()->GetView()->SizeContents(new_size);
 }
 
 void BrowserPluginGuest::WillDestroy() {
@@ -142,8 +136,6 @@ void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
         ->SetInitialFocus(focus_type == blink::mojom::FocusType::kBackward);
   }
   RenderWidgetHostImpl::From(rwh)->GetWidgetInputHandler()->SetFocus(focused);
-  if (!focused && mouse_locked_)
-    DidUnlockMouse();
 
   // Restore the last seen state of text input to the view.
   RenderWidgetHostViewBase* rwhv = static_cast<RenderWidgetHostViewBase*>(
@@ -402,30 +394,6 @@ void BrowserPluginGuest::DidTextInputStateChange(const TextInputState& params) {
 void BrowserPluginGuest::DidUnlockMouse() {
 }
 
-bool BrowserPluginGuest::OnMessageReceived(const IPC::Message& message,
-                                           RenderFrameHost* render_frame_host) {
-  // This will eventually be the home for more IPC handlers that depend on
-  // RenderFrameHost. Until more are moved here, though, the IPC_* macros won't
-  // compile if there are no handlers for a platform. So we have both #if guards
-  // around the whole thing (unfortunate but temporary), and #if guards where
-  // they belong, only around the one IPC handler. TODO(avi): Move more of the
-  // frame-based handlers to this function and remove the outer #if layer.
-#if defined(OS_MACOSX)
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(BrowserPluginGuest, message,
-                                   render_frame_host)
-    // MacOS X creates and populates platform-specific select drop-down menus
-    // whereas other platforms merely create a popup window that the guest
-    // renderer process paints inside.
-    IPC_MESSAGE_HANDLER(FrameHostMsg_ShowPopup, OnShowPopup)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-#else
-  return false;
-#endif
-}
-
 void BrowserPluginGuest::OnDetach(int browser_plugin_instance_id) {
   if (!attached())
     return;
@@ -549,30 +517,6 @@ void BrowserPluginGuest::OnSetFocus(int browser_plugin_instance_id,
   SetFocus(rwh, focused, focus_type);
 }
 
-void BrowserPluginGuest::OnSetEditCommandsForNextKeyEvent(
-    int browser_plugin_instance_id,
-    const std::vector<EditCommand>& edit_commands) {
-  GetWebContents()
-      ->GetRenderViewHost()
-      ->GetWidget()
-      ->GetWidgetInputHandler()
-      ->SetEditCommandsForNextKeyEvent(edit_commands);
-}
-
-void BrowserPluginGuest::OnUnlockMouseAck(int browser_plugin_instance_id) {
-  // mouse_locked_ could be false here if the lock attempt was cancelled due
-  // to window focus, or for various other reasons before the guest was informed
-  // of the lock's success.
-  if (mouse_locked_) {
-    mojom::WidgetInputHandler* input_handler = GetWebContents()
-                                                   ->GetRenderViewHost()
-                                                   ->GetWidget()
-                                                   ->GetWidgetInputHandler();
-    input_handler->MouseLockLost();
-  }
-  mouse_locked_ = false;
-}
-
 void BrowserPluginGuest::OnSynchronizeVisualProperties(
     int browser_plugin_instance_id,
     const FrameVisualProperties& visual_properties) {
@@ -625,10 +569,17 @@ void BrowserPluginGuest::OnSynchronizeVisualProperties(
 }
 
 #if defined(OS_MACOSX)
-void BrowserPluginGuest::OnShowPopup(
+bool BrowserPluginGuest::ShowPopupMenu(
     RenderFrameHost* render_frame_host,
-    const FrameHostMsg_ShowPopup_Params& params) {
-  gfx::Rect translated_bounds(params.bounds);
+    mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,
+    const gfx::Rect& bounds,
+    int32_t item_height,
+    double font_size,
+    int32_t selected_item,
+    std::vector<blink::mojom::MenuItemPtr>* menu_items,
+    bool right_aligned,
+    bool allow_multiple_selection) {
+  gfx::Rect translated_bounds(bounds);
   WebContents* guest = web_contents();
   if (render_frame_host->GetView()) {
     translated_bounds.set_origin(
@@ -640,14 +591,12 @@ void BrowserPluginGuest::OnShowPopup(
           translated_bounds.origin()));
   }
   BrowserPluginPopupMenuHelper popup_menu_helper(
-      owner_web_contents_->GetMainFrame(), render_frame_host);
-  popup_menu_helper.ShowPopupMenu(translated_bounds,
-                                  params.item_height,
-                                  params.item_font_size,
-                                  params.selected_item,
-                                  params.popup_items,
-                                  params.right_aligned,
-                                  params.allow_multiple_selection);
+      owner_web_contents_->GetMainFrame(), render_frame_host,
+      std::move(*popup_client));
+  popup_menu_helper.ShowPopupMenu(translated_bounds, item_height, font_size,
+                                  selected_item, std::move(*menu_items),
+                                  right_aligned, allow_multiple_selection);
+  return true;
 }
 #endif
 

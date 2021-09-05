@@ -12,6 +12,7 @@
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/browser/safe_browsing_token_fetcher.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/common/thread_utils.h"
@@ -64,16 +65,18 @@ RealTimeUrlLookupService::RealTimeUrlLookupService(
     signin::IdentityManager* identity_manager,
     syncer::SyncService* sync_service,
     PrefService* pref_service,
+    const ChromeUserPopulation::ProfileManagementStatus&
+        profile_management_status,
+    bool is_under_advanced_protection,
     bool is_off_the_record)
     : url_loader_factory_(url_loader_factory),
       cache_manager_(cache_manager),
       identity_manager_(identity_manager),
       sync_service_(sync_service),
       pref_service_(pref_service),
+      profile_management_status_(profile_management_status),
+      is_under_advanced_protection_(is_under_advanced_protection),
       is_off_the_record_(is_off_the_record) {
-  DCHECK(cache_manager_);
-  DCHECK(identity_manager_);
-  DCHECK(pref_service_);
   token_fetcher_ =
       std::make_unique<SafeBrowsingTokenFetcher>(identity_manager_);
 }
@@ -132,6 +135,9 @@ void RealTimeUrlLookupService::SendRequest(
     RTLookupRequestCallback request_callback,
     RTLookupResponseCallback response_callback) {
   DCHECK(CurrentlyOnThread(ThreadID::UI));
+  UMA_HISTOGRAM_ENUMERATION("SafeBrowsing.RT.Request.UserPopulation",
+                            request->population().user_population(),
+                            ChromeUserPopulation::UserPopulation_MAX + 1);
   std::string req_data;
   request->SerializeToString(&req_data);
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -171,8 +177,6 @@ void RealTimeUrlLookupService::SendRequest(
   resource_request->url = GURL(kRealTimeLookupUrlPrefix);
   resource_request->load_flags = net::LOAD_DISABLE_CACHE;
   resource_request->method = "POST";
-  // TODO(crbug.com/1041912): Verify if a header is still needed when oauth
-  // token is empty.
   if (access_token_info.has_value()) {
     resource_request->headers.SetHeader(
         net::HttpRequestHeaders::kAuthorization,
@@ -195,15 +199,11 @@ void RealTimeUrlLookupService::SendRequest(
 
   pending_requests_[owned_loader.release()] = std::move(response_callback);
 
-  // For displaying the token in chrome://safe-browsing, set the
-  // scoped_oauth_token field. Since the token is already set in the header,
-  // this field is set after the request is sent.
-  if (access_token_info.has_value()) {
-    request->set_scoped_oauth_token(access_token_info.value().token);
-  }
-  base::PostTask(
-      FROM_HERE, CreateTaskTraits(ThreadID::IO),
-      base::BindOnce(std::move(request_callback), std::move(request)));
+  base::PostTask(FROM_HERE, CreateTaskTraits(ThreadID::IO),
+                 base::BindOnce(std::move(request_callback), std::move(request),
+                                access_token_info.has_value()
+                                    ? access_token_info.value().token
+                                    : ""));
 }
 
 std::unique_ptr<RTLookupResponse>
@@ -337,7 +337,24 @@ std::unique_ptr<RTLookupRequest> RealTimeUrlLookupService::FillRequestProto(
           : IsExtendedReportingEnabled(*pref_service_)
                 ? ChromeUserPopulation::EXTENDED_REPORTING
                 : ChromeUserPopulation::SAFE_BROWSING);
+
+  user_population->set_profile_management_status(profile_management_status_);
+  user_population->set_is_history_sync_enabled(IsHistorySyncEnabled());
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+  user_population->set_is_under_advanced_protection(
+      is_under_advanced_protection_);
+#endif
+  user_population->set_is_incognito(is_off_the_record_);
   return request;
+}
+
+// TODO(bdea): Refactor this method into a util class as multiple SB classes
+// have this method.
+bool RealTimeUrlLookupService::IsHistorySyncEnabled() {
+  return sync_service_ && sync_service_->IsSyncFeatureActive() &&
+         !sync_service_->IsLocalSyncEnabled() &&
+         sync_service_->GetActiveDataTypes().Has(
+             syncer::HISTORY_DELETE_DIRECTIVES);
 }
 
 size_t RealTimeUrlLookupService::GetBackoffDurationInSeconds() const {
@@ -410,7 +427,7 @@ bool RealTimeUrlLookupService::CanPerformFullURLLookup() const {
 
 bool RealTimeUrlLookupService::CanPerformFullURLLookupWithToken() const {
   return RealTimePolicyEngine::CanPerformFullURLLookupWithToken(
-      pref_service_, is_off_the_record_, sync_service_);
+      pref_service_, is_off_the_record_, sync_service_, identity_manager_);
 }
 
 bool RealTimeUrlLookupService::IsUserEpOptedIn() const {

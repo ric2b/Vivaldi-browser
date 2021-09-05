@@ -11,6 +11,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/login_delegate.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/storage_partition.h"
@@ -19,6 +20,26 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 
 LoginTabHelper::~LoginTabHelper() {}
+
+std::unique_ptr<content::LoginDelegate>
+LoginTabHelper::CreateAndStartMainFrameLoginDelegate(
+    const net::AuthChallengeInfo& auth_info,
+    content::WebContents* web_contents,
+    const content::GlobalRequestID& request_id,
+    const GURL& url,
+    scoped_refptr<net::HttpResponseHeaders> response_headers,
+    LoginAuthRequiredCallback auth_required_callback) {
+  std::unique_ptr<LoginHandler> login_handler = LoginHandler::Create(
+      auth_info, web_contents, std::move(auth_required_callback));
+  login_handler->StartMainFrame(
+      request_id, url, response_headers,
+      // The caller owns the created LoginHandler, and there's no guarantee that
+      // |this| outlives it, so use a weak pointer to receive a callback when an
+      // extension has cancelled the auth request for a navigation.
+      base::BindOnce(&LoginTabHelper::RegisterExtensionCancelledNavigation,
+                     weak_ptr_factory_.GetWeakPtr()));
+  return login_handler;
+}
 
 void LoginTabHelper::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -44,6 +65,18 @@ void LoginTabHelper::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() ||
       navigation_handle->IsSameDocument()) {
+    return;
+  }
+
+  // Check if this navigation was already handled by an extension cancelling the
+  // auth request. If so, do not show a prompt for it.
+  int64_t navigation_id_for_extension_cancelled_navigation =
+      navigation_handle_id_for_extension_cancelled_navigation_;
+  // Once a navigation has finished, any pending navigation handled by an
+  // extension is no longer pending, so clear this field.
+  navigation_handle_id_for_extension_cancelled_navigation_ = 0;
+  if (navigation_handle->GetNavigationId() ==
+      navigation_id_for_extension_cancelled_navigation) {
     return;
   }
 
@@ -80,7 +113,8 @@ void LoginTabHelper::DidFinishNavigation(
   }
 
   challenge_ = navigation_handle->GetAuthChallengeInfo().value();
-  network_isolation_key_ = navigation_handle->GetNetworkIsolationKey();
+  network_isolation_key_ =
+      navigation_handle->GetIsolationInfo().network_isolation_key();
 
   url_for_login_handler_ = navigation_handle->GetURL();
   login_handler_ = LoginHandler::Create(
@@ -140,6 +174,26 @@ LoginTabHelper::WillProcessMainFrameUnauthorizedResponse(
     return content::NavigationThrottle::PROCEED;
   }
 
+  // Check if this response was for an auth request that an extension handled by
+  // cancelling auth. If so, remember the navigation handle ID so as to be able
+  // to suppress a prompt for this navigation when it finishes in
+  // DidFinishNavigation().
+  if (navigation_handle->GetGlobalRequestID().request_id ==
+      request_id_for_extension_cancelled_navigation_.request_id) {
+    // Navigation requests are always initiated in the browser process. Due to a
+    // bug (https://crbug.com/1078216), different |child_id|s are used in
+    // different places to represent the browser process. Therefore, we don't
+    // compare the two GlobalRequestIDs directly here but rather check that they
+    // each have the expected |child_id| value signifying the browser process
+    // initiated the request.
+    CHECK_EQ(request_id_for_extension_cancelled_navigation_.child_id, 0);
+    CHECK_EQ(navigation_handle->GetGlobalRequestID().child_id, -1);
+    navigation_handle_id_for_extension_cancelled_navigation_ =
+        navigation_handle->GetNavigationId();
+    request_id_for_extension_cancelled_navigation_ = {0, -1};
+    return content::NavigationThrottle::PROCEED;
+  }
+
   // Otherwise, rewrite the response to a blank page. DidFinishNavigation will
   // show a login prompt on top of this blank page.
   return {content::NavigationThrottle::CANCEL,
@@ -191,8 +245,14 @@ void LoginTabHelper::HandleCredentials(
   }
 }
 
+void LoginTabHelper::RegisterExtensionCancelledNavigation(
+    const content::GlobalRequestID& request_id) {
+  request_id_for_extension_cancelled_navigation_ = request_id;
+}
+
 void LoginTabHelper::Reload() {
-  web_contents()->GetController().Reload(content::ReloadType::NORMAL, true);
+  web_contents()->GetController().Reload(content::ReloadType::NORMAL,
+                                         false /* check_for_repost */);
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(LoginTabHelper)

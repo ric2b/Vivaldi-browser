@@ -52,18 +52,17 @@ ProfileSigninConfirmationDialogViews::ProfileSigninConfirmationDialogViews(
       username_(username),
       delegate_(std::move(delegate)),
       prompt_for_new_profile_(prompt_for_new_profile) {
-  DialogDelegate::SetDefaultButton(ui::DIALOG_BUTTON_NONE);
-  DialogDelegate::SetButtonLabel(
+  SetDefaultButton(ui::DIALOG_BUTTON_NONE);
+  SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(prompt_for_new_profile_
                                     ? IDS_ENTERPRISE_SIGNIN_CREATE_NEW_PROFILE
                                     : IDS_ENTERPRISE_SIGNIN_CONTINUE));
-  DialogDelegate::SetButtonLabel(
-      ui::DIALOG_BUTTON_CANCEL,
-      l10n_util::GetStringUTF16(IDS_ENTERPRISE_SIGNIN_CANCEL));
+  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+                 l10n_util::GetStringUTF16(IDS_ENTERPRISE_SIGNIN_CANCEL));
 
   if (prompt_for_new_profile) {
-    DialogDelegate::SetExtraView(views::MdTextButton::CreateSecondaryUiButton(
+    SetExtraView(views::MdTextButton::Create(
         this, l10n_util::GetStringUTF16(IDS_ENTERPRISE_SIGNIN_CONTINUE)));
   }
 
@@ -76,12 +75,12 @@ ProfileSigninConfirmationDialogViews::ProfileSigninConfirmationDialogViews(
       dialog->delegate_.reset();
     }
   };
-  DialogDelegate::SetAcceptCallback(
-      base::BindOnce(notify_delegate, base::Unretained(this),
-                     prompt_for_new_profile_ ? &Delegate::OnSigninWithNewProfile
-                                             : &Delegate::OnContinueSignin));
-  DialogDelegate::SetCancelCallback(base::BindOnce(
-      notify_delegate, base::Unretained(this), &Delegate::OnCancelSignin));
+  SetAcceptCallback(base::BindOnce(notify_delegate, base::Unretained(this),
+                                   prompt_for_new_profile_
+                                       ? &Delegate::OnSigninWithNewProfile
+                                       : &Delegate::OnContinueSignin));
+  SetCancelCallback(base::BindOnce(notify_delegate, base::Unretained(this),
+                                   &Delegate::OnCancelSignin));
 
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::PROFILE_SIGNIN_CONFIRMATION);
@@ -210,23 +209,24 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
   auto* prompt_columnset = prompt_layout->AddColumnSet(kPromptBarColumnSetId);
   prompt_columnset->AddColumn(
       views::GridLayout::FILL, views::GridLayout::CENTER,
-      views::GridLayout::kFixedSize, views::GridLayout::USE_PREF, 0, 0);
+      views::GridLayout::kFixedSize,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   prompt_columnset->AddPaddingColumn(
       views::GridLayout::kFixedSize,
       ChromeLayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING));
-  prompt_columnset->AddColumn(views::GridLayout::FILL,
-                              views::GridLayout::CENTER, 1.0,
-                              views::GridLayout::USE_PREF, 0, 0);
+  prompt_columnset->AddColumn(
+      views::GridLayout::FILL, views::GridLayout::CENTER, 1.0,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 
   prompt_layout->StartRow(views::GridLayout::kFixedSize, kPromptBarColumnSetId);
   prompt_layout->AddView(std::move(business_icon));
   prompt_layout->AddView(std::move(prompt_label));
 
   // Use a column set with no padding.
-  dialog_layout->AddColumnSet(0)->AddColumn(views::GridLayout::FILL,
-                                            views::GridLayout::FILL, 1.0,
-                                            views::GridLayout::USE_PREF, 0, 0);
+  dialog_layout->AddColumnSet(0)->AddColumn(
+      views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   dialog_layout->StartRow(views::GridLayout::kFixedSize, 0);
   dialog_layout->AddView(std::move(prompt_bar), 1, 1, views::GridLayout::FILL,
                          views::GridLayout::FILL, 0, 0);
@@ -239,9 +239,9 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
       dialog_layout->AddColumnSet(kExplanationColumnSetId);
   explanation_columns->AddPaddingColumn(views::GridLayout::kFixedSize,
                                         content_insets.left());
-  explanation_columns->AddColumn(views::GridLayout::FILL,
-                                 views::GridLayout::FILL, 1.0,
-                                 views::GridLayout::USE_PREF, 0, 0);
+  explanation_columns->AddColumn(
+      views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
+      views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   explanation_columns->AddPaddingColumn(views::GridLayout::kFixedSize,
                                         content_insets.right());
   dialog_layout->StartRow(views::GridLayout::kFixedSize,

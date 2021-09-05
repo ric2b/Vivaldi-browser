@@ -205,7 +205,7 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
                                    [BookmarkEarlGreyUI contextBarMoreString])]
       performAction:grey_tap()];
 
-  [BookmarkEarlGreyUI verifyContextMenuForSingleURL];
+  [BookmarkEarlGreyUI verifyContextMenuForSingleURLWithEditEnabled:YES];
 }
 
 // Verify Edit Text functionality on single URL selection.
@@ -434,8 +434,8 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
       performAction:grey_tap()];
 
   // Verify it shows the context menu.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"bookmark_context_menu")]
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kBookmarkHomeContextMenuIdentifier)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Verify options on context menu.
@@ -695,8 +695,8 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
       performAction:grey_tap()];
 
   // Verify it shows the context menu.
-  [[EarlGrey
-      selectElementWithMatcher:grey_accessibilityID(@"bookmark_context_menu")]
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kBookmarkHomeContextMenuIdentifier)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Verify options on context menu.
@@ -721,7 +721,7 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
       performAction:grey_longPress()];
 
   // Verify context menu.
-  [BookmarkEarlGreyUI verifyContextMenuForSingleURL];
+  [BookmarkEarlGreyUI verifyContextMenuForSingleURLWithEditEnabled:YES];
 }
 
 // Verify Move functionality on mixed folder / url selection.

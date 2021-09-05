@@ -23,7 +23,6 @@
 #include "content/public/renderer/url_loader_throttle_provider.h"
 #include "content/public/renderer/websocket_handshake_throttle_provider.h"
 #include "media/base/audio_parameters.h"
-#include "media/base/speech_recognition_client.h"
 #include "media/base/supported_types.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
@@ -31,6 +30,10 @@
 #include "third_party/blink/public/web/web_navigation_type.h"
 #include "ui/base/page_transition_types.h"
 #include "v8/include/v8.h"
+
+#if !defined(OS_ANDROID)
+#include "media/base/speech_recognition_client.h"
+#endif
 
 class GURL;
 class SkBitmap;
@@ -55,6 +58,7 @@ struct WebURLError;
 }  // namespace blink
 
 namespace media {
+class Demuxer;
 class KeySystemProperties;
 }
 
@@ -136,9 +140,10 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual bool HasErrorPage(int http_status_code);
 
   // Returns true if the embedder prefers not to show an error page for a failed
-  // navigation to |url| in |render_frame|.
+  // navigation to |url| with |error_code| in |render_frame|.
   virtual bool ShouldSuppressErrorPage(RenderFrame* render_frame,
-                                       const GURL& url);
+                                       const GURL& url,
+                                       int error_code);
 
   // Returns false for new tab page activities, which should be filtered out in
   // UseCounter; returns true otherwise.
@@ -170,6 +175,14 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual bool DeferMediaLoad(RenderFrame* render_frame,
                               bool has_played_media_before,
                               base::OnceClosure closure);
+
+  // Allows the embedder to override the Demuxer used for certain URLs.
+  // If a non-null value is returned, the object will be used as the source of
+  // media data by the media player instance for which this method was called.
+  virtual std::unique_ptr<media::Demuxer> OverrideDemuxerForUrl(
+      RenderFrame* render_frame,
+      const GURL& url,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // Allows the embedder to override the WebThemeEngine used. If it returns NULL
   // the content layer will provide an engine.
@@ -216,9 +229,10 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Notifies the embedder that the given frame is requesting the resource at
   // |url|. If the function returns a valid |new_url|, the request must be
-  // updated to use it. The |attach_same_site_cookies| output parameter
-  // determines whether SameSite cookies should be attached to the request.
-  // The |site_for_cookies| is the site_for_cookies of the request. (This is
+  // updated to use it. The |force_ignore_site_for_cookies| output parameter
+  // indicates whether SameSite cookies should be unconditionally attached to
+  // the request, bypassing the usual |site_for_cookies| checks. The
+  // |site_for_cookies| is the site_for_cookies of the request. (This is
   // approximately the URL of the main frame. It is empty in the case of
   // cross-site iframes.)
   //
@@ -231,7 +245,7 @@ class CONTENT_EXPORT ContentRendererClient {
                                const net::SiteForCookies& site_for_cookies,
                                const url::Origin* initiator_origin,
                                GURL* new_url,
-                               bool* attach_same_site_cookies);
+                               bool* force_ignore_site_for_cookies);
 
   // Returns true if the request is associated with a document that is in
   // ""prefetch only" mode, and will not be rendered.
@@ -287,9 +301,11 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual std::unique_ptr<blink::WebContentSettingsClient>
   CreateWorkerContentSettingsClient(RenderFrame* render_frame);
 
+#if !defined(OS_ANDROID)
   // Creates a speech recognition client used to transcribe audio into captions.
   virtual std::unique_ptr<media::SpeechRecognitionClient>
   CreateSpeechRecognitionClient(RenderFrame* render_frame);
+#endif
 
   // Returns true if the page at |url| can use Pepper CameraDevice APIs.
   virtual bool IsPluginAllowedToUseCameraDeviceAPI(const GURL& url);

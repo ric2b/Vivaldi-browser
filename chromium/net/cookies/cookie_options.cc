@@ -6,20 +6,41 @@
 
 #include "net/cookies/cookie_options.h"
 
+#include "net/cookies/cookie_util.h"
+
 namespace net {
 
 CookieOptions::SameSiteCookieContext
 CookieOptions::SameSiteCookieContext::MakeInclusive() {
-  return SameSiteCookieContext(ContextType::SAME_SITE_STRICT);
+  return SameSiteCookieContext(ContextType::SAME_SITE_STRICT,
+                               ContextType::SAME_SITE_STRICT);
 }
 
-int64_t CookieOptions::SameSiteCookieContext::ConvertToMetricsValue() const {
-  if (cross_schemeness == CrossSchemeness::INSECURE_SECURE) {
-    return static_cast<int64_t>(context) | kToSecureMask;
-  } else if (cross_schemeness == CrossSchemeness::SECURE_INSECURE) {
-    return static_cast<int64_t>(context) | kToInsecureMask;
-  }
-  return static_cast<int64_t>(context);
+CookieOptions::SameSiteCookieContext
+CookieOptions::SameSiteCookieContext::MakeInclusiveForSet() {
+  return SameSiteCookieContext(ContextType::SAME_SITE_LAX,
+                               ContextType::SAME_SITE_LAX);
+}
+
+CookieOptions::SameSiteCookieContext::ContextType
+CookieOptions::SameSiteCookieContext::GetContextForCookieInclusion() const {
+  DCHECK_LE(schemeful_context_, context_);
+
+  if (cookie_util::IsSchemefulSameSiteEnabled())
+    return schemeful_context_;
+
+  return context_;
+}
+
+bool operator==(const CookieOptions::SameSiteCookieContext& lhs,
+                const CookieOptions::SameSiteCookieContext& rhs) {
+  return std::tie(lhs.context_, lhs.schemeful_context_) ==
+         std::tie(rhs.context_, rhs.schemeful_context_);
+}
+
+bool operator!=(const CookieOptions::SameSiteCookieContext& lhs,
+                const CookieOptions::SameSiteCookieContext& rhs) {
+  return !(lhs == rhs);
 }
 
 // Keep default values in sync with content/public/common/cookie_manager.mojom.
@@ -37,17 +58,6 @@ CookieOptions CookieOptions::MakeAllInclusive() {
   options.set_same_site_cookie_context(SameSiteCookieContext::MakeInclusive());
   options.set_do_not_update_access_time();
   return options;
-}
-
-bool operator==(const CookieOptions::SameSiteCookieContext& lhs,
-                const CookieOptions::SameSiteCookieContext& rhs) {
-  return std::tie(lhs.context, lhs.cross_schemeness) ==
-         std::tie(rhs.context, rhs.cross_schemeness);
-}
-
-bool operator!=(const CookieOptions::SameSiteCookieContext& lhs,
-                const CookieOptions::SameSiteCookieContext& rhs) {
-  return !(lhs == rhs);
 }
 
 }  // namespace net

@@ -25,6 +25,7 @@
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/driver/sync_service.h"
+#include "content/public/test/browser_test.h"
 #include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -36,6 +37,13 @@
 
 namespace signin {
 namespace test {
+
+const base::TimeDelta kDialogTimeout = base::TimeDelta::FromSeconds(10);
+
+// A wrapper importing the settings module when the chrome://settings serve the
+// Polymer 3 version.
+const char kSettingsScriptWrapperFormat[] =
+    "import('./settings.js').then(settings => {%s});";
 
 enum class PrimarySyncAccountWait { kWaitForAdded, kWaitForCleared, kNotWait };
 
@@ -197,7 +205,9 @@ class LiveSignInTest : public signin::test::LiveTest {
     auto* settings_tab = browser()->tab_strip_model()->GetActiveWebContents();
     EXPECT_TRUE(content::ExecuteScript(
         settings_tab,
-        "settings.SyncBrowserProxyImpl.getInstance().startSignIn()"));
+        base::StringPrintf(
+            kSettingsScriptWrapperFormat,
+            "settings.SyncBrowserProxyImpl.getInstance().startSignIn();")));
     SignInFromCurrentPage(test_account, previously_signed_in_accounts);
   }
 
@@ -216,7 +226,7 @@ class LiveSignInTest : public signin::test::LiveTest {
 
     SignInTestObserver observer(identity_manager(), account_reconcilor());
     EXPECT_TRUE(login_ui_test_utils::ConfirmSyncConfirmationDialog(
-        browser(), base::TimeDelta::FromSeconds(3)));
+        browser(), kDialogTimeout));
     observer.WaitForAccountChanges(previously_signed_in_accounts + 1,
                                    PrimarySyncAccountWait::kWaitForAdded);
   }
@@ -235,7 +245,9 @@ class LiveSignInTest : public signin::test::LiveTest {
     auto* settings_tab = browser()->tab_strip_model()->GetActiveWebContents();
     EXPECT_TRUE(content::ExecuteScript(
         settings_tab,
-        "settings.SyncBrowserProxyImpl.getInstance().signOut(false)"));
+        base::StringPrintf(
+            kSettingsScriptWrapperFormat,
+            "settings.SyncBrowserProxyImpl.getInstance().signOut(false)")));
     observer.WaitForAccountChanges(0, PrimarySyncAccountWait::kWaitForCleared);
   }
 
@@ -413,13 +425,15 @@ IN_PROC_BROWSER_TEST_F(LiveSignInTest, MANUAL_CancelSyncWithWebAccount) {
   GURL settings_url("chrome://settings");
   AddTabAtIndex(0, settings_url, ui::PageTransition::PAGE_TRANSITION_TYPED);
   auto* settings_tab = browser()->tab_strip_model()->GetActiveWebContents();
+  std::string start_syncing_script = base::StringPrintf(
+      "settings.SyncBrowserProxyImpl.getInstance()."
+      "startSyncingWithEmail(\"%s\", true);",
+      test_account.user.c_str());
   EXPECT_TRUE(content::ExecuteScript(
-      settings_tab,
-      base::StringPrintf("settings.SyncBrowserProxyImpl.getInstance()."
-                         "startSyncingWithEmail(\"%s\", true)",
-                         test_account.user.c_str())));
+      settings_tab, base::StringPrintf(kSettingsScriptWrapperFormat,
+                                       start_syncing_script.c_str())));
   EXPECT_TRUE(login_ui_test_utils::CancelSyncConfirmationDialog(
-      browser(), base::TimeDelta::FromSeconds(3)));
+      browser(), kDialogTimeout));
   observer.WaitForAccountChanges(1, PrimarySyncAccountWait::kWaitForCleared);
 
   const AccountsInCookieJarInfo& accounts_in_cookie_jar =
@@ -445,7 +459,7 @@ IN_PROC_BROWSER_TEST_F(LiveSignInTest, MANUAL_CancelSync) {
 
   SignInTestObserver observer(identity_manager(), account_reconcilor());
   EXPECT_TRUE(login_ui_test_utils::CancelSyncConfirmationDialog(
-      browser(), base::TimeDelta::FromSeconds(3)));
+      browser(), kDialogTimeout));
   observer.WaitForAccountChanges(0, PrimarySyncAccountWait::kWaitForCleared);
 
   const AccountsInCookieJarInfo& accounts_in_cookie_jar =
@@ -488,7 +502,7 @@ IN_PROC_BROWSER_TEST_F(LiveSignInTest,
   // Click "This wasn't me" on the email confirmation dialog and wait for a new
   // browser and profile created.
   EXPECT_TRUE(login_ui_test_utils::CompleteSigninEmailConfirmationDialog(
-      browser(), base::TimeDelta::FromSeconds(3),
+      browser(), kDialogTimeout,
       SigninEmailConfirmationDialog::CREATE_NEW_USER));
   Browser* new_browser = ui_test_utils::WaitForBrowserToOpen();
   EXPECT_EQ(profile_manager->GetNumberOfProfiles(), 2U);
@@ -499,7 +513,7 @@ IN_PROC_BROWSER_TEST_F(LiveSignInTest,
   SignInTestObserver new_browser_observer(identity_manager(new_browser),
                                           account_reconcilor(new_browser));
   EXPECT_TRUE(login_ui_test_utils::ConfirmSyncConfirmationDialog(
-      new_browser, base::TimeDelta::FromSeconds(3)));
+      new_browser, kDialogTimeout));
   new_browser_observer.WaitForAccountChanges(
       1, PrimarySyncAccountWait::kWaitForAdded);
 
@@ -559,10 +573,9 @@ IN_PROC_BROWSER_TEST_F(LiveSignInTest,
   // for a primary account to be set.
   SignInTestObserver observer(identity_manager(), account_reconcilor());
   EXPECT_TRUE(login_ui_test_utils::CompleteSigninEmailConfirmationDialog(
-      browser(), base::TimeDelta::FromSeconds(3),
-      SigninEmailConfirmationDialog::START_SYNC));
+      browser(), kDialogTimeout, SigninEmailConfirmationDialog::START_SYNC));
   EXPECT_TRUE(login_ui_test_utils::ConfirmSyncConfirmationDialog(
-      browser(), base::TimeDelta::FromSeconds(5)));
+      browser(), kDialogTimeout));
   observer.WaitForAccountChanges(1, PrimarySyncAccountWait::kWaitForAdded);
 
   // Check no profile was created.
@@ -615,8 +628,7 @@ IN_PROC_BROWSER_TEST_F(LiveSignInTest,
   // removed from Chrome.
   SignInTestObserver observer(identity_manager(), account_reconcilor());
   EXPECT_TRUE(login_ui_test_utils::CompleteSigninEmailConfirmationDialog(
-      browser(), base::TimeDelta::FromSeconds(3),
-      SigninEmailConfirmationDialog::CLOSE));
+      browser(), kDialogTimeout, SigninEmailConfirmationDialog::CLOSE));
   observer.WaitForAccountChanges(0, PrimarySyncAccountWait::kWaitForCleared);
 
   // Check no profile was created.

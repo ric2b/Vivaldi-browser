@@ -253,10 +253,13 @@ inline bool NGLineBreaker::HandleOverflowIfNeeded(NGLineInfo* line_info) {
   return false;
 }
 
-void NGLineBreaker::SetMaxSizeCache(MaxSizeCache* max_size_cache) {
+void NGLineBreaker::SetIntrinsicSizeOutputs(
+    MaxSizeCache* max_size_cache,
+    bool* depends_on_percentage_block_size_out) {
   DCHECK_NE(mode_, NGLineBreakerMode::kContent);
   DCHECK(max_size_cache);
   max_size_cache_ = max_size_cache;
+  depends_on_percentage_block_size_out_ = depends_on_percentage_block_size_out;
 }
 
 // Compute the base direction for bidi algorithm for this line.
@@ -1176,9 +1179,10 @@ void NGLineBreaker::ComputeTrailingCollapsibleSpace(NGLineInfo* line_info) {
       return;
     }
     if (item.Type() == NGInlineItem::kControl) {
-      UChar character = text[item.StartOffset()];
-      if (character == kNewlineCharacter)
+      if (item.TextType() == NGTextType::kForcedLineBreak) {
+        DCHECK_EQ(text[item.StartOffset()], kNewlineCharacter);
         continue;
+      }
       trailing_whitespace_ = WhitespaceState::kPreserved;
       trailing_collapsible_space_.reset();
       return;
@@ -1194,39 +1198,42 @@ void NGLineBreaker::ComputeTrailingCollapsibleSpace(NGLineInfo* line_info) {
 void NGLineBreaker::HandleControlItem(const NGInlineItem& item,
                                       NGLineInfo* line_info) {
   DCHECK_GE(item.Length(), 1u);
+  if (item.TextType() == NGTextType::kForcedLineBreak) {
+    DCHECK_EQ(Text()[item.StartOffset()], kNewlineCharacter);
+
+    // Check overflow, because the last item may have overflowed.
+    if (HandleOverflowIfNeeded(line_info))
+      return;
+
+    NGInlineItemResult* item_result = AddItem(item, line_info);
+    item_result->should_create_line_box = true;
+    item_result->has_only_trailing_spaces = true;
+    MoveToNextOf(item);
+
+    // Include following close tags. The difference is visible when they have
+    // margin/border/padding.
+    //
+    // This is not a defined behavior, but legacy/WebKit do this for preserved
+    // newlines and <br>s. Gecko does this only for preserved newlines (but
+    // not for <br>s).
+    const Vector<NGInlineItem>& items = Items();
+    while (item_index_ < items.size()) {
+      const NGInlineItem& next_item = items[item_index_];
+      if (next_item.Type() == NGInlineItem::kCloseTag) {
+        HandleCloseTag(next_item, line_info);
+        continue;
+      }
+      break;
+    }
+
+    is_after_forced_break_ = true;
+    line_info->SetIsLastLine(true);
+    state_ = LineBreakState::kDone;
+    return;
+  }
+  DCHECK_EQ(item.TextType(), NGTextType::kFlowControl);
   UChar character = Text()[item.StartOffset()];
   switch (character) {
-    case kNewlineCharacter: {
-      // Check overflow, because the last item may have overflowed.
-      if (HandleOverflowIfNeeded(line_info))
-        return;
-
-      NGInlineItemResult* item_result = AddItem(item, line_info);
-      item_result->should_create_line_box = true;
-      item_result->has_only_trailing_spaces = true;
-      MoveToNextOf(item);
-
-      // Include following close tags. The difference is visible when they have
-      // margin/border/padding.
-      //
-      // This is not a defined behavior, but legacy/WebKit do this for preserved
-      // newlines and <br>s. Gecko does this only for preserved newlines (but
-      // not for <br>s).
-      const Vector<NGInlineItem>& items = Items();
-      while (item_index_ < items.size()) {
-        const NGInlineItem& next_item = items[item_index_];
-        if (next_item.Type() == NGInlineItem::kCloseTag) {
-          HandleCloseTag(next_item, line_info);
-          continue;
-        }
-        break;
-      }
-
-      is_after_forced_break_ = true;
-      line_info->SetIsLastLine(true);
-      state_ = LineBreakState::kDone;
-      return;
-    }
     case kTabulationCharacter: {
       DCHECK(item.Style());
       const ComputedStyle& style = *item.Style();
@@ -1371,18 +1378,22 @@ void NGLineBreaker::HandleAtomicInline(
     DCHECK(mode_ == NGLineBreakerMode::kMinContent || !max_size_cache_);
     NGBlockNode child(ToLayoutBox(item.GetLayoutObject()));
     MinMaxSizesInput input(percentage_resolution_block_size_for_min_max);
-    MinMaxSizes sizes =
+    MinMaxSizesResult result =
         ComputeMinAndMaxContentContribution(node_.Style(), child, input);
     if (mode_ == NGLineBreakerMode::kMinContent) {
-      item_result->inline_size = sizes.min_size + inline_margins;
+      item_result->inline_size = result.sizes.min_size + inline_margins;
+      if (depends_on_percentage_block_size_out_) {
+        *depends_on_percentage_block_size_out_ |=
+            result.depends_on_percentage_block_size;
+      }
       if (max_size_cache_) {
         if (max_size_cache_->IsEmpty())
           max_size_cache_->resize(Items().size());
         unsigned item_index = &item - Items().begin();
-        (*max_size_cache_)[item_index] = sizes.max_size + inline_margins;
+        (*max_size_cache_)[item_index] = result.sizes.max_size + inline_margins;
       }
     } else {
-      item_result->inline_size = sizes.max_size + inline_margins;
+      item_result->inline_size = result.sizes.max_size + inline_margins;
     }
   }
 
@@ -1808,9 +1819,8 @@ void NGLineBreaker::RewindOverflow(unsigned new_end, NGLineInfo* line_info) {
         if (ComputedStyle::AutoWrap(white_space) &&
             white_space != EWhiteSpace::kBreakSpaces &&
             IsBreakableSpace(text[item_result.start_offset])) {
-          // If more items left and all characters are trailable spaces, check
-          // the next item.
-          if (item_result.shape_result && index < item_results.size() - 1 &&
+          // If all characters are trailable spaces, check the next item.
+          if (item_result.shape_result &&
               IsAllBreakableSpaces(text, item_result.start_offset + 1,
                                    item_result.end_offset)) {
             continue;

@@ -22,6 +22,7 @@
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
 #include "components/password_manager/core/browser/form_fetcher_impl.h"
+#include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form_filling.h"
 #include "components/password_manager/core/browser/password_generation_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -30,11 +31,14 @@
 #include "components/password_manager/core/browser/possible_username_data.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
+#include "google_apis/gaia/core_account_id.h"
 
 using autofill::FormData;
 using autofill::FormFieldData;
 using autofill::FormSignature;
 using autofill::FormStructure;
+using autofill::GaiaIdHash;
 using autofill::NOT_USERNAME;
 using autofill::PasswordForm;
 using autofill::SINGLE_USERNAME;
@@ -94,7 +98,7 @@ bool IsUsernameFirstFlowFeatureEnabled() {
 // Find a field in |predictions| with given renderer id.
 const PasswordFieldPrediction* FindFieldPrediction(
     const base::Optional<FormPredictions>& predictions,
-    uint32_t field_renderer_id) {
+    autofill::FieldRendererId field_renderer_id) {
   if (!predictions)
     return nullptr;
   for (const auto& field : predictions->fields) {
@@ -176,16 +180,11 @@ bool PasswordFormManager::DoesManage(
   // All unowned input elements are considered as one synthetic form.
   if (!observed_form_.is_form_tag && !form.is_form_tag)
     return true;
-#if defined(OS_IOS)
-  // On iOS form name is used as the form identifier.
-  return observed_form_.name == form.name;
-#else
   return observed_form_.unique_renderer_id == form.unique_renderer_id;
-#endif
 }
 
 bool PasswordFormManager::DoesManageAccordingToRendererId(
-    uint32_t form_renderer_id,
+    autofill::FormRendererId form_renderer_id,
     const PasswordManagerDriver* driver) const {
   if (driver != driver_.get())
     return false;
@@ -263,8 +262,45 @@ base::span<const InteractionsStats> PasswordFormManager::GetInteractionsStats()
   return base::make_span(form_fetcher_->GetInteractionsStats());
 }
 
+base::span<const CompromisedCredentials>
+PasswordFormManager::GetCompromisedCredentials() const {
+  return form_fetcher_->GetCompromisedCredentials();
+}
+
 bool PasswordFormManager::IsBlacklisted() const {
   return form_fetcher_->IsBlacklisted() || newly_blacklisted_;
+}
+
+bool PasswordFormManager::IsMovableToAccountStore() const {
+  signin::IdentityManager* identity_manager = client_->GetIdentityManager();
+  if (!identity_manager)
+    return false;
+  const std::string gaia_id =
+      identity_manager
+          ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
+          .gaia;
+  // If there is no signed in user, we cannot move the credentials to the
+  // account store.
+  if (gaia_id.empty())
+    return false;
+
+  const base::string16& username = GetPendingCredentials().username_value;
+  const base::string16& password = GetPendingCredentials().password_value;
+  const std::vector<const PasswordForm*> matches =
+      form_fetcher_->GetBestMatches();
+  // If no match in the profile store with the same username and password exist,
+  // then there is nothing to move.
+  if (std::none_of(matches.cbegin(), matches.cend(),
+                   [&](const PasswordForm* match) {
+                     return !match->IsUsingAccountStore() &&
+                            match->username_value == username &&
+                            match->password_value == password;
+                   })) {
+    return false;
+  }
+
+  return !form_fetcher_->IsMovingBlocked(GaiaIdHash::FromGaiaId(gaia_id),
+                                         username);
 }
 
 void PasswordFormManager::Save() {
@@ -402,6 +438,22 @@ void PasswordFormManager::OnPasswordsRevealed() {
 
 void PasswordFormManager::MoveCredentialsToAccountStore() {
   password_save_manager_->MoveCredentialsToAccountStore();
+}
+
+void PasswordFormManager::BlockMovingCredentialsToAccountStore() {
+  // Nothing to do if there is no signed in user or the credentials are already
+  // blocked for moving.
+  if (!IsMovableToAccountStore())
+    return;
+  const std::string gaia_id =
+      client_->GetIdentityManager()
+          ->GetPrimaryAccountInfo(signin::ConsentLevel::kNotRequired)
+          .gaia;
+  // The above call to IsMovableToAccountStore() guarantees there is a signed in
+  // user.
+  DCHECK(!gaia_id.empty());
+  password_save_manager_->BlockMovingToAccountStoreFor(
+      GaiaIdHash::FromGaiaId(gaia_id));
 }
 
 bool PasswordFormManager::IsNewLogin() const {
@@ -734,10 +786,13 @@ void PasswordFormManager::Fill() {
   if (observed_password_form->is_new_password_reliable && !IsBlacklisted()) {
 #if defined(OS_IOS)
     driver_->FormEligibleForGenerationFound(
-        {/*form_name*/ observed_password_form->form_data.name,
+        {/*form_renderer_id*/ observed_password_form->form_data
+             .unique_renderer_id,
          /*new_password_element*/ observed_password_form->new_password_element,
-         /*confirmation_password_element*/
-         observed_password_form->confirmation_password_element});
+         /*new_password_element_renderer_id*/
+         observed_password_form->new_password_element_renderer_id,
+         /*confirmation_password_element_renderer_id*/
+         observed_password_form->confirmation_password_element_renderer_id});
 #else
     driver_->FormEligibleForGenerationFound(
         {/*new_password_renderer_id*/
@@ -773,7 +828,7 @@ void PasswordFormManager::FillForm(const FormData& observed_form) {
 
 void PasswordFormManager::OnGeneratedPasswordAccepted(
     FormData form_data,
-    uint32_t generation_element_id,
+    autofill::FieldRendererId generation_element_id,
     const base::string16& password) {
   // Find the generating element to update its value. The parser needs a non
   // empty value.
@@ -897,21 +952,22 @@ void PasswordFormManager::CalculateFillingAssistanceMetric(
   // TODO(https://crbug.com/918846): implement collecting all necessary data
   // on iOS.
 #if not defined(OS_IOS)
-  std::set<base::string16> saved_usernames;
-  std::set<base::string16> saved_passwords;
+  std::set<std::pair<base::string16, PasswordForm::Store>> saved_usernames;
+  std::set<std::pair<base::string16, PasswordForm::Store>> saved_passwords;
 
   for (auto* saved_form : form_fetcher_->GetNonFederatedMatches()) {
-    saved_usernames.insert(saved_form->username_value);
-    saved_passwords.insert(saved_form->password_value);
+    // Saved credentials might have empty usernames which are not interesting
+    // for filling assistance metric.
+    if (!saved_form->username_value.empty())
+      saved_usernames.emplace(saved_form->username_value, saved_form->in_store);
+    saved_passwords.emplace(saved_form->password_value, saved_form->in_store);
   }
-
-  // Saved credentials might have empty usernames which are not interesting
-  // for filling assistance metric.
-  saved_usernames.erase(base::string16());
 
   metrics_recorder_->CalculateFillingAssistanceMetric(
       submitted_form, saved_usernames, saved_passwords, IsBlacklisted(),
-      form_fetcher_->GetInteractionsStats());
+      form_fetcher_->GetInteractionsStats(),
+      client_->GetPasswordFeatureManager()
+          ->ComputePasswordAccountStorageUsageLevel());
 #endif
 }
 

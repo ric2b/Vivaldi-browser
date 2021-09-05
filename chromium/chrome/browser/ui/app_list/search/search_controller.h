@@ -21,8 +21,13 @@ class AppListModelUpdater;
 class ChromeSearchResult;
 class Profile;
 
+namespace ash {
+class AppListNotifier;
+}
+
 namespace app_list {
 
+class SearchMetricsObserver;
 class SearchProvider;
 enum class RankingItemType;
 
@@ -33,6 +38,7 @@ class SearchController {
  public:
   SearchController(AppListModelUpdater* model_updater,
                    AppListControllerDelegate* list_controller,
+                   ash::AppListNotifier* notifier,
                    Profile* profile);
   virtual ~SearchController();
 
@@ -91,6 +97,7 @@ class SearchController {
   std::string last_launched_app_id_;
 
   std::unique_ptr<Mixer> mixer_;
+  std::unique_ptr<SearchMetricsObserver> metrics_observer_;
   using Providers = std::vector<std::unique_ptr<SearchProvider>>;
   Providers providers_;
   AppListControllerDelegate* list_controller_;

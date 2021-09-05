@@ -88,6 +88,8 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
       base::Optional<HitTestRegionList> hit_test_region_list,
       uint64_t submit_time,
       SubmitCompositorFrameSyncCallback callback) override;
+  void InitializeCompositorFrameSinkType(
+      mojom::CompositorFrameSinkType type) override;
 
   base::ScopedClosureRunner GetCacheBackBufferCb();
 
@@ -103,7 +105,9 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
       std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
       std::unique_ptr<ExternalBeginFrameSource> external_begin_frame_source,
       std::unique_ptr<Display> display,
-      bool use_preferred_interval_for_video);
+      bool use_preferred_interval_for_video,
+      bool hw_support_for_multiple_refresh_rates,
+      size_t num_of_frames_to_toggle_interval);
 
   // DisplayClient:
   void DisplayOutputSurfaceLost() override;
@@ -113,11 +117,13 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override;
   void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override;
+  void SetWideColorEnabled(bool enabled) override;
   void SetPreferredFrameInterval(base::TimeDelta interval) override;
   base::TimeDelta GetPreferredFrameIntervalForFrameSinkId(
-      const FrameSinkId& id) override;
-  void UpdateVSyncParameters();
+      const FrameSinkId& id,
+      mojom::CompositorFrameSinkType* type) override;
 
+  void UpdateVSyncParameters();
   BeginFrameSource* begin_frame_source();
 
   mojo::Remote<mojom::CompositorFrameSinkClient> compositor_frame_sink_client_;

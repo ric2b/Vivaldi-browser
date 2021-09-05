@@ -122,9 +122,9 @@ AutomationPredicate = class {
    * @return {boolean}
    */
   static touchLeaf(node) {
-    return !node.firstChild || node.role == Role.BUTTON ||
-        node.role == Role.POP_UP_BUTTON || node.role == Role.SLIDER ||
-        node.role == Role.TEXT_FIELD ||
+    return !!(!node.firstChild && node.name) || node.role == Role.BUTTON ||
+        node.role == Role.POP_UP_BUTTON || node.role == Role.PORTAL ||
+        node.role == Role.SLIDER || node.role == Role.TEXT_FIELD ||
         (node.role == Role.MENU_ITEM && !hasActionableDescendant(node));
   }
 
@@ -236,6 +236,20 @@ AutomationPredicate = class {
         (/\S+/.test(node.name) ||
          (node.role != Role.LINE_BREAK && node.role != Role.STATIC_TEXT &&
           node.role != Role.INLINE_TEXT_BOX));
+  }
+
+  /**
+   * Matches against nodes visited during touch exploration.
+   * @param {!AutomationNode} node
+   * @return {boolean}
+   */
+  static touchObject(node) {
+    // Exclude large objects such as containers.
+    if (AutomationPredicate.container(node)) {
+      return false;
+    }
+
+    return AutomationPredicate.object(node);
   }
 
   /**
@@ -606,7 +620,8 @@ AutomationPredicate.link = AutomationPredicate.roles([Role.LINK]);
 /** @type {AutomationPredicate.Unary} */
 AutomationPredicate.row = AutomationPredicate.roles([Role.ROW]);
 /** @type {AutomationPredicate.Unary} */
-AutomationPredicate.table = AutomationPredicate.roles([Role.GRID, Role.TABLE]);
+AutomationPredicate.table =
+    AutomationPredicate.roles([Role.GRID, Role.LIST_GRID, Role.TABLE]);
 /** @type {AutomationPredicate.Unary} */
 AutomationPredicate.listLike =
     AutomationPredicate.roles([Role.LIST, Role.DESCRIPTION_LIST]);

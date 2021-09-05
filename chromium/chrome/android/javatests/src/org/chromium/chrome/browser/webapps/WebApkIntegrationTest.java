@@ -67,7 +67,7 @@ public class WebApkIntegrationTest {
     @LargeTest
     @Feature({"Webapps"})
     public void testWebApkLaunchesByLauncherActivity() {
-        String pwaRocksUrl = getUrlForHost("pwa.rocks");
+        String pwaRocksUrl = getUrlForHost("pwa-directory.appspot.com");
 
         Intent intent = new Intent();
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -80,6 +80,6 @@ public class WebApkIntegrationTest {
 
         WebappActivity lastActivity = mActivityTestRule.getActivity();
         Assert.assertEquals(ActivityType.WEB_APK, lastActivity.getActivityType());
-        Assert.assertEquals(pwaRocksUrl, lastActivity.getWebappInfo().url());
+        Assert.assertEquals(pwaRocksUrl, lastActivity.getIntentDataProvider().getUrlToLoad());
     }
 }

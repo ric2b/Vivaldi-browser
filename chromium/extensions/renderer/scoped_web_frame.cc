@@ -4,6 +4,7 @@
 
 #include "extensions/renderer/scoped_web_frame.h"
 
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/web/web_heap.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -16,11 +17,13 @@ ScopedWebFrame::ScopedWebFrame()
                                    /*is_hidden=*/false,
                                    /*compositing_enabled=*/false,
                                    /*opener=*/nullptr,
-                                   mojo::ScopedInterfaceEndpointHandle())),
-      frame_(blink::WebLocalFrame::CreateMainFrame(view_,
-                                                   &frame_client_,
-                                                   nullptr,
-                                                   nullptr)) {}
+                                   mojo::NullAssociatedReceiver())),
+      frame_(blink::WebLocalFrame::CreateMainFrame(
+          view_,
+          &frame_client_,
+          nullptr,
+          base::UnguessableToken::Create(),
+          nullptr)) {}
 
 ScopedWebFrame::~ScopedWebFrame() {
   view_->Close();

@@ -7,6 +7,7 @@ import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * AccountManagerFacade instance manipulation methods in one place.
  */
 public class AccountManagerFacadeProvider {
+    private static final String TAG = "AccManagerProvider";
     private static final AtomicReference<AccountManagerFacade> sAtomicInstance =
             new AtomicReference<>();
     private static AccountManagerFacade sInstance;
@@ -25,53 +27,49 @@ public class AccountManagerFacadeProvider {
     private AccountManagerFacadeProvider() {}
 
     /**
-     * Initializes AccountManagerFacade singleton instance. Can only be called once.
-     * Tests can override the instance with {@link #overrideAccountManagerFacadeForTests}.
+     * Sets AccountManagerFacade singleton instance. Can only be called once.
+     * Tests can override the instance with {@link #setInstanceForTests}.
      *
-     * @param delegate the AccountManagerDelegate to use
      */
     @MainThread
-    public static void initializeAccountManagerFacade(AccountManagerDelegate delegate) {
+    public static void setInstance(AccountManagerFacade accountManagerFacade) {
         ThreadUtils.assertOnUiThread();
         if (sInstance != null) {
             throw new IllegalStateException("AccountManagerFacade is already initialized!");
         }
-        sInstance = new AccountManagerFacade(delegate);
+        sInstance = accountManagerFacade;
         if (sTestingInstance != null) return;
         sAtomicInstance.set(sInstance);
     }
 
     /**
-     * Overrides AccountManagerFacade singleton instance for tests. Only for use in Tests.
-     * Overrides any previous or future calls to {@link #initializeAccountManagerFacade}.
-     *
-     * @param delegate the AccountManagerDelegate to use
+     * Sets the test instance.
      */
     @VisibleForTesting
     @AnyThread
-    public static void overrideAccountManagerFacadeForTests(AccountManagerDelegate delegate) {
+    public static void setInstanceForTests(AccountManagerFacade accountManagerFacade) {
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            sTestingInstance = new AccountManagerFacade(delegate);
+            sTestingInstance = accountManagerFacade;
             sAtomicInstance.set(sTestingInstance);
         });
     }
 
     /**
-     * Resets custom AccountManagerFacade set with {@link #overrideAccountManagerFacadeForTests}.
-     * Only for use in Tests.
+     * Resets the test instance set with {@link #setInstanceForTests}.
      */
     @VisibleForTesting
     @AnyThread
-    public static void resetAccountManagerFacadeForTests() {
+    public static void resetInstanceForTests() {
         ThreadUtils.runOnUiThreadBlocking(() -> {
             sTestingInstance = null;
             sAtomicInstance.set(sInstance);
+            Log.d(TAG, "reset AccountManagerFacade test instance");
         });
     }
 
     /**
      * Singleton instance getter. Singleton must be initialized before calling this by
-     * {@link #initializeAccountManagerFacade} or {@link #overrideAccountManagerFacadeForTests}.
+     * {@link #setInstance} or {@link #setInstanceForTests}.
      *
      * @return a singleton instance
      */

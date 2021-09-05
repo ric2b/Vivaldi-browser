@@ -21,6 +21,7 @@
 #include "base/values.h"
 #include "printing/backend/print_backend.h"
 #include "printing/backend/print_backend_consts.h"
+#include "printing/mojom/print.mojom.h"
 #include "printing/printing_utils.h"
 #include "printing/units.h"
 #include "url/gurl.h"
@@ -44,9 +45,9 @@ WEAK_CUPS_FN(httpConnect2);
 // able to start and respond on all systems within this duration.
 constexpr base::TimeDelta kCupsTimeout = base::TimeDelta::FromSeconds(5);
 
-// CUPS default max copies value (taken from default cupsMaxCopies parsing in
-// cups/ppd-cache.c).
+// CUPS default max copies value (parsed from kCupsMaxCopies PPD attribute).
 constexpr int32_t kDefaultMaxCopies = 9999;
+constexpr char kCupsMaxCopies[] = "cupsMaxCopies";
 
 constexpr char kColorDevice[] = "ColorDevice";
 constexpr char kColorModel[] = "ColorModel";
@@ -162,9 +163,19 @@ void MarkLpOptions(base::StringPiece printer_name, ppd_file_t* ppd) {
   }
 }
 
+int32_t GetCopiesMax(ppd_file_t* ppd) {
+  ppd_attr_t* attr = ppdFindAttr(ppd, kCupsMaxCopies, nullptr);
+  if (!attr || !attr->value) {
+    return kDefaultMaxCopies;
+  }
+
+  int32_t ret;
+  return base::StringToInt(attr->value, &ret) ? ret : kDefaultMaxCopies;
+}
+
 void GetDuplexSettings(ppd_file_t* ppd,
-                       std::vector<DuplexMode>* duplex_modes,
-                       DuplexMode* duplex_default) {
+                       std::vector<mojom::DuplexMode>* duplex_modes,
+                       mojom::DuplexMode* duplex_default) {
   ppd_choice_t* duplex_choice = ppdFindMarkedChoice(ppd, kDuplex);
   ppd_option_t* option = ppdFindOption(ppd, kDuplex);
   if (!option)
@@ -177,24 +188,24 @@ void GetDuplexSettings(ppd_file_t* ppd,
     duplex_choice = ppdFindChoice(option, option->defchoice);
 
   if (ppdFindChoice(option, kDuplexNone))
-    duplex_modes->push_back(SIMPLEX);
+    duplex_modes->push_back(mojom::DuplexMode::kSimplex);
 
   if (ppdFindChoice(option, kDuplexNoTumble))
-    duplex_modes->push_back(LONG_EDGE);
+    duplex_modes->push_back(mojom::DuplexMode::kLongEdge);
 
   if (ppdFindChoice(option, kDuplexTumble))
-    duplex_modes->push_back(SHORT_EDGE);
+    duplex_modes->push_back(mojom::DuplexMode::kShortEdge);
 
   if (!duplex_choice)
     return;
 
   const char* choice = duplex_choice->choice;
   if (EqualsCaseInsensitiveASCII(choice, kDuplexNone)) {
-    *duplex_default = SIMPLEX;
+    *duplex_default = mojom::DuplexMode::kSimplex;
   } else if (EqualsCaseInsensitiveASCII(choice, kDuplexTumble)) {
-    *duplex_default = SHORT_EDGE;
+    *duplex_default = mojom::DuplexMode::kShortEdge;
   } else {
-    *duplex_default = LONG_EDGE;
+    *duplex_default = mojom::DuplexMode::kLongEdge;
   }
 }
 
@@ -591,9 +602,7 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
   if (!base::CreateTemporaryFile(&ppd_file_path))
     return false;
 
-  int data_size = printer_capabilities.length();
-  if (data_size !=
-      base::WriteFile(ppd_file_path, printer_capabilities.data(), data_size)) {
+  if (!base::WriteFile(ppd_file_path, printer_capabilities)) {
     base::DeleteFile(ppd_file_path, false);
     return false;
   }
@@ -612,8 +621,7 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
   PrinterSemanticCapsAndDefaults caps;
   caps.collate_capable = true;
   caps.collate_default = true;
-  // TODO(crbug.com/1027830): Parse PPD for cupsMaxCopies value.
-  caps.copies_max = kDefaultMaxCopies;
+  caps.copies_max = GetCopiesMax(ppd);
 
   GetDuplexSettings(ppd, &caps.duplex_modes, &caps.duplex_default);
 

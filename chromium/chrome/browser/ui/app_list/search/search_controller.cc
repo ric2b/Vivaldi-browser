@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/cros_action_history/cros_action_recorder.h"
+#include "chrome/browser/ui/app_list/search/search_metrics_observer.h"
 #include "chrome/browser/ui/app_list/search/search_provider.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/chip_ranker.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/histogram_util.h"
@@ -69,9 +70,12 @@ std::string RemoveAppShortcutLabel(const std::string& id) {
 
 SearchController::SearchController(AppListModelUpdater* model_updater,
                                    AppListControllerDelegate* list_controller,
+                                   ash::AppListNotifier* notifier,
                                    Profile* profile)
     : profile_(profile),
       mixer_(std::make_unique<Mixer>(model_updater)),
+      metrics_observer_(
+          std::make_unique<SearchMetricsObserver>(notifier, this)),
       list_controller_(list_controller) {}
 
 SearchController::~SearchController() {}
@@ -111,12 +115,17 @@ void SearchController::OpenResult(ChromeSearchResult* result, int event_flags) {
                               ash::SearchResultDisplayType::kLast);
   }
 
+  const bool dismiss_view_on_open = result->dismiss_view_on_open();
+
+  // Open() may cause |result| to be deleted.
   result->Open(event_flags);
 
-  // Launching apps can take some time. It looks nicer to dismiss the app list.
-  // Do not close app list for home launcher.
-  if (!ash::TabletMode::Get() || !ash::TabletMode::Get()->InTabletMode())
+  // Launching apps can take some time. It looks nicer to eagerly dismiss the
+  // app list if |result| permits it. Do not close app list for home launcher.
+  if (dismiss_view_on_open &&
+      (!ash::TabletMode::Get() || !ash::TabletMode::Get()->InTabletMode())) {
     list_controller_->DismissView();
+  }
 }
 
 void SearchController::InvokeResultAction(ChromeSearchResult* result,

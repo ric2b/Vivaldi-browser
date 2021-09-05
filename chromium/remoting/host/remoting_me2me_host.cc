@@ -59,6 +59,7 @@
 #include "remoting/host/desktop_environment.h"
 #include "remoting/host/desktop_environment_options.h"
 #include "remoting/host/desktop_session_connector.h"
+#include "remoting/host/ftl_echo_message_listener.h"
 #include "remoting/host/ftl_host_change_notification_listener.h"
 #include "remoting/host/ftl_signaling_connector.h"
 #include "remoting/host/heartbeat_sender.h"
@@ -79,7 +80,6 @@
 #include "remoting/host/security_key/security_key_auth_handler.h"
 #include "remoting/host/security_key/security_key_extension.h"
 #include "remoting/host/shutdown_watchdog.h"
-#include "remoting/host/single_window_desktop_environment.h"
 #include "remoting/host/switches.h"
 #include "remoting/host/test_echo_extension.h"
 #include "remoting/host/third_party_auth_config.h"
@@ -180,8 +180,6 @@ const char kEnableVp9SwitchName[] = "enable-vp9";
 
 // Command line switch used to enable hardware H264 encoding.
 const char kEnableH264SwitchName[] = "enable-h264";
-
-const char kWindowIdSwitchName[] = "window-id";
 
 // Command line switch used to send a custom offline reason and exit.
 const char kReportOfflineReasonSwitchName[] = "report-offline-reason";
@@ -338,8 +336,6 @@ class HostProcess : public ConfigWatcher::Delegate,
   void GoOffline(const std::string& host_offline_reason);
   void OnHostOfflineReasonAck(bool success);
 
-  void UpdateConfigRefreshToken(const std::string& token);
-
 #if defined(OS_WIN)
   // Initializes the pairing registry on Windows. This should be invoked on the
   // network thread.
@@ -397,17 +393,13 @@ class HostProcess : public ConfigWatcher::Delegate,
   bool security_key_auth_policy_enabled_ = false;
   bool security_key_extension_supported_ = true;
 
-  // Boolean to change flow, where necessary, if we're
-  // capturing a window instead of the entire desktop.
-  bool enable_window_capture_ = false;
-
   // Used to specify which window to stream, if enabled.
   webrtc::WindowId window_id_ = 0;
 
   // Must outlive |signal_strategy_| and |ftl_signaling_connector_|.
   std::unique_ptr<OAuthTokenGetterImpl> oauth_token_getter_;
 
-  // Must outlive |heartbeat_sender_| and |host_status_logger_|.
+  // Must outlive |host_status_logger_|.
   std::unique_ptr<LogToServer> log_to_server_;
 
   // Signal strategies must outlive |ftl_signaling_connector_|.
@@ -417,6 +409,7 @@ class HostProcess : public ConfigWatcher::Delegate,
   std::unique_ptr<HeartbeatSender> heartbeat_sender_;
   std::unique_ptr<FtlHostChangeNotificationListener>
       ftl_host_change_notification_listener_;
+  std::unique_ptr<FtlEchoMessageListener> ftl_echo_message_listener_;
 
   std::unique_ptr<HostStatusLogger> host_status_logger_;
   std::unique_ptr<HostEventLogger> host_event_logger_;
@@ -572,27 +565,6 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
     if (report_offline_reason_.empty()) {
       LOG(ERROR) << "--" << kReportOfflineReasonSwitchName
                  << " requires an argument.";
-      return false;
-    }
-  }
-
-  enable_window_capture_ = cmd_line->HasSwitch(kWindowIdSwitchName);
-  if (enable_window_capture_) {
-
-#if defined(OS_LINUX) || defined(OS_WIN)
-    LOG(WARNING) << "Window capturing is not fully supported on Linux or "
-                    "Windows.";
-#endif  // defined(OS_LINUX) || defined(OS_WIN)
-
-    // uint32_t is large enough to hold window IDs on all platforms.
-    uint32_t window_id;
-    if (base::StringToUint(
-            cmd_line->GetSwitchValueASCII(kWindowIdSwitchName),
-            &window_id)) {
-      window_id_ = static_cast<webrtc::WindowId>(window_id);
-    } else {
-      LOG(ERROR) << "Window with window id: " << window_id_
-                 << " not found. Shutting down host.";
       return false;
     }
   }
@@ -896,15 +868,9 @@ void HostProcess::StartOnUiThread() {
   desktop_session_connector_ = desktop_environment_factory;
 #else  // !defined(REMOTING_MULTI_PROCESS)
   BasicDesktopEnvironmentFactory* desktop_environment_factory;
-  if (enable_window_capture_) {
-    desktop_environment_factory = new SingleWindowDesktopEnvironmentFactory(
-        context_->network_task_runner(), context_->video_capture_task_runner(),
-        context_->input_task_runner(), context_->ui_task_runner(), window_id_);
-  } else {
-    desktop_environment_factory = new Me2MeDesktopEnvironmentFactory(
-        context_->network_task_runner(), context_->video_capture_task_runner(),
-        context_->input_task_runner(), context_->ui_task_runner());
-  }
+  desktop_environment_factory = new Me2MeDesktopEnvironmentFactory(
+      context_->network_task_runner(), context_->video_capture_task_runner(),
+      context_->input_task_runner(), context_->ui_task_runner());
 #endif  // !defined(REMOTING_MULTI_PROCESS)
 
   desktop_environment_factory_.reset(desktop_environment_factory);
@@ -1423,8 +1389,6 @@ void HostProcess::InitializeSignaling() {
   // callback will never be invoked once it is destroyed.
   oauth_token_getter_ = std::make_unique<OAuthTokenGetterImpl>(
       std::move(oauth_credentials),
-      base::BindRepeating(&HostProcess::UpdateConfigRefreshToken,
-                          base::Unretained(this)),
       context_->url_loader_factory(), false);
 
   log_to_server_ = std::make_unique<RemotingLogToServer>(
@@ -1439,11 +1403,7 @@ void HostProcess::InitializeSignaling() {
       base::BindOnce(&HostProcess::OnAuthFailed, base::Unretained(this)));
   ftl_signaling_connector_->Start();
   heartbeat_sender_ = std::make_unique<HeartbeatSender>(
-      this, host_id_, ftl_signal_strategy.get(), oauth_token_getter_.get(),
-      log_to_server_.get());
-  ftl_host_change_notification_listener_ =
-      std::make_unique<FtlHostChangeNotificationListener>(
-          this, ftl_signal_strategy.get());
+      this, host_id_, ftl_signal_strategy.get(), oauth_token_getter_.get());
   signal_strategy_ = std::move(ftl_signal_strategy);
 }
 
@@ -1536,6 +1496,13 @@ void HostProcess::StartHost() {
   power_save_blocker_.reset(new HostPowerSaveBlocker(
       host_->status_monitor(), context_->ui_task_runner(),
       context_->file_task_runner()));
+
+  ftl_host_change_notification_listener_ =
+      std::make_unique<FtlHostChangeNotificationListener>(
+          this, signal_strategy_.get());
+
+  ftl_echo_message_listener_ = std::make_unique<FtlEchoMessageListener>(
+      host_owner_, signal_strategy_.get());
 
   // Set up reporting the host status notifications.
 #if defined(REMOTING_MULTI_PROCESS)
@@ -1651,6 +1618,7 @@ void HostProcess::OnHostOfflineReasonAck(bool success) {
   heartbeat_sender_.reset();
   oauth_token_getter_.reset();
   ftl_signaling_connector_.reset();
+  ftl_echo_message_listener_.reset();
   signal_strategy_.reset();
 
   if (state_ == HOST_GOING_OFFLINE_TO_RESTART) {
@@ -1670,13 +1638,6 @@ void HostProcess::OnHostOfflineReasonAck(bool success) {
   } else {
     NOTREACHED();
   }
-}
-
-void HostProcess::UpdateConfigRefreshToken(const std::string& token) {
-#if defined(REMOTING_MULTI_PROCESS)
-  daemon_channel_->Send(
-      new ChromotingNetworkDaemonMsg_UpdateConfigRefreshToken(token));
-#endif
 }
 
 void HostProcess::OnCrash(const std::string& function_name,

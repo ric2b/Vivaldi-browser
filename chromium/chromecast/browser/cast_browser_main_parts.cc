@@ -121,6 +121,7 @@
 #if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
 #include "chromecast/browser/extensions/api/tts/tts_extension_api.h"
 #include "chromecast/browser/extensions/cast_extension_system.h"
+#include "chromecast/browser/extensions/cast_extension_system_factory.h"
 #include "chromecast/browser/extensions/cast_extensions_browser_client.h"
 #include "chromecast/browser/extensions/cast_prefs.h"
 #include "chromecast/common/cast_extensions_client.h"
@@ -139,8 +140,10 @@
 
 #if !defined(OS_FUCHSIA)
 #include "base/bind_helpers.h"
-#include "components/heap_profiling/client_connection_manager.h"
-#include "components/heap_profiling/supervisor.h"
+#include "chromecast/base/cast_sys_info_util.h"
+#include "chromecast/public/cast_sys_info.h"
+#include "components/heap_profiling/multi_process/client_connection_manager.h"
+#include "components/heap_profiling/multi_process/supervisor.h"
 #endif  // !defined(OS_FUCHSIA)
 
 namespace {
@@ -378,6 +381,17 @@ void AddDefaultCommandLineSwitches(base::CommandLine* command_line) {
   }
 }
 
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+// Instantiates all cast KeyedService factories, which is especially important
+// for services that should be created at profile creation time as compared to
+// lazily on first access.
+void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  extensions::EnsureBrowserContextKeyedServiceFactoriesBuilt();
+
+  extensions::CastExtensionSystemFactory::GetInstance();
+}
+#endif
+
 }  // namespace
 
 CastBrowserMainParts::CastBrowserMainParts(
@@ -574,10 +588,12 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
 #if defined(USE_AURA)
 
 #if !defined(OS_FUCHSIA)
-  // Start UI devtools if enabled.
+  // Start UI devtools if this is a dev device or explicitly enabled.
   // Note that this must happen before the window tree host is created by the
   // window manager.
-  if (::ui_devtools::UiDevToolsServer::IsUiDevToolsEnabled(
+  auto build_type = CreateSysInfo()->GetBuildType();
+  if (CAST_IS_DEBUG_BUILD() || build_type == CastSysInfo::BUILD_ENG ||
+      ::ui_devtools::UiDevToolsServer::IsUiDevToolsEnabled(
           ::ui_devtools::switches::kEnableUiDevTools)) {
     // Starts the UI Devtools server for browser Aura UI
     ui_devtools_ = std::make_unique<CastUIDevTools>(
@@ -627,7 +643,7 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
           cast_content_browser_client_->cast_network_contexts());
   extensions::ExtensionsBrowserClient::Set(extensions_browser_client_.get());
 
-  extensions::EnsureBrowserContextKeyedServiceFactoriesBuilt();
+  EnsureBrowserContextKeyedServiceFactoriesBuilt();
 
   extensions::CastExtensionSystem* extension_system =
       static_cast<extensions::CastExtensionSystem*>(

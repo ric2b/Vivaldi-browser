@@ -266,7 +266,7 @@ class TestGCScope : public TestGCCollectGarbageScope {
         BlinkGC::GCReason::kForcedGCForTesting);
     ThreadState::Current()->AtomicPauseMarkPrologue(
         BlinkGC::CollectionType::kMajor, state, BlinkGC::kAtomicMarking,
-        BlinkGC::GCReason::kPreciseGC);
+        BlinkGC::GCReason::kForcedGCForTesting);
   }
   ~TestGCScope() {
     ThreadState::Current()->AtomicPauseMarkEpilogue(BlinkGC::kAtomicMarking);
@@ -604,10 +604,11 @@ TEST_F(HeapTest, IsHeapObjectAliveForConstPointer) {
   // See http://crbug.com/661363.
   auto* object = MakeGarbageCollected<SimpleObject>();
   HeapObjectHeader* header = HeapObjectHeader::FromPayload(object);
+  LivenessBroker broker = internal::LivenessBrokerFactory::Create();
   EXPECT_TRUE(header->TryMark());
-  EXPECT_TRUE(ThreadHeap::IsHeapObjectAlive(object));
+  EXPECT_TRUE(broker.IsHeapObjectAlive(object));
   const SimpleObject* const_object = const_cast<const SimpleObject*>(object);
-  EXPECT_TRUE(ThreadHeap::IsHeapObjectAlive(const_object));
+  EXPECT_TRUE(broker.IsHeapObjectAlive(const_object));
 }
 
 class ClassWithMember : public GarbageCollected<ClassWithMember> {
@@ -863,7 +864,7 @@ class Weak : public Bar {
         this);
   }
 
-  void ZapWeakMembers(const WeakCallbackInfo& info) {
+  void ZapWeakMembers(const LivenessBroker& info) {
     if (!info.IsHeapObjectAlive(weak_bar_))
       weak_bar_ = nullptr;
   }
@@ -1013,7 +1014,7 @@ class FinalizationObserver : public GarbageCollected<FinalizationObserver<T>> {
         this);
   }
 
-  void ZapWeakMembers(const WeakCallbackInfo& info) {
+  void ZapWeakMembers(const LivenessBroker& info) {
     if (data_ && !info.IsHeapObjectAlive(data_)) {
       data_->WillFinalize();
       data_ = nullptr;
@@ -1827,7 +1828,7 @@ TEST_F(HeapTest, LazySweepingPages) {
   EXPECT_EQ(0, SimpleFinalizedObject::destructor_calls_);
   for (int i = 0; i < 1000; i++)
     MakeGarbageCollected<SimpleFinalizedObject>();
-  ThreadState::Current()->CollectGarbage(
+  ThreadState::Current()->CollectGarbageForTesting(
       BlinkGC::CollectionType::kMajor, BlinkGC::kNoHeapPointersOnStack,
       BlinkGC::kAtomicMarking, BlinkGC::kConcurrentAndLazySweeping,
       BlinkGC::GCReason::kForcedGCForTesting);
@@ -1861,7 +1862,7 @@ TEST_F(HeapTest, LazySweepingLargeObjectPages) {
   EXPECT_EQ(0, LargeHeapObject::destructor_calls_);
   for (int i = 0; i < 10; i++)
     MakeGarbageCollected<LargeHeapObject>();
-  ThreadState::Current()->CollectGarbage(
+  ThreadState::Current()->CollectGarbageForTesting(
       BlinkGC::CollectionType::kMajor, BlinkGC::kNoHeapPointersOnStack,
       BlinkGC::kAtomicMarking, BlinkGC::kConcurrentAndLazySweeping,
       BlinkGC::GCReason::kForcedGCForTesting);
@@ -1873,7 +1874,7 @@ TEST_F(HeapTest, LazySweepingLargeObjectPages) {
   MakeGarbageCollected<LargeHeapObject>();
   MakeGarbageCollected<LargeHeapObject>();
   EXPECT_EQ(10, LargeHeapObject::destructor_calls_);
-  ThreadState::Current()->CollectGarbage(
+  ThreadState::Current()->CollectGarbageForTesting(
       BlinkGC::CollectionType::kMajor, BlinkGC::kNoHeapPointersOnStack,
       BlinkGC::kAtomicMarking, BlinkGC::kConcurrentAndLazySweeping,
       BlinkGC::GCReason::kForcedGCForTesting);
@@ -5302,8 +5303,10 @@ TEST_F(HeapTest, GarbageCollectedMixinInConstruction) {
 
 TEST_F(HeapTest, GarbageCollectedMixinIsAliveDuringConstruction) {
   using O = ObjectWithMixinWithCallbackBeforeInitializer<IntWrapper>;
-  MakeGarbageCollected<O>(base::BindOnce(
-      [](O::Mixin* thiz) { CHECK(ThreadHeap::IsHeapObjectAlive(thiz)); }));
+  MakeGarbageCollected<O>(base::BindOnce([](O::Mixin* thiz) {
+    LivenessBroker broker = internal::LivenessBrokerFactory::Create();
+    CHECK(broker.IsHeapObjectAlive(thiz));
+  }));
 
   using P = HeapVector<Member<HeapLinkedHashSet<Member<IntWrapper>>>>;
   MakeGarbageCollected<P>();

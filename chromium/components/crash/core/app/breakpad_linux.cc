@@ -67,8 +67,6 @@
 #include "services/service_manager/embedder/switches.h"  // nogncheck
 #endif
 
-#include "installer/vivaldi_crash_urls.h"
-
 #if defined(ADDRESS_SANITIZER)
 #include <ucontext.h>  // for getcontext().
 #endif
@@ -105,7 +103,11 @@ namespace {
 // while we do have functions to deal with uint64_t's.
 uint64_t g_crash_loop_before_time = 0;
 #else
-const char kUploadURL[] = CRASH_REPORT_URL("/report");
+char* g_upload_url = nullptr;
+void SetUploadURL(const std::string& url) {
+  DCHECK(!g_upload_url);
+  g_upload_url = strdup(url.c_str());
+}
 #endif
 
 bool g_is_crash_reporter_enabled = false;
@@ -1402,16 +1404,16 @@ void ExecUploadProcessOrTerminate(const BreakpadInfo& info,
 
   static const char kWgetBinary[] = "/usr/bin/wget";
   const char* args[] = {
-    kWgetBinary,
-    header_content_encoding,
-    header_content_type,
-    post_file,
-    kUploadURL,
-    "--timeout=10",  // Set a timeout so we don't hang forever.
-    "--tries=1",     // Don't retry if the upload fails.
-    "-O",  // Output reply to the file descriptor path.
-    status_fd_path,
-    nullptr,
+      kWgetBinary,
+      header_content_encoding,
+      header_content_type,
+      post_file,
+      g_upload_url,
+      "--timeout=10",  // Set a timeout so we don't hang forever.
+      "--tries=1",     // Don't retry if the upload fails.
+      "-O",            // Output reply to the file descriptor path.
+      status_fd_path,
+      nullptr,
   };
   static const char msg[] = "Cannot upload crash dump: cannot exec "
                             "/usr/bin/wget\n";
@@ -1895,8 +1897,7 @@ void HandleCrashDump(const BreakpadInfo& info) {
 
   IGNORE_RET(sys_close(temp_file_fd));
 
-// For now save the file in tmp (patricia@vivaldi.com)
-#if defined(OS_ANDROID) || defined(VIVALDI_BUILD)
+#if defined(OS_ANDROID)
   if (info.filename) {
     size_t filename_length = my_strlen(info.filename);
 
@@ -2039,6 +2040,10 @@ void InitCrashReporter(const std::string& process_type) {
       process_type == kBrowserProcessType ||
 #endif
       process_type.empty();
+
+#if !defined(OS_CHROMEOS)
+  SetUploadURL(GetCrashReporterClient()->GetUploadUrl());
+#endif
 
   if (is_browser_process) {
     bool enable_breakpad = GetCrashReporterClient()->GetCollectStatsConsent() ||

@@ -6,9 +6,10 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
@@ -33,7 +34,7 @@ std::unique_ptr<app_list::AppContextMenu> AppServiceAppItem::MakeAppContextMenu(
     AppListControllerDelegate* controller,
     bool is_platform_app) {
   // Terminal System App uses CrostiniAppContextMenu.
-  if (app_id == crostini::kCrostiniTerminalSystemAppId) {
+  if (app_id == crostini::GetTerminalId()) {
     return std::make_unique<CrostiniAppContextMenu>(profile, app_id,
                                                     controller);
   }
@@ -41,6 +42,7 @@ std::unique_ptr<app_list::AppContextMenu> AppServiceAppItem::MakeAppContextMenu(
   switch (app_type) {
     case apps::mojom::AppType::kUnknown:
     case apps::mojom::AppType::kBuiltIn:
+    case apps::mojom::AppType::kLacros:
       return std::make_unique<app_list::AppContextMenu>(delegate, profile,
                                                         app_id, controller);
 
@@ -51,6 +53,10 @@ std::unique_ptr<app_list::AppContextMenu> AppServiceAppItem::MakeAppContextMenu(
     case apps::mojom::AppType::kCrostini:
       return std::make_unique<CrostiniAppContextMenu>(profile, app_id,
                                                       controller);
+
+    case apps::mojom::AppType::kPluginVm:
+      return std::make_unique<app_list::AppContextMenu>(delegate, profile,
+                                                        app_id, controller);
 
     case apps::mojom::AppType::kWeb:
       if (base::FeatureList::IsEnabled(
@@ -89,7 +95,7 @@ AppServiceAppItem::AppServiceAppItem(
 
     // Crostini apps and the Terminal System App start in the crostini folder.
     if (app_type_ == apps::mojom::AppType::kCrostini ||
-        id() == crostini::kCrostiniTerminalSystemAppId) {
+        id() == crostini::GetTerminalId()) {
       DCHECK(folder_id().empty());
       SetChromeFolderId(crostini::kCrostiniFolderId);
     }

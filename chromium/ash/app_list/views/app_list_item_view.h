@@ -27,7 +27,6 @@ class SimpleMenuModel;
 namespace views {
 class ImageView;
 class Label;
-class ProgressBar;
 }  // namespace views
 
 namespace ash {
@@ -64,8 +63,6 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   void SetItemName(const base::string16& display_name,
                    const base::string16& full_name);
-  void SetItemIsInstalling(bool is_installing);
-  void SetItemPercentDownloaded(int percent_downloaded);
 
   void CancelContextMenu();
 
@@ -103,6 +100,10 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   // Sets UI state to dragging state.
   void SetDragUIState();
+  // Sets UI state to cardify state.
+  void SetCardifyUIState();
+  // Sets UI state to normal state.
+  void SetNormalUIState();
 
   // Returns the icon bounds for with |target_bounds| as the bounds of this view
   // and given |icon_size| and the |icon_scale| if the icon was scaled from the
@@ -119,12 +120,6 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
       const AppListConfig& config,
       const gfx::Rect& target_bounds,
       const gfx::Size& title_size);
-
-  // Returns the progress bar bounds for with |target_bounds| as the bounds of
-  // this view and given |progress_bar_size|.
-  static gfx::Rect GetProgressBarBoundsForTargetViewBounds(
-      const gfx::Rect& target_bounds,
-      const gfx::Size& progress_bar_size);
 
   // views::Button overrides:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -157,6 +152,7 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
     UI_STATE_NORMAL,              // Normal UI (icon + label)
     UI_STATE_DRAGGING,            // Dragging UI (scaled icon only)
     UI_STATE_DROPPING_IN_FOLDER,  // Folder dropping preview UI
+    UI_STATE_CARDIFY,             // Cardify UI (scaled icon + label)
   };
 
   // gfx::AnimationDelegate:
@@ -176,6 +172,9 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   // Scales up app icon if |scale_up| is true; otherwise, scale it back to
   // normal size.
   void ScaleAppIcon(bool scale_up);
+
+  // Scale app icon to |scale_factor| without animation.
+  void ScaleIconImmediatly(float scale_factor);
 
   // Sets |touch_dragging_| flag and updates UI.
   void SetTouchDragging(bool touch_dragging);
@@ -222,8 +221,6 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   // AppListItemObserver overrides:
   void ItemIconChanged(AppListConfigType config_type) override;
   void ItemNameChanged() override;
-  void ItemIsInstallingChanged() override;
-  void ItemPercentDownloadedChanged() override;
   void ItemBeingDestroyed() override;
 
   // ui::ImplicitAnimationObserver:
@@ -254,7 +251,6 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   AppsGridView* apps_grid_view_;                // Parent view, owns this.
   IconImageView* icon_ = nullptr;               // Strongly typed child view.
   views::Label* title_ = nullptr;               // Strongly typed child view.
-  views::ProgressBar* progress_bar_ = nullptr;  // Strongly typed child view.
   views::ImageView* icon_shadow_ = nullptr;     // Strongly typed child view.
 
   std::unique_ptr<AppListMenuModelAdapter> context_menu_;
@@ -276,8 +272,6 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   // The radius of preview circle for non-folder item.
   int preview_circle_radius_ = 0;
-
-  bool is_installing_ = false;
 
   // Whether |context_menu_| was cancelled as the result of a continuous drag
   // gesture.

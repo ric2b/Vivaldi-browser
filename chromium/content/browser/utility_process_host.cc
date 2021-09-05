@@ -91,6 +91,7 @@ class UtilitySandboxedProcessLauncherDelegate
         sandbox_type_ == service_manager::SandboxType::kCdm ||
         sandbox_type_ == service_manager::SandboxType::kPrintCompositor ||
         sandbox_type_ == service_manager::SandboxType::kPpapi ||
+        sandbox_type_ == service_manager::SandboxType::kVideoCapture ||
 #if defined(OS_CHROMEOS)
         sandbox_type_ == service_manager::SandboxType::kIme ||
 #endif  // OS_CHROMEOS
@@ -98,7 +99,7 @@ class UtilitySandboxedProcessLauncherDelegate
 #if !defined(OS_MACOSX)
         sandbox_type_ == service_manager::SandboxType::kSharingService ||
 #endif
-        sandbox_type_ == service_manager::SandboxType::kSoda;
+        sandbox_type_ == service_manager::SandboxType::kSpeechRecognition;
     DCHECK(supported_sandbox_type);
 #endif  // DCHECK_IS_ON()
   }
@@ -213,7 +214,7 @@ class UtilitySandboxedProcessLauncherDelegate
         sandbox_type_ == service_manager::SandboxType::kIme ||
 #endif  // OS_CHROMEOS
         sandbox_type_ == service_manager::SandboxType::kAudio ||
-        sandbox_type_ == service_manager::SandboxType::kSoda) {
+        sandbox_type_ == service_manager::SandboxType::kSpeechRecognition) {
       return service_manager::GetUnsandboxedZygote();
     }
 
@@ -233,7 +234,7 @@ class UtilitySandboxedProcessLauncherDelegate
  private:
 #if defined(OS_POSIX)
   base::EnvironmentMap env_;
-#endif  // OS_WIN
+#endif  // OS_POSIX
   service_manager::SandboxType sandbox_type_;
   base::CommandLine cmd_line_;
 };
@@ -281,7 +282,6 @@ bool UtilityProcessHost::Send(IPC::Message* message) {
 
 void UtilityProcessHost::SetSandboxType(
     service_manager::SandboxType sandbox_type) {
-  DCHECK(sandbox_type != service_manager::SandboxType::kInvalid);
   sandbox_type_ = sandbox_type;
 }
 
@@ -398,6 +398,8 @@ bool UtilityProcessHost::StartProcess() {
 
     cmd_line->AppendSwitchASCII(switches::kProcessType,
                                 switches::kUtilityProcess);
+    // Specify the type of utility process for debugging/profiling purposes.
+    cmd_line->AppendSwitchASCII(switches::kUtilitySubType, metrics_name_);
     BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line.get());
     BrowserChildProcessHostImpl::CopyTraceStartupFlags(cmd_line.get());
     std::string locale = GetContentClient()->browser()->GetApplicationLocale();
@@ -422,6 +424,7 @@ bool UtilityProcessHost::StartProcess() {
 
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
+      network::switches::kAdditionalTrustTokenKeyCommitments,
       network::switches::kForceEffectiveConnectionType,
       network::switches::kHostResolverRules,
       network::switches::kIgnoreCertificateErrorsSPKIList,
@@ -430,12 +433,16 @@ bool UtilityProcessHost::StartProcess() {
       network::switches::kNetLogCaptureMode,
       network::switches::kExplicitlyAllowedPorts,
       service_manager::switches::kNoSandbox,
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+      switches::kDisableDevShmUsage,
+#endif
       service_manager::switches::kEnableAudioServiceSandbox,
 #if defined(OS_MACOSX)
       service_manager::switches::kEnableSandboxLogging,
       os_crypt::switches::kUseMockKeychain,
 #endif
       switches::kDisableTestCerts,
+      switches::kEnableExperimentalCookieFeatures,
       switches::kEnableLogging,
       switches::kForceTextDirection,
       switches::kForceUIDirection,
@@ -463,7 +470,6 @@ bool UtilityProcessHost::StartProcess() {
       switches::kAudioServiceQuitTimeoutMs,
       switches::kDisableAudioOutput,
       switches::kFailAudioStreamCreation,
-      switches::kForceDisableWebRtcApmInAudioService,
       switches::kMuteAudio,
       switches::kUseFileForFakeAudioCapture,
       switches::kAgcStartupMinVolume,

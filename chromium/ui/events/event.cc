@@ -8,6 +8,7 @@
 #include <cstring>
 #include <utility>
 
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
@@ -137,6 +138,14 @@ std::string ScrollEventPhaseToString(ScrollEventPhase phase) {
       return "kEnd";
   }
 }
+
+#if defined(USE_OZONE)
+uint32_t ScanCodeFromNative(const PlatformEvent& native_event) {
+  const ui::KeyEvent* event = static_cast<const ui::KeyEvent*>(native_event);
+  DCHECK(event->IsKeyEvent());
+  return event->scan_code();
+}
+#endif  // defined(USE_OZONE)
 
 }  // namespace
 
@@ -784,6 +793,9 @@ KeyEvent::KeyEvent(const PlatformEvent& native_event)
 KeyEvent::KeyEvent(const PlatformEvent& native_event, int event_flags)
     : Event(native_event, EventTypeFromNative(native_event), event_flags),
       key_code_(KeyboardCodeFromNative(native_event)),
+#if defined(USE_OZONE)
+      scan_code_(ScanCodeFromNative(native_event)),
+#endif  // defined(USE_OZONE)
       code_(CodeFromNative(native_event)),
       is_char_(IsCharFromNative(native_event)) {
   InitializeNative();
@@ -837,14 +849,21 @@ KeyEvent::KeyEvent(base::char16 character,
 KeyEvent::KeyEvent(const KeyEvent& rhs)
     : Event(rhs),
       key_code_(rhs.key_code_),
+#if defined(USE_OZONE)
+      scan_code_(rhs.scan_code_),
+#endif  // defined(USE_OZONE)
       code_(rhs.code_),
       is_char_(rhs.is_char_),
-      key_(rhs.key_) {}
+      key_(rhs.key_) {
+}
 
 KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
   if (this != &rhs) {
     Event::operator=(rhs);
     key_code_ = rhs.key_code_;
+#if defined(USE_OZONE)
+    scan_code_ = rhs.scan_code_;
+#endif  // defined(USE_OZONE)
     code_ = rhs.code_;
     key_ = rhs.key_;
     is_char_ = rhs.is_char_;
@@ -859,16 +878,12 @@ void KeyEvent::InitializeNative() {
       INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, time_stamp());
   latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT);
 
-  KeyEvent** last_key_event = &last_key_event_;
+  // Check if this is a key repeat. This must be called before initial flags
+  // processing, e.g: NormalizeFlags(), to avoid issues like crbug.com/1069690.
+  if (IsRepeated(GetLastKeyEvent()))
+    set_flags(flags() | ui::EF_IS_REPEAT);
 
 #if defined(USE_X11)
-  // Use a different static variable for key events that have non standard
-  // state masks as it may be reposted by an IME. IBUS-GTK uses this field
-  // to detect the re-posted event for example. crbug.com/385873.
-  if (properties() && properties()->contains(kPropertyKeyboardIBusFlag)) {
-    last_key_event = &last_ibus_key_event_;
-  }
-
   NormalizeFlags();
 #elif defined(OS_WIN)
   // Only Windows has native character events.
@@ -881,9 +896,6 @@ void KeyEvent::InitializeNative() {
     set_flags(adjusted_flags);
   }
 #endif
-
-  if (IsRepeated(last_key_event))
-    set_flags(flags() | ui::EF_IS_REPEAT);
 }
 
 void KeyEvent::ApplyLayout() const {
@@ -974,6 +986,19 @@ bool KeyEvent::IsRepeated(KeyEvent** last_key_event) {
   *last_key_event = new KeyEvent(*this);
 
   return false;
+}
+
+KeyEvent** KeyEvent::GetLastKeyEvent() {
+#if defined(USE_X11)
+  // Use a different static variable for key events that have non standard
+  // state masks as it may be reposted by an IME. IBUS-GTK uses this field
+  // to detect the re-posted event for example. crbug.com/385873.
+  return properties() && properties()->contains(kPropertyKeyboardIBusFlag)
+             ? &last_ibus_key_event_
+             : &last_key_event_;
+#else
+  return &last_key_event_;
+#endif
 }
 
 DomKey KeyEvent::GetDomKey() const {

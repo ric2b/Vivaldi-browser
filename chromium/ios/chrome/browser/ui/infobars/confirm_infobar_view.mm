@@ -7,19 +7,23 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <QuartzCore/QuartzCore.h>
 
+#include "base/check_op.h"
+#include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/i18n/rtl.h"
-#include "base/logging.h"
 #include "base/mac/foundation_util.h"
+#include "base/notreached.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/infobars/infobar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/label_link_controller.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -827,6 +831,14 @@ UIImage* InfoBarCloseImage() {
   [_closeButton setTag:tag];
   [_closeButton setAccessibilityLabel:l10n_util::GetNSString(IDS_CLOSE)];
   _closeButton.tintColor = [UIColor colorNamed:kToolbarButtonColor];
+
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (base::FeatureList::IsEnabled(kPointerSupport)) {
+      _closeButton.pointerInteractionEnabled = YES;
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
   [self addSubview:_closeButton];
 }
 
@@ -1029,6 +1041,15 @@ UIImage* InfoBarCloseImage() {
   [button addTarget:target
                 action:action
       forControlEvents:UIControlEventTouchUpInside];
+
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (base::FeatureList::IsEnabled(kPointerSupport)) {
+      button.pointerInteractionEnabled = YES;
+      button.pointerStyleProvider = CreateOpaqueButtonPointerStyleProvider();
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
   // Without the call to layoutIfNeeded, |button| returns an incorrect
   // titleLabel the first time it is accessed in |narrowestWidthOfButton|.
   [button layoutIfNeeded];

@@ -25,6 +25,7 @@
 #include "content/public/browser/restore_type.h"
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "ui/gfx/geometry/size.h"
 
 #include "app/vivaldi_apptools.h"
@@ -58,7 +59,7 @@ std::unique_ptr<WebContents> CreateRestoredTab(
     bool from_last_session,
     base::TimeTicks last_active_time,
     content::SessionStorageNamespace* session_storage_namespace,
-    const std::string& user_agent_override,
+    const sessions::SerializedUserAgentOverride& user_agent_override,
     bool initially_hidden,
     bool from_session_restore,
     const std::string& ext_data) {
@@ -91,9 +92,12 @@ std::unique_ptr<WebContents> CreateRestoredTab(
   std::vector<std::unique_ptr<NavigationEntry>> entries =
       ContentSerializedNavigationBuilder::ToNavigationEntries(
           navigations, browser->profile());
-  // TODO(https://crbug.com/1061917): handle UA client hints override.
-  web_contents->SetUserAgentOverride(
-      blink::UserAgentOverride::UserAgentOnly(user_agent_override), false);
+
+  blink::UserAgentOverride ua_override;
+  ua_override.ua_string_override = user_agent_override.ua_string_override;
+  ua_override.ua_metadata_override = blink::UserAgentMetadata::Demarshal(
+      user_agent_override.opaque_ua_metadata_override);
+  web_contents->SetUserAgentOverride(ua_override, false);
   web_contents->SetExtData(ext_data);
   web_contents->GetController().Restore(
       selected_navigation, GetRestoreType(browser, from_last_session),
@@ -144,7 +148,7 @@ WebContents* AddRestoredTab(
     bool from_last_session,
     base::TimeTicks last_active_time,
     content::SessionStorageNamespace* session_storage_namespace,
-    const std::string& user_agent_override,
+    const sessions::SerializedUserAgentOverride& user_agent_override,
     bool from_session_restore,
     const std::string& ext_data) {
   const bool initially_hidden = !select || browser->window()->IsMinimized();
@@ -227,7 +231,7 @@ WebContents* ReplaceRestoredTab(
     bool from_last_session,
     const std::string& extension_app_id,
     content::SessionStorageNamespace* session_storage_namespace,
-    const std::string& user_agent_override,
+    const sessions::SerializedUserAgentOverride& user_agent_override,
     bool from_session_restore,
     const std::string& ext_data) {
   std::unique_ptr<WebContents> web_contents = CreateRestoredTab(

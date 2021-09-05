@@ -8,6 +8,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/updateable_sequenced_task_runner.h"
 #include "chrome/browser/media/feeds/media_feeds.pb.h"
+#include "chrome/browser/media/feeds/media_feeds_store.mojom-forward.h"
 #include "chrome/browser/media/feeds/media_feeds_utils.h"
 #include "chrome/browser/media/history/media_history_store.h"
 #include "sql/statement.h"
@@ -89,6 +90,27 @@ media_feeds::mojom::ActionPtr Convert(const media_feeds::Action& action) {
   return out;
 }
 
+media_feeds::mojom::LiveDetailsPtr Convert(
+    const media_feeds::LiveDetails& live_details) {
+  auto out = media_feeds::mojom::LiveDetails::New();
+
+  if (live_details.start_time_secs()) {
+    out->start_time = base::Time::FromDeltaSinceWindowsEpoch(
+        base::TimeDelta::FromSeconds(live_details.start_time_secs()));
+  }
+
+  if (live_details.end_time_secs()) {
+    out->end_time = base::Time::FromDeltaSinceWindowsEpoch(
+        base::TimeDelta::FromSeconds(live_details.end_time_secs()));
+  }
+
+  return out;
+}
+
+media_feeds::mojom::MediaImagePtr Convert(const media_feeds::Image& image) {
+  return media_feeds::ProtoToMediaImage(image);
+}
+
 void FillIdentifier(const media_feeds::mojom::IdentifierPtr& identifier,
                     media_feeds::Identifier* proto) {
   switch (identifier->type) {
@@ -112,6 +134,16 @@ void FillAction(const media_feeds::mojom::ActionPtr& action,
 
   if (action->start_time.has_value())
     proto->set_start_time_secs(action->start_time->InSeconds());
+}
+
+void FillLiveDetails(const media_feeds::mojom::LiveDetailsPtr& live_details,
+                     media_feeds::LiveDetails* proto) {
+  proto->set_start_time_secs(
+      live_details->start_time.ToDeltaSinceWindowsEpoch().InSeconds());
+
+  if (live_details->end_time.has_value())
+    proto->set_end_time_secs(
+        live_details->end_time->ToDeltaSinceWindowsEpoch().InSeconds());
 }
 
 }  // namespace
@@ -152,8 +184,8 @@ sql::InitStatus MediaHistoryFeedItemsTable::CreateTableIfNonExistent() {
       "tv_episode BLOB, "
       "play_next_candidate BLOB, "
       "identifiers BLOB, "
-      "shown_count INTEGER,"
-      "clicked INTEGER, "
+      "shown_count INTEGER DEFAULT 0,"
+      "clicked INTEGER DEFAULT 0, "
       "images BLOB, "
       "safe_search_result INTEGER DEFAULT 0, "
       "CONSTRAINT fk_feed "
@@ -170,8 +202,9 @@ sql::InitStatus MediaHistoryFeedItemsTable::CreateTableIfNonExistent() {
 
   if (success) {
     success = DB()->Execute(
-        "CREATE INDEX IF NOT EXISTS mediaFeedItem_safe_search_result_index ON "
-        "mediaFeedItem (safe_search_result)");
+        "CREATE INDEX IF NOT EXISTS "
+        "mediaFeedItem_safe_search_result_feed_id_index ON "
+        "mediaFeedItem (safe_search_result, feed_id)");
   }
 
   if (!success) {
@@ -231,12 +264,8 @@ bool MediaHistoryFeedItemsTable::SaveItem(
   statement.BindBool(8, !item->live.is_null());
 
   if (!item->live.is_null()) {
-    if (item->live->start_time.has_value()) {
-      statement.BindInt64(
-          9, item->live->start_time->ToDeltaSinceWindowsEpoch().InSeconds());
-    } else {
-      statement.BindNull(9);
-    }
+    statement.BindInt64(
+        9, item->live->start_time.ToDeltaSinceWindowsEpoch().InSeconds());
 
     if (item->live->end_time.has_value()) {
       statement.BindInt64(
@@ -313,9 +342,18 @@ bool MediaHistoryFeedItemsTable::SaveItem(
     tv_episode.set_name(item->tv_episode->name);
     tv_episode.set_episode_number(item->tv_episode->episode_number);
     tv_episode.set_season_number(item->tv_episode->season_number);
+    tv_episode.set_duration_secs(item->tv_episode->duration.InSeconds());
 
     for (auto& identifier : item->tv_episode->identifiers)
       FillIdentifier(identifier, tv_episode.add_identifier());
+
+    for (auto& image : item->tv_episode->images)
+      media_feeds::MediaImageToProto(tv_episode.add_image(), image);
+
+    if (!item->tv_episode->live.is_null()) {
+      FillLiveDetails(item->tv_episode->live,
+                      tv_episode.mutable_live_details());
+    }
 
     BindProto(statement, 18, tv_episode);
   } else {
@@ -336,6 +374,9 @@ bool MediaHistoryFeedItemsTable::SaveItem(
 
     for (auto& identifier : item->play_next_candidate->identifiers)
       FillIdentifier(identifier, play_next_candidate.add_identifier());
+
+    for (auto& image : item->play_next_candidate->images)
+      media_feeds::MediaImageToProto(play_next_candidate.add_image(), image);
 
     BindProto(statement, 19, play_next_candidate);
   } else {
@@ -504,9 +545,17 @@ MediaHistoryFeedItemsTable::GetItemsForFeed(const int64_t feed_id) {
       item->tv_episode->name = tv_episode.name();
       item->tv_episode->episode_number = tv_episode.episode_number();
       item->tv_episode->season_number = tv_episode.season_number();
+      item->tv_episode->duration =
+          base::TimeDelta::FromSeconds(tv_episode.duration_secs());
+
+      if (tv_episode.has_live_details())
+        item->tv_episode->live = Convert(tv_episode.live_details());
 
       for (auto& identifier : tv_episode.identifier())
         item->tv_episode->identifiers.push_back(Convert(identifier));
+
+      for (auto& image : tv_episode.image())
+        item->tv_episode->images.push_back(Convert(image));
     }
 
     if (statement.GetColumnType(18) == sql::ColumnType::kBlob) {
@@ -531,6 +580,9 @@ MediaHistoryFeedItemsTable::GetItemsForFeed(const int64_t feed_id) {
 
       for (auto& identifier : play_next_candidate.identifier())
         item->play_next_candidate->identifiers.push_back(Convert(identifier));
+
+      for (auto& image : play_next_candidate.image())
+        item->play_next_candidate->images.push_back(Convert(image));
     }
 
     if (statement.GetColumnType(19) == sql::ColumnType::kBlob) {
@@ -647,7 +699,7 @@ MediaHistoryFeedItemsTable::GetPendingSafeSearchCheckItems() {
   return items;
 }
 
-bool MediaHistoryFeedItemsTable::StoreSafeSearchResult(
+base::Optional<int64_t> MediaHistoryFeedItemsTable::StoreSafeSearchResult(
     int64_t feed_item_id,
     media_feeds::mojom::SafeSearchResult result) {
   sql::Statement statement(DB()->GetCachedStatement(
@@ -655,7 +707,37 @@ bool MediaHistoryFeedItemsTable::StoreSafeSearchResult(
       "UPDATE mediaFeedItem SET safe_search_result = ? WHERE id = ?"));
   statement.BindInt64(0, static_cast<int>(result));
   statement.BindInt64(1, feed_item_id);
+
+  if (!statement.Run())
+    return base::nullopt;
+
+  {
+    // Get the feed that was affected.
+    sql::Statement statement(DB()->GetCachedStatement(
+        SQL_FROM_HERE, "SELECT feed_id FROM mediaFeedItem WHERE id = ?"));
+    statement.BindInt64(0, feed_item_id);
+
+    while (statement.Step())
+      return statement.ColumnInt64(0);
+  }
+
+  return base::nullopt;
+}
+
+bool MediaHistoryFeedItemsTable::IncrementShownCount(
+    const int64_t feed_item_id) {
+  sql::Statement statement(DB()->GetCachedStatement(
+      SQL_FROM_HERE,
+      "UPDATE mediaFeedItem SET shown_count = shown_count + 1 WHERE id = ?"));
+  statement.BindInt64(0, feed_item_id);
   return statement.Run() && DB()->GetLastChangeCount() == 1;
+}
+
+bool MediaHistoryFeedItemsTable::MarkAsClicked(const int64_t feed_item_id) {
+  sql::Statement statement(DB()->GetCachedStatement(
+      SQL_FROM_HERE, "UPDATE mediaFeedItem SET clicked = 1 WHERE id = ?"));
+  statement.BindInt64(0, feed_item_id);
+  return statement.Run();
 }
 
 }  // namespace media_history

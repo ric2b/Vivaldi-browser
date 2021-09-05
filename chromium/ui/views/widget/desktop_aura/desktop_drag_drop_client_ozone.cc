@@ -18,10 +18,10 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/clipboard/clipboard.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_aura.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_handler/wm_drag_handler.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
@@ -239,6 +239,7 @@ void DesktopDragDropClientOzone::PerformDrop() {
     drag_operation_ = drag_drop_delegate_->OnPerformDrop(
         *event, std::move(os_exchange_data_));
   DragDropSessionCompleted();
+  ResetDragDropTarget();
 }
 
 }  // namespace views

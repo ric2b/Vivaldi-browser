@@ -24,8 +24,7 @@ import sys
 
 from update import (CDS_URL, CHROMIUM_DIR, CLANG_REVISION, LLVM_BUILD_DIR,
                     FORCE_HEAD_REVISION_FILE, PACKAGE_VERSION, RELEASE_VERSION,
-                    STAMP_FILE, CopyFile, CopyDiaDllTo, DownloadUrl,
-                    DownloadAndUnpack, EnsureDirExists, GetWinSDKDir,
+                    STAMP_FILE, DownloadUrl, DownloadAndUnpack, EnsureDirExists,
                     ReadStampFile, RmTree, WriteStampFile)
 
 # Path constants. (All of these should be absolute paths.)
@@ -52,6 +51,45 @@ BUG_REPORT_URL = ('https://crbug.com and run'
 
 FIRST_LLVM_COMMIT = '97724f18c79c7cc81ced24239eb5e883bf1398ef'
 
+
+win_sdk_dir = None
+dia_dll = None
+def GetWinSDKDir():
+  """Get the location of the current SDK. Sets dia_dll as a side-effect."""
+  global win_sdk_dir
+  global dia_dll
+  if win_sdk_dir:
+    return win_sdk_dir
+
+  # Bump after VC updates.
+  DIA_DLL = {
+      '2013': 'msdia120.dll',
+      '2015': 'msdia140.dll',
+      '2017': 'msdia140.dll',
+      '2019': 'msdia140.dll',
+  }
+
+  # Don't let vs_toolchain overwrite our environment.
+  environ_bak = os.environ
+
+  sys.path.append(os.path.join(CHROMIUM_DIR, 'build'))
+  import vs_toolchain
+  win_sdk_dir = vs_toolchain.SetEnvironmentAndGetSDKDir()
+  msvs_version = vs_toolchain.GetVisualStudioVersion()
+
+  if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))):
+    dia_path = os.path.join(win_sdk_dir, '..', 'DIA SDK', 'bin', 'amd64')
+  else:
+    if 'GYP_MSVS_OVERRIDE_PATH' not in os.environ:
+      vs_path = vs_toolchain.DetectVisualStudioPath()
+    else:
+      vs_path = os.environ['GYP_MSVS_OVERRIDE_PATH']
+    dia_path = os.path.join(vs_path, 'DIA SDK', 'bin', 'amd64')
+
+  dia_dll = os.path.join(dia_path, DIA_DLL[msvs_version])
+
+  os.environ = environ_bak
+  return win_sdk_dir
 
 
 def RunCommand(command, msvc_arch=None, env=None, fail_hard=True):
@@ -85,6 +123,17 @@ def RunCommand(command, msvc_arch=None, env=None, fail_hard=True):
   if fail_hard:
     sys.exit(1)
   return False
+
+
+def CopyFile(src, dst):
+  """Copy a file from src to dst."""
+  print("Copying %s to %s" % (src, dst))
+  shutil.copy(src, dst)
+
+
+def CopyDiaDllTo(target_dir):
+  GetWinSDKDir()
+  CopyFile(dia_dll, target_dir)
 
 
 def CopyDirectoryContents(src, dst):
@@ -129,11 +178,7 @@ def CheckoutLLVM(commit, dir):
 
 
 def UrlOpen(url):
-  # Normally we'd use urllib, but on our bots it can't connect to the GitHub API
-  # due to using too old TLS (see crbug.com/897796#c56). As a horrible
-  # workaround, shell out to curl instead. It seems curl is recent enough on all
-  # our machines that it can connect. On Windows it's in our gnuwin package.
-  # TODO(crbug.com/965937): Use urllib once our Python is recent enough.
+  # TODO(crbug.com/1067752): Use urllib once certificates are fixed.
   return subprocess.check_output(['curl', '--silent', url])
 
 
@@ -189,14 +234,14 @@ def AddCMakeToPath(args):
     return
 
   if sys.platform == 'win32':
-    zip_name = 'cmake-3.12.1-win32-x86.zip'
-    dir_name = ['cmake-3.12.1-win32-x86', 'bin']
+    zip_name = 'cmake-3.17.1-win64-x64.zip'
+    dir_name = ['cmake-3.17.1-win64-x64', 'bin']
   elif sys.platform == 'darwin':
-    zip_name = 'cmake-3.12.1-Darwin-x86_64.tar.gz'
-    dir_name = ['cmake-3.12.1-Darwin-x86_64', 'CMake.app', 'Contents', 'bin']
+    zip_name = 'cmake-3.17.1-Darwin-x86_64.tar.gz'
+    dir_name = ['cmake-3.17.1-Darwin-x86_64', 'CMake.app', 'Contents', 'bin']
   else:
-    zip_name = 'cmake-3.12.1-Linux-x86_64.tar.gz'
-    dir_name = ['cmake-3.12.1-Linux-x86_64', 'bin']
+    zip_name = 'cmake-3.17.1-Linux-x86_64.tar.gz'
+    dir_name = ['cmake-3.17.1-Linux-x86_64', 'bin']
 
   cmake_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, *dir_name)
   if not os.path.exists(cmake_dir):
@@ -396,7 +441,7 @@ def main():
 
   # The gnuwin package also includes curl, which is needed to interact with the
   # github API below.
-  # TODO(crbug.com/965937): Use urllib once our Python is recent enough, and
+  # TODO(crbug.com/1067752): Use urllib once certificates are fixed, and
   # move this down to where we fetch other build tools.
   AddGnuWinToPath()
 
@@ -463,6 +508,7 @@ def main():
       '-DLLVM_ENABLE_PIC=OFF',
       '-DLLVM_ENABLE_UNWIND_TABLES=OFF',
       '-DLLVM_ENABLE_TERMINFO=OFF',
+      '-DLLVM_ENABLE_Z3_SOLVER=OFF',
       '-DCLANG_PLUGIN_SUPPORT=OFF',
       '-DCLANG_ENABLE_STATIC_ANALYZER=OFF',
       '-DCLANG_ENABLE_ARCMT=OFF',
@@ -472,6 +518,15 @@ def main():
       # Don't run Go bindings tests; PGO makes them confused.
       '-DLLVM_INCLUDE_GO_TESTS=OFF',
   ]
+
+  if sys.platform == 'darwin':
+    # For libc++, we only want the headers.
+    base_cmake_args.extend([
+        '-DLIBCXX_ENABLE_SHARED=OFF', '-DLIBCXX_ENABLE_STATIC=OFF',
+        '-DLIBCXX_INCLUDE_TESTS=OFF'
+    ])
+    # Prefer Python 2. TODO(crbug.com/1076834): Remove this.
+    base_cmake_args.append('-DPython3_EXECUTABLE=/nonexistent')
 
   if args.gcc_toolchain:
     # Don't use the custom gcc toolchain when building compiler-rt tests; those
@@ -488,12 +543,6 @@ def main():
     cflags.append('-I' + zlib_dir)
     cxxflags.append('-I' + zlib_dir)
     ldflags.append('-LIBPATH:' + zlib_dir)
-
-  if sys.platform == 'darwin':
-    # Use the system libc++abi.
-    # TODO(hans): use https://reviews.llvm.org/D62060 instead
-    base_cmake_args.append('-DLIBCXX_CXX_ABI=libcxxabi')
-    base_cmake_args.append('-DLIBCXX_CXX_ABI_SYSTEM=1')
 
   if sys.platform != 'win32':
     # libxml2 is required by the Win manifest merging tool used in cross-builds.

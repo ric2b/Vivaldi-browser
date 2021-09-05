@@ -8,8 +8,9 @@
 
 #include "base/base64.h"
 #include "base/bind_helpers.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
@@ -98,20 +99,59 @@ void BinaryFCMService::ClearCallbackForToken(const std::string& token) {
 }
 
 void BinaryFCMService::UnregisterInstanceID(
-    const std::string& token,
+    const std::string& instance_id,
     UnregisterInstanceIDCallback callback) {
-  instance_id_driver_->GetInstanceID(kBinaryFCMServiceAppId)
-      ->DeleteToken(kBinaryFCMServiceSenderId, instance_id::kGCMScope,
-                    base::BindOnce(&BinaryFCMService::OnInstanceIDUnregistered,
-                                   weakptr_factory_.GetWeakPtr(), token,
-                                   std::move(callback)));
+  instance_id_caller_counts_[instance_id]--;
+  if (instance_id_caller_counts_[instance_id] == 0) {
+    UnregisterInstanceIDImpl(instance_id, std::move(callback));
+    instance_id_caller_counts_.erase(instance_id);
+  }
+}
+
+void BinaryFCMService::SetQueuedOperationDelayForTesting(
+    base::TimeDelta delay) {
+  delay_between_pending_attempts_ = delay;
 }
 
 void BinaryFCMService::OnGetInstanceID(GetInstanceIDCallback callback,
                                        const std::string& instance_id,
                                        instance_id::InstanceID::Result result) {
-  std::move(callback).Run(
-      result == instance_id::InstanceID::SUCCESS ? instance_id : kInvalidId);
+  if (result == instance_id::InstanceID::SUCCESS) {
+    instance_id_caller_counts_[instance_id]++;
+    std::move(callback).Run(instance_id);
+
+    // If we have queued operations, we know there is no async operation
+    // currently pending, so start running the next operation early.
+    if (!pending_token_calls_.empty()) {
+      MaybeRunNextQueuedOperation();
+    }
+  } else if (result == instance_id::InstanceID::ASYNC_OPERATION_PENDING) {
+    pending_token_calls_.push_back(
+        base::BindOnce(&BinaryFCMService::GetInstanceID,
+                       weakptr_factory_.GetWeakPtr(), std::move(callback)));
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&BinaryFCMService::MaybeRunNextQueuedOperation,
+                       weakptr_factory_.GetWeakPtr()),
+        delay_between_pending_attempts_);
+  } else {
+    std::move(callback).Run(kInvalidId);
+  }
+}
+
+void BinaryFCMService::MaybeRunNextQueuedOperation() {
+  if (!pending_token_calls_.empty()) {
+    base::OnceClosure pending_operation =
+        std::move(pending_token_calls_.front());
+    pending_token_calls_.pop_front();
+    std::move(pending_operation).Run();
+
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&BinaryFCMService::MaybeRunNextQueuedOperation,
+                       weakptr_factory_.GetWeakPtr()),
+        delay_between_pending_attempts_);
+  }
 }
 
 void BinaryFCMService::ShutdownHandler() {
@@ -167,6 +207,16 @@ bool BinaryFCMService::CanHandle(const std::string& app_id) const {
   return app_id == kBinaryFCMServiceAppId;
 }
 
+void BinaryFCMService::UnregisterInstanceIDImpl(
+    const std::string& instance_id,
+    UnregisterInstanceIDCallback callback) {
+  instance_id_driver_->GetInstanceID(kBinaryFCMServiceAppId)
+      ->DeleteToken(kBinaryFCMServiceSenderId, instance_id::kGCMScope,
+                    base::BindOnce(&BinaryFCMService::OnInstanceIDUnregistered,
+                                   weakptr_factory_.GetWeakPtr(), instance_id,
+                                   std::move(callback)));
+}
+
 void BinaryFCMService::OnInstanceIDUnregistered(
     const std::string& token,
     UnregisterInstanceIDCallback callback,
@@ -186,6 +236,15 @@ void BinaryFCMService::OnInstanceIDUnregistered(
       UnregisterInstanceID(token, std::move(callback));
       break;
   }
+}
+
+void BinaryFCMService::Shutdown() {
+  for (const auto& id_and_count : instance_id_caller_counts_) {
+    const std::string& instance_id = id_and_count.first;
+    UnregisterInstanceIDImpl(instance_id, base::DoNothing());
+  }
+
+  instance_id_caller_counts_.clear();
 }
 
 }  // namespace safe_browsing

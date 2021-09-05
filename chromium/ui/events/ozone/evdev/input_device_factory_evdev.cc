@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/files/scoped_file.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -25,6 +26,7 @@
 #include "ui/events/ozone/evdev/stylus_button_event_converter_evdev.h"
 #include "ui/events/ozone/evdev/tablet_event_converter_evdev.h"
 #include "ui/events/ozone/evdev/touch_event_converter_evdev.h"
+#include "ui/events/ozone/features.h"
 #include "ui/events/ozone/gamepad/gamepad_provider_ozone.h"
 
 #if defined(USE_EVDEV_GESTURES)
@@ -234,7 +236,8 @@ void InputDeviceFactoryEvdev::AttachInputDevice(
       DetachInputDevice(path);
 
     if (converter->type() == InputDeviceType::INPUT_DEVICE_INTERNAL &&
-        converter->HasPen()) {
+        converter->HasPen() &&
+        base::FeatureList::IsEnabled(kEnablePalmSuppression)) {
       converter->SetPalmSuppressionCallback(
           base::BindRepeating(&InputDeviceFactoryEvdev::EnablePalmSuppression,
                               base::Unretained(this)));
@@ -353,6 +356,9 @@ void InputDeviceFactoryEvdev::ApplyInputDeviceSettings() {
   SetBoolPropertyForOneType(
       DT_MOUSE, "Mouse Reverse Scrolling",
       input_device_settings_.mouse_reverse_scroll_enabled);
+  SetBoolPropertyForOneType(
+      DT_MOUSE, "Mouse High Resolution Scrolling",
+      base::FeatureList::IsEnabled(ui::kEnableHighResolutionMouseScrolling));
 
   SetBoolPropertyForOneType(DT_TOUCHPAD, "Tap Paused",
                             input_device_settings_.tap_to_click_paused);

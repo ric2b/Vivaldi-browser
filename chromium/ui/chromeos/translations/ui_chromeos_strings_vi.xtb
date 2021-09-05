@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Bàn phím tiếng Đức</translation>
 <translation id="1972984168337863910">Mở rộng bảng dữ liệu phản hồi về tệp</translation>
 <translation id="1984603991036629094">Bàn phím ngữ âm Armenia</translation>
+<translation id="1995337122023280937">Chuyển đến vị trí tệp</translation>
 <translation id="2001796770603320721">Quản lý trong Drive</translation>
 <translation id="2009067268969781306">Thao tác định dạng ổ sẽ xóa toàn bộ dữ liệu lưu trữ trên ổ đó. Bạn không thể hủy thao tác này sau khi đã thực hiện.</translation>
 <translation id="2028997212275086731">Lưu trữ RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Không thể truy cập Google Drive. Vui lòng <ph name="BEGIN_LINK" />đăng xuất<ph name="END_LINK" /> và đăng nhập lại.</translation>
 <translation id="2649120831653069427">Cá cầu vồng</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Vị trí tệp</translation>
 <translation id="2672394958563893062">Đã xảy ra lỗi. Nhấp để khởi động lại từ đầu.</translation>
 <translation id="2676946222714718093">Đang phát trên</translation>
 <translation id="2735698359135166290">Bàn phím chuẩn tiếng Rumani</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> lỗi.</translation>
 <translation id="3519867315646775981">Chuyển ngữ (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Tiếng Bồ Đào Nha</translation>
+<translation id="3524311639100184459">Lưu ý: Các tệp này chỉ được lưu trữ tạm thời và có thể tự động bị xóa để giải phóng dung lượng ổ đĩa.  <ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Thư mục</translation>
 <translation id="3549797760399244642">Truy cập drive.google.com...</translation>
 <translation id="357479282490346887">Tiếng Lithuania</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Trình phát âm thanh</translation>
 <translation id="4002066346123236978">Tiêu đề</translation>
+<translation id="4065397611279318371">Để mở tệp bằng các ứng dụng <ph name="APP_NAME" />, trước tiên, hãy di chuyển các tệp đó sang thư mục <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Phương thức nhập tiếng Quảng Đông</translation>
 <translation id="4072248638558688893">Bàn phím tiếng Tamil (Ngữ âm)</translation>
 <translation id="4124935795427217608">Kỳ lân</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Tự động sửa</translation>
 <translation id="4881695831933465202">Mở</translation>
 <translation id="4886021172213954916">Bàn phím tiếng Tamil (Máy đánh chữ)</translation>
+<translation id="4892969127351273348">Không thể mở bằng <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Đã sẵn sàng sao lưu <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Đã sửa</translation>
 <translation id="4935975195727477204">Hoa Gazania</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Quản lý chia sẻ với Linux</translation>
 <translation id="6808193438228982088">Cáo</translation>
 <translation id="6820687829547641339">Lưu trữ tar được nén bởi Gzip</translation>
+<translation id="6823166707458800069">Tất cả các tệp bạn đã lưu trong thư mục này đều tự động được sao lưu trực tuyến.</translation>
 <translation id="6825883775269213504">Tiếng Nga</translation>
 <translation id="6827236167376090743">Video này sẽ tiếp tục phát đi phát lại.</translation>
 <translation id="6847101934483209767">Đã xóa <ph name="ENTRY_NAME" /> khỏi lựa chọn.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Bản đồ Google</translation>
 <translation id="7419631653042041064">Bàn phím tiếng Catalan</translation>
 <translation id="7434823369735508263">Bàn phím Dvorak Vương quốc Anh</translation>
+<translation id="7447678886297481665">Các tệp trong thư mục này đang ở chế độ chỉ đọc. Vì thế, bạn sẽ không thực hiện được một số hành động.</translation>
 <translation id="7460898608667578234">Tiếng Ukraina</translation>
 <translation id="7474889694310679759">Bàn phím tiếng Anh ở Canada</translation>
 <translation id="7489215562877293245">Đã tìm thấy <ph name="FILE_COUNT" />

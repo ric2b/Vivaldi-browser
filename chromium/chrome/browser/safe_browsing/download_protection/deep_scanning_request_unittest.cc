@@ -587,7 +587,7 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
 
     request.Start();
 
-    EXPECT_EQ(DownloadCheckResult::DEEP_SCANNED_SAFE, last_result_);
+    EXPECT_EQ(DownloadCheckResult::UNKNOWN, last_result_);
   }
 
   {
@@ -618,7 +618,7 @@ TEST_F(DeepScanningReportingTest, ProcessesResponseCorrectly) {
 
     request.Start();
 
-    EXPECT_EQ(DownloadCheckResult::DEEP_SCANNED_SAFE, last_result_);
+    EXPECT_EQ(DownloadCheckResult::UNKNOWN, last_result_);
   }
 }
 

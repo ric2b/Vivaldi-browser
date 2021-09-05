@@ -47,7 +47,7 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // TabletModeObserver:
   void OnTabletModeStarting() override;
-  void OnTabletModeEnded() override;
+  void OnTabletModeEnding() override;
 
   // DisplayObserver:
   void OnDisplayMetricsChanged(const display::Display& display,
@@ -63,6 +63,24 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // reasons.
   bool ShelfControlsForcedShownForAccessibility() const;
 
+  // Returns the shelf button size. If |force_dense| is true, returns the
+  // shelf button size for dense shelf layout; otherwise, returns the optimal
+  // shelf button size for the current state.
+  int GetShelfButtonSize(bool force_dense) const;
+
+  // Returns the icon size of shelf button. If |force_dense| is true, returns
+  // the icon size for dense shelf layout; otherwise, returns the optimal
+  // icon size for the current state.
+  int GetShelfButtonIconSize(bool force_dense) const;
+
+  // Returns the hotseat height. If |force_dense| is true, returns the hotseat
+  // height for dense shelf layout; otherwise, returns the optimal hotseat
+  // height for the current state.
+  // NOTE: This may not match the actual hotseat size, as hotseat may get scaled
+  // down if it does not fit in available bounds within the shelf. Use
+  // HotseatWidget::GetHotseatSize() to get the actual widget size.
+  int GetHotseatSize(bool force_dense) const;
+
   // Size of the shelf when visible (height when the shelf is horizontal and
   // width when the shelf is vertical).
   int shelf_size() const;
@@ -73,9 +91,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // Size of the shelf when not in tablet mode, or when no apps are visible.
   int system_shelf_size() const;
 
-  // Size of the hotseat, which contains the scrollable shelf in tablet mode.
-  int hotseat_size() const;
-
   // The shelf size within which the drag handle should be centered.
   int shelf_drag_handle_centering_size() const;
 
@@ -83,14 +98,8 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // extended.
   int hotseat_bottom_padding() const;
 
-  // Size allocated for each app button on the shelf.
-  int button_size() const;
-
   // Size of the space between buttons on the shelf.
   int button_spacing() const;
-
-  // Size of the icons within shelf buttons.
-  int button_icon_size() const;
 
   // Size for controls like the home button, back button, etc.
   int control_size() const;
@@ -115,6 +124,10 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // Returns whether we are within an app.
   bool is_in_app() const;
+
+  // The threshold relative to the size of the shelf that is used to determine
+  // if the shelf visibility should change during a drag.
+  float drag_hide_ratio_threshold() const;
 
   int app_icon_group_margin() const { return app_icon_group_margin_; }
   SkColor shelf_control_permanent_highlight_background() const {
@@ -193,13 +206,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // The padding between the app icon and the end of the scrollable shelf.
   int GetAppIconEndPadding() const;
 
-  // Return the size of the shelf item's ripple.
-  int GetShelfItemRippleSize() const;
-
-  // Return the drag distance to fully show the hotseat widget from the state
-  // being hidden.
-  int GetHotseatFullDragAmount() const;
-
   // The animation time for dimming shelf icons, widgets, and buttons.
   base::TimeDelta DimAnimationDuration() const;
 
@@ -220,8 +226,10 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // Updates |is_dense_|, |is_app_list_visible_|, and |shelf_controls_shown_|
   // and notifies all observers of the update if the state changes.
-  // |app_list_visible| - The new app list visibility state.
-  void UpdateConfig(bool app_list_visible);
+  // |new_is_app_list_visible| - The new app list visibility state.
+  // |tablet_mode_changed| should be set to true if this config is being updated
+  // as a result of a change in tablet mode state.
+  void UpdateConfig(bool new_is_app_list_visible, bool tablet_mode_changed);
 
   // Gets the current shelf size.
   // |ignore_in_app_state| - Whether the returned shelf size should be
@@ -231,7 +239,7 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // Updates shelf config - called when the accessibility state changes.
   void UpdateConfigForAccessibilityState();
 
-  // Whether shelf config was calculated for tablet mode.
+  // True if device is currently in tablet mode.
   bool in_tablet_mode_;
 
   // Whether shelf is currently standard or dense.

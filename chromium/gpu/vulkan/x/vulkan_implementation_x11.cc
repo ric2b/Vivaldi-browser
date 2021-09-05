@@ -7,13 +7,12 @@
 #include "base/base_paths.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/path_service.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_instance.h"
-#include "gpu/vulkan/vulkan_posix_util.h"
 #include "gpu/vulkan/vulkan_surface.h"
 #include "gpu/vulkan/vulkan_util.h"
 #include "gpu/vulkan/x/vulkan_surface_x11.h"
@@ -186,14 +185,14 @@ VkSemaphore VulkanImplementationX11::CreateExternalSemaphore(
 VkSemaphore VulkanImplementationX11::ImportSemaphoreHandle(
     VkDevice vk_device,
     SemaphoreHandle sync_handle) {
-  return ImportVkSemaphoreHandlePosix(vk_device, std::move(sync_handle));
+  return ImportVkSemaphoreHandle(vk_device, std::move(sync_handle));
 }
 
 SemaphoreHandle VulkanImplementationX11::GetSemaphoreHandle(
     VkDevice vk_device,
     VkSemaphore vk_semaphore) {
-  return GetVkSemaphoreHandlePosix(
-      vk_device, vk_semaphore, VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+  return GetVkSemaphoreHandle(vk_device, vk_semaphore,
+                              VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
 }
 
 VkExternalMemoryHandleTypeFlagBits

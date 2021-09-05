@@ -77,9 +77,6 @@ class CrashReporterClient {
   // restarting after a crash.
   virtual bool AboutToRestart();
 
-  // Returns true if the crash report uploader supports deferred uploads.
-  virtual bool GetDeferredUploadsSupported(bool is_per_user_install);
-
   // Returns true if the running binary is a per-user installation.
   virtual bool GetIsPerUserInstall();
 
@@ -193,6 +190,9 @@ class CrashReporterClient {
       void** target_module,
       bool* sanitize_stacks);
 #endif
+
+  // Returns the URL target for crash report uploads.
+  virtual std::string GetUploadUrl();
 
   // This method should return true to configure a crash reporter capable of
   // monitoring itself for its own crashes to do so, even if self-monitoring

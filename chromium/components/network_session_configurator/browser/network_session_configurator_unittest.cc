@@ -69,7 +69,34 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_FALSE(params_.greased_http2_frame);
   EXPECT_FALSE(params_.enable_websocket_over_http2);
 
-  EXPECT_FALSE(params_.enable_quic);
+  EXPECT_TRUE(params_.enable_quic);
+  EXPECT_TRUE(quic_params_.retry_without_alt_svc_on_quic_errors);
+  EXPECT_EQ(1350u, quic_params_.max_packet_length);
+  EXPECT_EQ(quic::QuicTagVector(), quic_params_.connection_options);
+  EXPECT_EQ(quic::QuicTagVector(), quic_params_.client_connection_options);
+  EXPECT_FALSE(params_.enable_server_push_cancellation);
+  EXPECT_FALSE(quic_params_.close_sessions_on_ip_change);
+  EXPECT_FALSE(quic_params_.goaway_sessions_on_ip_change);
+  EXPECT_EQ(net::kIdleConnectionTimeout, quic_params_.idle_connection_timeout);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(quic::kPingTimeoutSecs),
+            quic_params_.reduced_ping_timeout);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(quic::kMaxTimeForCryptoHandshakeSecs),
+            quic_params_.max_time_before_crypto_handshake);
+  EXPECT_EQ(base::TimeDelta::FromSeconds(quic::kInitialIdleTimeoutSecs),
+            quic_params_.max_idle_time_before_crypto_handshake);
+  EXPECT_FALSE(quic_params_.estimate_initial_rtt);
+  EXPECT_FALSE(quic_params_.migrate_sessions_on_network_change_v2);
+  EXPECT_FALSE(quic_params_.migrate_sessions_early_v2);
+  EXPECT_FALSE(quic_params_.retry_on_alternate_network_before_handshake);
+  EXPECT_FALSE(quic_params_.migrate_idle_sessions);
+  EXPECT_FALSE(quic_params_.go_away_on_path_degrading);
+  EXPECT_TRUE(quic_params_.initial_rtt_for_handshake.is_zero());
+  EXPECT_FALSE(quic_params_.allow_server_migration);
+  EXPECT_TRUE(params_.quic_host_allowlist.empty());
+  EXPECT_TRUE(quic_params_.retransmittable_on_wire_timeout.is_zero());
+
+  EXPECT_EQ(net::DefaultSupportedQuicVersions(),
+            quic_params_.supported_versions);
   EXPECT_FALSE(params_.enable_quic_proxies_for_https_urls);
   EXPECT_EQ("Chrome/52.0.2709.0 Linux x86_64", quic_params_.user_agent_id);
   EXPECT_EQ(0u, quic_params_.origins_to_force_quic_on.size());
@@ -95,40 +122,15 @@ TEST_F(NetworkSessionConfiguratorTest, Http2FieldTrialDisable) {
   EXPECT_FALSE(params_.enable_http2);
 }
 
-TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromFieldTrialGroup) {
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+TEST_F(NetworkSessionConfiguratorTest, DisableQuicFromFieldTrialGroup) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["enable_quic"] = "false";
+  variations::AssociateVariationParams("QUIC", "Disabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Disabled");
 
   ParseFieldTrials();
 
-  EXPECT_TRUE(params_.enable_quic);
-  EXPECT_TRUE(quic_params_.retry_without_alt_svc_on_quic_errors);
-  EXPECT_EQ(1350u, quic_params_.max_packet_length);
-  EXPECT_EQ(quic::QuicTagVector(), quic_params_.connection_options);
-  EXPECT_EQ(quic::QuicTagVector(), quic_params_.client_connection_options);
-  EXPECT_FALSE(params_.enable_server_push_cancellation);
-  EXPECT_FALSE(quic_params_.close_sessions_on_ip_change);
-  EXPECT_FALSE(quic_params_.goaway_sessions_on_ip_change);
-  EXPECT_EQ(net::kIdleConnectionTimeout, quic_params_.idle_connection_timeout);
-  EXPECT_EQ(base::TimeDelta::FromSeconds(quic::kPingTimeoutSecs),
-            quic_params_.reduced_ping_timeout);
-  EXPECT_EQ(base::TimeDelta::FromSeconds(quic::kMaxTimeForCryptoHandshakeSecs),
-            quic_params_.max_time_before_crypto_handshake);
-  EXPECT_EQ(base::TimeDelta::FromSeconds(quic::kInitialIdleTimeoutSecs),
-            quic_params_.max_idle_time_before_crypto_handshake);
-  EXPECT_FALSE(quic_params_.race_cert_verification);
-  EXPECT_FALSE(quic_params_.estimate_initial_rtt);
-  EXPECT_FALSE(quic_params_.migrate_sessions_on_network_change_v2);
-  EXPECT_FALSE(quic_params_.migrate_sessions_early_v2);
-  EXPECT_FALSE(quic_params_.retry_on_alternate_network_before_handshake);
-  EXPECT_FALSE(quic_params_.migrate_idle_sessions);
-  EXPECT_FALSE(quic_params_.go_away_on_path_degrading);
-  EXPECT_TRUE(quic_params_.initial_rtt_for_handshake.is_zero());
-  EXPECT_FALSE(quic_params_.allow_server_migration);
-  EXPECT_TRUE(params_.quic_host_allowlist.empty());
-  EXPECT_TRUE(quic_params_.retransmittable_on_wire_timeout.is_zero());
-
-  EXPECT_EQ(net::DefaultSupportedQuicVersions(),
-            quic_params_.supported_versions);
+  EXPECT_FALSE(params_.enable_quic);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, EnableQuicFromParams) {
@@ -299,17 +301,6 @@ TEST_F(NetworkSessionConfiguratorTest,
   ParseFieldTrials();
   EXPECT_EQ(base::TimeDelta::FromSeconds(quic::kInitialIdleTimeoutSecs),
             quic_params_.max_idle_time_before_crypto_handshake);
-}
-
-TEST_F(NetworkSessionConfiguratorTest, QuicRaceCertVerification) {
-  std::map<std::string, std::string> field_trial_params;
-  field_trial_params["race_cert_verification"] = "true";
-  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
-  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
-
-  ParseFieldTrials();
-
-  EXPECT_TRUE(quic_params_.race_cert_verification);
 }
 
 TEST_F(NetworkSessionConfiguratorTest, EnableServerPushCancellation) {
@@ -600,18 +591,18 @@ TEST_F(NetworkSessionConfiguratorTest, QuicHostAllowlistEmpty) {
 }
 
 TEST_F(NetworkSessionConfiguratorTest, QuicFlags) {
-  FLAGS_quic_reloadable_flag_quic_enable_version_t050 = false;
+  FLAGS_quic_reloadable_flag_quic_enable_version_t050_v2 = false;
   FLAGS_quic_reloadable_flag_quic_enable_version_draft_27 = false;
   std::map<std::string, std::string> field_trial_params;
   field_trial_params["set_quic_flags"] =
-      "FLAGS_quic_reloadable_flag_quic_enable_version_t050=true,"
+      "FLAGS_quic_reloadable_flag_quic_enable_version_t050_v2=true,"
       "FLAGS_quic_reloadable_flag_quic_enable_version_draft_27=true";
   variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
   base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
 
   ParseFieldTrials();
 
-  EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_enable_version_t050);
+  EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_enable_version_t050_v2);
   EXPECT_TRUE(FLAGS_quic_reloadable_flag_quic_enable_version_draft_27);
 }
 

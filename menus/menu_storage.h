@@ -16,6 +16,7 @@
 
 namespace base {
 class SequencedTaskRunner;
+class Value;
 }
 
 namespace content {
@@ -37,12 +38,15 @@ class MenuLoadDetails {
                            const std::string& menu, bool force_bundle);
   ~MenuLoadDetails();
 
-  Menu_Node* root_node() { return root_.get(); }
-  Menu_Control* control() { return control_.get(); }
+  void SetHasUpgraded();
+
+  Menu_Node* root_node() const { return root_.get(); }
+  Menu_Control* control() const { return control_.get(); }
 
   int64_t id() { return id_; }
   const std::string& menu() { return menu_; }
-  bool force_bundle() { return force_bundle_; }
+  bool has_upgraded() const { return has_upgraded_; }
+  bool force_bundle() const { return force_bundle_; }
   std::unique_ptr<Menu_Node> release_root_node() {
     return std::move(root_);
   }
@@ -54,6 +58,7 @@ class MenuLoadDetails {
   std::unique_ptr<Menu_Node> root_;
   std::unique_ptr<Menu_Control> control_;
   int64_t id_;
+  bool has_upgraded_;
   bool force_bundle_;
   std::string menu_;
 
@@ -85,6 +90,7 @@ class MenuStorage : public base::ImportantFileWriter::DataSerializer {
   // ImportantFileWriter::DataSerializer implementation.
   bool SerializeData(std::string* output) override;
 
+  bool SaveValue(const base::Value& value);
  private:
   // Backup is done once and only if a regular save is attempted.
   enum BackupState {

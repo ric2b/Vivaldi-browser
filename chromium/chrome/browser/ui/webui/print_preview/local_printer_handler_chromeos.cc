@@ -30,6 +30,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "chromeos/printing/printer_translator.h"
 #include "components/prefs/pref_service.h"
 #include "components/printing/browser/printer_capabilities.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -238,6 +239,22 @@ void LocalPrinterHandlerChromeos::StartGetEulaUrl(
                      weak_factory_.GetWeakPtr(), std::move(cb)));
 }
 
+void LocalPrinterHandlerChromeos::StartPrinterStatusRequest(
+    const std::string& printer_id,
+    PrinterStatusRequestCallback callback) {
+  printers_manager_->FetchPrinterStatus(
+      printer_id,
+      base::BindOnce(&LocalPrinterHandlerChromeos::OnPrinterStatusUpdated,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void LocalPrinterHandlerChromeos::OnPrinterStatusUpdated(
+    PrinterStatusRequestCallback callback,
+    const chromeos::CupsPrinterStatus& cups_printers_status) {
+  std::move(callback).Run(
+      CreateCupsPrinterStatusDictionary(cups_printers_status));
+}
+
 void LocalPrinterHandlerChromeos::OnPrinterInstalled(
     const chromeos::Printer& printer,
     GetCapabilityCallback cb,
@@ -245,9 +262,7 @@ void LocalPrinterHandlerChromeos::OnPrinterInstalled(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (result == chromeos::PrinterSetupResult::kSuccess) {
-    printers_manager_->PrinterInstalled(
-        printer, /*is_automatic=*/true,
-        chromeos::PrinterSetupSource::kPrintPreview);
+    printers_manager_->PrinterInstalled(printer, /*is_automatic=*/true);
   }
 
   HandlePrinterSetup(printer, std::move(cb), printer.IsUsbProtocol(), result);

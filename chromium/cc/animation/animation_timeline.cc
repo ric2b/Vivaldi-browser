@@ -8,6 +8,7 @@
 
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_host.h"
+#include "cc/trees/property_tree.h"
 
 namespace cc {
 
@@ -65,21 +66,42 @@ Animation* AnimationTimeline::GetAnimationById(int animation_id) const {
   return f == id_to_animation_map_.end() ? nullptr : f->second.get();
 }
 
-std::vector<Animation*> AnimationTimeline::GetAnimations() const {
-  std::vector<Animation*> animations;
-  animations.reserve(id_to_animation_map_.size());
-
-  for (auto& kv : id_to_animation_map_)
-    animations.push_back(kv.second.get());
-  return animations;
-}
-
 void AnimationTimeline::ClearAnimations() {
   for (auto& kv : id_to_animation_map_)
     EraseAnimation(kv.second);
   id_to_animation_map_.clear();
 
   SetNeedsPushProperties();
+}
+
+bool AnimationTimeline::TickTimeLinkedAnimations(
+    const std::vector<scoped_refptr<Animation>>& ticking_animations,
+    base::TimeTicks monotonic_time) {
+  DCHECK(!IsScrollTimeline());
+
+  bool animated = false;
+  for (auto& animation : ticking_animations) {
+    if (animation->animation_timeline() != this)
+      continue;
+    // Worklet animations are ticked separately by AnimationHost.
+    if (animation->IsWorkletAnimation())
+      continue;
+
+    // Scroll-linked animations are ticked separately.
+    if (animation->IsScrollLinkedAnimation())
+      continue;
+
+    animation->Tick(monotonic_time);
+    animated = true;
+  }
+  return animated;
+}
+
+bool AnimationTimeline::TickScrollLinkedAnimations(
+    const std::vector<scoped_refptr<Animation>>& ticking_animations,
+    const ScrollTree& scroll_tree,
+    bool is_active_tree) {
+  return false;
 }
 
 void AnimationTimeline::SetNeedsPushProperties() {

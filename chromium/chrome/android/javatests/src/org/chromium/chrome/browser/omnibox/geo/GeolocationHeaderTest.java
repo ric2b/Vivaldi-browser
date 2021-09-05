@@ -20,11 +20,12 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.site_settings.ContentSettingValues;
-import org.chromium.chrome.browser.site_settings.PermissionInfo;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.browser_ui.site_settings.PermissionInfo;
+import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
@@ -151,7 +152,7 @@ public class GeolocationHeaderTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PermissionInfo infoHttps =
                     new PermissionInfo(PermissionInfo.Type.GEOLOCATION, SEARCH_URL_1, null, false);
-            infoHttps.setContentSetting(httpsPermission);
+            infoHttps.setContentSetting(Profile.getLastUsedRegularProfile(), httpsPermission);
             String header = GeolocationHeader.getGeoHeader(
                     SEARCH_URL_1, mActivityTestRule.getActivity().getActivityTab());
             assertHeaderState(header, locationTime, shouldBeNull);

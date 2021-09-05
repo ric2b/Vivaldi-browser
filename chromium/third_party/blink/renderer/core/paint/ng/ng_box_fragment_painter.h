@@ -18,6 +18,7 @@
 
 namespace blink {
 
+class BoxDecorationData;
 class FillLayer;
 class HitTestLocation;
 class HitTestRequest;
@@ -71,6 +72,10 @@ class NGBoxFragmentPainter : public BoxPainterBase {
                         const PhysicalOffset& accumulated_offset,
                         HitTestFilter = kHitTestAll);
 
+  void PaintBoxDecorationBackgroundWithRectImpl(const PaintInfo&,
+                                                const PhysicalRect&,
+                                                const BoxDecorationData&);
+
  protected:
   LayoutRectOutsets ComputeBorders() const override;
   LayoutRectOutsets ComputePadding() const override;
@@ -109,6 +114,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
   void PaintBoxDecorationBackgroundWithRect(const PaintInfo&,
                                             const PhysicalRect&,
                                             const DisplayItemClient&);
+
   void PaintColumnRules(const PaintInfo&, const PhysicalOffset& paint_offset);
 
   void PaintInternal(const PaintInfo&);
@@ -148,9 +154,6 @@ class NGBoxFragmentPainter : public BoxPainterBase {
                      const PaintInfo&,
                      const PhysicalOffset& paint_offset,
                      const PhysicalOffset& parent_offset);
-  MoveTo PaintLineBoxItem(const NGFragmentItem& item,
-                          const PaintInfo& paint_info,
-                          const PhysicalOffset& paint_offset);
   void PaintBoxItem(const NGFragmentItem& item,
                     const NGPhysicalBoxFragment& child_fragment,
                     const NGInlineCursor& cursor,
@@ -223,6 +226,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
   bool HitTestChildren(const HitTestContext& hit_test,
                        const PhysicalOffset& physical_offset);
   bool HitTestChildren(const HitTestContext& hit_test,
+                       const NGPhysicalBoxFragment& container,
                        const NGInlineCursor& children,
                        const PhysicalOffset& physical_offset);
   bool HitTestBlockChildren(HitTestResult&,
@@ -233,6 +237,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
                                     const NGInlineCursor& children,
                                     const PhysicalOffset& physical_offset);
   bool HitTestItemsChildren(const HitTestContext& hit_test,
+                            const NGPhysicalBoxFragment& container,
                             const NGInlineCursor& children);
   bool HitTestFloatingChildren(const HitTestContext& hit_test,
                                const NGPhysicalContainerFragment& container,
@@ -250,6 +255,7 @@ class NGBoxFragmentPainter : public BoxPainterBase {
                                const NGInlineBackwardCursor& cursor,
                                const PhysicalOffset& physical_offset);
   bool HitTestChildBoxItem(const HitTestContext& hit_test,
+                           const NGPhysicalBoxFragment& container,
                            const NGFragmentItem& item,
                            const NGInlineBackwardCursor& cursor);
 

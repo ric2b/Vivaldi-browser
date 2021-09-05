@@ -36,9 +36,8 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-
 #include "extensions/api/tabs/tabs_private_api.h"
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 namespace {
 
@@ -343,6 +342,7 @@ void NotificationPermissionContext::UpdateTabContext(
     const permissions::PermissionRequestID& id,
     const GURL& requesting_frame,
     bool allowed) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(
           content::RenderFrameHost::FromID(id.render_process_id(),
@@ -361,4 +361,5 @@ void NotificationPermissionContext::UpdateTabContext(
                                         content_setting);
     }
   }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 }

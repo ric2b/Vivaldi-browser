@@ -17,8 +17,8 @@
 #include "ui/android/event_forwarder.h"
 #include "ui/android/ui_android_jni_headers/ViewAndroidDelegate_jni.h"
 #include "ui/android/window_android.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/layout.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/events/android/drag_event_android.h"
 #include "ui/events/android/event_handler_android.h"
 #include "ui/events/android/gesture_event_android.h"
@@ -434,7 +434,6 @@ void ViewAndroid::OnTopControlsChanged(float top_controls_offset,
 
 void ViewAndroid::OnBottomControlsChanged(
     float bottom_controls_offset,
-    float bottom_content_offset,
     float bottom_controls_min_height_offset) {
   ScopedJavaLocalRef<jobject> delegate(GetViewAndroidDelegate());
   if (delegate.is_null())
@@ -442,7 +441,6 @@ void ViewAndroid::OnBottomControlsChanged(
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ViewAndroidDelegate_onBottomControlsChanged(
       env, delegate, std::round(bottom_controls_offset),
-      std::round(bottom_content_offset),
       std::round(bottom_controls_min_height_offset));
 }
 
@@ -663,46 +661,6 @@ bool ViewAndroid::HitTest(EventHandlerCallback<E> handler_callback,
 
 void ViewAndroid::SetLayoutForTesting(int x, int y, int width, int height) {
   bounds_.SetRect(x, y, width, height);
-}
-
-bool ViewAndroid::HasTouchlessEventHandler() {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  static bool s_has_touchless_event_handler =
-      Java_ViewAndroidDelegate_hasTouchlessEventHandler(env);
-
-  return s_has_touchless_event_handler;
-}
-
-bool ViewAndroid::OnUnconsumedKeyboardEventAck(int native_code) {
-  if (!HasTouchlessEventHandler())
-    return false;
-
-  JNIEnv* env = base::android::AttachCurrentThread();
-
-  return Java_ViewAndroidDelegate_onUnconsumedKeyboardEventAck(env,
-                                                               native_code);
-}
-
-void ViewAndroid::FallbackCursorModeLockCursor(bool left,
-                                               bool right,
-                                               bool up,
-                                               bool down) {
-  if (!HasTouchlessEventHandler())
-    return;
-
-  JNIEnv* env = base::android::AttachCurrentThread();
-
-  Java_ViewAndroidDelegate_fallbackCursorModeLockCursor(env, left, right, up,
-                                                        down);
-}
-
-void ViewAndroid::FallbackCursorModeSetCursorVisibility(bool visible) {
-  if (!HasTouchlessEventHandler())
-    return;
-
-  JNIEnv* env = base::android::AttachCurrentThread();
-
-  Java_ViewAndroidDelegate_fallbackCursorModeSetCursorVisibility(env, visible);
 }
 
 }  // namespace ui

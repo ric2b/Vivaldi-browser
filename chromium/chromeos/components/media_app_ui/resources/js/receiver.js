@@ -11,14 +11,15 @@ const parentMessagePipe = new MessagePipe('chrome://media-app', window.parent);
  */
 class ReceivedFile {
   /**
-   * @param {!File} file The received file.
+   * @param {?File} file The received file.
    * @param {number} token A token that identifies the file.
+   * @param {string} fallbackName The name to use when `file` is null/empty.
    */
-  constructor(file, token) {
-    this.blob = file;
-    this.name = file.name;
-    this.size = file.size;
-    this.mimeType = file.type;
+  constructor(file, token, fallbackName) {
+    this.blob = file || new File([], fallbackName);
+    this.name = this.blob.name;
+    this.size = this.blob.size;
+    this.mimeType = this.blob.type;
     this.token = token;
   }
 
@@ -29,18 +30,9 @@ class ReceivedFile {
   async overwriteOriginal(blob) {
     /** @type{OverwriteFileMessage} */
     const message = {token: this.token, blob: blob};
-    const reply =
-        parentMessagePipe.sendMessage(Message.OVERWRITE_FILE, message);
-    try {
-      await reply;
-    } catch (/** @type{GenericErrorResponse} */ errorResponse) {
-      if (errorResponse.message === 'File not current.') {
-        const domError = new DOMError();
-        domError.name = 'NotAllowedError';
-        throw domError;
-      }
-      throw errorResponse;
-    }
+
+    await parentMessagePipe.sendMessage(Message.OVERWRITE_FILE, message);
+
     // Note the following are skipped if an exception is thrown above.
     this.blob = blob;
     this.size = blob.size;
@@ -93,7 +85,7 @@ class ReceivedFileList {
 
     this.length = files.length;
     /** @type {!Array<!ReceivedFile>} */
-    this.files = files.map(f => new ReceivedFile(f.file, f.token));
+    this.files = files.map(f => new ReceivedFile(f.file, f.token, f.name));
     /** @type {number} */
     this.writableFileIndex = 0;
   }
@@ -133,7 +125,7 @@ class ReceivedFileList {
 }
 
 parentMessagePipe.registerHandler(Message.LOAD_FILES, async (message) => {
-  const filesMessage = /** @type{!LoadFilesMessage} */ (message);
+  const filesMessage = /** @type {!LoadFilesMessage} */ (message);
   await loadFiles(new ReceivedFileList(filesMessage));
 });
 
@@ -143,11 +135,18 @@ parentMessagePipe.registerHandler(Message.LOAD_FILES, async (message) => {
  * @type {!mediaApp.ClientApiDelegate}
  */
 const DELEGATE = {
-  /** @override */
   async openFeedbackDialog() {
     const response =
         await parentMessagePipe.sendMessage(Message.OPEN_FEEDBACK_DIALOG);
     return /** @type {?string} */ (response['errorMessage']);
+  },
+  async saveCopy(/** !mediaApp.AbstractFile */ abstractFile) {
+    /** @type {!SaveCopyMessage} */
+    const msg = {blob: abstractFile.blob, suggestedName: abstractFile.name};
+    const response =
+        /** @type {!SaveCopyResponse} */ (
+            await parentMessagePipe.sendMessage(Message.SAVE_COPY, msg));
+    return response.errorMessage;
   }
 };
 

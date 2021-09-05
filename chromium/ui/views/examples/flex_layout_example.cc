@@ -38,12 +38,12 @@ void FlexLayoutExample::CreateAdditionalControls(int vertical_pos) {
   static const char* const cross_axis_values[4] = {"Stretch", "Start", "Center",
                                                    "End"};
 
-  orientation_ = CreateCombobox(base::ASCIIToUTF16("Orientation"),
-                                orientation_values, 2, &vertical_pos);
-  main_axis_alignment_ = CreateCombobox(base::ASCIIToUTF16("Main axis"),
-                                        main_axis_values, 3, &vertical_pos);
-  cross_axis_alignment_ = CreateCombobox(base::ASCIIToUTF16("Cross axis"),
-                                         cross_axis_values, 4, &vertical_pos);
+  orientation_ = CreateAndAddCombobox(base::ASCIIToUTF16("Orientation"),
+                                      orientation_values, 2, &vertical_pos);
+  main_axis_alignment_ = CreateAndAddCombobox(
+      base::ASCIIToUTF16("Main axis"), main_axis_values, 3, &vertical_pos);
+  cross_axis_alignment_ = CreateAndAddCombobox(
+      base::ASCIIToUTF16("Cross axis"), cross_axis_values, 4, &vertical_pos);
 
   CreateMarginsTextFields(base::ASCIIToUTF16("Interior margin"),
                           &interior_margin_, &vertical_pos);
@@ -51,10 +51,10 @@ void FlexLayoutExample::CreateAdditionalControls(int vertical_pos) {
   CreateMarginsTextFields(base::ASCIIToUTF16("Default margins"),
                           &default_child_margins_, &vertical_pos);
 
-  collapse_margins_ =
-      CreateCheckbox(base::ASCIIToUTF16("Collapse margins"), &vertical_pos);
+  collapse_margins_ = CreateAndAddCheckbox(
+      base::ASCIIToUTF16("Collapse margins"), &vertical_pos);
 
-  ignore_default_main_axis_margins_ = CreateCheckbox(
+  ignore_default_main_axis_margins_ = CreateAndAddCheckbox(
       base::ASCIIToUTF16("Ignore main axis margins"), &vertical_pos);
 
   layout_ = layout_panel()->SetLayoutManager(std::make_unique<FlexLayout>());

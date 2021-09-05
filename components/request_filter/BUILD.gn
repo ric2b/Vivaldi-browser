@@ -1,0 +1,40 @@
+# Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+import("//extensions/buildflags/buildflags.gni")
+
+source_set("request_filter") {
+  sources = [
+    "filtered_request_info.cc",
+    "filtered_request_info.h",
+    "request_filter_manager_factory.cc",
+    "request_filter_manager_factory.h",
+    "request_filter_manager.cc",
+    "request_filter_manager.h",
+    "request_filter_proxying_url_loader_factory.cc",
+    "request_filter_proxying_url_loader_factory.h",
+    "request_filter_proxying_websocket.cc",
+    "request_filter_proxying_websocket.h",
+    "request_filter.cc",
+    "request_filter.h",
+  ]
+
+  deps = [
+    "//base:base",
+    "//components/keyed_service/content",
+    "//components/web_cache/browser",
+    "//content/public/browser",
+    "//content/public/common",
+    "//extensions/buildflags",
+    "//vivaldi/components/request_filter/adblock_filter",
+    "//third_party/blink/public/common",
+  ]
+  if (enable_extensions) {
+    deps += [
+      "//extensions/browser",
+      "//extensions/browser/api/web_request",
+    ]
+  }
+  allow_circular_includes_from = [
+    "//vivaldi/components/request_filter/adblock_filter",
+  ]
+}

@@ -147,15 +147,7 @@ class BaseUIManager
   // implement the reporting logic themselves if needed.
   virtual void CreateAndSendHitReport(const UnsafeResource& resource);
 
-  // Calls BaseBlockingPage::ShowBlockingPage(). Override this if using a
-  // different blocking page.
-  virtual void ShowBlockingPageForResource(const UnsafeResource& resource);
-
  private:
-  // When true, we immediately cancel navigations that have been blocked by Safe
-  // Browsing, otherwise we call show on the interstitial.
-  bool SafeBrowsingInterstitialsAreCommittedNavigations();
-
   friend class base::RefCountedThreadSafe<BaseUIManager>;
 
   // Creates a blocking page, used for interstitials triggered by subresources.

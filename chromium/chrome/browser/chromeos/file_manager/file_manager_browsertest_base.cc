@@ -78,7 +78,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/common/service_manager_connection.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/network_connection_change_simulator.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -94,7 +94,6 @@
 #include "google_apis/drive/test_util.h"
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "storage/browser/file_system/external_mount_points.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -1045,7 +1044,7 @@ class DriveFsTestVolume : public TestVolume {
       case AddEntriesMessage::FILE: {
         original_name = base::FilePath(entry.target_path).BaseName();
         if (entry.source_file_name.empty()) {
-          ASSERT_EQ(0, base::WriteFile(target_path, "", 0));
+          ASSERT_TRUE(base::WriteFile(target_path, ""));
           break;
         }
         const base::FilePath source_path =
@@ -1316,6 +1315,16 @@ class MockSmbFsImpl : public smbfs::mojom::SmbFs {
   explicit MockSmbFsImpl(mojo::PendingReceiver<smbfs::mojom::SmbFs> pending)
       : receiver_(this, std::move(pending)) {}
 
+  MOCK_METHOD(void,
+              RemoveSavedCredentials,
+              (RemoveSavedCredentialsCallback),
+              (override));
+
+  MOCK_METHOD(void,
+              DeleteRecursively,
+              (const base::FilePath&, DeleteRecursivelyCallback),
+              (override));
+
  private:
   mojo::Receiver<smbfs::mojom::SmbFs> receiver_;
 };
@@ -1465,6 +1474,13 @@ void FileManagerBrowserTestBase::SetUpCommandLine(
   if (IsOfflineTest()) {
     command_line->AppendSwitchASCII(chromeos::switches::kShillStub, "clear=1");
   }
+
+  // TODO(crbug.com/937746): See crbug.com/1081581 for context, but
+  // the FilesApp does not work when custom elements v0 are enabled.
+  // Make sure they are disabled here. Remove this once WCv0 features
+  // are removed completely.
+  command_line->AppendSwitchASCII(switches::kDisableBlinkFeatures,
+                                  "ShadowDOMV0,CustomElementsV0,HTMLImports");
 
   std::vector<base::Feature> enabled_features;
   std::vector<base::Feature> disabled_features;
@@ -1694,7 +1710,7 @@ bool FileManagerBrowserTestBase::GetIsOffline() const {
 }
 
 bool FileManagerBrowserTestBase::GetEnableFilesNg() const {
-  return false;
+  return true;
 }
 
 bool FileManagerBrowserTestBase::GetEnableNativeSmb() const {

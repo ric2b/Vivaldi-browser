@@ -37,6 +37,7 @@ NavigationPresence GetNavigationPresence(
     case UserEventSpecifics::kLanguageDetectionEvent:
     case UserEventSpecifics::kTranslationEvent:
     case UserEventSpecifics::kUserConsent:
+    case UserEventSpecifics::kFlocIdComputedEvent:
     case UserEventSpecifics::EVENT_NOT_SET:
       break;
   }

@@ -91,7 +91,7 @@ class AshFocusRules;
 class AppListControllerImpl;
 class NativeCursorManagerAsh;
 class AshTouchTransformController;
-class AssistantController;
+class AssistantControllerImpl;
 class AutoclickController;
 class BackGestureEventHandler;
 class BacklightsForcedOffSetter;
@@ -107,6 +107,7 @@ class DisplayColorManager;
 class DisplayConfigurationController;
 class DisplayConfigurationObserver;
 class DisplayErrorObserver;
+class DisplayHighlightController;
 class DisplayPrefs;
 class DisplayShutdownObserver;
 class DisplaySpeakerController;
@@ -312,7 +313,9 @@ class ASH_EXPORT Shell : public SessionObserver,
     return app_list_controller_.get();
   }
   AmbientController* ambient_controller() { return ambient_controller_.get(); }
-  AssistantController* assistant_controller();
+  AssistantControllerImpl* assistant_controller() {
+    return assistant_controller_.get();
+  }
   AutoclickController* autoclick_controller() {
     return autoclick_controller_.get();
   }
@@ -347,6 +350,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   DisplayErrorObserver* display_error_observer() {
     return display_error_observer_.get();
+  }
+
+  DisplayHighlightController* display_highlight_controller() {
+    return display_highlight_controller_.get();
   }
 
   DockedMagnifierControllerImpl* docked_magnifier_controller();
@@ -636,7 +643,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   // May be null in tests or when running on linux-chromeos.
   scoped_refptr<dbus::Bus> dbus_bus_;
   std::unique_ptr<AshDBusServices> ash_dbus_services_;
-  std::unique_ptr<AssistantController> assistant_controller_;
+  std::unique_ptr<AssistantControllerImpl> assistant_controller_;
   std::unique_ptr<BacklightsForcedOffSetter> backlights_forced_off_setter_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
@@ -644,6 +651,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DetachableBaseHandler> detachable_base_handler_;
   std::unique_ptr<DetachableBaseNotificationController>
       detachable_base_notification_controller_;
+  std::unique_ptr<DisplayHighlightController> display_highlight_controller_;
   std::unique_ptr<DisplaySpeakerController> display_speaker_controller_;
   std::unique_ptr<DragDropController> drag_drop_controller_;
   std::unique_ptr<FocusCycler> focus_cycler_;

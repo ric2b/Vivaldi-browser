@@ -18,9 +18,10 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -427,6 +428,7 @@ void GLRenderer::DidChangeVisibility() {
 
 void GLRenderer::ReleaseRenderPassTextures() {
   render_pass_textures_.clear();
+  render_pass_backdrop_textures_.clear();
 }
 
 void GLRenderer::DiscardPixels() {
@@ -622,13 +624,10 @@ static GrGLenum SkFormatToGlFormat(SkColorType format) {
   switch (format) {
     case kRGB_888x_SkColorType:
       return GL_RGB8_OES;
-      break;
     case kRGBA_8888_SkColorType:
       return GL_RGBA8_OES;
-      break;
     case kBGRA_8888_SkColorType:
       return GL_BGRA8_EXT;
-      break;
     default:
       NOTREACHED();
       return GL_RGBA8_OES;
@@ -963,6 +962,16 @@ sk_sp<SkImage> GLRenderer::ApplyBackdropFilters(
   const RenderPassDrawQuad* quad = params->quad;
   auto use_gr_context = ScopedUseGrContext::Create(this);
 
+  // Check if cached result can be used
+  auto bg_texture_it =
+      render_pass_backdrop_textures_.find(quad->render_pass_id);
+  if (bg_texture_it != render_pass_backdrop_textures_.end()) {
+    if (quad->can_use_backdrop_filter_cache)
+      return bg_texture_it->second;
+    else
+      render_pass_backdrop_textures_.erase(bg_texture_it);
+  }
+
   gfx::Vector2d clipping_offset =
       (params->background_rect.top_right() - unclipped_rect.top_right()) +
       (params->background_rect.bottom_left() - unclipped_rect.bottom_left());
@@ -1092,7 +1101,12 @@ sk_sp<SkImage> GLRenderer::ApplyBackdropFilters(
     surface->getCanvas()->restore();
   }
 
-  return FinalizeImage(surface);
+  sk_sp<SkImage> filtered_image_texture = FinalizeImage(surface);
+  if (quad->can_use_backdrop_filter_cache) {
+    render_pass_backdrop_textures_[params->quad->render_pass_id] =
+        filtered_image_texture;
+  }
+  return filtered_image_texture;
 }
 
 const DrawQuad* GLRenderer::CanPassBeDrawnDirectly(const RenderPass* pass) {
@@ -4002,8 +4016,13 @@ void GLRenderer::UpdateRenderPassTextures(
   }
   // Delete RenderPass textures from the previous frame that will not be used
   // again.
-  for (size_t i = 0; i < passes_to_delete.size(); ++i)
-    render_pass_textures_.erase(passes_to_delete[i]);
+  for (auto& pass_to_delete : passes_to_delete) {
+    auto rp_backdrop_texture_it =
+        render_pass_backdrop_textures_.find(pass_to_delete);
+    if (rp_backdrop_texture_it != render_pass_backdrop_textures_.end())
+      render_pass_backdrop_textures_.erase(pass_to_delete);
+    render_pass_textures_.erase(pass_to_delete);
+  }
 }
 
 ResourceFormat GLRenderer::CurrentRenderPassResourceFormat() const {

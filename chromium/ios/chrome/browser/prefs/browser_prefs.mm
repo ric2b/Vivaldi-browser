@@ -30,6 +30,7 @@
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/policy/core/common/policy_statistics_collector.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -65,6 +66,7 @@
 #include "ios/chrome/browser/voice/voice_search_prefs_registration.h"
 #import "ios/chrome/browser/web/font_size_tab_helper.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/web/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -72,7 +74,6 @@
 #endif
 
 namespace {
-const char kReverseAutologinEnabled[] = "reverse_autologin.enabled";
 const char kLastKnownGoogleURL[] = "browser.last_known_google_url";
 const char kLastPromptedGoogleURL[] = "browser.last_prompted_google_url";
 
@@ -156,6 +157,7 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   ntp_tiles::PopularSitesImpl::RegisterProfilePrefs(registry);
   password_manager::PasswordManager::RegisterProfilePrefs(registry);
   payments::RegisterProfilePrefs(registry);
+  policy::URLBlacklistManager::RegisterProfilePrefs(registry);
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
   RegisterVoiceSearchBrowserStatePrefs(registry);
   safe_browsing::RegisterProfilePrefs(registry);
@@ -197,7 +199,6 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kSearchSuggestEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled, false);
-  registry->RegisterIntegerPref(prefs::kNtpShownPage, 1 << 10);
 
   // This comes from components/bookmarks/core/browser/bookmark_model.h
   // Defaults to 3, which is the id of bookmarkModel_->mobile_node()
@@ -206,7 +207,6 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Register prefs used by Clear Browsing Data UI.
   browsing_data::prefs::RegisterBrowserUserPrefs(registry);
 
-  registry->RegisterBooleanPref(kReverseAutologinEnabled, true);
   registry->RegisterStringPref(kLastKnownGoogleURL, std::string());
   registry->RegisterStringPref(kLastPromptedGoogleURL, std::string());
   registry->RegisterStringPref(kGoogleServicesUsername, std::string());
@@ -236,14 +236,8 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
 
 // This method should be periodically pruned of year+ old migrations.
 void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
-  // Added 01/2018.
-  prefs->ClearPref(::prefs::kNtpShownPage);
-
-  // Added 8/2018.
+  // Check MigrateDeprecatedAutofillPrefs() to see if this is safe to remove.
   autofill::prefs::MigrateDeprecatedAutofillPrefs(prefs);
-
-  // Added 10/2018.
-  prefs->ClearPref(kReverseAutologinEnabled);
 
   // Added 07/2019.
   syncer::MigrateSyncSuppressedPref(prefs);

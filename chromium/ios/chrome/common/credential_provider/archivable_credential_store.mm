@@ -4,7 +4,9 @@
 
 #import "ios/chrome/common/credential_provider/archivable_credential_store.h"
 
-#include "base/logging.h"
+#include "base/check.h"
+#include "base/mac/foundation_util.h"
+#include "base/notreached.h"
 #import "ios/chrome/common/credential_provider/archivable_credential.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -32,35 +34,13 @@
 - (instancetype)initWithFileURL:(NSURL*)fileURL {
   self = [super init];
   if (self) {
+    if (fileURL) {
+      DCHECK(fileURL.isFileURL) << "URL must be a file URL.";
+    }
     _fileURL = fileURL;
     _workingQueue = dispatch_queue_create(nullptr, DISPATCH_QUEUE_CONCURRENT);
   }
   return self;
-}
-
-- (void)addCredential:(ArchivableCredential*)credential {
-  DCHECK(credential.recordIdentifier)
-      << "credential must have a record identifier";
-  dispatch_barrier_async(self.workingQueue, ^{
-    DCHECK(!self.memoryStorage[credential.recordIdentifier])
-        << "Credential already exists in the storage";
-    self.memoryStorage[credential.recordIdentifier] = credential;
-  });
-}
-
-- (void)updateCredential:(ArchivableCredential*)credential {
-  [self removeCredential:credential];
-  [self addCredential:credential];
-}
-
-- (void)removeCredential:(ArchivableCredential*)credential {
-  DCHECK(credential.recordIdentifier)
-      << "credential must have a record identifier";
-  dispatch_barrier_async(self.workingQueue, ^{
-    DCHECK(self.memoryStorage[credential.recordIdentifier])
-        << "Credential doesn't exist in the storage";
-    self.memoryStorage[credential.recordIdentifier] = nil;
-  });
 }
 
 #pragma mark - CredentialStore
@@ -75,9 +55,20 @@
 
 - (void)saveDataWithCompletion:(void (^)(NSError* error))completion {
   dispatch_barrier_async(self.workingQueue, ^{
+    auto executeCompletionIfPresent = ^(NSError* error) {
+      if (completion) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          completion(error);
+        });
+      }
+    };
+
     if (!self.fileURL) {
+      // There is no fileURL, store is being used as memory only.
+      executeCompletionIfPresent(nil);
       return;
     }
+
     NSError* error = nil;
     NSData* data =
         [NSKeyedArchiver archivedDataWithRootObject:self.memoryStorage
@@ -85,14 +76,65 @@
                                               error:&error];
     DCHECK(!error) << error.debugDescription.UTF8String;
     if (error) {
-      completion(error);
+      executeCompletionIfPresent(error);
+      return;
+    }
+
+    [[NSFileManager defaultManager]
+               createDirectoryAtURL:self.fileURL.URLByDeletingLastPathComponent
+        withIntermediateDirectories:YES
+                         attributes:nil
+                              error:&error];
+
+    if (error) {
+      executeCompletionIfPresent(error);
       return;
     }
 
     [data writeToURL:self.fileURL options:NSDataWritingAtomic error:&error];
     DCHECK(!error) << error.debugDescription.UTF8String;
-    completion(error);
+    executeCompletionIfPresent(error);
   });
+}
+
+- (void)removeAllCredentials {
+  dispatch_barrier_async(self.workingQueue, ^{
+    [self.memoryStorage removeAllObjects];
+  });
+}
+
+- (void)addCredential:(id<Credential>)credential {
+  DCHECK(credential.recordIdentifier)
+      << "credential must have a record identifier";
+  dispatch_barrier_async(self.workingQueue, ^{
+    DCHECK(!self.memoryStorage[credential.recordIdentifier])
+        << "Credential already exists in the storage";
+    self.memoryStorage[credential.recordIdentifier] =
+        base::mac::ObjCCastStrict<ArchivableCredential>(credential);
+  });
+}
+
+- (void)updateCredential:(id<Credential>)credential {
+  [self removeCredential:credential];
+  [self addCredential:credential];
+}
+
+- (void)removeCredential:(id<Credential>)credential {
+  DCHECK(credential.recordIdentifier)
+      << "credential must have a record identifier";
+  dispatch_barrier_async(self.workingQueue, ^{
+    DCHECK(self.memoryStorage[credential.recordIdentifier])
+        << "Credential doesn't exist in the storage";
+    self.memoryStorage[credential.recordIdentifier] = nil;
+  });
+}
+
+- (id<Credential>)credentialWithIdentifier:(NSString*)identifier {
+  __block id<Credential> credential;
+  dispatch_sync(self.workingQueue, ^{
+    credential = self.memoryStorage[identifier];
+  });
+  return credential;
 }
 
 #pragma mark - Getters

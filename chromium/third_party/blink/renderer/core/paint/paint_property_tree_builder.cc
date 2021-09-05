@@ -260,6 +260,12 @@ class FragmentPaintPropertyTreeBuilder {
     full_context_.clip_changed |= cleared;
   }
 
+  CompositorElementId GetCompositorElementId(
+      CompositorElementIdNamespace namespace_id) const {
+    return CompositorElementIdFromUniqueObjectId(fragment_data_.UniqueId(),
+                                                 namespace_id);
+  }
+
   const LayoutObject& object_;
   NGPrePaintInfo* pre_paint_info_;
   // The tree builder context for the whole object.
@@ -534,6 +540,10 @@ void FragmentPaintPropertyTreeBuilder::UpdateStickyTranslation() {
       const auto& box_model = ToLayoutBoxModelObject(object_);
       TransformPaintPropertyNode::State state{
           FloatSize(box_model.StickyPositionOffset())};
+      // TODO(wangxianzhu): Not using GetCompositorElementId() here because
+      // sticky elements don't work properly under multicol for now, to keep
+      // consistency with CompositorElementIdFromUniqueObjectId() below.
+      // This will be fixed by LayoutNG block fragments.
       state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
           box_model.UniqueId(),
           CompositorElementIdNamespace::kStickyTranslation);
@@ -692,11 +702,12 @@ static CompositingReasons CompositingReasonsForTransformProperty() {
   // property instead of creating all nodes and only create a transform/
   // effect/filter node if needed.
   reasons |= CompositingReason::kComboActiveAnimation;
-  // We also need to create transform node if the opacity node is created for
-  // will-change:opacity to avoid raster invalidation (caused by otherwise a
-  // created/deleted effect node) when we start/stop an opacity animation.
-  // https://crbug.com/942681
+  // We also need to create a transform node if will-change creates other nodes,
+  // to avoid raster invalidation caused by creating/deleting those nodes when
+  // starting/stopping an animation. See: https://crbug.com/942681.
   reasons |= CompositingReason::kWillChangeOpacity;
+  reasons |= CompositingReason::kWillChangeFilter;
+  reasons |= CompositingReason::kWillChangeBackdropFilter;
   return reasons;
 }
 
@@ -801,8 +812,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateTransform() {
           object_.HasHiddenBackface()
               ? TransformPaintPropertyNode::BackfaceVisibility::kHidden
               : TransformPaintPropertyNode::BackfaceVisibility::kVisible;
-      state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
-          object_.UniqueId(), CompositorElementIdNamespace::kPrimaryTransform);
+      state.compositor_element_id = GetCompositorElementId(
+          CompositorElementIdNamespace::kPrimaryTransform);
 
       TransformPaintPropertyNode::AnimationState animation_state;
       animation_state.is_running_animation_on_compositor =
@@ -865,13 +876,13 @@ static CompositingReasons CompositingReasonsForEffectProperty() {
   // property instead of creating all nodes and only create a transform/
   // effect/filter node if needed.
   reasons |= CompositingReason::kComboActiveAnimation;
-  // We also need to create effect node if the transform node is created for
-  // will-change:transform to avoid raster invalidation (caused by otherwise a
-  // created/deleted effect node) when we start/stop a transform animation.
-  // https://crbug.com/942681
+  // We also need to create an effect node if will-change creates other nodes,
+  // to avoid raster invalidation caused by creating/deleting those nodes when
+  // starting/stopping an animation. See: https://crbug.com/942681.
   // In CompositeAfterPaint, this also avoids decomposition of the effect when
   // the object is forced compositing with will-change:transform.
   reasons |= CompositingReason::kWillChangeTransform;
+  reasons |= CompositingReason::kWillChangeFilter;
   return reasons;
 }
 
@@ -1045,8 +1056,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
 
       CompositorElementId mask_compositor_element_id;
       if (mask_clip || has_spv1_composited_clip_path) {
-        mask_compositor_element_id = CompositorElementIdFromUniqueObjectId(
-            object_.UniqueId(), CompositorElementIdNamespace::kEffectMask);
+        mask_compositor_element_id =
+            GetCompositorElementId(CompositorElementIdNamespace::kEffectMask);
       }
 
       EffectPaintPropertyNode::State state;
@@ -1083,15 +1094,15 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
           full_context_.direct_compositing_reasons &
           CompositingReasonsForEffectProperty();
       if (state.direct_compositing_reasons) {
-        state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
-            object_.UniqueId(), CompositorElementIdNamespace::kPrimaryEffect);
+        state.compositor_element_id = GetCompositorElementId(
+            CompositorElementIdNamespace::kPrimaryEffect);
       } else {
         // The effect node CompositorElementId is used to uniquely identify
         // renderpasses so even if we don't need one for animations we still
         // need to set an id. Using kPrimary avoids confusing cc::Animation
         // into thinking the element has been composited for animations.
-        state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
-            object_.UniqueId(), CompositorElementIdNamespace::kPrimary);
+        state.compositor_element_id =
+            GetCompositorElementId(CompositorElementIdNamespace::kPrimary);
       }
 
       // TODO(crbug.com/900241): Remove these setters when we can use
@@ -1148,10 +1159,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
         clip_path_state.local_transform_space = context_.current.transform;
         clip_path_state.output_clip = output_clip;
         clip_path_state.blend_mode = SkBlendMode::kDstIn;
-        clip_path_state.compositor_element_id =
-            CompositorElementIdFromUniqueObjectId(
-                object_.UniqueId(),
-                CompositorElementIdNamespace::kEffectClipPath);
+        clip_path_state.compositor_element_id = GetCompositorElementId(
+            CompositorElementIdNamespace::kEffectClipPath);
         OnUpdate(
             properties_->UpdateClipPath(parent, std::move(clip_path_state)));
       } else {
@@ -1189,14 +1198,15 @@ static CompositingReasons CompositingReasonsForFilterProperty() {
   // property instead of creating all nodes and only create a transform/
   // effect/filter node if needed.
   reasons |= CompositingReason::kComboActiveAnimation;
-  // We also need to create filter node if the transform/effect node is
-  // created for will-change:transform/opacity to avoid raster invalidation
-  // (caused by otherwise a created/deleted filter node) when we start/stop a
-  // transform/opacity animation. https://crbug.com/942681
+
+  // We also need to create a filter node if will-change creates other nodes,
+  // to avoid raster invalidation caused by creating/deleting those nodes when
+  // starting/stopping an animation. See: https://crbug.com/942681.
   // In CompositeAfterPaint, this also avoids decomposition of the filter when
-  // the object is forced compositing with will-change:transform/opacity.
+  // the object is forced compositing with will-change.
   reasons |= CompositingReason::kWillChangeTransform |
-             CompositingReason::kWillChangeOpacity;
+             CompositingReason::kWillChangeOpacity |
+             CompositingReason::kWillChangeBackdropFilter;
   return reasons;
 }
 
@@ -1265,8 +1275,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateFilter() {
       state.direct_compositing_reasons =
           full_context_.direct_compositing_reasons &
           CompositingReasonsForFilterProperty();
-      state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
-          object_.UniqueId(), CompositorElementIdNamespace::kEffectFilter);
+      state.compositor_element_id =
+          GetCompositorElementId(CompositorElementIdNamespace::kEffectFilter);
 
       // TODO(crbug.com/900241): Remove the setter when we can use
       // state.direct_compositing_reasons to check for active animations.
@@ -2250,6 +2260,11 @@ void FragmentPaintPropertyTreeBuilder::UpdatePaintOffset() {
         // offset transform for paint_offset_root.
         !context_.current.paint_offset_root->PaintingLayer()
              ->EnclosingPaginationLayer()) {
+      if (object_.StyleRef().GetPosition() == EPosition::kAbsolute)
+        context_.current = context_.absolute_position;
+      else if (object_.StyleRef().GetPosition() == EPosition::kFixed)
+        context_.current = context_.fixed_position;
+
       // Set fragment visual paint offset.
       PhysicalOffset paint_offset = PaintOffsetInPaginationContainer(
           object_, *enclosing_pagination_layer);
@@ -3004,6 +3019,7 @@ PaintPropertyTreeBuilder::ContextForFragment(
   // This will be used in the loop finding matching fragment from ancestor flow
   // threads after no matching from parent_fragments.
   LayoutUnit logical_top_in_containing_flow_thread;
+  bool crossed_flow_thread = false;
 
   if (object_.IsLayoutFlowThread()) {
     const auto& flow_thread = ToLayoutFlowThread(object_);
@@ -3022,6 +3038,7 @@ PaintPropertyTreeBuilder::ContextForFragment(
         return context;
       }
     }
+    crossed_flow_thread = true;
   } else {
     bool parent_is_under_same_flow_thread;
     auto* pagination_layer =
@@ -3054,6 +3071,7 @@ PaintPropertyTreeBuilder::ContextForFragment(
     }
 
     logical_top_in_containing_flow_thread = logical_top_in_flow_thread;
+    crossed_flow_thread = !parent_is_under_same_flow_thread;
   }
 
   // Found no matching parent fragment. Use parent_fragments[0] to inherit
@@ -3073,19 +3091,41 @@ PaintPropertyTreeBuilder::ContextForFragment(
   // For each case, we need to adjust context.current.clip. For now it's the
   // first parent fragment's FragmentClip which is not the correct clip for
   // object_.
+  const ClipPaintPropertyNode* found_clip = nullptr;
   for (const auto* container = object_.Container(); container;
        container = container->Container()) {
     if (!container->FirstFragment().HasLocalBorderBoxProperties())
       continue;
 
-    for (const auto* fragment = &container->FirstFragment(); fragment;
-         fragment = fragment->NextFragment()) {
-      if (fragment->LogicalTopInFlowThread() ==
-          logical_top_in_containing_flow_thread) {
-        // Found a matching fragment in an ancestor container. Use the
-        // container's content clip as the clip state.
-        context.current.clip = &fragment->PostOverflowClip();
-        return context;
+    const FragmentData* container_fragment = &container->FirstFragment();
+    while (container_fragment->LogicalTopInFlowThread() <
+               logical_top_in_containing_flow_thread &&
+           container_fragment->NextFragment())
+      container_fragment = container_fragment->NextFragment();
+
+    if (container_fragment->LogicalTopInFlowThread() ==
+        logical_top_in_containing_flow_thread) {
+      // Found a matching fragment in an ancestor container. Use the
+      // container's content clip as the clip state.
+      found_clip = &container_fragment->PostOverflowClip();
+      break;
+    }
+
+    // We didn't find corresponding fragment in the container because the
+    // fragment fully overflows the container. If the container has overflow
+    // clip, then this fragment should be under |container_fragment|.
+    // This works only when the current fragment and the overflow clip are under
+    // the same flow thread. In other cases, we just leave it broken, which will
+    // be fixed by LayoutNG block fragments hopefully.
+    if (!crossed_flow_thread) {
+      if (const auto* container_properties =
+              container_fragment->PaintProperties()) {
+        if (const auto* overflow_clip = container_properties->OverflowClip()) {
+          context.logical_top_in_flow_thread =
+              container_fragment->LogicalTopInFlowThread();
+          found_clip = overflow_clip;
+          break;
+        }
       }
     }
 
@@ -3094,6 +3134,7 @@ PaintPropertyTreeBuilder::ContextForFragment(
           FragmentLogicalTopInParentFlowThread(
               ToLayoutFlowThread(*container),
               logical_top_in_containing_flow_thread);
+      crossed_flow_thread = true;
     }
   }
 
@@ -3101,7 +3142,15 @@ PaintPropertyTreeBuilder::ContextForFragment(
   // because logical_top_in_containing_flow_thread will be zero when we traverse
   // across the top-level flow thread and it should match the first fragment of
   // a non-fragmented ancestor container.
-  NOTREACHED();
+  DCHECK(found_clip);
+
+  if (!crossed_flow_thread)
+    context.fragment_clip = base::nullopt;
+  context.current.clip = found_clip;
+  if (object_.StyleRef().GetPosition() == EPosition::kAbsolute)
+    context.absolute_position.clip = found_clip;
+  else if (object_.StyleRef().GetPosition() == EPosition::kFixed)
+    context.fixed_position.clip = found_clip;
   return context;
 }
 
@@ -3178,8 +3227,16 @@ void PaintPropertyTreeBuilder::CreateFragmentContextsInFlowThread(
     }
 
     // Match to parent fragments from the same containing flow thread.
-    new_fragment_contexts.push_back(
-        ContextForFragment(fragment_clip, logical_top_in_flow_thread));
+    auto fragment_context =
+        ContextForFragment(fragment_clip, logical_top_in_flow_thread);
+    // ContextForFragment may override logical_top_in_flow_thread.
+    logical_top_in_flow_thread = fragment_context.logical_top_in_flow_thread;
+    // Avoid fragment with duplicated overridden logical_top_in_flow_thread.
+    if (new_fragment_contexts.size() &&
+        new_fragment_contexts.back().logical_top_in_flow_thread ==
+            logical_top_in_flow_thread)
+      break;
+    new_fragment_contexts.push_back(fragment_context);
 
     if (current_fragment_data) {
       if (!current_fragment_data->NextFragment())

@@ -21,6 +21,7 @@
 #include "base/bind_helpers.h"
 #include "base/bits.h"
 #include "base/callback_helpers.h"
+#include "base/cpu.h"
 #include "base/environment.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
@@ -141,6 +142,31 @@ namespace media {
 
 namespace {
 
+// Returns true if the SoC has a 9.5 GPU. CPU model IDs are referenced from the
+// following file in the kernel source:  arch/x86/include/asm/intel-family.h.
+bool IsGen95Gpu() {
+  constexpr int kPentiumAndLaterFamily = 0x06;
+  constexpr int kKabyLakeModelId = 0x9E;
+  // Amber Lake, Whiskey Lake and some Comet Lake CPU IDs are the same as KBL L.
+  constexpr int kKabyLake_LModelId = 0x8E;
+  constexpr int kGeminiLakeModelId = 0x7A;
+  constexpr int kCometLakeModelId = 0xA5;
+  constexpr int kCometLake_LModelId = 0xA6;
+  static base::NoDestructor<base::CPU> cpuid;
+  static const bool is_gen95_gpu = cpuid->family() == kPentiumAndLaterFamily &&
+                                   (cpuid->model() == kKabyLakeModelId ||
+                                    cpuid->model() == kKabyLake_LModelId ||
+                                    cpuid->model() == kGeminiLakeModelId ||
+                                    cpuid->model() == kCometLakeModelId ||
+                                    cpuid->model() == kCometLake_LModelId);
+  return is_gen95_gpu;
+}
+
+bool IsModeEncoding(VaapiWrapper::CodecMode mode) {
+  return mode == VaapiWrapper::CodecMode::kEncode ||
+         mode == VaapiWrapper::CodecMode::kEncodeConstantQuantizationParameter;
+}
+
 bool GetNV12VisibleWidthBytes(int visible_width,
                               uint32_t plane,
                               size_t* bytes) {
@@ -220,7 +246,8 @@ static const struct {
     {H264PROFILE_HIGH, VAProfileH264High},
     {VP8PROFILE_ANY, VAProfileVP8Version0_3},
     {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
-    {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
+    // VP9 hw encode/decode on profile 1 is not enabled on chromium-vaapi.
+    // {VP9PROFILE_PROFILE1, VAProfileVP9Profile1},
     // TODO(crbug.com/1011454, crbug.com/1011469): Reenable VP9PROFILE_PROFILE2
     // and _PROFILE3 when P010 is completely supported.
     //{VP9PROFILE_PROFILE2, VAProfileVP9Profile2},
@@ -308,14 +335,14 @@ std::string VAProfileToString(VAProfile va_profile) {
 bool IsBlackListedDriver(const std::string& va_vendor_string,
                          VaapiWrapper::CodecMode mode,
                          VAProfile va_profile) {
-  if (mode != VaapiWrapper::CodecMode::kEncode)
+  if (!IsModeEncoding(mode))
     return false;
 
   // TODO(crbug.com/828482): Remove once H264 encoder on AMD is enabled by
   // default.
   if (VendorStringToImplementationType(va_vendor_string) ==
           VAImplementation::kMesaGallium &&
-      va_vendor_string.find("AMD STONEY") != std::string::npos &&
+      base::Contains(va_vendor_string, "AMD STONEY") &&
       !base::FeatureList::IsEnabled(kVaapiH264AMDEncoder)) {
     constexpr VAProfile kH264Profiles[] = {VAProfileH264Baseline,
                                            VAProfileH264Main, VAProfileH264High,
@@ -330,12 +357,16 @@ bool IsBlackListedDriver(const std::string& va_vendor_string,
     return true;
   }
 
-  // TODO(crbug.com/811912): Remove once VP9 encoding is to be enabled by
-  // default.
+  // TODO(crbug.com/811912): Remove once VP9 encoding is enabled by default.
   if (va_profile == VAProfileVP9Profile0 &&
       !base::FeatureList::IsEnabled(kVaapiVP9Encoder)) {
     return true;
   }
+
+  // TODO(b/158655609): Several Gen 9.5 GPU devices suffer from a GPU hang when
+  // VP8 encoding in some power saving states. Blacklist them temporarily.
+  if (IsGen95Gpu() && va_profile == VAProfileVP8Version0_3)
+    return true;
 
   return false;
 }
@@ -556,6 +587,9 @@ std::vector<VAEntrypoint> GetEntryPointsForProfile(const base::Lock* va_lock,
           {VAEntrypointVLD},  // For kDecode.
           {VAEntrypointEncSlice, VAEntrypointEncPicture,
            VAEntrypointEncSliceLP},  // For kEncode.
+          {VAEntrypointEncSlice,
+           VAEntrypointEncSliceLP},  // For
+                                     // kEncodeConstantQuantizationParameter.
           {VAEntrypointVideoProc}    // For kVideoProcess.
       };
   std::vector<VAEntrypoint> entrypoints;
@@ -586,12 +620,15 @@ static bool GetRequiredAttribs(const base::Lock* va_lock,
     required_attribs->push_back({VAConfigAttribRTFormat, VA_RT_FORMAT_YUV420});
   }
 
-  if (mode != VaapiWrapper::kEncode)
+  if (!IsModeEncoding(mode))
     return true;
 
-  // All encoding use constant bit rate except for JPEG.
-  if (profile != VAProfileJPEGBaseline)
-    required_attribs->push_back({VAConfigAttribRateControl, VA_RC_CBR});
+  if (profile != VAProfileJPEGBaseline) {
+    if (mode == VaapiWrapper::kEncode)
+      required_attribs->push_back({VAConfigAttribRateControl, VA_RC_CBR});
+    if (mode == VaapiWrapper::kEncodeConstantQuantizationParameter)
+      required_attribs->push_back({VAConfigAttribRateControl, VA_RC_CQP});
+  }
 
   // VAConfigAttribEncPackedHeaders is H.264 specific.
   if ((profile >= VAProfileH264Baseline && profile <= VAProfileH264High) ||
@@ -1359,6 +1396,11 @@ bool VaapiWrapper::GetJpegDecodeSuitableImageFourCC(unsigned int rt_format,
         preferred_fourcc == VA_FOURCC_P010) {
       preferred_fourcc = VA_FOURCC_I420;
     }
+  } else if (GetImplementationType() == VAImplementation::kIntelIHD) {
+    // TODO(b/155939640): iHD v19.4 fails to allocate AYUV surfaces for the VPP
+    // on gen 9.5.
+    if (preferred_fourcc == VA_FOURCC_AYUV)
+      preferred_fourcc = VA_FOURCC_I420;
   }
 
   if (!VASupportedImageFormats::Get().IsImageFormatSupported(
@@ -1449,6 +1491,7 @@ VAEntrypoint VaapiWrapper::GetDefaultVaEntryPoint(CodecMode mode,
     case VaapiWrapper::kDecode:
       return VAEntrypointVLD;
     case VaapiWrapper::kEncode:
+    case VaapiWrapper::kEncodeConstantQuantizationParameter:
       if (profile == VAProfileJPEGBaseline)
         return VAEntrypointEncPicture;
       else
@@ -2191,12 +2234,18 @@ VaapiWrapper::~VaapiWrapper() {
 }
 
 bool VaapiWrapper::Initialize(CodecMode mode, VAProfile va_profile) {
+#if DCHECK_IS_ON()
+  if (mode == kEncodeConstantQuantizationParameter) {
+    DCHECK_NE(va_profile, VAProfileJPEGBaseline)
+        << "JPEG Encoding doesn't support CQP bitrate control";
+  }
+#endif  // DCHECK_IS_ON()
+
   if (mode != kVideoProcess)
     TryToSetVADisplayAttributeToLocalGPU();
 
   VAEntrypoint entrypoint = GetDefaultVaEntryPoint(mode, va_profile);
-
-  if (mode == CodecMode::kEncode && IsLowPowerEncSupported(va_profile) &&
+  if (IsModeEncoding(mode) && IsLowPowerEncSupported(va_profile, mode) &&
       base::FeatureList::IsEnabled(kVaapiLowPowerEncoder)) {
     entrypoint = VAEntrypointEncSliceLP;
     DVLOG(2) << "Enable VA-API Low-Power Encode Entrypoint";
@@ -2205,8 +2254,9 @@ bool VaapiWrapper::Initialize(CodecMode mode, VAProfile va_profile) {
   base::AutoLock auto_lock(*va_lock_);
   std::vector<VAConfigAttrib> required_attribs;
   if (!GetRequiredAttribs(va_lock_, va_display_, mode, va_profile, entrypoint,
-                          &required_attribs))
+                          &required_attribs)) {
     return false;
+  }
 
   VAStatus va_res =
       vaCreateConfig(va_display_, va_profile, entrypoint,
@@ -2420,7 +2470,8 @@ void VaapiWrapper::TryToSetVADisplayAttributeToLocalGPU() {
 }
 
 // Check the support for low-power encode
-bool VaapiWrapper::IsLowPowerEncSupported(VAProfile va_profile) const {
+bool VaapiWrapper::IsLowPowerEncSupported(VAProfile va_profile,
+                                          CodecMode mode) const {
   // Enabled only for H264/AVC & VP9 Encoders
   if (va_profile != VAProfileH264ConstrainedBaseline &&
       va_profile != VAProfileH264Main && va_profile != VAProfileH264High &&
@@ -2431,8 +2482,8 @@ bool VaapiWrapper::IsLowPowerEncSupported(VAProfile va_profile) const {
   std::vector<VAConfigAttrib> required_attribs;
 
   base::AutoLock auto_lock(*va_lock_);
-  GetRequiredAttribs(va_lock_, va_display_, VaapiWrapper::CodecMode::kEncode,
-                     va_profile, kLowPowerEncEntryPoint, &required_attribs);
+  GetRequiredAttribs(va_lock_, va_display_, mode, va_profile,
+                     kLowPowerEncEntryPoint, &required_attribs);
   // Query the driver for required attributes.
   std::vector<VAConfigAttrib> attribs = required_attribs;
   for (size_t i = 0; i < required_attribs.size(); ++i)

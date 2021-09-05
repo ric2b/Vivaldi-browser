@@ -28,8 +28,8 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_manager_connection.h"
 #include "content/public/test/back_forward_cache_util.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -83,7 +83,8 @@ constexpr char kPublicKeyErrorMessage[] =
 
 constexpr char kNotAllowedErrorMessage[] =
     "webauth: NotAllowedError: The operation either timed out or was not "
-    "allowed. See: https://w3c.github.io/webauthn/#sec-assertion-privacy.";
+    "allowed. See: "
+    "https://www.w3.org/TR/webauthn-2/#sctn-privacy-considerations-client.";
 
 #if defined(OS_WIN)
 constexpr char kInvalidStateErrorMessage[] =
@@ -109,10 +110,16 @@ constexpr char kRelyingPartyRpIconUrlSecurityErrorMessage[] =
 constexpr char kAbortErrorMessage[] =
     "webauth: AbortError: Request has been aborted.";
 
-constexpr char kFeatureMissingMessage[] =
-    "webauth: NotAllowedError: The 'publickey-credentials' feature is not "
-    "enabled in this document. Feature Policy may be used to delegate Web "
+constexpr char kGetFeaturePolicyMissingMessage[] =
+    "webauth: NotAllowedError: The 'publickey-credentials-get' feature is "
+    "not enabled in this document. Feature Policy may be used to delegate Web "
     "Authentication capabilities to cross-origin child frames.";
+
+constexpr char kCrossOriginAncestorMessage[] =
+    "webauth: NotAllowedError: The following credential operations can only "
+    "occur in a document which is same-origin with all of its ancestors: "
+    "storage/retrieval of 'PasswordCredential' and 'FederatedCredential', "
+    "storage of 'PublicKeyCredential'.";
 
 // Templates to be used with base::ReplaceStringPlaceholders. Can be
 // modified to include up to 9 replacements. The default values for
@@ -789,7 +796,7 @@ class WebAuthJavascriptClientBrowserTest : public WebAuthBrowserTestBase {
 
  protected:
   std::vector<base::Feature> GetFeaturesToEnable() override {
-    return {device::kWebAuthFeaturePolicy};
+    return {device::kWebAuthGetAssertionFeaturePolicy};
   }
 
  private:
@@ -1170,7 +1177,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
       // XO |Create|Get  | Allow
       {false, true, true, ""},
       {true, false, false, ""},
-      {true, true, true, "publickey-credentials"},
+      {true, false, true, "publickey-credentials-get"},
   };
 
   for (const auto& test : kTestCases) {
@@ -1210,7 +1217,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
     if (test.create_should_work) {
       EXPECT_EQ(std::string(kOkMessage), result);
     } else {
-      EXPECT_EQ(kFeatureMissingMessage, result);
+      EXPECT_EQ(kCrossOriginAncestorMessage, result);
     }
 
     const int credential_id =
@@ -1228,7 +1235,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
     if (test.get_should_work) {
       EXPECT_EQ(std::string(kOkMessage), result);
     } else {
-      EXPECT_EQ(kFeatureMissingMessage, result);
+      EXPECT_EQ(kGetFeaturePolicyMissingMessage, result);
     }
   }
 }
@@ -1412,7 +1419,10 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest, WinGetAssertion) {
+// TODO(crbug/1081450): FakeWinWebAuthnApi needs to support injecting
+// credentials in order for assertion responses to pass response validation.
+IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
+                       DISABLED_WinGetAssertion) {
   EXPECT_TRUE(
       NavigateToURL(shell(), GetHttpsURL("www.acme.com", "/title1.html")));
 

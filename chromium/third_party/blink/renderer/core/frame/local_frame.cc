@@ -51,6 +51,7 @@
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/scheduler/web_resource_loading_task_runner_handle.h"
@@ -99,11 +100,13 @@
 #include "third_party/blink/renderer/core/frame/page_scale_constraints_set.h"
 #include "third_party/blink/renderer/core/frame/performance_monitor.h"
 #include "third_party/blink/renderer/core/frame/picture_in_picture_controller.h"
+#include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_owner.h"
 #include "third_party/blink/renderer/core/frame/report.h"
 #include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/user_activation.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -114,7 +117,7 @@
 #include "third_party/blink/renderer/core/html/plugin_document.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
-#include "third_party/blink/renderer/core/inspector/inspector_issue.h"
+#include "third_party/blink/renderer/core/inspector/inspector_issue_storage.h"
 #include "third_party/blink/renderer/core/inspector/inspector_task_runner.h"
 #include "third_party/blink/renderer/core/inspector/inspector_trace_events.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_controller.h"
@@ -125,6 +128,7 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/idleness_detector.h"
+#include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/drag_controller.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
@@ -156,8 +160,14 @@
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "ui/gfx/geometry/point.h"
+
+#if defined(OS_MACOSX)
+#include "third_party/blink/renderer/core/editing/ephemeral_range.h"
+#include "ui/gfx/range/range.h"
+#endif
 
 namespace blink {
 
@@ -175,6 +185,14 @@ inline float ParentTextZoomFactor(LocalFrame* frame) {
   auto* parent_local_frame = DynamicTo<LocalFrame>(frame->Tree().Parent());
   return parent_local_frame ? parent_local_frame->TextZoomFactor() : 1;
 }
+
+#if defined(OS_MACOSX)
+uint32_t GetCurrentCursorPositionInFrame(LocalFrame* local_frame) {
+  blink::WebRange range =
+      WebLocalFrameImpl::FromFrame(local_frame)->SelectionRange();
+  return range.IsNull() ? 0U : static_cast<uint32_t>(range.StartOffset());
+}
+#endif
 
 // Convert a data url to a message pipe handle that corresponds to a remote
 // blob, so that it can be passed across processes.
@@ -200,6 +218,13 @@ HitTestResult HitTestResultForRootFramePos(
       location, HitTestRequest::kReadOnly | HitTestRequest::kActive);
   result.SetToShadowHostIfInRestrictedShadowRoot();
   return result;
+}
+
+RemoteFrame* SourceFrameForOptionalToken(
+    const base::Optional<base::UnguessableToken>& source_frame_token) {
+  if (!source_frame_token)
+    return nullptr;
+  return RemoteFrame::FromFrameToken(source_frame_token.value());
 }
 
 class WebBundleGenerationDelegate
@@ -358,12 +383,9 @@ void LocalFrame::Trace(Visitor* visitor) {
   visitor->Trace(page_popup_owner_);
   visitor->Trace(script_controller_);
   visitor->Trace(editor_);
-  visitor->Trace(spell_checker_);
   visitor->Trace(selection_);
   visitor->Trace(event_handler_);
   visitor->Trace(console_);
-  visitor->Trace(input_method_controller_);
-  visitor->Trace(text_suggestion_controller_);
   visitor->Trace(smooth_scroll_sequencer_);
   visitor->Trace(content_capture_manager_);
   visitor->Trace(system_clipboard_);
@@ -573,9 +595,6 @@ void LocalFrame::DidAttachDocument() {
   // even after the frame reattaches.
   GetEventHandler().Clear();
   Selection().DidAttachDocument(document);
-  GetInputMethodController().DidAttachDocument(document);
-  GetSpellChecker().DidAttachDocument(document);
-  GetTextSuggestionController().DidAttachDocument(document);
   if (IsCrossOriginToParentFrame() && !first_url_cross_origin_to_parent_) {
     first_url_cross_origin_to_parent_ = GetDocument()->Url().GetString();
   }
@@ -902,6 +921,16 @@ void LocalFrame::DeviceScaleFactorChanged() {
   }
 }
 
+void LocalFrame::MediaQueryAffectingValueChangedForLocalSubtree(
+    MediaValueChange value) {
+  GetDocument()->MediaQueryAffectingValueChanged(value);
+  for (Frame* child = Tree().FirstChild(); child;
+       child = child->Tree().NextSibling()) {
+    if (auto* child_local_frame = DynamicTo<LocalFrame>(child))
+      child_local_frame->MediaQueryAffectingValueChangedForLocalSubtree(value);
+  }
+}
+
 double LocalFrame::DevicePixelRatio() const {
   if (!page_)
     return 0;
@@ -987,12 +1016,14 @@ bool LocalFrame::ShouldThrottleRendering() const {
 LocalFrame::LocalFrame(LocalFrameClient* client,
                        Page& page,
                        FrameOwner* owner,
+                       const base::UnguessableToken& frame_token,
                        WindowAgentFactory* inheriting_agent_factory,
                        InterfaceRegistry* interface_registry,
                        const base::TickClock* clock)
     : Frame(client,
             page,
             owner,
+            frame_token,
             MakeGarbageCollected<LocalWindowProxyManager>(*this),
             inheriting_agent_factory),
       frame_scheduler_(page.GetPageScheduler()->CreateFrameScheduler(
@@ -1005,14 +1036,9 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
           *this,
           *static_cast<LocalWindowProxyManager*>(GetWindowProxyManager()))),
       editor_(MakeGarbageCollected<Editor>(*this)),
-      spell_checker_(MakeGarbageCollected<SpellChecker>(*this)),
       selection_(MakeGarbageCollected<FrameSelection>(*this)),
       event_handler_(MakeGarbageCollected<EventHandler>(*this)),
       console_(MakeGarbageCollected<FrameConsole>(*this)),
-      input_method_controller_(
-          MakeGarbageCollected<InputMethodController>(*this)),
-      text_suggestion_controller_(
-          MakeGarbageCollected<TextSuggestionController>(*this)),
       navigation_disable_count_(0),
       page_zoom_factor_(ParentPageZoomFactor(this)),
       text_zoom_factor_(ParentTextZoomFactor(this)),
@@ -1054,6 +1080,12 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
   Initialize();
 
   probe::FrameAttachedToParent(this);
+#if defined(OS_MACOSX)
+  // It should be bound before accessing TextInputHost which is the interface to
+  // respond to GetCharacterIndexAtPoint.
+  GetBrowserInterfaceBroker().GetInterface(
+      text_input_host_.BindNewPipeAndPassReceiver());
+#endif
 }
 
 FrameScheduler* LocalFrame::GetFrameScheduler() {
@@ -1127,7 +1159,7 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
   }
 
   if (GetSecurityContext()->IsSandboxed(
-          mojom::blink::WebSandboxFlags::kNavigation)) {
+          network::mojom::blink::WebSandboxFlags::kNavigation)) {
     if (!target_frame.Tree().IsDescendantOf(this) &&
         !target_frame.IsMainFrame()) {
       PrintNavigationErrorMessage(
@@ -1142,10 +1174,10 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
     // 'allow-popups' flag is specified, or if the
     if (target_frame.IsMainFrame() && target_frame != Tree().Top() &&
         GetSecurityContext()->IsSandboxed(
-            mojom::blink::WebSandboxFlags::
+            network::mojom::blink::WebSandboxFlags::
                 kPropagatesToAuxiliaryBrowsingContexts) &&
         (GetSecurityContext()->IsSandboxed(
-             mojom::blink::WebSandboxFlags::kPopups) ||
+             network::mojom::blink::WebSandboxFlags::kPopups) ||
          target_frame.Client()->Opener() != this)) {
       PrintNavigationErrorMessage(
           target_frame,
@@ -1159,9 +1191,10 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
     // allow-top-navigation-by-user-activation will also skips origin checks.
     if (target_frame == Tree().Top()) {
       if (GetSecurityContext()->IsSandboxed(
-              mojom::blink::WebSandboxFlags::kTopNavigation) &&
+              network::mojom::blink::WebSandboxFlags::kTopNavigation) &&
           GetSecurityContext()->IsSandboxed(
-              mojom::blink::WebSandboxFlags::kTopNavigationByUserActivation)) {
+              network::mojom::blink::WebSandboxFlags::
+                  kTopNavigationByUserActivation)) {
         PrintNavigationErrorMessage(
             target_frame,
             "The frame attempting navigation of the top-level window is "
@@ -1171,9 +1204,10 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
       }
 
       if (GetSecurityContext()->IsSandboxed(
-              mojom::blink::WebSandboxFlags::kTopNavigation) &&
+              network::mojom::blink::WebSandboxFlags::kTopNavigation) &&
           !GetSecurityContext()->IsSandboxed(
-              mojom::blink::WebSandboxFlags::kTopNavigationByUserActivation) &&
+              network::mojom::blink::WebSandboxFlags::
+                  kTopNavigationByUserActivation) &&
           !LocalFrame::HasTransientUserActivation(this)) {
         // With only 'allow-top-navigation-by-user-activation' (but not
         // 'allow-top-navigation'), top navigation requires a user gesture.
@@ -1563,8 +1597,7 @@ void LocalFrame::ForceSynchronousDocumentInstall(
   DomWindow()->InstallNewDocument(
       DocumentInit::Create()
           .WithDocumentLoader(loader_.GetDocumentLoader())
-          .WithTypeFrom(mime_type),
-      false);
+          .WithTypeFrom(mime_type));
   loader_.StateMachine()->AdvanceTo(
       FrameLoaderStateMachine::kCommittedFirstRealLoad);
 
@@ -1859,15 +1892,14 @@ void LocalFrame::DidResume() {
 
 void LocalFrame::PauseContext() {
   GetDocument()->Fetcher()->SetDefersLoading(true);
-  GetDocument()->ToExecutionContext()->SetLifecycleState(lifecycle_state_);
+  DomWindow()->SetLifecycleState(lifecycle_state_);
   Loader().SetDefersLoading(true);
   GetFrameScheduler()->SetPaused(true);
 }
 
 void LocalFrame::UnpauseContext() {
   GetDocument()->Fetcher()->SetDefersLoading(false);
-  GetDocument()->ToExecutionContext()->SetLifecycleState(
-      mojom::FrameLifecycleState::kRunning);
+  DomWindow()->SetLifecycleState(mojom::FrameLifecycleState::kRunning);
   Loader().SetDefersLoading(false);
   GetFrameScheduler()->SetPaused(false);
 }
@@ -2121,6 +2153,38 @@ void LocalFrame::ZoomToFindInPageRect(const gfx::Rect& rect_in_root_frame) {
       WebRect(rect_in_root_frame));
 }
 
+#if defined(OS_MACOSX)
+void LocalFrame::GetCharacterIndexAtPoint(const gfx::Point& point) {
+  HitTestLocation location(View()->ViewportToFrame(IntPoint(point)));
+  HitTestResult result = GetEventHandler().HitTestResultAtLocation(
+      location, HitTestRequest::kReadOnly | HitTestRequest::kActive);
+  uint32_t index =
+      Selection().CharacterIndexForPoint(result.RoundedPointInInnerNodeFrame());
+  GetTextInputHost().GotCharacterIndexAtPoint(index);
+}
+
+void LocalFrame::GetFirstRectForRange(const gfx::Range& range) {
+  gfx::Rect rect;
+  WebLocalFrameClient* client = WebLocalFrameImpl::FromFrame(this)->Client();
+  if (!client)
+    return;
+
+  if (!client->GetCaretBoundsFromFocusedPlugin(rect)) {
+    blink::WebRect web_rect;
+    // When request range is invalid we will try to obtain it from current
+    // frame selection. The fallback value will be 0.
+    uint32_t start =
+        range.IsValid() ? range.start() : GetCurrentCursorPositionInFrame(this);
+
+    WebLocalFrameImpl::FromFrame(this)->FirstRectForCharacterRange(
+        start, range.length(), web_rect);
+    rect.SetRect(web_rect.x, web_rect.y, web_rect.width, web_rect.height);
+  }
+
+  GetTextInputHost().GotFirstRectForRange(rect);
+}
+#endif
+
 HitTestResult LocalFrame::HitTestResultForVisualViewportPos(
     const IntPoint& pos_in_viewport) {
   IntPoint root_frame_point(
@@ -2219,7 +2283,23 @@ void LocalFrame::AddMessageToConsole(mojom::blink::ConsoleMessageLevel level,
 }
 
 void LocalFrame::AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr info) {
-  GetDocument()->AddInspectorIssue(InspectorIssue::Create(std::move(info)));
+  if (GetPage()) {
+    GetPage()->GetInspectorIssueStorage().AddInspectorIssue(DomWindow(), std::move(info));
+  }
+}
+
+void LocalFrame::StopLoading() {
+  Loader().StopAllLoaders();
+
+  // The stopLoading handler may run script, which may cause this frame to be
+  // detached/deleted. If that happens, return immediately.
+  if (!IsAttached())
+    return;
+
+  // Notify RenderFrame observers.
+  WebLocalFrameClient* client = Client()->GetWebFrame()->Client();
+  if (client)
+    client->OnStopLoading();
 }
 
 void LocalFrame::Collapse(bool collapsed) {
@@ -2448,6 +2528,19 @@ void LocalFrame::MediaPlayerActionAt(
   MediaPlayerActionAtViewportPoint(location, action->type, action->enable);
 }
 
+void LocalFrame::AdvanceFocusInFrame(
+    mojom::blink::FocusType focus_type,
+    const base::Optional<base::UnguessableToken>& source_frame_token) {
+  RemoteFrame* source_frame = SourceFrameForOptionalToken(source_frame_token);
+  if (!source_frame) {
+    SetInitialFocus(focus_type == mojom::blink::FocusType::kBackward);
+    return;
+  }
+
+  GetPage()->GetFocusController().AdvanceFocusAcrossFrames(focus_type,
+                                                           source_frame, this);
+}
+
 void LocalFrame::AdvanceFocusInForm(mojom::blink::FocusType focus_type) {
   auto* focused_frame = GetPage()->GetFocusController().FocusedFrame();
   if (focused_frame != this)
@@ -2504,6 +2597,84 @@ void LocalFrame::DidUpdateFramePolicy(const FramePolicy& frame_policy) {
   To<RemoteFrameOwner>(Owner())->SetFramePolicy(frame_policy);
 }
 
+void LocalFrame::OnScreensChange() {
+  if (RuntimeEnabledFeatures::WindowPlacementEnabled()) {
+    DomWindow()->DispatchEvent(
+        *Event::Create(event_type_names::kScreenschange));
+  }
+}
+
+void LocalFrame::PostMessageEvent(
+    const base::Optional<base::UnguessableToken>& source_frame_token,
+    const String& source_origin,
+    const String& target_origin,
+    BlinkTransferableMessage message) {
+  RemoteFrame* source_frame = SourceFrameForOptionalToken(source_frame_token);
+
+  // We must pass in the target_origin to do the security check on this side,
+  // since it may have changed since the original postMessage call was made.
+  scoped_refptr<SecurityOrigin> target_security_origin;
+  if (!target_origin.IsEmpty()) {
+    target_security_origin = SecurityOrigin::CreateFromString(target_origin);
+  }
+
+  // Preparation of the MessageEvent.
+  MessageEvent* message_event = MessageEvent::Create();
+  DOMWindow* window = nullptr;
+  if (source_frame)
+    window = source_frame->DomWindow();
+  MessagePortArray* ports = nullptr;
+  if (GetDocument()) {
+    ports = MessagePort::EntanglePorts(*GetDocument()->GetExecutionContext(),
+                                       std::move(message.ports));
+  }
+  UserActivation* user_activation = nullptr;
+  if (message.user_activation) {
+    user_activation = MakeGarbageCollected<UserActivation>(
+        message.user_activation->has_been_active,
+        message.user_activation->was_active);
+  }
+  message_event->initMessageEvent(
+      "message", false, false, std::move(message.message), source_origin,
+      "" /*lastEventId*/, window, ports, user_activation,
+      message.transfer_user_activation, message.allow_autoplay);
+
+  // If the agent cluster id had a value it means this was locked when it
+  // was serialized.
+  if (message.locked_agent_cluster_id)
+    message_event->LockToAgentCluster();
+
+  // Transfer user activation state in the target's renderer when
+  // |transferUserActivation| is true.
+  //
+  // Also do the same as an ad-hoc solution to allow the origin trial of dynamic
+  // delegation of autoplay capability through postMessages.  Note that we
+  // skipped updating the user activation states in all other copies of the
+  // frame tree in this case because this is a temporary hack.
+  //
+  // TODO(mustaq): Remove the ad-hoc solution when the API shape is
+  // ready. https://crbug.com/985914
+  if ((RuntimeEnabledFeatures::UserActivationPostMessageTransferEnabled() &&
+       message.transfer_user_activation) ||
+      message.allow_autoplay) {
+    TransferUserActivationFrom(source_frame);
+    if (message.allow_autoplay)
+      UseCounter::Count(GetDocument(), WebFeature::kAutoplayDynamicDelegation);
+  }
+
+  // Finally dispatch the message to the DOM Window.
+  DomWindow()->DispatchMessageEventWithOriginCheck(
+      target_security_origin.get(), message_event,
+      std::make_unique<SourceLocation>(String(), 0, 0, nullptr),
+      message.locked_agent_cluster_id ? message.locked_agent_cluster_id.value()
+                                      : base::UnguessableToken());
+}
+
+void LocalFrame::BindReportingObserver(
+    mojo::PendingReceiver<mojom::blink::ReportingObserver> receiver) {
+  ReportingContext::From(DomWindow())->Bind(std::move(receiver));
+}
+
 bool LocalFrame::ShouldThrottleDownload() {
   const auto now = base::TimeTicks::Now();
   if (num_burst_download_requests_ == 0) {
@@ -2523,6 +2694,13 @@ bool LocalFrame::ShouldThrottleDownload() {
   return false;
 }
 
+#if defined(OS_MACOSX)
+mojom::blink::TextInputHost& LocalFrame::GetTextInputHost() {
+  DCHECK(text_input_host_);
+  return *text_input_host_.get();
+}
+#endif
+
 void LocalFrame::BindToReceiver(
     blink::LocalFrame* frame,
     mojo::PendingAssociatedReceiver<mojom::blink::LocalFrame> receiver) {
@@ -2539,6 +2717,21 @@ void LocalFrame::BindToMainFrameReceiver(
   frame->main_frame_receiver_.Bind(
       std::move(receiver),
       frame->GetTaskRunner(blink::TaskType::kInternalDefault));
+}
+
+SpellChecker& LocalFrame::GetSpellChecker() const {
+  DCHECK(DomWindow());
+  return DomWindow()->GetSpellChecker();
+}
+
+InputMethodController& LocalFrame::GetInputMethodController() const {
+  DCHECK(DomWindow());
+  return DomWindow()->GetInputMethodController();
+}
+
+TextSuggestionController& LocalFrame::GetTextSuggestionController() const {
+  DCHECK(DomWindow());
+  return DomWindow()->GetTextSuggestionController();
 }
 
 }  // namespace blink

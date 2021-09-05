@@ -10,11 +10,12 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
@@ -240,9 +241,8 @@ bool UpdateAndIndexDynamicRules(const RulesetSource& source,
   // Initially write the new JSON and indexed rulesets to temporary files to
   // ensure we don't leave the actual files in an inconsistent state.
   std::unique_ptr<RulesetSource> temporary_source =
-      RulesetSource::CreateTemporarySource(source.id(), source.type(),
-                                           source.rule_count_limit(),
-                                           source.extension_id());
+      RulesetSource::CreateTemporarySource(
+          source.id(), source.rule_count_limit(), source.extension_id());
   if (!temporary_source) {
     *error = kInternalErrorUpdatingDynamicRules;
     *status = UpdateDynamicRulesStatus::kErrorCreateTemporarySource;
@@ -257,8 +257,7 @@ bool UpdateAndIndexDynamicRules(const RulesetSource& source,
   }
 
   // Index and persist the indexed ruleset.
-  ParseInfo info = temporary_source->IndexAndPersistRules(std::move(new_rules),
-                                                          ruleset_checksum);
+  ParseInfo info = temporary_source->IndexAndPersistRules(std::move(new_rules));
   if (info.has_error()) {
     *error = info.error();
     *status = info.error_reason() == ParseResult::ERROR_PERSISTING_RULESET
@@ -266,6 +265,8 @@ bool UpdateAndIndexDynamicRules(const RulesetSource& source,
                   : UpdateDynamicRulesStatus::kErrorInvalidRules;
     return false;
   }
+
+  *ruleset_checksum = info.ruleset_checksum();
 
   // Treat rules which exceed the regex memory limit as errors if these are new
   // rules. Just surface an error for the first such rule.

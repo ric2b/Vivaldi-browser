@@ -10,6 +10,7 @@
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/util/deep_link_util.h"
+#include "ash/public/cpp/assistant/controller/assistant_controller.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/event.h"
@@ -59,15 +60,15 @@ AssistantCardElementView::AssistantCardElementView(
     AssistantViewDelegate* delegate,
     const AssistantCardElement* card_element)
     : delegate_(delegate), card_element_(card_element) {
-  InitLayout(card_element);
+  InitLayout();
 
   // We observe contents_view() to receive events pertaining to the underlying
   // WebContents including focus change and suppressed navigation events.
-  contents_view()->AddObserver(this);
+  contents_view_->AddObserver(this);
 }
 
 AssistantCardElementView::~AssistantCardElementView() {
-  contents_view()->RemoveObserver(this);
+  contents_view_->RemoveObserver(this);
 }
 
 const char* AssistantCardElementView::GetClassName() const {
@@ -146,10 +147,10 @@ void AssistantCardElementView::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void AssistantCardElementView::ScrollRectToVisible(const gfx::Rect& rect) {
-  // We expect this method is called outside this class to show its local
+  // We expect this method is called outside this class to show its contents
   // bounds. Inside this class, should call views::View::ScrollRectToVisible()
   // to show the focused node in the web contents.
-  DCHECK(rect == GetLocalBounds());
+  DCHECK(rect == GetContentsBounds());
 
   // When this view is focused, View::Focus() calls ScrollViewToVisible(), which
   // calls ScrollRectToVisible().  But we don't want that call to do anything,
@@ -187,7 +188,7 @@ void AssistantCardElementView::DidSuppressNavigation(
   }
   // We delegate navigation to the AssistantController so that it can apply
   // special handling to deep links.
-  delegate_->OpenUrlFromView(url);
+  AssistantController::Get()->OpenUrl(url);
 }
 
 void AssistantCardElementView::DidChangeFocusedNode(
@@ -202,20 +203,15 @@ void AssistantCardElementView::DidChangeFocusedNode(
   views::View::ScrollRectToVisible(focused_node_rect_);
 }
 
-void AssistantCardElementView::InitLayout(
-    const AssistantCardElement* card_element) {
-  SetFocusBehavior(FocusBehavior::ALWAYS);
+void AssistantCardElementView::InitLayout() {
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
   // Contents view.
-  AddChildView(contents_view());
+  contents_view_ = AddChildView(
+      const_cast<AssistantCardElement*>(card_element_)->MoveContentsView());
 
   // OverrideDescription() doesn't work. Only names are read automatically.
-  GetViewAccessibility().OverrideName(card_element->fallback());
-}
-
-AssistantWebView* AssistantCardElementView::contents_view() {
-  return const_cast<AssistantWebView*>(card_element_->contents_view());
+  GetViewAccessibility().OverrideName(card_element_->fallback());
 }
 
 }  // namespace ash

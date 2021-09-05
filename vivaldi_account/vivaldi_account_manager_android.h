@@ -16,6 +16,8 @@ class VivaldiAccountManagerAndroid
   VivaldiAccountManagerAndroid(JNIEnv* env, jobject obj);
   ~VivaldiAccountManagerAndroid() override;
 
+  static void CreateNow();
+
   void Login(JNIEnv* env,
              const base::android::JavaParamRef<jobject>& obj,
              const base::android::JavaParamRef<jstring>& username,

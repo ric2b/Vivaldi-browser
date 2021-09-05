@@ -78,7 +78,8 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   static RenderFrameProxy* CreateProxyToReplaceFrame(
       RenderFrameImpl* frame_to_replace,
       int routing_id,
-      blink::WebTreeScopeType scope);
+      blink::mojom::TreeScopeType scope,
+      const base::UnguessableToken& proxy_frame_token);
 
   // This method should be used to create a RenderFrameProxy, when there isn't
   // an existing RenderFrame. It should be called to construct a local
@@ -99,6 +100,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
       blink::WebFrame* opener,
       int parent_routing_id,
       const FrameReplicationState& replicated_state,
+      const base::UnguessableToken& frame_token,
       const base::UnguessableToken& devtools_frame_token);
 
   // Creates a RenderFrameProxy to be used with a portal owned by |parent|.
@@ -106,6 +108,7 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
   static RenderFrameProxy* CreateProxyForPortal(
       RenderFrameImpl* parent,
       int proxy_routing_id,
+      const base::UnguessableToken& frame_token,
       const base::UnguessableToken& devtools_frame_token,
       const blink::WebElement& portal_element);
 
@@ -178,13 +181,16 @@ class CONTENT_EXPORT RenderFrameProxy : public IPC::Listener,
                           blink::WebRemoteFrame* targetFrame,
                           blink::WebSecurityOrigin target,
                           blink::WebDOMMessageEvent event) override;
-  void Navigate(const blink::WebURLRequest& request,
-                bool should_replace_current_entry,
-                bool is_opener_navigation,
-                bool initiator_frame_has_download_sandbox_flag,
-                bool blocking_downloads_in_sandbox_enabled,
-                bool initiator_frame_is_ad,
-                mojo::ScopedMessagePipeHandle blob_url_token) override;
+  void Navigate(
+      const blink::WebURLRequest& request,
+      blink::WebLocalFrame* initiator_frame,
+      bool should_replace_current_entry,
+      bool is_opener_navigation,
+      bool initiator_frame_has_download_sandbox_flag,
+      bool blocking_downloads_in_sandbox_enabled,
+      bool initiator_frame_is_ad,
+      mojo::ScopedMessagePipeHandle blob_url_token,
+      const base::Optional<blink::WebImpression>& impression) override;
   void FrameRectsChanged(const blink::WebRect& local_frame_rect,
                          const blink::WebRect& screen_space_rect) override;
   void UpdateRemoteViewportIntersection(

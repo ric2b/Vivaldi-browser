@@ -234,6 +234,8 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // |target_state| is the hotseat state after hotseat transition animation.
   ui::AnimationMetricsReporter* GetHotseatTransitionMetricsReporter(
       HotseatState target_state);
+  ui::AnimationMetricsReporter* GetTranslucentBackgroundMetricsReporter(
+      HotseatState target_state);
 
   ui::AnimationMetricsReporter* GetNavigationWidgetAnimationMetricsReporter();
 
@@ -257,6 +259,7 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // Uses Auto Dim Event Handler to update the shelf dim state.
   void DimShelf();
   void UndimShelf();
+  bool HasDimShelfTimer();
 
   // Returns work area insets object for the window with this shelf.
   WorkAreaInsets* GetWorkAreaInsets() const;
@@ -296,6 +299,11 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // ensure it outlives the Hotseat Widget.
   std::unique_ptr<HotseatWidgetAnimationMetricsReporter>
       hotseat_transition_metrics_reporter_;
+
+  // Metrics reporter for animations of the traslucent background in the
+  // hotseat. Owned by the Shelf to ensure it outlives the Hotseat Widget.
+  std::unique_ptr<HotseatWidgetAnimationMetricsReporter>
+      translucent_background_metrics_reporter_;
 
   // Animation metrics reporter for navigation widget animations. Owned by the
   // Shelf to ensure it outlives the Navigation Widget.

@@ -6,11 +6,11 @@
 #include "base/strings/string_piece.h"
 
 #include <limits.h>
+#include <string.h>
 
 #include <algorithm>
 #include <ostream>
 
-#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 
 namespace base {

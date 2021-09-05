@@ -232,6 +232,19 @@ cc::ScrollTree& PropertyTreeManager::GetScrollTree() {
   return property_trees_.scroll_tree;
 }
 
+void PropertyTreeManager::EnsureCompositorScrollNodes(
+    const Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes) {
+  DCHECK(RuntimeEnabledFeatures::ScrollUnificationEnabled());
+
+  for (auto* node : scroll_translation_nodes)
+    EnsureCompositorScrollNode(*node);
+}
+
+void PropertyTreeManager::SetCcScrollNodeIsComposited(int cc_node_id) {
+  DCHECK(RuntimeEnabledFeatures::ScrollUnificationEnabled());
+  GetScrollTree().Node(cc_node_id)->is_composited = true;
+}
+
 void PropertyTreeManager::SetupRootTransformNode() {
   // cc is hardcoded to use transform node index 1 for device scale and
   // transform.
@@ -602,7 +615,6 @@ void PropertyTreeManager::EmitClipMaskLayer() {
       !pending_synthetic_mask_layers_.Contains(mask_isolation->id) &&
       mask_isolation->rounded_corner_bounds.IsEmpty();
 
-  int clip_id = EnsureCompositorClipNode(*current_.clip);
   CompositorElementId mask_isolation_id, mask_effect_id;
   SynthesizedClip& clip = client_.CreateOrReuseSynthesizedClipLayer(
       *current_.clip, *current_.transform, needs_layer, mask_isolation_id,
@@ -619,13 +631,13 @@ void PropertyTreeManager::EmitClipMaskLayer() {
 
   cc::EffectNode& mask_effect = *GetEffectTree().Node(
       GetEffectTree().Insert(cc::EffectNode(), current_.effect_id));
-  mask_effect.stable_id = mask_effect_id.GetStableId();
-  mask_effect.clip_id = clip_id;
-  mask_effect.blend_mode = SkBlendMode::kDstIn;
-
   // The address of mask_isolation may have changed when we insert
   // |mask_effect| into the tree.
   mask_isolation = GetEffectTree().Node(current_.effect_id);
+
+  mask_effect.stable_id = mask_effect_id.GetStableId();
+  mask_effect.clip_id = mask_isolation->clip_id;
+  mask_effect.blend_mode = SkBlendMode::kDstIn;
 
   cc::PictureLayer* mask_layer = clip.Layer();
 
@@ -640,7 +652,7 @@ void PropertyTreeManager::EmitClipMaskLayer() {
   int scroll_id =
       EnsureCompositorScrollNode(clip_space.NearestScrollTranslationNode());
   mask_layer->SetScrollTreeIndex(scroll_id);
-  mask_layer->SetClipTreeIndex(clip_id);
+  mask_layer->SetClipTreeIndex(mask_effect.clip_id);
   mask_layer->SetEffectTreeIndex(mask_effect.id);
 
   if (!mask_isolation->backdrop_filters.IsEmpty()) {
@@ -897,6 +909,7 @@ PropertyTreeManager::SynthesizeCcEffectsForClipsIfNeeded(
     const ClipPaintPropertyNode& target_clip_arg,
     const EffectPaintPropertyNode* next_effect) {
   const auto* target_clip = &target_clip_arg.Unalias();
+  int clip_id = EnsureCompositorClipNode(*target_clip);
   auto backdrop_effect_state = kNoBackdropEffect;
   if (next_effect && next_effect->HasBackdropEffect()) {
     // Exit all synthetic effect node if the next child has backdrop effect
@@ -968,7 +981,7 @@ PropertyTreeManager::SynthesizeCcEffectsForClipsIfNeeded(
         GetEffectTree().Insert(cc::EffectNode(), current_.effect_id));
 
     if (pending_clip.type & CcEffectType::kSyntheticForNonTrivialClip) {
-      synthetic_effect.clip_id = EnsureCompositorClipNode(*pending_clip.clip);
+      synthetic_effect.clip_id = clip_id;
       // For non-trivial clip, isolation_effect.stable_id will be assigned later
       // when the effect is closed. For now the default value INVALID_STABLE_ID
       // is used. See PropertyTreeManager::EmitClipMaskLayer().
@@ -1049,11 +1062,20 @@ void PropertyTreeManager::BuildEffectNodesRecursively(
   BuildEffectNodesRecursively(*next_effect.Parent());
   DCHECK_EQ(&next_effect.Parent()->Unalias(), current_.effect);
 
-#if DCHECK_IS_ON()
-  DCHECK(!GetEffectTree().Node(next_effect.CcNodeId(new_sequence_number_)))
-      << "Malformed paint artifact. Paint chunks under the same effect should "
-         "be contiguous.";
-#endif
+  bool has_multiple_groups = false;
+  if (GetEffectTree().Node(next_effect.CcNodeId(new_sequence_number_))) {
+    if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+      // TODO(crbug.com/1064341): We have to allow one blink effect node to
+      // apply to multiple groups in block fragments (multicol, etc.) due to
+      // the current FragmentClip implementation. This can only be fixed by
+      // LayoutNG block fragments. For now we'll create multiple cc effect
+      // nodes in the case.
+      has_multiple_groups = true;
+    } else {
+      NOTREACHED() << "Malformed paint artifact. Paint chunks under the same"
+                      " effect should be contiguous.";
+    }
+  }
 
   auto backdrop_effect_state = kNoBackdropEffect;
   int output_clip_id = 0;
@@ -1080,14 +1102,16 @@ void PropertyTreeManager::BuildEffectNodesRecursively(
   int effect_node_id =
       GetEffectTree().Insert(cc::EffectNode(), current_.effect_id);
   auto& effect_node = *GetEffectTree().Node(effect_node_id);
-  next_effect.SetCcNodeId(new_sequence_number_, effect_node_id);
+
+  if (!has_multiple_groups)
+    next_effect.SetCcNodeId(new_sequence_number_, effect_node_id);
 
   PopulateCcEffectNode(effect_node, next_effect, output_clip_id,
                        backdrop_effect_state);
 
   CompositorElementId compositor_element_id =
       next_effect.GetCompositorElementId();
-  if (compositor_element_id) {
+  if (compositor_element_id && !has_multiple_groups) {
     DCHECK(!property_trees_.element_id_to_effect_node_index.contains(
         compositor_element_id));
     property_trees_.element_id_to_effect_node_index[compositor_element_id] =

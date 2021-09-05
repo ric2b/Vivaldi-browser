@@ -9,6 +9,9 @@ namespace ui {
 const base::Feature kEnableHeuristicPalmDetectionFilter{
     "EnableHeuristicPalmDetectionFilter", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kEnableHighResolutionMouseScrolling{
+    "EnableHighResolutionMouseScrolling", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kEnableNeuralPalmDetectionFilter{
     "EnableNeuralPalmDetectionFilter", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -20,6 +23,9 @@ const base::Feature kEnablePalmOnMaxTouchMajor{
 
 const base::Feature kEnablePalmOnToolTypePalm{"EnablePalmOnToolTypePalm",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kEnablePalmSuppression{"EnablePalmSuppression",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 extern const base::FeatureParam<std::string> kNeuralPalmRadiusPolynomial{
     &kEnableNeuralPalmDetectionFilter, "neural_palm_radius_polynomial", ""};

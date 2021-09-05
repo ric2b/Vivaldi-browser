@@ -14,12 +14,12 @@
 #include <vector>
 
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/sequence_checker.h"
@@ -41,7 +41,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandbox_init.h"
-#include "content/public/test/browser_test.h"
 #include "gpu/config/gpu_switches.h"
 #include "net/base/escape.h"
 #include "testing/gtest/include/gtest/gtest.h"

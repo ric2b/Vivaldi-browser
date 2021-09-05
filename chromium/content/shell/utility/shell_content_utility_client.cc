@@ -25,13 +25,13 @@
 #include "content/public/test/test_service.h"
 #include "content/public/test/test_service.mojom.h"
 #include "content/public/utility/utility_thread.h"
-#include "content/shell/common/power_monitor_test.mojom.h"
 #include "content/shell/common/power_monitor_test_impl.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/bindings/service_factory.h"
 #include "mojo/public/cpp/system/buffer.h"
+#include "services/service_manager/sandbox/sandbox.h"
 #include "services/test/echo/echo_service.h"
 
 #if defined(OS_LINUX)
@@ -105,6 +105,10 @@ class TestUtilityServiceImpl : public mojom::TestService {
     std::copy(message.begin(), message.end(),
               mapping.GetMemoryAsSpan<char>().begin());
     std::move(callback).Run(std::move(region));
+  }
+
+  void IsProcessSandboxed(IsProcessSandboxedCallback callback) override {
+    std::move(callback).Run(service_manager::Sandbox::IsProcessSandboxed());
   }
 
  private:

@@ -1035,22 +1035,22 @@
     },
     {
       name: "lazyImageFirstKFullyLoadSlow2G",
-      initial: 12,
+      initial: 0,
       type: "int",
     },
     {
       name: "lazyImageFirstKFullyLoad2G",
-      initial: 10,
+      initial: 0,
       type: "int",
     },
     {
       name: "lazyImageFirstKFullyLoad3G",
-      initial: 8,
+      initial: 0,
       type: "int",
     },
     {
       name: "lazyImageFirstKFullyLoad4G",
-      initial: 6,
+      initial: 0,
       type: "int",
     },
 
@@ -1082,11 +1082,19 @@
       invalidate: "MediaQuery",
       type: "NavigationControls",
     },
+
+    {
+      name: "accessibilityAlwaysShowFocus",
+      initial: false,
+      invalidate: "Style",
+      type: "bool"
+    }
+
     // Vivaldi:
     // Will only serve a resource that is in cache,
     // see ResourceFetcher::requestResource
     // only used for images now.
-    {
+    , {
       name: "serveResourceFromCacheOnly",
       initial: false,
       invalidate: "ImageLoading",
@@ -1102,6 +1110,6 @@
     {
       name: "vivaldiShowContextMenuOnDoubleClick",
       initial: false,
-    },
+    }
   ],
 }

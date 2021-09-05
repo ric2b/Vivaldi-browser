@@ -1,0 +1,96 @@
+# Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+import("//testing/test.gni")
+
+source_set("adblock_parser") {
+  sources = [
+    "adblock_cosmetic_rule.cc",
+    "adblock_cosmetic_rule.h",
+    "adblock_filter_rule.cc",
+    "adblock_filter_rule.h",
+    "adblock_metadata.cc",
+    "adblock_metadata.h",
+    "adblock_rule_parser.cc",
+    "adblock_rule_parser.h",
+    "adblock_ruleset_file_parser.cc",
+    "adblock_ruleset_file_parser.h",
+    "ddg_rules_parser.cc",
+    "ddg_rules_parser.h",
+    "parse_result.cc",
+    "parse_result.h",
+    "parse_utils.cc",
+    "parse_utils.h",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//url",
+  ]
+}
+
+source_set("adblock_filter") {
+  sources = [
+    "adblock_cosmetic_filter.cc",
+    "adblock_cosmetic_filter.h",
+    "adblock_known_sources_handler.cc",
+    "adblock_known_sources_handler.h",
+    "adblock_request_filter.cc",
+    "adblock_request_filter.h",
+    "adblock_rule_pattern_matcher.cc",
+    "adblock_rule_pattern_matcher.h",
+    "adblock_rule_service_factory.cc",
+    "adblock_rule_service_factory.h",
+    "adblock_rule_service_impl.cc",
+    "adblock_rule_service_impl.h",
+    "adblock_rule_service.cc",
+    "adblock_rule_service.h",
+    "adblock_rule_service_storage.cc",
+    "adblock_rule_service_storage.h",
+    "adblock_rule_source_handler.cc",
+    "adblock_rule_source_handler.h",
+    "adblock_rules_index_builder.cc",
+    "adblock_rules_index_builder.h",
+    "adblock_rules_index_manager.cc",
+    "adblock_rules_index_manager.h",
+    "adblock_rules_index.cc",
+    "adblock_rules_index.h",
+    "blocked_urls_reporter_tab_helper.cc",
+    "blocked_urls_reporter_tab_helper.h",
+    "blocked_urls_reporter.cc",
+    "blocked_urls_reporter.h",
+    "stylesheet_builder.cc",
+    "stylesheet_builder.h",
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    ":adblock_parser",
+    "//base:base",
+    "//base:i18n",
+    "//base/util/values:values_util",
+    "//components/keyed_service/content",
+    "//components/url_pattern_index",
+    "//content/public/browser",
+    "//url",
+    "//third_party/re2",
+    "//vivaldi/components/request_filter/adblock_filter/flat:adblock_rules_list",
+    "//vivaldi_mojom/components/request_filter/adblock_filter/mojom",
+    "//third_party/blink/public/common",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "adblock_rule_parser_unittest.cc",
+    "ddg_rules_parser_unittest.cc",
+  ]
+
+  deps = [
+    ":adblock_parser",
+     "//base",
+    "//testing/gtest",
+  ]
+}

@@ -94,7 +94,7 @@ const char kVivaldiAppCastUrl[] =
 #elif defined(OFFICIAL_BUILD)
 // This is the public snapshot release channel
 #if defined(OS_MACOSX)
-    "https://update.vivaldi.com/update/1.0/mac/appcast.xml";
+    "https://update.vivaldi.com/update/1.0/snapshot/mac/appcast.xml";
 #elif defined(_WIN64)
     "https://update.vivaldi.com/update/1.0/win/appcast.x64.xml";
 #else

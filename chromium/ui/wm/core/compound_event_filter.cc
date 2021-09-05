@@ -4,7 +4,8 @@
 
 #include "ui/wm/core/compound_event_filter.h"
 
-#include "base/logging.h"
+#include "base/check.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/drag_drop_client.h"
@@ -12,8 +13,8 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/hit_test.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/events/event.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -157,12 +158,20 @@ void CompoundEventFilter::SetCursorVisibilityOnEvent(aura::Window* target,
 void CompoundEventFilter::SetMouseEventsEnableStateOnEvent(aura::Window* target,
                                                            ui::Event* event,
                                                            bool enable) {
+  TRACE_EVENT2("ui,input",
+               "CompoundEventFilter::SetMouseEventsEnableStateOnEvent",
+               "event_flags", event->flags(), "enable", enable);
   if (event->flags() & ui::EF_IS_SYNTHESIZED)
     return;
   aura::client::CursorClient* client =
       aura::client::GetCursorClient(target->GetRootWindow());
-  if (!client)
+  if (!client) {
+    TRACE_EVENT_INSTANT0(
+        "ui,input",
+        "CompoundEventFilter::SetMouseEventsEnableStateOnEvent - No Client",
+        TRACE_EVENT_SCOPE_THREAD);
     return;
+  }
 
   if (enable)
     client->EnableMouseEvents();
@@ -184,6 +193,8 @@ void CompoundEventFilter::OnKeyEvent(ui::KeyEvent* event) {
 }
 
 void CompoundEventFilter::OnMouseEvent(ui::MouseEvent* event) {
+  TRACE_EVENT2("ui,input", "CompoundEventFilter::OnMouseEvent", "event_type",
+               event->type(), "event_flags", event->flags());
   aura::Window* window = static_cast<aura::Window*>(event->target());
 
   // We must always update the cursor, otherwise the cursor can get stuck if an
@@ -211,6 +222,8 @@ void CompoundEventFilter::OnScrollEvent(ui::ScrollEvent* event) {
 }
 
 void CompoundEventFilter::OnTouchEvent(ui::TouchEvent* event) {
+  TRACE_EVENT2("ui,input", "CompoundEventFilter::OnTouchEvent", "event_type",
+               event->type(), "event_handled", event->handled());
   FilterTouchEvent(event);
   if (!event->handled() && event->type() == ui::ET_TOUCH_PRESSED &&
       ShouldHideCursorOnTouch(*event)) {

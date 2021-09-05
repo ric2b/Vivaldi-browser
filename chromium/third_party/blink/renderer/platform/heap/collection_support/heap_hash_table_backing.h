@@ -9,11 +9,15 @@
 #include "third_party/blink/renderer/platform/heap/threading_traits.h"
 #include "third_party/blink/renderer/platform/heap/trace_traits.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
+#include "third_party/blink/renderer/platform/wtf/conditional_destructor.h"
 
 namespace blink {
 
 template <typename Table>
-class HeapHashTableBacking {
+class HeapHashTableBacking final
+    : public WTF::ConditionalDestructor<
+          HeapHashTableBacking<Table>,
+          std::is_trivially_destructible<typename Table::ValueType>::value> {
   DISALLOW_NEW();
   IS_GARBAGE_COLLECTED_TYPE();
 
@@ -21,8 +25,7 @@ class HeapHashTableBacking {
   template <typename Backing>
   static void* AllocateObject(size_t size);
 
-  static void Finalize(void* pointer);
-  void FinalizeGarbageCollectedObject() { Finalize(this); }
+  void Finalize();
 };
 
 template <typename Table>
@@ -51,16 +54,16 @@ void* HeapHashTableBacking<Table>::AllocateObject(size_t size) {
 }
 
 template <typename Table>
-void HeapHashTableBacking<Table>::Finalize(void* pointer) {
+void HeapHashTableBacking<Table>::Finalize() {
   using Value = typename Table::ValueType;
   static_assert(
       !std::is_trivially_destructible<Value>::value,
       "Finalization of trivially destructible classes should not happen.");
-  HeapObjectHeader* header = HeapObjectHeader::FromPayload(pointer);
+  HeapObjectHeader* header = HeapObjectHeader::FromPayload(this);
   // Use the payload size as recorded by the heap to determine how many
   // elements to finalize.
   size_t length = header->PayloadSize() / sizeof(Value);
-  Value* table = reinterpret_cast<Value*>(pointer);
+  Value* table = reinterpret_cast<Value*>(this);
   for (unsigned i = 0; i < length; ++i) {
     if (!Table::IsEmptyOrDeletedBucket(table[i]))
       table[i].~Value();
@@ -80,17 +83,6 @@ struct MakeGarbageCollectedTrait<HeapHashTableBacking<Table>> {
         ::new (memory) HeapHashTableBacking<Table>();
     header->MarkFullyConstructed<HeapObjectHeader::AccessMode::kAtomic>();
     return object;
-  }
-};
-
-template <typename Table>
-struct FinalizerTrait<HeapHashTableBacking<Table>> {
-  STATIC_ONLY(FinalizerTrait);
-  static const bool kNonTrivialFinalizer =
-      !std::is_trivially_destructible<typename Table::ValueType>::value;
-  static void Finalize(void* obj) {
-    internal::FinalizerTraitImpl<HeapHashTableBacking<Table>,
-                                 kNonTrivialFinalizer>::Finalize(obj);
   }
 };
 
@@ -118,8 +110,10 @@ struct TraceTrait<HeapHashTableBacking<Table>> {
 
   template <WTF::WeakHandlingFlag WeakHandling = WTF::kNoWeakHandling>
   static void Trace(Visitor* visitor, const void* self) {
-    if (visitor->ConcurrentTracingBailOut({self, &Trace}))
-      return;
+    if (!Traits::kCanTraceConcurrently) {
+      if (visitor->DeferredTraceIfConcurrent({self, &Trace}))
+        return;
+    }
 
     static_assert(WTF::IsTraceableInCollectionTrait<Traits>::value ||
                       WTF::IsWeak<ValueType>::value,
@@ -179,7 +173,7 @@ struct TraceHashTableBackingInCollectionTrait {
   using Value = typename Table::ValueType;
   using Traits = typename Table::ValueTraits;
 
-  static bool Trace(blink::Visitor* visitor, const void* self) {
+  static void Trace(blink::Visitor* visitor, const void* self) {
     static_assert(IsTraceableInCollectionTrait<Traits>::value ||
                       WTF::IsWeak<Value>::value,
                   "Table should not be traced");
@@ -210,7 +204,6 @@ struct TraceHashTableBackingInCollectionTrait {
         }
       }
     }
-    return false;
   }
 };
 
@@ -218,9 +211,9 @@ template <typename Table>
 struct TraceInCollectionTrait<kNoWeakHandling,
                               blink::HeapHashTableBacking<Table>,
                               void> {
-  static bool Trace(blink::Visitor* visitor, const void* self) {
-    return TraceHashTableBackingInCollectionTrait<kNoWeakHandling,
-                                                  Table>::Trace(visitor, self);
+  static void Trace(blink::Visitor* visitor, const void* self) {
+    TraceHashTableBackingInCollectionTrait<kNoWeakHandling, Table>::Trace(
+        visitor, self);
   }
 };
 
@@ -228,15 +221,14 @@ template <typename Table>
 struct TraceInCollectionTrait<kWeakHandling,
                               blink::HeapHashTableBacking<Table>,
                               void> {
-  static bool Trace(blink::Visitor* visitor, const void* self) {
-    return TraceHashTableBackingInCollectionTrait<kWeakHandling, Table>::Trace(
-        visitor, self);
+  static void Trace(blink::Visitor* visitor, const void* self) {
+    TraceHashTableBackingInCollectionTrait<kWeakHandling, Table>::Trace(visitor,
+                                                                        self);
   }
 };
 
-// Key value pairs, as used in HashMap.  To disambiguate template choice we have
-// to have two versions, first the one with no special weak handling, then the
-// one with weak handling.
+// Trait for strong treatment of KeyValuePair. This is used to handle regular
+// KVP but also for strongification of otherwise weakly handled KVPs.
 template <typename Key, typename Value, typename Traits>
 struct TraceInCollectionTrait<kNoWeakHandling,
                               KeyValuePair<Key, Value>,
@@ -247,30 +239,51 @@ struct TraceInCollectionTrait<kNoWeakHandling,
                                    typename Traits::KeyTraits,
                                    typename Traits::ValueTraits>;
 
-  static bool Trace(blink::Visitor* visitor,
+  static void Trace(blink::Visitor* visitor,
                     const KeyValuePair<Key, Value>& self) {
-    if (WTF::IsWeak<Key>::value != WTF::IsWeak<Value>::value) {
-      // Strongification of Weak/Strong and Strong/Weak.
-      EphemeronHelper helper(&self.key, &self.value);
-      visitor->VisitEphemeronKeyValuePair(
-          helper.key, helper.value,
-          blink::TraceCollectionIfEnabled<
-              kNoWeakHandling, typename EphemeronHelper::KeyType,
-              typename EphemeronHelper::KeyTraits>::Trace,
-          blink::TraceCollectionIfEnabled<
-              kNoWeakHandling, typename EphemeronHelper::ValueType,
-              typename EphemeronHelper::ValueTraits>::Trace);
-    } else {
-      // Strongification of Strong/Strong or Weak/Weak. Order does not matter
-      // here.
-      blink::TraceCollectionIfEnabled<
-          kNoWeakHandling, Key, typename Traits::KeyTraits>::Trace(visitor,
-                                                                   &self.key);
-      blink::TraceCollectionIfEnabled<
-          kNoWeakHandling, Value,
-          typename Traits::ValueTraits>::Trace(visitor, &self.value);
-    }
-    return false;
+    TraceImpl(visitor, self);
+  }
+
+ private:
+  template <bool = EphemeronHelper::is_ephemeron>
+  static void TraceImpl(blink::Visitor* visitor,
+                        const KeyValuePair<Key, Value>& self);
+
+  // Strongification of ephemerons, i.e., Weak/Strong and Strong/Weak.
+  template <>
+  static void TraceImpl<true>(blink::Visitor* visitor,
+                              const KeyValuePair<Key, Value>& self) {
+    // Strongification of ephemerons, i.e., Weak/Strong and Strong/Weak.
+    // The helper ensures that helper.key always refers to the weak part and
+    // helper.value always refers to the dependent part.
+    // We distinguish ephemeron from Weak/Weak and Strong/Strong to allow users
+    // to override visitation behavior. An example is creating a heap snapshot,
+    // where it is useful to annotate values as being kept alive from keys
+    // rather than the table.
+    EphemeronHelper helper(&self.key, &self.value);
+    // Strongify the weak part.
+    blink::TraceCollectionIfEnabled<
+        kNoWeakHandling, typename EphemeronHelper::KeyType,
+        typename EphemeronHelper::KeyTraits>::Trace(visitor, helper.key);
+    // Strongify the dependent part.
+    visitor->TraceEphemeron(
+        *helper.key, helper.value,
+        blink::TraceCollectionIfEnabled<
+            kNoWeakHandling, typename EphemeronHelper::ValueType,
+            typename EphemeronHelper::ValueTraits>::Trace);
+  }
+
+  template <>
+  static void TraceImpl<false>(blink::Visitor* visitor,
+                               const KeyValuePair<Key, Value>& self) {
+    // Strongification of non-ephemeron KVP, i.e., Strong/Strong or Weak/Weak.
+    // Order does not matter here.
+    blink::TraceCollectionIfEnabled<
+        kNoWeakHandling, Key, typename Traits::KeyTraits>::Trace(visitor,
+                                                                 &self.key);
+    blink::TraceCollectionIfEnabled<
+        kNoWeakHandling, Value,
+        typename Traits::ValueTraits>::Trace(visitor, &self.value);
   }
 };
 
@@ -282,30 +295,29 @@ struct TraceInCollectionTrait<kWeakHandling, KeyValuePair<Key, Value>, Traits> {
                                    typename Traits::KeyTraits,
                                    typename Traits::ValueTraits>;
 
-  static bool IsAlive(const KeyValuePair<Key, Value>& self) {
+  static bool IsAlive(const blink::LivenessBroker& info,
+                      const KeyValuePair<Key, Value>& self) {
     // Needed for Weak/Weak, Strong/Weak (reverse ephemeron), and Weak/Strong
     // (ephemeron). Order of invocation does not matter as tracing weak key or
     // value does not have any side effects.
     return blink::TraceCollectionIfEnabled<
                WeakHandlingTrait<Key>::value, Key,
-               typename Traits::KeyTraits>::IsAlive(self.key) &&
+               typename Traits::KeyTraits>::IsAlive(info, self.key) &&
            blink::TraceCollectionIfEnabled<
                WeakHandlingTrait<Value>::value, Value,
-               typename Traits::ValueTraits>::IsAlive(self.value);
+               typename Traits::ValueTraits>::IsAlive(info, self.value);
   }
 
-  static bool Trace(blink::Visitor* visitor,
+  static void Trace(blink::Visitor* visitor,
                     const KeyValuePair<Key, Value>& self) {
     EphemeronHelper helper(&self.key, &self.value);
-    return visitor->VisitEphemeronKeyValuePair(
-        helper.key, helper.value,
+    // The following passes on kNoWeakHandling for tracing value as the value
+    // callback is only invoked to keep value alive iff key is alive, following
+    // ephemeron semantics.
+    visitor->TraceEphemeron(
+        *helper.key, helper.value,
         blink::TraceCollectionIfEnabled<
-            WeakHandlingTrait<typename EphemeronHelper::KeyType>::value,
-            typename EphemeronHelper::KeyType,
-            typename EphemeronHelper::KeyTraits>::Trace,
-        blink::TraceCollectionIfEnabled<
-            WeakHandlingTrait<typename EphemeronHelper::ValueType>::value,
-            typename EphemeronHelper::ValueType,
+            kNoWeakHandling, typename EphemeronHelper::ValueType,
             typename EphemeronHelper::ValueTraits>::Trace);
   }
 };

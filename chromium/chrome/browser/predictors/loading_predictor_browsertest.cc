@@ -24,6 +24,8 @@
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_preconnect_client.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/loading_test_util.h"
@@ -35,9 +37,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/optimization_guide/optimization_guide_constants.h"
 #include "components/optimization_guide/optimization_guide_features.h"
-#include "components/optimization_guide/optimization_guide_switches.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -47,6 +47,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
 #include "net/base/escape.h"
@@ -92,29 +93,6 @@ GURL GetDataURLWithContent(const std::string& content) {
   base::Base64Encode(content, &encoded_content);
   std::string data_uri_content = "data:text/html;base64," + encoded_content;
   return GURL(data_uri_content);
-}
-
-void RetryForHistogramUntilCountReached(
-    const base::HistogramTester& histogram_tester,
-    const std::string& histogram_name,
-    size_t count) {
-  while (true) {
-    base::ThreadPoolInstance::Get()->FlushForTesting();
-    base::RunLoop().RunUntilIdle();
-
-    content::FetchHistogramsFromChildProcesses();
-    SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-
-    const std::vector<base::Bucket> buckets =
-        histogram_tester.GetAllSamples(histogram_name);
-    size_t total_count = 0;
-    for (const auto& bucket : buckets) {
-      total_count += bucket.count;
-    }
-    if (total_count >= count) {
-      break;
-    }
-  }
 }
 
 // Helper class to track and allow waiting for ResourcePrefetchPredictor
@@ -1024,8 +1002,10 @@ class LoadingPredictorNetworkIsolationKeyBrowserTest
     content::SimpleURLLoaderTestHelper simple_loader_helper;
     url::Origin origin = url::Origin::Create(url);
     request->trusted_params = network::ResourceRequest::TrustedParams();
-    request->trusted_params->network_isolation_key =
-        net::NetworkIsolationKey(origin, origin);
+    request->trusted_params->isolation_info =
+        net::IsolationInfo::CreateForInternalRequest(origin);
+    request->site_for_cookies =
+        request->trusted_params->isolation_info.site_for_cookies();
     std::unique_ptr<network::SimpleURLLoader> simple_loader =
         network::SimpleURLLoader::Create(std::move(request),
                                          TRAFFIC_ANNOTATION_FOR_TESTS);
@@ -1242,8 +1222,10 @@ IN_PROC_BROWSER_TEST_P(LoadingPredictorNetworkIsolationKeyBrowserTest,
     content::SimpleURLLoaderTestHelper simple_loader_helper;
     url::Origin origin = url::Origin::Create(request->url);
     request->trusted_params = network::ResourceRequest::TrustedParams();
-    request->trusted_params->network_isolation_key =
-        net::NetworkIsolationKey(origin, origin);
+    request->trusted_params->isolation_info =
+        net::IsolationInfo::CreateForInternalRequest(origin);
+    request->site_for_cookies =
+        request->trusted_params->isolation_info.site_for_cookies();
     std::unique_ptr<network::SimpleURLLoader> simple_loader =
         network::SimpleURLLoader::Create(std::move(request),
                                          TRAFFIC_ANNOTATION_FOR_TESTS);
@@ -1541,47 +1523,30 @@ class LoadingPredictorBrowserTestWithOptimizationGuide
     }
   }
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // TODO(crbug/1035698): Make this simpler when Optimization Guide has better
-    // test support.
-    optimization_guide::proto::Configuration config;
-    optimization_guide::proto::Hint* hint1 = config.add_hints();
-    hint1->set_key_representation(optimization_guide::proto::HOST_SUFFIX);
-    hint1->set_key("hints.com");
-    optimization_guide::proto::PageHint* page_hint1 = hint1->add_page_hints();
-    page_hint1->set_page_pattern("*");
-    optimization_guide::proto::Optimization* opt1 =
-        page_hint1->add_whitelisted_optimizations();
-    opt1->set_optimization_type(optimization_guide::proto::LOADING_PREDICTOR);
-    opt1->mutable_loading_predictor_metadata()->add_subresources()->set_url(
-        "http://subresource.com/1");
-    opt1->mutable_loading_predictor_metadata()->add_subresources()->set_url(
-        "http://subresource.com/2");
-    opt1->mutable_loading_predictor_metadata()->add_subresources()->set_url(
-        "http://otherresource.com/2");
-    opt1->mutable_loading_predictor_metadata()->add_subresources()->set_url(
-        "skipsoverinvalidurl////");
-    optimization_guide::proto::Hint* hint2 = config.add_hints();
-    hint2->set_key_representation(optimization_guide::proto::HOST_SUFFIX);
-    hint2->set_key("test.com");
-    optimization_guide::proto::PageHint* page_hint2 = hint2->add_page_hints();
-    page_hint2->set_page_pattern("*");
-    optimization_guide::proto::Optimization* opt2 =
-        page_hint2->add_whitelisted_optimizations();
-    opt2->set_optimization_type(optimization_guide::proto::LOADING_PREDICTOR);
-    opt2->mutable_loading_predictor_metadata()->add_subresources()->set_url(
-        "https://doesntmatter.com/alsodoesntmatter");
-    std::string config_string;
-    config.SerializeToString(&config_string);
-    base::Base64Encode(config_string, &config_string);
-    command_line->AppendSwitchASCII(
-        optimization_guide::switches::kHintsProtoOverride, config_string);
-  }
-
   bool IsLocalPredictionEnabled() const { return std::get<0>(GetParam()); }
 
   bool ShouldPreconnectUsingOptimizationGuidePredictions() const {
     return std::get<1>(GetParam());
+  }
+
+  void SetUpOptimizationHint(
+      const GURL& url,
+      const std::vector<std::string>& predicted_subresource_urls) {
+    auto* optimization_guide_keyed_service =
+        OptimizationGuideKeyedServiceFactory::GetForProfile(
+            browser()->profile());
+    optimization_guide::proto::LoadingPredictorMetadata
+        loading_predictor_metadata;
+    for (const auto& subresource_url : predicted_subresource_urls) {
+      loading_predictor_metadata.add_subresources()->set_url(subresource_url);
+    }
+
+    optimization_guide::OptimizationMetadata optimization_metadata;
+    optimization_metadata.set_loading_predictor_metadata(
+        loading_predictor_metadata);
+    optimization_guide_keyed_service->AddHintForTesting(
+        url, optimization_guide::proto::LOADING_PREDICTOR,
+        optimization_metadata);
   }
 
  private:
@@ -1593,16 +1558,8 @@ INSTANTIATE_TEST_SUITE_P(,
                          LoadingPredictorBrowserTestWithOptimizationGuide,
                          testing::Combine(testing::Bool(), testing::Bool()));
 
-// https://crbug.com/1056693
-#if (defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS))
-#define DISABLE_ON_WIN_MAC_CHROMEOS(x) DISABLED_##x
-#else
-#define DISABLE_ON_WIN_MAC_CHROMEOS(x) x
-#endif
-
-IN_PROC_BROWSER_TEST_P(
-    LoadingPredictorBrowserTestWithOptimizationGuide,
-    DISABLED_NavigationHasLocalPredictionNoOptimizationHint) {
+IN_PROC_BROWSER_TEST_P(LoadingPredictorBrowserTestWithOptimizationGuide,
+                       NavigationHasLocalPredictionNoOptimizationHint) {
   // Navigate the first time to fill the predictor's database and the HTTP
   // cache.
   GURL url = embedded_test_server()->GetURL(
@@ -1612,8 +1569,6 @@ IN_PROC_BROWSER_TEST_P(
   net::NetworkIsolationKey network_isolation_key(origin, origin);
   ui_test_utils::NavigateToURL(browser(), url);
   ResetNetworkState();
-
-  base::HistogramTester histogram_tester;
 
   auto observer = NavigateToURLAsync(url);
   EXPECT_TRUE(observer->WaitForRequestStart());
@@ -1641,32 +1596,23 @@ IN_PROC_BROWSER_TEST_P(
             connection_tracker()->GetAcceptedSocketCount());
   // No reads since all resources should be cached.
   EXPECT_EQ(0u, connection_tracker()->GetReadSocketCount());
-
-  if (IsLocalPredictionEnabled()) {
-    histogram_tester.ExpectTotalCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus", 0);
-  } else {
-    histogram_tester.ExpectTotalCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus", 1);
-  }
 }
 
-// TODO(crbug.com/1060966): Tests are flakey.
-IN_PROC_BROWSER_TEST_P(
-    LoadingPredictorBrowserTestWithOptimizationGuide,
-    DISABLED_NavigationWithBothLocalPredictionAndOptimizationHint) {
-  base::HistogramTester histogram_tester;
-
+IN_PROC_BROWSER_TEST_P(LoadingPredictorBrowserTestWithOptimizationGuide,
+                       NavigationWithBothLocalPredictionAndOptimizationHint) {
+  // Navigate the first time to fill the predictor's database and the HTTP
+  // cache.
   GURL url = embedded_test_server()->GetURL(
-      "m.hints.com",
-      GetPathWithPortReplacement(kHtmlSubresourcesPath,
-                                 embedded_test_server()->port()));
+      "test.com", GetPathWithPortReplacement(kHtmlSubresourcesPath,
+                                             embedded_test_server()->port()));
   url::Origin origin = url::Origin::Create(url);
   net::NetworkIsolationKey network_isolation_key(origin, origin);
   ui_test_utils::NavigateToURL(browser(), url);
-  RetryForHistogramUntilCountReached(
-      histogram_tester, optimization_guide::kLoadedHintLocalHistogramString, 1);
   ResetNetworkState();
+
+  SetUpOptimizationHint(
+      url, {"http://subresource.com/1", "http://subresource.com/2",
+            "http://otherresource.com/2", "skipsoverinvalidurl/////"});
 
   auto observer = NavigateToURLAsync(url);
   EXPECT_TRUE(observer->WaitForRequestStart());
@@ -1705,165 +1651,145 @@ IN_PROC_BROWSER_TEST_P(
     EXPECT_TRUE(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
         expected_origin));
   }
-
-  if (IsLocalPredictionEnabled()) {
-    histogram_tester.ExpectUniqueSample(
-        "LoadingPredictor.OptimizationHintsReceiveStatus",
-        OptimizationHintsReceiveStatus::kAfterNavigationFinish, 1);
-  } else {
-    // We expect one for the setup navigation and one for the navigation we care
-    // about.
-    histogram_tester.ExpectTotalCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus", 2);
-    // We expect the hints to arrive before navigation for the navigation we
-    // care about.
-    histogram_tester.ExpectBucketCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus",
-        OptimizationHintsReceiveStatus::kBeforeNavigationFinish, 1);
-    // We expect the decision to arrive at finish for the setup navigation.
-    histogram_tester.ExpectBucketCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus",
-        OptimizationHintsReceiveStatus::kAfterNavigationFinish, 1);
-  }
-}
-
-// crbug.com/1060966
-IN_PROC_BROWSER_TEST_P(
-    LoadingPredictorBrowserTestWithOptimizationGuide,
-    DISABLED_NavigationWithNoLocalPredictionsButHasOptimizationHint) {
-  {
-    base::HistogramTester histogram_tester;
-
-    // Navigate to a setup URL with the same host suffix as |url| to guarantee
-    // that the optimization guide hints are available for |url| when we
-    // navigate to it. We also make sure that the setup URL is not of the same
-    // origin as |url| to guarantee that the ResourcePrefetchPredictor does not
-    // have any predictions available for |url|'s origin since local predictions
-    // are used instead of optimization hints if available.
-    ui_test_utils::NavigateToURL(
-        browser(),
-        embedded_test_server()->GetURL("setup.hints.com", "/simple.html"));
-    RetryForHistogramUntilCountReached(
-        histogram_tester, optimization_guide::kLoadedHintLocalHistogramString,
-        1);
-    ResetNetworkState();
-  }
-
-  {
-    base::HistogramTester histogram_tester;
-
-    GURL url = embedded_test_server()->GetURL("m.hints.com", "/simple.html");
-    url::Origin origin = url::Origin::Create(url);
-    net::NetworkIsolationKey network_isolation_key(origin, origin);
-
-    auto observer = NavigateToURLAsync(url);
-    EXPECT_TRUE(observer->WaitForRequestStart());
-
-    // The initial URL should be preconnected to.
-    preconnect_manager_observer()->WaitUntilHostLookedUp(url.host(),
-                                                         network_isolation_key);
-    EXPECT_TRUE(preconnect_manager_observer()->HostFound(
-        url.host(), network_isolation_key));
-    EXPECT_TRUE(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
-        origin.GetURL()));
-
-    for (auto* const host : {"subresource.com", "otherresource.com"}) {
-      if (ShouldPreconnectUsingOptimizationGuidePredictions()) {
-        // Both subresource hosts should be preconnected to.
-        preconnect_manager_observer()->WaitUntilHostLookedUp(
-            host, network_isolation_key);
-      }
-      EXPECT_EQ(
-          preconnect_manager_observer()->HostFound(host, network_isolation_key),
-          ShouldPreconnectUsingOptimizationGuidePredictions());
-
-      EXPECT_EQ(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
-                    GURL(base::StringPrintf("http://%s/", host))),
-                ShouldPreconnectUsingOptimizationGuidePredictions());
-    }
-
-    EXPECT_TRUE(observer->WaitForResponse());
-    observer->ResumeNavigation();
-    content::AwaitDocumentOnLoadCompleted(observer->web_contents());
-    observer->WaitForNavigationFinished();
-
-    // Navigate to another URL - make sure optimization guide prediction is
-    // cleared.
-    ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL("nohints.com", "/"));
-
-    histogram_tester.ExpectUniqueSample(
-        "LoadingPredictor.PreconnectLearningRecall.OptimizationGuide", 0, 1);
-    histogram_tester.ExpectUniqueSample(
-        "LoadingPredictor.PreconnectLearningPrecision.OptimizationGuide", 0, 1);
-    histogram_tester.ExpectUniqueSample(
-        "LoadingPredictor.PreconnectLearningCount.OptimizationGuide", 2, 1);
-
-    // We expect one for the final navigation and one for the navigation we care
-    // about.
-    histogram_tester.ExpectTotalCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus", 2);
-    // We expect the hints to arrive before navigation for the navigation we
-    // care about.
-    histogram_tester.ExpectBucketCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus",
-        OptimizationHintsReceiveStatus::kBeforeNavigationFinish, 1);
-    // We expect the decision to arrive at finish for the navigation we do not
-    // have hints for.
-    histogram_tester.ExpectBucketCount(
-        "LoadingPredictor.OptimizationHintsReceiveStatus",
-        OptimizationHintsReceiveStatus::kAfterNavigationFinish, 1);
-  }
-}
-
-// TODO(crbug.com/1060966): Tests are flakey.
-IN_PROC_BROWSER_TEST_P(
-    LoadingPredictorBrowserTestWithOptimizationGuide,
-    DISABLED_OptimizationGuidePredictionsNotAppliedForAlreadyCommittedNavigation) {
-  base::HistogramTester histogram_tester;
-
-  GURL url = embedded_test_server()->GetURL("hints.com", "/simple.html");
-  url::Origin origin = url::Origin::Create(url);
-  net::NetworkIsolationKey network_isolation_key(origin, origin);
-  // Navigate to URL with hints, the hints will come back eventually but
-  // after commit.
-  ui_test_utils::NavigateToURL(browser(), url);
-
-  EXPECT_FALSE(preconnect_manager_observer()->HasHostBeenLookedUp(
-      "subresource.com", network_isolation_key));
-  EXPECT_FALSE(preconnect_manager_observer()->HasHostBeenLookedUp(
-      "otheresource.com", network_isolation_key));
-
-  histogram_tester.ExpectUniqueSample(
-      "LoadingPredictor.OptimizationHintsReceiveStatus",
-      OptimizationHintsReceiveStatus::kAfterNavigationFinish, 1);
 }
 
 IN_PROC_BROWSER_TEST_P(LoadingPredictorBrowserTestWithOptimizationGuide,
-                       DISABLE_ON_WIN_MAC_CHROMEOS(
-                           OptimizationGuidePredictionsNotAppliedForRedirect)) {
+                       NavigationWithNoLocalPredictionsButHasOptimizationHint) {
   base::HistogramTester histogram_tester;
 
-  GURL destination_url =
-      embedded_test_server()->GetURL("otherhost.com", "/cachetime");
-  GURL redirecting_url = embedded_test_server()->GetURL(
-      "hints.com", "/cached-redirect?" + destination_url.spec());
-
-  url::Origin origin = url::Origin::Create(redirecting_url);
+  GURL url = embedded_test_server()->GetURL("m.hints.com", "/simple.html");
+  SetUpOptimizationHint(
+      url, {"http://subresource.com/1", "http://subresource.com/2",
+            "http://otherresource.com/2", "skipsoverinvalidurl/////"});
+  url::Origin origin = url::Origin::Create(url);
   net::NetworkIsolationKey network_isolation_key(origin, origin);
-  // Navigate to URL with hints but is redirected, hints should not be
-  // applied.
-  ui_test_utils::NavigateToURL(browser(), redirecting_url);
+
+  auto observer = NavigateToURLAsync(url);
+  EXPECT_TRUE(observer->WaitForRequestStart());
+
+  // The initial URL should be preconnected to.
+  preconnect_manager_observer()->WaitUntilHostLookedUp(url.host(),
+                                                       network_isolation_key);
+  EXPECT_TRUE(preconnect_manager_observer()->HostFound(url.host(),
+                                                       network_isolation_key));
+  EXPECT_TRUE(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
+      origin.GetURL()));
+
+  for (auto* const host : {"subresource.com", "otherresource.com"}) {
+    if (ShouldPreconnectUsingOptimizationGuidePredictions()) {
+      // Both subresource hosts should be preconnected to.
+      preconnect_manager_observer()->WaitUntilHostLookedUp(
+          host, network_isolation_key);
+    }
+    EXPECT_EQ(
+        preconnect_manager_observer()->HostFound(host, network_isolation_key),
+        ShouldPreconnectUsingOptimizationGuidePredictions());
+
+    EXPECT_EQ(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
+                  GURL(base::StringPrintf("http://%s/", host))),
+              ShouldPreconnectUsingOptimizationGuidePredictions());
+  }
+
+  EXPECT_TRUE(observer->WaitForResponse());
+  observer->ResumeNavigation();
+  content::AwaitDocumentOnLoadCompleted(observer->web_contents());
+  observer->WaitForNavigationFinished();
+
+  // Navigate to another URL - make sure optimization guide prediction is
+  // cleared.
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("nohints.com", "/"));
+
+  histogram_tester.ExpectUniqueSample(
+      "LoadingPredictor.PreconnectLearningRecall.OptimizationGuide", 0, 1);
+  histogram_tester.ExpectUniqueSample(
+      "LoadingPredictor.PreconnectLearningPrecision.OptimizationGuide", 0, 1);
+  histogram_tester.ExpectUniqueSample(
+      "LoadingPredictor.PreconnectLearningCount.OptimizationGuide", 2, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    LoadingPredictorBrowserTestWithOptimizationGuide,
+    OptimizationGuidePredictionsNotAppliedForAlreadyCommittedNavigation) {
+  GURL url = embedded_test_server()->GetURL("hints.com", "/simple.html");
+  url::Origin origin = url::Origin::Create(url);
+  net::NetworkIsolationKey network_isolation_key(origin, origin);
+  // Navigate to URL with hints but only seed hints after navigation has
+  // committed.
+  auto observer = NavigateToURLAsync(url);
+  EXPECT_TRUE(observer->WaitForResponse());
+  observer->ResumeNavigation();
+  SetUpOptimizationHint(
+      url, {"http://subresource.com/1", "http://subresource.com/2",
+            "http://otherresource.com/2", "skipsoverinvalidurl/////"});
 
   EXPECT_FALSE(preconnect_manager_observer()->HasHostBeenLookedUp(
       "subresource.com", network_isolation_key));
   EXPECT_FALSE(preconnect_manager_observer()->HasHostBeenLookedUp(
       "otheresource.com", network_isolation_key));
+}
 
-  // We cannot force when the hint comes back, so we make sure that we at least
-  // received something back from the optimization guide instead.
-  histogram_tester.ExpectTotalCount(
-      "LoadingPredictor.OptimizationHintsReceiveStatus", 1);
+IN_PROC_BROWSER_TEST_P(LoadingPredictorBrowserTestWithOptimizationGuide,
+                       OptimizationGuidePredictionsNotAppliedForRedirect) {
+  GURL destination_url =
+      embedded_test_server()->GetURL("otherhost.com", "/cachetime");
+  GURL redirecting_url = embedded_test_server()->GetURL(
+      "sometimesredirects.com", "/cached-redirect?" + destination_url.spec());
+  SetUpOptimizationHint(
+      destination_url,
+      {"http://subresource.com/1", "http://subresource.com/2",
+       "http://otherresource.com/2", "skipsoverinvalidurl/////"});
+
+  // Navigate the first time to something on redirecting origin to fill the
+  // predictor's database and the HTTP cache.
+  ui_test_utils::NavigateToURL(
+      browser(),
+      embedded_test_server()->GetURL(
+          "sometimesredirects.com",
+          GetPathWithPortReplacement(kHtmlSubresourcesPath,
+                                     embedded_test_server()->port())));
+  ResetNetworkState();
+
+  url::Origin origin = url::Origin::Create(destination_url);
+  net::NetworkIsolationKey network_isolation_key(origin, origin);
+  // Navigate to URL with hints but is redirected, hints should not be
+  // applied.
+  auto observer = NavigateToURLAsync(redirecting_url);
+  EXPECT_TRUE(observer->WaitForResponse());
+  SetUpOptimizationHint(
+      redirecting_url,
+      {"http://subresourceredirect.com/1", "http://subresourceredirect.com/2",
+       "http://otherresourceredirect.com/2", "skipsoverinvalidurl/////"});
+  observer->ResumeNavigation();
+
+  std::vector<std::string> expected_opt_guide_subresource_hosts = {
+      "subresource.com", "otherresource.com"};
+  if (!IsLocalPredictionEnabled() &&
+      ShouldPreconnectUsingOptimizationGuidePredictions()) {
+    // Should use subresources from optimization hint.
+    for (const auto& host : expected_opt_guide_subresource_hosts) {
+      preconnect_manager_observer()->WaitUntilHostLookedUp(
+          host, network_isolation_key);
+      EXPECT_TRUE(preconnect_manager_observer()->HostFound(
+          host, network_isolation_key));
+
+      GURL expected_origin;
+      if (IsLocalPredictionEnabled()) {
+        // The locally learned origins are expected to have a port.
+        expected_origin = embedded_test_server()->GetURL(host, "/");
+      } else {
+        // The optimization hints learned origins do not have a port.
+        expected_origin = GURL(base::StringPrintf("http://%s", host.c_str()));
+      }
+      EXPECT_TRUE(preconnect_manager_observer()->HasOriginAttemptedToPreconnect(
+          expected_origin));
+    }
+  } else {
+    for (const auto& host : expected_opt_guide_subresource_hosts) {
+      EXPECT_FALSE(preconnect_manager_observer()->HasHostBeenLookedUp(
+          host, network_isolation_key));
+    }
+  }
 }
 
 class LoadingPredictorBrowserTestWithNoLocalPredictions

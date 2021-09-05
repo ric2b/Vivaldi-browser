@@ -15,8 +15,7 @@ ExecutionContextClient::ExecutionContextClient(
     : execution_context_(execution_context) {}
 
 ExecutionContextClient::ExecutionContextClient(LocalFrame* frame)
-    : execution_context_(frame ? frame->GetDocument()->ToExecutionContext()
-                               : nullptr) {}
+    : execution_context_(frame ? frame->DomWindow() : nullptr) {}
 
 ExecutionContext* ExecutionContextClient::GetExecutionContext() const {
   return execution_context_ && !execution_context_->IsContextDestroyed()
@@ -24,31 +23,18 @@ ExecutionContext* ExecutionContextClient::GetExecutionContext() const {
              : nullptr;
 }
 
-Document* ExecutionContextClient::GetDocument() const {
-  return execution_context_
-             ? Document::DynamicFrom(
-                   static_cast<ExecutionContext*>(execution_context_))
-             : nullptr;
+LocalDOMWindow* ExecutionContextClient::DomWindow() const {
+  return DynamicTo<LocalDOMWindow>(GetExecutionContext());
 }
 
 LocalFrame* ExecutionContextClient::GetFrame() const {
-  auto* document = GetDocument();
-  return document ? document->GetFrame() : nullptr;
+  auto* window = DomWindow();
+  return window ? window->GetFrame() : nullptr;
 }
 
 void ExecutionContextClient::Trace(Visitor* visitor) {
   visitor->Trace(execution_context_);
 }
-
-ExecutionContextLifecycleObserver::ExecutionContextLifecycleObserver()
-    : observer_type_(kGenericType) {}
-
-ExecutionContextLifecycleObserver::ExecutionContextLifecycleObserver(
-    Document* document,
-    Type type)
-    : ExecutionContextLifecycleObserver(
-          document ? document->ToExecutionContext() : nullptr,
-          type) {}
 
 ExecutionContextLifecycleObserver::ExecutionContextLifecycleObserver(
     ExecutionContext* execution_context,
@@ -68,29 +54,12 @@ void ExecutionContextLifecycleObserver::SetExecutionContext(
 }
 
 LocalFrame* ExecutionContextLifecycleObserver::GetFrame() const {
-  auto* document = Document::DynamicFrom(GetExecutionContext());
-  return document ? document->GetFrame() : nullptr;
+  auto* window = DynamicTo<LocalDOMWindow>(GetExecutionContext());
+  return window ? window->GetFrame() : nullptr;
 }
 
 void ExecutionContextLifecycleObserver::Trace(Visitor* visitor) {
   ContextLifecycleObserver::Trace(visitor);
 }
 
-DOMWindowClient::DOMWindowClient(LocalDOMWindow* window)
-    : dom_window_(window) {}
-
-DOMWindowClient::DOMWindowClient(LocalFrame* frame)
-    : dom_window_(frame ? frame->DomWindow() : nullptr) {}
-
-LocalDOMWindow* DOMWindowClient::DomWindow() const {
-  return dom_window_ && dom_window_->GetFrame() ? dom_window_ : nullptr;
-}
-
-LocalFrame* DOMWindowClient::GetFrame() const {
-  return dom_window_ ? dom_window_->GetFrame() : nullptr;
-}
-
-void DOMWindowClient::Trace(Visitor* visitor) {
-  visitor->Trace(dom_window_);
-}
 }  // namespace blink

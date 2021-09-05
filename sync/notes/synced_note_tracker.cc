@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
@@ -24,6 +25,10 @@
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "ui/base/models/tree_node_iterator.h"
+
+namespace sync_bookmarks {
+extern const base::Feature kInvalidateBookmarkSyncMetadataIfClientTagDuplicates;
+}
 
 namespace sync_notes {
 
@@ -413,8 +418,8 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
   std::unordered_map<int64_t, const vivaldi::NoteNode*> id_to_note_node_map =
       BuildIdToNoteNodeMap(model);
 
-  // Collect ids of non-deletion entries in the metadata.
-  std::vector<int> metadata_node_ids;
+  std::unordered_set<syncer::ClientTagHash, syncer::ClientTagHash::Hash>
+      used_client_tag_hashes;
 
   for (sync_pb::NoteMetadata& note_metadata :
        *model_metadata.mutable_notes_metadata()) {
@@ -428,6 +433,28 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     if (sync_id_to_entities_map_.count(sync_id) != 0) {
       DLOG(ERROR) << "Error when decoding sync metadata: Duplicated server id.";
       return false;
+    }
+
+    // Duplicate nodes might happen by restoring of a removed note due to
+    // some past bugs (see https://crbug.com/1071061). In this case it was
+    // possible that there were two entities for the same node: one of them is a
+    // tombstone and another one is the entity for the restored note.
+    // Currently the tombstone entity is overridden in this case, but it is
+    // still possible that the incorrect state was stored.
+    if (note_metadata.metadata().has_client_tag_hash()) {
+      const syncer::ClientTagHash client_tag_hash =
+          syncer::ClientTagHash::FromHashed(
+              note_metadata.metadata().client_tag_hash());
+      const bool new_element =
+          used_client_tag_hashes.insert(client_tag_hash).second;
+      if (!new_element &&
+          base::FeatureList::IsEnabled(
+              sync_bookmarks::
+                  kInvalidateBookmarkSyncMetadataIfClientTagDuplicates)) {
+        DLOG(ERROR) << "Error when decoding sync metadata: Duplicated client "
+                       "tag hash.";
+        return false;
+      }
     }
 
     // Handle tombstones.

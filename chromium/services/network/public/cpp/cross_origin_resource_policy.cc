@@ -33,21 +33,23 @@ enum class CorpResult {
   kMaxValue = kNotSameSite,
 };
 
-CorpResult ToCorpResult(const base::Optional<BlockedByResponseReason>& value) {
+CorpResult ToCorpResult(
+    const base::Optional<mojom::BlockedByResponseReason>& value) {
   if (!value) {
     return CorpResult::kSuccess;
   }
   switch (*value) {
-    case BlockedByResponseReason::kCoepFrameResourceNeedsCoepHeader:
-    case BlockedByResponseReason::kCoopSandboxedIFrameCannotNavigateToCoopPage:
+    case mojom::BlockedByResponseReason::kCoepFrameResourceNeedsCoepHeader:
+    case mojom::BlockedByResponseReason::
+        kCoopSandboxedIFrameCannotNavigateToCoopPage:
       NOTREACHED();
       return CorpResult::kSuccess;
-    case BlockedByResponseReason::kCorpNotSameOrigin:
+    case mojom::BlockedByResponseReason::kCorpNotSameOrigin:
       return CorpResult::kNotSameOrigin;
-    case BlockedByResponseReason::
+    case mojom::BlockedByResponseReason::
         kCorpNotSameOriginAfterDefaultedToSameOriginByCoep:
       return CorpResult::kNotSameOriginAfterDefaultedToSameOriginByCoep;
-    case BlockedByResponseReason::kCorpNotSameSite:
+    case mojom::BlockedByResponseReason::kCorpNotSameSite:
       return CorpResult::kNotSameSite;
   }
 }
@@ -93,8 +95,7 @@ CrossOriginResourcePolicy::ParsedHeader ParseHeaderByHttpResponseHeaders(
 
 std::string GetDomain(const url::Origin& origin) {
   return net::registry_controlled_domains::GetDomainAndRegistry(
-      origin.host(),
-      net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+      origin, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
 
 bool ShouldAllowSameSite(const url::Origin& initiator,
@@ -137,7 +138,7 @@ bool ShouldAllowSameSite(const url::Origin& initiator,
          target_origin.scheme() != url::kHttpsScheme;
 }
 
-base::Optional<BlockedByResponseReason> IsBlockedInternal(
+base::Optional<mojom::BlockedByResponseReason> IsBlockedInternal(
     CrossOriginResourcePolicy::ParsedHeader policy,
     const GURL& request_url,
     const base::Optional<url::Origin>& request_initiator,
@@ -179,9 +180,9 @@ base::Optional<BlockedByResponseReason> IsBlockedInternal(
   // > 4. If policy is `same-origin`, then return blocked.
   if (policy == CrossOriginResourcePolicy::kSameOrigin) {
     return upgrade_to_same_origin
-               ? BlockedByResponseReason::
+               ? mojom::BlockedByResponseReason::
                      kCorpNotSameOriginAfterDefaultedToSameOriginByCoep
-               : BlockedByResponseReason::kCorpNotSameOrigin;
+               : mojom::BlockedByResponseReason::kCorpNotSameOrigin;
   }
 
   // From https://fetch.spec.whatwg.org/#cross-origin-resource-policy-header:
@@ -197,10 +198,10 @@ base::Optional<BlockedByResponseReason> IsBlockedInternal(
   // From https://fetch.spec.whatwg.org/#cross-origin-resource-policy-header:
   // > 6.  If policy is `same-site`, then return blocked.
   DCHECK_EQ(CrossOriginResourcePolicy::kSameSite, policy);
-  return BlockedByResponseReason::kCorpNotSameSite;
+  return mojom::BlockedByResponseReason::kCorpNotSameSite;
 }
 
-base::Optional<BlockedByResponseReason> IsBlockedInternalWithReporting(
+base::Optional<mojom::BlockedByResponseReason> IsBlockedInternalWithReporting(
     CrossOriginResourcePolicy::ParsedHeader policy,
     const GURL& request_url,
     const GURL& original_url,
@@ -209,7 +210,7 @@ base::Optional<BlockedByResponseReason> IsBlockedInternalWithReporting(
     base::Optional<url::Origin> request_initiator_site_lock,
     const CrossOriginEmbedderPolicy& embedder_policy,
     mojom::CrossOriginEmbedderPolicyReporter* reporter) {
-  constexpr auto kBlockedDueToCoep = BlockedByResponseReason::
+  constexpr auto kBlockedDueToCoep = mojom::BlockedByResponseReason::
       kCorpNotSameOriginAfterDefaultedToSameOriginByCoep;
   if (embedder_policy.report_only_value ==
           mojom::CrossOriginEmbedderPolicyValue::kRequireCorp &&
@@ -251,7 +252,8 @@ const char CrossOriginResourcePolicy::kHeaderName[] =
     "Cross-Origin-Resource-Policy";
 
 // static
-base::Optional<BlockedByResponseReason> CrossOriginResourcePolicy::IsBlocked(
+base::Optional<mojom::BlockedByResponseReason>
+CrossOriginResourcePolicy::IsBlocked(
     const GURL& request_url,
     const GURL& original_url,
     const base::Optional<url::Origin>& request_initiator,
@@ -281,7 +283,7 @@ base::Optional<BlockedByResponseReason> CrossOriginResourcePolicy::IsBlocked(
 }
 
 // static
-base::Optional<BlockedByResponseReason>
+base::Optional<mojom::BlockedByResponseReason>
 CrossOriginResourcePolicy::IsBlockedByHeaderValue(
     const GURL& request_url,
     const GURL& original_url,
@@ -304,7 +306,7 @@ CrossOriginResourcePolicy::IsBlockedByHeaderValue(
 }
 
 // static
-base::Optional<BlockedByResponseReason>
+base::Optional<mojom::BlockedByResponseReason>
 CrossOriginResourcePolicy::IsNavigationBlocked(
     const GURL& request_url,
     const GURL& original_url,

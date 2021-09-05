@@ -27,20 +27,34 @@ constexpr int kRewriteRulesProviderDisconnectExitCode = 130;
 
 }  // namespace
 
-CastComponent::CastComponentParams::CastComponentParams() = default;
-CastComponent::CastComponentParams::CastComponentParams(CastComponentParams&&) =
-    default;
-CastComponent::CastComponentParams::~CastComponentParams() = default;
+CastComponent::Params::Params() = default;
+CastComponent::Params::Params(Params&&) = default;
+CastComponent::Params::~Params() = default;
 
-CastComponent::CastComponent(CastRunner* runner,
-                             CastComponent::CastComponentParams params)
+bool CastComponent::Params::AreComplete() const {
+  if (application_config.IsEmpty())
+    return false;
+  if (!api_bindings_client->HasBindings())
+    return false;
+  if (!initial_url_rewrite_rules)
+    return false;
+  if (!media_session_id)
+    return false;
+  return true;
+}
+
+CastComponent::CastComponent(WebContentRunner* runner,
+                             CastComponent::Params params,
+                             bool is_headless)
     : WebComponent(runner,
                    std::move(params.startup_context),
                    std::move(params.controller_request)),
+      is_headless_(is_headless),
       agent_manager_(std::move(params.agent_manager)),
-      application_config_(std::move(params.app_config)),
-      rewrite_rules_provider_(std::move(params.rewrite_rules_provider)),
-      initial_rewrite_rules_(std::move(params.rewrite_rules.value())),
+      application_config_(std::move(params.application_config)),
+      url_rewrite_rules_provider_(std::move(params.url_rewrite_rules_provider)),
+      initial_url_rewrite_rules_(
+          std::move(params.initial_url_rewrite_rules.value())),
       api_bindings_client_(std::move(params.api_bindings_client)),
       media_session_id_(params.media_session_id.value()),
       headless_disconnect_watch_(FROM_HERE),
@@ -49,6 +63,10 @@ CastComponent::CastComponent(CastRunner* runner,
 }
 
 CastComponent::~CastComponent() = default;
+
+void CastComponent::SetOnDestroyedCallback(base::OnceClosure on_destroyed) {
+  on_destroyed_ = std::move(on_destroyed);
+}
 
 void CastComponent::StartComponent() {
   if (application_config_.has_enable_remote_debugging() &&
@@ -60,13 +78,13 @@ void CastComponent::StartComponent() {
 
   connector_ = std::make_unique<NamedMessagePortConnector>(frame());
 
-  rewrite_rules_provider_.set_error_handler([this](zx_status_t status) {
+  url_rewrite_rules_provider_.set_error_handler([this](zx_status_t status) {
     ZX_LOG_IF(ERROR, status != ZX_OK, status)
         << "UrlRequestRewriteRulesProvider disconnected.";
     DestroyComponent(kRewriteRulesProviderDisconnectExitCode,
                      fuchsia::sys::TerminationReason::INTERNAL_ERROR);
   });
-  OnRewriteRulesReceived(std::move(initial_rewrite_rules_));
+  OnRewriteRulesReceived(std::move(initial_url_rewrite_rules_));
 
   frame()->SetMediaSessionId(media_session_id_);
   frame()->ConfigureInputTypes(fuchsia::web::InputTypes::ALL,
@@ -79,6 +97,10 @@ void CastComponent::StartComponent() {
                      kBindingsFailureExitCode,
                      fuchsia::sys::TerminationReason::INTERNAL_ERROR));
 
+  // Media loading has to be unblocked by the agent via the
+  // ApplicationController.
+  frame()->SetBlockMediaLoading(true);
+
   if (application_config_.has_force_content_dimensions()) {
     frame()->ForceContentDimensions(std::make_unique<fuchsia::ui::gfx::vec2>(
         application_config_.force_content_dimensions()));
@@ -87,7 +109,7 @@ void CastComponent::StartComponent() {
   application_controller_ = std::make_unique<ApplicationControllerImpl>(
       frame(),
       agent_manager_->ConnectToAgentService<chromium::cast::ApplicationContext>(
-          CastRunner::kAgentComponentUrl));
+          application_config_.agent_url()));
 
   // Pass application permissions to the frame.
   std::string origin = GURL(application_config_.web_url()).GetOrigin().spec();
@@ -106,13 +128,15 @@ void CastComponent::DestroyComponent(int termination_exit_code,
                                      fuchsia::sys::TerminationReason reason) {
   DCHECK(!constructor_active_);
 
+  std::move(on_destroyed_).Run();
+
   WebComponent::DestroyComponent(termination_exit_code, reason);
 }
 
 void CastComponent::OnRewriteRulesReceived(
     std::vector<fuchsia::web::UrlRequestRewriteRule> rewrite_rules) {
   frame()->SetUrlRequestRewriteRules(std::move(rewrite_rules), [this]() {
-    rewrite_rules_provider_->GetUrlRequestRewriteRules(
+    url_rewrite_rules_provider_->GetUrlRequestRewriteRules(
         fit::bind_member(this, &CastComponent::OnRewriteRulesReceived));
   });
 }
@@ -129,7 +153,7 @@ void CastComponent::CreateView(
     zx::eventpair view_token,
     fidl::InterfaceRequest<fuchsia::sys::ServiceProvider> incoming_services,
     fidl::InterfaceHandle<fuchsia::sys::ServiceProvider> outgoing_services) {
-  if (runner()->is_headless()) {
+  if (is_headless_) {
     // For headless CastComponents, |view_token| does not actually connect to a
     // Scenic View. It is merely used as a conduit for propagating termination
     // signals.
@@ -149,10 +173,7 @@ void CastComponent::CreateView(
 void CastComponent::OnZxHandleSignalled(zx_handle_t handle,
                                         zx_signals_t signals) {
   DCHECK_EQ(signals, ZX_SOCKET_PEER_CLOSED);
-  DCHECK(runner()->is_headless());
+  DCHECK(is_headless_);
 
   frame()->DisableHeadlessRendering();
-
-  if (on_headless_disconnect_cb_)
-    std::move(on_headless_disconnect_cb_).Run();
 }

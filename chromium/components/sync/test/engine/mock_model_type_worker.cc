@@ -7,7 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/syncable/syncable_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -210,7 +211,8 @@ syncer::UpdateResponseData MockModelTypeWorker::GenerateTypeRootUpdateData(
   return response_data;
 }
 
-void MockModelTypeWorker::TombstoneFromServer(const ClientTagHash& tag_hash) {
+syncer::UpdateResponseData MockModelTypeWorker::GenerateTombstoneUpdateData(
+    const ClientTagHash& tag_hash) {
   int64_t old_version = GetServerVersion(tag_hash);
   int64_t version = old_version + 1;
   SetServerVersion(tag_hash, version);
@@ -229,9 +231,12 @@ void MockModelTypeWorker::TombstoneFromServer(const ClientTagHash& tag_hash) {
   response_data.entity = std::move(data);
   response_data.response_version = version;
   response_data.encryption_key_name = model_type_state_.encryption_key_name();
+  return response_data;
+}
 
+void MockModelTypeWorker::TombstoneFromServer(const ClientTagHash& tag_hash) {
   UpdateResponseDataList list;
-  list.push_back(std::move(response_data));
+  list.push_back(GenerateTombstoneUpdateData(tag_hash));
   processor_->OnUpdateReceived(model_type_state_, std::move(list));
 }
 

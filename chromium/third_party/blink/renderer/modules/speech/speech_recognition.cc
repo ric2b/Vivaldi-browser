@@ -29,7 +29,7 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/modules/speech/speech_recognition_controller.h"
@@ -41,8 +41,7 @@
 namespace blink {
 
 SpeechRecognition* SpeechRecognition::Create(ExecutionContext* context) {
-  Document& document = Document::From(*context);
-  return MakeGarbageCollected<SpeechRecognition>(document.GetFrame(), context);
+  return MakeGarbageCollected<SpeechRecognition>(To<LocalDOMWindow>(context));
 }
 
 void SpeechRecognition::start(ExceptionState& exception_state) {
@@ -208,21 +207,21 @@ void SpeechRecognition::OnConnectionError() {
   Ended();
 }
 
-SpeechRecognition::SpeechRecognition(LocalFrame* frame,
-                                     ExecutionContext* context)
-    : ExecutionContextLifecycleObserver(context),
-      PageVisibilityObserver(frame ? frame->GetPage() : nullptr),
+SpeechRecognition::SpeechRecognition(LocalDOMWindow* window)
+    : ExecutionContextLifecycleObserver(window),
+      PageVisibilityObserver(window->GetFrame() ? window->GetFrame()->GetPage()
+                                                : nullptr),
       grammars_(SpeechGrammarList::Create()),  // FIXME: The spec is not clear
                                                // on the default value for the
                                                // grammars attribute.
       continuous_(false),
       interim_results_(false),
       max_alternatives_(1),
-      controller_(SpeechRecognitionController::From(frame)),
+      controller_(SpeechRecognitionController::From(*window)),
       started_(false),
       stopping_(false),
-      receiver_(this, context),
-      session_(context) {}
+      receiver_(this, window),
+      session_(window) {}
 
 SpeechRecognition::~SpeechRecognition() = default;
 

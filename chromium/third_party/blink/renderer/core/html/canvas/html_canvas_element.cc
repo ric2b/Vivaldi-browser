@@ -38,7 +38,10 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
 #include "build/build_config.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/resources/grit/blink_image_resources.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -55,6 +58,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_async_blob_creator.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_draw_listener.h"
@@ -249,6 +253,15 @@ void HTMLCanvasElement::RegisterRenderingContextFactory(
   RenderingContextFactories()[type] = std::move(rendering_context_factory);
 }
 
+void HTMLCanvasElement::RecordIdentifiabilityMetric(
+    const blink::IdentifiableSurface& surface,
+    int64_t value) const {
+  blink::IdentifiabilityMetricBuilder(
+      base::UkmSourceId::FromInt64(GetDocument().UkmSourceID()))
+      .Set(surface, value)
+      .Record(GetDocument().UkmRecorder());
+}
+
 CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContext(
     const String& type,
     const CanvasContextCreationAttributesCore& attributes) {
@@ -271,8 +284,14 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
   }
 
   // Log the aliased context type used.
-  if (!context_)
+  if (!context_) {
+    RecordIdentifiabilityMetric(
+        blink::IdentifiableSurface::FromTypeAndInput(
+            blink::IdentifiableSurface::Type::kWebFeature,
+            static_cast<uint64_t>(blink::WebFeature::kCanvasRenderingContext)),
+        blink::IdentifiabilityDigestHelper(context_type));
     UMA_HISTOGRAM_ENUMERATION("Blink.Canvas.ContextType", context_type);
+  }
 
   context_type =
       CanvasRenderingContext::ResolveContextTypeAliases(context_type);
@@ -352,6 +371,20 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
     SetNeedsCompositingUpdate();
 
   return context_.Get();
+}
+
+ScriptPromise HTMLCanvasElement::convertToBlob(
+    ScriptState* script_state,
+    const ImageEncodeOptions* options,
+    ExceptionState& exception_state) {
+  RecordIdentifiabilityMetric(
+      blink::IdentifiableSurface::FromTypeAndInput(
+          blink::IdentifiableSurface::Type::kCanvasReadback,
+          context_ ? context_->GetContextType()
+                   : CanvasRenderingContext::kContextTypeUnknown),
+      0);
+  return CanvasRenderingContextHost::convertToBlob(script_state, options,
+                                                   exception_state);
 }
 
 bool HTMLCanvasElement::ShouldBeDirectComposited() const {
@@ -694,6 +727,16 @@ bool HTMLCanvasElement::LowLatencyEnabled() const {
   return !!frame_dispatcher_;
 }
 
+void HTMLCanvasElement::UpdateFilterQuality() {
+  if (IsOffscreenCanvasRegistered())
+    UpdateOffscreenCanvasFilterQuality(FilterQuality());
+
+  if (context_ && Is3d())
+    context_->SetFilterQuality(FilterQuality());
+  else if (canvas2d_bridge_)
+    canvas2d_bridge_->UpdateFilterQuality();
+}
+
 // In some instances we don't actually want to paint to the parent layer
 // We still might want to set filter quality and MarkFirstContentfulPaint though
 void HTMLCanvasElement::Paint(GraphicsContext& context,
@@ -723,11 +766,6 @@ void HTMLCanvasElement::Paint(GraphicsContext& context,
   // compositing feature.
   if (!context_ && !OffscreenCanvasFrame())
     return;
-
-  if (Is3d())
-    context_->SetFilterQuality(FilterQuality());
-  else if (canvas2d_bridge_)
-    canvas2d_bridge_->UpdateFilterQuality();
 
   if (HasResourceProvider() && !canvas_is_clear_)
     PaintTiming::From(GetDocument()).MarkFirstContentfulPaint();
@@ -920,6 +958,12 @@ String HTMLCanvasElement::ToDataURLInternal(
       // Currently we only support three encoding types.
       NOTREACHED();
     }
+    RecordIdentifiabilityMetric(
+        blink::IdentifiableSurface::FromTypeAndInput(
+            blink::IdentifiableSurface::Type::kCanvasReadback,
+            context_ ? context_->GetContextType()
+                     : CanvasRenderingContext::kContextTypeUnknown),
+        0);
     return data_url;
   }
 
@@ -985,6 +1029,13 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
         CanvasAsyncBlobCreator::kHTMLCanvasToBlobCallback, callback, start_time,
         GetExecutionContext());
   }
+
+  RecordIdentifiabilityMetric(
+      blink::IdentifiableSurface::FromTypeAndInput(
+          blink::IdentifiableSurface::Type::kCanvasReadback,
+          context_ ? context_->GetContextType()
+                   : CanvasRenderingContext::kContextTypeUnknown),
+      0);
 
   if (async_creator) {
     async_creator->ScheduleAsyncBlobCreation(quality);
@@ -1317,12 +1368,9 @@ IntSize HTMLCanvasElement::BitmapSourceSize() const {
 
 ScriptPromise HTMLCanvasElement::CreateImageBitmap(
     ScriptState* script_state,
-    EventTarget& event_target,
     base::Optional<IntRect> crop_rect,
     const ImageBitmapOptions* options,
     ExceptionState& exception_state) {
-  DCHECK(event_target.ToLocalDOMWindow());
-
   return ImageBitmapSource::FulfillImageBitmap(
       script_state, MakeGarbageCollected<ImageBitmap>(this, crop_rect, options),
       exception_state);
@@ -1427,7 +1475,8 @@ void HTMLCanvasElement::CreateLayer() {
   // We do not design transferControlToOffscreen() for frame-less HTML canvas.
   if (frame) {
     surface_layer_bridge_ = std::make_unique<::blink::SurfaceLayerBridge>(
-        frame->GetPage()->GetChromeClient().GetFrameSinkId(frame), this,
+        frame->GetPage()->GetChromeClient().GetFrameSinkId(frame),
+        ::blink::SurfaceLayerBridge::ContainsVideo::kNo, this,
         base::DoNothing());
     // Creates a placeholder layer first before Surface is created.
     surface_layer_bridge_->CreateSolidColorLayer();

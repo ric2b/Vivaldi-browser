@@ -27,9 +27,6 @@ extern const char kLaunchSourceAppListInfoDialog[];
 
 namespace extension_misc {
 
-// The extension id of the Calculator application.
-extern const char kCalculatorAppId[];
-
 // The extension id of the Calendar application.
 extern const char kCalendarAppId[];
 
@@ -89,9 +86,6 @@ extern const char kHTermDevAppId[];
 
 // The extension id of the Identity API UI application.
 extern const char kIdentityApiUiAppId[];
-
-// The extension id of the Crosh component app for ChromeOS.
-extern const char kCroshBuiltinAppId[];
 
 // The extension id of the Text Editor application.
 extern const char kTextEditorAppId[];

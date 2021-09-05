@@ -25,8 +25,7 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
 
   scoped_refptr<const NGLayoutResult> Layout() override;
 
-  base::Optional<MinMaxSizes> ComputeMinMaxSizes(
-      const MinMaxSizesInput&) const override;
+  MinMaxSizesResult ComputeMinMaxSizes(const MinMaxSizesInput&) const override;
 
  private:
   NGBreakStatus LayoutChildren();
@@ -37,7 +36,6 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
       NGBlockNode& fieldset_content,
       scoped_refptr<const NGBlockBreakToken> content_break_token,
       LogicalSize adjusted_padding_box_size,
-      LayoutUnit fragmentainer_block_offset,
       bool has_legend);
 
   const NGConstraintSpace CreateConstraintSpaceForLegend(
@@ -62,10 +60,6 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
   // and padding are only applied to the first fragment.
   NGBoxStrut adjusted_border_padding_;
 
-  // The result of borders_ after positioning the fieldset's legend element.
-  NGBoxStrut borders_with_legend_;
-
-  LayoutUnit block_start_padding_edge_;
   LayoutUnit intrinsic_block_size_;
   const LayoutUnit consumed_block_size_;
   LogicalSize border_box_size_;
@@ -75,9 +69,9 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
   // the legend.
   LayoutUnit minimum_border_box_block_size_;
 
-  // If true, this indicates the block_start_padding_edge_ had changed from its
-  // initial value during the current layout pass.
-  bool block_start_padding_edge_adjusted_ = false;
+  // The amount of the border block-start that was consumed in previous
+  // fragments.
+  LayoutUnit consumed_border_block_start_;
 
   // If true, this indicates that the legend broke during the current layout
   // pass.

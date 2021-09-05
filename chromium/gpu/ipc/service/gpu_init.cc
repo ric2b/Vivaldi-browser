@@ -129,14 +129,6 @@ GpuInit::~GpuInit() {
 bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
                                         const GpuPreferences& gpu_preferences) {
   gpu_preferences_ = gpu_preferences;
-
-  if (gpu_preferences_.enable_perf_data_collection) {
-    // This is only enabled on the info collection GPU process.
-    DevicePerfInfo device_perf_info;
-    CollectDevicePerfInfo(&device_perf_info, /*in_browser_process=*/false);
-    device_perf_info_ = device_perf_info;
-  }
-
   // Blacklist decisions based on basic GPUInfo may not be final. It might
   // need more context based GPUInfo. In such situations, switching to
   // SwiftShader needs to wait until creating a context.
@@ -160,6 +152,13 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 #else
   gpu_info_.subpixel_font_rendering = true;
 #endif
+
+  if (gpu_preferences_.enable_perf_data_collection) {
+    // This is only enabled on the info collection GPU process.
+    DevicePerfInfo device_perf_info;
+    CollectDevicePerfInfo(&device_perf_info, /*in_browser_process=*/false);
+    device_perf_info_ = device_perf_info;
+  }
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   if (gpu_info_.gpu.vendor_id == 0x10de &&  // NVIDIA
@@ -276,7 +275,6 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   // may also have started at this point.
   ui::OzonePlatform::InitParams params;
   params.single_process = false;
-  params.using_mojo = features::IsOzoneDrmMojo();
   ui::OzonePlatform::InitializeForGPU(params);
   const std::vector<gfx::BufferFormat> supported_buffer_formats_for_texturing =
       ui::OzonePlatform::GetInstance()
@@ -560,7 +558,6 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
 #if defined(USE_OZONE)
   ui::OzonePlatform::InitParams params;
   params.single_process = true;
-  params.using_mojo = features::IsOzoneDrmMojo();
   ui::OzonePlatform::InitializeForGPU(params);
   const std::vector<gfx::BufferFormat> supported_buffer_formats_for_texturing =
       ui::OzonePlatform::GetInstance()
@@ -717,6 +714,11 @@ void GpuInit::InitializeVulkan() {
   }
   if (!vulkan_implementation_) {
     if (gpu_preferences_.gr_context_type == gpu::GrContextType::kVulkan) {
+#if defined(OS_FUCHSIA)
+      // Fuchsia uses ANGLE for GL which requires Vulkan, so don't fall
+      // back to GL if Vulkan init fails.
+      LOG(FATAL) << "Vulkan initialization failed";
+#endif
       gpu_preferences_.gr_context_type = gpu::GrContextType::kGL;
     }
     gpu_preferences_.use_vulkan = gpu::VulkanImplementationName::kNone;
@@ -732,5 +734,4 @@ void GpuInit::InitializeVulkan() {
       gpu::kGpuFeatureStatusDisabled;
 #endif  // BUILDFLAG(ENABLE_VULKAN)
 }
-
 }  // namespace gpu

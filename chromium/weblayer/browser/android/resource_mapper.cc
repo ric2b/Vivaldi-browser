@@ -8,8 +8,9 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "components/resources/android/theme_resources.h"
 #include "weblayer/browser/java/jni/ResourceMapper_jni.h"
 
@@ -37,6 +38,7 @@ void ConstructMap() {
   (*GetIdMap())[c_id] = resource_id_list[next_id++];
 #define DECLARE_RESOURCE_ID(c_id, java_id) \
   (*GetIdMap())[c_id] = resource_id_list[next_id++];
+#include "components/resources/android/page_info_resource_id.h"
 #include "components/resources/android/permissions_resource_id.h"
 #undef LINK_RESOURCE_ID
 #undef DECLARE_RESOURCE_ID
@@ -57,6 +59,10 @@ int MapToJavaDrawableId(int resource_id) {
   }
 
   // The resource couldn't be found.
+  // If you've landed here, please ensure that the header that declares the
+  // mapping of your native resource to Java resource is listed both in
+  // ResourceId.tempalate and in this file, next to other *resource_id.h
+  // headers.
   NOTREACHED();
   return 0;
 }

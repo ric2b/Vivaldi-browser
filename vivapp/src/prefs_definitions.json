@@ -376,6 +376,12 @@
         "default": "system",
         "syncable": false
       },
+      "relative_dates": {
+        "description": "Allow relative dates display",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "display_mode": {
         "type": "enum",
         "enum_values": {
@@ -396,7 +402,7 @@
           "week": 1,
           "agenda": 5
         },
-        "default": "agenda",
+        "default": "day",
         "syncable": false
       },
       "show_day_sidebar": {
@@ -431,6 +437,25 @@
           "default": "full",
           "syncable": true
         }
+      },
+      "click_outside": {
+        "type": "enum",
+        "enum_values": {
+          "cancel": 0,
+          "save_and_close": 1,
+          "save_and_new": 2
+        },
+        "default": "save_and_close",
+        "syncable": true
+      },
+      "edit_mode": {
+        "type": "enum",
+        "enum_values": {
+          "inline": 0,
+          "popup": 1
+        },
+        "default": "inline",
+        "syncable": true
       },
       "mail_account": {
         "type": "string",
@@ -654,6 +679,47 @@
         "default": [],
         "syncable": false
       },
+      "panel_activity_indicators_enabled": {
+        "description": "Show activity indicators in the Mail Panel",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "counters": {
+        "panel": {
+          "switcher_enabled": {
+            "description": "Show unread count in panel switcher",
+            "type": "boolean",
+            "default": true,
+            "syncable": true
+          },
+          "unseen_enabled": {
+            "description": "Show counters for unseen messages in the Mail Panel",
+            "type": "boolean",
+            "default": true,
+            "syncable": true
+          },
+          "drafts_enabled": {
+            "description": "Show counters for draft messages in the Mail Panel",
+            "type": "boolean",
+            "default": true,
+            "syncable": true
+          },
+          "trash_enabled": {
+            "description": "Show counter for messages in the Mail Panel trash folder",
+            "type": "boolean",
+            "default": true,
+            "syncable": true
+          }
+        },
+        "status_button_enabled": {
+          "description": "Show unread count in status button",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
+      },
+
       "check_interval": {
         "description": "How often to check for new mail, in minutes or false for manually",
         "type": "enum",
@@ -935,6 +1001,16 @@
         }
       },
       "manager": {
+        "layout": {
+          "description": "Notes manager layout",
+          "type": "enum",
+          "enum_values": {
+            "horizontal": 0,
+            "vertical": 1
+          },
+          "default": "horizontal",
+          "syncable": true
+        },
         "tree": {
           "height": {
             "description": "Notes manager tree height",
@@ -1258,7 +1334,7 @@
         "description": "Open settings in a tab instead of standalone window",
         "type": "boolean",
         "default": false,
-        "syncable": false
+        "syncable": true
       },
       "size": {
         "width": {
@@ -1289,13 +1365,13 @@
           "description": "Background color or 'user_defined' reference",
           "type": "string",
           "default": "#cccccc",
-          "syncable": true
+          "syncable": false
         },
         "color_custom": {
           "description": "User-defined background color",
           "type": "string",
           "default": "#bfb8b0",
-          "syncable": true
+          "syncable": false
         }
       },
       "image": {
@@ -1574,6 +1650,13 @@
           "bury": 2
         },
         "default": "off",
+        "syncable": true
+      },
+      "close_button_left": {
+        "type": "boolean",
+        "description": "Controls close tab button position",
+        "default": false,
+        "default_mac": true,
         "syncable": true
       },
       "counter_detection": {
@@ -1982,6 +2065,12 @@
       }
     },
     "vivaldi_account": {
+      "device_id": {
+        "description": "An random GUID that uniquely identifies the device to the authentication server. It is reset when logging out.",
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
       "id": {
         "description": "The actual username obtained from the server",
         "type": "string",
@@ -2144,6 +2233,12 @@
         "type": "string",
         "default": "var(--colorBgLightIntense)",
         "syncable": true
+      },
+      "allow_selection_in_links": {
+        "description": "Allowing the injection of boss-select into all frames. Turning this off will disable the ability to select text inside link elements.",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
       }
     },
     "welcome": {
@@ -2291,6 +2386,22 @@
     },
 
     "system": {
+      "accent_color": {
+        "description": "The app accent color, RRGGBB hex values",
+        "type": "string",
+        "default": "",
+        "default_linux": "",
+        "default_mac": "",
+        "syncable": false
+      },
+      "highlight_color": {
+        "description": "The text highlight color, RRGGBB hex values",
+        "type": "string",
+        "default": "",
+        "default_linux": "",
+        "default_mac": "",
+        "syncable": false
+      },
       "desktop_theme_color": {
         "type": "enum",
         "enum_values": {

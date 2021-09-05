@@ -1,5 +1,5 @@
 
-update_template_instance("//chrome/browser:browser") {
+update_target("//chrome/browser:browser") {
   public_deps += [
     "//vivaldi/prefs",
     "//vivaldi/prefs:browser_prefs",

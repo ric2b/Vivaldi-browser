@@ -105,8 +105,8 @@ void ArcKioskAppService::OnMaintenanceSessionCreated() {
   // Safe to bind |this| as timer is auto-cancelled on destruction.
   maintenance_timeout_timer_.Start(
       FROM_HERE, kArcKioskMaintenanceSessionTimeout,
-      base::Bind(&ArcKioskAppService::OnMaintenanceSessionFinished,
-                 base::Unretained(this)));
+      base::BindOnce(&ArcKioskAppService::OnMaintenanceSessionFinished,
+                     base::Unretained(this)));
 }
 
 void ArcKioskAppService::OnMaintenanceSessionFinished() {
@@ -131,8 +131,7 @@ void ArcKioskAppService::OnIconUpdated(ArcAppIcon* icon) {
   AccountId account_id = multi_user_util::GetAccountIdFromProfile(profile_);
   app_manager_->UpdateNameAndIcon(account_id, app_info_->name,
                                   app_icon_->image_skia());
-  if (delegate_)
-    delegate_->OnAppDataUpdated();
+  delegate_->OnAppDataUpdated();
 }
 
 void ArcKioskAppService::OnArcSessionRestarting() {

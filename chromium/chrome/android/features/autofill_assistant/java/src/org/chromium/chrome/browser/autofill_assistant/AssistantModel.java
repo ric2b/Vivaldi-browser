@@ -22,9 +22,10 @@ import org.chromium.ui.modelutil.PropertyModel;
  */
 @JNINamespace("autofill_assistant")
 class AssistantModel extends PropertyModel {
-    static final WritableBooleanPropertyKey ALLOW_SOFT_KEYBOARD = new WritableBooleanPropertyKey();
     static final WritableBooleanPropertyKey ALLOW_TALKBACK_ON_WEBSITE =
             new WritableBooleanPropertyKey();
+    static final WritableFloatPropertyKey TALKBACK_SHEET_SIZE_FRACTION =
+            new WritableFloatPropertyKey();
     static final WritableBooleanPropertyKey VISIBLE = new WritableBooleanPropertyKey();
 
     /** The web contents the Autofill Assistant is associated with. */
@@ -46,7 +47,7 @@ class AssistantModel extends PropertyModel {
     }
 
     AssistantModel(AssistantOverlayModel overlayModel) {
-        super(ALLOW_SOFT_KEYBOARD, VISIBLE, WEB_CONTENTS, ALLOW_TALKBACK_ON_WEBSITE);
+        super(VISIBLE, WEB_CONTENTS, ALLOW_TALKBACK_ON_WEBSITE, TALKBACK_SHEET_SIZE_FRACTION);
         mOverlayModel = overlayModel;
     }
 
@@ -90,13 +91,13 @@ class AssistantModel extends PropertyModel {
     }
 
     @CalledByNative
-    private void setAllowSoftKeyboard(boolean allowed) {
-        set(ALLOW_SOFT_KEYBOARD, allowed);
+    private void setAllowTalkbackOnWebsite(boolean allowed) {
+        set(ALLOW_TALKBACK_ON_WEBSITE, allowed);
     }
 
     @CalledByNative
-    private void setAllowTalkbackOnWebsite(boolean allowed) {
-        set(ALLOW_TALKBACK_ON_WEBSITE, allowed);
+    private void setTalkbackSheetSizeFraction(float fraction) {
+        set(TALKBACK_SHEET_SIZE_FRACTION, fraction);
     }
 
     @CalledByNative

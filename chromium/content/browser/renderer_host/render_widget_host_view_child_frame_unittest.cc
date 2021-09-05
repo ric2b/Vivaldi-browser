@@ -85,7 +85,7 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
 
   blink::WebInputEvent::Type GetAndResetLastBubbledEventType() {
     blink::WebInputEvent::Type last = last_bubbled_event_type_;
-    last_bubbled_event_type_ = blink::WebInputEvent::kUndefined;
+    last_bubbled_event_type_ = blink::WebInputEvent::Type::kUndefined;
     return last;
   }
 
@@ -95,7 +95,7 @@ class MockFrameConnectorDelegate : public FrameConnectorDelegate {
 
  private:
   blink::WebInputEvent::Type last_bubbled_event_type_ =
-      blink::WebInputEvent::kUndefined;
+      blink::WebInputEvent::Type::kUndefined;
   bool can_bubble_ = true;
 };
 
@@ -128,6 +128,16 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
     widget_host_ = new RenderWidgetHostImpl(
         &delegate_, process_host, routing_id, std::move(widget),
         /*hidden=*/false, std::make_unique<FrameTokenMessageQueue>());
+
+    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+    auto frame_widget_host_receiver =
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
+    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+    auto frame_widget_receiver =
+        frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+    widget_host_->BindFrameWidgetInterfaces(
+        std::move(frame_widget_host_receiver), frame_widget.Unbind());
+
     view_ = RenderWidgetHostViewChildFrame::Create(widget_host_);
 
     test_frame_connector_ =
@@ -314,19 +324,20 @@ TEST_F(RenderWidgetHostViewChildFrameTest, UncomsumedGestureScrollBubbled) {
       SyntheticWebGestureEventBuilder::BuildScrollUpdate(
           0.f, 10.f, 0, blink::WebGestureDevice::kTouchscreen);
   blink::WebGestureEvent scroll_end = SyntheticWebGestureEventBuilder::Build(
-      blink::WebInputEvent::kGestureScrollEnd,
+      blink::WebInputEvent::Type::kGestureScrollEnd,
       blink::WebGestureDevice::kTouchscreen);
 
-  view_->GestureEventAck(scroll_begin,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_EQ(blink::WebInputEvent::kGestureScrollBegin,
+  view_->GestureEventAck(
+      scroll_begin, blink::mojom::InputEventResultState::kNoConsumerExists);
+  EXPECT_EQ(blink::WebInputEvent::Type::kGestureScrollBegin,
             test_frame_connector_->GetAndResetLastBubbledEventType());
-  view_->GestureEventAck(scroll_update,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_EQ(blink::WebInputEvent::kGestureScrollUpdate,
+  view_->GestureEventAck(
+      scroll_update, blink::mojom::InputEventResultState::kNoConsumerExists);
+  EXPECT_EQ(blink::WebInputEvent::Type::kGestureScrollUpdate,
             test_frame_connector_->GetAndResetLastBubbledEventType());
-  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
-  EXPECT_EQ(blink::WebInputEvent::kGestureScrollEnd,
+  view_->GestureEventAck(scroll_end,
+                         blink::mojom::InputEventResultState::kIgnored);
+  EXPECT_EQ(blink::WebInputEvent::Type::kGestureScrollEnd,
             test_frame_connector_->GetAndResetLastBubbledEventType());
 }
 
@@ -340,25 +351,28 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ConsumedGestureScrollNotBubbled) {
       SyntheticWebGestureEventBuilder::BuildScrollUpdate(
           0.f, 10.f, 0, blink::WebGestureDevice::kTouchscreen);
   blink::WebGestureEvent scroll_end = SyntheticWebGestureEventBuilder::Build(
-      blink::WebInputEvent::kGestureScrollEnd,
+      blink::WebInputEvent::Type::kGestureScrollEnd,
       blink::WebGestureDevice::kTouchscreen);
 
-  view_->GestureEventAck(scroll_begin, INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+  view_->GestureEventAck(scroll_begin,
+                         blink::mojom::InputEventResultState::kConsumed);
+  EXPECT_EQ(blink::WebInputEvent::Type::kUndefined,
             test_frame_connector_->GetAndResetLastBubbledEventType());
-  view_->GestureEventAck(scroll_update, INPUT_EVENT_ACK_STATE_CONSUMED);
-  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+  view_->GestureEventAck(scroll_update,
+                         blink::mojom::InputEventResultState::kConsumed);
+  EXPECT_EQ(blink::WebInputEvent::Type::kUndefined,
             test_frame_connector_->GetAndResetLastBubbledEventType());
 
   // Scrolling in a child my reach its extent and no longer be consumed, however
   // scrolling is latched to the child so we do not bubble the update.
-  view_->GestureEventAck(scroll_update,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+  view_->GestureEventAck(
+      scroll_update, blink::mojom::InputEventResultState::kNoConsumerExists);
+  EXPECT_EQ(blink::WebInputEvent::Type::kUndefined,
             test_frame_connector_->GetAndResetLastBubbledEventType());
 
-  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
-  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+  view_->GestureEventAck(scroll_end,
+                         blink::mojom::InputEventResultState::kIgnored);
+  EXPECT_EQ(blink::WebInputEvent::Type::kUndefined,
             test_frame_connector_->GetAndResetLastBubbledEventType());
 }
 
@@ -373,39 +387,41 @@ TEST_F(RenderWidgetHostViewChildFrameTest,
       SyntheticWebGestureEventBuilder::BuildScrollUpdate(
           0.f, 10.f, 0, blink::WebGestureDevice::kTouchscreen);
   blink::WebGestureEvent scroll_end = SyntheticWebGestureEventBuilder::Build(
-      blink::WebInputEvent::kGestureScrollEnd,
+      blink::WebInputEvent::Type::kGestureScrollEnd,
       blink::WebGestureDevice::kTouchscreen);
 
   test_frame_connector_->SetCanBubble(false);
 
-  view_->GestureEventAck(scroll_begin,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_EQ(blink::WebInputEvent::kGestureScrollBegin,
+  view_->GestureEventAck(
+      scroll_begin, blink::mojom::InputEventResultState::kNoConsumerExists);
+  EXPECT_EQ(blink::WebInputEvent::Type::kGestureScrollBegin,
             test_frame_connector_->GetAndResetLastBubbledEventType());
 
   // The GSB was rejected, so the child view must not attempt to bubble the
   // remaining events of the scroll sequence.
-  view_->GestureEventAck(scroll_update,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+  view_->GestureEventAck(
+      scroll_update, blink::mojom::InputEventResultState::kNoConsumerExists);
+  EXPECT_EQ(blink::WebInputEvent::Type::kUndefined,
             test_frame_connector_->GetAndResetLastBubbledEventType());
-  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
-  EXPECT_EQ(blink::WebInputEvent::kUndefined,
+  view_->GestureEventAck(scroll_end,
+                         blink::mojom::InputEventResultState::kIgnored);
+  EXPECT_EQ(blink::WebInputEvent::Type::kUndefined,
             test_frame_connector_->GetAndResetLastBubbledEventType());
 
   test_frame_connector_->SetCanBubble(true);
 
   // When we have a new scroll gesture, the view may try bubbling again.
-  view_->GestureEventAck(scroll_begin,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_EQ(blink::WebInputEvent::kGestureScrollBegin,
+  view_->GestureEventAck(
+      scroll_begin, blink::mojom::InputEventResultState::kNoConsumerExists);
+  EXPECT_EQ(blink::WebInputEvent::Type::kGestureScrollBegin,
             test_frame_connector_->GetAndResetLastBubbledEventType());
-  view_->GestureEventAck(scroll_update,
-                         INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS);
-  EXPECT_EQ(blink::WebInputEvent::kGestureScrollUpdate,
+  view_->GestureEventAck(
+      scroll_update, blink::mojom::InputEventResultState::kNoConsumerExists);
+  EXPECT_EQ(blink::WebInputEvent::Type::kGestureScrollUpdate,
             test_frame_connector_->GetAndResetLastBubbledEventType());
-  view_->GestureEventAck(scroll_end, INPUT_EVENT_ACK_STATE_IGNORED);
-  EXPECT_EQ(blink::WebInputEvent::kGestureScrollEnd,
+  view_->GestureEventAck(scroll_end,
+                         blink::mojom::InputEventResultState::kIgnored);
+  EXPECT_EQ(blink::WebInputEvent::Type::kGestureScrollEnd,
             test_frame_connector_->GetAndResetLastBubbledEventType());
 }
 

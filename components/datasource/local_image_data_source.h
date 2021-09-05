@@ -15,7 +15,7 @@ class LocalImageDataClassHandler : public VivaldiDataClassHandler {
 
   ~LocalImageDataClassHandler() override;
 
-  bool GetData(
+  void GetData(
       const std::string& data_id,
       content::URLDataSource::GotDataCallback callback) override;
 

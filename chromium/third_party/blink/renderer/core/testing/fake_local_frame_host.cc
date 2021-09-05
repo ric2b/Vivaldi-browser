@@ -163,6 +163,26 @@ void FakeLocalFrameHost::FocusedElementChanged(
     bool is_editable_element,
     const gfx::Rect& bounds_in_frame_widget) {}
 
+void FakeLocalFrameHost::ShowPopupMenu(
+    mojo::PendingRemote<mojom::blink::PopupMenuClient> popup_client,
+    const gfx::Rect& bounds,
+    int32_t item_height,
+    double font_size,
+    int32_t selected_item,
+    Vector<mojom::blink::MenuItemPtr> menu_items,
+    bool right_aligned,
+    bool allow_multiple_selection) {}
+
+void FakeLocalFrameHost::DidLoadResourceFromMemoryCache(
+    const KURL& url,
+    const WTF::String& http_method,
+    const WTF::String& mime_type,
+    network::mojom::blink::RequestDestination request_destination) {}
+
+void FakeLocalFrameHost::DidChangeFrameOwnerProperties(
+    const base::UnguessableToken& child_frame_token,
+    mojom::blink::FrameOwnerPropertiesPtr frame_owner_properties) {}
+
 void FakeLocalFrameHost::BindFrameHostReceiver(
     mojo::ScopedInterfaceEndpointHandle handle) {
   receiver_.Bind(mojo::PendingAssociatedReceiver<mojom::blink::LocalFrameHost>(

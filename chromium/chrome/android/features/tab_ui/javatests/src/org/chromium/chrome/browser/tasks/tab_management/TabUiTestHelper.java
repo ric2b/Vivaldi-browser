@@ -5,11 +5,13 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static android.support.test.espresso.Espresso.onView;
+import static android.support.test.espresso.Espresso.pressBack;
 import static android.support.test.espresso.action.ViewActions.click;
 import static android.support.test.espresso.assertion.ViewAssertions.matches;
 import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
 import static android.support.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
 import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static android.support.test.espresso.matcher.ViewMatchers.withId;
 import static android.support.test.espresso.matcher.ViewMatchers.withParent;
 
@@ -21,9 +23,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import static org.chromium.base.test.util.CallbackHelper.WAIT_TIMEOUT_SECONDS;
+import static org.chromium.chrome.test.util.browser.RecyclerViewTestUtils.waitForStableRecyclerView;
 import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
 import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 
+import android.app.Activity;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.os.Build;
@@ -56,10 +60,12 @@ import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
 import org.chromium.content_public.browser.test.util.Criteria;
@@ -103,6 +109,17 @@ public class TabUiTestHelper {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { cta.findViewById(R.id.tab_switcher_button).performClick(); });
         showWatcher.waitForBehavior();
+    }
+
+    /**
+     * Leave tab switcher by tapping "back".
+     * @param cta  The current running activity.
+     */
+    public static void leaveTabSwitcher(ChromeTabbedActivity cta) {
+        OverviewModeBehaviorWatcher hideWatcher = createOverviewHideWatcher(cta);
+        assertTrue(cta.getLayoutManager().overviewVisible());
+        pressBack();
+        hideWatcher.waitForBehavior();
     }
 
     /**
@@ -220,23 +237,44 @@ public class TabUiTestHelper {
     }
 
     /**
-     * Check whether there is a tab list showing in a {@link android.widget.PopupWindow}. This can
-     * be used for tab grid dialog and tab group popup UI.
+     * Check whether the tab list in {@link android.widget.PopupWindow} is completely showing. This
+     * can be used for tab grid dialog and tab group popup UI.
      * @param cta  The current running activity.
-     * @return Whether there is a tab list showing in a popup component.
+     * @return Whether the tab list in a popup component is completely showing.
      */
-    static boolean isShowingPopupTabList(ChromeTabbedActivity cta) {
+    static boolean isPopupTabListCompletelyShowing(ChromeTabbedActivity cta) {
         boolean isShowing = true;
         try {
             onView(withId(R.id.tab_list_view))
                     .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
-                    .check(matches(isDisplayed()));
-        } catch (NoMatchingRootException e) {
+                    .check(matches(isCompletelyDisplayed()))
+                    .check((v, e) -> assertEquals(1f, v.getAlpha(), 0.0));
+        } catch (NoMatchingRootException | AssertionError e) {
             isShowing = false;
         } catch (Exception e) {
             assert false : "error when inspecting pop up tab list.";
         }
         return isShowing;
+    }
+
+    /**
+     * Check whether the tab list in {@link android.widget.PopupWindow} is completely hidden. This
+     * can be used for tab grid dialog and tab group popup UI.
+     * @param cta  The current running activity.
+     * @return Whether the tab list in a popup component is completely hidden.
+     */
+    static boolean isPopupTabListCompletelyHidden(ChromeTabbedActivity cta) {
+        boolean isHidden = false;
+        try {
+            onView(withId(R.id.tab_list_view))
+                    .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                    .check(matches(isDisplayed()));
+        } catch (NoMatchingRootException e) {
+            isHidden = true;
+        } catch (Exception e) {
+            assert false : "error when inspecting pop up tab list.";
+        }
+        return isHidden;
     }
 
     /**
@@ -255,17 +293,34 @@ public class TabUiTestHelper {
      * @param cta   The current running activity.
      */
     static void mergeAllNormalTabsToAGroup(ChromeTabbedActivity cta) {
+        mergeAllTabsToAGroup(cta, false);
+    }
+
+    /**
+     * Merge all incognito tabs into a single tab group.
+     * @param cta   The current running activity.
+     */
+    static void mergeAllIncognitoTabsToAGroup(ChromeTabbedActivity cta) {
+        mergeAllTabsToAGroup(cta, true);
+    }
+
+    /**
+     * Merge all tabs in one tab model into a single tab group.
+     * @param cta           The current running activity.
+     * @param isIncognito   indicates the tab model that we are creating tab group in.
+     */
+    static void mergeAllTabsToAGroup(ChromeTabbedActivity cta, boolean isIncognito) {
         List<Tab> tabGroup = new ArrayList<>();
-        TabModel tabModel = cta.getTabModelSelector().getModel(false);
+        TabModel tabModel = cta.getTabModelSelector().getModel(isIncognito);
         for (int i = 0; i < tabModel.getCount(); i++) {
             tabGroup.add(tabModel.getTabAt(i));
         }
-        createTabGroup(cta, false, tabGroup);
+        createTabGroup(cta, isIncognito, tabGroup);
         assertTrue(cta.getTabModelSelector().getTabModelFilterProvider().getCurrentTabModelFilter()
                            instanceof TabGroupModelFilter);
         TabGroupModelFilter filter = (TabGroupModelFilter) cta.getTabModelSelector()
                                              .getTabModelFilterProvider()
-                                             .getCurrentTabModelFilter();
+                                             .getTabModelFilter(isIncognito);
         assertEquals(1, filter.getCount());
     }
 
@@ -577,6 +632,35 @@ public class TabUiTestHelper {
             return new GeneralSwipeAction(Swipe.FAST, GeneralLocation.CENTER_RIGHT,
                     GeneralLocation.CENTER_LEFT, Press.FINGER);
         }
+    }
+
+    /** Finishes the given activity and do tab_ui-specific cleanup. */
+    public static void finishActivity(final Activity activity) throws Exception {
+        ApplicationTestUtils.finishActivity(activity);
+        PseudoTab.clearForTesting();
+    }
+
+    /**
+     * Click on the incognito toggle within grid tab switcher top toolbar to switch between normal
+     * and incognito tab model.
+     * @param cta          The current running activity.
+     * @param isIncognito  indicates whether the incognito or normal tab model is selected after
+     *         switch.
+     */
+    public static void switchTabModel(ChromeTabbedActivity cta, boolean isIncognito) {
+        assertTrue(isIncognito != cta.getTabModelSelector().isIncognitoSelected());
+        assertTrue(cta.getOverviewModeBehavior().overviewVisible());
+
+        onView(withContentDescription(isIncognito
+                               ? R.string.accessibility_tab_switcher_incognito_stack
+                               : R.string.accessibility_tab_switcher_standard_stack))
+                .perform(click());
+
+        CriteriaHelper.pollUiThread(Criteria.equals(
+                isIncognito, () -> cta.getTabModelSelector().isIncognitoSelected()));
+        // Wait for tab list recyclerView to finish animation after tab model switch.
+        RecyclerView recyclerView = cta.findViewById(R.id.tab_list_view);
+        waitForStableRecyclerView(recyclerView);
     }
 
     /**

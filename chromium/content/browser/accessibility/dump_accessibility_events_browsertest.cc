@@ -26,6 +26,7 @@
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/accessibility_notification_waiter.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -266,6 +267,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsAriaControlsChanged) {
   RunEventTest(FILE_PATH_LITERAL("aria-controls-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaComboBoxUneditable) {
+  RunEventTest(FILE_PATH_LITERAL("aria-combo-box-uneditable.html"));
 }
 
 #if defined(OS_WIN)
@@ -561,8 +567,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("form-required-changed.html"));
 }
 
+// Flaky on Windows: https://crbug.com/1078490.
+#if defined(OS_WIN)
+#define MAYBE_AccessibilityEventsFocusListbox \
+  DISABLED_AccessibilityEventsFocusListbox
+#else
+#define MAYBE_AccessibilityEventsFocusListbox AccessibilityEventsFocusListbox
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsFocusListbox) {
+                       MAYBE_AccessibilityEventsFocusListbox) {
   RunEventTest(FILE_PATH_LITERAL("focus-listbox.html"));
 }
 
@@ -580,8 +593,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("input-type-text-value-changed.html"));
 }
 
+// Flaky on Windows: https://crbug.com/1078490.
+#if defined(OS_WIN)
+#define MAYBE_AccessibilityEventsListboxFocus \
+  DISABLED_AccessibilityEventsListboxFocus
+#else
+#define MAYBE_AccessibilityEventsListboxFocus AccessibilityEventsListboxFocus
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsListboxFocus) {
+                       MAYBE_AccessibilityEventsListboxFocus) {
   RunEventTest(FILE_PATH_LITERAL("listbox-focus.html"));
 }
 
@@ -605,8 +625,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("live-region-change.html"));
 }
 
+// Flaky on Windows: https://crbug.com/1078490.
+#if defined(OS_WIN)
+#define MAYBE_AccessibilityEventsLiveRegionCreate \
+  DISABLED_AccessibilityEventsLiveRegionCreate
+#else
+#define MAYBE_AccessibilityEventsLiveRegionCreate \
+  AccessibilityEventsLiveRegionCreate
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsLiveRegionCreate) {
+                       MAYBE_AccessibilityEventsLiveRegionCreate) {
   RunEventTest(FILE_PATH_LITERAL("live-region-create.html"));
 }
 
@@ -670,8 +698,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("multiple-aria-properties-changed.html"));
 }
 
+// Flaky on Windows: https://crbug.com/1078490.
+#if defined(OS_WIN)
+#define MAYBE_AccessibilityEventsNameChange \
+  DISABLED_AccessibilityEventsNameChange
+#else
+#define MAYBE_AccessibilityEventsNameChange AccessibilityEventsNameChange
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsNameChange) {
+                       MAYBE_AccessibilityEventsNameChange) {
   RunEventTest(FILE_PATH_LITERAL("name-change.html"));
 }
 

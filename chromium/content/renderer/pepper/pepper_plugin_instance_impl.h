@@ -63,8 +63,8 @@
 #include "third_party/blink/public/web/web_plugin.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/ime/text_input_type.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 #include "v8/include/v8.h"
@@ -521,6 +521,8 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
 
   // Should be used only for logging.
   bool is_flash_plugin() const { return is_flash_plugin_; }
+
+  bool SupportsKeyboardFocus();
 
  private:
   friend class base::RefCounted<PepperPluginInstanceImpl>;

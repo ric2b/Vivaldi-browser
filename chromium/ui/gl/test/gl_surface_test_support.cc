@@ -6,8 +6,8 @@
 
 #include <vector>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "build/build_config.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
@@ -23,7 +23,7 @@
 #endif
 
 #if defined(USE_X11)
-#include "ui/gfx/x/x11.h"
+#include "ui/gfx/x/x11.h"  // nogncheck
 #endif
 
 namespace gl {
@@ -32,6 +32,9 @@ namespace {
 void InitializeOneOffHelper(bool init_extensions) {
   DCHECK_EQ(kGLImplementationNone, GetGLImplementation());
 
+  // TODO(https://crbug.com/1036285): delete this once USE_X11 is removed. If
+  // Ozone/X11 is used, XThreads are initialized with the
+  // OzonePlatform::InitializeForGPU call.
 #if defined(USE_X11)
   XInitThreads();
 #endif
@@ -55,10 +58,8 @@ void InitializeOneOffHelper(bool init_extensions) {
     use_software_gl = false;
   }
 
-#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
+#if defined(OS_ANDROID)
   // On Android we always use hardware GL.
-  // On Fuchsia, we always use fake GL, but we don't want any software
-  // GLs, but rather a stub implementation.
   use_software_gl = false;
 #endif
 

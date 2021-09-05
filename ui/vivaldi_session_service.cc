@@ -319,7 +319,8 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
   const blink::UserAgentOverride& ua_override = tab->GetUserAgentOverride();
   if (!ua_override.ua_string_override.empty()) {
     ScheduleCommand(sessions::CreateSetTabUserAgentOverrideCommand(
-        session_id, ua_override.ua_string_override));
+        session_id, sessions::SerializedUserAgentOverride::UserAgentOnly(
+                        ua_override.ua_string_override)));
   }
   for (int i = min_index; i < max_index; ++i) {
     NavigationEntry* entry =

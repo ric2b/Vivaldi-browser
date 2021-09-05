@@ -71,6 +71,7 @@ class MediaNotificationService
   // MediaNotificationContainerObserver implementation.
   void OnContainerExpanded(bool expanded) override {}
   void OnContainerMetadataChanged() override {}
+  void OnContainerActionsChanged() override {}
   void OnContainerClicked(const std::string& id) override;
   void OnContainerDismissed(const std::string& id) override;
   void OnContainerDestroyed(const std::string& id) override;
@@ -181,6 +182,8 @@ class MediaNotificationService
     // Called when the notification associated with this session is pulled out
     // into an overlay or it's overlay is closed.
     void OnSessionOverlayStateChanged(bool is_in_overlay);
+
+    bool IsPlaying();
 
    private:
     static void RecordDismissReason(GlobalMediaControlsDismissReason reason);

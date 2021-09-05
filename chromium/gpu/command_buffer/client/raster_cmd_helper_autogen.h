@@ -204,6 +204,42 @@ void CopySubTextureINTERNALImmediate(GLint xoffset,
   }
 }
 
+void WritePixelsINTERNALImmediate(GLint x_offset,
+                                  GLint y_offset,
+                                  GLuint src_width,
+                                  GLuint src_height,
+                                  GLuint row_bytes,
+                                  GLuint src_sk_color_type,
+                                  GLuint src_sk_alpha_type,
+                                  GLint shm_id,
+                                  GLuint shm_offset,
+                                  GLuint pixels_offset,
+                                  const GLbyte* mailbox) {
+  const uint32_t size =
+      raster::cmds::WritePixelsINTERNALImmediate::ComputeSize();
+  raster::cmds::WritePixelsINTERNALImmediate* c =
+      GetImmediateCmdSpaceTotalSize<raster::cmds::WritePixelsINTERNALImmediate>(
+          size);
+  if (c) {
+    c->Init(x_offset, y_offset, src_width, src_height, row_bytes,
+            src_sk_color_type, src_sk_alpha_type, shm_id, shm_offset,
+            pixels_offset, mailbox);
+  }
+}
+
+void ConvertYUVMailboxesToRGBINTERNALImmediate(GLenum planes_yuv_color_space,
+                                               GLboolean is_nv12,
+                                               const GLbyte* mailboxes) {
+  const uint32_t size =
+      raster::cmds::ConvertYUVMailboxesToRGBINTERNALImmediate::ComputeSize();
+  raster::cmds::ConvertYUVMailboxesToRGBINTERNALImmediate* c =
+      GetImmediateCmdSpaceTotalSize<
+          raster::cmds::ConvertYUVMailboxesToRGBINTERNALImmediate>(size);
+  if (c) {
+    c->Init(planes_yuv_color_space, is_nv12, mailboxes);
+  }
+}
+
 void TraceBeginCHROMIUM(GLuint category_bucket_id, GLuint name_bucket_id) {
   raster::cmds::TraceBeginCHROMIUM* c =
       GetCmdSpace<raster::cmds::TraceBeginCHROMIUM>();

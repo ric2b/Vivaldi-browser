@@ -26,9 +26,7 @@ import org.chromium.base.annotations.MainDex;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.memory.MemoryPressureMonitor;
-import org.chromium.base.multidex.ChromiumMultiDexInstaller;
 import org.chromium.base.task.AsyncTask;
-import org.chromium.build.BuildHooksAndroid;
 import org.chromium.chrome.browser.background_task_scheduler.ChromeBackgroundTaskFactory;
 import org.chromium.chrome.browser.crash.ApplicationStatusTracker;
 import org.chromium.chrome.browser.crash.FirebaseConfig;
@@ -86,9 +84,6 @@ public class ChromeApplication extends Application {
         maybeInitProcessType(isBrowserProcess);
         BundleUtils.setIsBundle(ProductConfig.IS_BUNDLE);
         if (isBrowserProcess) {
-            if (BuildConfig.IS_MULTIDEX_ENABLED) {
-                ChromiumMultiDexInstaller.install(this);
-            }
             checkAppBeingReplaced();
 
             PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
@@ -112,16 +107,12 @@ public class ChromeApplication extends Application {
             tracker.onApplicationStateChange(ApplicationStatus.getStateForApplication());
             ApplicationStatus.registerApplicationStateListener(tracker);
 
-            // Only browser process requires custom resources.
-            BuildHooksAndroid.initCustomResources(this);
-
             // Disable MemoryPressureMonitor polling when Chrome goes to the background.
             ApplicationStatus.registerApplicationStateListener(
                     ChromeApplication::updateMemoryPressurePolling);
 
-            // Record via UMA all modules that have been requested and are currently installed. This
-            // will tell us the install penetration of each module over time.
-            ModuleUtil.recordModuleAvailability();
+            // Initializes the support for dynamic feature modules (browser only).
+            ModuleUtil.initApplication();
 
             // Set Chrome factory for mapping BackgroundTask classes to TaskIds.
             ChromeBackgroundTaskFactory.setAsDefault();

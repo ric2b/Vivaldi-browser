@@ -97,7 +97,6 @@ class WebContentController
   void HandleCanGoForward(int64_t id);
   void HandleClearCache();
   void HandleGetTitle(int64_t id);
-  void HandleUpdateSettings(const webview::UpdateSettingsRequest& request);
   void HandleSetAutoMediaPlaybackPolicy(
       const webview::SetAutoMediaPlaybackPolicyRequest& request);
   void HandleResize(const gfx::Size& size);
@@ -128,8 +127,8 @@ class WebContentController
                                     JsClientInstance* instance) override;
 
   // content::RenderWidgetHost::InputEventObserver
-  void OnInputEventAck(content::InputEventAckSource source,
-                       content::InputEventAckState state,
+  void OnInputEventAck(blink::mojom::InputEventResultSource source,
+                       blink::mojom::InputEventResultState state,
                        const blink::WebInputEvent&) override;
 
   ui::GestureRecognizerImpl gesture_recognizer_;

@@ -48,7 +48,7 @@
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/web_associated_url_loader_client.h"
-#include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader_client.h"
@@ -292,7 +292,7 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidFail(
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::DidFailRedirectCheck() {
-  DidFail(ResourceError::Failure(NullURL()));
+  DidFail(WebURLError(ResourceError::Failure(NullURL())));
 }
 
 void WebAssociatedURLLoaderImpl::ClientAdapter::EnableErrorNotifications() {
@@ -320,8 +320,8 @@ class WebAssociatedURLLoaderImpl::Observer final
   USING_GARBAGE_COLLECTED_MIXIN(Observer);
 
  public:
-  Observer(WebAssociatedURLLoaderImpl* parent, Document* document)
-      : ExecutionContextLifecycleObserver(document), parent_(parent) {}
+  Observer(WebAssociatedURLLoaderImpl* parent, ExecutionContext* context)
+      : ExecutionContextLifecycleObserver(context), parent_(parent) {}
 
   void Dispose() {
     parent_ = nullptr;
@@ -336,7 +336,7 @@ class WebAssociatedURLLoaderImpl::Observer final
 
   void ContextDestroyed() override {
     if (parent_)
-      parent_->DocumentDestroyed();
+      parent_->ContextDestroyed();
   }
 
   void Trace(Visitor* visitor) override {
@@ -347,11 +347,11 @@ class WebAssociatedURLLoaderImpl::Observer final
 };
 
 WebAssociatedURLLoaderImpl::WebAssociatedURLLoaderImpl(
-    Document* document,
+    ExecutionContext* context,
     const WebAssociatedURLLoaderOptions& options)
     : client_(nullptr),
       options_(options),
-      observer_(MakeGarbageCollected<Observer>(this, document)) {}
+      observer_(MakeGarbageCollected<Observer>(this, context)) {}
 
 WebAssociatedURLLoaderImpl::~WebAssociatedURLLoaderImpl() {
   Cancel();
@@ -395,12 +395,12 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
       options_.preflight_policy);
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner;
-  // |observer_| can be null if Cancel, DocumentDestroyed or
+  // |observer_| can be null if Cancel, ContextDestroyed or
   // ClientAdapterDone gets called between creating the loader and
   // calling LoadAsynchronously.
   if (observer_) {
-    task_runner = Document::From(observer_->GetExecutionContext())
-                      ->GetTaskRunner(TaskType::kInternalLoading);
+    task_runner = observer_->GetExecutionContext()->GetTaskRunner(
+        TaskType::kInternalLoading);
   } else {
     task_runner = Thread::Current()->GetTaskRunner();
   }
@@ -425,7 +425,7 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
       new_request.ToMutableResourceRequest().SetRequestorOrigin(origin);
     }
 
-    const ResourceRequest& webcore_request = new_request.ToResourceRequest();
+    ResourceRequest& webcore_request = new_request.ToMutableResourceRequest();
     mojom::RequestContextType context = webcore_request.GetRequestContext();
     if (context == mojom::RequestContextType::UNSPECIFIED) {
       // TODO(yoav): We load URLs without setting a TargetType (and therefore a
@@ -444,17 +444,17 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
     }
 
     if (observer_) {
-      Document& document = Document::From(*observer_->GetExecutionContext());
       loader_ = MakeGarbageCollected<ThreadableLoader>(
-          *document.ToExecutionContext(), client_adapter_,
+          *observer_->GetExecutionContext(), client_adapter_,
           resource_loader_options);
-      loader_->Start(webcore_request);
+      loader_->Start(std::move(webcore_request));
     }
   }
 
   if (!loader_) {
-    client_adapter_->DidFail(ResourceError::CancelledDueToAccessCheckError(
-        request.Url(), ResourceRequestBlockedReason::kOther));
+    client_adapter_->DidFail(
+        WebURLError(ResourceError::CancelledDueToAccessCheckError(
+            request.Url(), ResourceRequestBlockedReason::kOther)));
   }
   client_adapter_->EnableErrorNotifications();
 }
@@ -494,14 +494,14 @@ void WebAssociatedURLLoaderImpl::SetLoadingTaskRunner(
   // TODO(alexclarke): Maybe support this one day if it proves worthwhile.
 }
 
-void WebAssociatedURLLoaderImpl::DocumentDestroyed() {
+void WebAssociatedURLLoaderImpl::ContextDestroyed() {
   DisposeObserver();
   CancelLoader();
 
   if (!client_)
     return;
 
-  ReleaseClient()->DidFail(ResourceError::CancelledError(KURL()));
+  ReleaseClient()->DidFail(WebURLError(ResourceError::CancelledError(KURL())));
   // |this| may be dead here.
 }
 

@@ -6,6 +6,8 @@
 
 #include <vector>
 
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/half_float.h"
@@ -37,7 +39,6 @@ void GLImageTestSupport::InitializeGL(
 #if defined(USE_OZONE)
   ui::OzonePlatform::InitParams params;
   params.single_process = true;
-  params.using_mojo = true;
   ui::OzonePlatform::InitializeForGPU(params);
 #endif
 

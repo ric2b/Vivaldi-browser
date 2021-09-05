@@ -38,7 +38,7 @@
 #include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/common/form_data.h"
-#include "components/autofill/core/common/signatures_util.h"
+#include "components/autofill/core/common/signatures.h"
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 #include "components/autofill/core/browser/autofill_assistant.h"
@@ -562,7 +562,8 @@ class AutofillManager : public AutofillHandler,
                           FormFieldData* field_data,
                           bool should_notify,
                           const base::string16& cvc,
-                          uint32_t profile_form_bitmask);
+                          uint32_t profile_form_bitmask,
+                          std::string* failure_to_fill);
 
   // Whether there should be an attemps to refill the form. Returns true if all
   // the following are satisfied:

@@ -167,15 +167,12 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     @Override
     public void syncStateChanged() {
         ThreadUtils.assertOnUiThread();
-        if(ChromeApplication.isVivaldi()) {
-            return;
-        }
         if (mProfileSyncService.isSyncRequested()) {
-            if (!AndroidSyncSettings.get().isSyncEnabled()) {
+            if (ChromeApplication.isVivaldi() || !AndroidSyncSettings.get().isSyncEnabled()) {
                 AndroidSyncSettings.get().enableChromeSync();
             }
         } else {
-            if (AndroidSyncSettings.get().isSyncEnabled()) {
+            if (ChromeApplication.isVivaldi() || AndroidSyncSettings.get().isSyncEnabled()) {
                 // Both Android's master and Chrome sync setting are enabled, so we want to disable
                 // the Chrome sync setting to match isSyncRequested. We have to be careful not to
                 // disable it when isSyncRequested becomes false due to master sync being disabled

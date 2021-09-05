@@ -6,7 +6,6 @@
 
 #include <cstddef>
 
-#include "base/logging.h"
 #include "components/metrics/metrics_provider.h"
 #import "ios/public/provider/chrome/browser/mailto/mailto_handler_provider.h"
 
@@ -76,6 +75,10 @@ std::string ChromeBrowserProvider::GetRiskData() {
 void ChromeBrowserProvider::AddSerializableData(
     web::SerializableUserDataManager* user_data_manager,
     web::WebState* web_state) {}
+
+bool ChromeBrowserProvider::MightBlockUrlDuringRestore() {
+  return false;
+}
 
 bool ChromeBrowserProvider::ShouldBlockUrlDuringRestore(
     const GURL& url,

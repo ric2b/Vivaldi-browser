@@ -10,22 +10,26 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/native_file_system/native_file_system_permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/services/app_service/public/cpp/app_registry_cache.h"
 #include "chrome/services/app_service/public/cpp/app_update.h"
@@ -33,8 +37,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller_factory.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/mock_navigation_handle.h"
+#include "content/public/test/test_launcher.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
@@ -43,10 +49,13 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/apps/app_service/app_icon_factory.h"
+#include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
-#include "chrome/browser/ui/app_list/extension_app_item.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
+#include "chrome/test/base/testing_browser_process.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #endif
 
 namespace web_app {
@@ -120,11 +129,9 @@ apps::AppLaunchParams SystemWebAppManagerBrowserTestBase::LaunchParamsForApp(
 
 content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
     const apps::AppLaunchParams& params) {
-  // Use apps::LaunchService::OpenApplication() to get the most coverage. E.g.,
-  // this is what is invoked by file_manager::file_tasks::ExecuteWebTask() on
-  // ChromeOS.
-  return apps::LaunchService::Get(browser()->profile())
-      ->OpenApplication(params);
+  return apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+      ->BrowserAppLauncher()
+      .LaunchAppWithParams(params);
 }
 
 SystemWebAppManagerBrowserTest::SystemWebAppManagerBrowserTest(
@@ -167,12 +174,18 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerBrowserTest, Install) {
     EXPECT_EQ(extensions::Manifest::EXTERNAL_COMPONENT, extension->location());
   }
 
+  // OS Integration only relevant for Chrome OS.
+#if defined(OS_CHROMEOS)
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
   proxy->AppRegistryCache().ForOneApp(
       app_id, [](const apps::AppUpdate& update) {
         EXPECT_EQ(apps::mojom::OptionalBool::kTrue, update.ShowInLauncher());
+        EXPECT_EQ(apps::mojom::OptionalBool::kTrue, update.ShowInSearch());
+        EXPECT_EQ(apps::mojom::OptionalBool::kFalse, update.ShowInManagement());
+        EXPECT_EQ(apps::mojom::Readiness::kReady, update.Readiness());
       });
+#endif  // defined(OS_CHROMEOS)
 }
 
 // Check the toolbar is not shown for system web apps for pages on the chrome://
@@ -272,7 +285,9 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchFilesBrowserTest,
   content::TestNavigationObserver navigation_observer(launch_url);
   navigation_observer.StartWatchingNewWebContents();
   content::WebContents* web_contents =
-      apps::LaunchService::Get(browser()->profile())->OpenApplication(params);
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(params);
   navigation_observer.Wait();
 
   // Set up a Promise that resolves to launchParams, when launchQueue's consumer
@@ -309,7 +324,9 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchFilesBrowserTest,
                                              &temp_file_path2));
   params.launch_files = {temp_file_path2};
   content::WebContents* web_contents2 =
-      apps::LaunchService::Get(browser()->profile())->OpenApplication(params);
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(params);
 
   // WebContents* should be the same because we are passing launchParams to the
   // opened application.
@@ -331,6 +348,165 @@ class SystemWebAppManagerLaunchDirectoryBrowserTest
   SystemWebAppManagerLaunchDirectoryBrowserTest()
       : SystemWebAppManagerFileHandlingBrowserTestBase(
             IncludeLaunchDirectory::kYes) {}
+
+  // Returns the content of |jsIdentifier| file handle.
+  std::string ReadContentFromJsFileHandle(content::WebContents* web_contents,
+                                          const std::string& jsIdentifier) {
+    std::string js_file_content;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+        web_contents,
+        "Promise.resolve(" + jsIdentifier + ")" +
+            ".then(async (identifier) => {"
+            "  const file = await identifier.getFile();"
+            "  const content = await file.text();"
+            "  window.domAutomationController.send(content);"
+            "});",
+        &js_file_content));
+    return js_file_content;
+  }
+
+  // Writes |contentToWrite| to |jsIdentifier| file handle. Returns whether
+  // JavaScript execution finishes.
+  bool WriteContentToJsFileHandle(content::WebContents* web_contents,
+                                  const std::string& jsIdentifier,
+                                  const std::string& contentToWrite) {
+    bool file_written;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        content::JsReplace(
+            "Promise.resolve(" + jsIdentifier + ")" +
+                ".then(async (file_handle) => {"
+                "  const writable = await file_handle.createWritable();"
+                "  await writable.write($1);"
+                "  await writable.close();"
+                "  window.domAutomationController.send(true);"
+                "});",
+            contentToWrite),
+        &file_written));
+    return file_written;
+  }
+
+  // Remove file by |file_name| from |jsIdentifier| directory handle. Returns
+  // whether JavaScript execution finishes.
+  bool RemoveFileFromJsDirectoryHandle(content::WebContents* web_contents,
+                                       const std::string& jsIdentifier,
+                                       const std::string& file_name) {
+    bool file_removed;
+    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+        web_contents,
+        content::JsReplace("Promise.resolve(" + jsIdentifier + ")" +
+                               ".then(async (dir_handle) => {"
+                               "  await dir_handle.removeEntry($1);"
+                               "  domAutomationController.send(true);"
+                               "});",
+                           file_name),
+        &file_removed));
+    return file_removed;
+  }
+
+  std::string ReadFileContent(const base::FilePath& path) {
+    std::string content;
+    EXPECT_TRUE(base::ReadFileToString(path, &content));
+    return content;
+  }
+
+  // Launch the App with |base_dir| and a file inside this directory, then test
+  // SWA can 1) read and write to the launch file; 2) read and write to other
+  // files inside the launch directory; 3) read and write to the launch
+  // directory (i.e. list and delete files).
+  void TestPermissionsForLaunchDirectory(const base::FilePath& base_dir) {
+    apps::AppLaunchParams params = LaunchParamsForApp(GetMockAppType());
+    params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
+
+    base::ScopedAllowBlockingForTesting allow_blocking;
+
+    // Create the launch file, which stores 4 characters "test".
+    base::FilePath launch_file_path;
+    ASSERT_TRUE(base::CreateTemporaryFileInDir(base_dir, &launch_file_path));
+    ASSERT_TRUE(base::WriteFile(launch_file_path, "test"));
+
+    // Launch the App.
+    const GURL& launch_url = WebAppProvider::Get(browser()->profile())
+                                 ->registrar()
+                                 .GetAppLaunchURL(params.app_id);
+    params.launch_files = {launch_file_path};
+    content::TestNavigationObserver navigation_observer(launch_url);
+    navigation_observer.StartWatchingNewWebContents();
+    content::WebContents* web_contents =
+        apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+            ->BrowserAppLauncher()
+            .LaunchAppWithParams(params);
+    navigation_observer.Wait();
+
+    // Launch directories and files passed to system web apps should
+    // automatically be granted write permission. Users should not get
+    // permission prompts. So we auto deny them (if they show up).
+    NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
+        ->set_auto_response_for_test(permissions::PermissionAction::DENIED);
+
+    // Set up a Promise to resolves to launchParams, when launchQueue's consumer
+    // callback is called.
+    EXPECT_TRUE(content::ExecuteScript(
+        web_contents,
+        "window.launchParamsPromise = new Promise(resolve => {"
+        "  window.resolveLaunchParamsPromise = resolve;"
+        "});"
+        "launchQueue.setConsumer(launchParams => {"
+        "  window.resolveLaunchParamsPromise(launchParams);"
+        "});"));
+
+    // Wait for launch. Set window.launchParams for manipulation.
+    EXPECT_TRUE(content::ExecuteScript(
+        web_contents,
+        "window.launchParamsPromise.then(launchParams => {"
+        "  window.launchParams = launchParams;"
+        "});"));
+
+    // Check we can read and write to the launch file.
+    std::string launch_file_js_handle = "window.launchParams.files[1]";
+    EXPECT_EQ("test",
+              ReadContentFromJsFileHandle(web_contents, launch_file_js_handle));
+    EXPECT_TRUE(WriteContentToJsFileHandle(web_contents, launch_file_js_handle,
+                                           "js_written"));
+    EXPECT_EQ("js_written", ReadFileContent(launch_file_path));
+
+    // Check we can read and write to a different file inside the directory.
+    // Note, this also checks we can read the launch directory, using
+    // directory_handle.getFile().
+    base::FilePath non_launch_file_path;
+    ASSERT_TRUE(
+        base::CreateTemporaryFileInDir(base_dir, &non_launch_file_path));
+    ASSERT_TRUE(base::WriteFile(non_launch_file_path, "test2"));
+
+    std::string non_launch_file_js_handle =
+        content::JsReplace("window.launchParams.files[0].getFile($1)",
+                           non_launch_file_path.BaseName().AsUTF8Unsafe());
+    EXPECT_EQ("test2", ReadContentFromJsFileHandle(web_contents,
+                                                   non_launch_file_js_handle));
+    EXPECT_TRUE(WriteContentToJsFileHandle(
+        web_contents, non_launch_file_js_handle, "js_written2"));
+    EXPECT_EQ("js_written2", ReadFileContent(non_launch_file_path));
+
+    // Check the launch file can be deleted.
+    std::string launch_dir_js_handle = "window.launchParams.files[0]";
+    EXPECT_TRUE(RemoveFileFromJsDirectoryHandle(
+        web_contents, launch_dir_js_handle,
+        launch_file_path.BaseName().AsUTF8Unsafe()));
+    EXPECT_FALSE(base::PathExists(launch_file_path));
+
+    // Check the non-launch file can be deleted.
+    EXPECT_TRUE(RemoveFileFromJsDirectoryHandle(
+        web_contents, launch_dir_js_handle,
+        non_launch_file_path.BaseName().AsUTF8Unsafe()));
+    EXPECT_FALSE(base::PathExists(non_launch_file_path));
+
+    // Check a file can be created.
+    std::string new_file_js_handle = content::JsReplace(
+        "window.launchParams.files[0].getFile($1, {create:true})", "new_file");
+    EXPECT_TRUE(WriteContentToJsFileHandle(web_contents, new_file_js_handle,
+                                           "js_new_file"));
+    EXPECT_EQ("js_new_file", ReadFileContent(base_dir.AppendASCII("new_file")));
+  }
 };
 
 // Launching behavior for apps that do not want to received launch directory are
@@ -359,7 +535,9 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
   content::TestNavigationObserver navigation_observer(launch_url);
   navigation_observer.StartWatchingNewWebContents();
   content::WebContents* web_contents =
-      apps::LaunchService::Get(browser()->profile())->OpenApplication(params);
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(params);
   navigation_observer.Wait();
 
   // Set up a Promise that resolves to launchParams, when launchQueue's consumer
@@ -423,7 +601,9 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
                                              &temp_file_path2));
   params.launch_files = {temp_file_path2};
   content::WebContents* web_contents2 =
-      apps::LaunchService::Get(browser()->profile())->OpenApplication(params);
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(params);
 
   // WebContents* should be the same because we are passing launchParams to the
   // opened application.
@@ -462,45 +642,33 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
       "domAutomationController.send(window.secondLaunchParams.files[1].name)",
       &file_name));
   EXPECT_EQ(temp_file_path2.BaseName().AsUTF8Unsafe(), file_name);
+}
 
-  // Launch directories and files passed to system web apps should automatically
-  // be granted write permission. Users should not get permission prompts. Here
-  // we execute some JavaScript code that modifies and deletes files in the
-  // directory.
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
+                       ReadWritePermissions_OrdinaryDirectory) {
+  WaitForTestSystemAppInstall();
 
-  // Auto deny prompts (if they show up).
-  NativeFileSystemPermissionRequestManager::FromWebContents(web_contents)
-      ->set_auto_response_for_test(permissions::PermissionAction::DENIED);
+  // Test for ordinary directory.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir temp_directory;
+  ASSERT_TRUE(temp_directory.CreateUniqueTempDir());
+  TestPermissionsForLaunchDirectory(temp_directory.GetPath());
+}
 
-  // Modifies the launch file. Reuse the first launch directory.
-  bool writer_closed;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "window.firstLaunchParams.files[1].createWritable().then("
-      "  async writer => {"
-      "    console.log(writer);"
-      "    await writer.write('test');"
-      "    await writer.close();"
-      "    domAutomationController.send(true);"
-      "  }"
-      ");",
-      &writer_closed));
-  EXPECT_TRUE(writer_closed);
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerLaunchDirectoryBrowserTest,
+                       ReadWritePermissions_SensitiveDirectory) {
+  WaitForTestSystemAppInstall();
 
-  std::string read_contents;
-  EXPECT_TRUE(base::ReadFileToString(temp_file_path, &read_contents));
-  EXPECT_EQ("test", read_contents);
-
-  // Deletes the launch file. Reuse the second launch directory.
-  bool file_removed;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "window.secondLaunchParams.files[0].removeEntry("
-      "  window.secondLaunchParams.files[1].name"
-      ").then(_ => domAutomationController.send(true));",
-      &file_removed));
-  EXPECT_TRUE(file_removed);
-  EXPECT_FALSE(base::PathExists(temp_file_path2));
+  // Test for sensitive directory (which are otherwise blocked by
+  // NativeFileSystem API). It is safe to use |chrome::DIR_DEFAULT_DOWNLOADS|,
+  // because InProcBrowserTest fixture sets up different download directory for
+  // each test cases.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::FilePath sensitive_dir;
+  ASSERT_TRUE(
+      base::PathService::Get(chrome::DIR_DEFAULT_DOWNLOADS, &sensitive_dir));
+  ASSERT_TRUE(base::DirectoryExists(sensitive_dir));
+  TestPermissionsForLaunchDirectory(sensitive_dir);
 }
 
 class SystemWebAppManagerFileHandlingOriginTrialsBrowserTest
@@ -541,7 +709,9 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerFileHandlingOriginTrialsBrowserTest,
   content::TestNavigationObserver navigation_observer(launch_url);
   navigation_observer.StartWatchingNewWebContents();
   content::WebContents* web_contents =
-      apps::LaunchService::Get(browser()->profile())->OpenApplication(params);
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+          ->BrowserAppLauncher()
+          .LaunchAppWithParams(params);
   navigation_observer.Wait();
 
   // Wait for the Promise to resolve.
@@ -567,24 +737,17 @@ class SystemWebAppManagerNotShownInLauncherTest
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerNotShownInLauncherTest,
                        NotShownInLauncher) {
-  // TODO(crbug.com/1054195): Make the expectation unconditional.
-  const web_app::ProviderType provider = provider_type();
-
   WaitForSystemAppInstallAndLaunch(GetMockAppType());
   AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
 
+  // OS Integration only relevant for Chrome OS.
+#if defined(OS_CHROMEOS)
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
   proxy->AppRegistryCache().ForOneApp(
-      app_id, [provider](const apps::AppUpdate& update) {
-        if (provider == ProviderType::kWebApps) {
-          EXPECT_EQ(apps::mojom::OptionalBool::kTrue, update.ShowInLauncher());
-        } else {
-          EXPECT_EQ(apps::mojom::OptionalBool::kFalse, update.ShowInLauncher());
-        }
+      app_id, [](const apps::AppUpdate& update) {
+        EXPECT_EQ(apps::mojom::OptionalBool::kFalse, update.ShowInLauncher());
       });
-  // OS Integration only relevant for Chrome OS.
-#if defined(OS_CHROMEOS)
   // The |AppList| should have all apps visible in the launcher, apps get
   // removed from the |AppList| when they are hidden.
   AppListClientImpl* client = AppListClientImpl::GetInstance();
@@ -593,15 +756,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerNotShownInLauncherTest,
   const ChromeAppListItem* mock_app = model_updater->FindItem(app_id);
   // |mock_app| shouldn't be found in |AppList| because it should be hidden in
   // launcher.
-  if (provider == ProviderType::kWebApps) {
-    // TODO(crbug.com/877898): |mock_app| should be hidden but web_apps.cc does
-    // not currently read from system_web_app_manager.cc. When
-    // DesktopPWAsWithoutExtensions launches this should change to
-    // EXPECT_FALSE().
-    EXPECT_TRUE(mock_app);
-  } else {
-    EXPECT_FALSE(mock_app);
-  }
+  EXPECT_FALSE(mock_app);
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -617,25 +772,18 @@ class SystemWebAppManagerNotShownInSearchTest
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerNotShownInSearchTest,
                        NotShownInSearch) {
-  const web_app::ProviderType provider = provider_type();
-
   WaitForSystemAppInstallAndLaunch(GetMockAppType());
   AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
 
+  // OS Integration only relevant for Chrome OS.
+#if defined(OS_CHROMEOS)
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
   proxy->AppRegistryCache().ForOneApp(
-      app_id, [provider](const apps::AppUpdate& update) {
-        if (provider == ProviderType::kWebApps) {
-          // TODO(crbug.com/877898): |mock_app| should be hidden but web_apps.cc
-          // does not currently read from system_web_app_manager.cc. When
-          // DesktopPWAsWithoutExtensions launches remove the special case for
-          // kWebApps, ShowInSearch() should return false.
-          EXPECT_EQ(apps::mojom::OptionalBool::kTrue, update.ShowInSearch());
-        } else {
-          EXPECT_EQ(apps::mojom::OptionalBool::kFalse, update.ShowInSearch());
-        }
+      app_id, [](const apps::AppUpdate& update) {
+        EXPECT_EQ(apps::mojom::OptionalBool::kFalse, update.ShowInSearch());
       });
+#endif  // defined(OS_CHROMEOS)
 }
 
 class SystemWebAppManagerAdditionalSearchTermsTest
@@ -660,6 +808,76 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerAdditionalSearchTermsTest,
         EXPECT_EQ(std::vector<std::string>({"Security"}),
                   update.AdditionalSearchTerms());
       });
+}
+
+// Tests that SWA-specific data is correctly migrated to Web Apps without
+// Extensions.
+class SystemWebAppManagerMigrationTest
+    : public SystemWebAppManagerBrowserTestBase {
+ public:
+  SystemWebAppManagerMigrationTest()
+      : SystemWebAppManagerBrowserTestBase(/*install_mock=*/false) {
+    maybe_installation_ =
+        TestSystemWebAppInstallation::SetUpAppWithAdditionalSearchTerms();
+    maybe_installation_->set_update_policy(
+        SystemWebAppManager::UpdatePolicy::kOnVersionChange);
+
+    if (content::IsPreTest()) {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kDesktopPWAsWithoutExtensions);
+    } else {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kDesktopPWAsWithoutExtensions);
+    }
+  }
+  ~SystemWebAppManagerMigrationTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// These tests use the App Service which is only enabled on Chrome OS.
+#if defined(OS_CHROMEOS)
+#define MAYBE_PRE_ExtraDataIsMigrated PRE_ExtraDataIsMigrated
+#else
+#define MAYBE_PRE_ExtraDataIsMigrated DISABLED_PRE_ExtraDataIsMigrated
+#endif
+IN_PROC_BROWSER_TEST_F(SystemWebAppManagerMigrationTest,
+                       MAYBE_PRE_ExtraDataIsMigrated) {
+  WaitForTestSystemAppInstall();
+  AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
+
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+  const bool app_found = proxy->AppRegistryCache().ForOneApp(
+      app_id, [](const apps::AppUpdate& update) {
+        EXPECT_EQ(std::vector<std::string>({"Security"}),
+                  update.AdditionalSearchTerms());
+        EXPECT_EQ(apps::mojom::OptionalBool::kFalse, update.ShowInManagement());
+      });
+  ASSERT_TRUE(app_found);
+}
+
+// These tests use the App Service which is only enabled on Chrome OS.
+#if defined(OS_CHROMEOS)
+#define MAYBE_ExtraDataIsMigrated ExtraDataIsMigrated
+#else
+#define MAYBE_ExtraDataIsMigrated DISABLED_ExtraDataIsMigrated
+#endif
+IN_PROC_BROWSER_TEST_F(SystemWebAppManagerMigrationTest,
+                       MAYBE_ExtraDataIsMigrated) {
+  WaitForTestSystemAppInstall();
+  AppId app_id = GetManager().GetAppIdForSystemApp(GetMockAppType()).value();
+
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+  const bool app_found = proxy->AppRegistryCache().ForOneApp(
+      app_id, [](const apps::AppUpdate& update) {
+        EXPECT_EQ(std::vector<std::string>({"Security"}),
+                  update.AdditionalSearchTerms());
+        EXPECT_EQ(apps::mojom::OptionalBool::kFalse, update.ShowInManagement());
+      });
+  ASSERT_TRUE(app_found);
 }
 
 class SystemWebAppManagerChromeUntrustedTest
@@ -853,6 +1071,119 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerOriginTrialsBrowserTest,
     ASSERT_EQ("", tab_helper.GetAppId());
   }
 }
+
+#if defined(OS_CHROMEOS)
+
+class SystemWebAppManagerAppSuspensionBrowserTest
+    : public SystemWebAppManagerBrowserTest {
+ public:
+  SystemWebAppManagerAppSuspensionBrowserTest()
+      : SystemWebAppManagerBrowserTest(false) {}
+
+  apps::mojom::Readiness GetAppReadiness(const AppId& app_id) {
+    apps::AppServiceProxy* proxy =
+        apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+    apps::mojom::Readiness readiness;
+    bool app_found = proxy->AppRegistryCache().ForOneApp(
+        app_id, [&readiness](const apps::AppUpdate& update) {
+          readiness = update.Readiness();
+        });
+    CHECK(app_found);
+    return readiness;
+  }
+
+  apps::mojom::IconKeyPtr GetAppIconKey(const AppId& app_id) {
+    apps::AppServiceProxy* proxy =
+        apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+    apps::mojom::IconKeyPtr icon_key;
+    bool app_found = proxy->AppRegistryCache().ForOneApp(
+        app_id, [&icon_key](const apps::AppUpdate& update) {
+          icon_key = update.IconKey();
+        });
+    CHECK(app_found);
+    return icon_key;
+  }
+};
+
+// Tests that System Apps can be suspended when the policy is set before the app
+// is installed.
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerAppSuspensionBrowserTest,
+                       AppSuspendedBeforeInstall) {
+  ASSERT_FALSE(
+      GetManager().GetAppIdForSystemApp(SystemAppType::SETTINGS).has_value());
+  {
+    ListPrefUpdate update(TestingBrowserProcess::GetGlobal()->local_state(),
+                          policy::policy_prefs::kSystemFeaturesDisableList);
+    base::ListValue* list = update.Get();
+    list->Append(policy::SystemFeature::OS_SETTINGS);
+  }
+  WaitForTestSystemAppInstall();
+  base::Optional<AppId> settings_id =
+      GetManager().GetAppIdForSystemApp(SystemAppType::SETTINGS);
+  DCHECK(settings_id.has_value());
+
+  EXPECT_EQ(apps::mojom::Readiness::kDisabledByPolicy,
+            GetAppReadiness(*settings_id));
+  EXPECT_TRUE(apps::IconEffects::kBlocked &
+              GetAppIconKey(*settings_id)->icon_effects);
+
+  {
+    ListPrefUpdate update(TestingBrowserProcess::GetGlobal()->local_state(),
+                          policy::policy_prefs::kSystemFeaturesDisableList);
+    base::ListValue* list = update.Get();
+    list->Clear();
+  }
+  apps::AppServiceProxyFactory::GetForProfile(browser()->profile())
+      ->FlushMojoCallsForTesting();
+  EXPECT_EQ(apps::mojom::Readiness::kReady, GetAppReadiness(*settings_id));
+  EXPECT_FALSE(apps::IconEffects::kBlocked &
+               GetAppIconKey(*settings_id)->icon_effects);
+}
+
+// Tests that System Apps can be suspended when the policy is set after the app
+// is installed.
+IN_PROC_BROWSER_TEST_P(SystemWebAppManagerAppSuspensionBrowserTest,
+                       AppSuspendedAfterInstall) {
+  WaitForTestSystemAppInstall();
+  base::Optional<AppId> settings_id =
+      GetManager().GetAppIdForSystemApp(SystemAppType::SETTINGS);
+  DCHECK(settings_id.has_value());
+  EXPECT_EQ(apps::mojom::Readiness::kReady, GetAppReadiness(*settings_id));
+
+  {
+    ListPrefUpdate update(TestingBrowserProcess::GetGlobal()->local_state(),
+                          policy::policy_prefs::kSystemFeaturesDisableList);
+    base::ListValue* list = update.Get();
+    list->Append(policy::SystemFeature::OS_SETTINGS);
+  }
+
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+  proxy->FlushMojoCallsForTesting();
+  EXPECT_EQ(apps::mojom::Readiness::kDisabledByPolicy,
+            GetAppReadiness(*settings_id));
+  EXPECT_TRUE(apps::IconEffects::kBlocked &
+              GetAppIconKey(*settings_id)->icon_effects);
+
+  {
+    ListPrefUpdate update(TestingBrowserProcess::GetGlobal()->local_state(),
+                          policy::policy_prefs::kSystemFeaturesDisableList);
+    base::ListValue* list = update.Get();
+    list->Clear();
+  }
+  proxy->FlushMojoCallsForTesting();
+  EXPECT_EQ(apps::mojom::Readiness::kReady, GetAppReadiness(*settings_id));
+  EXPECT_FALSE(apps::IconEffects::kBlocked &
+               GetAppIconKey(*settings_id)->icon_effects);
+}
+// This feature will only work when DesktopPWAsWithoutExtensions launches.
+INSTANTIATE_TEST_SUITE_P(All,
+                         SystemWebAppManagerAppSuspensionBrowserTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         ProviderTypeParamToString);
+
+#endif  // defined(OS_CHROMEOS)
 
 // We test with and without enabling kDesktopPWAsWithoutExtensions.
 

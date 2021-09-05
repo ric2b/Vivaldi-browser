@@ -8,12 +8,16 @@ import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.action.ViewActions.click;
 import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static android.support.test.espresso.assertion.ViewAssertions.matches;
+import static android.support.test.espresso.matcher.RootMatchers.withDecorView;
 import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static android.support.test.espresso.matcher.ViewMatchers.isRoot;
 import static android.support.test.espresso.matcher.ViewMatchers.withId;
 import static android.support.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
 import static org.chromium.chrome.test.util.ViewUtils.VIEW_NULL;
 import static org.chromium.chrome.test.util.ViewUtils.waitForView;
@@ -26,10 +30,13 @@ import android.support.test.espresso.action.Press;
 import android.support.test.espresso.action.Swipe;
 import android.support.test.espresso.contrib.RecyclerViewActions;
 import android.support.test.filters.MediumTest;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.hamcrest.Matcher;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -37,6 +44,10 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.test.params.ParameterAnnotations;
+import org.chromium.base.test.params.ParameterProvider;
+import org.chromium.base.test.params.ParameterSet;
+import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -44,6 +55,7 @@ import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.cards.SignInPromo;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeader;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -52,7 +64,7 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
@@ -66,17 +78,19 @@ import org.chromium.components.signin.test.util.AccountManagerTestRule;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
- * Tests for {@link FeedNewTabPage} specifically. Other tests can be found in
+ * Tests for {@link NewTabPage}. Other tests can be found in
  * {@link org.chromium.chrome.browser.ntp.NewTabPageTest}.
+ * TODO(https://crbug.com/1069183): Combine test suites.
  */
-@RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags
-        .Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
-        @Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
-        public class FeedNewTabPageTest {
+@RunWith(ParameterizedRunner.class)
+@ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
+@CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
+@Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
+public class FeedNewTabPageTest {
     private static final int ARTICLE_SECTION_HEADER_POSITION = 1;
     private static final int SIGNIN_PROMO_POSITION = 2;
 
@@ -95,15 +109,31 @@ import java.util.List;
     @Rule
     public AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
 
+    /** Parameter provider for enabling/disabling the signin promo card. */
+    public static class SigninPromoParams implements ParameterProvider {
+        @Override
+        public Iterable<ParameterSet> getParameters() {
+            return Collections.singletonList(
+                    new ParameterSet().value(true).name("DisableSigninPromo"));
+        }
+    }
+
     private Tab mTab;
-    private FeedNewTabPage mNtp;
+    private NewTabPage mNtp;
     private ViewGroup mTileGridLayout;
     private FakeMostVisitedSites mMostVisitedSites;
     private EmbeddedTestServer mTestServer;
     private List<SiteSuggestion> mSiteSuggestions;
+    private boolean mDisableSigninPromoCard;
+
+    @ParameterAnnotations.UseMethodParameterBefore(SigninPromoParams.class)
+    public void disableSigninPromoCard(boolean disableSigninPromoCard) {
+        mDisableSigninPromoCard = disableSigninPromoCard;
+    }
 
     @Before
     public void setUp() {
+        SignInPromo.setDisablePromoForTests(mDisableSigninPromoCard);
         mActivityTestRule.startMainActivityWithURL("about:blank");
 
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
@@ -116,8 +146,8 @@ import java.util.List;
         mTab = mActivityTestRule.getActivity().getActivityTab();
         NewTabPageTestUtils.waitForNtpLoaded(mTab);
 
-        Assert.assertTrue(mTab.getNativePage() instanceof FeedNewTabPage);
-        mNtp = (FeedNewTabPage) mTab.getNativePage();
+        Assert.assertTrue(mTab.getNativePage() instanceof NewTabPage);
+        mNtp = (NewTabPage) mTab.getNativePage();
         mTileGridLayout = mNtp.getView().findViewById(R.id.tile_grid_layout);
         Assert.assertEquals(mSiteSuggestions.size(), mTileGridLayout.getChildCount());
     }
@@ -128,15 +158,23 @@ import java.util.List;
         FeedProcessScopeFactory.setTestNetworkClient(null);
     }
 
+    private void waitForPopup(Matcher<View> matcher) {
+        View mainDecorView = mActivityTestRule.getActivity().getWindow().getDecorView();
+        onView(isRoot())
+                .inRoot(withDecorView(not(is(mainDecorView))))
+                .check(waitForView(matcher, ViewUtils.VIEW_VISIBLE));
+    }
+
     @Test
     @MediumTest
     @Feature({"FeedNewTabPage"})
     public void testSignInPromo() {
-        SignInPromo.SigninObserver signinObserver = mNtp.getMediatorForTesting()
+        SignInPromo.SigninObserver signinObserver = mNtp.getCoordinatorForTesting()
+                                                            .getMediatorForTesting()
                                                             .getSignInPromoForTesting()
                                                             .getSigninObserverForTesting();
         RecyclerView recyclerView =
-                (RecyclerView) mNtp.getCoordinatorForTesting().getStream().getView();
+                (RecyclerView) mNtp.getCoordinatorForTesting().getStreamForTesting().getView();
 
         // Prioritize RecyclerView's focusability so that the sign-in promo button and the action
         // button don't get focused initially to avoid flakiness.
@@ -171,8 +209,10 @@ import java.util.List;
         onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));
 
         // Reset states.
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> recyclerView.setDescendantFocusability(descendantFocusability));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mNtp.getCoordinatorForTesting().getMediatorForTesting().destroy();
+            recyclerView.setDescendantFocusability(descendantFocusability);
+        });
     }
 
     @Test
@@ -197,7 +237,8 @@ import java.util.List;
                 .perform(RecyclerViewActions.actionOnItemAtPosition(
                         SIGNIN_PROMO_POSITION, SWIPE_LEFT));
 
-        ViewGroup view = (ViewGroup) mNtp.getCoordinatorForTesting().getStream().getView();
+        ViewGroup view =
+                (ViewGroup) mNtp.getCoordinatorForTesting().getStreamForTesting().getView();
         waitForView(view, withId(R.id.signin_promo_view_container), VIEW_NULL);
         waitForView(view, allOf(withId(R.id.header_title), isDisplayed()));
 
@@ -235,6 +276,45 @@ import java.util.List;
 
     @Test
     @MediumTest
+    @Features.EnableFeatures(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)
+    @Feature({"NewTabPage", "FeedNewTabPage"})
+    @ParameterAnnotations.UseMethodParameter(SigninPromoParams.class)
+    public void testArticleSectionHeaderWithMenu(boolean disableSigninPromoCard) throws Exception {
+        // Scroll to the article section header in case it is not visible.
+        onView(instanceOf(RecyclerView.class))
+                .perform(RecyclerViewActions.scrollToPosition(ARTICLE_SECTION_HEADER_POSITION));
+        waitForView((ViewGroup) mNtp.getView(), allOf(withId(R.id.header_title), isDisplayed()));
+
+        View sectionHeaderView = mNtp.getCoordinatorForTesting().getSectionHeaderViewForTesting();
+        TextView headerStatusView = sectionHeaderView.findViewById(R.id.header_title);
+
+        // Assert that the feed is expanded and that the header title text is correct.
+        Assert.assertTrue(mNtp.getCoordinatorForTesting()
+                                  .getMediatorForTesting()
+                                  .getSectionHeaderForTesting()
+                                  .isExpanded());
+        Assert.assertEquals(sectionHeaderView.getContext().getString(R.string.ntp_discover_on),
+                headerStatusView.getText());
+
+        // Toggle header on the current tab.
+        onView(withId(R.id.header_menu)).perform(click());
+        View mainDecorView = mActivityTestRule.getActivity().getWindow().getDecorView();
+        waitForPopup(withText(R.string.ntp_turn_off_feed));
+        onView(withText(R.string.ntp_turn_off_feed))
+                .inRoot(withDecorView(not(is(mainDecorView))))
+                .perform(click());
+
+        // Assert that the feed is collapsed and that the header title text is correct.
+        Assert.assertFalse(mNtp.getCoordinatorForTesting()
+                                   .getMediatorForTesting()
+                                   .getSectionHeaderForTesting()
+                                   .isExpanded());
+        Assert.assertEquals(sectionHeaderView.getContext().getString(R.string.ntp_discover_off),
+                headerStatusView.getText());
+    }
+
+    @Test
+    @MediumTest
     @Feature({"FeedNewTabPage"})
     @DisabledTest(message = "https://crbug.com/914068")
     public void testArticleSectionHeader() throws Exception {
@@ -243,10 +323,13 @@ import java.util.List;
 
         // Open a new tab.
         Tab tab1 = mActivityTestRule.loadUrlInNewTab(UrlConstants.NTP_URL);
-        FeedNewTabPage ntp1 = (FeedNewTabPage) tab1.getNativePage();
-        SectionHeader firstHeader = ntp1.getMediatorForTesting().getSectionHeaderForTesting();
+        NewTabPage ntp1 = (NewTabPage) tab1.getNativePage();
+        SectionHeader firstHeader = ntp1.getCoordinatorForTesting()
+                                            .getMediatorForTesting()
+                                            .getSectionHeaderForTesting();
         RecyclerView.Adapter adapter1 =
-                ((RecyclerView) ntp1.getCoordinatorForTesting().getStream().getView()).getAdapter();
+                ((RecyclerView) ntp1.getCoordinatorForTesting().getStreamForTesting().getView())
+                        .getAdapter();
 
         // Check header is expanded.
         Assert.assertTrue(firstHeader.isExpandable() && firstHeader.isExpanded());
@@ -254,7 +337,8 @@ import java.util.List;
         Assert.assertTrue(getPreferenceForArticleSectionHeader());
 
         // Toggle header on the current tab.
-        toggleHeader((ViewGroup) ntp1.getCoordinatorForTesting().getStream().getView(), false);
+        toggleHeader(
+                (ViewGroup) ntp1.getCoordinatorForTesting().getStreamForTesting().getView(), false);
 
         // Check header is collapsed.
         Assert.assertTrue(firstHeader.isExpandable() && !firstHeader.isExpanded());
@@ -263,10 +347,13 @@ import java.util.List;
 
         // Open a second new tab.
         Tab tab2 = mActivityTestRule.loadUrlInNewTab(UrlConstants.NTP_URL);
-        FeedNewTabPage ntp2 = (FeedNewTabPage) tab2.getNativePage();
-        SectionHeader secondHeader = ntp2.getMediatorForTesting().getSectionHeaderForTesting();
+        NewTabPage ntp2 = (NewTabPage) tab2.getNativePage();
+        SectionHeader secondHeader = ntp2.getCoordinatorForTesting()
+                                             .getMediatorForTesting()
+                                             .getSectionHeaderForTesting();
         RecyclerView.Adapter adapter2 =
-                ((RecyclerView) ntp2.getCoordinatorForTesting().getStream().getView()).getAdapter();
+                ((RecyclerView) ntp2.getCoordinatorForTesting().getStreamForTesting().getView())
+                        .getAdapter();
 
         // Check header on the second tab is collapsed.
         Assert.assertTrue(secondHeader.isExpandable() && !secondHeader.isExpanded());
@@ -274,7 +361,8 @@ import java.util.List;
         Assert.assertFalse(getPreferenceForArticleSectionHeader());
 
         // Toggle header on the second tab.
-        toggleHeader((ViewGroup) ntp2.getCoordinatorForTesting().getStream().getView(), true);
+        toggleHeader(
+                (ViewGroup) ntp2.getCoordinatorForTesting().getStreamForTesting().getView(), true);
 
         // Check header on the second tab is expanded.
         Assert.assertTrue(secondHeader.isExpandable() && secondHeader.isExpanded());
@@ -303,11 +391,11 @@ import java.util.List;
         // Policy is disabled. Verify the NTP root view contains only the Stream view as child.
         ViewGroup rootView = (ViewGroup) mNtp.getView();
         ViewUtils.waitForStableView(rootView);
-        Assert.assertNotNull(mNtp.getCoordinatorForTesting().getStream());
+        Assert.assertNotNull(mNtp.getCoordinatorForTesting().getStreamForTesting());
         Assert.assertNull(mNtp.getCoordinatorForTesting().getScrollViewForPolicy());
         Assert.assertEquals(1, rootView.getChildCount());
-        Assert.assertEquals(
-                mNtp.getCoordinatorForTesting().getStream().getView(), rootView.getChildAt(0));
+        Assert.assertEquals(mNtp.getCoordinatorForTesting().getStreamForTesting().getView(),
+                rootView.getChildAt(0));
 
         // Simulate that policy is enabled. Verify the NTP root view contains only the view for
         // policy as child.
@@ -316,14 +404,14 @@ import java.util.List;
                         -> PrefServiceBridge.getInstance().setBoolean(
                                 Pref.NTP_ARTICLES_SECTION_ENABLED, false));
         Assert.assertNotNull(mNtp.getCoordinatorForTesting().getScrollViewForPolicy());
-        Assert.assertNull(mNtp.getCoordinatorForTesting().getStream());
+        Assert.assertNull(mNtp.getCoordinatorForTesting().getStreamForTesting());
         Assert.assertEquals(1, rootView.getChildCount());
         Assert.assertEquals(
                 mNtp.getCoordinatorForTesting().getScrollViewForPolicy(), rootView.getChildAt(0));
 
         // Open a new tab while policy is still enabled.
         Tab tab2 = mActivityTestRule.loadUrlInNewTab(UrlConstants.NTP_URL);
-        FeedNewTabPage ntp2 = (FeedNewTabPage) tab2.getNativePage();
+        NewTabPage ntp2 = (NewTabPage) tab2.getNativePage();
         ViewGroup rootView2 = (ViewGroup) ntp2.getView();
 
         // Verify that NTP root view contains only the view for policy as child.

@@ -4,6 +4,7 @@
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="device_page_browser_proxy.html">
+<link rel="import" href="dlc_subpage.html">
 <link rel="import" href="display.html">
 <link rel="import" href="keyboard.html">
 <link rel="import" href="pointers.html">
@@ -42,12 +43,10 @@
         <cr-link-row class="hr" hidden="[[hideStorageInfo_]]" id="storageRow"
             label="$i18n{storageTitle}" on-click="onStorageTap_"
             role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
-        <template is="dom-if" if="[[enablePowerSettings_]]">
-          <cr-link-row class="hr" id="powerRow" label="$i18n{powerTitle}"
-              on-click="onPowerTap_"
-              role-description="$i18n{subpageArrowRoleDescription}">
-          </cr-link-row>
-        </template>
+        <cr-link-row class="hr" id="powerRow" label="$i18n{powerTitle}"
+            on-click="onPowerTap_"
+            role-description="$i18n{subpageArrowRoleDescription}">
+        </cr-link-row>
       </div>
       <template is="dom-if" route-path="/pointer-overlay">
         <settings-subpage
@@ -100,14 +99,21 @@
           </settings-subpage>
         </template>
       </template>
-      <template is="dom-if" route-path="/power"
-          no-search="[[!enablePowerSettings_]]">
+      <template is="dom-if" if="[[allowDlcSubpage_]]">
+        <template is="dom-if" route-path="/storage/downloadedContent">
+          <settings-subpage
+              associated-control="[[$$('#storageRow')]]"
+              page-title="$i18n{dlcSubpageTitle}">
+            <os-settings-dlc-subpage>
+            </os-settings-dlc-subpage>
+          </settings-subpage>
+        </template>
+      </template>
+      <template is="dom-if" route-path="/power">
         <settings-subpage
             associated-control="[[$$('#powerRow')]]"
-            page-title="$i18n{powerTitle}"
-            no-search$="[[!enablePowerSettings_]]">
-          <settings-power enable-power-settings="[[enablePowerSettings_]]">
-          </settings-power>
+            page-title="$i18n{powerTitle}">
+          <settings-power></settings-power>
         </settings-subpage>
       </template>
     </settings-animated-pages>

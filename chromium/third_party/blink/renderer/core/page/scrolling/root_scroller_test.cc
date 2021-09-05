@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/web/web_console_message.h"
 #include "third_party/blink/public/web/web_hit_test_result.h"
@@ -166,14 +166,14 @@ class RootScrollerTest : public testing::Test,
     WebGestureEvent event(type, WebInputEvent::kNoModifiers,
                           WebInputEvent::GetStaticTimeStampForTests(), device);
     event.SetPositionInWidget(gfx::PointF(100, 100));
-    if (type == WebInputEvent::kGestureScrollUpdate) {
+    if (type == WebInputEvent::Type::kGestureScrollUpdate) {
       event.data.scroll_update.delta_x = delta_x;
       event.data.scroll_update.delta_y = delta_y;
-    } else if (type == WebInputEvent::kGestureScrollBegin) {
+    } else if (type == WebInputEvent::Type::kGestureScrollBegin) {
       event.data.scroll_begin.delta_x_hint = delta_x;
       event.data.scroll_begin.delta_y_hint = delta_y;
     }
-    return WebCoalescedInputEvent(event);
+    return WebCoalescedInputEvent(event, ui::LatencyInfo());
   }
 
   WebViewImpl* InitializeInternal(
@@ -260,7 +260,7 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
   double maximum_scroll = 550;
 
   GetWebView()->MainFrameWidget()->HandleInputEvent(
-      GenerateTouchGestureEvent(WebInputEvent::kGestureScrollBegin));
+      GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollBegin));
 
   {
     // Scrolling over the #container DIV should cause the browser controls to
@@ -268,7 +268,7 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
     EXPECT_FLOAT_EQ(1, GetBrowserControls().TopShownRatio());
     EXPECT_FLOAT_EQ(1, GetBrowserControls().BottomShownRatio());
     GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0,
+        GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollUpdate, 0,
                                   -GetBrowserControls().TopHeight()));
     EXPECT_FLOAT_EQ(0, GetBrowserControls().TopShownRatio());
     EXPECT_FLOAT_EQ(0, GetBrowserControls().BottomShownRatio());
@@ -277,7 +277,7 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
   {
     // Make sure we're actually scrolling the DIV and not the LocalFrameView.
     GetWebView()->MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
-        WebInputEvent::kGestureScrollUpdate, 0, -100));
+        WebInputEvent::Type::kGestureScrollUpdate, 0, -100));
     EXPECT_FLOAT_EQ(100, container->scrollTop());
     EXPECT_FLOAT_EQ(
         0, MainFrameView()->LayoutViewport()->GetScrollOffset().Height());
@@ -290,7 +290,7 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
                 DidOverscroll(gfx::Vector2dF(0, 50), gfx::Vector2dF(0, 50),
                               gfx::PointF(100, 100), gfx::Vector2dF()));
     GetWebView()->MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
-        WebInputEvent::kGestureScrollUpdate, 0, -500));
+        WebInputEvent::Type::kGestureScrollUpdate, 0, -500));
     EXPECT_FLOAT_EQ(maximum_scroll, container->scrollTop());
     EXPECT_FLOAT_EQ(
         0, MainFrameView()->LayoutViewport()->GetScrollOffset().Height());
@@ -302,8 +302,8 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
     EXPECT_CALL(client,
                 DidOverscroll(gfx::Vector2dF(0, 20), gfx::Vector2dF(0, 70),
                               gfx::PointF(100, 100), gfx::Vector2dF()));
-    GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0, -20));
+    GetWebView()->MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+        WebInputEvent::Type::kGestureScrollUpdate, 0, -20));
     EXPECT_FLOAT_EQ(maximum_scroll, container->scrollTop());
     EXPECT_FLOAT_EQ(
         0, MainFrameView()->LayoutViewport()->GetScrollOffset().Height());
@@ -311,42 +311,42 @@ TEST_F(RootScrollerTest, TestSetRootScroller) {
   }
 
   GetWebView()->MainFrameWidget()->HandleInputEvent(
-      GenerateTouchGestureEvent(WebInputEvent::kGestureScrollEnd));
+      GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollEnd));
 
   {
     // Make sure a new gesture scroll still won't scroll the frameview and
     // overscrolls.
     GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollBegin));
+        GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollBegin));
 
     EXPECT_CALL(client,
                 DidOverscroll(gfx::Vector2dF(0, 30), gfx::Vector2dF(0, 30),
                               gfx::PointF(100, 100), gfx::Vector2dF()));
-    GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0, -30));
+    GetWebView()->MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+        WebInputEvent::Type::kGestureScrollUpdate, 0, -30));
     EXPECT_FLOAT_EQ(maximum_scroll, container->scrollTop());
     EXPECT_FLOAT_EQ(
         0, MainFrameView()->LayoutViewport()->GetScrollOffset().Height());
     Mock::VerifyAndClearExpectations(&client);
 
     GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollEnd));
+        GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollEnd));
   }
 
   {
     // Scrolling up should show the browser controls.
     GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollBegin));
+        GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollBegin));
 
     EXPECT_FLOAT_EQ(0, GetBrowserControls().TopShownRatio());
     EXPECT_FLOAT_EQ(0, GetBrowserControls().BottomShownRatio());
-    GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0, 30));
+    GetWebView()->MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+        WebInputEvent::Type::kGestureScrollUpdate, 0, 30));
     EXPECT_FLOAT_EQ(0.6, GetBrowserControls().TopShownRatio());
     EXPECT_FLOAT_EQ(0.6, GetBrowserControls().BottomShownRatio());
 
     GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollEnd));
+        GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollEnd));
   }
 
   // Reset manually to avoid lifetime issues with custom WebViewClient.
@@ -803,12 +803,12 @@ TEST_F(RootScrollerTest, RemoteMainFrame) {
 
   // Try scrolling in the iframe.
   {
-    widget->HandleInputEvent(
-        GenerateWheelGestureEvent(WebInputEvent::kGestureScrollBegin, 0, -100));
     widget->HandleInputEvent(GenerateWheelGestureEvent(
-        WebInputEvent::kGestureScrollUpdate, 0, -100));
+        WebInputEvent::Type::kGestureScrollBegin, 0, -100));
+    widget->HandleInputEvent(GenerateWheelGestureEvent(
+        WebInputEvent::Type::kGestureScrollUpdate, 0, -100));
     widget->HandleInputEvent(
-        GenerateWheelGestureEvent(WebInputEvent::kGestureScrollEnd));
+        GenerateWheelGestureEvent(WebInputEvent::Type::kGestureScrollEnd));
     EXPECT_EQ(100, container->scrollTop());
   }
 
@@ -820,12 +820,12 @@ TEST_F(RootScrollerTest, RemoteMainFrame) {
 
   // Try scrolling in the iframe now that it has a root scroller set.
   {
-    widget->HandleInputEvent(
-        GenerateWheelGestureEvent(WebInputEvent::kGestureScrollBegin, 0, -100));
     widget->HandleInputEvent(GenerateWheelGestureEvent(
-        WebInputEvent::kGestureScrollUpdate, 0, -100));
+        WebInputEvent::Type::kGestureScrollBegin, 0, -100));
+    widget->HandleInputEvent(GenerateWheelGestureEvent(
+        WebInputEvent::Type::kGestureScrollUpdate, 0, -100));
     widget->HandleInputEvent(
-        GenerateWheelGestureEvent(WebInputEvent::kGestureScrollEnd));
+        GenerateWheelGestureEvent(WebInputEvent::Type::kGestureScrollEnd));
 
     // TODO(bokan): This doesn't work right now because we notice in
     // Element::nativeApplyScroll that the container is the
@@ -1015,22 +1015,22 @@ TEST_F(RootScrollerTest, TopControlsAdjustmentAppliedToRootScroller) {
   ASSERT_EQ(1000 - 400, container_scroller->MaximumScrollOffset().Height());
 
   GetWebView()->MainFrameWidget()->HandleInputEvent(
-      GenerateTouchGestureEvent(WebInputEvent::kGestureScrollBegin));
+      GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollBegin));
   ASSERT_EQ(1, GetBrowserControls().TopShownRatio());
   ASSERT_EQ(1, GetBrowserControls().BottomShownRatio());
   GetWebView()->MainFrameWidget()->HandleInputEvent(
-      GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0,
+      GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollUpdate, 0,
                                 -GetBrowserControls().TopHeight()));
   ASSERT_EQ(0, GetBrowserControls().TopShownRatio());
   ASSERT_EQ(0, GetBrowserControls().BottomShownRatio());
   EXPECT_EQ(1000 - 450, container_scroller->MaximumScrollOffset().Height());
 
-  GetWebView()->MainFrameWidget()->HandleInputEvent(
-      GenerateTouchGestureEvent(WebInputEvent::kGestureScrollUpdate, 0, -3000));
+  GetWebView()->MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+      WebInputEvent::Type::kGestureScrollUpdate, 0, -3000));
   EXPECT_EQ(1000 - 450, container_scroller->GetScrollOffset().Height());
 
   GetWebView()->MainFrameWidget()->HandleInputEvent(
-      GenerateTouchGestureEvent(WebInputEvent::kGestureScrollEnd));
+      GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollEnd));
   GetWebView()->ResizeWithBrowserControls(IntSize(400, 450), 50, 50, false);
   EXPECT_EQ(1000 - 450, container_scroller->MaximumScrollOffset().Height());
 }
@@ -1063,11 +1063,11 @@ TEST_F(RootScrollerTest, RotationAnchoring) {
 
     GetWebView()->SetPageScaleFactor(2);
     GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollBegin));
+        GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollBegin));
     GetWebView()->MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
-        WebInputEvent::kGestureScrollUpdate, -scroll_x, -scroll_y));
+        WebInputEvent::Type::kGestureScrollUpdate, -scroll_x, -scroll_y));
     GetWebView()->MainFrameWidget()->HandleInputEvent(
-        GenerateTouchGestureEvent(WebInputEvent::kGestureScrollEnd));
+        GenerateTouchGestureEvent(WebInputEvent::Type::kGestureScrollEnd));
 
     // The visual viewport should be 1.5 screens scrolled so that the target
     // occupies the bottom quadrant of the layout viewport.
@@ -1303,7 +1303,7 @@ TEST_F(RootScrollerSimTest, NonLifecycleLayoutDoesntCauseReselection) {
   ASSERT_EQ(container,
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "width",
+  container->style()->setProperty(GetDocument().GetExecutionContext(), "width",
                                   "95%", String(), ASSERT_NO_EXCEPTION);
 
   ASSERT_TRUE(Compositor().NeedsBeginFrame());
@@ -1623,14 +1623,14 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScroller) {
     String& style_val = std::get<1>(test_case);
     Node* expected_root_scroller = std::get<2>(test_case);
 
-    container->style()->setProperty(GetDocument().ToExecutionContext(), style,
+    container->style()->setProperty(GetDocument().GetExecutionContext(), style,
                                     style_val, String(), ASSERT_NO_EXCEPTION);
     Compositor().BeginFrame();
     ASSERT_EQ(expected_root_scroller,
               GetDocument().GetRootScrollerController().EffectiveRootScroller())
         << "Failed to set rootScroller after setting " << std::get<0>(test_case)
         << ": " << std::get<1>(test_case);
-    container->style()->setProperty(GetDocument().ToExecutionContext(),
+    container->style()->setProperty(GetDocument().GetExecutionContext(),
                                     std::get<0>(test_case), String(), String(),
                                     ASSERT_NO_EXCEPTION);
     Compositor().BeginFrame();
@@ -1651,7 +1651,7 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScroller) {
     String& style_val = std::get<1>(test_case);
     Node* expected_root_scroller = &GetDocument();
 
-    container->style()->setProperty(GetDocument().ToExecutionContext(), style,
+    container->style()->setProperty(GetDocument().GetExecutionContext(), style,
                                     style_val, String(), ASSERT_NO_EXCEPTION);
     Compositor().BeginFrame();
     ASSERT_EQ(expected_root_scroller,
@@ -1659,7 +1659,7 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScroller) {
         << "Failed to set rootScroller after setting " << std::get<0>(test_case)
         << ": " << std::get<1>(test_case);
 
-    container->style()->setProperty(GetDocument().ToExecutionContext(),
+    container->style()->setProperty(GetDocument().GetExecutionContext(),
                                     std::get<0>(test_case), String(), String(),
                                     ASSERT_NO_EXCEPTION);
     Compositor().BeginFrame();
@@ -1705,9 +1705,9 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScrollerAddOverflow) {
       << "Shouldn't promote 'container' since it has no overflow.";
 
   Element* spacer = GetDocument().getElementById("spacer");
-  spacer->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  spacer->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                "2000px", String(), ASSERT_NO_EXCEPTION);
-  spacer->style()->setProperty(GetDocument().ToExecutionContext(), "width",
+  spacer->style()->setProperty(GetDocument().GetExecutionContext(), "width",
                                "2000px", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   Element* container = GetDocument().getElementById("container");
@@ -1817,9 +1817,9 @@ TEST_F(ImplicitRootScrollerSimTest,
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
   Element* overflow = GetDocument().getElementById("overflow");
-  overflow->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  overflow->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                  "10px", String(), ASSERT_NO_EXCEPTION);
-  overflow->style()->setProperty(GetDocument().ToExecutionContext(), "width",
+  overflow->style()->setProperty(GetDocument().GetExecutionContext(), "width",
                                  "10px", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(&GetDocument(),
@@ -1870,21 +1870,22 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScrollerVisibilityCondition) {
   ASSERT_EQ(container,
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "opacity",
-                                  "0.5", String(), ASSERT_NO_EXCEPTION);
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
+                                  "opacity", "0.5", String(),
+                                  ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(&GetDocument(),
             GetDocument().GetRootScrollerController().EffectiveRootScroller())
       << "Adding opacity to 'container' causes it to be demoted.";
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "opacity",
-                                  "", String(), ASSERT_NO_EXCEPTION);
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
+                                  "opacity", "", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(container,
             GetDocument().GetRootScrollerController().EffectiveRootScroller())
       << "Removing opacity from 'container' causes it to be promoted.";
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(),
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
                                   "visibility", "hidden", String(),
                                   ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
@@ -1892,7 +1893,7 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScrollerVisibilityCondition) {
             GetDocument().GetRootScrollerController().EffectiveRootScroller())
       << "visibility:hidden causes 'container' to be demoted.";
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(),
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
                                   "visibility", "collapse", String(),
                                   ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
@@ -1900,7 +1901,7 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScrollerVisibilityCondition) {
             GetDocument().GetRootScrollerController().EffectiveRootScroller())
       << "visibility:collapse doesn't cause 'container' to be promoted.";
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(),
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
                                   "visibility", "visible", String(),
                                   ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
@@ -1944,7 +1945,7 @@ TEST_F(ImplicitRootScrollerSimTest, ImplicitRootScrollerIframe) {
   ASSERT_EQ(container,
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  container->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                   "95%", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
@@ -1986,7 +1987,7 @@ TEST_F(ImplicitRootScrollerSimTest, UseCounterNegative) {
   EXPECT_FALSE(
       GetDocument().IsUseCounted(WebFeature::kActivatedImplicitRootScroller));
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  container->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                   "150%", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
@@ -2034,7 +2035,7 @@ TEST_F(ImplicitRootScrollerSimTest, UseCounterPositive) {
   EXPECT_TRUE(
       GetDocument().IsUseCounted(WebFeature::kActivatedImplicitRootScroller));
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  container->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                   "150%", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
@@ -2085,7 +2086,7 @@ TEST_F(ImplicitRootScrollerSimTest, UseCounterPositiveAfterLoad) {
   EXPECT_FALSE(
       GetDocument().IsUseCounted(WebFeature::kActivatedImplicitRootScroller));
 
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  container->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                   "100%", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
@@ -2187,8 +2188,9 @@ TEST_F(ImplicitRootScrollerSimTest, DontPromoteWhenMultipleAreValid) {
   // Now make the second one invalid, that should cause the first to be
   // promoted.
   Element* container2 = GetDocument().getElementById("container2");
-  container2->style()->setProperty(GetDocument().ToExecutionContext(), "height",
-                                   "95%", String(), ASSERT_NO_EXCEPTION);
+  container2->style()->setProperty(GetDocument().GetExecutionContext(),
+                                   "height", "95%", String(),
+                                   ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
   Element* container = GetDocument().getElementById("container");
@@ -2449,7 +2451,7 @@ TEST_F(ImplicitRootScrollerSimTest,
 
   // Set the height explicitly to a new value in-between. The root scroller
   // should be demoted.
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  container->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                   "601px", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(GetDocument(),
@@ -2457,7 +2459,7 @@ TEST_F(ImplicitRootScrollerSimTest,
 
   // Reset back to valid and hide the top controls. Zoom to 2x. Ensure we're
   // still considered valid.
-  container->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  container->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                   "", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(container,
@@ -2519,14 +2521,14 @@ TEST_F(ImplicitRootScrollerSimTest, ContinuallyReevaluateImplicitPromotion) {
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
   // The container now has overflow but still doesn't scroll.
-  spacer->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  spacer->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                "2000px", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(GetDocument(),
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
   // The container is now scrollable and should be promoted.
-  container->style()->setProperty(GetDocument().ToExecutionContext(),
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
                                   "overflow", "auto", String(),
                                   ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
@@ -2534,7 +2536,7 @@ TEST_F(ImplicitRootScrollerSimTest, ContinuallyReevaluateImplicitPromotion) {
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
   // The container is now not viewport-filling so it should be demoted.
-  container->style()->setProperty(GetDocument().ToExecutionContext(),
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
                                   "transform", "translateX(-50px)", String(),
                                   ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
@@ -2542,7 +2544,7 @@ TEST_F(ImplicitRootScrollerSimTest, ContinuallyReevaluateImplicitPromotion) {
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
   // The container is viewport-filling again so it should be promoted.
-  parent->style()->setProperty(GetDocument().ToExecutionContext(), "transform",
+  parent->style()->setProperty(GetDocument().GetExecutionContext(), "transform",
                                "translateX(50px)", String(),
                                ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
@@ -2550,7 +2552,7 @@ TEST_F(ImplicitRootScrollerSimTest, ContinuallyReevaluateImplicitPromotion) {
             GetDocument().GetRootScrollerController().EffectiveRootScroller());
 
   // No longer scrollable so demote.
-  container->style()->setProperty(GetDocument().ToExecutionContext(),
+  container->style()->setProperty(GetDocument().GetExecutionContext(),
                                   "overflow", "hidden", String(),
                                   ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
@@ -2601,7 +2603,7 @@ TEST_F(ImplicitRootScrollerSimTest, IframeScrollingAffectsPromotion) {
 
   // Allows scrolling now so promote.
   inner_html_element->style()->setProperty(
-      container->contentDocument()->ToExecutionContext(), "overflow", "auto",
+      To<LocalDOMWindow>(container->contentWindow()), "overflow", "auto",
       String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(container,
@@ -2609,7 +2611,7 @@ TEST_F(ImplicitRootScrollerSimTest, IframeScrollingAffectsPromotion) {
 
   // Demote again.
   inner_html_element->style()->setProperty(
-      container->contentDocument()->ToExecutionContext(), "overflow", "hidden",
+      To<LocalDOMWindow>(container->contentWindow()), "overflow", "hidden",
       String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
   EXPECT_EQ(GetDocument(),
@@ -2912,7 +2914,7 @@ TEST_F(ImplicitRootScrollerSimTest, OverflowInMainDocumentRestrictsImplicit) {
       << "iframe shouldn't be promoted due to overflow in the main document.";
 
   Element* spacer = GetDocument().getElementById("spacer");
-  spacer->style()->setProperty(GetDocument().ToExecutionContext(), "height",
+  spacer->style()->setProperty(GetDocument().GetExecutionContext(), "height",
                                "100%", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
@@ -2975,7 +2977,7 @@ TEST_F(ImplicitRootScrollerSimTest, OverflowHiddenDoesntRestrictImplicit) {
       << "iframe should be promoted since document's overflow is hidden.";
 
   Element* html = GetDocument().documentElement();
-  html->style()->setProperty(GetDocument().ToExecutionContext(), "overflow",
+  html->style()->setProperty(GetDocument().GetExecutionContext(), "overflow",
                              "auto", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
@@ -2983,7 +2985,7 @@ TEST_F(ImplicitRootScrollerSimTest, OverflowHiddenDoesntRestrictImplicit) {
             GetDocument().GetRootScrollerController().EffectiveRootScroller())
       << "iframe should now be demoted since main document scrolls overflow.";
 
-  html->style()->setProperty(GetDocument().ToExecutionContext(), "overflow",
+  html->style()->setProperty(GetDocument().GetExecutionContext(), "overflow",
                              "visible", String(), ASSERT_NO_EXCEPTION);
   Compositor().BeginFrame();
 
@@ -3068,7 +3070,7 @@ TEST_F(ImplicitRootScrollerSimTest, ClippingAncestorPreventsPromotion) {
               GetDocument().GetRootScrollerController().EffectiveRootScroller())
         << "iframe should start off promoted.";
 
-    ancestor->style()->setProperty(GetDocument().ToExecutionContext(), style,
+    ancestor->style()->setProperty(GetDocument().GetExecutionContext(), style,
                                    style_val, String(), ASSERT_NO_EXCEPTION);
     Compositor().BeginFrame();
 
@@ -3077,7 +3079,7 @@ TEST_F(ImplicitRootScrollerSimTest, ClippingAncestorPreventsPromotion) {
         << "iframe should be demoted since ancestor has " << style << ": "
         << style_val;
 
-    ancestor->style()->setProperty(GetDocument().ToExecutionContext(), style,
+    ancestor->style()->setProperty(GetDocument().GetExecutionContext(), style,
                                    String(), String(), ASSERT_NO_EXCEPTION);
     Compositor().BeginFrame();
     ASSERT_EQ(iframe,

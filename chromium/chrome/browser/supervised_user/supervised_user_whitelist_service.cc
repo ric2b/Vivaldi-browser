@@ -29,7 +29,6 @@
 #include "components/sync/model/sync_data.h"
 #include "components/sync/model/sync_error.h"
 #include "components/sync/model/sync_error_factory.h"
-#include "components/sync/model/sync_merge_result.h"
 #include "components/sync/protocol/sync.pb.h"
 
 const char kName[] = "name";
@@ -146,7 +145,7 @@ void SupervisedUserWhitelistService::WaitUntilReadyToSync(
   std::move(done).Run();
 }
 
-syncer::SyncMergeResult
+base::Optional<syncer::ModelError>
 SupervisedUserWhitelistService::MergeDataAndStartSyncing(
     syncer::ModelType type,
     const syncer::SyncDataList& initial_sync_data,
@@ -155,14 +154,10 @@ SupervisedUserWhitelistService::MergeDataAndStartSyncing(
   DCHECK_EQ(syncer::SUPERVISED_USER_WHITELISTS, type);
 
   syncer::SyncChangeList change_list;
-  syncer::SyncMergeResult result(syncer::SUPERVISED_USER_WHITELISTS);
 
   DictionaryPrefUpdate update(prefs_, prefs::kSupervisedUserWhitelists);
   base::DictionaryValue* pref_dict = update.Get();
-  result.set_num_items_before_association(pref_dict->size());
   std::set<std::string> seen_ids;
-  int num_items_added = 0;
-  int num_items_modified = 0;
 
   for (const syncer::SyncData& sync_data : initial_sync_data) {
     DCHECK_EQ(syncer::SUPERVISED_USER_WHITELISTS, sync_data.GetDataType());
@@ -178,10 +173,8 @@ SupervisedUserWhitelistService::MergeDataAndStartSyncing(
       DCHECK(result);
       if (name != old_name) {
         SetWhitelistProperties(dict, whitelist);
-        num_items_modified++;
       }
     } else {
-      num_items_added++;
       AddNewWhitelist(pref_dict, whitelist);
     }
   }
@@ -202,22 +195,43 @@ SupervisedUserWhitelistService::MergeDataAndStartSyncing(
   if (!ids_to_remove.empty())
     NotifyWhitelistsChanged();
 
-  result.set_num_items_added(num_items_added);
-  result.set_num_items_modified(num_items_modified);
-  result.set_num_items_deleted(ids_to_remove.size());
-  result.set_num_items_after_association(pref_dict->size());
-  return result;
+  // The function does not generate any errors, so it can always return
+  // base::nullopt.
+  return base::nullopt;
 }
 
 void SupervisedUserWhitelistService::StopSyncing(syncer::ModelType type) {
   DCHECK_EQ(syncer::SUPERVISED_USER_WHITELISTS, type);
 }
 
-syncer::SyncError SupervisedUserWhitelistService::ProcessSyncChanges(
+syncer::SyncDataList SupervisedUserWhitelistService::GetAllSyncDataForTesting(
+    syncer::ModelType type) const {
+  syncer::SyncDataList sync_data;
+  const base::DictionaryValue* whitelists =
+      prefs_->GetDictionary(prefs::kSupervisedUserWhitelists);
+  for (base::DictionaryValue::Iterator it(*whitelists); !it.IsAtEnd();
+       it.Advance()) {
+    const std::string& id = it.key();
+    const base::DictionaryValue* dict = nullptr;
+    it.value().GetAsDictionary(&dict);
+    std::string name;
+    bool result = dict->GetString(kName, &name);
+    DCHECK(result);
+    sync_pb::EntitySpecifics specifics;
+    sync_pb::ManagedUserWhitelistSpecifics* whitelist =
+        specifics.mutable_managed_user_whitelist();
+    whitelist->set_id(id);
+    whitelist->set_name(name);
+    sync_data.push_back(syncer::SyncData::CreateLocalData(id, name, specifics));
+  }
+  return sync_data;
+}
+
+base::Optional<syncer::ModelError>
+SupervisedUserWhitelistService::ProcessSyncChanges(
     const base::Location& from_here,
     const syncer::SyncChangeList& change_list) {
   bool whitelists_removed = false;
-  syncer::SyncError error;
   DictionaryPrefUpdate update(prefs_, prefs::kSupervisedUserWhitelists);
   base::DictionaryValue* pref_dict = update.Get();
   for (const syncer::SyncChange& sync_change : change_list) {
@@ -254,7 +268,7 @@ syncer::SyncError SupervisedUserWhitelistService::ProcessSyncChanges(
   if (whitelists_removed)
     NotifyWhitelistsChanged();
 
-  return error;
+  return base::nullopt;
 }
 
 void SupervisedUserWhitelistService::AddNewWhitelist(

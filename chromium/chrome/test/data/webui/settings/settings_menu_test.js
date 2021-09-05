@@ -5,24 +5,19 @@
 /** @fileoverview Runs tests for the settings menu. */
 
 // clang-format off
-// #import {pageVisibility, Router, routes} from 'chrome://settings/settings.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {isChromeOS} from 'chrome://resources/js/cr.m.js';
+import {isChromeOS} from 'chrome://resources/js/cr.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {pageVisibility, Router, routes} from 'chrome://settings/settings.js';
+
 // clang-format on
 
 suite('SettingsMenu', function() {
   let settingsMenu = null;
 
-  suiteSetup(function() {
-    loadTimeData.overrideValues({
-      privacySettingsRedesignEnabled: true,
-    });
-  });
-
   setup(function() {
     PolymerTest.clearBody();
     settingsMenu = document.createElement('settings-menu');
-    settingsMenu.pageVisibility = settings.pageVisibility;
+    settingsMenu.pageVisibility = pageVisibility;
     document.body.appendChild(settingsMenu);
   });
 
@@ -33,11 +28,11 @@ suite('SettingsMenu', function() {
   test('advancedOpenedBinding', function() {
     assertFalse(settingsMenu.advancedOpened);
     settingsMenu.advancedOpened = true;
-    Polymer.dom.flush();
+    flush();
     assertTrue(settingsMenu.$.advancedSubmenu.opened);
 
     settingsMenu.advancedOpened = false;
-    Polymer.dom.flush();
+    flush();
     assertFalse(settingsMenu.$.advancedSubmenu.opened);
   });
 
@@ -48,11 +43,11 @@ suite('SettingsMenu', function() {
     assertTrue(!!advancedToggle);
 
     advancedToggle.click();
-    Polymer.dom.flush();
+    flush();
     assertTrue(settingsMenu.$.advancedSubmenu.opened);
 
     advancedToggle.click();
-    Polymer.dom.flush();
+    flush();
     assertFalse(settingsMenu.$.advancedSubmenu.opened);
   });
 
@@ -63,12 +58,12 @@ suite('SettingsMenu', function() {
     assertTrue(!!ironIconElement);
 
     settingsMenu.advancedOpened = true;
-    Polymer.dom.flush();
+    flush();
     const openIcon = ironIconElement.icon;
     assertTrue(!!openIcon);
 
     settingsMenu.advancedOpened = false;
-    Polymer.dom.flush();
+    flush();
     assertNotEquals(openIcon, ironIconElement.icon);
   });
 
@@ -81,24 +76,30 @@ suite('SettingsMenu', function() {
     ironSelector.forceSynchronousItemUpdate();
 
     const urlParams = new URLSearchParams('search=foo');
-    settings.Router.getInstance().navigateTo(settings.routes.BASIC, urlParams);
+    Router.getInstance().navigateTo(routes.BASIC, urlParams);
     assertEquals(
         urlParams.toString(),
-        settings.Router.getInstance().getQueryParameters().toString());
+        Router.getInstance().getQueryParameters().toString());
     settingsMenu.$.people.click();
-    assertEquals(
-        '', settings.Router.getInstance().getQueryParameters().toString());
+    assertEquals('', Router.getInstance().getQueryParameters().toString());
   });
 });
 
 suite('SettingsMenuReset', function() {
   let settingsMenu = null;
 
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      privacySettingsRedesignEnabled: true,
+    });
+  });
+
   setup(function() {
     PolymerTest.clearBody();
-    settings.Router.getInstance().navigateTo(settings.routes.RESET, '');
+    Router.getInstance().navigateTo(routes.RESET, '');
     settingsMenu = document.createElement('settings-menu');
     document.body.appendChild(settingsMenu);
+    flush();
   });
 
   teardown(function() {
@@ -116,8 +117,8 @@ suite('SettingsMenuReset', function() {
     let path = new window.URL(selector.selected).pathname;
     assertEquals('/reset', path);
 
-    settings.Router.getInstance().navigateTo(settings.routes.PEOPLE, '');
-    Polymer.dom.flush();
+    Router.getInstance().navigateTo(routes.PEOPLE, '');
+    flush();
 
     path = new window.URL(selector.selected).pathname;
     assertEquals('/people', path);
@@ -128,48 +129,49 @@ suite('SettingsMenuReset', function() {
     const path = new window.URL(selector.selected).pathname;
     assertEquals('/reset', path);
 
-    settings.Router.getInstance().navigateTo(settings.routes.BASIC, '');
-    Polymer.dom.flush();
+    Router.getInstance().navigateTo(routes.BASIC, '');
+    flush();
 
     // BASIC has no sub page selected.
     assertFalse(!!selector.selected);
   });
 
   test('pageVisibility', function() {
-    function assertPageVisibility(expectedHidden) {
+    function assertPagesHidden(expectedHidden) {
       assertEquals(expectedHidden, settingsMenu.$$('#people').hidden);
       assertEquals(expectedHidden, settingsMenu.$$('#appearance').hidden);
       assertEquals(expectedHidden, settingsMenu.$$('#onStartup').hidden);
       assertEquals(expectedHidden, settingsMenu.$$('#advancedButton').hidden);
       assertEquals(expectedHidden, settingsMenu.$$('#advancedSubmenu').hidden);
       assertEquals(expectedHidden, settingsMenu.$$('#reset').hidden);
+      assertEquals(expectedHidden, settingsMenu.$$('#safetyCheck').hidden);
 
-      if (!cr.isChromeOS) {
+      if (!isChromeOS) {
         assertEquals(expectedHidden, settingsMenu.$$('#defaultBrowser').hidden);
       }
     }
 
     // The default pageVisibility should not cause menu items to be hidden.
-    assertPageVisibility(false);
+    assertPagesHidden(false);
 
     // Set the visibility of the pages under test to "false".
-    settingsMenu.pageVisibility = Object.assign(settings.pageVisibility || {}, {
+    settingsMenu.pageVisibility = Object.assign(pageVisibility || {}, {
       advancedSettings: false,
       appearance: false,
       defaultBrowser: false,
       multidevice: false,
       onStartup: false,
       people: false,
-      reset: false
+      reset: false,
+      safetyCheck: false,
     });
-    Polymer.dom.flush();
+    flush();
 
     // Now, the menu items should be hidden.
-    assertPageVisibility(true);
+    assertPagesHidden(true);
   });
 
   test('safetyCheckInMenu', function() {
-    Polymer.dom.flush();
     assertTrue(!!settingsMenu.$$('#safetyCheck'));
   });
 });
@@ -186,8 +188,9 @@ suite('SettingsMenuPrivacyRedesignFlagOff', function() {
   setup(function() {
     PolymerTest.clearBody();
     settingsMenu = document.createElement('settings-menu');
-    settingsMenu.pageVisibility = settings.pageVisibility;
+    settingsMenu.pageVisibility = pageVisibility;
     document.body.appendChild(settingsMenu);
+    flush();
   });
 
   teardown(function() {
@@ -195,7 +198,6 @@ suite('SettingsMenuPrivacyRedesignFlagOff', function() {
   });
 
   test('safetyCheckNotInMenu', function() {
-    Polymer.dom.flush();
     assertFalse(!!settingsMenu.$$('#safetyCheck'));
   });
 });

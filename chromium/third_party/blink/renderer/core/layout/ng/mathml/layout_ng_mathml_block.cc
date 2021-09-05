@@ -6,10 +6,11 @@
 
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
+#include "third_party/blink/renderer/core/mathml/mathml_element.h"
 
 namespace blink {
 
-LayoutNGMathMLBlock::LayoutNGMathMLBlock(MathMLElement* element)
+LayoutNGMathMLBlock::LayoutNGMathMLBlock(Element* element)
     : LayoutNGMixin<LayoutBlock>(element) {
   DCHECK(element);
 }
@@ -34,7 +35,7 @@ bool LayoutNGMathMLBlock::IsOfType(LayoutObjectType type) const {
 
 bool LayoutNGMathMLBlock::IsChildAllowed(LayoutObject* child,
                                          const ComputedStyle&) const {
-  return child->GetNode() && child->GetNode()->IsMathMLElement();
+  return child->GetNode() && IsA<MathMLElement>(child->GetNode());
 }
 
 bool LayoutNGMathMLBlock::CanHaveChildren() const {

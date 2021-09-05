@@ -239,7 +239,8 @@ class ChromePasswordProtectionServiceTest
     content_setting_map_ = new HostContentSettingsMap(
         &test_pref_service_, false /* is_off_the_record */,
         false /* store_last_modified */,
-        false /* migrate_requesting_and_top_level_origin_settings */);
+        false /* migrate_requesting_and_top_level_origin_settings */,
+        false /* restore_session*/);
 
     cache_manager_ = std::make_unique<VerdictCacheManager>(
         nullptr, content_setting_map_.get());
@@ -438,12 +439,7 @@ TEST_F(ChromePasswordProtectionServiceTest,
 
   RequestOutcome reason;
   service_->ConfigService(false /*incognito*/, false /*SBER*/);
-// kPasswordProtectionForSavedPasswords is disabled by default on Android.
-#if defined(OS_ANDROID)
-  EXPECT_FALSE(service_->IsPingingEnabled(
-#else
   EXPECT_TRUE(service_->IsPingingEnabled(
-#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
 
@@ -453,12 +449,7 @@ TEST_F(ChromePasswordProtectionServiceTest,
       &reason));
 
   service_->ConfigService(true /*incognito*/, false /*SBER*/);
-// kPasswordProtectionForSavedPasswords is disabled by default on Android.
-#if defined(OS_ANDROID)
-  EXPECT_FALSE(service_->IsPingingEnabled(
-#else
   EXPECT_TRUE(service_->IsPingingEnabled(
-#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
 
@@ -476,6 +467,13 @@ TEST_F(ChromePasswordProtectionServiceTest,
         LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
         reused_password_type, &reason));
   }
+
+  service_->ConfigService(false /*incognito*/, false /*SBER*/);
+  reused_password_type.set_account_type(ReusedPasswordAccountType::UNKNOWN);
+  EXPECT_FALSE(service_->IsPingingEnabled(
+      LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
+      &reason));
+  EXPECT_EQ(RequestOutcome::DISABLED_DUE_TO_USER_POPULATION, reason);
 }
 
 TEST_F(ChromePasswordProtectionServiceTest,
@@ -604,10 +602,27 @@ TEST_F(ChromePasswordProtectionServiceTest,
   service_->ConfigService(/*is_incognito=*/false,
                           /*is_extended_reporting=*/true);
   std::vector<password_manager::MatchingReusedCredential> credentials = {
-      {"http://example.com"}, {"http://2.example.com"}};
+      {"http://example.test"}, {"http://2.example.com"}};
 
   EXPECT_CALL(*password_store_, AddCompromisedCredentialsImpl(_)).Times(2);
   service_->PersistPhishedSavedPasswordCredential(credentials);
+}
+
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyRemovePhishedSavedPasswordCredential) {
+  service_->ConfigService(/*is_incognito=*/false,
+                          /*is_extended_reporting=*/true);
+  std::vector<password_manager::MatchingReusedCredential> credentials = {
+      {"http://example.test", base::ASCIIToUTF16("username1")},
+      {"http://2.example.test", base::ASCIIToUTF16("username2")}};
+
+  EXPECT_CALL(*password_store_,
+              RemoveCompromisedCredentialsImpl(
+                  _, _,
+                  password_manager::RemoveCompromisedCredentialsReason::
+                      kMarkSiteAsLegitimate))
+      .Times(2);
+  service_->RemovePhishedSavedPasswordCredential(credentials);
 }
 
 TEST_F(ChromePasswordProtectionServiceTest, VerifyCanSendSamplePing) {

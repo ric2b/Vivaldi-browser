@@ -28,6 +28,10 @@ class ChromePermissionsClient : public permissions::PermissionsClient {
   void AreSitesImportant(
       content::BrowserContext* browser_context,
       std::vector<std::pair<url::Origin, bool>>* urls) override;
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+  bool IsCookieDeletionDisabled(content::BrowserContext* browser_context,
+                                const GURL& origin) override;
+#endif
   void GetUkmSourceId(content::BrowserContext* browser_context,
                       const content::WebContents* web_contents,
                       const GURL& requesting_origin,
@@ -60,7 +64,10 @@ class ChromePermissionsClient : public permissions::PermissionsClient {
       content::WebContents* web_contents,
       ContentSettingsType type,
       base::WeakPtr<permissions::PermissionPromptAndroid> prompt) override;
-  base::android::ScopedJavaLocalRef<jobject> GetJavaObject() override;
+  void RepromptForAndroidPermissions(
+      content::WebContents* web_contents,
+      const std::vector<ContentSettingsType>& content_settings_types,
+      PermissionsUpdatedCallback callback) override;
   int MapToJavaDrawableId(int resource_id) override;
 #else
   std::unique_ptr<permissions::PermissionPrompt> CreatePrompt(

@@ -55,9 +55,7 @@ class SuggestionWindowBorder : public views::BubbleBorder {
 
 }  // namespace
 
-SuggestionWindowView::SuggestionWindowView(gfx::NativeView parent,
-                                           int window_shell_id)
-    : window_shell_id_(window_shell_id) {
+SuggestionWindowView::SuggestionWindowView(gfx::NativeView parent) {
   DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
   SetCanActivate(false);
   DCHECK(parent);
@@ -66,12 +64,10 @@ SuggestionWindowView::SuggestionWindowView(gfx::NativeView parent,
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
-
-  suggestion_view_ = new SuggestionView();
-  AddChildView(suggestion_view_);
+  suggestion_view_ = AddChildView(std::make_unique<SuggestionView>());
 }
 
-SuggestionWindowView::~SuggestionWindowView() {}
+SuggestionWindowView::~SuggestionWindowView() = default;
 
 views::Widget* SuggestionWindowView::InitWidget() {
   views::Widget* widget = BubbleDialogDelegateView::CreateBubble(this);
@@ -89,14 +85,18 @@ void SuggestionWindowView::Hide() {
   GetWidget()->Close();
 }
 
-void SuggestionWindowView::Show(const base::string16& text) {
-  UpdateSuggestion(text);
+void SuggestionWindowView::Show(const base::string16& text,
+                                const size_t confirmed_length,
+                                const bool show_tab) {
+  UpdateSuggestion(text, confirmed_length, show_tab);
   suggestion_view_->SetVisible(true);
   SizeToContents();
 }
 
-void SuggestionWindowView::UpdateSuggestion(const base::string16& text) {
-  suggestion_view_->SetText(text);
+void SuggestionWindowView::UpdateSuggestion(const base::string16& text,
+                                            const size_t confirmed_length,
+                                            const bool show_tab) {
+  suggestion_view_->SetView(text, confirmed_length, show_tab);
 
   std::unique_ptr<SuggestionWindowBorder> border =
       std::make_unique<SuggestionWindowBorder>();

@@ -2,6 +2,7 @@
 
 #include "menus/menu_model.h"
 
+#include "app/vivaldi_version_info.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
@@ -30,12 +31,14 @@ std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(
     const std::string& menu) {
   Menu_Node* root = new Menu_Node();
   Menu_Control* control = new Menu_Control();
+  control->version = ::vivaldi::GetVivaldiVersionString();
   return base::WrapUnique(new MenuLoadDetails(root, control, menu, loaded_));
 }
 
 std::unique_ptr<MenuLoadDetails> Menu_Model::CreateLoadDetails(int64_t id) {
   Menu_Node* root = new Menu_Node();
   Menu_Control* control = new Menu_Control();
+  control->version = ::vivaldi::GetVivaldiVersionString();
   return base::WrapUnique(new MenuLoadDetails(root, control, id, loaded_));
 }
 
@@ -135,6 +138,9 @@ void Menu_Model::LoadFinished(std::unique_ptr<MenuLoadDetails> details) {
     }
     control_ = details->release_control();
     loaded_ = true;
+    if (details->has_upgraded()) {
+      Save();
+    }
     for (auto& observer : observers_)
       observer.MenuModelLoaded(this);
   }

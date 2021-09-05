@@ -25,8 +25,9 @@ class CONTENT_EXPORT BrowserAccessibilityWin : public BrowserAccessibility {
   //
   // BrowserAccessibility methods.
   //
+  bool PlatformIsLeafIncludingIgnored() const override;
+  bool CanFireEvents() const override;
   ui::AXPlatformNode* GetAXPlatformNode() const override;
-  bool IsNative() const override;
   void OnLocationChanged() override;
   base::string16 GetText() const override;
   base::string16 GetHypertext() const override;

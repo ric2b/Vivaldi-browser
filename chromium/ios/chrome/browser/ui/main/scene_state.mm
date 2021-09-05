@@ -30,12 +30,17 @@
 
 @implementation SceneState
 @synthesize window = _window;
+@synthesize windowID = _windowID;
 
-- (instancetype)init {
+- (instancetype)initWithAppState:(AppState*)appState {
   self = [super init];
   if (self) {
+    _appState = appState;
     _observers = [SceneStateObserverList
         observersWithProtocol:@protocol(SceneStateObserver)];
+    if (@available(iOS 13, *)) {
+      _windowID = UIApplication.sharedApplication.connectedScenes.count - 1;
+    }
   }
   return self;
 }
@@ -52,8 +57,16 @@
 
 #pragma mark - Setters & Getters.
 
-- (void)setWindow:(UIWindow*)window {
+- (NSUInteger)windowID {
   if (IsMultiwindowSupported()) {
+    return _windowID;
+  } else {
+    return 0;
+  }
+}
+
+- (void)setWindow:(UIWindow*)window {
+  if (IsSceneStartupSupported()) {
     // No need to set anything, instead the getter is backed by scene.windows
     // property.
     return;
@@ -62,7 +75,7 @@
 }
 
 - (UIWindow*)window {
-  if (IsMultiwindowSupported()) {
+  if (IsSceneStartupSupported()) {
     UIWindow* mainWindow = nil;
     if (@available(ios 13, *)) {
       for (UIWindow* window in self.scene.windows) {

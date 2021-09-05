@@ -9,14 +9,15 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -44,11 +45,10 @@
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/benchmarking_extension.h"
 #include "chrome/renderer/browser_exposed_renderer_interfaces.h"
+#include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
-#include "chrome/renderer/content_settings_agent_impl.h"
 #include "chrome/renderer/loadtimes_extension_bindings.h"
-#include "chrome/renderer/media/chrome_speech_recognition_client.h"
 #include "chrome/renderer/media/flash_embed_rewrite.h"
 #include "chrome/renderer/media/webrtc_logging_agent_impl.h"
 #include "chrome/renderer/net/net_error_helper.h"
@@ -67,6 +67,7 @@
 #include "chrome/renderer/websocket_handshake_throttle_provider_impl.h"
 #include "chrome/renderer/worker_content_settings_client.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
+#include "components/autofill/content/renderer/autofill_assistant_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/password_generation_agent.h"
 #include "components/content_capture/common/content_capture_features.h"
@@ -93,6 +94,8 @@
 #include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
 #include "components/subresource_filter/core/common/common_features.h"
 #include "components/sync/engine/sync_engine_switches.h"
+#include "components/translate/content/renderer/per_frame_translate_agent.h"
+#include "components/translate/core/common/translate_util.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
@@ -123,8 +126,8 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/page/page_visibility_state.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_renderer_process_type.h"
 #include "third_party/blink/public/platform/url_conversion.h"
@@ -153,6 +156,7 @@
 #if defined(OS_ANDROID)
 #include "chrome/renderer/sandbox_status_extension_android.h"
 #else
+#include "chrome/renderer/media/chrome_speech_recognition_client.h"
 #include "chrome/renderer/searchbox/search_bouncer.h"
 #include "chrome/renderer/searchbox/searchbox.h"
 #include "chrome/renderer/searchbox/searchbox_extension.h"
@@ -218,6 +222,7 @@
 #include "components/request_filter/adblock_filter/renderer/adblock_cosmetic_filter_agent.h"
 
 using autofill::AutofillAgent;
+using autofill::AutofillAssistantAgent;
 using autofill::PasswordAutofillAgent;
 using autofill::PasswordGenerationAgent;
 using base::ASCIIToUTF16;
@@ -475,12 +480,16 @@ void ChromeContentRendererClient::RenderFrameCreated(
   bool should_whitelist_for_content_settings =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kInstantProcess);
-  ContentSettingsAgentImpl* content_settings = new ContentSettingsAgentImpl(
-      render_frame, should_whitelist_for_content_settings, registry);
+  auto content_settings_delegate =
+      std::make_unique<ChromeContentSettingsAgentDelegate>(render_frame);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  content_settings->SetExtensionDispatcher(
+  content_settings_delegate->SetExtensionDispatcher(
       ChromeExtensionsRendererClient::GetInstance()->extension_dispatcher());
 #endif
+  content_settings::ContentSettingsAgentImpl* content_settings =
+      new content_settings::ContentSettingsAgentImpl(
+          render_frame, should_whitelist_for_content_settings,
+          std::move(content_settings_delegate));
   if (chrome_observer_.get()) {
     content_settings->SetContentSettingRules(
         chrome_observer_->content_setting_rules());
@@ -563,8 +572,11 @@ void ChromeContentRendererClient::RenderFrameCreated(
   PasswordGenerationAgent* password_generation_agent =
       new PasswordGenerationAgent(render_frame, password_autofill_agent,
                                   associated_interfaces);
+  AutofillAssistantAgent* autofill_assistant_agent =
+      new AutofillAssistantAgent(render_frame);
   new AutofillAgent(render_frame, password_autofill_agent,
-                    password_generation_agent, associated_interfaces);
+                    password_generation_agent, autofill_assistant_agent,
+                    associated_interfaces);
 
   if (content_capture::features::IsContentCaptureEnabled()) {
     new content_capture::ContentCaptureSender(render_frame,
@@ -596,6 +608,10 @@ void ChromeContentRendererClient::RenderFrameCreated(
   if (render_frame->IsMainFrame()) {
     new previews::ResourceLoadingHintsAgent(
         render_frame_observer->associated_interfaces(), render_frame);
+  }
+  if (translate::IsSubFrameTranslationEnabled()) {
+    new translate::PerFrameTranslateAgent(
+        render_frame, ISOLATED_WORLD_ID_TRANSLATE, associated_interfaces);
   }
 
 #if !defined(OS_ANDROID)
@@ -745,7 +761,7 @@ bool ChromeContentRendererClient::DeferMediaLoad(
   //
   // NOTE: This is also used to defer media loading for prerender.
   if ((render_frame->GetRenderView()->GetWebView()->GetVisibilityState() !=
-           blink::PageVisibilityState::kVisible &&
+           content::PageVisibilityState::kVisible &&
        !has_played_media_before) ||
       prerender::PrerenderHelper::IsPrerendering(render_frame)) {
     new MediaLoadDeferrer(render_frame->GetRenderView(), std::move(closure));
@@ -812,8 +828,10 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
       params.mime_type = WebString::FromUTF8(actual_mime_type);
     }
 
-    ContentSettingsAgentImpl* content_settings_agent =
-        ContentSettingsAgentImpl::Get(render_frame);
+    auto* content_settings_agent =
+        content_settings::ContentSettingsAgentImpl::Get(render_frame);
+    auto* content_settings_agent_delegate =
+        ChromeContentSettingsAgentDelegate::Get(render_frame);
 
     const ContentSettingsType content_type =
         ShouldUseJavaScriptSettingForPlugin(info)
@@ -822,7 +840,8 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
 
     if ((status == chrome::mojom::PluginStatus::kUnauthorized ||
          status == chrome::mojom::PluginStatus::kBlocked) &&
-        content_settings_agent->IsPluginTemporarilyAllowed(identifier)) {
+        content_settings_agent_delegate->IsPluginTemporarilyAllowed(
+            identifier)) {
       status = chrome::mojom::PluginStatus::kAllowed;
     }
 
@@ -1202,12 +1221,13 @@ bool ChromeContentRendererClient::HasErrorPage(int http_status_code) {
 
 bool ChromeContentRendererClient::ShouldSuppressErrorPage(
     content::RenderFrame* render_frame,
-    const GURL& url) {
+    const GURL& url,
+    int error_code) {
   // Unit tests for ChromeContentRendererClient pass a NULL RenderFrame here.
   // Unfortunately it's very difficult to construct a mock RenderView, so skip
   // this functionality in this case.
-  if (render_frame &&
-      NetErrorHelper::Get(render_frame)->ShouldSuppressErrorPage(url)) {
+  if (render_frame && NetErrorHelper::Get(render_frame)
+                          ->ShouldSuppressErrorPage(url, error_code)) {
     return true;
   }
 
@@ -1291,13 +1311,13 @@ void ChromeContentRendererClient::WillSendRequest(
     const net::SiteForCookies& site_for_cookies,
     const url::Origin* initiator_origin,
     GURL* new_url,
-    bool* attach_same_site_cookies) {
+    bool* force_ignore_site_for_cookies) {
 // Check whether the request should be allowed. If not allowed, we reset the
 // URL to something invalid to prevent the request and cause an error.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   ChromeExtensionsRendererClient::GetInstance()->WillSendRequest(
       frame, transition_type, url, site_for_cookies, initiator_origin, new_url,
-      attach_same_site_cookies);
+      force_ignore_site_for_cookies);
   if (!new_url->is_empty())
     return;
 #endif
@@ -1424,11 +1444,13 @@ ChromeContentRendererClient::CreateWorkerContentSettingsClient(
   return std::make_unique<WorkerContentSettingsClient>(render_frame);
 }
 
+#if !defined(OS_ANDROID)
 std::unique_ptr<media::SpeechRecognitionClient>
 ChromeContentRendererClient::CreateSpeechRecognitionClient(
     content::RenderFrame* render_frame) {
   return std::make_unique<ChromeSpeechRecognitionClient>(render_frame);
 }
+#endif
 
 bool ChromeContentRendererClient::IsPluginAllowedToUseDevChannelAPIs() {
 #if BUILDFLAG(ENABLE_PLUGINS)

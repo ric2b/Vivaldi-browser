@@ -23,9 +23,9 @@ class ArcBridgeService;
 class MojoChannelBase;
 
 // Implementation of the ArcBridgeHost.
-// The lifetime of ArcBridgeHost and ArcBridgeInstance mojo channels are tied
-// to this instance. Also, any ARC related Mojo channel will be closed if
-// either ArcBridgeHost or ArcBridgeInstance Mojo channels is closed on error.
+// The lifetime of ArcBridgeHost mojo channel is tied to this instance.
+// Also, any ARC related Mojo channel will be closed if ArcBridgeHost Mojo
+// channel is closed on error.
 // When ARC Instance (not Host) Mojo channel gets ready (= passed via
 // OnFooInstanceReady(), and the QueryVersion() gets completed), then this sets
 // the raw pointer to the ArcBridgeService so that other services can access
@@ -33,8 +33,9 @@ class MojoChannelBase;
 // Note that ArcBridgeService must be alive while ArcBridgeHostImpl is alive.
 class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
  public:
-  ArcBridgeHostImpl(ArcBridgeService* arc_bridge_service,
-                    mojo::PendingRemote<mojom::ArcBridgeInstance> instance);
+  ArcBridgeHostImpl(
+      ArcBridgeService* arc_bridge_service,
+      mojo::PendingReceiver<mojom::ArcBridgeHost> pending_receiver);
   ~ArcBridgeHostImpl() override;
 
   // ArcBridgeHost overrides.
@@ -91,7 +92,6 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   void OnPipInstanceReady(mojom::PipInstancePtr policy_ptr) override;
   void OnPolicyInstanceReady(mojom::PolicyInstancePtr policy_ptr) override;
   void OnPowerInstanceReady(mojom::PowerInstancePtr power_ptr) override;
-  void OnPrintInstanceReady(mojom::PrintInstancePtr print_ptr) override;
   void OnPrintSpoolerInstanceReady(
       mojom::PrintSpoolerInstancePtr print_spooler_ptr) override;
   void OnProcessInstanceReady(mojom::ProcessInstancePtr process_ptr) override;
@@ -141,7 +141,6 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   ArcBridgeService* const arc_bridge_service_;
 
   mojo::Receiver<mojom::ArcBridgeHost> receiver_;
-  mojo::Remote<mojom::ArcBridgeInstance> instance_;
 
   // Put as a last member to ensure that any callback tied to the elements
   // is not invoked.

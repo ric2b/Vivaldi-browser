@@ -183,15 +183,20 @@ bool VideoProgress::OnMousePressed(const ui::MouseEvent& event) {
   return false;
 }
 
-void VideoProgress::OnGestureEvent(ui::GestureEvent* event) {
+bool VideoProgress::HandleGestureEvent(ui::GestureEvent* event) {
   if (progress_bar_->GetMirroredBounds().Contains(event->location())) {
     HandleSeeking(event->location());
     event->SetHandled();
+    return true;
   }
+  return false;
 }
 
 views::View* VideoProgress::GetTooltipHandlerForPoint(const gfx::Point& point) {
-  return this;
+  if (progress_bar_->bounds().Contains(point)) {
+    return this;
+  }
+  return nullptr;
 }
 
 base::string16 VideoProgress::GetTooltipText(const gfx::Point& p) const {

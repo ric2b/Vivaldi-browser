@@ -17,11 +17,11 @@
 #include "base/threading/thread_checker.h"
 #include "gpu/gpu_export.h"
 
-@class DataSourceLoader;
 
 namespace media {
 
 class AVFMediaReader;
+class DataRequestHandler;
 
 // The preferred PlatformMediaPipeline implementation for OS X.  Not available
 // on all OS X versions, see |IsAvailable()|.
@@ -43,8 +43,7 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
   static GPU_EXPORT void WarmUp();
 
   // PlatformMediaPipeline implementation.
-  void Initialize(ipc_data_source::Reader source_reader,
-                  ipc_data_source::Info source_info,
+  void Initialize(ipc_data_source::Info source_info,
                   InitializeCB initialize_cb) override;
   void ReadMediaData(IPCDecodingBuffer buffer) override;
   void WillSeek() override;
@@ -53,11 +52,9 @@ class AVFMediaReaderRunner : public PlatformMediaPipeline {
  private:
   void DataReady(IPCDecodingBuffer buffer);
 
-  base::scoped_nsobject<DataSourceLoader> data_source_loader_;
+  scoped_refptr<DataRequestHandler> data_request_handler_;
   dispatch_queue_t reader_queue_;
   std::unique_ptr<AVFMediaReader> reader_;
-
-  bool will_seek_;
 
   base::ThreadChecker thread_checker_;
 

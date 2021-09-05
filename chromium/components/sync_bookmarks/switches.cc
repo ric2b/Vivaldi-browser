@@ -15,14 +15,18 @@ const base::Feature kUpdateBookmarkGUIDWithNodeReplacement{
     "UpdateGUIDWithNodeReplacement", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables the GUID-aware merge algorithm.
-const base::Feature kMergeBookmarksUsingGUIDs{
-    "MergeBookmarksUsingGUIDs", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMergeBookmarksUsingGUIDs{"MergeBookmarksUsingGUIDs",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSyncReuploadBookmarkFullTitles{
     "SyncReuploadBookmarkFullTitles", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kSyncProcessBookmarkRestoreAfterDeletion{
     "SyncProcessBookmarkRestoreAfterDeletion",
+    base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kSyncDeduplicateAllBookmarksWithSameGUID{
+    "SyncDeduplicateAllBookmarksWithSameGUID",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace switches

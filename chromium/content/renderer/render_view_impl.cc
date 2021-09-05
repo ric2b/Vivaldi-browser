@@ -449,16 +449,12 @@ void RenderViewImpl::Initialize(
   webview_ = WebView::Create(this, params->hidden,
                              /*compositing_enabled=*/true,
                              opener_frame ? opener_frame->View() : nullptr,
-                             params->blink_page_broadcast.PassHandle());
+                             std::move(params->blink_page_broadcast));
 
   g_view_map.Get().insert(std::make_pair(GetWebView(), this));
   g_routing_id_view_map.Get().insert(std::make_pair(GetRoutingID(), this));
 
   bool local_main_frame = params->main_frame_routing_id != MSG_ROUTING_NONE;
-
-  // TODO(danakj): Put this in with making the RenderFrame? Does order matter?
-  if (local_main_frame)
-    GetWebView()->SetDisplayMode(params->visual_properties.display_mode);
 
   // Vivaldi
   GetWebView()->GetSettings()->SetImagesEnabled(
@@ -482,10 +478,10 @@ void RenderViewImpl::Initialize(
     main_render_frame_ = RenderFrameImpl::CreateMainFrame(
         this, compositor_deps, opener_frame, &params, std::move(show_callback));
   } else {
-    RenderFrameProxy::CreateFrameProxy(params->proxy_routing_id, GetRoutingID(),
-                                       opener_frame, MSG_ROUTING_NONE,
-                                       params->replicated_frame_state,
-                                       params->devtools_main_frame_token);
+    RenderFrameProxy::CreateFrameProxy(
+        params->proxy_routing_id, GetRoutingID(), opener_frame,
+        MSG_ROUTING_NONE, params->replicated_frame_state,
+        params->main_frame_frame_token, params->devtools_main_frame_token);
   }
 
   // TODO(davidben): Move this state from Blink into content.
@@ -648,6 +644,9 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   // Enable gpu-accelerated 2d canvas if requested on the command line.
   WebRuntimeFeatures::EnableAccelerated2dCanvas(
       prefs.accelerated_2d_canvas_enabled);
+
+  // Enable new canvas 2d api features
+  WebRuntimeFeatures::EnableNewCanvas2DAPI(prefs.new_canvas_2d_api_enabled);
 
   // Disable antialiasing for 2d canvas if requested on the command line.
   settings->SetAntialiased2dCanvasEnabled(
@@ -844,6 +843,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   }
 #endif  // defined(OS_ANDROID)
   settings->SetForceDarkModeEnabled(prefs.force_dark_mode_enabled);
+
+  settings->SetAccessibilityAlwaysShowFocus(prefs.always_show_focus);
 
   switch (prefs.autoplay_policy) {
     case AutoplayPolicy::kNoUserGestureRequired:
@@ -1072,11 +1073,6 @@ bool RenderViewImpl::ShouldAckSyntheticInputImmediately() {
   return false;
 }
 
-void RenderViewImpl::ApplyNewDisplayModeForWidget(
-    blink::mojom::DisplayMode new_display_mode) {
-  GetWebView()->SetDisplayMode(new_display_mode);
-}
-
 void RenderViewImpl::ApplyAutoResizeLimitsForWidget(const gfx::Size& min_size,
                                                     const gfx::Size& max_size) {
   GetWebView()->EnableAutoResizeMode(min_size, max_size);
@@ -1211,7 +1207,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ViewMsg_MoveOrResizeStarted, OnMoveOrResizeStarted)
 
     // Page messages.
-    IPC_MESSAGE_HANDLER(PageMsg_VisibilityChanged, OnPageVisibilityChanged)
     IPC_MESSAGE_HANDLER(PageMsg_SetHistoryOffsetAndLength,
                         OnSetHistoryOffsetAndLength)
     IPC_MESSAGE_HANDLER(PageMsg_AudioStateChanged, OnAudioStateChanged)
@@ -1247,7 +1242,7 @@ WebView* RenderViewImpl::CreateView(
     const WebWindowFeatures& features,
     const WebString& frame_name,
     WebNavigationPolicy policy,
-    blink::mojom::WebSandboxFlags sandbox_flags,
+    network::mojom::WebSandboxFlags sandbox_flags,
     const blink::FeaturePolicy::FeatureState& opener_feature_state,
     const blink::SessionStorageNamespaceId& session_storage_namespace_id) {
   RenderFrameImpl* creator_frame = RenderFrameImpl::FromWebFrame(creator);
@@ -1336,6 +1331,7 @@ WebView* RenderViewImpl::CreateView(
   view_params->renderer_preferences = renderer_preferences_.Clone();
   view_params->web_preferences = webkit_preferences_;
   view_params->view_id = reply->route_id;
+  view_params->main_frame_frame_token = reply->main_frame_frame_token;
   view_params->main_frame_routing_id = reply->main_frame_route_id;
   view_params->frame_widget_host = std::move(reply->frame_widget_host);
   view_params->frame_widget = std::move(reply->frame_widget);
@@ -1414,7 +1410,6 @@ blink::WebPagePopup* RenderViewImpl::CreatePopup(
 
   RenderWidget* popup_widget = RenderWidget::CreateForPopup(
       widget_routing_id, opener_render_widget->compositor_deps(),
-      blink::mojom::DisplayMode::kUndefined,
       /*hidden=*/false,
       /*never_composited=*/false, std::move(widget_channel_receiver));
 
@@ -1655,27 +1650,16 @@ bool RenderViewImpl::AllowPopupsDuringPageUnload() {
          base::FeatureList::IsEnabled(features::kAllowPopupsDuringPageUnload);
 }
 
+void RenderViewImpl::OnPageVisibilityChanged(PageVisibilityState visibility) {
+#if defined(OS_ANDROID)
+  SuspendVideoCaptureDevices(visibility != PageVisibilityState::kVisible);
+#endif
+  for (auto& observer : observers_)
+    observer.OnPageVisibilityChanged(visibility);
+}
+
 bool RenderViewImpl::CanUpdateLayout() {
   return true;
-}
-
-void RenderViewImpl::SetEditCommandForNextKeyEvent(const std::string& name,
-                                                   const std::string& value) {
-  // This is test-only code. Only propagate the command if there is a main
-  // render frame.
-  if (main_render_frame_) {
-    RenderWidget* widget = main_render_frame_->GetLocalRootRenderWidget();
-    widget->SetEditCommandForNextKeyEvent(name, value);
-  }
-}
-
-void RenderViewImpl::ClearEditCommands() {
-  // This is test-only code. Only propagate the command if there is a main
-  // render frame.
-  if (main_render_frame_) {
-    RenderWidget* widget = main_render_frame_->GetLocalRootRenderWidget();
-    widget->ClearEditCommands();
-  }
 }
 
 const std::string& RenderViewImpl::GetAcceptLanguages() {
@@ -1785,16 +1769,6 @@ void RenderViewImpl::OnMoveOrResizeStarted() {
     GetWebView()->CancelPagePopup();
 }
 
-void RenderViewImpl::OnPageVisibilityChanged(
-    PageVisibilityState visibility_state) {
-#if defined(OS_ANDROID)
-  SuspendVideoCaptureDevices(visibility_state != PageVisibilityState::kVisible);
-#endif
-
-  ApplyPageVisibilityState(visibility_state,
-                           /*initial_setting=*/false);
-}
-
 void RenderViewImpl::SetPageFrozen(bool frozen) {
   if (GetWebView())
     GetWebView()->SetPageFrozen(frozen);
@@ -1829,13 +1803,6 @@ void RenderViewImpl::OnSetInsidePortal(bool inside_portal) {
   GetWebView()->SetInsidePortal(inside_portal);
 }
 
-void RenderViewImpl::DidUpdateTextAutosizerPageInfo(
-    const blink::WebTextAutosizerPageInfo& page_info) {
-  DCHECK(GetWebView()->MainFrame()->IsWebLocalFrame());
-  Send(new ViewHostMsg_NotifyTextAutosizerPageInfoChangedInLocalMainFrame(
-      GetRoutingID(), page_info));
-}
-
 void RenderViewImpl::DidAutoResize(const blink::WebSize& newSize) {
   // Auto resize should only happen on local main frames.
   DCHECK(main_render_frame_);
@@ -1843,11 +1810,9 @@ void RenderViewImpl::DidAutoResize(const blink::WebSize& newSize) {
 }
 
 void RenderViewImpl::DidFocus(blink::WebLocalFrame* calling_frame) {
-  // TODO(jcivelli): when https://bugs.webkit.org/show_bug.cgi?id=33389 is fixed
-  //                 we won't have to test for user gesture anymore and we can
-  //                 move that code back to render_widget.cc
-  if (calling_frame && calling_frame->HasTransientUserActivation() &&
-      !RenderThreadImpl::current()->web_test_mode()) {
+  // We only allow focus to move to this RenderView when the request comes from
+  // a user gesture. (See also https://bugs.webkit.org/show_bug.cgi?id=33389.)
+  if (calling_frame && calling_frame->HasTransientUserActivation()) {
     Send(new ViewHostMsg_Focus(GetRoutingID()));
 
     // Tattle on the frame that called |window.focus()|.
@@ -1877,29 +1842,6 @@ void RenderViewImpl::SuspendVideoCaptureDevices(bool suspend) {
 
 unsigned RenderViewImpl::GetLocalSessionHistoryLengthForTesting() const {
   return history_list_length_;
-}
-
-void RenderViewImpl::SetFocusAndActivateForTesting(bool enable) {
-  // If the main frame is remote, return immediately. Page level focus
-  // should be set from the browser process, so if needed by tests it should
-  // be properly supported.
-  if (!main_render_frame_)
-    return;
-
-  RenderWidget* render_widget = main_render_frame_->GetLocalRootRenderWidget();
-
-  if (enable == render_widget->has_focus())
-    return;
-
-  if (enable) {
-    SetActiveForWidget(true);
-    // Fake an IPC message so go through the IPC handler.
-    render_widget->OnSetFocus(true);
-  } else {
-    // Fake an IPC message so go through the IPC handler.
-    render_widget->OnSetFocus(false);
-    SetActiveForWidget(false);
-  }
 }
 
 // static

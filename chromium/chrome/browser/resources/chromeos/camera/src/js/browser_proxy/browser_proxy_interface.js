@@ -117,4 +117,15 @@ export class BrowserProxy {
    * @abstract
    */
   sendMessage(extensionId, message) {}
+
+  /**
+   * @abstract
+   */
+  addDummyHistoryIfNotAvailable() {}
+
+  /**
+   * @return {boolean}
+   * @abstract
+   */
+  isMp4RecordingEnabled() {}
 }

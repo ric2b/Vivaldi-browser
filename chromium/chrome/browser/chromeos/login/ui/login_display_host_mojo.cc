@@ -10,7 +10,9 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider_service.h"
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider_service_factory.h"
 #include "chrome/browser/chromeos/certificate_provider/pin_dialog_manager.h"
@@ -28,7 +30,9 @@
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/login/auth/user_context.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
@@ -184,8 +188,12 @@ void LoginDisplayHostMojo::StartWizard(OobeScreenId first_screen) {
   // screens to show.
   ObserveOobeUI();
 
-  wizard_controller_ = std::make_unique<WizardController>();
-  wizard_controller_->Init(first_screen);
+  if (features::IsOobeScreensPriorityEnabled() && wizard_controller_) {
+    wizard_controller_->AdvanceToScreen(first_screen);
+  } else {
+    wizard_controller_ = std::make_unique<WizardController>();
+    wizard_controller_->Init(first_screen);
+  }
 }
 
 WizardController* LoginDisplayHostMojo::GetWizardController() {
@@ -250,7 +258,13 @@ void LoginDisplayHostMojo::OnStartAppLaunch() {
 }
 
 void LoginDisplayHostMojo::OnBrowserCreated() {
-  NOTIMPLEMENTED();
+  base::TimeTicks startup_time = startup_metric_utils::MainEntryPointTicks();
+  if (startup_time.is_null())
+    return;
+  base::TimeDelta delta = base::TimeTicks::Now() - startup_time;
+  UMA_HISTOGRAM_CUSTOM_TIMES("OOBE.BootToSignInCompleted", delta,
+                             base::TimeDelta::FromMilliseconds(10),
+                             base::TimeDelta::FromMinutes(30), 100);
 }
 
 void LoginDisplayHostMojo::ShowGaiaDialog(const AccountId& prefilled_account) {
@@ -266,9 +280,16 @@ void LoginDisplayHostMojo::HideOobeDialog() {
 
   // The dialog can not be hidden if there are no users on the login screen.
   // Reload it instead.
-  if (!login_display_->IsSigninInProgress() && users_.empty()) {
+
+  // As ShowDialogCommon will not reload GAIA upon show for performance reasons,
+  // reload it to ensure that no state is persisted between hide and
+  // subsequent show.
+  const bool no_users =
+      !login_display_->IsSigninInProgress() && users_.empty();
+  if (no_users || GetOobeUI()->current_screen() == GaiaView::kScreenId) {
     GetOobeUI()->GetView<GaiaScreenHandler>()->ShowGaiaAsync(EmptyAccountId());
-    return;
+    if (no_users)
+      return;
   }
 
   user_selection_screen_->OnBeforeShow();

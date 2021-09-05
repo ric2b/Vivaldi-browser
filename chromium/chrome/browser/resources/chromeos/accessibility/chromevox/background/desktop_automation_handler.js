@@ -54,6 +54,12 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     /** @private {number?} */
     this.delayedAttributeOutputId_;
 
+    /** @private {!Date} */
+    this.lastHoverExit_ = new Date();
+
+    /** @private {!AutomationNode|undefined} */
+    this.lastHoverTarget_;
+
     this.addListener_(EventType.ALERT, this.onAlert);
     this.addListener_(EventType.BLUR, this.onBlur);
     this.addListener_(
@@ -91,6 +97,14 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
   /** @type {editing.TextEditHandler} */
   get textEditHandler() {
     return this.textEditHandler_;
+  }
+
+  /**
+   * @return {!AutomationNode|undefined} The target of the last observed hover
+   *     event.
+   */
+  get lastHoverTarget() {
+    return this.lastHoverTarget_;
   }
 
   /** @override */
@@ -149,11 +163,14 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
 
     EventSourceState.set(EventSourceType.TOUCH_GESTURE);
 
+    // Save the last hover target for use by the gesture handler.
+    this.lastHoverTarget_ = evt.target;
+
     let target = evt.target;
     let targetLeaf = null;
     let targetObject = null;
     while (target && target != target.root) {
-      if (!targetObject && AutomationPredicate.object(target)) {
+      if (!targetObject && AutomationPredicate.touchObject(target)) {
         targetObject = target;
       }
       if (AutomationPredicate.touchLeaf(target)) {
@@ -164,6 +181,19 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
 
     target = targetLeaf || targetObject;
     if (!target) {
+      // This clears the anchor point in the TouchExplorationController (so
+      // things like double tap won't be directed to the previous target). It
+      // also ensures if a user touch explores back to the previous range, it
+      // will be announced again.
+      ChromeVoxState.instance.setCurrentRange(null);
+
+      // Play a earcon to let the user know they're in the middle of nowhere.
+      if ((new Date() - this.lastHoverExit_) >
+          DesktopAutomationHandler.MIN_HOVER_EXIT_SOUND_DELAY_MS) {
+        ChromeVoxState.instance.nextEarcons_.engine_.onTouchExitAnchor();
+        this.lastHoverExit_ = new Date();
+      }
+      chrome.tts.stop();
       return;
     }
 
@@ -176,6 +206,7 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       this.textEditHandler_ = null;
     }
 
+    ChromeVoxState.instance.nextEarcons_.engine_.onTouchEnterAnchor();
     Output.forceModeForNextSpeechUtterance(QueueMode.FLUSH);
     this.onEventDefault(
         new CustomAutomationEvent(evt.type, target, evt.eventFrom));
@@ -488,7 +519,7 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
     // editable leading to braille output routing to the editable.
     this.textEditHandler_ = null;
 
-    chrome.automation.getFocus(function(focus) {
+    chrome.automation.getFocus((focus) => {
       // Desktop tabs get "selection" when there's a focused webview during
       // tab switching. Ignore it.
       if (evt.target.role == RoleType.TAB &&
@@ -500,11 +531,12 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
       // that focus is an ancestor of a selection target.
       const override = AutomationPredicate.menuItem(evt.target) ||
           (evt.target.root == focus.root &&
-           focus.root.role == RoleType.DESKTOP);
+           focus.root.role == RoleType.DESKTOP) ||
+          evt.target.role === RoleType.IME_CANDIDATE;
       if (override || AutomationUtil.isDescendantOf(evt.target, focus)) {
         this.onEventDefault(evt);
       }
-    }.bind(this));
+    });
   }
 
   /**
@@ -635,9 +667,12 @@ DesktopAutomationHandler = class extends BaseAutomationHandler {
 
   /**
    * Initializes global state for DesktopAutomationHandler.
-   * @private
    */
-  static init_() {
+  static init() {
+    if (DesktopAutomationHandler.instance) {
+      throw new Error('DesktopAutomationHandler.instance already exists.');
+    }
+
     chrome.automation.getDesktop(function(desktop) {
       DesktopAutomationHandler.instance = new DesktopAutomationHandler(desktop);
     });
@@ -663,6 +698,8 @@ DesktopAutomationHandler.ATTRIBUTE_DELAY_MS = 1500;
  */
 DesktopAutomationHandler.announceActions = false;
 
+/** @const {number} */
+DesktopAutomationHandler.MIN_HOVER_EXIT_SOUND_DELAY_MS = 500;
 
 /**
  * Global instance.
@@ -670,6 +707,4 @@ DesktopAutomationHandler.announceActions = false;
  */
 DesktopAutomationHandler.instance;
 
-
-DesktopAutomationHandler.init_();
 });  // goog.scope

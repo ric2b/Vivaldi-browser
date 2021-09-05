@@ -962,25 +962,39 @@ void StyleBuilderConverter::CreateImplicitNamedGridLinesFromGridArea(
 
 float StyleBuilderConverter::ConvertBorderWidth(StyleResolverState& state,
                                                 const CSSValue& value) {
+  double result = 0;
   if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
-    CSSValueID value_id = identifier_value->GetValueID();
-    if (value_id == CSSValueID::kThin)
-      return 1;
-    if (value_id == CSSValueID::kMedium)
-      return 3;
-    if (value_id == CSSValueID::kThick)
-      return 5;
-    NOTREACHED();
-    return 0;
+    switch (identifier_value->GetValueID()) {
+      case CSSValueID::kThin:
+        result = 1;
+        break;
+      case CSSValueID::kMedium:
+        result = 3;
+        break;
+      case CSSValueID::kThick:
+        result = 5;
+        break;
+      default:
+        NOTREACHED();
+        break;
+    }
+    result = state.CssToLengthConversionData().ZoomedComputedPixels(
+        result, CSSPrimitiveValue::UnitType::kPixels);
+  } else {
+    const auto& primitive_value = To<CSSPrimitiveValue>(value);
+    result =
+        primitive_value.ComputeLength<float>(state.CssToLengthConversionData());
   }
-  const auto& primitive_value = To<CSSPrimitiveValue>(value);
-  double result =
-      primitive_value.ComputeLength<float>(state.CssToLengthConversionData());
   double zoomed_result = state.StyleRef().EffectiveZoom() * result;
   if (zoomed_result > 0.0 && zoomed_result < 1.0)
     return 1.0;
   return clampTo<float>(result, defaultMinimumForClamp<float>(),
                         defaultMaximumForClamp<float>());
+}
+
+LayoutUnit StyleBuilderConverter::ConvertLayoutUnit(StyleResolverState& state,
+                                                    const CSSValue& value) {
+  return LayoutUnit::Clamp(ConvertComputedLength<float>(state, value));
 }
 
 GapLength StyleBuilderConverter::ConvertGapLength(StyleResolverState& state,
@@ -1443,6 +1457,17 @@ SVGPaint StyleBuilderConverter::ConvertSVGPaint(StyleResolverState& state,
   return paint;
 }
 
+TextDecorationThickness StyleBuilderConverter::ConvertTextDecorationThickness(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
+  if (identifier_value &&
+      identifier_value->GetValueID() == CSSValueID::kFromFont)
+    return TextDecorationThickness(identifier_value->GetValueID());
+
+  return TextDecorationThickness(ConvertLengthOrAuto(state, value));
+}
+
 TextEmphasisPosition StyleBuilderConverter::ConvertTextTextEmphasisPosition(
     StyleResolverState& state,
     const CSSValue& value) {
@@ -1505,6 +1530,12 @@ TextUnderlinePosition StyleBuilderConverter::ConvertTextUnderlinePosition(
     process(value);
   }
   return flags;
+}
+
+Length StyleBuilderConverter::ConvertTextUnderlineOffset(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return ConvertLengthOrAuto(state, value);
 }
 
 TransformOperations StyleBuilderConverter::ConvertTransformOperations(
@@ -1834,11 +1865,6 @@ StyleBuilderConverter::ConvertRegisteredPropertyVariableData(
       has_root_font_units, absolutized, g_null_atom, WTF::TextEncoding());
 }
 
-const CSSToLengthConversionData&
-StyleBuilderConverter::CssToLengthConversionData(StyleResolverState& state) {
-  return state.CssToLengthConversionData();
-}
-
 LengthSize StyleBuilderConverter::ConvertIntrinsicSize(
     StyleResolverState& state,
     const CSSValue& value) {
@@ -1880,6 +1906,21 @@ AtomicString StyleBuilderConverter::ConvertPage(StyleResolverState& state,
   DCHECK_EQ(DynamicTo<CSSIdentifierValue>(value)->GetValueID(),
             CSSValueID::kAuto);
   return AtomicString();
+}
+
+RubyPosition StyleBuilderConverter::ConvertRubyPosition(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  if (const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+    CSSValueID value_id = identifier_value->GetValueID();
+    if (value_id == CSSValueID::kOver)
+      return RubyPosition::kBefore;
+    if (value_id == CSSValueID::kUnder)
+      return RubyPosition::kAfter;
+    return identifier_value->ConvertTo<blink::RubyPosition>();
+  }
+  NOTREACHED();
+  return RubyPosition::kBefore;
 }
 
 }  // namespace blink

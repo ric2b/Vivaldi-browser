@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.customtabs;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
@@ -23,20 +22,20 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.customtabs.CustomTabDelegateFactory.CustomTabNavigationDelegate;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
+import org.chromium.chrome.browser.tab.InterceptNavigationDelegateTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResult;
+import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -111,8 +110,6 @@ public class CustomTabFromChromeExternalNavigationTest {
     @Test
     @Feature("CustomTabFromChrome")
     @LargeTest
-    @DisableIf.Build(message = "Flaky on K, https://crbug.com/962974",
-            sdk_is_less_than = Build.VERSION_CODES.LOLLIPOP)
     public void
     testIntentWithRedirectToApp() {
         final String redirectUrl = "https://maps.google.com/maps?q=1600+amphitheatre+parkway";
@@ -137,7 +134,8 @@ public class CustomTabFromChromeExternalNavigationTest {
 
         CriteriaHelper.pollUiThread(() -> {
             Tab tab = mActivityRule.getActivity().getActivityTab();
-            InterceptNavigationDelegateImpl delegate = InterceptNavigationDelegateImpl.get(tab);
+            InterceptNavigationDelegateImpl delegate =
+                    InterceptNavigationDelegateTabHelper.get(tab);
             if (delegate == null) return false;
             navigationDelegate.set(delegate);
             return true;

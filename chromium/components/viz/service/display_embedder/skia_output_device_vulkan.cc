@@ -6,12 +6,10 @@
 
 #include <utility>
 
-#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/ipc/common/gpu_surface_lookup.h"
-#include "gpu/vulkan/vulkan_fence_helper.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_surface.h"
@@ -58,24 +56,17 @@ SkiaOutputDeviceVulkan::~SkiaOutputDeviceVulkan() {
   if (!vulkan_surface_)
     return;
 
-#if defined(OS_ANDROID)
-  if (base::SysInfo::IsLowEndDevice()) {
-    // For low end device, output surface will be destroyed when chrome goes
-    // into background. And a new output surface will be created when chrome
-    // goes to foreground again. The vulkan surface cannot be created
-    // successfully, if the old vulkan surface is not destroyed. To avoid the
-    // problem, we sync the device queue, and destroy the vulkan surface
-    // synchronously.
-    vkQueueWaitIdle(context_provider_->GetDeviceQueue()->GetVulkanQueue());
-    vulkan_surface_->Destroy();
-    return;
-  }
-#endif
-
-  auto* fence_helper = context_provider_->GetDeviceQueue()->GetFenceHelper();
-  fence_helper->EnqueueVulkanObjectCleanupForSubmittedWork(
-      std::move(vulkan_surface_));
+  vkQueueWaitIdle(context_provider_->GetDeviceQueue()->GetVulkanQueue());
+  vulkan_surface_->Destroy();
 }
+
+#if defined(OS_WIN)
+gpu::SurfaceHandle SkiaOutputDeviceVulkan::GetChildSurfaceHandle() {
+  if (vulkan_surface_->accelerated_widget() != surface_handle_)
+    return vulkan_surface_->accelerated_widget();
+  return gpu::kNullSurfaceHandle;
+}
+#endif
 
 bool SkiaOutputDeviceVulkan::Reshape(const gfx::Size& size,
                                      float device_scale_factor,
@@ -87,21 +78,7 @@ bool SkiaOutputDeviceVulkan::Reshape(const gfx::Size& size,
   if (!vulkan_surface_)
     return false;
 
-  auto generation = vulkan_surface_->swap_chain_generation();
-  vulkan_surface_->Reshape(size, transform);
-  auto sk_color_space = color_space.ToSkColorSpace();
-  if (vulkan_surface_->swap_chain_generation() != generation ||
-      !SkColorSpace::Equals(sk_color_space.get(), sk_color_space_.get())) {
-    // swapchain is changed, we need recreate all cached sk surfaces.
-    for (auto it = sk_surface_size_pairs_.begin();
-         it != sk_surface_size_pairs_.end(); ++it) {
-      memory_type_tracker_->TrackMemFree(it->bytes_allocated);
-    }
-    sk_surface_size_pairs_.clear();
-    sk_surface_size_pairs_.resize(vulkan_surface_->swap_chain()->num_images());
-    sk_color_space_ = std::move(sk_color_space);
-  }
-  return true;
+  return RecreateSwapChain(size, color_space.ToSkColorSpace(), transform);
 }
 
 void SkiaOutputDeviceVulkan::SwapBuffers(
@@ -126,8 +103,19 @@ void SkiaOutputDeviceVulkan::PostSubBuffer(
   StartSwapBuffers(std::move(feedback));
   auto image_size = vulkan_surface_->image_size();
   gfx::SwapResult result = gfx::SwapResult::SWAP_ACK;
+  // If the swapchain is new created, but rect doesn't cover the whole buffer,
+  // we will still present it even it causes a artifact in this frame and
+  // recovered when the next frame is presented. We do that because the old
+  // swapchain's present thread is blocked on waiting a reply from xserver, and
+  // presenting a new image with the new create swapchain will somehow makes
+  // xserver send a reply to us, and then unblock the old swapchain's present
+  // thread. So the old swapchain can be destroyed properly.
   if (!rect.IsEmpty())
     result = vulkan_surface_->PostSubBuffer(rect);
+  if (is_new_swapchain_) {
+    is_new_swapchain_ = false;
+    result = gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS;
+  }
   FinishSwapBuffers(result, image_size, std::move(latency_info));
 }
 
@@ -139,8 +127,21 @@ SkSurface* SkiaOutputDeviceVulkan::BeginPaint(
   scoped_write_.emplace(vulkan_surface_->swap_chain());
   if (!scoped_write_->success()) {
     scoped_write_.reset();
-    return nullptr;
+    if (vulkan_surface_->swap_chain()->state() != VK_ERROR_SURFACE_LOST_KHR)
+      return nullptr;
+    // If vulkan surface is lost, we will try to recreate swap chain.
+    if (!RecreateSwapChain(vulkan_surface_->image_size(), color_space_,
+                           vulkan_surface_->transform())) {
+      LOG(DFATAL) << "Failed to recreate vulkan swap chain.";
+      return nullptr;
+    }
+    scoped_write_.emplace(vulkan_surface_->swap_chain());
+    if (!scoped_write_->success()) {
+      scoped_write_.reset();
+      return nullptr;
+    }
   }
+
   auto& sk_surface =
       sk_surface_size_pairs_[scoped_write_->image_index()].sk_surface;
 
@@ -176,8 +177,7 @@ SkSurface* SkiaOutputDeviceVulkan::BeginPaint(
                              : kRGBA_8888_SkColorType;
     sk_surface = SkSurface::MakeFromBackendRenderTarget(
         context_provider_->GetGrContext(), render_target,
-        kTopLeft_GrSurfaceOrigin, sk_color_type, sk_color_space_,
-        &surface_props);
+        kTopLeft_GrSurfaceOrigin, sk_color_type, color_space_, &surface_props);
     DCHECK(sk_surface);
   } else {
     auto backend = sk_surface->getBackendRenderTarget(
@@ -257,6 +257,32 @@ bool SkiaOutputDeviceVulkan::Initialize() {
                                     ? kRGBA_8888_SkColorType
                                     : kBGRA_8888_SkColorType;
   capabilities_.gr_backend_format = GrBackendFormat::MakeVk(surface_format);
+  return true;
+}
+
+bool SkiaOutputDeviceVulkan::RecreateSwapChain(
+    const gfx::Size& size,
+    sk_sp<SkColorSpace> color_space,
+    gfx::OverlayTransform transform) {
+  auto generation = vulkan_surface_->swap_chain_generation();
+
+  // Call vulkan_surface_->Reshape() will recreate vulkan swapchain if it is
+  // necessary.
+  if (!vulkan_surface_->Reshape(size, transform))
+    return false;
+
+  if (vulkan_surface_->swap_chain_generation() != generation ||
+      !SkColorSpace::Equals(color_space.get(), color_space_.get())) {
+    // swapchain is changed, we need recreate all cached sk surfaces.
+    for (const auto& sk_surface_size_pair : sk_surface_size_pairs_) {
+      memory_type_tracker_->TrackMemFree(sk_surface_size_pair.bytes_allocated);
+    }
+    sk_surface_size_pairs_.clear();
+    sk_surface_size_pairs_.resize(vulkan_surface_->swap_chain()->num_images());
+    color_space_ = std::move(color_space);
+    is_new_swapchain_ = true;
+  }
+
   return true;
 }
 

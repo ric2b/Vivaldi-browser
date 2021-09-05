@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/modules/picture_in_picture/picture_in_picture_window.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/widget/frame_widget.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
@@ -202,9 +203,10 @@ void PictureInPictureControllerImpl::OnEnteredPictureInPicture(
     return;
   }
 
-  picture_in_picture_session_ =
-      mojo::Remote<mojom::blink::PictureInPictureSession>(
-          std::move(session_remote));
+  picture_in_picture_session_.reset();
+  picture_in_picture_session_.Bind(
+      std::move(session_remote),
+      element->GetDocument().GetTaskRunner(TaskType::kMediaElementEvent));
 
   if (IsElementAllowed(*element, /*report_failure=*/true) != Status::kEnabled) {
     if (resolver) {
@@ -223,8 +225,7 @@ void PictureInPictureControllerImpl::OnEnteredPictureInPicture(
   picture_in_picture_element_->OnEnteredPictureInPicture();
 
   picture_in_picture_window_ = MakeGarbageCollected<PictureInPictureWindow>(
-      GetSupplementable()->ToExecutionContext(),
-      picture_in_picture_window_size);
+      GetExecutionContext(), picture_in_picture_window_size);
 
   picture_in_picture_element_->DispatchEvent(
       *EnterPictureInPictureEvent::Create(
@@ -318,12 +319,15 @@ bool PictureInPictureControllerImpl::IsEnterAutoPictureInPictureAllowed()
   // - Document runs in a Chrome Extension.
   // - Document is in fullscreen.
   // - Document is in a PWA window that runs in the scope of the PWA.
+  bool is_in_pwa_window = false;
+  if (GetSupplementable()->GetFrame()) {
+    mojom::blink::DisplayMode display_mode =
+        GetSupplementable()->GetFrame()->GetWidgetForLocalRoot()->DisplayMode();
+    is_in_pwa_window = display_mode != mojom::blink::DisplayMode::kBrowser;
+  }
   if (!(GetSupplementable()->Url().ProtocolIs("chrome-extension") ||
         Fullscreen::FullscreenElementFrom(*GetSupplementable()) ||
-        (GetSupplementable()->View() &&
-         GetSupplementable()->View()->DisplayMode() !=
-             blink::mojom::DisplayMode::kBrowser &&
-         GetSupplementable()->IsInWebAppScope()))) {
+        (is_in_pwa_window && GetSupplementable()->IsInWebAppScope()))) {
     return false;
   }
 
@@ -375,11 +379,6 @@ void PictureInPictureControllerImpl::PageVisibilityChanged() {
   }
 }
 
-void PictureInPictureControllerImpl::ContextDestroyed() {
-  picture_in_picture_service_.reset();
-  session_observer_receiver_.reset();
-}
-
 void PictureInPictureControllerImpl::OnPictureInPictureStateChange() {
   DCHECK(picture_in_picture_element_);
   DCHECK(picture_in_picture_element_->GetWebMediaPlayer());
@@ -405,20 +404,25 @@ void PictureInPictureControllerImpl::Trace(Visitor* visitor) {
   visitor->Trace(picture_in_picture_element_);
   visitor->Trace(auto_picture_in_picture_elements_);
   visitor->Trace(picture_in_picture_window_);
+  visitor->Trace(session_observer_receiver_);
+  visitor->Trace(picture_in_picture_service_);
+  visitor->Trace(picture_in_picture_session_);
   PictureInPictureController::Trace(visitor);
   PageVisibilityObserver::Trace(visitor);
-  ExecutionContextLifecycleObserver::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
 }
 
 PictureInPictureControllerImpl::PictureInPictureControllerImpl(
     Document& document)
     : PictureInPictureController(document),
       PageVisibilityObserver(document.GetPage()),
-      ExecutionContextLifecycleObserver(&document),
-      session_observer_receiver_(this) {}
+      ExecutionContextClient(document.GetExecutionContext()),
+      session_observer_receiver_(this, document.GetExecutionContext()),
+      picture_in_picture_service_(document.GetExecutionContext()),
+      picture_in_picture_session_(document.GetExecutionContext()) {}
 
 bool PictureInPictureControllerImpl::EnsureService() {
-  if (picture_in_picture_service_)
+  if (picture_in_picture_service_.is_bound())
     return true;
 
   if (!GetSupplementable()->GetFrame())

@@ -44,11 +44,15 @@ enum class StatusCode : StatusCodeType {
   // Windows Errors: 0x02
   kWindowsWrappedHresult = 0x00000201,
   kWindowsApiNotAvailible = 0x00000202,
+  kWindowsD3D11Error = 0x00000203,
 
   // D3D11VideoDecoder Errors: 0x03
   kCantMakeContextCurrent = 0x00000301,
   kCantPostTexture = 0x00000302,
   kCantPostAcquireStream = 0x00000303,
+  kCantCreateEglStream = 0x00000304,
+  kCantCreateEglStreamConsumer = 0x00000305,
+  kCantCreateEglStreamProducer = 0x00000306,
 
   // MojoDecoder Errors: 0x04
   kMojoDecoderNoWrappedDecoder = 0x00000401,
@@ -67,6 +71,15 @@ enum class StatusCode : StatusCodeType {
   kV4l2BadFormat = 0x00000507,
   kVaapiReinitializedDuringDecode = 0x00000508,
   kVaapiFailedAcceleratorCreation = 0x00000509,
+
+  // Encoder Error: 0x06
+  kEncoderInitializeNeverCompleted = 0x00000601,
+  kEncoderInitializeTwice = 0x00000602,
+  kEncoderFailedEncode = 0x00000603,
+  kEncoderUnsupportedProfile = 0x00000604,
+  kEncoderUnsupportedCodec = 0x00000605,
+  kEncoderUnsupportedConfig = 0x00000606,
+  kEncoderInitializationError = 0x00000607,
 
   // Special codes
   kGenericErrorPleaseRemove = 0x79999999,

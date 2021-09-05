@@ -18,7 +18,6 @@ import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.URLSpan;
 import android.util.SparseArray;
-import android.util.SparseLongArray;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -51,10 +50,11 @@ import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.ui.base.WindowAndroid;
 
 import java.util.ArrayList;
-import java.util.Calendar;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -118,9 +118,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     // Constant for no granularity selected.
     private static final int NO_GRANULARITY_SELECTED = 0;
 
-    // Constant for throttling delay of successive accessibility events in milliseconds.
-    private static final int ACCESSIBILITY_EVENT_DELAY = 100;
-
     private final WebContentsImpl mWebContents;
     protected AccessibilityManager mAccessibilityManager;
     protected final Context mContext;
@@ -143,6 +140,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     private boolean mIsCurrentlyExtendingSelection;
     private int mSelectionStart;
     private int mCursorIndex;
+    private String mSupportedHtmlElementTypes;
 
     // Whether or not the next selection event should be fired. We only want to sent one traverse
     // and one selection event per granularity move, this ensures no double events while still
@@ -165,27 +163,17 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     // Accessibility touch exploration state.
     private boolean mTouchExplorationEnabled;
 
-    // Unordered list of event types we will throttle if multiple events of the given type are sent
-    // in quick succession.
-    // TODO (mschillaci) - No event types added in M83 to disable all throttling.
-    private Set<Integer> mEventsToThrottle = new HashSet<Integer>();
-
-    // For events being throttled (see: |mEventsToThrottle|), this array will map the eventType
-    // to the last time (long in milliseconds) such an event has been sent.
-    private SparseLongArray mEventLastFiredTimes = new SparseLongArray();
-
-    // For events being throttled (see: |mEventsToThrottle|), this array will map the eventType
-    // to a single Runnable that will send an event after some delay.
-    private SparseArray<Runnable> mPendingEvents = new SparseArray<>();
-
     // This array maps a given virtualViewId to an |AccessibilityNodeInfo| for that view. We use
     // this to update a node quickly rather than building from one scratch each time.
-    // TODO (mschillaci) - Nothing is added to the cache in M83, it is disabled.
     private SparseArray<AccessibilityNodeInfo> mNodeInfoCache = new SparseArray<>();
 
-    // TODO (mschillaci) - Revert this change to re-enable throttling.
-    private Runnable mSendWindowContentChangedRunnable;
-    private static final int WINDOW_CONTENT_CHANGED_DELAY_MS = 500;
+    // Delay times for throttling of successive AccessibilityEvents in milliseconds.
+    private static final int ACCESSIBILITY_EVENT_DELAY_DEFAULT = 100;
+    private static final int ACCESSIBILITY_EVENT_DELAY_HOVER = 50;
+
+    // This handles the dispatching of accessibility events. It acts as an intermediary where we can
+    // apply throttling rules, delay event construction, etc.
+    private AccessibilityEventDispatcher mEventDispatcher;
 
     /**
      * Create a WebContentsAccessibilityImpl object.
@@ -199,8 +187,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                 return new OWebContentsAccessibility(webContents);
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 return new LollipopWebContentsAccessibility(webContents);
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                return new KitKatWebContentsAccessibility(webContents);
             } else {
                 return new WebContentsAccessibilityImpl(webContents);
             }
@@ -227,6 +213,54 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         mCaptioningController = new CaptioningController(mWebContents);
         WindowEventObserverManager.from(mWebContents).addObserver(this);
 
+        // Define our delays on a per event type basis.
+        Map<Integer, Integer> eventThrottleDelays = new HashMap<Integer, Integer>();
+        eventThrottleDelays.put(
+                AccessibilityEvent.TYPE_VIEW_SCROLLED, ACCESSIBILITY_EVENT_DELAY_DEFAULT);
+        eventThrottleDelays.put(
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED, ACCESSIBILITY_EVENT_DELAY_DEFAULT);
+        eventThrottleDelays.put(
+                AccessibilityEvent.TYPE_VIEW_HOVER_ENTER, ACCESSIBILITY_EVENT_DELAY_HOVER);
+
+        // Define events to throttle without regard for |virtualViewId|.
+        Set<Integer> viewIndependentEvents = new HashSet<Integer>();
+        viewIndependentEvents.add(AccessibilityEvent.TYPE_VIEW_HOVER_ENTER);
+
+        mEventDispatcher =
+                new AccessibilityEventDispatcher(new AccessibilityEventDispatcher.Client() {
+                    @Override
+                    public void postRunnable(Runnable toPost, long delayInMilliseconds) {
+                        mView.postDelayed(toPost, delayInMilliseconds);
+                    }
+
+                    @Override
+                    public void removeRunnable(Runnable toRemove) {
+                        mView.removeCallbacks(toRemove);
+                    }
+
+                    @Override
+                    public boolean dispatchEvent(int virtualViewId, int eventType) {
+                        AccessibilityEvent event =
+                                buildAccessibilityEvent(virtualViewId, eventType);
+                        if (event == null) return false;
+
+                        mView.requestSendAccessibilityEvent(mView, event);
+
+                        // Always send the ENTER and then the EXIT event, to match a standard
+                        // Android View.
+                        if (eventType == AccessibilityEvent.TYPE_VIEW_HOVER_ENTER) {
+                            AccessibilityEvent exitEvent = buildAccessibilityEvent(
+                                    mLastHoverId, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
+                            if (exitEvent != null) {
+                                mView.requestSendAccessibilityEvent(mView, exitEvent);
+                                mLastHoverId = virtualViewId;
+                            }
+                        }
+
+                        return true;
+                    }
+                }, eventThrottleDelays, viewIndependentEvents);
+
         // Native is initialized lazily, when node provider is actually requested.
     }
 
@@ -239,6 +273,10 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         mSelectionNodeId = View.NO_ID;
         mIsHovering = false;
         mCurrentRootId = View.NO_ID;
+
+        mSupportedHtmlElementTypes =
+                WebContentsAccessibilityImplJni.get().getSupportedHtmlElementTypes(
+                        mNativeObj, WebContentsAccessibilityImpl.this);
     }
 
     @CalledByNative
@@ -378,8 +416,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             if (WebContentsAccessibilityImplJni.get().populateAccessibilityNodeInfo(
                         mNativeObj, WebContentsAccessibilityImpl.this, info, virtualViewId)) {
                 // After successfully populating this node, add it to our cache then return.
-                // TODO (mschillaci) - Uncomment this line to re-enable caching.
-                // mNodeInfoCache.put(virtualViewId, AccessibilityNodeInfo.obtain(info));
+                mNodeInfoCache.put(virtualViewId, AccessibilityNodeInfo.obtain(info));
                 return info;
             } else {
                 info.recycle();
@@ -417,9 +454,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
     public void setObscuredByAnotherView(boolean isObscured) {
         if (isObscured != mIsObscuredByAnotherView) {
             mIsObscuredByAnotherView = isObscured;
-            // TODO (mschillaci) - Revert this change to re-enable throttling.
-            // sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-            mView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
         }
     }
 
@@ -539,8 +574,9 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         if (action == ACTION_IME_ENTER && ACTION_IME_ENTER != 0) {
             if (mWebContents != null) {
                 if (ImeAdapterImpl.fromWebContents(mWebContents) != null) {
+                    // We send an unspecified action to ensure Enter key is hit
                     return ImeAdapterImpl.fromWebContents(mWebContents)
-                            .performEditorAction(EditorInfo.IME_ACTION_NEXT);
+                            .performEditorAction(EditorInfo.IME_ACTION_UNSPECIFIED);
                 }
             }
             return false;
@@ -768,10 +804,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
 
         if (action == MotionEvent.ACTION_HOVER_EXIT) {
             mIsHovering = false;
-            if (mLastHoverId != View.NO_ID) {
-                sendAccessibilityEvent(mLastHoverId, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
-                mLastHoverId = View.NO_ID;
-            }
+            mLastHoverId = View.NO_ID;
+
             if (mPendingScrollToMakeNodeVisible) {
                 WebContentsAccessibilityImplJni.get().scrollToMakeNodeVisible(
                         mNativeObj, WebContentsAccessibilityImpl.this, mAccessibilityFocusId);
@@ -798,9 +832,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
 
         // Invalidate the container view, since the chrome accessibility tree is now
         // ready and listed as the child of the container view.
-        // TODO (mschillaci) - Revert this change to re-enable throttling.
-        // sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-        sendWindowContentChangedOnView();
+        sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
 
         // (Re-) focus focused element, since we weren't able to create an
         // AccessibilityNodeInfo for this element before.
@@ -1069,30 +1101,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
      */
     @CalledByNative
     private void sendDelayedWindowContentChangedEvent() {
-        // TODO (mschillaci) - Revert this change to re-enable throttling.
-        if (mSendWindowContentChangedRunnable != null) return;
-
-        mSendWindowContentChangedRunnable = new Runnable() {
-            @Override
-            public void run() {
-                sendWindowContentChangedOnView();
-            }
-        };
-
-        mView.postDelayed(mSendWindowContentChangedRunnable, WINDOW_CONTENT_CHANGED_DELAY_MS);
-    }
-
-    private void sendWindowContentChangedOnView() {
-        if (mSendWindowContentChangedRunnable != null) {
-            mView.removeCallbacks(mSendWindowContentChangedRunnable);
-            mSendWindowContentChangedRunnable = null;
-        }
-        mView.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-    }
-
-    private void sendWindowContentChangedOnVirtualView(int virtualViewId) {
-        sendAccessibilityEvent(virtualViewId, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-        // sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+        sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
     }
 
     private void sendAccessibilityEvent(int virtualViewId, int eventType) {
@@ -1110,54 +1119,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             return;
         }
 
-        // Check whether this type of event is one we want to throttle, and if not then send it
-        // TODO (mschillaci) - Will always return true until we enable throttling (see line: 171).
-        if (!mEventsToThrottle.contains(eventType)) {
-            AccessibilityEvent event = buildAccessibilityEvent(virtualViewId, eventType);
-            if (event == null) return;
-
-            mView.requestSendAccessibilityEvent(mView, event);
-            return;
-        }
-
-        // Check when we last fired an event. If we have not fired an event of this type, or the
-        // last time was longer than |ACCESSIBILITY_EVENT_DELAY| ago, then we allow this event
-        // to be sent immediately and record the time and clear any lingering callbacks.
-        long now = Calendar.getInstance().getTimeInMillis();
-        if (now - mEventLastFiredTimes.get(eventType, 0) >= ACCESSIBILITY_EVENT_DELAY) {
-            AccessibilityEvent event = buildAccessibilityEvent(virtualViewId, eventType);
-            // If accessibility is disabled or the node is invalid, returned event will be null.
-            if (event == null) return;
-
-            mView.requestSendAccessibilityEvent(mView, event);
-            mView.removeCallbacks(mPendingEvents.get(eventType));
-            mPendingEvents.remove(eventType);
-            mEventLastFiredTimes.put(eventType, now);
-        } else {
-            // We have fired an event within our |ACCESSIBILITY_EVENT_DELAY| delay window.
-            // Store this event, replacing any events in |mPendingEvents| of the same type,
-            // and set a delay equal to remaining time in our delay.
-            mView.removeCallbacks(mPendingEvents.get(eventType));
-
-            Runnable myRunnable = () -> {
-                // We have delayed firing this event, so accessibility may not be enabled or the
-                // node may be invalid, in which case build will return a null event.
-                AccessibilityEvent event = buildAccessibilityEvent(virtualViewId, eventType);
-                if (event != null) {
-                    mView.requestSendAccessibilityEvent(mView, event);
-                    // After sending event, record time it was sent
-                    mEventLastFiredTimes.put(eventType, Calendar.getInstance().getTimeInMillis());
-                }
-
-                // Remove callbacks and pending event
-                mView.removeCallbacks(mPendingEvents.get(eventType));
-                mPendingEvents.remove(eventType);
-            };
-
-            mView.postDelayed(myRunnable,
-                    (mEventLastFiredTimes.get(eventType, 0) + ACCESSIBILITY_EVENT_DELAY) - now);
-            mPendingEvents.put(eventType, myRunnable);
-        }
+        mEventDispatcher.enqueueEvent(virtualViewId, eventType);
     }
 
     private AccessibilityEvent buildAccessibilityEvent(int virtualViewId, int eventType) {
@@ -1315,13 +1277,9 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
                 mNativeObj, WebContentsAccessibilityImpl.this);
         if (rootId != mCurrentRootId) {
             mCurrentRootId = rootId;
-            // TODO (mschillaci) - Revert this change to re-enable throttling.
-            // sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-            sendWindowContentChangedOnView();
+            sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
         } else {
-            // TODO (mschillaci) - Revert this change to re-enable throttling.
-            // sendAccessibilityEvent(id, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-            sendWindowContentChangedOnVirtualView(id);
+            sendAccessibilityEvent(id, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
         }
     }
 
@@ -1331,9 +1289,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         mAccessibilityFocusRect = null;
         mUserHasTouchExplored = false;
         // Invalidate the host, since its child is now gone.
-        // TODO (mschillaci) - Revert this change to re-enable throttling.
-        // sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-        sendWindowContentChangedOnView();
+        sendAccessibilityEvent(View.NO_ID, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
     }
 
     @CalledByNative
@@ -1351,12 +1307,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
         if (mLastHoverId == id) return;
         if (!mIsHovering) return;
 
-        // Always send the ENTER and then the EXIT event, to match a standard Android View.
         sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_HOVER_ENTER);
-        if (mLastHoverId != View.NO_ID) {
-            sendAccessibilityEvent(mLastHoverId, AccessibilityEvent.TYPE_VIEW_HOVER_EXIT);
-        }
-        mLastHoverId = id;
     }
 
     @CalledByNative
@@ -1602,7 +1553,24 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
             boolean isRoot, boolean isEditableText, String role, String roleDescription,
             String hint, int selectionStartIndex, int selectionEndIndex, boolean hasImage,
             boolean contentInvalid, String targetUrl) {
-        // Requires KitKat or higher.
+        Bundle bundle = node.getExtras();
+        bundle.putCharSequence("AccessibilityNodeInfo.chromeRole", role);
+        bundle.putCharSequence("AccessibilityNodeInfo.roleDescription", roleDescription);
+        bundle.putCharSequence("AccessibilityNodeInfo.hint", hint);
+        if (!targetUrl.isEmpty()) {
+            bundle.putCharSequence("AccessibilityNodeInfo.targetUrl", targetUrl);
+        }
+        if (hasImage) bundle.putCharSequence("AccessibilityNodeInfo.hasImage", "true");
+        if (isRoot) {
+            bundle.putCharSequence(
+                    "ACTION_ARGUMENT_HTML_ELEMENT_STRING_VALUES", mSupportedHtmlElementTypes);
+        }
+        if (isEditableText) {
+            node.setEditable(true);
+            node.setTextSelection(selectionStartIndex, selectionEndIndex);
+        }
+
+        node.setContentInvalid(contentInvalid);
     }
 
     @CalledByNative
@@ -1835,8 +1803,13 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProvider
      */
     @CalledByNative
     protected int getAccessibilityServiceCapabilitiesMask() {
-        // Implemented in KitKatWebContentsAccessibility.
-        return 0;
+        int capabilitiesMask = 0;
+        for (AccessibilityServiceInfo service :
+                mAccessibilityManager.getEnabledAccessibilityServiceList(
+                        AccessibilityServiceInfo.FEEDBACK_ALL_MASK)) {
+            capabilitiesMask |= service.getCapabilities();
+        }
+        return capabilitiesMask;
     }
 
     @NativeMethods

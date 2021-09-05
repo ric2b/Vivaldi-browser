@@ -32,6 +32,20 @@ Profile* ProfileFromFrameTreeNodeID(int frame_tree_node_id) {
   return Profile::FromBrowserContext(web_contents->GetBrowserContext());
 }
 
+void ReportProbeLatency(int frame_tree_node_id, base::TimeDelta probe_latency) {
+  content::WebContents* web_contents =
+      content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+  if (!web_contents)
+    return;
+
+  IsolatedPrerenderTabHelper* tab_helper =
+      IsolatedPrerenderTabHelper::FromWebContents(web_contents);
+  if (!tab_helper)
+    return;
+
+  tab_helper->NotifyPrefetchProbeLatency(probe_latency);
+}
+
 }  // namespace
 
 IsolatedPrerenderURLLoaderInterceptor::IsolatedPrerenderURLLoaderInterceptor(
@@ -49,9 +63,10 @@ void IsolatedPrerenderURLLoaderInterceptor::MaybeCreateLoader(
 
   DCHECK(!loader_callback_);
   loader_callback_ = std::move(callback);
+  url_ = tentative_resource_request.url;
 
   std::unique_ptr<PrefetchedMainframeResponseContainer> prefetch =
-      GetPrefetchedResponse(tentative_resource_request.url);
+      GetPrefetchedResponse(url_);
   if (!prefetch) {
     DoNotInterceptNavigation();
     return;
@@ -59,14 +74,15 @@ void IsolatedPrerenderURLLoaderInterceptor::MaybeCreateLoader(
 
   if (base::FeatureList::IsEnabled(
           features::kIsolatePrerendersMustProbeOrigin)) {
-    StartProbe(tentative_resource_request.url.GetOrigin(),
+    StartProbe(url_.GetOrigin(),
                base::BindOnce(&IsolatedPrerenderURLLoaderInterceptor::
                                   InterceptPrefetchedNavigation,
                               base::Unretained(this),
                               tentative_resource_request, std::move(prefetch)));
     return;
   }
-  NotifyPrefetchUsage(IsolatedPrerenderTabHelper::PrefetchUsage::kPrefetchUsed);
+  NotifyPrefetchStatusUpdate(
+      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchUsedNoProbe);
   InterceptPrefetchedNavigation(tentative_resource_request,
                                 std::move(prefetch));
 }
@@ -89,14 +105,18 @@ void IsolatedPrerenderURLLoaderInterceptor::DoNotInterceptNavigation() {
 void IsolatedPrerenderURLLoaderInterceptor::OnProbeComplete(
     base::OnceClosure on_success_callback,
     bool success) {
+  DCHECK(probe_start_time_.has_value());
+  ReportProbeLatency(frame_tree_node_id_,
+                     base::TimeTicks::Now() - probe_start_time_.value());
+
   if (success) {
-    NotifyPrefetchUsage(
-        IsolatedPrerenderTabHelper::PrefetchUsage::kPrefetchUsedProbeSuccess);
+    NotifyPrefetchStatusUpdate(
+        IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchUsedProbeSuccess);
     std::move(on_success_callback).Run();
     return;
   }
-  NotifyPrefetchUsage(
-      IsolatedPrerenderTabHelper::PrefetchUsage::kPrefetchNotUsedProbeFailed);
+  NotifyPrefetchStatusUpdate(
+      IsolatedPrerenderTabHelper::PrefetchStatus::kPrefetchNotUsedProbeFailed);
   DoNotInterceptNavigation();
 }
 
@@ -137,6 +157,8 @@ void IsolatedPrerenderURLLoaderInterceptor::StartProbe(
               "developer testing."
             policy_exception_justification: "Not implemented."
         })");
+
+  probe_start_time_ = base::TimeTicks::Now();
 
   AvailabilityProber::TimeoutPolicy timeout_policy;
   timeout_policy.base_timeout = IsolatedPrerenderProbeTimeout();
@@ -188,8 +210,8 @@ IsolatedPrerenderURLLoaderInterceptor::GetPrefetchedResponse(const GURL& url) {
   return tab_helper->TakePrefetchResponse(url);
 }
 
-void IsolatedPrerenderURLLoaderInterceptor::NotifyPrefetchUsage(
-    IsolatedPrerenderTabHelper::PrefetchUsage usage) const {
+void IsolatedPrerenderURLLoaderInterceptor::NotifyPrefetchStatusUpdate(
+    IsolatedPrerenderTabHelper::PrefetchStatus status) const {
   content::WebContents* web_contents =
       content::WebContents::FromFrameTreeNodeId(frame_tree_node_id_);
   if (!web_contents) {
@@ -201,5 +223,6 @@ void IsolatedPrerenderURLLoaderInterceptor::NotifyPrefetchUsage(
   if (!tab_helper)
     return;
 
-  tab_helper->OnPrefetchUsage(usage);
+  DCHECK(url_.is_valid());
+  tab_helper->OnPrefetchStatusUpdate(url_, status);
 }

@@ -74,7 +74,7 @@ public class TopToolbarCoordinator implements Toolbar {
     private @Nullable StartSurfaceToolbarCoordinator mStartSurfaceToolbarCoordinator;
 
     private final IdentityDiscController mIdentityDiscController;
-    private final OptionalBrowsingModeButtonController mOptionalButtonController;
+    private OptionalBrowsingModeButtonController mOptionalButtonController;
 
     private HomepageManager.HomepageStateListener mHomepageStateListener =
             new HomepageManager.HomepageStateListener() {
@@ -92,11 +92,15 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param userEducationHelper Helper class for showing in-product help text bubbles.
      * @param buttonDataProviders List of classes that wish to display an optional button in the
      *         browsing mode toolbar.
+     * @param normalThemeColorProvider The {@link ThemeColorProvider} for normal mode.
+     * @param overviewThemeColorProvider The {@link ThemeColorProvider} for overview mode.
      */
     public TopToolbarCoordinator(ToolbarControlContainer controlContainer,
             ToolbarLayout toolbarLayout, IdentityDiscController identityDiscController,
             ToolbarDataProvider toolbarDataProvider, ToolbarTabController tabController,
-            UserEducationHelper userEducationHelper, List<ButtonDataProvider> buttonDataProviders) {
+            UserEducationHelper userEducationHelper, List<ButtonDataProvider> buttonDataProviders,
+            ThemeColorProvider normalThemeColorProvider,
+            ThemeColorProvider overviewThemeColorProvider) {
         mToolbarLayout = toolbarLayout;
         mIdentityDiscController = identityDiscController;
         mOptionalButtonController = new OptionalBrowsingModeButtonController(buttonDataProviders,
@@ -109,7 +113,7 @@ public class TopToolbarCoordinator implements Toolbar {
             if (StartSurfaceConfiguration.isStartSurfaceEnabled()) {
                 mStartSurfaceToolbarCoordinator = new StartSurfaceToolbarCoordinator(
                         controlContainer.getRootView().findViewById(R.id.tab_switcher_toolbar_stub),
-                        mIdentityDiscController, userEducationHelper);
+                        mIdentityDiscController, userEducationHelper, overviewThemeColorProvider);
             } else {
                 mTabSwitcherModeCoordinatorPhone = new TabSwitcherModeTTCoordinatorPhone(
                         controlContainer.getRootView().findViewById(
@@ -119,6 +123,12 @@ public class TopToolbarCoordinator implements Toolbar {
         controlContainer.setToolbar(this);
         HomepageManager.getInstance().addListener(mHomepageStateListener);
         mToolbarLayout.initialize(toolbarDataProvider, tabController);
+
+        final MenuButton menuButtonWrapper = getMenuButtonWrapper();
+        if (menuButtonWrapper != null) {
+            menuButtonWrapper.setThemeColorProvider(normalThemeColorProvider);
+        }
+        mToolbarLayout.setThemeColorProvider(normalThemeColorProvider);
     }
 
     /**
@@ -161,6 +171,9 @@ public class TopToolbarCoordinator implements Toolbar {
             mStartSurfaceToolbarCoordinator.setOnNewTabClickHandler(newTabClickHandler);
             mStartSurfaceToolbarCoordinator.setTabModelSelector(tabModelSelector);
             mStartSurfaceToolbarCoordinator.setOverviewModeBehavior(overviewModeBehavior);
+            mStartSurfaceToolbarCoordinator.setTabSwitcherListener(tabSwitcherClickHandler);
+            mStartSurfaceToolbarCoordinator.setOnTabSwitcherLongClickHandler(
+                    tabSwitcherLongClickHandler);
             mStartSurfaceToolbarCoordinator.onNativeLibraryReady();
         }
 
@@ -208,6 +221,11 @@ public class TopToolbarCoordinator implements Toolbar {
             mTabSwitcherModeCoordinatorPhone.destroy();
         } else if (mStartSurfaceToolbarCoordinator != null) {
             mStartSurfaceToolbarCoordinator.destroy();
+        }
+
+        if (mOptionalButtonController != null) {
+            mOptionalButtonController.destroy();
+            mOptionalButtonController = null;
         }
     }
 
@@ -485,6 +503,9 @@ public class TopToolbarCoordinator implements Toolbar {
         if (mTabSwitcherModeCoordinatorPhone != null) {
             mTabSwitcherModeCoordinatorPhone.setTabCountProvider(tabCountProvider);
         }
+        if (mStartSurfaceToolbarCoordinator != null) {
+            mStartSurfaceToolbarCoordinator.setTabCountProvider(tabCountProvider);
+        }
     }
 
     /**
@@ -496,17 +517,6 @@ public class TopToolbarCoordinator implements Toolbar {
         } else if (mStartSurfaceToolbarCoordinator != null) {
             mStartSurfaceToolbarCoordinator.setIncognitoStateProvider(provider);
         }
-    }
-
-    /**
-     * @param provider The provider used to determine theme color.
-     */
-    public void setThemeColorProvider(ThemeColorProvider provider) {
-        final MenuButton menuButtonWrapper = getMenuButtonWrapper();
-        if (menuButtonWrapper != null) {
-            menuButtonWrapper.setThemeColorProvider(provider);
-        }
-        mToolbarLayout.setThemeColorProvider(provider);
     }
 
     /**
@@ -559,44 +569,6 @@ public class TopToolbarCoordinator implements Toolbar {
      */
     public void setProgressBarEnabled(boolean enabled) {
         getProgressBar().setVisibility(enabled ? View.VISIBLE : View.GONE);
-    }
-
-    /**
-     * @param anchor The view to use as an anchor.
-     */
-    public void setProgressBarAnchorView(@Nullable View anchor) {
-        getProgressBar().setAnchorView(anchor);
-    }
-
-    /**
-     * Starts load progress.
-     */
-    public void startLoadProgress() {
-        mToolbarLayout.startLoadProgress();
-    }
-
-    /**
-     * Sets load progress.
-     * @param progress The load progress between 0 and 1.
-     */
-    public void setLoadProgress(float progress) {
-        mToolbarLayout.setLoadProgress(progress);
-    }
-
-    /**
-     * Finishes load progress.
-     * @param delayed Whether hiding progress bar should be delayed to give enough time for user to
-     *                        recognize the last state.
-     */
-    public void finishLoadProgress(boolean delayed) {
-        mToolbarLayout.finishLoadProgress(delayed);
-    }
-
-    /**
-     * @return True if the progress bar is started.
-     */
-    public boolean isProgressStarted() {
-        return mToolbarLayout.isProgressStarted();
     }
 
     /**
@@ -657,5 +629,10 @@ public class TopToolbarCoordinator implements Toolbar {
     @VisibleForTesting
     public ToolbarLayout getToolbarLayoutForTesting() {
         return mToolbarLayout;
+    }
+
+    @VisibleForTesting
+    public StartSurfaceToolbarCoordinator getStartSurfaceToolbarForTesting() {
+        return mStartSurfaceToolbarCoordinator;
     }
 }

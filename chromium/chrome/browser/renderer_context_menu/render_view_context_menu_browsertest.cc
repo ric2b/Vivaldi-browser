@@ -64,6 +64,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -76,6 +77,8 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/context_menu_data/media_type.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -681,7 +684,8 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, RealMenu) {
 
   // Open a context menu.
   blink::WebMouseEvent mouse_event(
-      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kRight;
   mouse_event.SetPositionInWidget(15, 15);
@@ -691,7 +695,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, RealMenu) {
   mouse_event.SetPositionInScreen(15 + offset.x(), 15 + offset.y());
   mouse_event.click_count = 1;
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   // The menu_observer will select "Open in new tab", wait for the new tab to
@@ -851,14 +855,15 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, SuggestedFileName) {
 
   // Open a context menu.
   blink::WebMouseEvent mouse_event(
-      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kRight;
   mouse_event.SetPositionInWidget(15, 15);
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   // Wait for context menu to be visible.
@@ -867,6 +872,96 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, SuggestedFileName) {
   // Compare filename.
   base::string16 suggested_filename = menu_observer.params().suggested_filename;
   ASSERT_EQ(kSuggestedFilename, base::UTF16ToUTF8(suggested_filename).c_str());
+}
+
+// Check which commands are present after opening the context menu for the main
+// frame.  This is a regression test for https://crbug.com/1085040.
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       MenuContentsVerification_MainFrame) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/iframe.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // Open a context menu.
+  ContextMenuWaiter menu_observer;
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = blink::WebMouseEvent::Button::kRight;
+  mouse_event.SetPositionInWidget(2, 2);  // This is over the main frame.
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+
+  // Wait for context menu to be visible.
+  menu_observer.WaitForMenuOpenAndClose();
+
+  // Verify that the expected context menu items are present.
+  //
+  // Note that the assertion below doesn't use exact matching via
+  // testing::ElementsAre, because some platforms may include unexpected extra
+  // elements (e.g. an extra separator and IDC=100 has been observed on some Mac
+  // bots).
+  EXPECT_THAT(menu_observer.GetCapturedCommandIds(),
+              testing::IsSupersetOf({IDC_BACK, IDC_FORWARD, IDC_RELOAD,
+                                     IDC_SAVE_PAGE, IDC_VIEW_SOURCE,
+                                     IDC_CONTENT_CONTEXT_INSPECTELEMENT}));
+  EXPECT_THAT(
+      menu_observer.GetCapturedCommandIds(),
+      testing::Not(testing::Contains(IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE)));
+  EXPECT_THAT(menu_observer.GetCapturedCommandIds(),
+              testing::Not(testing::Contains(IDC_CONTENT_CONTEXT_RELOADFRAME)));
+}
+
+#if defined(OS_MACOSX)
+// TODO(lukasza): https://crbug.com/1090891: Subframe behavior is unexpected on
+// some Mac bots.
+#define MAYBE_MenuContentsVerification_Subframe \
+  DISABLED_MenuContentsVerification_Subframe
+#else
+#define MAYBE_MenuContentsVerification_Subframe \
+  MenuContentsVerification_Subframe
+#endif
+// Check which commands are present after opening the context menu for a
+// subframe.
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
+                       MAYBE_MenuContentsVerification_Subframe) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/iframe.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // Open a context menu.
+  ContextMenuWaiter menu_observer;
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
+  mouse_event.button = blink::WebMouseEvent::Button::kRight;
+  mouse_event.SetPositionInWidget(25, 25);  // This is over the subframe.
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
+  tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+
+  // Wait for context menu to be visible.
+  menu_observer.WaitForMenuOpenAndClose();
+
+  // Verify that the expected context menu items are present.
+  //
+  // Note that the assertion below doesn't use exact matching via
+  // testing::ElementsAre, because some platforms may include unexpected extra
+  // elements (e.g. an extra separator and IDC=100 has been observed on some Mac
+  // bots).
+  EXPECT_THAT(
+      menu_observer.GetCapturedCommandIds(),
+      testing::IsSupersetOf({IDC_BACK, IDC_FORWARD, IDC_RELOAD, IDC_VIEW_SOURCE,
+                             IDC_SAVE_PAGE, IDC_CONTENT_CONTEXT_VIEWFRAMESOURCE,
+                             IDC_CONTENT_CONTEXT_RELOADFRAME,
+                             IDC_CONTENT_CONTEXT_INSPECTELEMENT}));
 }
 
 // Check filename on clicking "Save Link As" is ignored for cross origin.
@@ -883,14 +978,15 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, SuggestedFileNameCrossOrigin) {
 
   // Open a context menu.
   blink::WebMouseEvent mouse_event(
-      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kRight;
   mouse_event.SetPositionInWidget(15, 15);
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   // Wait for context menu to be visible.
@@ -1162,7 +1258,7 @@ IN_PROC_BROWSER_TEST_F(SearchByImageBrowserTest, ImageSearchWithCorruptImage) {
   bool response_received = false;
   chrome_render_frame->RequestImageForContextNode(
       0, gfx::Size(2048, 2048), chrome::mojom::ImageFormat::JPEG,
-      base::Bind(callback, &response_received, run_loop.QuitClosure()));
+      base::BindOnce(callback, &response_received, run_loop.QuitClosure()));
   run_loop.Run();
 
   // The browser should receive a response from the renderer, because the

@@ -192,12 +192,12 @@ class ParentPermissionInputSection : public views::TextfieldController {
         gfx::HorizontalAlignment::ALIGN_LEFT);
     view->AddChildView(std::move(enter_password_label));
 
-    auto credential_input_field = std::make_unique<views::Textfield>();
-    credential_input_field->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
-    credential_input_field->SetAccessibleName(enter_password_string);
-    credential_input_field->RequestFocus();
-    credential_input_field->set_controller(this);
-    view->AddChildView(std::move(credential_input_field));
+    credential_input_field_ =
+        view->AddChildView(std::make_unique<views::Textfield>());
+    credential_input_field_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
+    credential_input_field_->SetAccessibleName(enter_password_string);
+    credential_input_field_->RequestFocus();
+    credential_input_field_->set_controller(this);
 
     const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
     const gfx::Insets content_insets =
@@ -219,6 +219,11 @@ class ParentPermissionInputSection : public views::TextfieldController {
     main_view_->set_parent_permission_credential(new_contents);
   }
 
+  void ClearCredentialInputField() {
+    credential_input_field_->SetText(base::string16());
+  }
+  void FocusCredentialInputField() { credential_input_field_->RequestFocus(); }
+
  private:
   void OnParentRadioButtonSelected(ParentPermissionDialogView* main_view,
                                    const base::string16& parent_email) {
@@ -227,6 +232,9 @@ class ParentPermissionInputSection : public views::TextfieldController {
 
   views::PropertyChangedSubscription parent_0_subscription_;
   views::PropertyChangedSubscription parent_1_subscription_;
+
+  // The credential input field.
+  views::Textfield* credential_input_field_ = nullptr;
 
   // Owned by the parent view class, not this class.
   ParentPermissionDialogView* main_view_;
@@ -267,12 +275,11 @@ ParentPermissionDialogView::ParentPermissionDialogView(
     std::unique_ptr<Params> params,
     ParentPermissionDialogView::Observer* observer)
     : params_(std::move(params)), observer_(observer) {
-  DialogDelegate::SetDefaultButton(ui::DIALOG_BUTTON_OK);
-  DialogDelegate::set_draggable(true);
-  DialogDelegate::SetButtonLabel(
+  SetDefaultButton(ui::DIALOG_BUTTON_OK);
+  SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_PARENT_PERMISSION_PROMPT_APPROVE_BUTTON));
-  DialogDelegate::SetButtonLabel(
+  SetButtonLabel(
       ui::DIALOG_BUTTON_CANCEL,
       l10n_util::GetStringUTF16(IDS_PARENT_PERMISSION_PROMPT_CANCEL_BUTTON));
 
@@ -325,8 +332,8 @@ void ParentPermissionDialogView::AddedToWidget() {
   views::ColumnSet* column_set = layout->AddColumnSet(kTitleColumnSetId);
   constexpr int icon_size = extension_misc::EXTENSION_ICON_SMALL;
   column_set->AddColumn(views::GridLayout::CENTER, views::GridLayout::LEADING,
-                        views::GridLayout::kFixedSize, views::GridLayout::FIXED,
-                        icon_size, 0);
+                        views::GridLayout::kFixedSize,
+                        views::GridLayout::ColumnSize::kFixed, icon_size, 0);
 
   // Equalize padding on the left and the right of the icon.
   column_set->AddPaddingColumn(
@@ -335,7 +342,8 @@ void ParentPermissionDialogView::AddedToWidget() {
   // Set a resize weight so that the message label will be expanded to the
   // available width.
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::LEADING,
-                        1.0, views::GridLayout::USE_PREF, 0, 0);
+                        1.0, views::GridLayout::ColumnSize::kUsePreferred, 0,
+                        0);
   layout->StartRow(views::GridLayout::kFixedSize, kTitleColumnSetId);
 
   // Scale down to icon size, but allow smaller icons (don't scale up).
@@ -497,6 +505,10 @@ void ParentPermissionDialogView::ShowDialog() {
   is_showing_ = true;
   LoadParentEmailAddresses();
 
+  supervised_user_metrics_recorder_.RecordParentPermissionDialogUmaMetrics(
+      SupervisedUserExtensionsMetricsRecorder::ParentPermissionDialogState::
+          kOpened);
+
   if (params_->extension)
     InitializeExtensionData(params_->extension);
   else
@@ -542,8 +554,9 @@ void ParentPermissionDialogView::LoadParentEmailAddresses() {
     parent_permission_email_addresses_.push_back(secondary_parent_email);
 
   if (parent_permission_email_addresses_.empty()) {
-    // TODO(danan):  Add UMA stat for this failure.
-    // https://crbug.com/1049418
+    supervised_user_metrics_recorder_.RecordParentPermissionDialogUmaMetrics(
+        SupervisedUserExtensionsMetricsRecorder::ParentPermissionDialogState::
+            kNoParentError);
     SendResult(ParentPermissionDialog::Result::kParentPermissionFailed);
   }
 }
@@ -669,6 +682,24 @@ void ParentPermissionDialogView::SendResult(
     ParentPermissionDialog::Result result) {
   if (!params_->done_callback)
     return;
+  // Record UMA metrics.
+  switch (result) {
+    case ParentPermissionDialog::Result::kParentPermissionReceived:
+      supervised_user_metrics_recorder_.RecordParentPermissionDialogUmaMetrics(
+          SupervisedUserExtensionsMetricsRecorder::ParentPermissionDialogState::
+              kParentApproved);
+      break;
+    case ParentPermissionDialog::Result::kParentPermissionCanceled:
+      supervised_user_metrics_recorder_.RecordParentPermissionDialogUmaMetrics(
+          SupervisedUserExtensionsMetricsRecorder::ParentPermissionDialogState::
+              kParentCanceled);
+      break;
+    case ParentPermissionDialog::Result::kParentPermissionFailed:
+      supervised_user_metrics_recorder_.RecordParentPermissionDialogUmaMetrics(
+          SupervisedUserExtensionsMetricsRecorder::ParentPermissionDialogState::
+              kFailed);
+      break;
+  }
   std::move(params_->done_callback).Run(result);
 }
 
@@ -688,6 +719,8 @@ void ParentPermissionDialogView::OnReAuthProofTokenFailure(
     invalid_credential_received_ = true;
     if (reprompt_after_incorrect_credential_) {
       SetEnabled(true);
+      parent_permission_input_section_->ClearCredentialInputField();
+      parent_permission_input_section_->FocusCredentialInputField();
       invalid_credential_label_->SetText(l10n_util::GetStringUTF16(
           IDS_PARENT_PERMISSION_PROMPT_PASSWORD_INCORRECT_LABEL));
       invalid_credential_label_->NotifyAccessibilityEvent(

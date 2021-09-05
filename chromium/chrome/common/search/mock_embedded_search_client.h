@@ -7,17 +7,18 @@
 
 #include <string>
 
-#include "chrome/common/search.mojom.h"
 #include "chrome/common/search/instant_types.h"
+#include "chrome/common/search/omnibox.mojom.h"
+#include "chrome/common/search/search.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-class MockEmbeddedSearchClient : public chrome::mojom::EmbeddedSearchClient {
+class MockEmbeddedSearchClient : public search::mojom::EmbeddedSearchClient {
  public:
   MockEmbeddedSearchClient();
   ~MockEmbeddedSearchClient() override;
 
   MOCK_METHOD1(AutocompleteResultChanged,
-               void(chrome::mojom::AutocompleteResultPtr result));
+               void(search::mojom::AutocompleteResultPtr result));
   MOCK_METHOD3(AutocompleteMatchImageAvailable,
                void(uint32_t, const std::string&, const std::string&));
   MOCK_METHOD1(SetPageSequenceNumber, void(int));

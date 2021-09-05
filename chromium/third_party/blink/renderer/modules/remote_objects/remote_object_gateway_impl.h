@@ -14,6 +14,9 @@
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_wrapper_mode.h"
 
 namespace blink {
 
@@ -51,12 +54,15 @@ class MODULES_EXPORT RemoteObjectGatewayImpl
   void OnClearWindowObjectInMainWorld();
 
   void Trace(Visitor* visitor) override {
+    visitor->Trace(receiver_);
+    visitor->Trace(object_host_);
     Supplement<LocalFrame>::Trace(visitor);
   }
 
   void BindRemoteObjectReceiver(
       int32_t object_id,
       mojo::PendingReceiver<mojom::blink::RemoteObject>);
+  void ReleaseObject(int32_t object_id);
 
  private:
   // mojom::blink::RemoteObjectGateway
@@ -67,8 +73,13 @@ class MODULES_EXPORT RemoteObjectGatewayImpl
 
   HashMap<String, int32_t> named_objects_;
 
-  mojo::Receiver<mojom::blink::RemoteObjectGateway> receiver_;
-  mojo::Remote<mojom::blink::RemoteObjectHost> object_host_;
+  HeapMojoReceiver<mojom::blink::RemoteObjectGateway,
+                   RemoteObjectGatewayImpl,
+                   HeapMojoWrapperMode::kWithoutContextObserver>
+      receiver_;
+  HeapMojoRemote<mojom::blink::RemoteObjectHost,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      object_host_;
 };
 
 class RemoteObjectGatewayFactoryImpl

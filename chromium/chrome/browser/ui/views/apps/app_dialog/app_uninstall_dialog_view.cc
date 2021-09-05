@@ -72,12 +72,12 @@ AppUninstallDialogView::AppUninstallDialogView(
       AppDialogView(app_name, image),
       profile_(profile),
       app_type_(app_type) {
-  DialogDelegate::SetCloseCallback(base::BindOnce(
-      &AppUninstallDialogView::OnDialogCancelled, base::Unretained(this)));
-  DialogDelegate::SetCancelCallback(base::BindOnce(
-      &AppUninstallDialogView::OnDialogCancelled, base::Unretained(this)));
-  DialogDelegate::SetAcceptCallback(base::BindOnce(
-      &AppUninstallDialogView::OnDialogAccepted, base::Unretained(this)));
+  SetCloseCallback(base::BindOnce(&AppUninstallDialogView::OnDialogCancelled,
+                                  base::Unretained(this)));
+  SetCancelCallback(base::BindOnce(&AppUninstallDialogView::OnDialogCancelled,
+                                   base::Unretained(this)));
+  SetAcceptCallback(base::BindOnce(&AppUninstallDialogView::OnDialogAccepted,
+                                   base::Unretained(this)));
 
   InitializeView(profile, app_type, app_id);
 
@@ -104,6 +104,7 @@ base::string16 AppUninstallDialogView::GetWindowTitle() const {
     case apps::mojom::AppType::kUnknown:
     case apps::mojom::AppType::kBuiltIn:
     case apps::mojom::AppType::kMacNative:
+    case apps::mojom::AppType::kLacros:
       NOTREACHED();
       return base::string16();
     case apps::mojom::AppType::kArc:
@@ -118,6 +119,7 @@ base::string16 AppUninstallDialogView::GetWindowTitle() const {
       return base::string16();
 #endif
     case apps::mojom::AppType::kCrostini:
+    case apps::mojom::AppType::kPluginVm:
 #if defined(OS_CHROMEOS)
       FALLTHROUGH;
 #else
@@ -134,7 +136,7 @@ base::string16 AppUninstallDialogView::GetWindowTitle() const {
 void AppUninstallDialogView::InitializeView(Profile* profile,
                                             apps::mojom::AppType app_type,
                                             const std::string& app_id) {
-  DialogDelegate::SetButtonLabel(
+  SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_UNINSTALL_APP_BUTTON));
 
@@ -147,6 +149,7 @@ void AppUninstallDialogView::InitializeView(Profile* profile,
     case apps::mojom::AppType::kUnknown:
     case apps::mojom::AppType::kBuiltIn:
     case apps::mojom::AppType::kMacNative:
+    case apps::mojom::AppType::kLacros:
       NOTREACHED();
       break;
     case apps::mojom::AppType::kArc:
@@ -156,9 +159,18 @@ void AppUninstallDialogView::InitializeView(Profile* profile,
       NOTREACHED();
 #endif
       break;
+    case apps::mojom::AppType::kPluginVm:
+#if defined(OS_CHROMEOS)
+      InitializeViewWithMessage(l10n_util::GetStringFUTF16(
+          IDS_PLUGIN_VM_UNINSTALL_PROMPT_BODY, base::UTF8ToUTF16(app_name())));
+#else
+      NOTREACHED();
+#endif
+      break;
     case apps::mojom::AppType::kCrostini:
 #if defined(OS_CHROMEOS)
-      InitializeViewForCrostiniApp(profile, app_id);
+      InitializeViewWithMessage(l10n_util::GetStringUTF16(
+          IDS_CROSTINI_APPLICATION_UNINSTALL_CONFIRM_BODY));
 #else
       NOTREACHED();
 #endif
@@ -202,7 +214,7 @@ void AppUninstallDialogView::InitializeCheckbox(const GURL& app_launch_url) {
     offset = offsets[offsets.size() - 1];
   } else {
     auto domain = net::registry_controlled_domains::GetDomainAndRegistry(
-        app_launch_url.host_piece(),
+        app_launch_url,
         net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
     DCHECK(!domain.empty());
     domain[0] = base::ToUpperASCII(domain[0]);
@@ -243,13 +255,13 @@ void AppUninstallDialogView::InitializeCheckbox(const GURL& app_launch_url) {
   const int kReportColumnSetId = 0;
   views::ColumnSet* cs = checkbox_layout->AddColumnSet(kReportColumnSetId);
   cs->AddColumn(views::GridLayout::CENTER, views::GridLayout::LEADING,
-                views::GridLayout::kFixedSize, views::GridLayout::USE_PREF, 0,
-                0);
+                views::GridLayout::kFixedSize,
+                views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
   cs->AddPaddingColumn(views::GridLayout::kFixedSize,
                        ChromeLayoutProvider::Get()->GetDistanceMetric(
                            views::DISTANCE_RELATED_LABEL_HORIZONTAL));
   cs->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL, 1.0,
-                views::GridLayout::USE_PREF, 0, 0);
+                views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 
   checkbox_layout->StartRow(views::GridLayout::kFixedSize, kReportColumnSetId);
   clear_site_data_checkbox_ =
@@ -302,25 +314,17 @@ void AppUninstallDialogView::InitializeViewForArcApp(
   shortcut_ = app_info->shortcut;
 
   if (shortcut_) {
-    DialogDelegate::SetButtonLabel(
+    SetButtonLabel(
         ui::DIALOG_BUTTON_OK,
         l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_UNINSTALL_BUTTON));
   } else {
-    base::string16 subheading_text = l10n_util::GetStringUTF16(
-        IDS_ARC_APP_UNINSTALL_PROMPT_DATA_REMOVAL_WARNING);
-    auto* label = AddChildView(std::make_unique<views::Label>(subheading_text));
-    label->SetMultiLine(true);
-    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    label->SetAllowCharacterBreak(true);
+    InitializeViewWithMessage(l10n_util::GetStringUTF16(
+        IDS_ARC_APP_UNINSTALL_PROMPT_DATA_REMOVAL_WARNING));
   }
 }
 
-void AppUninstallDialogView::InitializeViewForCrostiniApp(
-    Profile* profile,
-    const std::string& app_id) {
-  base::string16 message = l10n_util::GetStringFUTF16(
-      IDS_CROSTINI_APPLICATION_UNINSTALL_CONFIRM_BODY,
-      base::UTF8ToUTF16(app_name()));
+void AppUninstallDialogView::InitializeViewWithMessage(
+    const base::string16& message) {
   auto* label = AddChildView(std::make_unique<views::Label>(message));
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);

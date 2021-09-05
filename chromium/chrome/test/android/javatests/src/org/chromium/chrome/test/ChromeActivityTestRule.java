@@ -7,7 +7,6 @@ package org.chromium.chrome.test;
 import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -34,23 +33,20 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
-import org.chromium.chrome.browser.settings.SettingsActivity;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuTestSupport;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
@@ -490,7 +486,7 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
         final CallbackHelper selectedCallback = new CallbackHelper();
 
         TabModel incognitoTabModel = getActivity().getTabModelSelector().getModel(true);
-        TabModelObserver observer = new EmptyTabModelObserver() {
+        TabModelObserver observer = new TabModelObserver() {
             @Override
             public void didAddTab(
                     Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
@@ -598,22 +594,6 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
                 return InfoBarContainer.get(currentTab).getInfoBarsForTesting();
             }
         });
-    }
-
-    /**
-     * Launches the settings activity with the specified fragment.
-     * Returns the activity that was started.
-     *
-     * TODO(chouinard): This seems like mostly a duplicate of {@link
-     * SettingsActivityTest#startSettingsActivity}, try to consolidate to one.
-     */
-    public SettingsActivity startSettingsActivity(String fragmentName) {
-        Context context = InstrumentationRegistry.getTargetContext();
-        Intent intent =
-                SettingsLauncher.getInstance().createIntentForSettingsPage(context, fragmentName);
-        Activity activity = InstrumentationRegistry.getInstrumentation().startActivitySync(intent);
-        Assert.assertTrue(activity instanceof SettingsActivity);
-        return (SettingsActivity) activity;
     }
 
     /**

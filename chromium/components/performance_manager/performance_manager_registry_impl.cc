@@ -4,15 +4,20 @@
 
 #include "components/performance_manager/performance_manager_registry_impl.h"
 
+#include <iterator>
 #include <utility>
 
 #include "base/stl_util.h"
+#include "components/performance_manager/embedder/binders.h"
 #include "components/performance_manager/performance_manager_tab_helper.h"
+#include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
 #include "components/performance_manager/public/performance_manager.h"
+#include "components/performance_manager/public/performance_manager_main_thread_mechanism.h"
 #include "components/performance_manager/public/performance_manager_main_thread_observer.h"
 #include "components/performance_manager/service_worker_context_adapter.h"
 #include "components/performance_manager/worker_watcher.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 
@@ -49,12 +54,32 @@ PerformanceManagerRegistryImpl* PerformanceManagerRegistryImpl::GetInstance() {
 
 void PerformanceManagerRegistryImpl::AddObserver(
     PerformanceManagerMainThreadObserver* observer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.AddObserver(observer);
 }
 
 void PerformanceManagerRegistryImpl::RemoveObserver(
     PerformanceManagerMainThreadObserver* observer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.RemoveObserver(observer);
+}
+
+void PerformanceManagerRegistryImpl::AddMechanism(
+    PerformanceManagerMainThreadMechanism* mechanism) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  mechanisms_.AddObserver(mechanism);
+}
+
+void PerformanceManagerRegistryImpl::RemoveMechanism(
+    PerformanceManagerMainThreadMechanism* mechanism) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  mechanisms_.RemoveObserver(mechanism);
+}
+
+bool PerformanceManagerRegistryImpl::HasMechanism(
+    PerformanceManagerMainThreadMechanism* mechanism) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return mechanisms_.HasObserver(mechanism);
 }
 
 void PerformanceManagerRegistryImpl::CreatePageNodeForWebContents(
@@ -78,18 +103,17 @@ void PerformanceManagerRegistryImpl::CreatePageNodeForWebContents(
   }
 }
 
-void PerformanceManagerRegistryImpl::CreateProcessNodeForRenderProcessHost(
-    content::RenderProcessHost* render_process_host) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  auto result = render_process_hosts_.insert(render_process_host);
-  if (result.second) {
-    // Create a RenderProcessUserData if |render_process_host| doesn't already
-    // have one.
-    RenderProcessUserData* user_data =
-        RenderProcessUserData::CreateForRenderProcessHost(render_process_host);
-    user_data->SetDestructionObserver(this);
+PerformanceManagerRegistryImpl::Throttles
+PerformanceManagerRegistryImpl::CreateThrottlesForNavigation(
+    content::NavigationHandle* handle) {
+  Throttles combined_throttles;
+  for (auto& mechanism : mechanisms_) {
+    Throttles throttles = mechanism.CreateThrottlesForNavigation(handle);
+    combined_throttles.insert(combined_throttles.end(),
+                              std::make_move_iterator(throttles.begin()),
+                              std::make_move_iterator(throttles.end()));
   }
+  return combined_throttles;
 }
 
 void PerformanceManagerRegistryImpl::NotifyBrowserContextAdded(
@@ -115,6 +139,27 @@ void PerformanceManagerRegistryImpl::NotifyBrowserContextAdded(
       worker_watchers_.emplace(browser_context, std::move(worker_watcher))
           .second;
   DCHECK(inserted);
+}
+
+void PerformanceManagerRegistryImpl::
+    CreateProcessNodeAndExposeInterfacesToRendererProcess(
+        service_manager::BinderRegistry* registry,
+        content::RenderProcessHost* render_process_host) {
+  registry->AddInterface(base::BindRepeating(&BindProcessCoordinationUnit,
+                                             render_process_host->GetID()),
+                         base::SequencedTaskRunnerHandle::Get());
+
+  // Ideally this would strictly be a "Create", but when a
+  // RenderFrameHost is "resurrected" with a new process it will
+  // already have user data attached. This will happen on renderer
+  // crash.
+  EnsureProcessNodeForRenderProcessHost(render_process_host);
+}
+
+void PerformanceManagerRegistryImpl::ExposeInterfacesToRenderFrame(
+    mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
+  map->Add<performance_manager::mojom::DocumentCoordinationUnit>(
+      base::BindRepeating(&BindDocumentCoordinationUnit));
 }
 
 void PerformanceManagerRegistryImpl::NotifyBrowserContextRemoved(
@@ -183,6 +228,20 @@ void PerformanceManagerRegistryImpl::OnRenderProcessUserDataDestroying(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const size_t num_removed = render_process_hosts_.erase(render_process_host);
   DCHECK_EQ(1U, num_removed);
+}
+
+void PerformanceManagerRegistryImpl::EnsureProcessNodeForRenderProcessHost(
+    content::RenderProcessHost* render_process_host) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto result = render_process_hosts_.insert(render_process_host);
+  if (result.second) {
+    // Create a RenderProcessUserData if |render_process_host| doesn't already
+    // have one.
+    RenderProcessUserData* user_data =
+        RenderProcessUserData::CreateForRenderProcessHost(render_process_host);
+    user_data->SetDestructionObserver(this);
+  }
 }
 
 }  // namespace performance_manager

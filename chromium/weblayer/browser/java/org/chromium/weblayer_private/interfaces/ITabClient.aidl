@@ -17,6 +17,7 @@ interface ITabClient {
 
   void onRenderProcessGone() = 2;
 
+  // Deprecated in 84.
   void onCloseTab() = 3;
 
   // Added in M82.
@@ -29,4 +30,10 @@ interface ITabClient {
 
   // Added in M83.
   void onTitleUpdated(in IObjectWrapper title) = 6;
+
+  // Added in M84.
+  void bringTabToFront() = 7;
+
+  // Added in M84.
+  void onTabDestroyed() = 8;
 }

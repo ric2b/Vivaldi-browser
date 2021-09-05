@@ -11,8 +11,6 @@
 #include "base/util/type_safety/pass_key.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "services/network/public/mojom/quic_transport.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
@@ -21,6 +19,8 @@
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
@@ -35,7 +35,7 @@ class WebTransportCloseInfo;
 class WritableStream;
 class ScriptPromise;
 class ScriptPromiseResolver;
-class WebTransportCloseProxy;
+class WebTransportStream;
 
 // https://wicg.github.io/web-transport/#quic-transport
 class MODULES_EXPORT QuicTransport final
@@ -61,6 +61,11 @@ class MODULES_EXPORT QuicTransport final
   ScriptPromise createSendStream(ScriptState*, ExceptionState&);
   ReadableStream* receiveStreams() { return received_streams_; }
 
+  ScriptPromise createBidirectionalStream(ScriptState*, ExceptionState&);
+  ReadableStream* receiveBidirectionalStreams() {
+    return received_bidirectional_streams_;
+  }
+
   WritableStream* sendDatagrams() { return outgoing_datagrams_; }
   ReadableStream* receiveDatagrams() { return received_datagrams_; }
   void close(const WebTransportCloseInfo*);
@@ -72,7 +77,7 @@ class MODULES_EXPORT QuicTransport final
       mojo::PendingRemote<network::mojom::blink::QuicTransport>,
       mojo::PendingReceiver<network::mojom::blink::QuicTransportClient>)
       override;
-  void OnHandshakeFailed() override;
+  void OnHandshakeFailed(network::mojom::blink::QuicTransportErrorPtr) override;
 
   // QuicTransportClient implementation
   void OnDatagramReceived(base::span<const uint8_t> data) override;
@@ -96,19 +101,29 @@ class MODULES_EXPORT QuicTransport final
  private:
   class DatagramUnderlyingSink;
   class DatagramUnderlyingSource;
-  class ReceivedStreamsUnderlyingSource;
+  class StreamVendingUnderlyingSource;
+  class ReceiveStreamVendor;
+  class BidirectionalStreamVendor;
+
+  QuicTransport(ScriptState*, const String& url, ExecutionContext* context);
 
   void Init(const String& url, ExceptionState&);
 
   // Reset the QuicTransport object and all associated streams.
   void ResetAll();
+
   void Dispose();
   void OnConnectionError();
   void RejectPendingStreamResolvers();
-  void OnCreateStreamResponse(ScriptPromiseResolver*,
-                              mojo::ScopedDataPipeProducerHandle producer,
-                              bool succeeded,
-                              uint32_t stream_id);
+  void OnCreateSendStreamResponse(ScriptPromiseResolver*,
+                                  mojo::ScopedDataPipeProducerHandle,
+                                  bool succeeded,
+                                  uint32_t stream_id);
+  void OnCreateBidirectionalStreamResponse(ScriptPromiseResolver*,
+                                           mojo::ScopedDataPipeProducerHandle,
+                                           mojo::ScopedDataPipeConsumerHandle,
+                                           bool succeeded,
+                                           uint32_t stream_id);
 
   bool cleanly_closed_ = false;
   Member<ReadableStream> received_datagrams_;
@@ -127,29 +142,34 @@ class MODULES_EXPORT QuicTransport final
   // This doesn't support stream ids of 0xfffffffe or larger.
   // TODO(ricea): Find out if such large stream ids are possible.
   HeapHashMap<uint32_t,
-              Member<WebTransportCloseProxy>,
+              Member<WebTransportStream>,
               WTF::DefaultHash<uint32_t>::Hash,
               WTF::UnsignedWithZeroKeyHashTraits<uint32_t>>
       stream_map_;
 
-  mojo::Remote<network::mojom::blink::QuicTransport> quic_transport_;
-  mojo::Receiver<network::mojom::blink::QuicTransportHandshakeClient>
-      handshake_client_receiver_{this};
-  mojo::Receiver<network::mojom::blink::QuicTransportClient> client_receiver_{
-      this};
+  HeapMojoRemote<network::mojom::blink::QuicTransport> quic_transport_;
+  HeapMojoReceiver<network::mojom::blink::QuicTransportHandshakeClient,
+                   QuicTransport>
+      handshake_client_receiver_;
+  HeapMojoReceiver<network::mojom::blink::QuicTransportClient, QuicTransport>
+      client_receiver_;
   Member<ScriptPromiseResolver> ready_resolver_;
   ScriptPromise ready_;
   Member<ScriptPromiseResolver> closed_resolver_;
   ScriptPromise closed_;
 
-  // Tracks resolvers for in-progress createSendStream() operations so they can
-  // be rejected
-  HeapHashSet<Member<ScriptPromiseResolver>> create_send_stream_resolvers_;
+  // Tracks resolvers for in-progress createSendStream() and
+  // createBidirectionalStream() operations so they can be rejected.
+  HeapHashSet<Member<ScriptPromiseResolver>> create_stream_resolvers_;
 
   // The [[ReceivedStreams]] slot.
   // https://wicg.github.io/web-transport/#dom-quictransport-receivedstreams-slot
   Member<ReadableStream> received_streams_;
-  Member<ReceivedStreamsUnderlyingSource> received_streams_underlying_source_;
+  Member<StreamVendingUnderlyingSource> received_streams_underlying_source_;
+
+  Member<ReadableStream> received_bidirectional_streams_;
+  Member<StreamVendingUnderlyingSource>
+      received_bidirectional_streams_underlying_source_;
 };
 
 }  // namespace blink

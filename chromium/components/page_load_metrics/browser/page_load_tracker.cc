@@ -9,8 +9,9 @@
 #include <string>
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "components/page_load_metrics/browser/page_load_metrics_embedder_interface.h"
@@ -813,6 +814,28 @@ ukm::SourceId PageLoadTracker::GetSourceId() const {
 
 bool PageLoadTracker::IsFirstNavigationInWebContents() const {
   return is_first_navigation_in_web_contents_;
+}
+
+void PageLoadTracker::OnEnterBackForwardCache() {
+  DCHECK(visibility_tracker_.currently_in_foreground());
+  if (GetWebContents()->GetVisibility() == content::Visibility::VISIBLE) {
+    PageHidden();
+  }
+
+  INVOKE_AND_PRUNE_OBSERVERS(observers_, OnEnterBackForwardCache,
+                             metrics_update_dispatcher_.timing());
+}
+
+void PageLoadTracker::OnRestoreFromBackForwardCache() {
+  DCHECK(!visibility_tracker_.currently_in_foreground());
+  if (GetWebContents()->GetVisibility() == content::Visibility::VISIBLE) {
+    PageShown();
+  }
+
+  for (const auto& observer : observers_) {
+    observer->OnRestoreFromBackForwardCache(
+        metrics_update_dispatcher_.timing());
+  }
 }
 
 }  // namespace page_load_metrics

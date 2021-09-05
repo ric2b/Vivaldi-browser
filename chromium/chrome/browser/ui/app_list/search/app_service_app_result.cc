@@ -121,12 +121,17 @@ ash::SearchResultType AppServiceAppResult::GetSearchResultType() const {
       return ash::PLAY_STORE_APP;
     case apps::mojom::AppType::kBuiltIn:
       return ash::INTERNAL_APP;
+    case apps::mojom::AppType::kPluginVm:
+      return ash::PLUGIN_VM_APP;
     case apps::mojom::AppType::kCrostini:
       return ash::CROSTINI_APP;
     case apps::mojom::AppType::kExtension:
     case apps::mojom::AppType::kWeb:
       return ash::EXTENSION_APP;
-    default:
+    case apps::mojom::AppType::kLacros:
+      return ash::LACROS;
+    case apps::mojom::AppType::kMacNative:
+    case apps::mojom::AppType::kUnknown:
       NOTREACHED();
       return ash::SEARCH_RESULT_TYPE_BOUNDARY;
   }
@@ -259,9 +264,9 @@ void AppServiceAppResult::UpdateContinueReadingFavicon(
     large_icon_service_->GetLargeIconImageOrFallbackStyleForPageUrl(
         url_for_continuous_reading_, min_source_size_in_pixel,
         desired_size_in_pixel,
-        base::BindRepeating(&AppServiceAppResult::OnGetFaviconFromCacheFinished,
-                            weak_ptr_factory_.GetWeakPtr(),
-                            continue_to_google_server),
+        base::BindOnce(&AppServiceAppResult::OnGetFaviconFromCacheFinished,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       continue_to_google_server),
         &task_tracker_);
   }
 }
@@ -306,7 +311,7 @@ void AppServiceAppResult::OnGetFaviconFromCacheFinished(
           url_for_continuous_reading_,
           /*may_page_url_be_private=*/false,
           /*should_trim_page_url_path=*/false, traffic_annotation,
-          base::BindRepeating(
+          base::BindOnce(
               &AppServiceAppResult::OnGetFaviconFromGoogleServerFinished,
               weak_ptr_factory_.GetWeakPtr()));
 }

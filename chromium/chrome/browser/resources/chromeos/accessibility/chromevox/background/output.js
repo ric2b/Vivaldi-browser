@@ -9,26 +9,27 @@
 goog.provide('Output');
 goog.provide('Output.EventType');
 
+goog.require('AbstractEarcons');
 goog.require('AutomationTreeWalker');
+goog.require('ChromeVox');
 goog.require('EarconEngine');
 goog.require('EventSourceState');
+goog.require('LocaleOutputHelper');
 goog.require('LogStore');
+goog.require('NavBraille');
 goog.require('OutputRulesStr');
+goog.require('PhoneticData');
 goog.require('Spannable');
 goog.require('TextLog');
+goog.require('TtsCategory');
+goog.require('UserAnnotationHandler');
+goog.require('ValueSelectionSpan');
+goog.require('ValueSpan');
 goog.require('constants');
 goog.require('cursors.Cursor');
 goog.require('cursors.Range');
 goog.require('cursors.Unit');
-goog.require('AbstractEarcons');
-goog.require('ChromeVox');
-goog.require('NavBraille');
-goog.require('TtsCategory');
-goog.require('ValueSelectionSpan');
-goog.require('ValueSpan');
 goog.require('goog.i18n.MessageFormat');
-goog.require('LocaleOutputHelper');
-goog.require('UserAnnotationHandler');
 
 goog.scope(function() {
 const AutomationNode = chrome.automation.AutomationNode;
@@ -748,7 +749,7 @@ Output = class {
           const nameOrAnnotation =
               UserAnnotationHandler.getAnnotationForNode(node) || node.name;
           if (localStorage['languageSwitching'] === 'true') {
-            this.assignLocalesAndAppend(nameOrAnnotation, node, buff, options);
+            this.assignLocaleAndAppend_(nameOrAnnotation, node, buff, options);
           } else {
             this.append_(buff, nameOrAnnotation || '', options);
           }
@@ -1140,6 +1141,10 @@ Output = class {
           const size = node.setSize ? node.setSize : 0;
           this.append_(buff, String(size));
           ruleStr.writeTokenWithValue(token, String(node.setSize));
+        } else if (token == 'phoneticReading') {
+          const text =
+              PhoneticData.forText(node.name, chrome.i18n.getUILanguage());
+          this.append_(buff, text);
         } else if (tree.firstChild) {
           // Custom functions.
           if (token == 'if') {
@@ -1669,7 +1674,7 @@ Output = class {
     }
 
     if (localStorage['languageSwitching'] === 'true') {
-      this.assignLocalesAndAppend(text, node, buff, options);
+      this.assignLocaleAndAppend_(text, node, buff, options);
     } else {
       this.append_(buff, text, options);
     }
@@ -1804,10 +1809,6 @@ Output = class {
         ret.push({msgId: 'hint_touch_type'});
       }
       return ret;
-    }
-
-    if (node.state[StateType.EDITABLE] && ChromeVox.isStickyPrefOn) {
-      ret.push({msgId: 'sticky_mode_enabled'});
     }
 
     if (node.state[StateType.EDITABLE] && node.state[StateType.FOCUSED] &&
@@ -2102,29 +2103,19 @@ Output = class {
    * @param {!AutomationNode} contextNode
    * @param {!Array<Spannable>} buff
    * @param {{isUnique: (boolean|undefined), annotation: !Array<*>}} options
+   * @private
    */
-  assignLocalesAndAppend(text, contextNode, buff, options) {
-    /**
-     * A callback that appends |outputString| to |buff| with |newLocale|.
-     * @param {!Array<Spannable>} buff
-     * @param {{isUnique: (boolean|undefined),
-     *      annotation: !Array<*>}} options
-     * @param {string} outputString
-     * @param {string} newLocale
-     */
-    const appendStringWithLocale = function(
-        buff, options, outputString, newLocale) {
-      const speechProps = new Output.SpeechProperties();
-      speechProps.properties['lang'] = newLocale;
-      this.append_(buff, outputString, options);
-      // Attach associated SpeechProperties if the buffer is
-      // non-empty.
-      if (buff.length > 0) {
-        buff[buff.length - 1].setSpan(speechProps, 0, 0);
-      }
-    };
-    LocaleOutputHelper.instance.assignLocalesAndAppend(
-        text, contextNode, appendStringWithLocale.bind(this, buff, options));
+  assignLocaleAndAppend_(text, contextNode, buff, options) {
+    const data =
+        LocaleOutputHelper.instance.computeTextAndLocale(text, contextNode);
+    const speechProps = new Output.SpeechProperties();
+    speechProps.properties['lang'] = data.locale;
+    this.append_(buff, data.text, options);
+    // Attach associated SpeechProperties if the buffer is
+    // non-empty.
+    if (buff.length > 0) {
+      buff[buff.length - 1].setSpan(speechProps, 0, 0);
+    }
   }
 };
 
@@ -2283,6 +2274,7 @@ Output.ROLE_INFO_ = {
   row: {msgId: 'role_row', inherits: 'abstractContainer'},
   rowHeader: {msgId: 'role_rowheader', inherits: 'cell'},
   scrollBar: {msgId: 'role_scrollbar', inherits: 'abstractRange'},
+  section: {msgId: 'role_region', inherits: 'abstractContainer'},
   search: {msgId: 'role_search', inherits: 'abstractContainer'},
   separator: {msgId: 'role_separator', inherits: 'abstractContainer'},
   slider: {msgId: 'role_slider', inherits: 'abstractRange', earconId: 'SLIDER'},
@@ -2380,8 +2372,8 @@ Output.PRESSED_STATE_MAP = {
 Output.RULES = {
   navigate: {
     'default': {
-      speak: `$name $node(activeDescendant) $value $state
-          $if($selected, @aria_selected_true) $restriction $role $description`,
+      speak: `$name $node(activeDescendant) $value $state $restriction $role
+          $description`,
       braille: ``
     },
     abstractContainer: {
@@ -2448,10 +2440,8 @@ Output.RULES = {
     date: {enter: `$nameFromNode $role $state $restriction $description`},
     dialog: {enter: `$nameFromNode $role $description`},
     genericContainer: {
-      enter: `$nameFromNode $description $state
-          $if($selected, @aria_selected_true)`,
-      speak: `$nameOrTextContent $description $state
-          $if($selected, @aria_selected_true)`
+      enter: `$nameFromNode $description $state`,
+      speak: `$nameOrTextContent $description $state`
     },
     embeddedObject: {speak: `$name`},
     grid: {
@@ -2468,17 +2458,19 @@ Output.RULES = {
       enter: `!relativePitch(hierarchicalLevel)
           $nameFromNode=
           $if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state
-          $description $if($selected, @aria_selected_true)`,
+          $description`,
       speak: `!relativePitch(hierarchicalLevel)
           $nameOrDescendants=
           $if($hierarchicalLevel, @tag_h+$hierarchicalLevel, $role) $state
-          $restriction $description $if($selected, @aria_selected_true)`
+          $restriction $description`
     },
     image: {
       speak: `$if($name, $name,
           $if($imageAnnotation, $imageAnnotation, $urlFilename))
           $value $state $role $description`,
     },
+    imeCandidate:
+        {speak: '$name $phoneticReading @describe_index($posInSet, $setSize)'},
     inlineTextBox: {speak: `$name=`},
     inputTime: {enter: `$nameFromNode $role $state $restriction $description`},
     labelText: {
@@ -2519,8 +2511,8 @@ Output.RULES = {
     },
     menuItemRadio: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
-          $if($checked, @describe_radio_selected($name),
-          @describe_radio_unselected($name)) $state $roleDescription
+          $if($checked, @describe_menu_item_radio_selected($name),
+          @describe_menu_item_radio_unselected($name)) $state $roleDescription
           $restriction $description
           @describe_index($posInSet, $setSize)`
     },
@@ -2556,7 +2548,7 @@ Output.RULES = {
       speak: `$nameOrTextContent $description $roleDescription
         $state $if($selected, @aria_selected_true)`
     },
-    staticText: {speak: `$name=`},
+    staticText: {speak: `$name= $description`},
     switch: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $if($checked, @describe_switch_on($name),

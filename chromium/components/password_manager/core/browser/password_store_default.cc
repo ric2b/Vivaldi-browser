@@ -230,6 +230,17 @@ bool PasswordStoreDefault::AddCompromisedCredentialsImpl(
          login_db_->compromised_credentials_table().AddRow(credentials);
 }
 
+bool PasswordStoreDefault::RemoveCompromisedCredentialsByCompromiseTypeImpl(
+    const std::string& signon_realm,
+    const base::string16& username,
+    const CompromiseType& compromise_type,
+    RemoveCompromisedCredentialsReason reason) {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+  return login_db_ &&
+         login_db_->compromised_credentials_table().RemoveRowByCompromiseType(
+             signon_realm, username, compromise_type, reason);
+}
+
 bool PasswordStoreDefault::RemoveCompromisedCredentialsImpl(
     const std::string& signon_realm,
     const base::string16& username,
@@ -244,6 +255,15 @@ PasswordStoreDefault::GetAllCompromisedCredentialsImpl() {
   DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
   return login_db_ ? login_db_->compromised_credentials_table().GetAllRows()
                    : std::vector<CompromisedCredentials>();
+}
+
+std::vector<CompromisedCredentials>
+PasswordStoreDefault::GetMatchingCompromisedCredentialsImpl(
+    const std::string& signon_realm) {
+  DCHECK(background_task_runner()->RunsTasksInCurrentSequence());
+  return login_db_
+             ? login_db_->compromised_credentials_table().GetRows(signon_realm)
+             : std::vector<CompromisedCredentials>();
 }
 
 bool PasswordStoreDefault::RemoveCompromisedCredentialsByUrlAndTimeImpl(

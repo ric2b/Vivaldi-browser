@@ -24,6 +24,7 @@
 #include "third_party/blink/renderer/modules/imagecapture/photo_capabilities.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -126,7 +127,7 @@ ScriptPromise ImageCapture::getPhotoCapabilities(ScriptState* script_state) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  if (!service_) {
+  if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoServiceError));
     return promise;
@@ -152,7 +153,7 @@ ScriptPromise ImageCapture::getPhotoSettings(ScriptState* script_state) {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  if (!service_) {
+  if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoServiceError));
     return promise;
@@ -189,7 +190,7 @@ ScriptPromise ImageCapture::setOptions(ScriptState* script_state,
     return promise;
   }
 
-  if (!service_) {
+  if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoServiceError));
     return promise;
@@ -269,7 +270,7 @@ ScriptPromise ImageCapture::takePhoto(ScriptState* script_state) {
         "The associated Track is in an invalid state."));
     return promise;
   }
-  if (!service_) {
+  if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoServiceError));
     return promise;
@@ -343,13 +344,50 @@ void ImageCapture::SetMediaTrackConstraints(
     ScriptPromiseResolver* resolver,
     const HeapVector<Member<MediaTrackConstraintSet>>& constraints_vector) {
   DCHECK_GT(constraints_vector.size(), 0u);
-  if (!service_) {
+  // TODO(mcasas): add support more than one single advanced constraint.
+  const MediaTrackConstraintSet* constraints = constraints_vector[0];
+
+  ExecutionContext* context = GetExecutionContext();
+  if (constraints->hasWhiteBalanceMode())
+    UseCounter::Count(context, WebFeature::kImageCaptureWhiteBalanceMode);
+  if (constraints->hasExposureMode())
+    UseCounter::Count(context, WebFeature::kImageCaptureExposureMode);
+  if (constraints->hasFocusMode())
+    UseCounter::Count(context, WebFeature::kImageCaptureFocusMode);
+  if (constraints->hasPointsOfInterest())
+    UseCounter::Count(context, WebFeature::kImageCapturePointsOfInterest);
+  if (constraints->hasExposureCompensation())
+    UseCounter::Count(context, WebFeature::kImageCaptureExposureCompensation);
+  if (constraints->hasExposureTime())
+    UseCounter::Count(context, WebFeature::kImageCaptureExposureTime);
+  if (constraints->hasColorTemperature())
+    UseCounter::Count(context, WebFeature::kImageCaptureColorTemperature);
+  if (constraints->hasIso())
+    UseCounter::Count(context, WebFeature::kImageCaptureIso);
+  if (constraints->hasBrightness())
+    UseCounter::Count(context, WebFeature::kImageCaptureBrightness);
+  if (constraints->hasContrast())
+    UseCounter::Count(context, WebFeature::kImageCaptureContrast);
+  if (constraints->hasSaturation())
+    UseCounter::Count(context, WebFeature::kImageCaptureSaturation);
+  if (constraints->hasSharpness())
+    UseCounter::Count(context, WebFeature::kImageCaptureSharpness);
+  if (constraints->hasFocusDistance())
+    UseCounter::Count(context, WebFeature::kImageCaptureFocusDistance);
+  if (constraints->hasPan())
+    UseCounter::Count(context, WebFeature::kImageCapturePan);
+  if (constraints->hasTilt())
+    UseCounter::Count(context, WebFeature::kImageCaptureTilt);
+  if (constraints->hasZoom())
+    UseCounter::Count(context, WebFeature::kImageCaptureZoom);
+  if (constraints->hasTorch())
+    UseCounter::Count(context, WebFeature::kImageCaptureTorch);
+
+  if (!service_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoServiceError));
     return;
   }
-  // TODO(mcasas): add support more than one single advanced constraint.
-  const MediaTrackConstraintSet* constraints = constraints_vector[0];
 
   if ((constraints->hasWhiteBalanceMode() &&
        !capabilities_->hasWhiteBalanceMode()) ||
@@ -691,6 +729,7 @@ void ImageCapture::GetMediaTrackSettings(MediaTrackSettings* settings) const {
 ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
     : ExecutionContextLifecycleObserver(context),
       stream_track_(track),
+      service_(context),
       capabilities_(MediaTrackCapabilities::Create()),
       settings_(MediaTrackSettings::Create()),
       current_constraints_(MediaTrackConstraintSet::Create()),
@@ -704,7 +743,8 @@ ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
     return;
 
   GetFrame()->GetBrowserInterfaceBroker().GetInterface(
-      service_.BindNewPipeAndPassReceiver());
+      service_.BindNewPipeAndPassReceiver(
+          context->GetTaskRunner(TaskType::kDOMManipulation)));
 
   service_.set_disconnect_handler(WTF::Bind(
       &ImageCapture::OnServiceConnectionError, WrapWeakPersistent(this)));
@@ -957,6 +997,7 @@ void ImageCapture::ResolveWithPhotoCapabilities(
 
 void ImageCapture::Trace(Visitor* visitor) {
   visitor->Trace(stream_track_);
+  visitor->Trace(service_);
   visitor->Trace(capabilities_);
   visitor->Trace(settings_);
   visitor->Trace(photo_settings_);

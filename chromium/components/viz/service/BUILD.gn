@@ -221,7 +221,6 @@ viz_component("service") {
       "display_embedder/software_output_device_x11.cc",
       "display_embedder/software_output_device_x11.h",
     ]
-    configs = [ "//build/config/linux:x11" ]
     deps += [ "//ui/gfx/x" ]
   }
 
@@ -368,6 +367,13 @@ viz_source_set("gpu_service_dependencies") {
 
   deps = [ "//gpu/config" ]
 
+  if (is_win) {
+    sources += [
+      "gl/info_collection_gpu_service_impl.cc",
+      "gl/info_collection_gpu_service_impl.h",
+    ]
+  }
+
   if (is_chromeos) {
     deps += [
       "//components/arc/video_accelerator",
@@ -400,7 +406,6 @@ viz_source_set("gpu_service_dependencies") {
       "display_embedder/skia_output_device_x11.cc",
       "display_embedder/skia_output_device_x11.h",
     ]
-    configs = [ "//build/config/linux:x11" ]
     deps += [ "//ui/gfx/x" ]
   }
 
@@ -413,9 +418,9 @@ viz_source_set("gpu_service_dependencies") {
     public_deps += [ "//third_party/dawn/src/dawn:dawn_headers" ]
 
     deps += [
-      "//third_party/dawn:libdawn_native",
-      "//third_party/dawn:libdawn_native_sources",
-      "//third_party/dawn/src/dawn:libdawn",
+      "//third_party/dawn/src/dawn:dawn_proc",
+      "//third_party/dawn/src/dawn:dawncpp",
+      "//third_party/dawn/src/dawn_native",
     ]
   }
 }

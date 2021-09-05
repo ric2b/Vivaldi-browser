@@ -111,7 +111,7 @@ Terminal=false
 Icon=@@PACKAGE@@
 Type=Application
 Categories=Network;WebBrowser;
-MimeType=application/pdf;application/rdf+xml;application/rss+xml;application/xhtml+xml;application/xhtml_xml;application/xml;image/gif;image/jpeg;image/png;image/webp;text/html;text/xml;x-scheme-handler/ftp;x-scheme-handler/http;x-scheme-handler/https;
+MimeType=application/pdf;application/rdf+xml;application/rss+xml;application/xhtml+xml;application/xhtml_xml;application/xml;image/gif;image/jpeg;image/png;image/webp;text/html;text/xml;x-scheme-handler/ftp;x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/mailto;
 Actions=new-window;new-private-window;
 
 [Desktop Action new-window]
@@ -190,7 +190,7 @@ Name[hi]=नई गुप्त विंडो
 Name[hr]=Novi privatni prozor
 Name[hu]=Új privát ablak
 Name[id]=Jendela Pribadi Baru
-Name[it]=Nuova finestra riservata
+Name[it]=Nuova finestra privata
 Name[iw]=חלון חדש לגלישה בסתר
 Name[ja]=新しいプライベートウィンドウ
 Name[kn]=ಹೊಸ ಖಾಸಗಿ ತೆರೆ

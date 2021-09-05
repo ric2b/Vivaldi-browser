@@ -5,6 +5,7 @@
 #ifndef CHROME_UPDATER_CONSTANTS_H_
 #define CHROME_UPDATER_CONSTANTS_H_
 
+#include "build/build_config.h"
 #include "components/update_client/update_client_errors.h"
 
 namespace updater {
@@ -55,11 +56,28 @@ extern const char kCrashHandlerSwitch[];
 // Installs the updater.
 extern const char kInstallSwitch[];
 
+#if defined(OS_MACOSX)
+// Swaps the current version of the updater with the newly installed one.
+// Performs clean-up.
+extern const char kSwapUpdaterSwitch[];
+#endif  // OS_MACOSX
+
+#if defined(OS_WIN)
+// A debug switch to indicate that --install is running from the `out` directory
+// of the build. When this switch is present, the setup picks up the run time
+// dependencies of the updater from the `out` directory instead of using the
+// metainstaller uncompressed archive.
+extern const char kInstallFromOutDir[];
+#endif  // OS_WIN
+
 // Uninstalls the updater.
 extern const char kUninstallSwitch[];
 
 // Updates all apps registered with the updater.
 extern const char kUpdateAppsSwitch[];
+
+// The updater needs to operate in the system context.
+extern const char kSystemSwitch[];
 
 // Runs in test mode. Currently, it exits right away.
 extern const char kTestSwitch[];
@@ -105,6 +123,10 @@ extern const char kAppsDir[];
 // The name of the uninstall script which is invoked by the --uninstall switch.
 extern const char kUninstallScript[];
 
+// Developer override keys.
+extern const char kDevOverrideKeyUrl[];
+extern const char kDevOverrideKeyUseCUP[];
+
 // Timing constants.
 //
 // How long to wait for an application installer (such as chrome_installer.exe)
@@ -133,6 +155,24 @@ constexpr int kErrorMissingRunableFile = kCustomInstallErrorBase + 2;
 
 // Running the application installer failed.
 constexpr int kErrorApplicationInstallerFailed = kCustomInstallErrorBase + 3;
+
+// Policy Management constants.
+extern const char kProxyModeDirect[];
+extern const char kProxyModeAutoDetect[];
+extern const char kProxyModePacScript[];
+extern const char kProxyModeFixedServers[];
+extern const char kProxyModeSystem[];
+
+extern const char kDownloadPreferenceCacheable[];
+
+constexpr int kPolicyDisabled = 0;
+constexpr int kPolicyEnabled = 1;
+constexpr int kPolicyEnabledMachineOnly = 4;
+constexpr int kPolicyManualUpdatesOnly = 2;
+constexpr int kPolicyAutomaticUpdatesOnly = 3;
+
+constexpr bool kInstallPolicyDefault = kPolicyEnabled;
+constexpr bool kUpdatePolicyDefault = kPolicyEnabled;
 
 }  // namespace updater
 

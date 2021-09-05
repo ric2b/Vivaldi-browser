@@ -42,8 +42,10 @@ source_set("test_support") {
     "//components/history/core/browser",
     "//components/keyed_service/core",
     "//components/metrics",
+    "//components/metrics:demographics_test_support",
     "//components/prefs",
     "//components/signin/public/base",
+    "//components/sync:test_support_nigori",
     "//components/sync/base",
     "//components/sync/test/fake_server",
     "//components/sync_device_info",
@@ -72,6 +74,8 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/browser_view",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/main",
+    "//ios/chrome/browser/ui/main:scene",
+    "//ios/chrome/browser/ui/main:scene_testing",
     "//ios/chrome/browser/ui/settings",
     "//ios/chrome/browser/ui/settings:settings_root",
     "//ios/chrome/browser/ui/settings/password",
@@ -94,6 +98,7 @@ source_set("test_support") {
     "//net",
     "//net:test_support",
     "//third_party/breakpad:client",
+    "//third_party/metrics_proto",
     "//url",
   ]
 }

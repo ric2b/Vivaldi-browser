@@ -60,6 +60,9 @@
 #error "This file requires ARC support."
 #endif
 
+using autofill::FormRendererId;
+using autofill::FieldRendererId;
+
 namespace {
 
 using FormDataVector = std::vector<autofill::FormData>;
@@ -314,12 +317,8 @@ autofillManagerFromWebState:(web::WebState*)webState
       /*autoselect_first_suggestion=*/false);
 }
 
-- (void)checkIfSuggestionsAvailableForForm:(NSString*)formName
-                           fieldIdentifier:(NSString*)fieldIdentifier
-                                 fieldType:(NSString*)fieldType
-                                      type:(NSString*)type
-                                typedValue:(NSString*)typedValue
-                                   frameID:(NSString*)frameID
+- (void)checkIfSuggestionsAvailableForForm:
+            (FormSuggestionProviderQuery*)formQuery
                                isMainFrame:(BOOL)isMainFrame
                             hasUserGesture:(BOOL)hasUserGesture
                                   webState:(web::WebState*)webState
@@ -338,8 +337,8 @@ autofillManagerFromWebState:(web::WebState*)webState
     return;
   }
 
-  web::WebFrame* frame =
-      web::GetWebFrameWithId(_webState, base::SysNSStringToUTF8(frameID));
+  web::WebFrame* frame = web::GetWebFrameWithId(
+      _webState, base::SysNSStringToUTF8(formQuery.frameID));
   if (!frame) {
     completion(NO);
     return;
@@ -351,10 +350,10 @@ autofillManagerFromWebState:(web::WebState*)webState
   id completionHandler = ^(BOOL success, const FormDataVector& forms) {
     if (success && forms.size() == 1) {
       [weakSelf queryAutofillForForm:forms[0]
-                     fieldIdentifier:fieldIdentifier
-                                type:type
-                          typedValue:typedValue
-                             frameID:frameID
+                     fieldIdentifier:formQuery.fieldIdentifier
+                                type:formQuery.type
+                          typedValue:formQuery.typedValue
+                             frameID:formQuery.frameID
                             webState:webState
                    completionHandler:completion];
     }
@@ -364,33 +363,26 @@ autofillManagerFromWebState:(web::WebState*)webState
   // input element are considered because key/value suggestions are offered
   // even on short forms.
   [self fetchFormsFiltered:YES
-                        withName:base::SysNSStringToUTF16(formName)
+                        withName:base::SysNSStringToUTF16(formQuery.formName)
       minimumRequiredFieldsCount:1
                          inFrame:frame
                completionHandler:completionHandler];
 }
 
-- (void)retrieveSuggestionsForForm:(NSString*)formName
-                   fieldIdentifier:(NSString*)fieldIdentifier
-                         fieldType:(NSString*)fieldType
-                              type:(NSString*)type
-                        typedValue:(NSString*)typedValue
-                           frameID:(NSString*)frameID
+- (void)retrieveSuggestionsForForm:(FormSuggestionProviderQuery*)formQuery
                           webState:(web::WebState*)webState
                  completionHandler:(SuggestionsReadyCompletion)completion {
-  DCHECK(_mostRecentSuggestions)
-      << "Requestor should have called "
-      << "|checkIfSuggestionsAvailableForForm:fieldIdentifier:fieldType:type:"
-      << "typedValue:frameID:isMainFrame:hasUserGesture:webState:"
-      << "completionHandler:| and waited for the result before calling "
-      << "|retrieveSuggestionsForForm:fieldIdentifier:fieldType:type:"
-      << "typedValue:frameID:webState:completionHandler:|.";
+  DCHECK(_mostRecentSuggestions) << "Requestor should have called "
+                                 << "|checkIfSuggestionsAvailableForForm:"
+                                    "webState:completionHandler:|.";
   completion(_mostRecentSuggestions, self);
 }
 
 - (void)didSelectSuggestion:(FormSuggestion*)suggestion
                        form:(NSString*)formName
+               uniqueFormID:(FormRendererId)uniqueFormID
             fieldIdentifier:(NSString*)fieldIdentifier
+              uniqueFieldID:(FieldRendererId)uniqueFieldID
                     frameID:(NSString*)frameID
           completionHandler:(SuggestionHandledCompletion)completion {
   [[UIDevice currentDevice] playInputClick];

@@ -36,7 +36,7 @@ class CalendarTable {
   virtual ~CalendarTable();
 
   bool CreateCalendarTable();
-  bool CreateDefaultCalendar();
+  bool CreateDefaultCalendar(AccountID account_id);
 
   CalendarID CreateCalendar(CalendarRow row);
   bool GetAllCalendars(CalendarRows* calendars);
@@ -51,15 +51,14 @@ class CalendarTable {
   void FillCalendarRow(sql::Statement& statement, CalendarRow* calendar);
 
  private:
-  std::string GURLToDatabaseURL(const GURL& gurl);
   bool DoesAnyCalendarExist();
 
   DISALLOW_COPY_AND_ASSIGN(CalendarTable);
 };
 
-#define CALENDAR_ROW_FIELDS                                               \
-  " id, account_id, name, description,  url, ctag, orderindex, color, "   \
-  " hidden, active, iconindex, username, type, interval, last_checked , " \
+#define CALENDAR_ROW_FIELDS                                        \
+  " id, account_id, name, description,  ctag, orderindex, color, " \
+  " hidden, active, iconindex, last_checked , "                    \
   " timezone, created, last_modified "
 
 }  // namespace calendar

@@ -4,13 +4,28 @@
 
 #include "chrome/browser/chromeos/input_method/native_input_method_engine.h"
 
+#include "base/guid.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "chrome/browser/autofill/personal_data_manager_factory.h"
+#include "chrome/browser/chromeos/input_method/ime_service_connector.h"
+#include "chrome/browser/chromeos/input_method/textinput_test_helper.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/personal_data_manager_observer.h"
+#include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/core/embedder/embedder.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/chromeos/input_method_chromeos.h"
 #include "ui/base/ime/dummy_text_input_client.h"
 #include "ui/base/ime/ime_bridge.h"
@@ -63,6 +78,31 @@ class TestObserver : public InputMethodEngineBase::Observer {
   DISALLOW_COPY_AND_ASSIGN(TestObserver);
 };
 
+class TestPersonalDataManagerObserver
+    : public autofill::PersonalDataManagerObserver {
+ public:
+  explicit TestPersonalDataManagerObserver(Profile* profile)
+      : profile_(profile) {
+    autofill::PersonalDataManagerFactory::GetForProfile(profile_)->AddObserver(
+        this);
+  }
+  ~TestPersonalDataManagerObserver() override {}
+
+  // Waits for the PersonalDataManager's list of profiles to be updated.
+  void Wait() {
+    run_loop_.Run();
+    autofill::PersonalDataManagerFactory::GetForProfile(profile_)
+        ->RemoveObserver(this);
+  }
+
+  // PersonalDataManagerObserver:
+  void OnPersonalDataChanged() override { run_loop_.Quit(); }
+
+ private:
+  Profile* profile_;
+  base::RunLoop run_loop_;
+};
+
 class KeyProcessingWaiter {
  public:
   ui::IMEEngineHandlerInterface::KeyEventDoneCallback CreateCallback() {
@@ -82,12 +122,14 @@ class NativeInputMethodEngineTest : public InProcessBrowserTest,
                                     public ui::internal::InputMethodDelegate {
  public:
   NativeInputMethodEngineTest() : input_method_(this) {
-    feature_list_.InitWithFeatureState(
-        chromeos::features::kNativeRuleBasedTyping, true);
+    feature_list_.InitWithFeatures({chromeos::features::kNativeRuleBasedTyping,
+                                    chromeos::features::kAssistPersonalInfo},
+                                   {});
   }
 
  protected:
   void SetUp() override {
+    chromeos::input_method::DisableImeSandboxForTesting();
     mojo::core::Init();
     InProcessBrowserTest::SetUp();
     ui::IMEBridge::Initialize();
@@ -95,10 +137,29 @@ class NativeInputMethodEngineTest : public InProcessBrowserTest,
 
   void SetUpOnMainThread() override {
     ui::IMEBridge::Get()->SetInputContextHandler(&input_method_);
+    ui::IMEBridge::Get()->SetCurrentEngineHandler(&engine_);
 
     auto observer = std::make_unique<TestObserver>();
-    engine_.Initialize(std::move(observer), "", nullptr);
+
+    profile_ = browser()->profile();
+    engine_.Initialize(std::move(observer), "", profile_);
     InProcessBrowserTest::SetUpOnMainThread();
+  }
+
+  void SetUpTextInput(chromeos::TextInputTestHelper& helper) {
+    GURL url = ui_test_utils::GetTestUrl(
+        base::FilePath(FILE_PATH_LITERAL("textinput")),
+        base::FilePath(FILE_PATH_LITERAL("simple_textarea.html")));
+    ui_test_utils::NavigateToURL(browser(), url);
+
+    content::WebContents* tab =
+        browser()->tab_strip_model()->GetActiveWebContents();
+
+    ASSERT_TRUE(content::ExecuteScript(
+        tab, "document.getElementById('text_id').focus()"));
+    helper.WaitForTextInputStateChanged(ui::TEXT_INPUT_TYPE_TEXT_AREA);
+
+    SetFocus(helper.GetTextInputClient());
   }
 
   // Overridden from ui::internal::InputMethodDelegate:
@@ -107,14 +168,18 @@ class NativeInputMethodEngineTest : public InProcessBrowserTest,
     return ui::EventDispatchDetails();
   }
 
-  void DispatchKeyPress(ui::KeyboardCode code, int flags = ui::EF_NONE) {
+  void DispatchKeyPress(ui::KeyboardCode code,
+                        bool need_flush,
+                        int flags = ui::EF_NONE) {
     KeyProcessingWaiter waiterPressed;
     KeyProcessingWaiter waiterReleased;
     engine_.ProcessKeyEvent({ui::ET_KEY_PRESSED, code, flags},
                             waiterPressed.CreateCallback());
     engine_.ProcessKeyEvent({ui::ET_KEY_RELEASED, code, flags},
                             waiterReleased.CreateCallback());
-    engine_.FlushForTesting();
+    if (need_flush)
+      engine_.FlushForTesting();
+
     waiterPressed.Wait();
     waiterReleased.Wait();
   }
@@ -123,7 +188,12 @@ class NativeInputMethodEngineTest : public InProcessBrowserTest,
     input_method_.SetFocusedTextInputClient(client);
   }
 
+  ui::InputMethod* GetBrowserInputMethod() {
+    return browser()->window()->GetNativeWindow()->GetHost()->GetInputMethod();
+  }
+
   chromeos::NativeInputMethodEngine engine_;
+  Profile* profile_;
 
  private:
   ui::InputMethodChromeOS input_method_;
@@ -131,8 +201,9 @@ class NativeInputMethodEngineTest : public InProcessBrowserTest,
 };
 
 // ID is specified in google_xkb_manifest.json.
-constexpr char kEngineIdVietnameseTelex[] = "vkd_vi_telex";
 constexpr char kEngineIdArabic[] = "vkd_ar";
+constexpr char kEngineIdUs[] = "xkb:us::eng";
+constexpr char kEngineIdVietnameseTelex[] = "vkd_vi_telex";
 
 }  // namespace
 
@@ -146,9 +217,9 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest,
   ui::DummyTextInputClient text_input_client(ui::TEXT_INPUT_TYPE_TEXT);
   SetFocus(&text_input_client);
 
-  DispatchKeyPress(ui::VKEY_A, ui::EF_SHIFT_DOWN);
-  DispatchKeyPress(ui::VKEY_S);
-  DispatchKeyPress(ui::VKEY_SPACE);
+  DispatchKeyPress(ui::VKEY_A, true, ui::EF_SHIFT_DOWN);
+  DispatchKeyPress(ui::VKEY_S, true);
+  DispatchKeyPress(ui::VKEY_SPACE, true);
 
   // Expect to commit 'Á '.
   ASSERT_EQ(text_input_client.composition_history().size(), 2U);
@@ -172,9 +243,9 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, VietnameseTelex_Reset) {
   ui::DummyTextInputClient text_input_client(ui::TEXT_INPUT_TYPE_TEXT);
   SetFocus(&text_input_client);
 
-  DispatchKeyPress(ui::VKEY_A);
+  DispatchKeyPress(ui::VKEY_A, true);
   engine_.Reset();
-  DispatchKeyPress(ui::VKEY_S);
+  DispatchKeyPress(ui::VKEY_S, true);
 
   // Expect to commit 's'.
   ASSERT_EQ(text_input_client.composition_history().size(), 1U);
@@ -199,7 +270,7 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SwitchActiveController) {
   ui::DummyTextInputClient text_input_client(ui::TEXT_INPUT_TYPE_TEXT);
   SetFocus(&text_input_client);
 
-  DispatchKeyPress(ui::VKEY_A);
+  DispatchKeyPress(ui::VKEY_A, true);
 
   // Expect to commit 'ش'.
   ASSERT_EQ(text_input_client.composition_history().size(), 0U);
@@ -219,12 +290,99 @@ IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, NoActiveController) {
   ui::DummyTextInputClient text_input_client(ui::TEXT_INPUT_TYPE_TEXT);
   SetFocus(&text_input_client);
 
-  DispatchKeyPress(ui::VKEY_A);
+  DispatchKeyPress(ui::VKEY_A, true);
   engine_.Reset();
 
   // Expect no changes.
   ASSERT_EQ(text_input_client.composition_history().size(), 0U);
   ASSERT_EQ(text_input_client.insert_text_history().size(), 0U);
+
+  SetFocus(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SuggestUserEmail) {
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfileIfExists(profile_);
+  signin::SetPrimaryAccount(identity_manager, "johnwayne@me.xyz");
+
+  engine_.Enable(kEngineIdUs);
+
+  chromeos::TextInputTestHelper helper(GetBrowserInputMethod());
+  SetUpTextInput(helper);
+
+  const base::string16 prefix_text = base::UTF8ToUTF16("my email is ");
+  const base::string16 expected_result_text =
+      base::UTF8ToUTF16("my email is johnwayne@me.xyz");
+
+  helper.GetTextInputClient()->InsertText(prefix_text);
+  helper.WaitForSurroundingTextChanged(prefix_text);
+
+  DispatchKeyPress(ui::VKEY_TAB, false);
+  helper.WaitForSurroundingTextChanged(expected_result_text);
+
+  EXPECT_EQ(expected_result_text, helper.GetSurroundingText());
+
+  SetFocus(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, DismissSuggestion) {
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfileIfExists(profile_);
+  signin::SetPrimaryAccount(identity_manager, "johnwayne@me.xyz");
+
+  engine_.Enable(kEngineIdUs);
+
+  chromeos::TextInputTestHelper helper(GetBrowserInputMethod());
+  SetUpTextInput(helper);
+
+  const base::string16 prefix_text = base::UTF8ToUTF16("my email is ");
+  const base::string16 expected_result_text =
+      base::UTF8ToUTF16("my email is john@abc.com");
+
+  helper.GetTextInputClient()->InsertText(prefix_text);
+  helper.WaitForSurroundingTextChanged(prefix_text);
+
+  DispatchKeyPress(ui::VKEY_ESCAPE, false);
+  // This tab should make no effect.
+  DispatchKeyPress(ui::VKEY_TAB, false);
+  helper.GetTextInputClient()->InsertText(base::UTF8ToUTF16("john@abc.com"));
+  helper.WaitForSurroundingTextChanged(expected_result_text);
+
+  EXPECT_EQ(expected_result_text, helper.GetSurroundingText());
+
+  SetFocus(nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(NativeInputMethodEngineTest, SuggestUserName) {
+  TestPersonalDataManagerObserver personal_data_observer(profile_);
+  autofill::AutofillProfile autofill_profile(base::GenerateGUID(),
+                                             autofill::test::kEmptyOrigin);
+  autofill_profile.SetRawInfo(autofill::ServerFieldType::NAME_FULL,
+                              base::UTF8ToUTF16("John Wayne"));
+  autofill::PersonalDataManagerFactory::GetForProfile(profile_)->AddProfile(
+      autofill_profile);
+  personal_data_observer.Wait();
+
+  engine_.Enable(kEngineIdUs);
+
+  chromeos::TextInputTestHelper helper(GetBrowserInputMethod());
+  SetUpTextInput(helper);
+
+  const base::string16 prefix_text = base::UTF8ToUTF16("my name is ");
+  const base::string16 expected_result_text =
+      base::UTF8ToUTF16("my name is John Wayne");
+
+  helper.GetTextInputClient()->InsertText(prefix_text);
+  helper.WaitForSurroundingTextChanged(prefix_text);
+
+  // Keep typing
+  helper.GetTextInputClient()->InsertText(base::UTF8ToUTF16("jo"));
+  helper.WaitForSurroundingTextChanged(base::UTF8ToUTF16("my name is jo"));
+
+  DispatchKeyPress(ui::VKEY_TAB, false);
+  helper.WaitForSurroundingTextChanged(expected_result_text);
+
+  EXPECT_EQ(expected_result_text, helper.GetSurroundingText());
 
   SetFocus(nullptr);
 }

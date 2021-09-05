@@ -331,7 +331,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void CollectMatchingUserRules(ElementRuleCollector&) const;
 
-  void CustomPropertyRegistered();
+  void PropertyRegistryChanged();
 
   void EnvironmentVariableChanged();
 
@@ -389,7 +389,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
  private:
   // FontSelectorClient implementation.
-  void FontsNeedUpdate(FontSelector*) override;
+  void FontsNeedUpdate(FontSelector*, FontInvalidationReason) override;
 
   void LoadVisionDeficiencyFilter();
 
@@ -464,8 +464,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       TreeScope& tree_scope,
       const HeapHashSet<Member<RuleSet>>& changed_rule_sets,
       unsigned changed_rule_flags,
-      InvalidationScope invalidation_scope,
-      bool rebuild_font_cache);
+      InvalidationScope invalidation_scope);
   void InvalidateInitialData();
 
   void UpdateViewport();
@@ -480,7 +479,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void UpdateStyleSheetList(TreeScope&);
 
   // Returns true if any @font-face rules are added or removed.
-  bool ClearFontCacheAndAddUserFonts();
+  bool ClearFontFaceCacheAndAddUserFonts();
 
   void ClearKeyframeRules() { keyframes_rule_map_.clear(); }
   void ClearPropertyRules();

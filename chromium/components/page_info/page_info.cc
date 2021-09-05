@@ -25,6 +25,7 @@
 #include "build/build_config.h"
 #include "components/browser_ui/util/android/url_constants.h"
 #include "components/browsing_data/content/local_storage_helper.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -89,6 +90,7 @@ namespace {
 ContentSettingsType kPermissionType[] = {
     ContentSettingsType::GEOLOCATION,
     ContentSettingsType::MEDIASTREAM_CAMERA,
+    ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
     ContentSettingsType::MEDIASTREAM_MIC,
     ContentSettingsType::SENSORS,
     ContentSettingsType::NOTIFICATIONS,
@@ -98,6 +100,7 @@ ContentSettingsType kPermissionType[] = {
     ContentSettingsType::IMAGES,
 #endif
     ContentSettingsType::POPUPS,
+    ContentSettingsType::WINDOW_PLACEMENT,
     ContentSettingsType::ADS,
     ContentSettingsType::BACKGROUND_SYNC,
     ContentSettingsType::SOUND,
@@ -177,6 +180,10 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
   // The Native File System write permission is desktop only at the moment.
   if (info.type == ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD)
     return false;
+
+  // Camera PTZ is desktop only at the moment.
+  if (info.type == ContentSettingsType::CAMERA_PAN_TILT_ZOOM)
+    return false;
 #else
   // Flash is shown if the user has ever changed its setting for |site_url|.
   if (info.type == ContentSettingsType::PLUGINS &&
@@ -195,6 +202,13 @@ bool ShouldShowPermission(const PageInfoUI::PermissionInfo& info,
   if (info.type == ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD &&
       web_contents->HasNativeFileSystemHandles()) {
     return true;
+  }
+
+  // Camera PTZ is shown only if Experimental Web Platform features are enabled.
+  base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+  if (info.type == ContentSettingsType::CAMERA_PAN_TILT_ZOOM &&
+      !cmd->HasSwitch(switches::kEnableExperimentalWebPlatformFeatures)) {
+    return false;
   }
 #endif
 
@@ -473,7 +487,7 @@ void PageInfo::RecordPageInfoAction(PageInfoAction action) {
 
 void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
                                        ContentSetting setting) {
-  delegate_->ContentSettingChangedViaPageInfo(type);
+  ContentSettingChangedViaPageInfo(type);
 
   // Count how often a permission for a specific content type is changed using
   // the Page Info UI.
@@ -520,8 +534,8 @@ void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
   // The permission may have been blocked due to being under embargo, so if it
   // was changed away from BLOCK, clear embargo status if it exists.
   if (setting != CONTENT_SETTING_BLOCK) {
-    delegate_->GetPermissionDecisionAutoblocker()->RemoveEmbargoByUrl(site_url_,
-                                                                      type);
+    delegate_->GetPermissionDecisionAutoblocker()->RemoveEmbargoAndResetCounts(
+        site_url_, type);
   }
   content_settings->SetNarrowestContentSetting(site_url_, site_url_, type,
                                                setting);
@@ -677,7 +691,8 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
         // This string is shown on all non-error HTTPS sites on Android when
         // the user taps "Details" link on page info.
         identity_status_description_android_.assign(l10n_util::GetStringFUTF16(
-            IDS_PAGE_INFO_SECURE_IDENTITY_VERIFIED, issuer_name));
+            IDS_PAGE_INFO_SECURE_IDENTITY_VERIFIED,
+            delegate_->GetClientApplicationName(), issuer_name));
 #endif
       }
       if (security_state::IsSHA1InChain(visible_security_state)) {
@@ -932,12 +947,9 @@ void PageInfo::PresentSitePermissions() {
       }
     }
 
-    // TODO(crbug.com/1058597): Remove the call to |delegate_| once
-    // TabSpecificContentSettings has been componentized.
-    if (ShouldShowPermission(permission_info, site_url_, content_settings,
-                             web_contents(),
-                             delegate_->HasContentSettingChangedViaPageInfo(
-                                 permission_info.type))) {
+    if (ShouldShowPermission(
+            permission_info, site_url_, content_settings, web_contents(),
+            HasContentSettingChangedViaPageInfo(permission_info.type))) {
       permission_info_list.push_back(permission_info);
     }
   }
@@ -968,14 +980,14 @@ void PageInfo::PresentSiteData() {
   // TODO(crbug.com/1058597): Remove the calls to the |delegate_| once
   // TabSpecificContentSettings has been componentized.
   PageInfoUI::CookieInfo cookie_info;
-  cookie_info.allowed = delegate_->GetFirstPartyAllowedCookiesCount(site_url_);
-  cookie_info.blocked = delegate_->GetFirstPartyBlockedCookiesCount(site_url_);
+  cookie_info.allowed = GetFirstPartyAllowedCookiesCount(site_url_);
+  cookie_info.blocked = GetFirstPartyBlockedCookiesCount(site_url_);
   cookie_info.is_first_party = true;
   cookie_info_list.push_back(cookie_info);
 
   // Add third party cookie counts.
-  cookie_info.allowed = delegate_->GetThirdPartyAllowedCookiesCount(site_url_);
-  cookie_info.blocked = delegate_->GetThirdPartyBlockedCookiesCount(site_url_);
+  cookie_info.allowed = GetThirdPartyAllowedCookiesCount(site_url_);
+  cookie_info.blocked = GetThirdPartyBlockedCookiesCount(site_url_);
   cookie_info.is_first_party = false;
   cookie_info_list.push_back(cookie_info);
 
@@ -1095,4 +1107,47 @@ void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
       *details = l10n_util::GetStringUTF16(IDS_PAGE_INFO_BILLING_DETAILS);
       break;
   }
+}
+
+content_settings::TabSpecificContentSettings*
+PageInfo::GetTabSpecificContentSettings() const {
+  return content_settings::TabSpecificContentSettings::FromWebContents(
+      web_contents());
+}
+
+bool PageInfo::HasContentSettingChangedViaPageInfo(ContentSettingsType type) {
+  return GetTabSpecificContentSettings()->HasContentSettingChangedViaPageInfo(
+      type);
+}
+
+void PageInfo::ContentSettingChangedViaPageInfo(ContentSettingsType type) {
+  GetTabSpecificContentSettings()->ContentSettingChangedViaPageInfo(type);
+}
+
+const browsing_data::LocalSharedObjectsContainer& PageInfo::GetAllowedObjects(
+    const GURL& site_url) {
+  return GetTabSpecificContentSettings()->allowed_local_shared_objects();
+}
+
+const browsing_data::LocalSharedObjectsContainer& PageInfo::GetBlockedObjects(
+    const GURL& site_url) {
+  return GetTabSpecificContentSettings()->blocked_local_shared_objects();
+}
+
+int PageInfo::GetFirstPartyAllowedCookiesCount(const GURL& site_url) {
+  return GetAllowedObjects(site_url).GetObjectCountForDomain(site_url);
+}
+
+int PageInfo::GetFirstPartyBlockedCookiesCount(const GURL& site_url) {
+  return GetBlockedObjects(site_url).GetObjectCountForDomain(site_url);
+}
+
+int PageInfo::GetThirdPartyAllowedCookiesCount(const GURL& site_url) {
+  return GetAllowedObjects(site_url).GetObjectCount() -
+         GetFirstPartyAllowedCookiesCount(site_url);
+}
+
+int PageInfo::GetThirdPartyBlockedCookiesCount(const GURL& site_url) {
+  return GetBlockedObjects(site_url).GetObjectCount() -
+         GetFirstPartyBlockedCookiesCount(site_url);
 }

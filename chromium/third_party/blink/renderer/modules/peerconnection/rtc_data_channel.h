@@ -44,7 +44,7 @@ class Blob;
 class DOMArrayBuffer;
 class DOMArrayBufferView;
 class ExceptionState;
-class RTCPeerConnectionHandlerPlatform;
+class RTCPeerConnectionHandler;
 
 class MODULES_EXPORT RTCDataChannel final
     : public EventTargetWithInlineData,
@@ -57,7 +57,7 @@ class MODULES_EXPORT RTCDataChannel final
  public:
   RTCDataChannel(ExecutionContext*,
                  scoped_refptr<webrtc::DataChannelInterface> channel,
-                 RTCPeerConnectionHandlerPlatform* peer_connection_handler);
+                 RTCPeerConnectionHandler* peer_connection_handler);
   ~RTCDataChannel() override;
 
   String label() const;
@@ -68,14 +68,9 @@ class MODULES_EXPORT RTCDataChannel final
   bool ordered() const;
   base::Optional<uint16_t> maxPacketLifeTime() const;
   base::Optional<uint16_t> maxRetransmits() const;
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  uint16_t maxPacketLifeTime(bool&) const;  // DEPRECATED
-  uint16_t maxRetransmits(bool&) const;     // DEPRECATED
   String protocol() const;
   bool negotiated() const;
   base::Optional<uint16_t> id() const;
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  uint16_t id(bool& is_null) const;  // DEPRECATED
   String readyState() const;
   unsigned bufferedAmount() const;
 
@@ -84,6 +79,12 @@ class MODULES_EXPORT RTCDataChannel final
 
   String binaryType() const;
   void setBinaryType(const String&, ExceptionState&);
+
+  // Functions called from RTCPeerConnection's DidAddRemoteDataChannel
+  // in order to make things happen in the specified order when announcing
+  // a remote channel.
+  void SetStateToOpenWithoutEvent();
+  void DispatchOpenEvent();
 
   void send(const String&, ExceptionState&);
   void send(DOMArrayBuffer*, ExceptionState&);

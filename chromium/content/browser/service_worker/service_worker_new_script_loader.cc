@@ -76,8 +76,7 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     int64_t cache_resource_id)
     : request_url_(original_request.url),
-      resource_type_(static_cast<blink::mojom::ResourceType>(
-          original_request.resource_type)),
+      resource_destination_(original_request.destination),
       original_options_(options),
       version_(version),
       network_watcher_(FROM_HERE,
@@ -89,7 +88,8 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
 
   network::ResourceRequest resource_request(original_request);
 #if DCHECK_IS_ON()
-  CheckVersionStatusBeforeLoad();
+  service_worker_loader_helpers::CheckVersionStatusBeforeWorkerScriptLoad(
+      version_->status(), resource_destination_);
 #endif  // DCHECK_IS_ON()
 
   scoped_refptr<ServiceWorkerRegistration> registration =
@@ -98,7 +98,8 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
   // worker is starting up, and it must be starting up here.
   DCHECK(registration);
   const bool is_main_script =
-      resource_type_ == blink::mojom::ResourceType::kServiceWorker;
+      (resource_destination_ ==
+       network::mojom::RequestDestination::kServiceWorker);
   if (is_main_script) {
     // Request SSLInfo. It will be persisted in service worker storage and
     // may be used by ServiceWorkerNavigationLoader for navigations handled
@@ -155,6 +156,7 @@ ServiceWorkerNewScriptLoader::~ServiceWorkerNewScriptLoader() {
 void ServiceWorkerNewScriptLoader::FollowRedirect(
     const std::vector<std::string>& removed_headers,
     const net::HttpRequestHeaders& modified_headers,
+    const net::HttpRequestHeaders& modified_cors_exempt_headers,
     const base::Optional<GURL>& new_url) {
   // Resource requests for service worker scripts should not follow redirects.
   // See comments in OnReceiveRedirect().
@@ -192,17 +194,16 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
       blink::ServiceWorkerStatusCode::kOk;
   network::URLLoaderCompletionStatus completion_status;
   std::string error_message;
-  std::unique_ptr<net::HttpResponseInfo> response_info =
-      service_worker_loader_helpers::CreateHttpResponseInfoAndCheckHeaders(
+  if (!service_worker_loader_helpers::CheckResponseHead(
           *response_head, &service_worker_state, &completion_status,
-          &error_message);
-  if (!response_info) {
+          &error_message)) {
     DCHECK_NE(net::OK, completion_status.error_code);
     CommitCompleted(completion_status, error_message);
     return;
   }
 
-  if (resource_type_ == blink::mojom::ResourceType::kServiceWorker) {
+  if (resource_destination_ ==
+      network::mojom::RequestDestination::kServiceWorker) {
     // Check the path restriction defined in the spec:
     // https://w3c.github.io/ServiceWorker/#service-worker-script-response
     std::string service_worker_allowed;
@@ -218,8 +219,14 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
       return;
     }
 
+    // TODO(arthursonzogni): Make the Cross-Origin-Embedder-Policy to be parsed
+    // when it reached this line, not matter what URLLoader it is coming from.
+    // The same mechanism as the one in NavigationURLLoader must be provided.
+    // Instead of being a "document", the main resource here is a "script".
     version_->set_cross_origin_embedder_policy(
-        response_head->cross_origin_embedder_policy);
+        response_head->parsed_headers
+            ? response_head->parsed_headers->cross_origin_embedder_policy
+            : network::CrossOriginEmbedderPolicy());
 
     if (response_head->network_accessed)
       version_->embedded_worker()->OnNetworkAccessedForScriptLoad();
@@ -231,8 +238,7 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
 
   network_loader_state_ = LoaderState::kWaitingForBody;
 
-  WriteHeaders(
-      base::MakeRefCounted<HttpResponseInfoIOBuffer>(std::move(response_info)));
+  WriteHeaders(response_head.Clone());
 
   // Don't pass SSLInfo to the client when the original request doesn't ask
   // to send it.
@@ -331,31 +337,12 @@ void ServiceWorkerNewScriptLoader::OnComplete(
 
 // End of URLLoaderClient ------------------------------------------------------
 
-#if DCHECK_IS_ON()
-void ServiceWorkerNewScriptLoader::CheckVersionStatusBeforeLoad() {
-  DCHECK(version_);
-
-  // ServiceWorkerNewScriptLoader is used for fetching the service worker main
-  // script (RESOURCE_TYPE_SERVICE_WORKER) during worker startup or
-  // importScripts() (RESOURCE_TYPE_SCRIPT).
-  // TODO(nhiroki): In the current implementation, importScripts() can be called
-  // in any ServiceWorkerVersion::Status except for REDUNDANT, but the spec
-  // defines importScripts() works only on the initial script evaluation and the
-  // install event. Update this check once importScripts() is fixed.
-  // (https://crbug.com/719052)
-  DCHECK((resource_type_ == blink::mojom::ResourceType::kServiceWorker &&
-          version_->status() == ServiceWorkerVersion::NEW) ||
-         (resource_type_ == blink::mojom::ResourceType::kScript &&
-          version_->status() != ServiceWorkerVersion::REDUNDANT));
-}
-#endif  // DCHECK_IS_ON()
-
 void ServiceWorkerNewScriptLoader::WriteHeaders(
-    scoped_refptr<HttpResponseInfoIOBuffer> info_buffer) {
+    network::mojom::URLResponseHeadPtr response_head) {
   DCHECK_EQ(WriterState::kNotStarted, header_writer_state_);
   header_writer_state_ = WriterState::kWriting;
   net::Error error = cache_writer_->MaybeWriteHeaders(
-      info_buffer.get(),
+      std::move(response_head),
       base::BindOnce(&ServiceWorkerNewScriptLoader::OnWriteHeadersComplete,
                      weak_factory_.GetWeakPtr()));
   if (error == net::ERR_IO_PENDING) {

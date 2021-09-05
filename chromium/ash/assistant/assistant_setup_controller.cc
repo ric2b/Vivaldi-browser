@@ -4,15 +4,14 @@
 
 #include "ash/assistant/assistant_setup_controller.h"
 
-#include "ash/assistant/assistant_controller.h"
-#include "ash/assistant/assistant_ui_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/assistant/util/deep_link_util.h"
 #include "ash/assistant/util/i18n_util.h"
-#include "ash/shell.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
-#include "chromeos/services/assistant/public/features.h"
+#include "chromeos/services/assistant/public/cpp/features.h"
 
 namespace {
 
@@ -24,14 +23,12 @@ constexpr char kGSuiteAdministratorInstructionsUrl[] =
 namespace ash {
 
 AssistantSetupController::AssistantSetupController(
-    AssistantController* assistant_controller)
+    AssistantControllerImpl* assistant_controller)
     : assistant_controller_(assistant_controller) {
-  assistant_controller_->AddObserver(this);
+  assistant_controller_observer_.Add(AssistantController::Get());
 }
 
-AssistantSetupController::~AssistantSetupController() {
-  assistant_controller_->RemoveObserver(this);
-}
+AssistantSetupController::~AssistantSetupController() = default;
 
 void AssistantSetupController::OnAssistantControllerConstructed() {
   assistant_controller_->view_delegate()->AddObserver(this);
@@ -57,7 +54,7 @@ void AssistantSetupController::OnOptInButtonPressed() {
   using chromeos::assistant::prefs::ConsentStatus;
   if (AssistantState::Get()->consent_status().value_or(
           ConsentStatus::kUnknown) == ConsentStatus::kUnauthorized) {
-    assistant_controller_->OpenUrl(assistant::util::CreateLocalizedGURL(
+    AssistantController::Get()->OpenUrl(assistant::util::CreateLocalizedGURL(
         kGSuiteAdministratorInstructionsUrl));
   } else {
     StartOnboarding(/*relaunch=*/true);
@@ -69,7 +66,7 @@ void AssistantSetupController::StartOnboarding(bool relaunch, FlowType type) {
   if (!assistant_setup)
     return;
 
-  assistant_controller_->ui_controller()->CloseUi(
+  AssistantUiController::Get()->CloseUi(
       chromeos::assistant::mojom::AssistantExitPoint::kSetup);
 
   assistant_setup->StartAssistantOptInFlow(
@@ -80,7 +77,7 @@ void AssistantSetupController::StartOnboarding(bool relaunch, FlowType type) {
 void AssistantSetupController::OnOptInFlowFinished(bool relaunch,
                                                    bool completed) {
   if (relaunch && completed) {
-    assistant_controller_->ui_controller()->ShowUi(
+    AssistantUiController::Get()->ShowUi(
         chromeos::assistant::mojom::AssistantEntryPoint::kSetup);
   }
 }

@@ -27,6 +27,7 @@
 #include "chrome/common/web_application_info.h"
 #include "components/sync/model/string_ordinal.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_prefs.h"
@@ -108,7 +109,9 @@ IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
 // Install some apps on both clients, some on only one client, some on only the
 // other, and sync.  Both clients should end up with all apps, and the app and
 // page ordinals should be identical.
-IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest, StartWithDifferentApps) {
+// Disabled due to flake: https://crbug.com/1069843
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
+                       DISABLED_StartWithDifferentApps) {
   ASSERT_TRUE(SetupClients());
 
   int i = 0;

@@ -11,11 +11,12 @@
 #include <shlobj.h>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop_current.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -258,13 +259,10 @@ void ClipboardWin::Clear(ClipboardBuffer buffer) {
   ::EmptyClipboard();
 }
 
-void ClipboardWin::ReadAvailableTypes(ClipboardBuffer buffer,
-                                      std::vector<base::string16>* types,
-                                      bool* contains_filenames) const {
-  if (!types || !contains_filenames) {
-    NOTREACHED();
-    return;
-  }
+void ClipboardWin::ReadAvailableTypes(
+    ClipboardBuffer buffer,
+    std::vector<base::string16>* types) const {
+  DCHECK(types);
 
   types->clear();
   if (::IsClipboardFormatAvailable(
@@ -278,7 +276,6 @@ void ClipboardWin::ReadAvailableTypes(ClipboardBuffer buffer,
     types->push_back(base::UTF8ToUTF16(kMimeTypeRTF));
   if (::IsClipboardFormatAvailable(CF_DIB))
     types->push_back(base::UTF8ToUTF16(kMimeTypePNG));
-  *contains_filenames = false;
 
   // Acquire the clipboard to read WebCustomDataType types.
   ScopedClipboard clipboard;

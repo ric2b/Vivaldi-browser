@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Papan kekunci Jerman</translation>
 <translation id="1972984168337863910">Kembangkan panel maklum balas fail</translation>
 <translation id="1984603991036629094">Papan kekunci Fonetik bahasa Armenia</translation>
+<translation id="1995337122023280937">Pergi ke lokasi fail</translation>
 <translation id="2001796770603320721">Urus dalam Drive</translation>
 <translation id="2009067268969781306">Memformatkan pemacu akan memadamkan semua data yang disimpan di dalamnya. Tindakan ini tidak boleh dibuat asal.</translation>
 <translation id="2028997212275086731">Arkib RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Drive tidak dapat dicapai. Sila <ph name="BEGIN_LINK" />log keluar<ph name="END_LINK" /> dan log masuk kembali.</translation>
 <translation id="2649120831653069427">Ikan Pelangi</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Lokasi fail</translation>
 <translation id="2672394958563893062">Ralat telah berlaku. Klik untuk memulakan semula dari permulaan.</translation>
 <translation id="2676946222714718093">Dimainkan di</translation>
 <translation id="2735698359135166290">Papan kekunci standard Romania</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> ralat.</translation>
 <translation id="3519867315646775981">Pengalihan huruf (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Bahasa Portugis</translation>
+<translation id="3524311639100184459">Awas: Fail ini bersifat sementara dan mungkin dipadamkan secara automatik untuk mengosongkan ruang cakera.  <ph name="BEGIN_LINK" />Ketahui Lebih Lanjut<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Folder</translation>
 <translation id="3549797760399244642">Pergi ke drive.google.com...</translation>
 <translation id="357479282490346887">Bahasa Lithuania</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Pemain Audio</translation>
 <translation id="4002066346123236978">Tajuk</translation>
+<translation id="4065397611279318371">Untuk membuka fail dengan menggunakan apl <ph name="APP_NAME" />, alihkan fail itu ke folder <ph name="SHARED_DIRECTORY_LABEL" /> dahulu.</translation>
 <translation id="4070370845051020638">Kaedah input Kantonis</translation>
 <translation id="4072248638558688893">Papan kekunci bahasa Tamil (Fonetik)</translation>
 <translation id="4124935795427217608">Unikorn</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Autobaiki</translation>
 <translation id="4881695831933465202">Buka</translation>
 <translation id="4886021172213954916">Papan kekunci bahasa Tamil (Mesin Taip)</translation>
+<translation id="4892969127351273348">Tidak dapat membuka fail menggunakan <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Sedia untuk menyandarkan <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Dibetulkan</translation>
 <translation id="4935975195727477204">Bunga Gazania</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Urus perkongsian Linux</translation>
 <translation id="6808193438228982088">Rubah</translation>
 <translation id="6820687829547641339">Arkib tar Gzip dimampatkan</translation>
+<translation id="6823166707458800069">Semua fail yang disimpan dalam folder ini disandarkan dalam talian secara automatik.</translation>
 <translation id="6825883775269213504">Bahasa Rusia</translation>
 <translation id="6827236167376090743">Video ini akan terus dimainkan untuk tempoh yang lama.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> dialih keluar daripada pilihan.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Peta Google</translation>
 <translation id="7419631653042041064">Papan kekunci Catalonia</translation>
 <translation id="7434823369735508263">Papan kekunci Dvorak UK</translation>
+<translation id="7447678886297481665">Fail dalam folder ini bersifat baca sahaja. Sesetengah aktiviti tidak disokong.</translation>
 <translation id="7460898608667578234">Bahasa Ukraine</translation>
 <translation id="7474889694310679759">Papan kekunci Inggeris Kanada</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> ditemui

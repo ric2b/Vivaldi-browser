@@ -43,8 +43,6 @@
   id<StartupInformation> _startupInformation;
   // Helper to open new tabs.
   id<TabOpening> _tabOpener;
-  // Handles the application stage changes.
-  AppState* _appState;
   // Handles tab switcher.
   id<TabSwitching> _tabSwitcherProtocol;
 }
@@ -75,11 +73,11 @@
     [_mainController setAppState:_appState];
     [_appState addObserver:_mainController];
 
-    if (!IsMultiwindowSupported()) {
-      // When multiwindow is not supported, this object holds a "scene" state
-      // and a "scene" controller. This allows the rest of the app to be mostly
-      // multiwindow-agnostic.
-      _sceneState = [[SceneState alloc] init];
+    if (!IsSceneStartupSupported()) {
+      // When the UIScene APU is not supported, this object holds a "scene"
+      // state and a "scene" controller. This allows the rest of the app to be
+      // mostly multiwindow-agnostic.
+      _sceneState = [[SceneState alloc] initWithAppState:_appState];
       _appState.mainSceneState = _sceneState;
       _sceneController =
           [[SceneController alloc] initWithSceneState:_sceneState];
@@ -117,20 +115,18 @@
   startup_loggers::RegisterAppDidFinishLaunchingTime();
 
   _mainController.window = self.window;
-  // self.window has been set by this time. _appState window can now be set.
-  _appState.window = self.window;
 
   BOOL inBackground =
       [application applicationState] == UIApplicationStateBackground;
   BOOL requiresHandling =
       [_appState requiresHandlingAfterLaunchWithOptions:launchOptions
                                         stateBackground:inBackground];
-  if (!IsMultiwindowSupported()) {
+  if (!IsSceneStartupSupported()) {
     self.sceneState.activationLevel = SceneActivationLevelForegroundInactive;
   }
 
   if (@available(iOS 13, *)) {
-    if (IsMultiwindowSupported()) {
+    if (IsSceneStartupSupported()) {
       [[NSNotificationCenter defaultCenter]
           addObserver:self
              selector:@selector(sceneWillConnect:)
@@ -148,7 +144,7 @@
 }
 
 - (void)applicationDidBecomeActive:(UIApplication*)application {
-  if (!IsMultiwindowSupported()) {
+  if (!IsSceneStartupSupported()) {
     self.sceneState.activationLevel = SceneActivationLevelForegroundActive;
   }
 
@@ -161,7 +157,7 @@
 }
 
 - (void)applicationWillResignActive:(UIApplication*)application {
-  if (!IsMultiwindowSupported()) {
+  if (!IsSceneStartupSupported()) {
     self.sceneState.activationLevel = SceneActivationLevelForegroundInactive;
   }
 
@@ -174,7 +170,7 @@
 // Called when going into the background. iOS already broadcasts, so
 // stakeholders can register for it directly.
 - (void)applicationDidEnterBackground:(UIApplication*)application {
-  if (!IsMultiwindowSupported()) {
+  if (!IsSceneStartupSupported()) {
     self.sceneState.activationLevel = SceneActivationLevelBackground;
   }
 
@@ -186,7 +182,7 @@
 
 // Called when returning to the foreground.
 - (void)applicationWillEnterForeground:(UIApplication*)application {
-  if (!IsMultiwindowSupported()) {
+  if (!IsSceneStartupSupported()) {
     self.sceneState.activationLevel = SceneActivationLevelForegroundInactive;
   }
 
@@ -215,7 +211,7 @@
 #pragma mark - Scenes lifecycle
 
 - (NSInteger)foregroundSceneCount {
-  DCHECK(IsMultiwindowSupported());
+  DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
     NSInteger foregroundSceneCount = 0;
     for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
@@ -230,7 +226,7 @@
 }
 
 - (void)sceneWillConnect:(NSNotification*)notification {
-  DCHECK(IsMultiwindowSupported());
+  DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
     UIWindowScene* scene = (UIWindowScene*)notification.object;
     SceneDelegate* sceneDelegate = (SceneDelegate*)scene.delegate;
@@ -251,7 +247,7 @@
 }
 
 - (void)sceneDidEnterBackground:(NSNotification*)notification {
-  DCHECK(IsMultiwindowSupported());
+  DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
     // When the first scene enters foreground, update the app state.
     if (self.foregroundSceneCount == 0) {
@@ -372,6 +368,12 @@
 
 - (AppState*)appState {
   return _appState;
+}
+
++ (AppState*)sharedAppState {
+  return base::mac::ObjCCast<MainApplicationDelegate>(
+             [[UIApplication sharedApplication] delegate])
+      .appState;
 }
 
 + (MainController*)sharedMainController {
