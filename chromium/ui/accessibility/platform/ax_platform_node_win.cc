@@ -1682,8 +1682,9 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelectionRanges(LONG nRanges,
     return E_INVALIDARG;
 
   // Blink only supports selections within a single tree.
-  if (anchor_node->GetDelegate()->GetTreeData().tree_id !=
-      focus_node->GetDelegate()->GetTreeData().tree_id) {
+  AXTreeID anchor_tree_id = anchor_node->GetDelegate()->GetTreeData().tree_id;
+  AXTreeID focus_tree_id = focus_node->GetDelegate()->GetTreeData().tree_id;
+  if (anchor_tree_id != focus_tree_id) {
     return E_INVALIDARG;
   }
 
@@ -1710,6 +1711,7 @@ IFACEMETHODIMP AXPlatformNodeWin::setSelectionRanges(LONG nRanges,
   AXActionData action_data;
   action_data.action = ax::mojom::Action::kSetSelection;
   action_data.anchor_node_id = anchor_node->GetData().id;
+  action_data.target_tree_id = anchor_tree_id;
   action_data.anchor_offset = int32_t{ranges->anchorOffset};
   action_data.focus_node_id = focus_node->GetData().id;
   action_data.focus_offset = int32_t{ranges->activeOffset};
@@ -5186,8 +5188,8 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_GROUPING;
 
     case ax::mojom::Role::kDocument:
+    case ax::mojom::Role::kPdfRoot:
     case ax::mojom::Role::kRootWebArea:
-    case ax::mojom::Role::kWebArea:
       return ROLE_SYSTEM_DOCUMENT;
 
     case ax::mojom::Role::kEmbeddedObject:
@@ -5291,14 +5293,11 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_LISTITEM;
 
     case ax::mojom::Role::kListMarker:
-      if (!GetDelegate()->GetChildCount()) {
-        // There's only a name attribute when using Legacy layout. With Legacy
-        // layout, list markers have no child and are considered as StaticText.
-        // We consider a list marker as a group in LayoutNG since it has
-        // a text child node.
-        return ROLE_SYSTEM_STATICTEXT;
-      }
-      return ROLE_SYSTEM_GROUPING;
+      // If a name is exposed, it's legacy layout, and this will be a leaf.
+      // Otherwise, it's LayoutNG, and the text will be exposed in children.
+      // In this case use an MSAA role of group, but IA2_ROLE_REDUNDANT_OBJECT
+      // in order to avoid having the object be announced in JAWS/NVDA.
+      return IsNameExposed() ? ROLE_SYSTEM_STATICTEXT : ROLE_SYSTEM_GROUPING;
 
     case ax::mojom::Role::kLog:
       return ROLE_SYSTEM_GROUPING;
@@ -5394,7 +5393,17 @@ int AXPlatformNodeWin::MSAARole() {
       return ROLE_SYSTEM_ROWHEADER;
 
     case ax::mojom::Role::kRuby:
-      return ROLE_SYSTEM_TEXT;
+      return ROLE_SYSTEM_GROUPING;
+
+    case ax::mojom::Role::kRubyAnnotation:
+      // Generally exposed as description on <ruby> (Role::kRuby) element, not
+      // as its own object in the tree.
+      // However, it's possible to make a kRubyAnnotation element show up in the
+      // AX tree, for example by adding tabindex="0" to the source <rp> or <rt>
+      // element or making the source element the target of an aria-owns.
+      // Therefore, browser side needs to gracefully handle it if it actually
+      // shows up in the tree.
+      return ROLE_SYSTEM_STATICTEXT;
 
     case ax::mojom::Role::kSection: {
       if (GetNameAsString16().empty()) {
@@ -5417,16 +5426,12 @@ int AXPlatformNodeWin::MSAARole() {
     case ax::mojom::Role::kSlider:
       return ROLE_SYSTEM_SLIDER;
 
-    case ax::mojom::Role::kSliderThumb:
-      return ROLE_SYSTEM_SLIDER;
-
     case ax::mojom::Role::kSpinButton:
       return ROLE_SYSTEM_SPINBUTTON;
 
     case ax::mojom::Role::kSwitch:
       return ROLE_SYSTEM_CHECKBUTTON;
 
-    case ax::mojom::Role::kRubyAnnotation:
     case ax::mojom::Role::kStaticText:
       return ROLE_SYSTEM_STATICTEXT;
 
@@ -5526,10 +5531,8 @@ int AXPlatformNodeWin::MSAARole() {
 }
 
 bool AXPlatformNodeWin::IsWebAreaForPresentationalIframe() {
-  if (GetData().role != ax::mojom::Role::kWebArea &&
-      GetData().role != ax::mojom::Role::kRootWebArea) {
+  if (!IsPlatformDocument())
     return false;
-  }
 
   AXPlatformNodeBase* parent = FromNativeViewAccessible(GetParent());
   if (!parent)
@@ -5757,6 +5760,13 @@ int32_t AXPlatformNodeWin::ComputeIA2Role() {
     case ax::mojom::Role::kLegend:
       ia2_role = IA2_ROLE_LABEL;
       break;
+    case ax::mojom::Role::kListMarker:
+      if (!IsNameExposed()) {
+        // This role causes JAWS and NVDA to ignore the object.
+        // Otherwise, they speak "group" before each bullet or item number.
+        ia2_role = IA2_ROLE_REDUNDANT_OBJECT;
+      }
+      break;
     case ax::mojom::Role::kMain:
       ia2_role = IA2_ROLE_LANDMARK;
       break;
@@ -5799,7 +5809,7 @@ int32_t AXPlatformNodeWin::ComputeIA2Role() {
       ia2_role = IA2_ROLE_LANDMARK;
       break;
     case ax::mojom::Role::kRuby:
-      ia2_role = IA2_ROLE_TEXT_FRAME;
+      ia2_role = IA2_ROLE_SECTION;
       break;
     case ax::mojom::Role::kSearch:
       ia2_role = IA2_ROLE_LANDMARK;
@@ -6014,8 +6024,8 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
       return L"group";
 
     case ax::mojom::Role::kDocument:
+    case ax::mojom::Role::kPdfRoot:
     case ax::mojom::Role::kRootWebArea:
-    case ax::mojom::Role::kWebArea:
       return L"document";
 
     case ax::mojom::Role::kEmbeddedObject:
@@ -6228,7 +6238,17 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
       return L"rowheader";
 
     case ax::mojom::Role::kRuby:
-      return L"region";
+      return L"group";
+
+    case ax::mojom::Role::kRubyAnnotation:
+      // Generally exposed as description on <ruby> (Role::kRuby) element, not
+      // as its own object in the tree.
+      // However, it's possible to make a kRubyAnnotation element show up in the
+      // AX tree, for example by adding tabindex="0" to the source <rp> or <rt>
+      // element or making the source element the target of an aria-owns.
+      // Therefore, browser side needs to gracefully handle it if it actually
+      // shows up in the tree.
+      return L"description";
 
     case ax::mojom::Role::kSection: {
       if (GetNameAsString16().empty()) {
@@ -6251,9 +6271,6 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
     case ax::mojom::Role::kSlider:
       return L"slider";
 
-    case ax::mojom::Role::kSliderThumb:
-      return L"slider";
-
     case ax::mojom::Role::kSpinButton:
       return L"spinbutton";
 
@@ -6263,7 +6280,6 @@ base::string16 AXPlatformNodeWin::UIAAriaRole() {
     case ax::mojom::Role::kSwitch:
       return L"switch";
 
-    case ax::mojom::Role::kRubyAnnotation:
     case ax::mojom::Role::kStaticText:
       return L"description";
 
@@ -6689,8 +6705,8 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
       return UIA_GroupControlTypeId;
 
     case ax::mojom::Role::kDocument:
+    case ax::mojom::Role::kPdfRoot:
     case ax::mojom::Role::kRootWebArea:
-    case ax::mojom::Role::kWebArea:
       return UIA_DocumentControlTypeId;
 
     case ax::mojom::Role::kEmbeddedObject:
@@ -6893,7 +6909,17 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
       return UIA_DataItemControlTypeId;
 
     case ax::mojom::Role::kRuby:
-      return UIA_PaneControlTypeId;
+      return UIA_GroupControlTypeId;
+
+    case ax::mojom::Role::kRubyAnnotation:
+      // Generally exposed as description on <ruby> (Role::kRuby) element, not
+      // as its own object in the tree.
+      // However, it's possible to make a kRubyAnnotation element show up in the
+      // AX tree, for example by adding tabindex="0" to the source <rp> or <rt>
+      // element or making the source element the target of an aria-owns.
+      // Therefore, browser side needs to gracefully handle it if it actually
+      // shows up in the tree.
+      return UIA_TextControlTypeId;
 
     case ax::mojom::Role::kSection:
       return UIA_GroupControlTypeId;
@@ -6910,16 +6936,12 @@ LONG AXPlatformNodeWin::ComputeUIAControlType() {  // NOLINT(runtime/int)
     case ax::mojom::Role::kSlider:
       return UIA_SliderControlTypeId;
 
-    case ax::mojom::Role::kSliderThumb:
-      return UIA_SliderControlTypeId;
-
     case ax::mojom::Role::kSpinButton:
       return UIA_SpinnerControlTypeId;
 
     case ax::mojom::Role::kSwitch:
       return UIA_ButtonControlTypeId;
 
-    case ax::mojom::Role::kRubyAnnotation:
     case ax::mojom::Role::kStaticText:
       return UIA_TextControlTypeId;
 
@@ -7191,8 +7213,8 @@ bool AXPlatformNodeWin::IsUIAControl() const {
   }  // end of web-content only case.
 
   const AXNodeData& data = GetData();
-  return !(data.HasState(ax::mojom::State::kInvisible) ||
-           (data.IsIgnored() && !data.HasState(ax::mojom::State::kFocusable)));
+  return !(IsInvisibleOrIgnored() &&
+           !data.HasState(ax::mojom::State::kFocusable));
 }
 
 base::Optional<LONG> AXPlatformNodeWin::ComputeUIALandmarkType() const {
@@ -7294,31 +7316,20 @@ bool AXPlatformNodeWin::IsPlatformCheckable() const {
 
 bool AXPlatformNodeWin::ShouldNodeHaveFocusableState(
     const AXNodeData& data) const {
-  switch (data.role) {
-    case ax::mojom::Role::kDocument:
-    case ax::mojom::Role::kGraphicsDocument:
-    case ax::mojom::Role::kWebArea:
-      return true;
-
-    case ax::mojom::Role::kRootWebArea: {
-      AXPlatformNodeBase* parent = FromNativeViewAccessible(GetParent());
-      return !parent || parent->GetData().role != ax::mojom::Role::kPortal;
-    }
-
-    case ax::mojom::Role::kIframe:
-      return false;
-
-    case ax::mojom::Role::kListBoxOption:
-    case ax::mojom::Role::kMenuListOption:
-      if (data.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected))
-        return true;
-      break;
-
-    default:
-      break;
+  if (IsIframe(data.role))
+    return false;
+  if (IsPlatformDocument()) {
+    const AXPlatformNodeBase* parent = FromNativeViewAccessible(GetParent());
+    return !parent || parent->GetData().role != ax::mojom::Role::kPortal;
   }
 
-  return data.HasState(ax::mojom::State::kFocusable);
+  switch (data.role) {
+    case ax::mojom::Role::kListBoxOption:
+    case ax::mojom::Role::kMenuListOption:
+      return data.HasBoolAttribute(ax::mojom::BoolAttribute::kSelected);
+    default:
+      return data.HasState(ax::mojom::State::kFocusable);
+  }
 }
 
 int AXPlatformNodeWin::MSAAState() const {
@@ -7359,8 +7370,8 @@ int AXPlatformNodeWin::MSAAState() const {
       msaa_state |= STATE_SYSTEM_HOTTRACKED;
   }
 
-  // If the role is IGNORED, we want these elements to be invisible so that
-  // these nodes are hidden from the screen reader.
+  // If the node is ignored, we want these elements to be invisible so that
+  // they are hidden from the screen reader.
   if (IsInvisibleOrIgnored())
     msaa_state |= STATE_SYSTEM_INVISIBLE;
 
@@ -7476,10 +7487,8 @@ int AXPlatformNodeWin::MSAAState() const {
   // TODO(dmazzoni): this should probably check if focus is actually inside
   // the menu bar, but we don't currently track focus inside menu pop-ups,
   // and Chrome only has one menu visible at a time so this works for now.
-  if (data.role == ax::mojom::Role::kMenuBar &&
-      !(data.HasState(ax::mojom::State::kInvisible))) {
+  if (data.role == ax::mojom::Role::kMenuBar && !IsInvisibleOrIgnored())
     msaa_state |= STATE_SYSTEM_FOCUSED;
-  }
 
   // Handle STATE_SYSTEM_LINKED
   if (GetData().role == ax::mojom::Role::kLink)
@@ -7594,7 +7603,7 @@ base::Optional<PROPERTYID> AXPlatformNodeWin::MojoEventToUIAProperty(
 
 // static
 BSTR AXPlatformNodeWin::GetValueAttributeAsBstr(AXPlatformNodeWin* target) {
-  if (target->IsDocument()) {
+  if (target->IsPlatformDocument()) {
     base::string16 url =
         base::UTF8ToUTF16(target->GetDelegate()->GetTreeData().url);
     BSTR value = SysAllocString(url.c_str());
@@ -7925,10 +7934,8 @@ AXPlatformNodeWin::GetPatternProviderFactoryMethod(PATTERNID pattern_id) {
 
     case UIA_TextEditPatternId:
     case UIA_TextPatternId:
-      if (IsText() || IsDocument() ||
-          HasBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot)) {
+      if (IsPlatformDocument() || IsTextField() || IsText())
         return &AXPlatformNodeTextProviderWin::CreateIUnknown;
-      }
       break;
 
     case UIA_TogglePatternId:

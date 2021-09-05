@@ -62,7 +62,7 @@ void TextLinkColors::SetTextColor(const Color& color) {
 }
 
 Color TextLinkColors::TextColor() const {
-  return TextColor(mojom::ColorScheme::kLight);
+  return TextColor(mojom::blink::ColorScheme::kLight);
 }
 
 Color TextLinkColors::TextColor(mojom::blink::ColorScheme color_scheme) const {
@@ -79,7 +79,7 @@ void TextLinkColors::SetLinkColor(const Color& color) {
 }
 
 const Color& TextLinkColors::LinkColor() const {
-  return LinkColor(mojom::ColorScheme::kLight);
+  return LinkColor(mojom::blink::ColorScheme::kLight);
 }
 
 const Color& TextLinkColors::LinkColor(
@@ -97,7 +97,7 @@ void TextLinkColors::SetVisitedLinkColor(const Color& color) {
 }
 
 const Color& TextLinkColors::VisitedLinkColor() const {
-  return VisitedLinkColor(mojom::ColorScheme::kLight);
+  return VisitedLinkColor(mojom::blink::ColorScheme::kLight);
 }
 
 const Color& TextLinkColors::VisitedLinkColor(
@@ -115,7 +115,7 @@ void TextLinkColors::SetActiveLinkColor(const Color& color) {
 }
 
 const Color& TextLinkColors::ActiveLinkColor() const {
-  return ActiveLinkColor(mojom::ColorScheme::kLight);
+  return ActiveLinkColor(mojom::blink::ColorScheme::kLight);
 }
 
 const Color& TextLinkColors::ActiveLinkColor(

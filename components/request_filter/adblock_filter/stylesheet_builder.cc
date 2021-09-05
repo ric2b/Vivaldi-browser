@@ -4,7 +4,8 @@
 
 namespace adblock_filter {
 
-const std::string& GetSelector(const std::string& selector_item) {
-  return selector_item;
+const flat::CosmeticRule* GetCosmeticRule(
+    const flat::CosmeticRule* cosmetic_rule) {
+  return cosmetic_rule;
 }
 }  // namespace adblock_filter

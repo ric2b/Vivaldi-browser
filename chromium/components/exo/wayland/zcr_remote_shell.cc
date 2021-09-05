@@ -56,6 +56,21 @@ constexpr char kForceRemoteShellScale[] = "force-remote-shell-scale";
 
 }  // namespace switches
 
+Surface* FindRootSurface(aura::Window* window) {
+  if (!window)
+    return nullptr;
+  Surface* root = GetShellMainSurface(window);
+  if (root)
+    return root;
+  root = Surface::AsSurface(window);
+  for (aura::Window* parent = window->parent();
+       root && parent && Surface::AsSurface(parent);
+       parent = parent->parent()) {
+    root = Surface::AsSurface(parent);
+  }
+  return root;
+}
+
 using chromeos::WindowStateType;
 
 // We don't send configure immediately after tablet mode switch
@@ -132,6 +147,18 @@ gfx::Rect ScaleBoundsToPixelSnappedToParent(
                        ? parent_size_in_pixel.height()
                        : base::ClampRound(bottom * device_scale_factor);
   return gfx::Rect(new_x, new_y, new_right - new_x, new_bottom - new_y);
+}
+
+void ScaleSkRegion(const SkRegion& src, float scale, SkRegion* dst) {
+  SkRegion::Iterator iter(src);
+  for (; !iter.done(); iter.next()) {
+    SkIRect r;
+    r.fLeft = base::ClampFloor(iter.rect().fLeft * scale);
+    r.fTop = base::ClampFloor(iter.rect().fTop * scale);
+    r.fRight = base::ClampCeil(iter.rect().fRight * scale);
+    r.fBottom = base::ClampCeil(iter.rect().fBottom * scale);
+    dst->op(r, SkRegion::kUnion_Op);
+  }
 }
 
 ash::ShelfLayoutManager* GetShelfLayoutManagerForDisplay(
@@ -608,16 +635,19 @@ void remote_surface_unset_pip_original_window(wl_client* client,
 void remote_surface_set_system_gesture_exclusion(wl_client* client,
                                                  wl_resource* resource,
                                                  wl_resource* region_resource) {
-  auto* widget = GetUserDataAs<ShellSurfaceBase>(resource)->GetWidget();
+  auto* shell_surface = GetUserDataAs<ClientControlledShellSurface>(resource);
+  auto* widget = shell_surface->GetWidget();
   if (!widget) {
     LOG(ERROR) << "no widget found for setting system gesture exclusion";
     return;
   }
 
   if (region_resource) {
-    widget->GetNativeWindow()->SetProperty(
-        ash::kSystemGestureExclusionKey,
-        new SkRegion(*GetUserDataAs<SkRegion>(region_resource)));
+    SkRegion* dst = new SkRegion;
+    ScaleSkRegion(*GetUserDataAs<SkRegion>(region_resource),
+                  shell_surface->GetClientToDpScale(), dst);
+    widget->GetNativeWindow()->SetProperty(ash::kSystemGestureExclusionKey,
+                                           dst);
   } else {
     widget->GetNativeWindow()->ClearProperty(ash::kSystemGestureExclusionKey);
   }
@@ -840,14 +870,14 @@ class WaylandRemoteOutput : public WaylandDisplayObserver {
 // Implements remote shell interface and monitors workspace state needed
 // for the remote shell interface.
 class WaylandRemoteShell : public ash::TabletModeObserver,
-                           public wm::ActivationChangeObserver,
+                           public aura::client::FocusChangeObserver,
                            public display::DisplayObserver {
  public:
   WaylandRemoteShell(Display* display, wl_resource* remote_shell_resource)
       : display_(display), remote_shell_resource_(remote_shell_resource) {
     WMHelperChromeOS* helper = WMHelperChromeOS::GetInstance();
     helper->AddTabletModeObserver(this);
-    helper->AddActivationObserver(this);
+    helper->AddFocusObserver(this);
     display::Screen::GetScreen()->AddObserver(this);
     helper->AddFrameThrottlingObserver();
 
@@ -873,7 +903,7 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   ~WaylandRemoteShell() override {
     WMHelperChromeOS* helper = WMHelperChromeOS::GetInstance();
     helper->RemoveTabletModeObserver(this);
-    helper->RemoveActivationObserver(this);
+    helper->RemoveFocusObserver(this);
     display::Screen::GetScreen()->RemoveObserver(this);
     helper->RemoveFrameThrottlingObserver();
   }
@@ -909,6 +939,7 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
 
   void SetUseDefaultScaleCancellation(bool use_default_scale) {
     use_default_scale_cancellation_ = use_default_scale;
+    WMHelper::GetInstance()->SetDefaultScaleCancellation(use_default_scale);
   }
 
   // TODO(mukai, oshima): rewrite this through delegate-style instead of
@@ -982,9 +1013,8 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   void OnTabletModeEnded() override {}
 
   // Overridden from wm::ActivationChangeObserver:
-  void OnWindowActivated(ActivationReason reason,
-                         aura::Window* gained_active,
-                         aura::Window* lost_active) override {
+  void OnWindowFocused(aura::Window* gained_active,
+                       aura::Window* lost_active) override {
     SendActivated(gained_active, lost_active);
   }
 
@@ -1106,10 +1136,11 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
   }
 
   void SendActivated(aura::Window* gained_active, aura::Window* lost_active) {
-    Surface* gained_active_surface =
-        gained_active ? GetShellMainSurface(gained_active) : nullptr;
-    Surface* lost_active_surface =
-        lost_active ? GetShellMainSurface(lost_active) : nullptr;
+    Surface* gained_active_surface = FindRootSurface(gained_active);
+    Surface* lost_active_surface = FindRootSurface(lost_active);
+    if (gained_active_surface == lost_active_surface)
+      return;
+
     wl_resource* gained_active_surface_resource =
         gained_active_surface ? GetSurfaceResource(gained_active_surface)
                               : nullptr;
@@ -1130,6 +1161,21 @@ class WaylandRemoteShell : public ash::TabletModeObserver,
     if (lost_active_surface_resource &&
         wl_resource_get_client(lost_active_surface_resource) != client) {
       lost_active_surface_resource = nullptr;
+    }
+
+    if (wl_resource_get_version(remote_shell_resource_) >=
+        ZCR_REMOTE_SHELL_V1_DESKTOP_FOCUS_STATE_CHANGED_SINCE_VERSION) {
+      uint32_t focus_state;
+      if (gained_active_surface_resource) {
+        focus_state = ZCR_REMOTE_SHELL_V1_DESKTOP_FOCUS_STATE_CLIENT_FOCUSED;
+      } else if (gained_active) {
+        focus_state =
+            ZCR_REMOTE_SHELL_V1_DESKTOP_FOCUS_STATE_OTHER_CLIENT_FOCUSED;
+      } else {
+        focus_state = ZCR_REMOTE_SHELL_V1_DESKTOP_FOCUS_STATE_NO_FOCUS;
+      }
+      zcr_remote_shell_v1_send_desktop_focus_state_changed(
+          remote_shell_resource_, focus_state);
     }
 
     zcr_remote_shell_v1_send_activated(remote_shell_resource_,

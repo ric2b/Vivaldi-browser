@@ -20,6 +20,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_renderer_host.h"
+#include "content/test/mock_agent_scheduling_group_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_render_widget_host.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -64,6 +65,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // RenderFrameHostImpl overrides (same values, but in Test*/Mock* types)
   TestRenderViewHost* GetRenderViewHost() override;
   MockRenderProcessHost* GetProcess() override;
+  MockAgentSchedulingGroupHost& agent_scheduling_group() override;
   TestRenderWidgetHost* GetRenderWidgetHost() override;
   void AddMessageToConsole(blink::mojom::ConsoleMessageLevel level,
                            const std::string& message) override;
@@ -87,9 +89,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
                                   ui::PageTransition transition);
   void SimulateBeforeUnloadCompleted(bool proceed) override;
   void SimulateUnloadACK() override;
-  void SimulateFeaturePolicyHeader(
-      blink::mojom::FeaturePolicyFeature feature,
-      const std::vector<url::Origin>& allowlist) override;
   void SimulateUserActivation() override;
   const std::vector<std::string>& GetConsoleMessages() override;
   int GetHeavyAdIssueCount(HeavyAdIssueType type) override;
@@ -97,11 +96,10 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   void SendNavigate(int nav_entry_id,
                     bool did_create_new_entry,
                     const GURL& url);
-  void SendNavigateWithParams(
-      FrameHostMsg_DidCommitProvisionalLoad_Params* params,
-      bool was_within_same_document);
+  void SendNavigateWithParams(mojom::DidCommitProvisionalLoadParamsPtr params,
+                              bool was_within_same_document);
   void SendNavigateWithParamsAndInterfaceParams(
-      FrameHostMsg_DidCommitProvisionalLoad_Params* params,
+      mojom::DidCommitProvisionalLoadParamsPtr params,
       mojom::DidCommitProvisionalLoadInterfaceParamsPtr interface_params,
       bool was_within_same_document);
 
@@ -116,10 +114,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // DEPRECATED: use NavigationSimulator instead.
   void SimulateRedirect(const GURL& new_url);
 
-  // Simulates a navigation to |url| committing in the RenderFrameHost.
-  // DEPRECATED: use NavigationSimulator instead.
-  void SimulateNavigationCommit(const GURL& url);
-
   // This method simulates receiving a BeginNavigation IPC.
   // DEPRECATED: use NavigationSimulator instead.
   void SendRendererInitiatedNavigationRequest(const GURL& url,
@@ -132,8 +126,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       blink::mojom::InsecureRequestPolicy policy);
 
   // If set, navigations will appear to have cleared the history list in the
-  // RenderFrame
-  // (FrameHostMsg_DidCommitProvisionalLoad_Params::history_list_was_cleared).
+  // RenderFrame (DidCommitProvisionalLoadParams::history_list_was_cleared).
   // False by default.
   void set_simulate_history_list_was_cleared(bool cleared) {
     simulate_history_list_was_cleared_ = cleared;
@@ -154,41 +147,31 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       bool is_signed_exchange_inner_response,
       net::HttpResponseInfo::ConnectionInfo connection_info,
       base::Optional<net::SSLInfo> ssl_info,
-      scoped_refptr<net::HttpResponseHeaders> response_headers);
+      scoped_refptr<net::HttpResponseHeaders> response_headers,
+      const std::vector<std::string>& dns_aliases);
 
   // Used to simulate the commit of a navigation having been processed in the
   // renderer. If parameters required to commit are not provided, they will be
   // set to default null values.
   void SimulateCommitProcessed(
       NavigationRequest* navigation_request,
-      std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params> params,
-      mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
-          interface_provider_receiver,
+      mojom::DidCommitProvisionalLoadParamsPtr params,
       mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker_receiver,
       bool same_document);
 
-  // Send a message with the sandbox flags and feature policy
-  void SendFramePolicy(network::mojom::WebSandboxFlags sandbox_flags,
-                       const blink::ParsedFeaturePolicy& fp_header,
-                       const blink::DocumentPolicyFeatureState& dp_header);
-
   // Creates a WebBluetooth Service with a dummy InterfaceRequest.
   WebBluetoothServiceImpl* CreateWebBluetoothServiceForTesting();
-
-  bool last_commit_was_error_page() const {
-    return last_commit_was_error_page_;
-  }
-
-  // Returns a PendingReceiver<InterfaceProvider> that is safe to bind to an
-  // implementation, but will never receive any interface receivers.
-  static mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
-  CreateStubInterfaceProviderReceiver();
 
   // Returns a PendingReceiver<BrowserInterfaceBroker> that is safe to bind to
   // an implementation, but will never receive any interface requests.
   static mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
   CreateStubBrowserInterfaceBrokerReceiver();
+
+  // Returns a PendingAssociatedReceiver<PolicyContainerHost> that is safe to
+  // bind to an implementation, but will never receive any interface requests.
+  static mojo::PendingAssociatedReceiver<blink::mojom::PolicyContainerHost>
+  CreateStubPolicyContainerHostReceiver();
 
   // This simulates aborting a cross document navigation.
   // Will abort the navigation with the given |navigation_id|.
@@ -257,17 +240,17 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       bool is_signed_exchange_inner_response,
       net::HttpResponseInfo::ConnectionInfo connection_info,
       base::Optional<net::SSLInfo> ssl_info,
-      scoped_refptr<net::HttpResponseHeaders> response_headers);
+      scoped_refptr<net::HttpResponseHeaders> response_headers,
+      const std::vector<std::string>& dns_aliases);
 
   // Computes the page ID for a pending navigation in this RenderFrameHost;
   int32_t ComputeNextPageID();
 
-  std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params>
-  BuildDidCommitParams(int nav_entry_id,
-                       bool did_create_new_entry,
-                       const GURL& url,
-                       ui::PageTransition transition,
-                       int response_code);
+  mojom::DidCommitProvisionalLoadParamsPtr BuildDidCommitParams(
+      bool did_create_new_entry,
+      const GURL& url,
+      ui::PageTransition transition,
+      int response_code);
 
   mojom::DidCommitProvisionalLoadInterfaceParamsPtr
   BuildDidCommitInterfaceParams(bool is_same_document);

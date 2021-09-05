@@ -23,6 +23,11 @@ views::Widget* VivaldiMenu::GetTopLevelWidgetFromWebContents(
       GetActiveNativeViewFromWebContents(web_contents));
 }
 
+RenderViewContextMenuBase::ToolkitDelegate*
+VivaldiContextMenu::GetToolkitDelegate() {
+  return nullptr;
+}
+
 BookmarkMenuContainer::BookmarkMenuContainer(Delegate* a_delegate)
   :edge(Below), delegate(a_delegate) {}
 BookmarkMenuContainer::~BookmarkMenuContainer() {}

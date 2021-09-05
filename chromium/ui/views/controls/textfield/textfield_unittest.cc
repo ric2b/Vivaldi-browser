@@ -21,6 +21,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -64,11 +65,13 @@
 #include "base/win/windows_version.h"
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/aura/window.h"
 #include "ui/wm/core/ime_util_chromeos.h"
 #endif
@@ -191,7 +194,9 @@ ui::EventDispatchDetails MockInputMethod::DispatchKeyEvent(ui::KeyEvent* key) {
   if (client) {
     if (handled) {
       if (result_text_.length())
-        client->InsertText(result_text_);
+        client->InsertText(result_text_,
+                           ui::TextInputClient::InsertTextCursorBehavior::
+                               kMoveCursorAfterText);
       if (composition_.text.length())
         client->SetCompositionText(composition_);
       else
@@ -503,11 +508,11 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
   }
 
   bool TestingNativeCrOs() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     return true;
 #else
     return false;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
 
  protected:
@@ -1586,7 +1591,9 @@ TEST_F(TextfieldTest, OnKeyPress) {
 TEST_F(TextfieldTest, OnKeyPressBinding) {
   InitTextfield();
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Install a TextEditKeyBindingsDelegateAuraLinux that does nothing.
   class TestDelegate : public ui::TextEditKeyBindingsDelegateAuraLinux {
    public:
@@ -1624,7 +1631,9 @@ TEST_F(TextfieldTest, OnKeyPressBinding) {
   EXPECT_STR_EQ("a", textfield_->GetText());
   textfield_->clear();
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   ui::SetTextEditKeyBindingsDelegate(nullptr);
 #endif
 }
@@ -2996,7 +3005,7 @@ TEST_F(TextfieldTest, CommitEmptyComposingTextTest) {
   EXPECT_EQ(composed_text_length, static_cast<uint32_t>(0));
 }
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 // SetCompositionFromExistingText is only available on Windows and Chrome OS.
 TEST_F(TextfieldTest, SetCompositionFromExistingTextTest) {
   InitTextfield();
@@ -3081,121 +3090,55 @@ TEST_F(TextfieldTest, GetCompositionCharacterBounds_ComplexText) {
   // - rects[6] == rects[7]
 }
 
-#if defined(OS_CHROMEOS)
-TEST_F(TextfieldTest, SetAutocorrectRangeText) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+TEST_F(TextfieldTest, SetAutocorrectRange) {
   InitTextfield();
 
-  ui::CompositionText composition;
-  composition.text = UTF8ToUTF16("Initial txt");
-  textfield_->SetCompositionText(composition);
-  textfield_->SetAutocorrectRange(ASCIIToUTF16("text replacement"),
-                                  gfx::Range(8, 11));
+  textfield_->SetText(ASCIIToUTF16("abc def ghi"));
+  textfield_->SetAutocorrectRange(gfx::Range(4, 7));
 
   gfx::Range autocorrect_range = textfield_->GetAutocorrectRange();
-  EXPECT_EQ(autocorrect_range, gfx::Range(8, 24));
-
-  base::string16 text;
-  textfield_->GetTextFromRange(gfx::Range(0, 24), &text);
-  EXPECT_EQ(text, UTF8ToUTF16("Initial text replacement"));
-}
-
-TEST_F(TextfieldTest, SetAutocorrectRangeExplicitlySet) {
-  InitTextfield();
-  textfield_->InsertText(UTF8ToUTF16("Initial txt"));
-  textfield_->SetAutocorrectRange(ASCIIToUTF16("text replacement"),
-                                  gfx::Range(8, 11));
-
-  gfx::Range autocorrectRange = textfield_->GetAutocorrectRange();
-  EXPECT_EQ(autocorrectRange, gfx::Range(8, 24));
-
-  base::string16 text;
-  textfield_->GetTextFromRange(gfx::Range(0, 24), &text);
-  EXPECT_EQ(text, UTF8ToUTF16("Initial text replacement"));
+  EXPECT_EQ(autocorrect_range, gfx::Range(4, 7));
 }
 
 TEST_F(TextfieldTest, DoesNotSetAutocorrectRangeWhenRangeGivenIsInvalid) {
   InitTextfield();
 
-  ui::CompositionText composition;
-  composition.text = UTF8ToUTF16("Initial");
-  textfield_->SetCompositionText(composition);
+  textfield_->SetText(ASCIIToUTF16("abc"));
 
-  EXPECT_FALSE(textfield_->SetAutocorrectRange(ASCIIToUTF16("text replacement"),
-                                               gfx::Range(8, 11)));
-  EXPECT_EQ(gfx::Range(0, 0), textfield_->GetAutocorrectRange());
-  gfx::Range range;
-  textfield_->GetTextRange(&range);
-  base::string16 text;
-  textfield_->GetTextFromRange(range, &text);
-  EXPECT_EQ(composition.text, text);
-}
-
-TEST_F(TextfieldTest,
-       ClearsAutocorrectRangeWhenSetAutocorrectRangeWithEmptyText) {
-  InitTextfield();
-
-  ui::CompositionText composition;
-  composition.text = UTF8ToUTF16("Initial");
-  textfield_->SetCompositionText(composition);
-
-  EXPECT_TRUE(
-      textfield_->SetAutocorrectRange(base::EmptyString16(), gfx::Range(0, 2)));
-  EXPECT_EQ(gfx::Range(0, 0), textfield_->GetAutocorrectRange());
-  gfx::Range range;
-  textfield_->GetTextRange(&range);
-  base::string16 text;
-  textfield_->GetTextFromRange(range, &text);
-  EXPECT_EQ(composition.text, text);
+  EXPECT_FALSE(textfield_->SetAutocorrectRange(gfx::Range(8, 11)));
+  EXPECT_TRUE(textfield_->GetAutocorrectRange().is_empty());
 }
 
 TEST_F(TextfieldTest,
        ClearsAutocorrectRangeWhenSetAutocorrectRangeWithEmptyRange) {
   InitTextfield();
 
-  ui::CompositionText composition;
-  composition.text = UTF8ToUTF16("Initial");
-  textfield_->SetCompositionText(composition);
+  textfield_->SetText(ASCIIToUTF16("abc"));
 
-  EXPECT_TRUE(
-      textfield_->SetAutocorrectRange(UTF8ToUTF16("Test"), gfx::Range(0, 0)));
-  EXPECT_EQ(gfx::Range(0, 0), textfield_->GetAutocorrectRange());
-  gfx::Range range;
-  textfield_->GetTextRange(&range);
-  base::string16 text;
-  textfield_->GetTextFromRange(range, &text);
-  EXPECT_EQ(composition.text, text);
-}
-
-TEST_F(TextfieldTest, ClearAutocorrectRange) {
-  InitTextfield();
-  textfield_->InsertText(UTF8ToUTF16("Initial txt"));
-  textfield_->SetAutocorrectRange(ASCIIToUTF16("text replacement"),
-                                  gfx::Range(8, 11));
-
-  EXPECT_EQ(textfield_->GetText(), UTF8ToUTF16("Initial text replacement"));
-  EXPECT_EQ(textfield_->GetAutocorrectRange(), gfx::Range(8, 24));
-
-  textfield_->ClearAutocorrectRange();
-
-  EXPECT_EQ(textfield_->GetAutocorrectRange(), gfx::Range());
+  EXPECT_TRUE(textfield_->SetAutocorrectRange(gfx::Range()));
+  EXPECT_TRUE(textfield_->GetAutocorrectRange().is_empty());
 }
 
 TEST_F(TextfieldTest, GetAutocorrectCharacterBoundsTest) {
   InitTextfield();
 
-  textfield_->InsertText(UTF8ToUTF16("hello placeholder text"));
-  textfield_->SetAutocorrectRange(ASCIIToUTF16("longlonglongtext"),
-                                  gfx::Range(3, 10));
+  textfield_->InsertText(
+      UTF8ToUTF16("hello placeholder text"),
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
+  textfield_->SetAutocorrectRange(gfx::Range(3, 10));
 
-  EXPECT_EQ(textfield_->GetAutocorrectRange(), gfx::Range(3, 19));
+  EXPECT_EQ(textfield_->GetAutocorrectRange(), gfx::Range(3, 10));
 
   gfx::Rect rect_for_long_text = textfield_->GetAutocorrectCharacterBounds();
 
   // Clear the text
   textfield_->DeleteRange(gfx::Range(0, 99));
 
-  textfield_->InsertText(UTF8ToUTF16("hello placeholder text"));
-  textfield_->SetAutocorrectRange(ASCIIToUTF16("short"), gfx::Range(3, 10));
+  textfield_->InsertText(
+      UTF8ToUTF16("hello placeholder text"),
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
+  textfield_->SetAutocorrectRange(gfx::Range(3, 8));
 
   EXPECT_EQ(textfield_->GetAutocorrectRange(), gfx::Range(3, 8));
 
@@ -3214,7 +3157,7 @@ TEST_F(TextfieldTest, GetAutocorrectCharacterBoundsTest) {
 
 // TODO(crbug.com/1108170): Add a test to check that when the composition /
 // surrounding text is updated, the AutocorrectRange is updated accordingly.
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // The word we select by double clicking should remain selected regardless of
 // where we drag the mouse afterwards without releasing the left button.
@@ -3241,7 +3184,9 @@ TEST_F(TextfieldTest, KeepInitiallySelectedWord) {
   EXPECT_EQ(gfx::Range(7, 0), textfield_->GetSelectedRange());
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 TEST_F(TextfieldTest, SelectionClipboard) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("0123"));
@@ -3501,7 +3446,7 @@ TEST_F(TextfieldTest, SetAccessibleNameNotifiesAccessibilityEvent) {
   EXPECT_EQ(test_tooltip_text, ASCIIToUTF16(name));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Check that when accessibility virtual keyboard is enabled, windows are
 // shifted up when focused and restored when focus is lost.
 TEST_F(TextfieldTest, VirtualKeyboardFocusEnsureCaretNotInRect) {
@@ -3535,7 +3480,7 @@ TEST_F(TextfieldTest, VirtualKeyboardFocusEnsureCaretNotInRect) {
   // Window should be restored.
   EXPECT_EQ(widget_->GetNativeView()->bounds(), orig_widget_bounds);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 class TextfieldTouchSelectionTest : public TextfieldTest {
  protected:
@@ -3566,7 +3511,7 @@ class TextfieldTouchSelectionTest : public TextfieldTest {
 };
 
 // Touch selection and dragging currently only works for chromeos.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(TextfieldTouchSelectionTest, TouchSelectionAndDraggingTest) {
   InitTextfield();
   textfield_->SetText(ASCIIToUTF16("hello world"));
@@ -4123,6 +4068,32 @@ TEST_F(TextfieldTest, ChangeTextDirectionAndLayoutAlignmentTest) {
             base::i18n::TextDirection::LEFT_TO_RIGHT);
   EXPECT_EQ(textfield_->GetHorizontalAlignment(),
             gfx::HorizontalAlignment::ALIGN_LEFT);
+
+  // If the text is center-aligned, only the text direction should change.
+  textfield_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  textfield_->ChangeTextDirectionAndLayoutAlignment(
+      base::i18n::TextDirection::RIGHT_TO_LEFT);
+  EXPECT_EQ(textfield_->GetTextDirection(),
+            base::i18n::TextDirection::RIGHT_TO_LEFT);
+  EXPECT_EQ(textfield_->GetHorizontalAlignment(),
+            gfx::HorizontalAlignment::ALIGN_CENTER);
+
+  // If the text is aligned to the text direction, its alignment should change
+  // iff the text direction changes. We test both scenarios.
+  auto dir = base::i18n::TextDirection::RIGHT_TO_LEFT;
+  auto opposite_dir = base::i18n::TextDirection::LEFT_TO_RIGHT;
+  EXPECT_EQ(textfield_->GetTextDirection(), dir);
+  textfield_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
+  textfield_->ChangeTextDirectionAndLayoutAlignment(opposite_dir);
+  EXPECT_EQ(textfield_->GetTextDirection(), opposite_dir);
+  EXPECT_NE(textfield_->GetHorizontalAlignment(), gfx::ALIGN_TO_HEAD);
+
+  dir = base::i18n::TextDirection::LEFT_TO_RIGHT;
+  EXPECT_EQ(textfield_->GetTextDirection(), dir);
+  textfield_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
+  textfield_->ChangeTextDirectionAndLayoutAlignment(dir);
+  EXPECT_EQ(textfield_->GetTextDirection(), dir);
+  EXPECT_EQ(textfield_->GetHorizontalAlignment(), gfx::ALIGN_TO_HEAD);
 }
 
 TEST_F(TextfieldTest, TextChangedCallbackTest) {
@@ -4154,9 +4125,52 @@ TEST_F(TextfieldTest, TextChangedCallbackTest) {
 TEST_F(TextfieldTest, InsertInvalidCharsTest) {
   InitTextfield();
 
-  textfield_->InsertText(ASCIIToUTF16("\babc\ndef\t"));
+  textfield_->InsertText(
+      ASCIIToUTF16("\babc\ndef\t"),
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
 
   EXPECT_EQ(textfield_->GetText(), ASCIIToUTF16("abcdef"));
 }
 
+TEST_F(TextfieldTest, ScrollCommands) {
+  InitTextfield();
+
+  // Scroll commands are only available on Mac.
+#if defined(OS_APPLE)
+  textfield_->SetText(ASCIIToUTF16("12 34567 89"));
+  textfield_->SetEditableSelectionRange(gfx::Range(6));
+
+  EXPECT_TRUE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_PAGE_UP));
+  EXPECT_TRUE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_PAGE_DOWN));
+  EXPECT_TRUE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_TO_BEGINNING_OF_DOCUMENT));
+  EXPECT_TRUE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_TO_END_OF_DOCUMENT));
+
+  test_api_->ExecuteTextEditCommand(ui::TextEditCommand::SCROLL_PAGE_UP);
+  EXPECT_EQ(textfield_->GetCursorPosition(), 0u);
+
+  test_api_->ExecuteTextEditCommand(ui::TextEditCommand::SCROLL_PAGE_DOWN);
+  EXPECT_EQ(textfield_->GetCursorPosition(), 11u);
+
+  test_api_->ExecuteTextEditCommand(
+      ui::TextEditCommand::SCROLL_TO_BEGINNING_OF_DOCUMENT);
+  EXPECT_EQ(textfield_->GetCursorPosition(), 0u);
+
+  test_api_->ExecuteTextEditCommand(
+      ui::TextEditCommand::SCROLL_TO_END_OF_DOCUMENT);
+  EXPECT_EQ(textfield_->GetCursorPosition(), 11u);
+#else
+  EXPECT_FALSE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_PAGE_UP));
+  EXPECT_FALSE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_PAGE_DOWN));
+  EXPECT_FALSE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_TO_BEGINNING_OF_DOCUMENT));
+  EXPECT_FALSE(textfield_->IsTextEditCommandEnabled(
+      ui::TextEditCommand::SCROLL_TO_END_OF_DOCUMENT));
+#endif
+}
 }  // namespace views

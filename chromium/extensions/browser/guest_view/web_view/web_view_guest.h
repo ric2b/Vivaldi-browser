@@ -155,7 +155,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // |removal_mask| corresponds to bitmask in StoragePartition::RemoveDataMask.
   bool ClearData(const base::Time remove_since,
                  uint32_t removal_mask,
-                 const base::Closure& callback);
+                 base::OnceClosure callback);
 
   ScriptExecutor* script_executor() { return script_executor_.get(); }
 
@@ -174,10 +174,10 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   void ClearCodeCache(base::Time remove_since,
                       uint32_t removal_mask,
-                      const base::Closure& callback);
+                      base::OnceClosure callback);
   void ClearDataInternal(const base::Time remove_since,
                          uint32_t removal_mask,
-                         const base::Closure& callback);
+                         base::OnceClosure callback);
 
   void OnWebViewNewWindowResponse(int new_window_instance_id,
                                   bool allow,
@@ -191,10 +191,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void RequestPointerLockPermission(bool user_gesture,
                                     bool last_unlocked_by_target,
                                     base::OnceCallback<void(bool)> callback);
-
-  // TODO(533069): This appears to be dead code following BrowserPlugin removal.
-  // Investigate removing this.
-  void DidDropLink(const GURL& url);
 
   // GuestViewBase implementation.
   void CreateWebContents(const base::DictionaryValue& create_params,
@@ -288,11 +284,13 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   void FrameNameChanged(content::RenderFrameHost* render_frame_host,
                         const std::string& name) final;
   void OnAudioStateChanged(bool audible) final;
-  void OnDidAddMessageToConsole(content::RenderFrameHost* source_frame,
-                                blink::mojom::ConsoleMessageLevel log_level,
-                                const base::string16& message,
-                                int32_t line_no,
-                                const base::string16& source_id) final;
+  void OnDidAddMessageToConsole(
+      content::RenderFrameHost* source_frame,
+      blink::mojom::ConsoleMessageLevel log_level,
+      const base::string16& message,
+      int32_t line_no,
+      const base::string16& source_id,
+      const base::Optional<base::string16>& untrusted_stack_trace) final;
 
   // Informs the embedder of a frame name change.
   void ReportFrameNameChange(const std::string& name);
@@ -347,9 +345,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   // Stores whether the contents of the guest can be transparent.
   bool allow_transparency_;
-
-  // Stores the src URL of the WebView.
-  GURL src_;
 
   // Handles the JavaScript dialog requests.
   JavaScriptDialogHelper javascript_dialog_helper_;

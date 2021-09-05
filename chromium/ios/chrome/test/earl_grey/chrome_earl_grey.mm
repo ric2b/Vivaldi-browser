@@ -579,6 +579,8 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 }
 
 - (void)triggerRestoreViaTabGridRemoveAllUndo {
+  [ChromeEarlGreyAppInterface disableCloseAllTabsConfirmation];
+
   [ChromeEarlGrey showTabSwitcher];
   GREYWaitForAppToIdle(@"App failed to idle");
   [ChromeEarlGrey
@@ -588,6 +590,8 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   [ChromeEarlGrey waitForAndTapButton:chrome_test_util::TabGridDoneButton()];
   [self waitForRestoreSessionToFinish];
   [self waitForPageToFinishLoading];
+
+  [ChromeEarlGreyAppInterface resetCloseAllTabsConfirmation];
 }
 
 - (BOOL)webStateWebViewUsesContentInset {
@@ -714,6 +718,11 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
   bool success = [waitForTypedURL waitWithTimeout:timeout];
   EG_TEST_HELPER_ASSERT_TRUE(success, kTypedURLError);
+}
+
+- (void)waitForSyncInvalidationFields {
+  EG_TEST_HELPER_ASSERT_NO_ERROR(
+      [ChromeEarlGreyAppInterface waitForSyncInvalidationFields]);
 }
 
 - (void)triggerSyncCycleForType:(syncer::ModelType)type {
@@ -904,10 +913,6 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   return [ChromeEarlGreyAppInterface isTestFeatureEnabled];
 }
 
-- (BOOL)isCreditCardScannerEnabled {
-  return [ChromeEarlGreyAppInterface isCreditCardScannerEnabled];
-}
-
 - (BOOL)isDemographicMetricsReportingEnabled {
   return [ChromeEarlGreyAppInterface isDemographicMetricsReportingEnabled];
 }
@@ -1046,6 +1051,12 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
              @"Waiting for '%@' to be copied to pasteboard.", text);
 }
 
+- (GURL)pasteboardURL {
+  NSString* absoluteString = [ChromeEarlGreyAppInterface pasteboardURLSpec];
+  return absoluteString ? GURL(base::SysNSStringToUTF8(absoluteString))
+                        : GURL::EmptyGURL();
+}
+
 #pragma mark - Context Menus Utilities (EG2)
 
 - (void)verifyCopyLinkActionWithText:(NSString*)text
@@ -1093,6 +1104,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   // Page title is added asynchronously, so wait for its appearance.
   [self waitForMatcher:grey_allOf(ActivityViewHeader(pageTitle),
                                   grey_sufficientlyVisible(), nil)];
+
+  // Dismiss the Activity View by tapping outside its bounds.
+  [[EarlGrey selectElementWithMatcher:grey_keyWindow()]
+      performAction:grey_tap()];
 }
 
 #pragma mark - Unified consent utilities

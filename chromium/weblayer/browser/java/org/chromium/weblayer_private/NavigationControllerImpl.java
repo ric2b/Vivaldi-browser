@@ -51,7 +51,7 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         }
         NavigationControllerImplJni.get().navigate(mNativeNavigationController, uri,
                 params == null ? false : params.mShouldReplaceCurrentEntry, false, false, false,
-                null);
+                false, null);
     }
 
     @Override
@@ -60,7 +60,8 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
             boolean enableAutoPlay) {
         StrictModeWorkaround.apply();
         NavigationControllerImplJni.get().navigate(mNativeNavigationController, uri,
-                shouldReplaceCurrentEntry, disableIntentProcessing, disableNetworkErrorAutoReload,
+                shouldReplaceCurrentEntry, disableIntentProcessing,
+                /*allowIntentLaunchesInBackground=*/false, disableNetworkErrorAutoReload,
                 enableAutoPlay, null);
     }
 
@@ -94,6 +95,7 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
 
         NavigationControllerImplJni.get().navigate(mNativeNavigationController, uri,
                 params.shouldReplaceCurrentEntry(), params.isIntentProcessingDisabled(),
+                params.areIntentLaunchesAllowedInBackground(),
                 params.isNetworkErrorAutoReloadDisabled(), params.isAutoPlayEnabled(),
                 responseInfo);
     }
@@ -174,6 +176,12 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
                 mNativeNavigationController, index);
     }
 
+    public NavigationImpl getNavigationImplFromId(long id) {
+        StrictModeWorkaround.apply();
+        return NavigationControllerImplJni.get().getNavigationImplFromId(
+                mNativeNavigationController, id);
+    }
+
     @CalledByNative
     private NavigationImpl createNavigation(long nativeNavigationImpl) {
         return new NavigationImpl(mNavigationControllerClient, nativeNavigationImpl);
@@ -242,7 +250,6 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
 
     @CalledByNative
     private void onOldPageNoLongerRendered(String uri) throws RemoteException {
-        if (WebLayerFactoryImpl.getClientMajorVersion() < 85) return;
         mNavigationControllerClient.onOldPageNoLongerRendered(uri);
     }
 
@@ -261,6 +268,7 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
     private static final class NavigateParamsImpl extends INavigateParams.Stub {
         private boolean mReplaceCurrentEntry;
         private boolean mIntentProcessingDisabled;
+        private boolean mIntentLaunchesAllowedInBackground;
         private boolean mNetworkErrorAutoReloadDisabled;
         private boolean mAutoPlayEnabled;
         private IObjectWrapper mResponse;
@@ -273,6 +281,11 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         @Override
         public void disableIntentProcessing() {
             mIntentProcessingDisabled = true;
+        }
+
+        @Override
+        public void allowIntentLaunchesInBackground() {
+            mIntentLaunchesAllowedInBackground = true;
         }
 
         @Override
@@ -298,6 +311,10 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
             return mIntentProcessingDisabled;
         }
 
+        public boolean areIntentLaunchesAllowedInBackground() {
+            return mIntentLaunchesAllowedInBackground;
+        }
+
         public boolean isNetworkErrorAutoReloadDisabled() {
             return mNetworkErrorAutoReloadDisabled;
         }
@@ -318,8 +335,8 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         long getNavigationController(long tab);
         void navigate(long nativeNavigationControllerImpl, String uri,
                 boolean shouldReplaceCurrentEntry, boolean disableIntentProcessing,
-                boolean disableNetworkErrorAutoReload, boolean enableAutoPlay,
-                WebResourceResponseInfo response);
+                boolean allowIntentLaunchesInBackground, boolean disableNetworkErrorAutoReload,
+                boolean enableAutoPlay, WebResourceResponseInfo response);
         void goBack(long nativeNavigationControllerImpl);
         void goForward(long nativeNavigationControllerImpl);
         boolean canGoBack(long nativeNavigationControllerImpl);
@@ -332,5 +349,6 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
         String getNavigationEntryDisplayUri(long nativeNavigationControllerImpl, int index);
         String getNavigationEntryTitle(long nativeNavigationControllerImpl, int index);
         boolean isNavigationEntrySkippable(long nativeNavigationControllerImpl, int index);
+        NavigationImpl getNavigationImplFromId(long nativeNavigationControllerImpl, long id);
     }
 }

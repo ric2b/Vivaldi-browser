@@ -18,7 +18,7 @@ var OobeDialogHostBehavior = {
    */
   propagateOnBeforeShow(selector) {
     if (!selector)
-      selector = 'oobe-dialog';
+      selector = 'oobe-dialog,oobe-adaptive-dialog';
 
     var screens = Polymer.dom(this.root).querySelectorAll(selector);
     for (var i = 0; i < screens.length; ++i) {
@@ -45,17 +45,6 @@ var OobeDialogHostBehavior = {
     }
   },
 
-  addSubmitListener(element, id) {
-    element.addEventListener('keydown', (function(id, e) {
-                                          if (e.keyCode != 13)
-                                            return;
-                                          this.onFieldSubmit(id);
-                                        }).bind(this, id));
-  },
-
-  onFieldSubmit(id) {
-    console.error('Override this method in your element.');
-  },
 };
 
 /**

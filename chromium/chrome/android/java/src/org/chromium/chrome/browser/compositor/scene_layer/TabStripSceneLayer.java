@@ -36,13 +36,11 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
     private int mNumReaddBackground;
 
     // Vivaldi
-    private float mDpToPxOffset;
     private boolean mShouldHideOverlay;
 
     public TabStripSceneLayer(Context context) {
         mDpToPx = context.getResources().getDisplayMetrics().density;
         // Vivaldi
-        mDpToPxOffset = mDpToPx;
         mShouldHideOverlay = false;
     }
 
@@ -77,7 +75,10 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             StripLayoutTab[] stripLayoutTabsToRender, float yOffset, int selectedTabId) {
         if (mNativePtr == 0) return;
 
-        final boolean visible = yOffset > -layoutHelper.getHeight();
+        // Vivaldi
+        boolean visible = yOffset > -layoutHelper.getHeight();
+        visible = visible && VivaldiUtils.isTabStripOn() && !mShouldHideOverlay;
+
         // This will hide the tab strips if necessary.
         TabStripSceneLayerJni.get().beginBuildingFrame(
                 mNativePtr, TabStripSceneLayer.this, visible);
@@ -106,9 +107,6 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
 
     private void pushButtonsAndBackground(StripLayoutHelperManager layoutHelper,
             ResourceManager resourceManager, float yOffset) {
-        // Note(david@vivaldi.com): We send the scene layer off screen when tab strip is off.
-        mDpToPx = mDpToPxOffset;
-        if (!VivaldiUtils.isTabStripOn() || mShouldHideOverlay) mDpToPx = -1;
         final float width = layoutHelper.getWidth() * mDpToPx;
         final float height = layoutHelper.getHeight() * mDpToPx;
         TabStripSceneLayerJni.get().updateTabStripLayer(mNativePtr, TabStripSceneLayer.this, width,

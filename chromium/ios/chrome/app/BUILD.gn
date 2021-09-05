@@ -148,6 +148,20 @@ source_set("content_suggestions_scheduler_app_state_agent") {
   ]
 }
 
+source_set("app_metrics_app_state_agent") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "app_metrics_app_state_agent.h",
+    "app_metrics_app_state_agent.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/chrome/app/application_delegate:app_state_header",
+    "//ios/chrome/browser/metrics",
+    "//ios/chrome/browser/ui/main:scene_state_header",
+  ]
+}
+
 source_set("app_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -167,12 +181,13 @@ source_set("app_internal") {
 
   deps = [
     ":app",
+    ":app_metrics_app_state_agent",
     ":blocking_scene_commands",
     ":content_suggestions_scheduler_app_state_agent",
     ":mode",
+    ":multi_window_buildflags",
     ":tests_hook",
     "//base",
-    "//base/ios:ios_multi_window_buildflags",
     "//build:branding_buildflags",
     "//components/bookmarks/browser",
     "//components/browser_sync",
@@ -209,6 +224,7 @@ source_set("app_internal") {
     "//ios/chrome/app/startup:startup_basic",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/accessibility",
     "//ios/chrome/browser/bookmarks",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:browser_state_impl",
@@ -301,6 +317,11 @@ source_set("app_internal") {
     "//ios/chrome/app/application_delegate:application_delegate_internal",
     "//ios/chrome/browser/ui/main:scene",
   ]
+}
+
+buildflag_header("multi_window_buildflags") {
+  header = "multi_window_buildflags.h"
+  flags = [ "IOS_MULTIWINDOW_ENABLED=$ios_enable_multi_window" ]
 }
 
 source_set("blocking_scene_commands") {

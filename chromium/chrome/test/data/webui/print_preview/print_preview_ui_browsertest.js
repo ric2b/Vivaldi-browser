@@ -15,14 +15,6 @@ const PrintPreviewTest = class extends PolymerTest {
     return 'chrome://print/';
   }
 
-  /** @override */
-  get extraLibraries() {
-    return [
-      '//third_party/mocha/mocha.js',
-      '//chrome/test/data/webui/mocha_adapter.js',
-    ];
-  }
-
   // The name of the mocha suite. Should be overridden by subclasses.
   get suiteName() {
     return null;
@@ -660,6 +652,45 @@ TEST_F('PrintPreviewDestinationStoreTestCros', 'DriveNotMounted', function() {
 });
 GEN('#endif');
 
+GEN('#if defined(OS_CHROMEOS)');
+// eslint-disable-next-line no-var
+var PrintPreviewPrintServerStoreTestCros = class extends PrintPreviewTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://print/test_loader.html?module=print_preview/print_server_store_test.js';
+  }
+
+  /** @override */
+  get suiteName() {
+    return print_server_store_test.suiteName;
+  }
+};
+TEST_F(
+    'PrintPreviewPrintServerStoreTestCros', 'ChoosePrintServers', function() {
+      this.runMochaTest(print_server_store_test.TestNames.ChoosePrintServers);
+    });
+
+TEST_F(
+    'PrintPreviewPrintServerStoreTestCros', 'PrintServersChanged', function() {
+      this.runMochaTest(print_server_store_test.TestNames.PrintServersChanged);
+    });
+
+TEST_F(
+    'PrintPreviewPrintServerStoreTestCros', 'GetPrintServersConfig',
+    function() {
+      this.runMochaTest(
+          print_server_store_test.TestNames.GetPrintServersConfig);
+    });
+
+TEST_F(
+    'PrintPreviewPrintServerStoreTestCros', 'ServerPrintersLoading',
+    function() {
+      this.runMochaTest(
+          print_server_store_test.TestNames.ServerPrintersLoading);
+    });
+GEN('#endif');
+
+GEN('#if !defined(OS_CHROMEOS)');
 // eslint-disable-next-line no-var
 var PrintPreviewDestinationDialogTest = class extends PrintPreviewTest {
   /** @override */
@@ -677,17 +708,63 @@ TEST_F('PrintPreviewDestinationDialogTest', 'PrinterList', function() {
   this.runMochaTest(destination_dialog_test.TestNames.PrinterList);
 });
 
-GEN('#if defined(OS_CHROMEOS)');
-TEST_F(
-    'PrintPreviewDestinationDialogTest', 'ShowProvisionalDialog', function() {
-      this.runMochaTest(
-          destination_dialog_test.TestNames.ShowProvisionalDialog);
-    });
-GEN('#endif');
-
 TEST_F('PrintPreviewDestinationDialogTest', 'UserAccounts', function() {
   this.runMochaTest(destination_dialog_test.TestNames.UserAccounts);
 });
+
+GEN('#else');
+
+// eslint-disable-next-line no-var
+var PrintPreviewDestinationDialogCrosTest = class extends PrintPreviewTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://print/test_loader.html?module=print_preview/destination_dialog_cros_test.js';
+  }
+
+  /** @override */
+  get suiteName() {
+    return destination_dialog_cros_test.suiteName;
+  }
+
+  /** @override */
+  get featureList() {
+    const featureList = super.featureList || [];
+    const kPrintServerScaling = ['chromeos::features::kPrintServerScaling'];
+    featureList.enabled = featureList.enabled ?
+        featureList.enabled.concat(kPrintServerScaling) :
+        kPrintServerScaling;
+    return featureList;
+  }
+};
+
+TEST_F('PrintPreviewDestinationDialogCrosTest', 'PrinterList', function() {
+  this.runMochaTest(destination_dialog_cros_test.TestNames.PrinterList);
+});
+
+TEST_F(
+    'PrintPreviewDestinationDialogCrosTest', 'ShowProvisionalDialog',
+    function() {
+      this.runMochaTest(
+          destination_dialog_cros_test.TestNames.ShowProvisionalDialog);
+    });
+
+TEST_F('PrintPreviewDestinationDialogCrosTest', 'UserAccounts', function() {
+  this.runMochaTest(destination_dialog_cros_test.TestNames.UserAccounts);
+});
+
+TEST_F(
+    'PrintPreviewDestinationDialogCrosTest', 'PrintServersChanged', function() {
+      this.runMochaTest(
+          destination_dialog_cros_test.TestNames.PrintServersChanged);
+    });
+
+TEST_F(
+    'PrintPreviewDestinationDialogCrosTest', 'PrintServerSelected', function() {
+      this.runMochaTest(
+          destination_dialog_cros_test.TestNames.PrintServerSelected);
+    });
+
+GEN('#endif');
 
 // eslint-disable-next-line no-var
 var PrintPreviewAdvancedDialogTest = class extends PrintPreviewTest {
@@ -1474,12 +1551,12 @@ GEN('#if defined(OS_CHROMEOS)');
 var PrintPreviewDestinationSettingsTestCros = class extends PrintPreviewTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://print/test_loader.html?module=print_preview/destination_settings_test.js';
+    return 'chrome://print/test_loader.html?module=print_preview/destination_settings_test_cros.js';
   }
 
   /** @override */
   get suiteName() {
-    return destination_settings_test.suiteName;
+    return destination_settings_test_cros.suiteName;
   }
 
   /** @override */
@@ -1495,12 +1572,14 @@ var PrintPreviewDestinationSettingsTestCros = class extends PrintPreviewTest {
 
 TEST_F(
     'PrintPreviewDestinationSettingsTestCros', 'EulaIsRetrieved', function() {
-      this.runMochaTest(destination_settings_test.TestNames.EulaIsRetrieved);
+      this.runMochaTest(
+          destination_settings_test_cros.TestNames.EulaIsRetrieved);
     });
 
 TEST_F(
     'PrintPreviewDestinationSettingsTestCros', 'DriveIsNotMounted', function() {
-      this.runMochaTest(destination_settings_test.TestNames.DriveIsNotMounted);
+      this.runMochaTest(
+          destination_settings_test_cros.TestNames.DriveIsNotMounted);
     });
 GEN('#endif');
 

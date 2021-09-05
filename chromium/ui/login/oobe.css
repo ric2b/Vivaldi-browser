@@ -9,6 +9,8 @@
 :root {
   --google-grey-700: rgb(95, 99, 104);
   --shelf-area-height-base: 57px;
+  --oobe-oobe-dialog-height-base: 504px;
+  --oobe-oobe-dialog-width-base: 461px;
 }
 
 html,
@@ -42,6 +44,12 @@ body {
  * oobe */
 html[screen=oobe] body {
   background-color: white;
+}
+
+/* New dialog size */
+html {
+  --oobe-adaptive-dialog-width: var(--oobe-oobe-dialog-width-base);
+  --oobe-adaptive-dialog-height: var(--oobe-oobe-dialog-height-base);
 }
 
 /* Padding defaults */

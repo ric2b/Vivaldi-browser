@@ -10,6 +10,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -30,10 +31,9 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/test/extension_test_message_listener.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #endif
 
@@ -63,24 +63,13 @@ using ContextType = ExtensionBrowserTest::ContextType;
 class ExtensionManagementApiTestWithBackgroundType
     : public ExtensionManagementApiBrowserTest,
       public testing::WithParamInterface<ContextType> {
- public:
-  ExtensionManagementApiTestWithBackgroundType() {
-    // Service Workers are currently only available on certain channels, so set
-    // the channel for those tests.
-    if (GetParam() == ContextType::kServiceWorker)
-      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
-  }
-
+ protected:
   const Extension* LoadExtensionWithParamFlags(const base::FilePath& path) {
     int flags = kFlagEnableFileAccess;
     if (GetParam() == ContextType::kServiceWorker)
       flags |= ExtensionBrowserTest::kFlagRunAsServiceWorkerBasedExtension;
     return LoadExtensionWithFlags(path, flags);
   }
-
- private:
-  std::unique_ptr<extensions::ScopedWorkerBasedExtensionsChannel>
-      current_channel_;
 };
 
 INSTANTIATE_TEST_SUITE_P(PersistentBackground,
@@ -120,7 +109,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
   ASSERT_TRUE(listener2.WaitUntilSatisfied());
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
                        NoDemoModeAppLaunchSourceReported) {
@@ -176,11 +165,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
   ASSERT_TRUE(listener1.WaitUntilSatisfied());
 }
 
-// TODO(https://crbug.com/1132581): This uninstall test is flaky for Service
-// Worker-based extensions. This should be an
-// ExtensionManagementApiTestWithBackgroundType test once that issue is
-// resolved.
-IN_PROC_BROWSER_TEST_F(ExtensionManagementApiBrowserTest, SelfUninstall) {
+IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
+                       SelfUninstall) {
   ExtensionTestMessageListener listener1("success", false);
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("management/self_uninstall_helper")));
@@ -189,11 +175,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiBrowserTest, SelfUninstall) {
   ASSERT_TRUE(listener1.WaitUntilSatisfied());
 }
 
-// TODO(https://crbug.com/1132581): This uninstall test is flaky for Service
-// Worker-based extensions. This should be an
-// ExtensionManagementApiTestWithBackgroundType test once that issue is
-// resolved.
-IN_PROC_BROWSER_TEST_F(ExtensionManagementApiBrowserTest,
+IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
                        SelfUninstallNoPermissions) {
   ExtensionTestMessageListener listener1("success", false);
   ASSERT_TRUE(LoadExtension(

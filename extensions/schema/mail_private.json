@@ -141,20 +141,12 @@
       {
         "name": "read",
         "type": "function",
-        "description": "Reads a mail. The root folder location is the profile directory of the current running instance /Mail",
+        "description": "Reads the contents of a file. Returns the content as arrayBuffer",
         "parameters": [
-          {
-            "name": "paths",
-            "type": "array",
-            "description": "String array that is used to build path to the file. Starting at user default profile/Mail.",
-            "items": {
-              "type": "string"
-            }
-          },
           {
             "name": "fileName",
             "type": "string",
-            "description": "The file name to be read."
+            "description": "Absoloute path to the file to be read."
           },
           {
             "type": "function",
@@ -163,15 +155,15 @@
             "parameters": [
               {
                 "name": "raw",
-                "type": "string",
-                "description": "The mail raw content."
+                "type": "binary",
+                "description": "The file raw content as arrayBuffer."
               }
             ]
           }
         ]
       },
       {
-        "name": "readBuffer",
+        "name": "readM3Message",
         "type": "function",
         "description": "Reads a mail. The root folder location is the profile directory of the current running instance /Mail",
         "parameters": [

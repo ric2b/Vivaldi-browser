@@ -90,6 +90,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/reading_list/core/reading_list_entry.h"
 #include "components/reading_list/core/reading_list_model.h"
+#include "components/reading_list/core/reading_list_pref_names.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -214,11 +215,9 @@ void CreateAndShowNewWindowWithContents(
                                                  TabStripModel::ADD_ACTIVE);
 }
 
-bool GetActiveTabURLAndTitleToSave(Browser* browser,
-                                   GURL* url,
-                                   base::string16* title) {
-  content::WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
+bool GetTabURLAndTitleToSave(content::WebContents* web_contents,
+                             GURL* url,
+                             base::string16* title) {
   // |web_contents| can be nullptr if the last tab in the browser was closed
   // but the browser wasn't closed yet. https://crbug.com/799668
   if (!web_contents)
@@ -566,6 +565,13 @@ void Home(Browser* browser, WindowOpenDisposition disposition) {
                             url.SchemeIs(chrome::kChromeNativeScheme);
   base::UmaHistogramBoolean("Navigation.Home.IsChromeInternal",
                             is_chrome_internal);
+  // Log a user action for the !is_chrome_internal case. This value is used as
+  // part of a high-level guiding metric, which is being migrated to user
+  // actions.
+  if (!is_chrome_internal) {
+    base::RecordAction(
+        base::UserMetricsAction("Navigation.Home.NotChromeInternal"));
+  }
   OpenURLParams params(
       url, Referrer(), disposition,
       ui::PageTransitionFromInt(ui::PAGE_TRANSITION_AUTO_BOOKMARK |
@@ -592,6 +598,8 @@ void OpenCurrentURL(Browser* browser) {
   params.tabstrip_add_types =
       TabStripModel::ADD_FORCE_INDEX | TabStripModel::ADD_INHERIT_OPENER;
   params.input_start = location_bar->GetMatchSelectionTimestamp();
+  params.is_using_https_as_default_scheme =
+      location_bar->IsInputTypedUrlWithoutScheme();
   Navigate(&params);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1067,13 +1075,23 @@ bool CanMoveActiveTabToReadLater(Browser* browser) {
 }
 
 bool MoveCurrentTabToReadLater(Browser* browser) {
+  return MoveTabToReadLater(browser,
+                            browser->tab_strip_model()->GetActiveWebContents());
+}
+
+bool MoveTabToReadLater(Browser* browser, content::WebContents* web_contents) {
   GURL url;
   base::string16 title;
   ReadingListModel* model = GetReadingListModel(browser);
-  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+  if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title) ||
+      !model->IsUrlSupported(url))
     return false;
   model->AddEntry(url, base::UTF16ToUTF8(title),
                   reading_list::EntrySource::ADDED_VIA_CURRENT_APP);
+  MaybeShowBookmarkBarForReadLater(browser);
+  base::UmaHistogramEnumeration(
+      "ReadingList.BookmarkBarState.OnEveryAddToReadingList",
+      browser->bookmark_bar_state());
   return true;
 }
 
@@ -1081,7 +1099,9 @@ bool MarkCurrentTabAsReadInReadLater(Browser* browser) {
   GURL url;
   base::string16 title;
   ReadingListModel* model = GetReadingListModel(browser);
-  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title))
     return false;
   const ReadingListEntry* entry = model->GetEntryByURL(url);
   // Mark current tab as read.
@@ -1094,10 +1114,29 @@ bool IsCurrentTabUnreadInReadLater(Browser* browser) {
   GURL url;
   base::string16 title;
   ReadingListModel* model = GetReadingListModel(browser);
-  if (!model || !GetActiveTabURLAndTitleToSave(browser, &url, &title))
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title))
     return false;
   const ReadingListEntry* entry = model->GetEntryByURL(url);
   return entry && !entry->IsRead();
+}
+
+void MaybeShowBookmarkBarForReadLater(Browser* browser) {
+#if !defined(OS_ANDROID)
+  PrefService* pref_service = browser->profile()->GetPrefs();
+  if (pref_service &&
+      !pref_service->GetBoolean(
+          reading_list::prefs::kReadingListDesktopFirstUseExperienceShown)) {
+    pref_service->SetBoolean(
+        reading_list::prefs::kReadingListDesktopFirstUseExperienceShown, true);
+    base::UmaHistogramEnumeration(
+        "ReadingList.BookmarkBarState.OnFirstAddToReadingList",
+        browser->bookmark_bar_state());
+    if (browser->bookmark_bar_state() == BookmarkBar::HIDDEN)
+      ToggleBookmarkBar(browser);
+  }
+#endif  // defined(OS_ANDROID)
 }
 
 void SaveCreditCard(Browser* browser) {
@@ -1115,30 +1154,6 @@ void MigrateLocalCards(Browser* browser) {
       autofill::ManageMigrationUiController::FromWebContents(web_contents);
   // Show migration-related Ui when the user clicks the credit card icon.
   controller->OnUserClickedCreditCardIcon();
-}
-
-void MaybeShowSaveLocalCardSignInPromo(Browser* browser) {
-  WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  autofill::SaveCardBubbleControllerImpl* controller =
-      autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
-
-  // If controller does not exist for the tab, don't show the sign-in promo.
-  if (controller) {
-    // The sign in promo will only be shown when 1) The user is signed out or 2)
-    // The user is signed in through DICe, but did not turn on syncing.
-    controller->MaybeShowBubbleForSignInPromo();
-  }
-}
-
-void CloseSaveLocalCardSignInPromo(Browser* browser) {
-  WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  autofill::SaveCardBubbleControllerImpl* controller =
-      autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
-
-  if (controller)
-    controller->HideBubbleForSignInPromo();
 }
 
 void Translate(Browser* browser) {

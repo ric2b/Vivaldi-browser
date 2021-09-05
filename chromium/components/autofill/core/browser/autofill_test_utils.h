@@ -337,6 +337,23 @@ std::string LastYear();
 std::string NextYear();
 std::string TenYearsFromNow();
 
+void AddFieldSuggestionToForm(
+    const autofill::FormFieldData& field_data,
+    ServerFieldType field_type,
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion);
+
+// Adds |field_types| predictions of |field_data| to |form_suggestion| query
+// response. Assumes int type can be cast to ServerFieldType.
+void AddFieldPredictionsToForm(
+    const autofill::FormFieldData& field_data,
+    const std::vector<int>& field_types,
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion);
+
+void AddFieldPredictionsToForm(
+    const autofill::FormFieldData& field_data,
+    const std::vector<ServerFieldType>& field_types,
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion);
+
 }  // namespace test
 }  // namespace autofill
 

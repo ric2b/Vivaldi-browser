@@ -33,7 +33,6 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_transformable_container.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_viewport_container.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
-#include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/style/shape_clip_path_operation.h"
@@ -210,10 +209,11 @@ const LayoutObject* SVGLayoutSupport::PushMappingToContainer(
   if (parent->IsSVGRoot()) {
     TransformationMatrix matrix(
         To<LayoutSVGRoot>(parent)->LocalToBorderBoxTransform());
-    matrix.Multiply(object->LocalToSVGParentTransform());
+    matrix.Multiply(TransformationMatrix(object->LocalToSVGParentTransform()));
     geometry_map.Push(object, matrix);
   } else {
-    geometry_map.Push(object, object->LocalToSVGParentTransform());
+    geometry_map.Push(
+        object, TransformationMatrix(object->LocalToSVGParentTransform()));
   }
 
   return parent;
@@ -262,13 +262,16 @@ void SVGLayoutSupport::AdjustWithClipPathAndMask(
     const LayoutObject& layout_object,
     const FloatRect& object_bounding_box,
     FloatRect& visual_rect) {
-  SVGResources* resources =
-      SVGResourcesCache::CachedResourcesForLayoutObject(layout_object);
-  if (!resources)
+  SVGResourceClient* client = SVGResources::GetClient(layout_object);
+  if (!client)
     return;
-  if (LayoutSVGResourceClipper* clipper = resources->Clipper())
+  const ComputedStyle& style = layout_object.StyleRef();
+  if (LayoutSVGResourceClipper* clipper =
+          GetSVGResourceAsType(*client, style.ClipPath()))
     visual_rect.Intersect(clipper->ResourceBoundingBox(object_bounding_box));
-  if (LayoutSVGResourceMasker* masker = resources->Masker())
+  const SVGComputedStyle& svg_style = style.SvgStyle();
+  if (auto* masker = GetSVGResourceAsType<LayoutSVGResourceMasker>(
+          *client, svg_style.MaskerResource()))
     visual_rect.Intersect(masker->ResourceBoundingBox(object_bounding_box, 1));
 }
 
@@ -311,11 +314,10 @@ bool SVGLayoutSupport::IntersectsClipPath(const LayoutObject& object,
         .Contains(location.TransformedPoint());
   }
   DCHECK_EQ(clip_path_operation->GetType(), ClipPathOperation::REFERENCE);
-  SVGResources* resources =
-      SVGResourcesCache::CachedResourcesForLayoutObject(object);
-  if (!resources || !resources->Clipper())
-    return true;
-  return resources->Clipper()->HitTestClipContent(reference_box, location);
+  SVGResourceClient* client = SVGResources::GetClient(object);
+  auto* clipper = GetSVGResourceAsType(
+      *client, To<ReferenceClipPathOperation>(*clip_path_operation));
+  return !clipper || clipper->HitTestClipContent(reference_box, location);
 }
 
 DashArray SVGLayoutSupport::ResolveSVGDashArray(
@@ -381,11 +383,8 @@ bool SVGLayoutSupport::WillIsolateBlendingDescendantsForObject(
 }
 
 bool SVGLayoutSupport::IsIsolationRequired(const LayoutObject* object) {
-  if (SVGResources* resources =
-          SVGResourcesCache::CachedResourcesForLayoutObject(*object)) {
-    if (resources->Masker())
-      return true;
-  }
+  if (object->StyleRef().SvgStyle().HasMasker())
+    return true;
   return WillIsolateBlendingDescendantsForObject(object) &&
          object->HasNonIsolatedBlendingDescendants();
 }

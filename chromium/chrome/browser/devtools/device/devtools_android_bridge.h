@@ -68,9 +68,8 @@ class DevToolsAndroidBridge : public KeyedService {
   using RemoteDevices = DevToolsDeviceDiscovery::RemoteDevices;
   using CompleteDevice = DevToolsDeviceDiscovery::CompleteDevice;
   using CompleteDevices = DevToolsDeviceDiscovery::CompleteDevices;
-  using DeviceListCallback = DevToolsDeviceDiscovery::DeviceListCallback;
 
-  using JsonRequestCallback = base::Callback<void(int, const std::string&)>;
+  using JsonRequestCallback = base::OnceCallback<void(int, const std::string&)>;
 
   class DeviceListListener {
    public:
@@ -118,7 +117,7 @@ class DevToolsAndroidBridge : public KeyedService {
   }
 
   void set_task_scheduler_for_test(
-      base::Callback<void(const base::Closure&)> scheduler) {
+      base::RepeatingCallback<void(base::OnceClosure)> scheduler) {
     task_scheduler_ = scheduler;
   }
 
@@ -131,7 +130,7 @@ class DevToolsAndroidBridge : public KeyedService {
 
   void SendJsonRequest(const std::string& browser_id_str,
                        const std::string& url,
-                       const JsonRequestCallback& callback);
+                       JsonRequestCallback callback);
 
   using TCPProviderCallback =
       base::Callback<void(scoped_refptr<TCPDeviceProvider>)>;
@@ -152,15 +151,12 @@ class DevToolsAndroidBridge : public KeyedService {
   void StopDeviceListPolling();
   bool NeedsDeviceListPolling();
 
-  void RequestDeviceList(const DeviceListCallback& callback);
   void ReceivedDeviceList(const CompleteDevices& complete_devices);
 
   void StartDeviceCountPolling();
   void StopDeviceCountPolling();
   void RequestDeviceCount(const base::Callback<void(int)>& callback);
   void ReceivedDeviceCount(int count);
-
-  static void ScheduleTaskDefault(const base::Closure& task);
 
   void CreateDeviceProviders();
 
@@ -181,7 +177,7 @@ class DevToolsAndroidBridge : public KeyedService {
   using DeviceCountListeners = std::vector<DeviceCountListener*>;
   DeviceCountListeners device_count_listeners_;
   base::CancelableCallback<void(int)> device_count_callback_;
-  base::Callback<void(const base::Closure&)> task_scheduler_;
+  base::RepeatingCallback<void(base::OnceClosure)> task_scheduler_;
 
   using PortForwardingListeners = std::vector<PortForwardingListener*>;
   PortForwardingListeners port_forwarding_listeners_;

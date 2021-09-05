@@ -81,6 +81,8 @@ const base::Feature kIPHReadLaterAppMenuBookmarkThisPageFeature{
     "IPH_ReadLaterAppMenuBookmarkThisPage", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHReadLaterAppMenuBookmarksFeature{
     "IPH_ReadLaterAppMenuBookmarks", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHReadLaterBottomSheetFeature{
+    "IPH_ReadLaterBottomSheet", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHEphemeralTabFeature{"IPH_EphemeralTab",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHFeedCardMenuFeature{"IPH_FeedCardMenu",
@@ -97,6 +99,8 @@ const base::Feature kIPHKeyboardAccessoryPasswordFillingFeature{
     "IPH_KeyboardAccessoryPasswordFilling", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHKeyboardAccessoryPaymentFillingFeature{
     "IPH_KeyboardAccessoryPaymentFilling", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHKeyboardAccessoryPaymentOfferFeature{
+    "IPH_KeyboardAccessoryPaymentOffer", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHNewTabPageHomeButtonFeature{
     "IPH_NewTabPageHomeButton", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHPreviewsOmniboxUIFeature{
@@ -135,6 +139,8 @@ const base::Feature kIPHChromeReengagementNotification3Feature{
     "IPH_ChromeReengagementNotification3", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHPwaInstallAvailableFeature{
     "IPH_PwaInstallAvailable", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHShareScreenshotFeature{
+    "IPH_ShareScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_IOS)

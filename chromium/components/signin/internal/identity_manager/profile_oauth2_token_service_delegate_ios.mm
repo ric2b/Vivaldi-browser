@@ -14,11 +14,8 @@
 #include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
-#include "components/prefs/pref_service.h"
-#include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/internal/identity_manager/account_tracker_service.h"
 #include "components/signin/public/base/signin_client.h"
-#include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/ios/device_accounts_provider.h"
 #include "google_apis/gaia/oauth2_access_token_fetcher.h"
@@ -29,6 +26,8 @@
 #endif
 
 namespace {
+
+using TokenResponseBuilder = OAuth2AccessTokenConsumer::TokenResponse::Builder;
 
 // Match the way Chromium handles authentication errors in
 // google_apis/gaia/oauth2_access_token_fetcher.cc:
@@ -144,8 +143,10 @@ void SSOAccessTokenFetcher::OnAccessTokenResponse(NSString* token,
   if (auth_error.state() == GoogleServiceAuthError::NONE) {
     base::Time expiration_date =
         base::Time::FromDoubleT([expiration timeIntervalSince1970]);
-    FireOnGetTokenSuccess(OAuth2AccessTokenConsumer::TokenResponse(
-        base::SysNSStringToUTF8(token), expiration_date, std::string()));
+    FireOnGetTokenSuccess(TokenResponseBuilder()
+                              .WithAccessToken(base::SysNSStringToUTF8(token))
+                              .WithExpirationTime(expiration_date)
+                              .build());
   } else {
     FireOnGetTokenFailure(auth_error);
   }
@@ -182,9 +183,6 @@ void ProfileOAuth2TokenServiceIOSDelegate::LoadCredentials(
             load_credentials_state());
   set_load_credentials_state(
       signin::LoadCredentialsState::LOAD_CREDENTIALS_IN_PROGRESS);
-
-  // Clean-up stale data from prefs.
-  ClearExcludedSecondaryAccounts();
 
   if (primary_account_id.empty()) {
     // On startup, always fire refresh token loaded even if there is nothing
@@ -263,7 +261,6 @@ void ProfileOAuth2TokenServiceIOSDelegate::RevokeAllCredentials() {
     RemoveAccount(accountStatus.first);
 
   DCHECK_EQ(0u, accounts_.size());
-  ClearExcludedSecondaryAccounts();
 }
 
 void ProfileOAuth2TokenServiceIOSDelegate::ReloadAllAccountsFromSystem() {
@@ -365,10 +362,4 @@ void ProfileOAuth2TokenServiceIOSDelegate::RemoveAccount(
     accounts_.erase(account_id);
     FireRefreshTokenRevoked(account_id);
   }
-}
-
-void ProfileOAuth2TokenServiceIOSDelegate::ClearExcludedSecondaryAccounts() {
-  client_->GetPrefs()->ClearPref(
-      prefs::kTokenServiceExcludeAllSecondaryAccounts);
-  client_->GetPrefs()->ClearPref(prefs::kTokenServiceExcludedSecondaryAccounts);
 }

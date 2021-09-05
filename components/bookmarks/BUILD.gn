@@ -1,0 +1,14 @@
+
+source_set("bookmark_locales_include") {
+  bookmark_locales = read_file(
+      "//vivaldi/vivapp/src/default-bookmarks/bookmark-locales.json", "json"
+  )
+  include_file = "$target_gen_dir/bookmark_locales.inc"
+  lines = []
+  foreach (locale, bookmark_locales.locales) {
+    lines += ["    \"" + locale + "\"," ]
+  }
+  write_file(include_file, lines)
+
+  sources = [ include_file ]
+}

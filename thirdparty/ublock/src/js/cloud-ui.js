@@ -34,7 +34,7 @@ self.cloud = {
     datakey: '',
     data: undefined,
     onPush: null,
-    onPull: null
+    onPull: null,
 };
 
 /******************************************************************************/
@@ -47,12 +47,46 @@ if ( self.cloud.datakey === '' ) { return; }
 
 /******************************************************************************/
 
+const fetchStorageUsed = async function() {
+    let elem = widget.querySelector('#cloudCapacity');
+    if ( elem.classList.contains('hide') ) { return; }
+    const result = await vAPI.messaging.send('cloudWidget', {
+        what: 'cloudUsed',
+        datakey: self.cloud.datakey,
+    });
+    if ( result instanceof Object === false ) {
+        elem.classList.add('hide');
+        return;
+    }
+    const units = ' ' + vAPI.i18n('genericBytes');
+    elem.title = result.max.toLocaleString() + units;
+    const total = (result.total / result.max * 100).toFixed(1);
+    elem = elem.firstElementChild;
+    elem.style.width = `${total}%`;
+    elem.title = result.total.toLocaleString() + units;
+    const used = (result.used / result.total * 100).toFixed(1);
+    elem = elem.firstElementChild;
+    elem.style.width = `${used}%`;
+    elem.title = result.used.toLocaleString() + units;
+};
+
+/******************************************************************************/
+
 const fetchCloudData = async function() {
+    const info = widget.querySelector('#cloudInfo');
+
     const entry = await vAPI.messaging.send('cloudWidget', {
         what: 'cloudPull',
         datakey: self.cloud.datakey,
     });
-    if ( entry instanceof Object === false ) { return entry; }
+
+    const hasData = entry instanceof Object;
+    if ( hasData === false ) {
+        uDom.nodeFromId('cloudPull').setAttribute('disabled', '');
+        uDom.nodeFromId('cloudPullAndMerge').setAttribute('disabled', '');
+        info.textContent = '...\n...';
+        return entry;
+    }
 
     self.cloud.data = entry.data;
 
@@ -71,7 +105,7 @@ const fetchCloudData = async function() {
     };
 
     const time = new Date(entry.tstamp);
-    widget.querySelector('#cloudInfo').textContent =
+    info.textContent =
         entry.source + '\n' +
         time.toLocaleString('fullwide', timeOptions);
 };
@@ -94,6 +128,7 @@ const pushData = async function() {
             .textContent = failed ? error : '';
     if ( failed ) { return; }
     fetchCloudData();
+    fetchStorageUsed();
 };
 
 /******************************************************************************/
@@ -151,7 +186,7 @@ const submitOptions = async function() {
 
 const onInitialize = function(options) {
     if ( options instanceof Object === false ) { return; }
-    if ( !options.enabled ) { return; }
+    if ( options.enabled !== true ) { return; }
     self.cloud.options = options;
 
     const xhr = new XMLHttpRequest();
@@ -180,12 +215,13 @@ const onInitialize = function(options) {
         uDom('#cloudCog').on('click', openOptions);
         uDom('#cloudOptions').on('click', closeOptions);
         uDom('#cloudOptionsSubmit').on('click', ( ) => { submitOptions(); });
-        
+
         fetchCloudData().then(result => {
             if ( typeof result !== 'string' ) { return; }
             document.getElementById('cloudPush').classList.add('error');
             document.querySelector('#cloudError').textContent = result;
         });
+        fetchStorageUsed();
     };
     xhr.send();
 };

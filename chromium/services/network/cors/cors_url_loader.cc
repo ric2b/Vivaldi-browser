@@ -5,10 +5,10 @@
 #include "services/network/cors/cors_url_loader.h"
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_status_code.h"
@@ -452,18 +452,6 @@ void CorsURLLoader::StartRequest() {
     if (tainted_) {
       request_.headers.SetHeader(net::HttpRequestHeaders::kOrigin,
                                  url::Origin().Serialize());
-    } else if (
-        base::FeatureList::IsEnabled(
-            features::
-                kDeriveOriginFromUrlForNeitherGetNorHeadRequestWhenHavingSpecialAccess) &&
-        !request_.isolated_world_origin && HasSpecialAccessToDestination()) {
-      DCHECK(!fetch_cors_flag_);
-      // When request's origin has an access to the destination URL (via
-      // |origin_access_list_| and |factory_bound_origin_access_list_|), we
-      // attach destination URL's origin instead of request's origin to the
-      // "origin" request header.
-      request_.headers.SetHeader(net::HttpRequestHeaders::kOrigin,
-                                 url::Origin::Create(request_.url).Serialize());
     } else {
       request_.headers.SetHeader(net::HttpRequestHeaders::kOrigin,
                                  request_.request_initiator->Serialize());

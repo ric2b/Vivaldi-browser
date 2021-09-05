@@ -46,11 +46,11 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileAccountManagementMetrics;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsActivity;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.SignOutDialogFragment;
-import org.chromium.chrome.browser.signin.SigninManager;
-import org.chromium.chrome.browser.signin.SigninUtils;
-import org.chromium.chrome.browser.signin.UnifiedConsentServiceBridge;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.SigninManager;
+import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
+import org.chromium.chrome.browser.signin.services.UnifiedConsentServiceBridge;
+import org.chromium.chrome.browser.signin.ui.SignOutDialogFragment;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.TrustedVaultClient;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
@@ -399,9 +399,9 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
             boolean atLeastOneDataTypeEnabled =
                     mSyncEverything.isChecked() || selectedModelTypes.size() > 0;
             if (mProfileSyncService.isSyncRequested() && !atLeastOneDataTypeEnabled) {
-                mProfileSyncService.requestStop();
+                mProfileSyncService.setSyncRequested(false);
             } else if (!mProfileSyncService.isSyncRequested() && atLeastOneDataTypeEnabled) {
-                mProfileSyncService.requestStart();
+                mProfileSyncService.setSyncRequested(true);
             }
         }
 
@@ -577,7 +577,8 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
                         .hasPrimaryAccount()) {
             return;
         }
-        SigninUtils.logEvent(ProfileAccountManagementMetrics.TOGGLE_SIGNOUT,
+        SigninMetricsUtils.logProfileAccountManagementMenu(
+                ProfileAccountManagementMetrics.TOGGLE_SIGNOUT,
                 GAIAServiceType.GAIA_SERVICE_TYPE_NONE);
 
         SignOutDialogFragment signOutFragment =
@@ -715,7 +716,7 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
                         this, primaryAccountInfo, REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL);
                 return;
             case SyncError.SYNC_SETUP_INCOMPLETE:
-                mProfileSyncService.requestStart();
+                mProfileSyncService.setSyncRequested(true);
                 mProfileSyncService.setFirstSetupComplete(
                         SyncFirstSetupCompleteSource.ADVANCED_FLOW_INTERRUPTED_TURN_SYNC_ON);
                 return;
@@ -796,12 +797,13 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
     // SignOutDialogListener implementation:
     @Override
     public void onSignOutClicked(boolean forceWipeUserData) {
+        final Profile profile = Profile.getLastUsedRegularProfile();
         // In case sign-out happened while the dialog was displayed, we guard the sign out so
         // we do not hit a native crash.
-        if (!IdentityServicesProvider.get().getIdentityManager().hasPrimaryAccount()) return;
+        if (!IdentityServicesProvider.get().getIdentityManager(profile).hasPrimaryAccount()) return;
 
         final DialogFragment clearDataProgressDialog = new ClearDataProgressDialog();
-        IdentityServicesProvider.get().getSigninManager().signOut(
+        IdentityServicesProvider.get().getSigninManager(profile).signOut(
                 SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS, new SigninManager.SignOutCallback() {
                     @Override
                     public void preWipeData() {

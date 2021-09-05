@@ -203,12 +203,12 @@ class FlipboardDesktopStory2018(_ArticleBrowsingStory):
   TAGS = [story_tags.YEAR_2018]
 
 
-class HackerNewsDesktopStory2018(_ArticleBrowsingStory):
-  NAME = 'browse:news:hackernews:2018'
+class HackerNewsDesktopStory2020(_ArticleBrowsingStory):
+  NAME = 'browse:news:hackernews:2020'
   URL = 'https://news.ycombinator.com'
   ITEM_SELECTOR = '.athing .title > a'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.YEAR_2018]
+  TAGS = [story_tags.YEAR_2020]
 
 
 class NytimesDesktopStory2020(_ArticleBrowsingStory):
@@ -247,14 +247,14 @@ class QqMobileStory2019(_ArticleBrowsingStory):
   TAGS = [story_tags.INTERNATIONAL, story_tags.YEAR_2019]
 
 
-class RedditDesktopStory2018(_ArticleBrowsingStory):
+class RedditDesktopStory2020(_ArticleBrowsingStory):
   """The top website in http://www.alexa.com/topsites/category/News"""
-  NAME = 'browse:news:reddit:2018'
+  NAME = 'browse:news:reddit:2020'
   URL = 'https://www.reddit.com/r/news/top/?sort=top&t=week'
   IS_SINGLE_PAGE_APP = True
   ITEM_SELECTOR = 'article'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.YEAR_2018]
+  TAGS = [story_tags.YEAR_2020]
 
 
 class RedditMobileStory2019(_ArticleBrowsingStory):
@@ -396,12 +396,12 @@ class GoogleDesktopStory2018(_ArticleBrowsingStory):
     _ Scroll the search page.
 
   """
-  NAME = 'browse:search:google:2018'
+  NAME = 'browse:search:google:2020'
   URL = 'https://www.google.com/search?q=flower&hl=en'
   _SEARCH_BOX_SELECTOR = 'input[aria-label="Search"]'
   _SEARCH_PAGE_2_SELECTOR = 'a[aria-label="Page 2"]'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-  TAGS = [story_tags.YEAR_2018]
+  TAGS = [story_tags.YEAR_2020]
 
   def _DidLoadDocument(self, action_runner):
     # Click on flower Wikipedia link.

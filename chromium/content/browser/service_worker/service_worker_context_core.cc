@@ -137,7 +137,7 @@ bool IsSameOriginClientContainerHost(
       container_host->IsInBackForwardCache()) {
     return false;
   }
-  return container_host->url().GetOrigin() == origin &&
+  return container_host->GetOrigin() == origin &&
          (allow_reserved_client || container_host->is_execution_ready());
 }
 
@@ -266,9 +266,6 @@ void ServiceWorkerContextCore::ContainerHostIterator::
 }
 
 ServiceWorkerContextCore::ServiceWorkerContextCore(
-    const base::FilePath& user_data_directory,
-    scoped_refptr<base::SequencedTaskRunner> database_task_runner,
-    storage::QuotaManagerProxy* quota_manager_proxy,
     storage::SpecialStoragePolicy* special_storage_policy,
     URLLoaderFactoryGetter* url_loader_factory_getter,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
@@ -281,10 +278,7 @@ ServiceWorkerContextCore::ServiceWorkerContextCore(
                                     blink::mojom::ServiceWorkerContainerHost,
                                     ServiceWorkerContainerHost*>>()),
       registry_(std::make_unique<ServiceWorkerRegistry>(
-          user_data_directory,
           this,
-          std::move(database_task_runner),
-          quota_manager_proxy,
           special_storage_policy)),
       job_coordinator_(std::make_unique<ServiceWorkerJobCoordinator>(this)),
       loader_factory_getter_(url_loader_factory_getter),
@@ -383,17 +377,9 @@ void ServiceWorkerContextCore::HasMainFrameWindowClient(const GURL& origin,
     container_host_iterator->Advance();
   }
 
-  if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    bool result = FrameListContainsMainFrameOnUI(std::move(render_frames));
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), result));
-  } else {
-    GetUIThreadTaskRunner({})->PostTaskAndReplyWithResult(
-        FROM_HERE,
-        base::BindOnce(&FrameListContainsMainFrameOnUI,
-                       std::move(render_frames)),
-        std::move(callback));
-  }
+  bool result = FrameListContainsMainFrameOnUI(std::move(render_frames));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), result));
 }
 
 base::WeakPtr<ServiceWorkerContainerHost>
@@ -796,7 +782,7 @@ void ServiceWorkerContextCore::UnprotectVersion(int64_t version_id) {
 }
 
 void ServiceWorkerContextCore::ScheduleDeleteAndStartOver() const {
-  registry()->PrepareForDeleteAndStarOver();
+  registry()->PrepareForDeleteAndStartOver();
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(&ServiceWorkerContextWrapper::DeleteAndStartOver,

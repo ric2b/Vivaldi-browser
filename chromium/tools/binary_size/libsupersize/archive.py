@@ -8,6 +8,7 @@ import argparse
 import bisect
 import calendar
 import collections
+import copy
 import datetime
 import gzip
 import itertools
@@ -52,7 +53,6 @@ _OWNERS_COMPONENT_REGEX = re.compile(r'^\s*#\s*COMPONENT:\s*(\S+)',
 _OWNERS_FILE_PATH_REGEX = re.compile(r'^\s*file://(\S+)', re.MULTILINE)
 
 _UNCOMPRESSED_COMPRESSION_RATIO_THRESHOLD = 0.9
-_APKS_MAIN_APK = 'splits/base-master.apk'
 
 # Holds computation state that is live only when an output directory exists.
 _OutputDirectoryContext = collections.namedtuple('_OutputDirectoryContext', [
@@ -742,14 +742,14 @@ def LoadAndPostProcessDeltaSizeInfo(path, file_obj=None):
       path, file_obj=file_obj)
   logging.info('Normalizing symbol names')
   _NormalizeNames(before_size_info.raw_symbols)
-  _NormalizeNames(after_size_info.symbols)
+  _NormalizeNames(after_size_info.raw_symbols)
   logging.info('Loaded %d + %d symbols', len(before_size_info.raw_symbols),
                len(after_size_info.raw_symbols))
   return before_size_info, after_size_info
 
 
-def _CollectModuleSizes(minimal_apks_path):
-  sizes_by_module = collections.defaultdict(int)
+def _GetModuleInfoList(minimal_apks_path):
+  module_info_list = []
   with zipfile.ZipFile(minimal_apks_path) as z:
     for info in z.infolist():
       # E.g.:
@@ -760,7 +760,14 @@ def _CollectModuleSizes(minimal_apks_path):
       # TODO(agrieve): Might be worth measuring a non-en locale as well.
       m = re.match(r'splits/(.*)-master\.apk', info.filename)
       if m:
-        sizes_by_module[m.group(1)] += info.file_size
+        module_info_list.append((m.group(1), info.file_size))
+  return sorted(module_info_list)
+
+
+def _CollectModuleSizes(minimal_apks_path):
+  sizes_by_module = collections.defaultdict(int)
+  for module_name, file_size in _GetModuleInfoList(minimal_apks_path):
+    sizes_by_module[module_name] += file_size
   return sizes_by_module
 
 
@@ -834,14 +841,18 @@ def CreateMetadata(args, linker_name, build_config):
     metadata[models.METADATA_MAP_FILENAME] = shorten_path(args.map_file)
 
   if args.minimal_apks_file:
-    sizes_by_module = _CollectModuleSizes(args.minimal_apks_file)
     metadata[models.METADATA_APK_FILENAME] = shorten_path(
         args.minimal_apks_file)
-    for name, size in sizes_by_module.items():
-      key = models.METADATA_APK_SIZE
-      if name != 'base':
-        key += '-' + name
-      metadata[key] = size
+    if args.split_name and args.split_name != 'base':
+      metadata[models.METADATA_APK_SPLIT_NAME] = args.split_name
+      metadata[models.METADATA_APK_SIZE] = os.path.getsize(args.apk_file)
+    else:
+      sizes_by_module = _CollectModuleSizes(args.minimal_apks_file)
+      for name, size in sizes_by_module.items():
+        key = models.METADATA_APK_SIZE
+        if name != 'base':
+          key += '-' + name
+        metadata[key] = size
   elif args.apk_file:
     metadata[models.METADATA_APK_FILENAME] = shorten_path(args.apk_file)
     metadata[models.METADATA_APK_SIZE] = os.path.getsize(args.apk_file)
@@ -1387,16 +1398,14 @@ def _CalculateElfOverhead(section_ranges, elf_path):
 
 def _OverwriteSymbolSizesWithRelocationCount(raw_symbols, tool_prefix,
                                              elf_path):
+  logging.info('Removing non-native symbols')
+  raw_symbols = [sym for sym in raw_symbols if sym.IsNative()]
+
   logging.info('Overwriting symbol sizes with relocation count')
-  native_symbols = [sym for sym in raw_symbols if sym.IsNative()]
-  symbol_addresses = [0] * (1 + len(native_symbols))
-
-  for i, symbol in enumerate(native_symbols):
-    symbol_addresses[i] = symbol.address
-
   # Last symbol address is the end of the last symbol, so we don't misattribute
   # all relros after the last symbol to that symbol.
-  symbol_addresses[-1] = native_symbols[-1].address + native_symbols[-1].size
+  symbol_addresses = [s.address for s in raw_symbols]
+  symbol_addresses.append(raw_symbols[-1].end_address)
 
   for symbol in raw_symbols:
     symbol.address = 0
@@ -1418,13 +1427,13 @@ def _OverwriteSymbolSizesWithRelocationCount(raw_symbols, tool_prefix,
   for addr in relro_addresses:
     # Attribute relros to largest symbol start address that precede them.
     idx = bisect.bisect_right(symbol_addresses, addr) - 1
-    if 0 <= idx < len(native_symbols):
-      symbol = native_symbols[idx]
+    if 0 <= idx < len(raw_symbols):
+      symbol = raw_symbols[idx]
       for alias in symbol.aliases or [symbol]:
         alias.size += 1
 
-  logging.info('Removing non-native symbols...')
-  raw_symbols[:] = [sym for sym in raw_symbols if sym.size or sym.IsNative()]
+  raw_symbols = [sym for sym in raw_symbols if sym.size]
+  return raw_symbols
 
 
 def _AddUnattributedSectionSymbols(raw_symbols, section_ranges):
@@ -1528,6 +1537,9 @@ def CreateContainerAndSymbols(knobs=None,
     (section_sizes maps section names to respective sizes).
     raw_symbols is a list of Symbol objects.
   """
+  assert elf_path or not opts.relocations_mode, (
+      '--relocations-mode requires a ELF file')
+
   knobs = knobs or SectionSizeKnobs()
   if apk_path and apk_so_path:
     # Extraction takes around 1 second, so do it in parallel.
@@ -1613,7 +1625,7 @@ def CreateContainerAndSymbols(knobs=None,
 
   pak_symbols_by_id = None
   other_symbols = []
-  if apk_path and size_info_prefix:
+  if apk_path and size_info_prefix and not opts.relocations_mode:
     # Can modify |section_ranges|.
     pak_symbols_by_id = _FindPakSymbolsFromApk(opts, section_ranges, apk_path,
                                                size_info_prefix)
@@ -1688,8 +1700,9 @@ def CreateContainerAndSymbols(knobs=None,
   logging.debug('Connecting nm aliases')
   _ConnectNmAliases(raw_symbols)
 
-  if elf_path and opts.relocations_mode:
-    _OverwriteSymbolSizesWithRelocationCount(raw_symbols, tool_prefix, elf_path)
+  if opts.relocations_mode:
+    raw_symbols = _OverwriteSymbolSizesWithRelocationCount(
+        raw_symbols, tool_prefix, elf_path)
 
   section_sizes = {k: size for k, (address, size) in section_ranges.items()}
   container = models.Container(name=container_name,
@@ -1698,7 +1711,10 @@ def CreateContainerAndSymbols(knobs=None,
   for symbol in raw_symbols:
     symbol.container = container
 
-  file_format.SortSymbols(raw_symbols, check_already_mostly_sorted=True)
+  # Sorting for relocations mode causes .data and .data.rel.ro to be interleaved
+  # due to setting all addresses to 0.
+  if not opts.relocations_mode:
+    file_format.SortSymbols(raw_symbols, check_already_mostly_sorted=True)
 
   return container, raw_symbols
 
@@ -1876,6 +1892,9 @@ def _AddContainerArguments(parser):
       action='store_true',
       help='Include a padding field for each symbol, instead of rederiving '
       'from consecutive symbols on file load.')
+
+  # The split_name arg is used for bundles to identify DFMs.
+  parser.set_defaults(split_name=None)
 
 
 def AddArguments(parser):
@@ -2071,14 +2090,7 @@ def _ReadMultipleArgsFromFile(ssargs_file, on_config_error):
                                      on_config_error)
 
 
-def _ProcessContainerArgs(top_args, sub_args, main_file, on_config_error):
-  if hasattr(sub_args, 'name'):
-    container_name = sub_args.name
-  else:
-    container_name = os.path.basename(main_file)
-  if set(container_name) & set('<>'):
-    parser.error('Container name cannot have characters in "<>"')
-
+def _ProcessContainerArgs(top_args, sub_args, container_name, on_config_error):
   # Copy output_directory, tool_prefix, etc. into sub_args.
   for k, v in top_args.__dict__.items():
     sub_args.__dict__.setdefault(k, v)
@@ -2127,6 +2139,28 @@ def _ProcessContainerArgs(top_args, sub_args, main_file, on_config_error):
           linker_name, size_info_prefix)
 
 
+def _IsOnDemand(apk_path):
+  # Check if the manifest specifies whether or not to extract native libs.
+  output = subprocess.check_output([
+      path_util.GetAapt2Path(), 'dump', 'xmltree', '--file',
+      'AndroidManifest.xml', apk_path
+  ]).decode('ascii')
+
+  def parse_attr(name):
+    # http://schemas.android.com/apk/res/android:isFeatureSplit(0x0101055b)=true
+    # http://schemas.android.com/apk/distribution:onDemand=true
+    m = re.search(name + r'(?:\(.*?\))?=(\w+)', output)
+    return m and m.group(1) == 'true'
+
+  is_feature_split = parse_attr('android:isFeatureSplit')
+  # Can use <dist:on-demand>, or <module dist:onDemand="true">.
+  on_demand = parse_attr(
+      'distribution:onDemand') or 'distribution:on-demand' in output
+  on_demand = bool(on_demand and is_feature_split)
+
+  return on_demand
+
+
 def _IterSubArgs(top_args, on_config_error):
   """Generates main paths (may be deduced) for each containers given by input.
 
@@ -2162,16 +2196,33 @@ def _IterSubArgs(top_args, on_config_error):
   # Each element in |sub_args_list| specifies a container.
   for sub_args in sub_args_list:
     main_file = _IdentifyInputFile(sub_args, on_config_error)
+    if hasattr(sub_args, 'name'):
+      container_name = sub_args.name
+    else:
+      container_name = os.path.basename(main_file)
+    if set(container_name) & set('<>'):
+      parser.error('Container name cannot have characters in "<>"')
+
 
     # If needed, extract .apk file to a temp file and process that instead.
     if sub_args.minimal_apks_file:
-      with zip_util.UnzipToTemp(sub_args.minimal_apks_file,
-                                _APKS_MAIN_APK) as temp:
-        sub_args.apk_file = temp
-        yield _ProcessContainerArgs(top_args, sub_args, main_file,
-                                    on_config_error)
+      for module_name, _ in _GetModuleInfoList(sub_args.minimal_apks_file):
+        with zip_util.UnzipToTemp(
+            sub_args.minimal_apks_file,
+            'splits/{}-master.apk'.format(module_name)) as temp:
+          if _IsOnDemand(temp):
+            continue
+          module_sub_args = copy.copy(sub_args)
+          module_sub_args.apk_file = temp
+          module_sub_args.split_name = module_name
+          module_sub_args.name = '{}/{}.apk'.format(container_name, module_name)
+          if module_name != 'base':
+            # TODO(crbug.com/1143690): Fix native analysis for split APKs.
+            module_sub_args.map_file = None
+          yield _ProcessContainerArgs(top_args, module_sub_args,
+                                      module_sub_args.name, on_config_error)
     else:
-      yield _ProcessContainerArgs(top_args, sub_args, main_file,
+      yield _ProcessContainerArgs(top_args, sub_args, container_name,
                                   on_config_error)
 
 

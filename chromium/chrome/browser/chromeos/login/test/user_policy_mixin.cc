@@ -66,6 +66,7 @@ void UserPolicyMixin::SetUpUserKeysFile(const std::string& user_key_bits) {
 
   base::ScopedAllowBlockingForTesting allow_io;
   chromeos::RegisterStubPathOverrides(user_data_dir);
+  chromeos::dbus_paths::RegisterStubPathOverrides(user_data_dir);
 
   base::FilePath user_keys_dir;
   CHECK(base::PathService::Get(chromeos::dbus_paths::DIR_USER_POLICY_KEYS,
@@ -101,8 +102,6 @@ void UserPolicyMixin::SetUpPolicy() {
   const cryptohome::AccountIdentifier cryptohome_id =
       cryptohome::CreateAccountIdentifierFromAccountId(account_id_);
   FakeSessionManagerClient::Get()->set_user_policy(cryptohome_id, policy_blob);
-  FakeSessionManagerClient::Get()->set_user_policy_without_session(
-      cryptohome_id, policy_blob);
 
   if (policy_server_) {
     policy_server_->UpdateUserPolicy(user_policy_builder_.payload(),

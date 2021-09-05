@@ -4,6 +4,7 @@
 
 #include "base/ios/ios_util.h"
 #import "base/test/ios/wait_util.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -55,6 +56,8 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
   // See crbug.com/1143299.
   if (base::ios::IsRunningOnIOS13OrLater()) {
     config.features_enabled.push_back(kExpandedTabStrip);
+    config.features_disabled.push_back(
+        fullscreen::features::kSmoothScrollingDefault);
   }
   return config;
 }
@@ -68,8 +71,8 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
 }
 
 // Tests that the entire thumb strip is visible in peeked state. Specifically,
-// this tests that the thumb strip is not partially covered when using the
-// FullscreenProvider.
+// this tests that the thumb strip is not partially covered when Smooth
+// Scrolling is on.
 - (void)testThumbStripVisibleInPeekedState {
   // The feature only works on iPad.
   if (![ChromeEarlGrey isIPadIdiom]) {

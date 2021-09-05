@@ -23,7 +23,7 @@ void* QueryDeviceObjectFromANGLE(int object_type) {
     egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
   }
 
-  if (!gl::GLSurfaceEGL::HasEGLExtension("EGL_EXT_device_query"))
+  if (!gl::GLSurfaceEGL::HasEGLClientExtension("EGL_EXT_device_query"))
     return nullptr;
 
   PFNEGLQUERYDISPLAYATTRIBEXTPROC QueryDisplayAttribEXT = nullptr;

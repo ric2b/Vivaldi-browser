@@ -9,6 +9,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/views/widget/widget.h"
@@ -37,7 +38,8 @@ TabSearchOpenAction GetActionForEvent(const ui::Event& event) {
 
 TabSearchButton::TabSearchButton(TabStrip* tab_strip)
     : NewTabButton(tab_strip, PressedCallback()),
-      webui_bubble_manager_(this,
+      webui_bubble_manager_(IDS_ACCNAME_TAB_SEARCH,
+                            this,
                             tab_strip->controller()->GetProfile(),
                             GURL(chrome::kChromeUITabSearchURL),
                             true),
@@ -96,7 +98,9 @@ void TabSearchButton::OnWidgetVisibilityChanged(views::Widget* widget,
 
 void TabSearchButton::OnWidgetDestroying(views::Widget* widget) {
   DCHECK_EQ(webui_bubble_manager_.GetBubbleWidget(), widget);
-  observed_bubble_widget_.Remove(webui_bubble_manager_.GetBubbleWidget());
+  DCHECK(bubble_widget_observation_.IsObservingSource(
+      webui_bubble_manager_.GetBubbleWidget()));
+  bubble_widget_observation_.Reset();
   pressed_lock_.reset();
 }
 
@@ -114,8 +118,8 @@ bool TabSearchButton::ShowTabSearchBubble(bool triggered_by_keyboard_shortcut) {
 
   // There should only ever be a single bubble widget active for the
   // TabSearchButton.
-  DCHECK(!observed_bubble_widget_.IsObservingSources());
-  observed_bubble_widget_.Add(webui_bubble_manager_.GetBubbleWidget());
+  DCHECK(!bubble_widget_observation_.IsObserving());
+  bubble_widget_observation_.Observe(webui_bubble_manager_.GetBubbleWidget());
   widget_open_timer_.Reset(webui_bubble_manager_.GetBubbleWidget());
 
   // Hold the pressed lock while the |bubble_| is active.

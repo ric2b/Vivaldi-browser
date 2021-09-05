@@ -29,7 +29,8 @@
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_migration_manager.h"
-#include "chrome/browser/web_applications/web_app_migration_user_display_mode_clean_up.h"
+#include "chrome/browser/web_applications/web_app_mover.h"
+#include "chrome/browser/web_applications/web_app_protocol_handler_manager.h"
 #include "chrome/browser/web_applications/web_app_provider_factory.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_shortcut_manager.h"
@@ -39,6 +40,13 @@
 #include "content/public/browser/web_contents.h"
 
 namespace web_app {
+
+namespace {
+
+WebAppProvider::OsIntegrationManagerFactory
+    g_os_integration_manager_factory_for_testing = nullptr;
+
+}  // namespace
 
 // static
 WebAppProvider* WebAppProvider::Get(Profile* profile) {
@@ -52,6 +60,12 @@ WebAppProvider* WebAppProvider::GetForWebContents(
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   DCHECK(profile);
   return WebAppProvider::Get(profile);
+}
+
+// static
+void WebAppProvider::SetOsIntegrationManagerFactoryForTesting(
+    OsIntegrationManagerFactory factory) {
+  g_os_integration_manager_factory_for_testing = factory;
 }
 
 WebAppProvider::WebAppProvider(Profile* profile) : profile_(profile) {
@@ -148,8 +162,8 @@ void WebAppProvider::Shutdown() {
   icon_manager_->Shutdown();
   install_finalizer_->Shutdown();
   registrar_->Shutdown();
-  if (migration_user_display_mode_clean_up_)
-    migration_user_display_mode_clean_up_->Shutdown();
+  if (web_app_mover_)
+    web_app_mover_->Shutdown();
 }
 
 void WebAppProvider::StartImpl() {
@@ -206,19 +220,27 @@ void WebAppProvider::CreateWebAppsSubsystems(Profile* profile) {
   install_finalizer_ = std::make_unique<WebAppInstallFinalizer>(
       profile, icon_manager.get(), std::move(legacy_finalizer));
 
-  auto file_handler_manager =
-      std::make_unique<WebAppFileHandlerManager>(profile);
-  auto shortcut_manager = std::make_unique<WebAppShortcutManager>(
-      profile, icon_manager.get(), file_handler_manager.get());
-  os_integration_manager_ = std::make_unique<OsIntegrationManager>(
-      profile, std::move(shortcut_manager), std::move(file_handler_manager));
+  if (g_os_integration_manager_factory_for_testing) {
+    os_integration_manager_ =
+        g_os_integration_manager_factory_for_testing(profile);
+  } else {
+    auto file_handler_manager =
+        std::make_unique<WebAppFileHandlerManager>(profile);
+    auto protocol_handler_manager =
+        std::make_unique<WebAppProtocolHandlerManager>(profile);
+    auto shortcut_manager = std::make_unique<WebAppShortcutManager>(
+        profile, icon_manager.get(), file_handler_manager.get());
+    os_integration_manager_ = std::make_unique<OsIntegrationManager>(
+        profile, std::move(shortcut_manager), std::move(file_handler_manager),
+        std::move(protocol_handler_manager));
+  }
 
   migration_manager_ = std::make_unique<WebAppMigrationManager>(
       profile, database_factory_.get(), icon_manager.get(),
       os_integration_manager_.get());
-  migration_user_display_mode_clean_up_ =
-      WebAppMigrationUserDisplayModeCleanUp::CreateIfNeeded(
-          profile, sync_bridge.get(), os_integration_manager_.get());
+  web_app_mover_ = WebAppMover::CreateIfNeeded(
+      profile, registrar.get(), install_finalizer_.get(),
+      install_manager_.get(), sync_bridge.get());
 
   // Upcast to unified subsystem types:
   registrar_ = std::move(registrar);
@@ -274,8 +296,8 @@ void WebAppProvider::OnRegistryControllerReady() {
   manifest_update_manager_->Start();
   os_integration_manager_->Start();
   ui_manager_->Start();
-  if (migration_user_display_mode_clean_up_)
-    migration_user_display_mode_clean_up_->Start();
+  if (web_app_mover_)
+    web_app_mover_->Start();
 
   on_registry_ready_.Signal();
 }
@@ -295,7 +317,6 @@ void WebAppProvider::RegisterProfilePrefs(
   WebAppPrefsUtilsRegisterProfilePrefs(registry);
   RegisterInstallBounceMetricProfilePrefs(registry);
   RegisterDailyWebAppMetricsProfilePrefs(registry);
-  WebAppMigrationUserDisplayModeCleanUp::RegisterProfilePrefs(registry);
 }
 
 }  // namespace web_app

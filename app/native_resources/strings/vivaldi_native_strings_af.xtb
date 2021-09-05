@@ -4,13 +4,16 @@
 <translation id="1033008476608128425">Landskap 3</translation>
 <translation id="1118377629180821201">Landskap 12</translation>
 <translation id="1158503667684816647">Moenie weer bevestiging toon nie</translation>
+<translation id="1222195720020481779">Installeerder word gelanseer…</translation>
 <translation id="1276145862619442150">Snelkiesers</translation>
 <translation id="1281950884873973195">Dier 6</translation>
 <translation id="1411638389238344450">Stuur Skakel per E-pos</translation>
 <translation id="1454726940098520109">Moenie Weer Bevestiging Toon Nie</translation>
 <translation id="1462666970065907900">Wil u regtig hierdie venster sluit?</translation>
+<translation id="1526344461589023948">’n Fout het voorgekom toe ’n afgelaaide bywerking bewaar moes word. Maak seker u rekenaar het genoeg skyfspasie en probeer later weer.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nuwe Privaat Venster</translation>
+<translation id="1702758681952953055">Rapporteer die fout indien dit voortduur en sluit die volgende detail in:</translation>
 <translation id="1728549374069268714">Plak en gaan</translation>
 <translation id="1756026472674246267">Open Skakel in Nuwe Oortjie</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -19,10 +22,15 @@
 <translation id="1921101374471252440">&amp;Herlaai Beeld</translation>
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Generies</translation>
+<translation id="1985669426322966465">Programmatuurbywerking</translation>
 <translation id="2079036669923635404">Klik hier om Vivaldi na weergawe <ph name="VERSION" /> by te werk.</translation>
+<translation id="2141974047387702305">’n Fout het voorgekom toe die opdateerlêers afgelaai is. Gaan u internetverbinding na en probeer later weer.</translation>
+<translation id="2339641773402824483">Kyk tans vir bywerkings…</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Voeg Nota In</translation>
 <translation id="2486841023299517366">Dier 4</translation>
+<translation id="2612127540243995147">Gereed vir installasie. Vivaldi sal afsluit en geherlanseer word.</translation>
+<translation id="2613387515621326337">Toon bywerkwebblad</translation>
 <translation id="2848085334714181751">Dier 3</translation>
 <translation id="2873951654529031587">Asblik</translation>
 <translation id="292258461174562431">Monster 4</translation>
@@ -33,9 +41,12 @@
 <translation id="3084011186245865060">Landskap 6</translation>
 <translation id="3127383884976966729">Dier 7</translation>
 <translation id="3156398087075132709">Nuwe Boekmerk</translation>
+<translation id="3255747772218936245">Installeer bywerking</translation>
 <translation id="3259769196742189631">Bekragtig</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(geen titel)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is tans die nuutste beskikbare weergawe.</translation>
+<translation id="3383198080133834965">U is bygewerk!</translation>
 <translation id="3402602684546832928">Kies Opera-boekmerklêer</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Bevestig Verlaat</translation>
@@ -45,6 +56,8 @@
 <translation id="3542768452570884558">Open Skakel in Nuwe Venster</translation>
 <translation id="3588820906588687999">Open Beeld in Nuwe Oortjie</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3680031241659195730">’n Nuwe weergawe van Vivaldi is beskikbaar!</translation>
+<translation id="3708982624815781692">Die aflaai is gekanselleer.</translation>
 <translation id="3732157130969736834">Maak Boekmerk van Skakel</translation>
 <translation id="3732388226447288666">Dier 2</translation>
 <translation id="3732439195215136813">Dier 5</translation>
@@ -52,6 +65,7 @@
 <translation id="3914946330804881301">Ingevoer vanaf Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Plak</translation>
+<translation id="4005270918754737597">Slaan hierdie weergawe oor</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Moenie weer wys nie</translation>
 <translation id="4074744496918018786">Open Beeld in Privaatvenster</translation>
@@ -68,6 +82,7 @@
 <translation id="4677434526832593569">Dier 8</translation>
 <translation id="474217410105706308">Demp oortjie</translation>
 <translation id="4881695831933465202">Open</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> van <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Ingevoerde Snelkiesers</translation>
 <translation id="5092656712000637858">Voeg Blad toe tot Webpaneel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -81,11 +96,14 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera weergawe 15+ (Beta)</translation>
 <translation id="5648110075441906505">Open Beeld in Nuwe Venster</translation>
+<translation id="5656371807944747581">Bywerkfout!</translation>
 <translation id="5716238312826274098">Deaktiveer tans kennisgewings</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> is nou beskikbaar (u het <ph name="OLD_VERSION" />). Wil u dit nou aflaai?</translation>
 <translation id="5770433027661640693">Landskap 10</translation>
 <translation id="5857090052475505287">Nuwe Vouer</translation>
 <translation id="588258955323874662">Volskerm</translation>
 <translation id="5916080360077521750">U Chrome-instellings is ongelukkig nie beskikbaar terwyl daardie blaaier loop nie. Bewaar u werk en sluit alle Chrome-vensters om daardie instellings na Vivaldi in te voer. Klik daarna op Gaan Voort.</translation>
+<translation id="6040143037577758943">Sluit</translation>
 <translation id="6229528619562190452">Klik hier om Vivaldi by te werk.</translation>
 <translation id="6234173136417926046">Gebruik Beeld as Snelkieseragtergrond</translation>
 <translation id="630690498669249215">Opera-boekmerkelêer</translation>
@@ -96,15 +114,21 @@
 <translation id="6538338088414940408">Open skakel in agtergrondoortjie</translation>
 <translation id="6551219277044048123">Voeg toe as &amp;Soekenjin…</translation>
 <translation id="6630781781151951863">Landskap 18</translation>
+<translation id="6635049669875534328">Vrystellingsnotas:</translation>
 <translation id="6804831687363620480">U Opera 15+-instellings is ongelukkig nie beskikbaar terwyl daardie blaaier loop nie. Bewaar u werk en sluit alle Opera 15+-vensters om daardie instellings na Vivaldi in te voer. Klik daarna op Gaan Voort.</translation>
+<translation id="6892812721183419409">Open skakel as <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopieer</translation>
 <translation id="7086554968911045110">Landskap 7</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi word moontlik gemaak deur die <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />-oopbronprojek en ander <ph name="BEGIN_LINK_OSS" />oopbronprogrammatuur<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Kon nie die bywerkinstalleerder lanseer nie. Maak seker u rekenaar het genoeg geheue of skyfspasie en probeer later weer.</translation>
+<translation id="7658239707568436148">Kanselleer</translation>
 <translation id="7715497554424665066">&amp;Ignoreer Bywerking</translation>
 <translation id="7724603315864178912">Knip</translation>
+<translation id="7727481996062361502">Bevestig tans bywerking…</translation>
 <translation id="7793738202466490491">Voeg toe as kalenteraktiwiteit</translation>
+<translation id="7848222781052558334">Kon nie die digitale handtekening van die afgelaaide lêers bevestig nie.</translation>
 <translation id="7865983598101744945">Bevestig verlaat</translation>
 <translation id="7957213167373139414">My Kalender</translation>
 <translation id="8027581147000338959">Open in Nuwe Venster</translation>
@@ -113,9 +137,13 @@
 <translation id="8261506727792406068">Skrap</translation>
 <translation id="8331671104904436324">Open in Agtergrondoortjie</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
+<translation id="8388552048012645975">Bywerking word afgelaai…</translation>
 <translation id="8427094907586191051">Landskap 17</translation>
+<translation id="8439034818057146672">’n Nuwe weergawe van Vivaldi is gereed vir installasie.</translation>
 <translation id="8446668873108041390">Uitvoer van JavaScript deur AppleScript is gedeaktiveer. In Instellings &gt; Privaatheid &gt; Apple-gebeure is ’n instelling om JavaScript vanad Apple-gebeure toe te laat.</translation>
 <translation id="8539196077526389150">Landskap 13</translation>
+<translation id="8562339533180097902">Sluit Vivaldi en installeer nou</translation>
+<translation id="8567452685425968223">Bywerking word uitgepak…</translation>
 <translation id="8624587806981488221">&amp;Herlaai beeld</translation>
 <translation id="864444594187862076">Opera weergawe 15+ (Ontwikkelaar)</translation>
 <translation id="8651348004684669199">Voeg Aktiewe Oortjie Toe</translation>
@@ -123,11 +151,13 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">U gaan nie meer hierdie kennisgewings sien nie. U kan dit weer in Vivaldi se instellings aktiveer.</translation>
+<translation id="8813277370772331957">Herinner my later</translation>
 <translation id="8894900864683381599">Voeg Skakel toe tot Webpaneel</translation>
 <translation id="8912720443398351457">Wil U Regtig Vivaldi Verlaat?</translation>
 <translation id="8947109330183116400">Kies HTML-boekmerklêer</translation>
 <translation id="9017566390391482291">Kies Vivaldi-profielvouer om in te voer</translation>
 <translation id="9065203028668620118">Wysig</translation>
+<translation id="912022491595344261">Open beeld as <ph name="USER" /></translation>
 <translation id="9157539936604258187">Open Skakel</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Landskap 16</translation>

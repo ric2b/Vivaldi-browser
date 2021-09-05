@@ -13,11 +13,16 @@ if (is_android) {
 # This target includes all mojom interfaces which can be used from
 # renderer/platform. In particular these mojom interfaces can't use types that
 # are typemapped to a type in renderer/core.
+#
+# Source targets outside of Blink that want to depend on mojom_platform should
+# instead depend on //content/public/common, which ultimately exposes it as a
+# public dependency. This is because the non-Blink variant of the
+# mojom_platform C++ bindings is linked into the //content component and
+# //content/public/common has private dependencies there.
 mojom("mojom_platform") {
   generate_java = true
   sources = [
     "ad_tagging/ad_frame.mojom",
-    "agents/agent_metrics.mojom",
     "app_banner/app_banner.mojom",
     "appcache/appcache.mojom",
     "appcache/appcache_info.mojom",
@@ -37,12 +42,14 @@ mojom("mojom_platform") {
     "clipboard/raw_clipboard.mojom",
     "commit_result/commit_result.mojom",
     "content_index/content_index.mojom",
+    "context_menu/context_menu.mojom",
     "conversions/conversions.mojom",
     "cookie_store/cookie_store.mojom",
     "crash/crash_memory_metrics_reporter.mojom",
     "credentialmanager/credential_manager.mojom",
     "css/preferred_color_scheme.mojom",
     "css/preferred_contrast.mojom",
+    "device/device.mojom",
     "devtools/console_message.mojom",
     "devtools/devtools_agent.mojom",
     "devtools/devtools_frontend.mojom",
@@ -59,13 +66,13 @@ mojom("mojom_platform") {
     "fetch/fetch_api_request.mojom",
     "fetch/fetch_api_response.mojom",
     "file/file_utilities.mojom",
-    "file_system_access/native_file_system_directory_handle.mojom",
-    "file_system_access/native_file_system_drag_drop_token.mojom",
-    "file_system_access/native_file_system_error.mojom",
-    "file_system_access/native_file_system_file_handle.mojom",
-    "file_system_access/native_file_system_file_writer.mojom",
-    "file_system_access/native_file_system_manager.mojom",
-    "file_system_access/native_file_system_transfer_token.mojom",
+    "file_system_access/file_system_access_directory_handle.mojom",
+    "file_system_access/file_system_access_drag_drop_token.mojom",
+    "file_system_access/file_system_access_error.mojom",
+    "file_system_access/file_system_access_file_handle.mojom",
+    "file_system_access/file_system_access_file_writer.mojom",
+    "file_system_access/file_system_access_manager.mojom",
+    "file_system_access/file_system_access_transfer_token.mojom",
     "filesystem/file_system.mojom",
     "font_access/font_access.mojom",
     "geolocation/geolocation_service.mojom",
@@ -92,7 +99,6 @@ mojom("mojom_platform") {
     "loader/fetch_client_settings_object.mojom",
     "loader/navigation_predictor.mojom",
     "loader/pause_subresource_loading_handle.mojom",
-    "loader/previews_resource_loading_hints.mojom",
     "loader/referrer.mojom",
     "loader/request_context_frame_type.mojom",
     "loader/resource_load_info.mojom",
@@ -100,10 +106,12 @@ mojom("mojom_platform") {
     "loader/transferrable_url_loader.mojom",
     "loader/url_loader_factory_bundle.mojom",
     "locks/lock_manager.mojom",
+    "manifest/capture_links.mojom",
     "manifest/display_mode.mojom",
     "manifest/manifest.mojom",
     "manifest/manifest_manager.mojom",
     "manifest/manifest_observer.mojom",
+    "media/fullscreen_video_element.mojom",
     "media/renderer_audio_input_stream_factory.mojom",
     "media/renderer_audio_output_stream_factory.mojom",
     "mediastream/aec_dump.mojom",
@@ -282,11 +290,6 @@ mojom("mojom_platform") {
     {
       types = [
         {
-          mojom = "blink.mojom.DragOperation"
-          cpp = "::blink::DragOperation"
-          copyable_pass_by_value = true
-        },
-        {
           mojom = "blink.mojom.AllowedDragOperations"
           cpp = "::blink::DragOperationsMask"
           copyable_pass_by_value = true
@@ -332,10 +335,6 @@ mojom("mojom_platform") {
           mojom = "blink.mojom.MediaDeviceInfo"
           cpp = "::blink::WebMediaDeviceInfo"
         },
-        {
-          mojom = "blink.mojom.FacingMode"
-          cpp = "::media::VideoFacingMode"
-        },
       ]
       traits_headers = [ "//third_party/blink/public/common/mediastream/media_devices_mojom_traits.h" ]
     },
@@ -375,6 +374,15 @@ mojom("mojom_platform") {
         },
       ]
       traits_headers = [ "//third_party/blink/public/common/widget/visual_properties_mojom_traits.h" ]
+    },
+    {
+      types = [
+        {
+          mojom = "blink.mojom.FrameVisualProperties"
+          cpp = "::blink::FrameVisualProperties"
+        },
+      ]
+      traits_headers = [ "//third_party/blink/public/common/frame/frame_visual_properties_mojom_traits.h" ]
     },
     {
       types = [
@@ -539,15 +547,6 @@ mojom("mojom_platform") {
     {
       types = [
         {
-          mojom = "blink.mojom.DeviceThermalState"
-          cpp = "::base::PowerObserver::DeviceThermalState"
-        },
-      ]
-      traits_headers = [ "//third_party/blink/public/common/peerconnection/peer_connection_tracker_mojom_traits.h" ]
-    },
-    {
-      types = [
-        {
           mojom = "blink.mojom.PolicyValue"
           cpp = "::blink::PolicyValue"
         },
@@ -660,6 +659,7 @@ mojom("android_mojo_bindings") {
     "payments/payment_handler_host.mojom",
     "payments/payment_request.mojom",
     "webauthn/authenticator.mojom",
+    "webshare/share_error.mojom",
     "webshare/webshare.mojom",
   ]
 
@@ -792,6 +792,7 @@ mojom("mojom_core") {
     "frame/frame.mojom",
     "frame/frame_owner_properties.mojom",
     "frame/frame_policy.mojom",
+    "frame/frame_visual_properties.mojom",
     "frame/navigation_initiator.mojom",
 
     # transferable_message.mojom depends the other three messaging/ mojom files.
@@ -837,6 +838,7 @@ mojom("mojom_core") {
     "//mojo/public/mojom/base",
     "//services/network/public/mojom",
     "//services/service_manager/public/mojom",
+    "//services/viz/public/mojom",
     "//skia/public/mojom",
     "//third_party/blink/public/mojom/service_worker:storage",
     "//ui/base/mojom",
@@ -947,9 +949,13 @@ mojom("mojom_core") {
     ":android_mojo_bindings",
     ":mojom_platform",
     "//services/network/public/mojom",
+    "//services/viz/public/mojom",
     "//third_party/blink/public/mojom/service_worker:storage",
   ]
-  component_deps_blink = [ "//third_party/blink/renderer/platform" ]
+  component_deps_blink = [
+    "//services/viz/public/mojom",
+    "//third_party/blink/renderer/platform",
+  ]
 
   export_class_attribute = "BLINK_COMMON_EXPORT"
   export_define = "BLINK_COMMON_IMPLEMENTATION=1"

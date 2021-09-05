@@ -211,30 +211,46 @@ SkColor AshColorProvider::GetControlsLayerColor(ControlsLayerType type) const {
 SkColor AshColorProvider::GetContentLayerColor(ContentLayerType type) const {
   const bool is_dark_mode = IsDarkModeEnabled();
   switch (type) {
+    case ContentLayerType::kLoginScrollBarColor:
     case ContentLayerType::kSeparatorColor:
     case ContentLayerType::kShelfHandleColor:
       return is_dark_mode ? SkColorSetA(SK_ColorWHITE, 0x24)
                           : SkColorSetA(SK_ColorBLACK, 0x24);
     case ContentLayerType::kIconColorSecondary:
       return gfx::kGoogleGrey500;
+    case ContentLayerType::kIconColorSecondaryBackground:
+      return is_dark_mode ? gfx::kGoogleGrey100 : gfx::kGoogleGrey800;
     case ContentLayerType::kButtonLabelColor:
     case ContentLayerType::kButtonIconColor:
     case ContentLayerType::kAppStateIndicatorColor:
     case ContentLayerType::kSliderColorInactive:
     case ContentLayerType::kRadioColorInactive:
       return is_dark_mode ? gfx::kGoogleGrey200 : gfx::kGoogleGrey700;
+    case ContentLayerType::kSwitchKnobColorInactive:
+      return is_dark_mode ? gfx::kGoogleGrey800 : SK_ColorWHITE;
+    case ContentLayerType::kSwitchTrackColorInactive:
+      return GetSecondToneColor(is_dark_mode ? gfx::kGoogleGrey200
+                                             : gfx::kGoogleGrey700);
     case ContentLayerType::kButtonLabelColorBlue:
     case ContentLayerType::kSliderColorActive:
     case ContentLayerType::kRadioColorActive:
+    case ContentLayerType::kSwitchAccessInnerStrokeColor:
+    case ContentLayerType::kSwitchKnobColorActive:
       return is_dark_mode ? gfx::kGoogleBlue300 : gfx::kGoogleBlue600;
+    case ContentLayerType::kSwitchTrackColorActive:
+      return GetSecondToneColor(
+          GetContentLayerColor(ContentLayerType::kSwitchKnobColorActive));
     case ContentLayerType::kButtonLabelColorPrimary:
     case ContentLayerType::kButtonIconColorPrimary:
+    case ContentLayerType::kBatteryBadgeColor:
       return is_dark_mode ? gfx::kGoogleGrey900 : gfx::kGoogleGrey200;
     case ContentLayerType::kAppStateIndicatorColorInactive:
       return GetDisabledColor(
           GetContentLayerColor(ContentLayerType::kAppStateIndicatorColor));
     case ContentLayerType::kCurrentDeskColor:
       return is_dark_mode ? SK_ColorWHITE : SK_ColorBLACK;
+    case ContentLayerType::kSwitchAccessOuterStrokeColor:
+      return is_dark_mode ? SK_ColorBLACK : SK_ColorWHITE;
     default:
       return ResolveColor(type, is_dark_mode);
   }
@@ -335,7 +351,7 @@ void AshColorProvider::DecorateIconButton(views::ImageButton* button,
   button->SetImage(views::Button::STATE_NORMAL, new_normal_image);
   button->SetImage(
       views::Button::STATE_DISABLED,
-      gfx::CreateVectorIcon(icon, icon_size, GetDisabledColor(icon_color)));
+      gfx::CreateVectorIcon(icon, icon_size, GetDisabledColor(normal_color)));
 }
 
 void AshColorProvider::AddObserver(ColorModeObserver* observer) {

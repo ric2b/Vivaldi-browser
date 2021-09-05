@@ -151,7 +151,7 @@ class FakeAuthInstance : public mojom::AuthInstance {
 
   mojom::AccountInfo* account_info() { return account_info_.get(); }
 
-  mojom::ArcSignInStatus sign_in_status() const { return status_; }
+  mojom::ArcAuthCodeStatus auth_code_status() const { return status_; }
 
   bool sign_in_persistent_error() const { return persistent_error_; }
 
@@ -165,7 +165,7 @@ class FakeAuthInstance : public mojom::AuthInstance {
 
  private:
   void OnPrimaryAccountInfoResponse(base::OnceClosure done_closure,
-                                    mojom::ArcSignInStatus status,
+                                    mojom::ArcAuthCodeStatus status,
                                     mojom::AccountInfoPtr account_info) {
     account_info_ = std::move(account_info);
     status_ = status;
@@ -173,7 +173,7 @@ class FakeAuthInstance : public mojom::AuthInstance {
   }
 
   void OnAccountInfoResponse(base::OnceClosure done_closure,
-                             mojom::ArcSignInStatus status,
+                             mojom::ArcAuthCodeStatus status,
                              mojom::AccountInfoPtr account_info,
                              bool persistent_error) {
     status_ = status;
@@ -183,7 +183,7 @@ class FakeAuthInstance : public mojom::AuthInstance {
   }
 
   mojo::Remote<mojom::AuthHost> host_remote_;
-  mojom::ArcSignInStatus status_;
+  mojom::ArcAuthCodeStatus status_;
   bool persistent_error_;
   mojom::AccountInfoPtr account_info_;
   base::OnceClosure done_closure_;
@@ -227,8 +227,7 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
     ArcSessionManager::Get()->SetArcSessionRunnerForTesting(
         std::make_unique<ArcSessionRunner>(
             base::BindRepeating(FakeArcSession::Create)));
-    EXPECT_TRUE(ExpandPropertyFilesForTesting(ArcSessionManager::Get(),
-                                              temp_dir_.GetPath()));
+    ExpandPropertyFilesForTesting(ArcSessionManager::Get());
 
     chromeos::ProfileHelper::SetAlwaysReturnPrimaryUserForTesting(true);
   }
@@ -597,8 +596,8 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   run_loop.Run();
 
   EXPECT_FALSE(auth_instance().account_info());
-  EXPECT_EQ(mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR,
-            auth_instance().sign_in_status());
+  EXPECT_EQ(mojom::ArcAuthCodeStatus::CHROME_SERVER_COMMUNICATION_ERROR,
+            auth_instance().auth_code_status());
 }
 
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, FetchSecondaryAccountInfoSucceeds) {
@@ -639,8 +638,8 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   run_loop.Run();
 
   EXPECT_FALSE(auth_instance().account_info());
-  EXPECT_EQ(mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR,
-            auth_instance().sign_in_status());
+  EXPECT_EQ(mojom::ArcAuthCodeStatus::CHROME_SERVER_COMMUNICATION_ERROR,
+            auth_instance().auth_code_status());
 }
 
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
@@ -657,8 +656,8 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   run_loop.Run();
 
   EXPECT_FALSE(auth_instance().account_info());
-  EXPECT_EQ(mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR,
-            auth_instance().sign_in_status());
+  EXPECT_EQ(mojom::ArcAuthCodeStatus::CHROME_SERVER_COMMUNICATION_ERROR,
+            auth_instance().auth_code_status());
   EXPECT_TRUE(auth_instance().sign_in_persistent_error());
 }
 
@@ -677,8 +676,8 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   run_loop.Run();
 
   EXPECT_FALSE(auth_instance().account_info());
-  EXPECT_EQ(mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR,
-            auth_instance().sign_in_status());
+  EXPECT_EQ(mojom::ArcAuthCodeStatus::CHROME_SERVER_COMMUNICATION_ERROR,
+            auth_instance().auth_code_status());
   EXPECT_TRUE(auth_instance().sign_in_persistent_error());
 }
 
@@ -694,8 +693,8 @@ IN_PROC_BROWSER_TEST_P(
   run_loop.Run();
 
   EXPECT_FALSE(auth_instance().account_info());
-  EXPECT_EQ(mojom::ArcSignInStatus::CHROME_ACCOUNT_NOT_FOUND,
-            auth_instance().sign_in_status());
+  EXPECT_EQ(mojom::ArcAuthCodeStatus::CHROME_ACCOUNT_NOT_FOUND,
+            auth_instance().auth_code_status());
   EXPECT_TRUE(auth_instance().sign_in_persistent_error());
 }
 

@@ -52,7 +52,6 @@
 
 #include "app/vivaldi_constants.h"
 #include "base/win/registry.h"
-#include "base/win/windows_version.h"
 #include "base/win/win_util.h"
 
 #include "installer/util/vivaldi_install_util.h"
@@ -149,15 +148,15 @@ void AddChromeToMediaPlayerList() {
     LOG(ERROR) << "Could not add Chrome to media player inclusion list.";
 }
 
-// Copy master_preferences file provided to installer, in the same folder
+// Copy the initial preferences file provided to installer, in the same folder
 // as chrome.exe so Chrome first run can find it. This function will be called
 // only on the first install of Chrome.
 void CopyPreferenceFileForFirstRun(const InstallerState& installer_state,
                                    const base::FilePath& prefs_source_path) {
   base::FilePath prefs_dest_path(
-      installer_state.target_path().AppendASCII(kDefaultMasterPrefs));
+      installer_state.target_path().AppendASCII(kLegacyInitialPrefs));
   if (!base::CopyFile(prefs_source_path, prefs_dest_path)) {
-    VLOG(1) << "Failed to copy master preferences from:"
+    VLOG(1) << "Failed to copy initial preferences from:"
             << prefs_source_path.value() << " gle: " << ::GetLastError();
   }
 }
@@ -237,7 +236,7 @@ InstallStatus InstallNewVersion(const InstallParams& install_params,
   }
 
   // if standalone install we treat this as a first install
-  if (installer_state.is_standalone()) {
+  if (installer_state.is_vivaldi_standalone()) {
     VLOG(1) << "Standalone install of version " << new_version.GetString();
     return installer::FIRST_INSTALL_SUCCESS;
   }
@@ -262,7 +261,8 @@ std::string GenerateVisualElementsManifest(const base::Version& version) {
       "      Square70x70Logo='%ls\\SmallLogo%ls.png'\r\n"
       "      Square44x44Logo='%ls\\SmallLogo%ls.png'\r\n"
       "      ForegroundText='light'\r\n"
-      "      BackgroundColor='" VIVALDI_RELEASE_BACKGROUND_COLOR "'/>\r\n"
+      "      BackgroundColor='" VIVALDI_RELEASE_BACKGROUND_COLOR
+      "'/>\r\n"
       "</Application>\r\n";
 
   // Construct the relative path to the versioned VisualElements directory.
@@ -338,13 +338,11 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
       *base::CommandLine::ForCurrentProcess();
   bool is_vivaldi_standalone =
       command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
+  if (is_vivaldi_standalone)
+    return;
 
-  if (is_vivaldi_standalone) {
-    do_not_create_any_shortcuts = true;
-  } else {
   prefs.GetBool(initial_preferences::kDoNotCreateAnyShortcuts,
                 &do_not_create_any_shortcuts);
-  }
   if (do_not_create_any_shortcuts)
     return;
 
@@ -407,13 +405,10 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
       shortcut_operation ==
           ShellUtil::SHELL_SHORTCUT_CREATE_IF_NO_SYSTEM_LEVEL) {
     start_menu_properties.set_pin_to_taskbar(!do_not_create_taskbar_shortcut);
-    if (base::win::GetVersion() >= base::win::Version::WIN7) {
-      base::win::RegKey key(HKEY_CURRENT_USER,
-                            vivaldi::constants::kVivaldiKey, KEY_ALL_ACCESS);
-      if (key.Valid()) {
-        key.WriteValue(vivaldi::constants::kVivaldiPinToTaskbarValue,
-                       DWORD(1));
-      }
+    base::win::RegKey key(HKEY_CURRENT_USER, vivaldi::constants::kVivaldiKey,
+                          KEY_ALL_ACCESS);
+    if (key.Valid()) {
+      key.WriteValue(vivaldi::constants::kVivaldiPinToTaskbarValue, DWORD(1));
     }
   }
 
@@ -449,7 +444,8 @@ void RegisterChromeOnMachine(const InstallerState& installer_state,
                              const base::Version& version) {
   // NOTE(jarle@vivaldi.com):
   // If standalone install and we should not register ourselves, return now.
-  if (installer_state.is_standalone() && !installer_state.register_standalone())
+  if (installer_state.is_vivaldi_standalone() &&
+      !installer_state.is_vivaldi_register_standalone())
     return;
 
   // Try to add Chrome to Media Player shim inclusion list. We don't do any
@@ -477,19 +473,10 @@ void RegisterChromeOnMachine(const InstallerState& installer_state,
     ShellUtil::RegisterChromeBrowserBestEffort(chrome_exe);
   }
 
-  base::string16 command;
-  if (make_chrome_default ||
-      (!installer_state.is_vivaldi_update() &&
-       (!base::win::ReadCommandFromAutoRun(
-            HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName, &command) ||
-        command.empty()))) {
-    command = installer_state.target_path()
-        .Append(vivaldi::constants::kVivaldiUpdateNotifierExe)
-        .value();
-    command = L"\"" + command + L"\"";
-    base::win::AddCommandToAutoRun(
-        HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName, command);
-   }
+  if (make_chrome_default || (!installer_state.is_vivaldi_update() &&
+                              !vivaldi::IsUpdateNotifierEnabledForAnyPath())) {
+    vivaldi::EnableUpdateNotifierFromInstaller(installer_state.target_path());
+  }
 }
 
 InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
@@ -514,16 +501,6 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
   // InstallNewVersion() below.
   installer_state.SetStage(CREATING_VISUAL_MANIFEST);
   CreateVisualElementsManifest(src_path, new_version);
-
-  // If we are about to reinstall the same version, just kill all the update
-  // notifiers since they have a lock over the version subfolder.
-  if (installer_state.is_vivaldi() &&
-      base::PathExists(
-          installer_state.target_path().AppendASCII(new_version.GetString()))) {
-    vivaldi::KillProcesses(vivaldi::GetRunningProcessesForPath(
-        installer_state.target_path().Append(
-          vivaldi::constants::kVivaldiUpdateNotifierExe)));
-  }
 
   InstallStatus result =
       InstallNewVersion(install_params, IsDowngradeAllowed(prefs));
@@ -570,7 +547,7 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
 
     // If this is not the user's first Chrome install, but they have chosen
     // Chrome to become their default browser on the download page, we must
-    // force it here because the master_preferences file will not get copied
+    // force it here because the initial preferences file will not get copied
     // into the build.
     bool force_chrome_default_for_user = false;
     if (result == NEW_VERSION_UPDATED || result == INSTALL_REPAIRED ||
@@ -584,39 +561,11 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
         new_version);
 
     if (!installer_state.system_install() &&
-        !installer_state.is_standalone()) {
+        !installer_state.is_vivaldi_standalone()) {
       UpdateDefaultBrowserBeaconForPath(
           installer_state.target_path().Append(kChromeExe));
     }
 
-    if (installer_state.is_vivaldi()) {
-      // Take a snapshot of notifiers running before we send the events.
-      std::vector<base::win::ScopedHandle> update_notifier_processes(
-          vivaldi::GetRunningProcessesForPath(
-              installer_state.target_path().Append(
-                vivaldi::constants::kVivaldiUpdateNotifierOldExe)));
-      base::string16 quit_event_path(L"Global\\Vivaldi/Update_notifier/Quit/");
-      base::string16 normalized_path =
-          installer_state.target_path().NormalizePathSeparatorsTo(L'/').value();
-      // See
-      // https://web.archive.org/web/20130528052217/http://blogs.msdn.com/b/michkap/archive/2005/10/17/481600.aspx
-      CharUpper(&normalized_path[0]);
-      quit_event_path += normalized_path;
-      installer_state.target_path().NormalizePathSeparatorsTo(L'/').value();
-      base::win::ScopedHandle quit_event(
-          OpenEvent(EVENT_MODIFY_STATE, FALSE, quit_event_path.c_str()));
-      SetEvent(quit_event.Get());
-      // This is hopefully enough time for all running notifiers to be notified.
-      Sleep(1000);
-      ResetEvent(quit_event.Get());
-      // Kill any remaining notifier
-      vivaldi::KillProcesses(update_notifier_processes);
-      base::DeleteFile(installer_state.target_path().Append(
-          vivaldi::constants::kVivaldiUpdateNotifierOldExe));
-    }
-    // For Vivaldi, do not clean up old versions here. The old setup.exe is used
-    // when delta patching itself. The cleanup is done in setup_main.cc.
-    if (!installer_state.is_vivaldi()) {
     // Delete files that belong to old versions of Chrome. If that fails during
     // a not-in-use update, launch a --delete-old-version process. If this is an
     // in-use update, a --delete-old-versions process will be launched when
@@ -629,7 +578,6 @@ InstallStatus InstallOrUpdateProduct(const InstallParams& install_params,
           installer_state.GetInstallerDirectory(new_version)
               .Append(setup_path.BaseName());
       LaunchDeleteOldVersionsProcess(new_version_setup_path, installer_state);
-    }
     }
   }
 
@@ -656,6 +604,12 @@ void LaunchDeleteOldVersionsProcess(const base::FilePath& setup_path,
     command_line.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
                                   vivaldi_install_dir);
   }
+#if !defined(OFFICIAL_BUILD)
+  extern base::FilePath* vivaldi_debug_subprocesses_exe;
+  if (vivaldi_debug_subprocesses_exe) {
+    command_line.SetProgram(*vivaldi_debug_subprocesses_exe);
+  }
+#endif
 
   base::LaunchOptions launch_options;
   launch_options.start_hidden = true;
@@ -675,9 +629,9 @@ void HandleOsUpgradeForBrowser(const InstallerState& installer_state,
                                const base::Version& installed_version) {
   VLOG(1) << "Updating and registering shortcuts for --on-os-upgrade.";
 
-  // Read master_preferences copied beside chrome.exe at install.
+  // Read the initial preferences copied beside chrome.exe at install.
   const InitialPreferences prefs(
-      installer_state.target_path().AppendASCII(kDefaultMasterPrefs));
+      installer_state.target_path().AppendASCII(kLegacyInitialPrefs));
 
   // Update shortcuts at this install level (per-user shortcuts on system-level
   // installs will be updated through Active Setup).
@@ -751,10 +705,10 @@ void HandleActiveSetupForBrowser(const InstallerState& installer_state,
           ? INSTALL_SHORTCUT_REPLACE_EXISTING
           : INSTALL_SHORTCUT_CREATE_EACH_IF_NO_SYSTEM_LEVEL;
 
-  // Read master_preferences copied beside chrome.exe at install for the sake of
-  // creating/updating shortcuts.
+  // Read the initial preferences copied beside chrome.exe at install for the
+  // sake of creating/updating shortcuts.
   const base::FilePath installation_root = installer_state.target_path();
-  InitialPreferences prefs(installation_root.AppendASCII(kDefaultMasterPrefs));
+  InitialPreferences prefs(installation_root.AppendASCII(kLegacyInitialPrefs));
   base::FilePath chrome_exe(installation_root.Append(kChromeExe));
   CreateOrUpdateShortcuts(chrome_exe, prefs, CURRENT_USER, install_operation);
 

@@ -301,9 +301,11 @@ void WebUILoginView::AboutToRequestFocusFromTabTraversal(bool reverse) {
   GetWidget()->Activate();
   web_view_->web_contents()->Focus();
 
-  content::WebUI* web_ui = GetWebUI();
-  if (web_ui)
-    web_ui->CallJavascriptFunctionUnsafe("cr.ui.Oobe.focusReturned");
+  if (!GetOobeUI())
+    return;
+  CoreOobeView* view = GetOobeUI()->GetCoreOobeView();
+  if (view)
+    view->FocusReturned(reverse);
 }
 
 void WebUILoginView::Observe(int type,
@@ -341,7 +343,8 @@ void WebUILoginView::OnKeyboardVisibilityChanged(bool visible) {
   if (!GetOobeUI())
     return;
   CoreOobeView* view = GetOobeUI()->GetCoreOobeView();
-  view->SetVirtualKeyboardShown(visible);
+  if (view)
+    view->SetVirtualKeyboardShown(visible);
 }
 
 // WebUILoginView private: -----------------------------------------------------
@@ -372,10 +375,10 @@ bool WebUILoginView::HandleKeyboardEvent(content::WebContents* source,
   // Make sure error bubble is cleared on keyboard event. This is needed
   // when the focus is inside an iframe. Only clear on KeyDown to prevent hiding
   // an immediate authentication error (See crbug.com/103643).
-  if (event.GetType() == blink::WebInputEvent::Type::kKeyDown) {
-    content::WebUI* web_ui = GetWebUI();
-    if (web_ui)
-      web_ui->CallJavascriptFunctionUnsafe("cr.ui.Oobe.clearErrors");
+  if (GetOobeUI() && event.GetType() == blink::WebInputEvent::Type::kKeyDown) {
+    CoreOobeView* view = GetOobeUI()->GetCoreOobeView();
+    if (view)
+      view->ClearErrors();
   }
   return handled;
 }
@@ -387,8 +390,10 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
     return false;
 
   // FocusLoginShelf focuses either system tray or login shelf buttons.
-  ash::LoginScreen::Get()->FocusLoginShelf(reverse);
-  return true;
+  // Only do this if the login shelf is enabled.
+  if (shelf_enabled_)
+    ash::LoginScreen::Get()->FocusLoginShelf(reverse);
+  return shelf_enabled_;
 }
 
 void WebUILoginView::RequestMediaAccessPermission(

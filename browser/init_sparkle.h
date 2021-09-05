@@ -13,7 +13,7 @@ namespace init_sparkle {
 
 struct Config {
   GURL appcast_url;
-  bool show_appcast = false;
+  bool with_custom_url = false;
 };
 
 Config GetConfig(const base::CommandLine& command_line);

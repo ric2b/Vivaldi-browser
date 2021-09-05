@@ -127,22 +127,19 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
     return nullptr;
   }
 
-  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
-      interface_provider;
-  auto interface_provider_receiver(
-      interface_provider.InitWithNewPipeAndPassReceiver());
-
   // Create a FrameTreeNode in the outer WebContents to host the portal, in
   // response to the creation of a portal in the renderer process.
   FrameTreeNode* outer_node = outer_contents_impl->GetFrameTree()->AddFrame(
       owner_render_frame_host_, owner_render_frame_host_->GetProcess()->GetID(),
       owner_render_frame_host_->GetProcess()->GetNextRoutingID(),
-      std::move(interface_provider_receiver),
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>()
           .InitWithNewPipeAndPassReceiver(),
-      blink::mojom::TreeScopeType::kDocument, "", "", true,
-      base::UnguessableToken::Create(), base::UnguessableToken::Create(),
-      blink::FramePolicy(), blink::mojom::FrameOwnerProperties(), false,
+      // Pass a null receiver for PolicyContainerHost. The PolicyContainerHost
+      // remote is sent to Blink in the CreateRenderView mojo message.
+      mojo::NullAssociatedReceiver(), blink::mojom::TreeScopeType::kDocument,
+      "", "", true, base::UnguessableToken::Create(),
+      base::UnguessableToken::Create(), blink::FramePolicy(),
+      blink::mojom::FrameOwnerProperties(), false,
       blink::mojom::FrameOwnerElementType::kPortal);
   outer_node->AddObserver(this);
 
@@ -248,9 +245,8 @@ void Portal::Navigate(const GURL& url,
   // navigated by a frame other than the owning frame. Find a way to route the
   // correct initiator of the portal navigation to this call.
   portal_root->navigator().NavigateFromFrameProxy(
-      portal_frame, url,
-      GlobalFrameRoutingId(owner_render_frame_host_->GetProcess()->GetID(),
-                           owner_render_frame_host_->GetRoutingID()),
+      portal_frame, url, &owner_render_frame_host_->GetFrameToken(),
+      owner_render_frame_host_->GetProcess()->GetID(),
       owner_render_frame_host_->GetLastCommittedOrigin(),
       owner_render_frame_host_->GetSiteInstance(),
       mojo::ConvertTo<Referrer>(referrer), ui::PAGE_TRANSITION_LINK,

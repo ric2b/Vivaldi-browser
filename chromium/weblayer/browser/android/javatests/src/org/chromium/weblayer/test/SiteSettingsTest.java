@@ -28,7 +28,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.weblayer.SettingsTestUtils;
+import org.chromium.weblayer.SiteSettingsActivity;
 
 /**
  * Tests the behavior of the Site Settings UI.
@@ -41,22 +42,24 @@ public class SiteSettingsTest {
     private static final String PROFILE_NAME = "DefaultProfile";
 
     @Rule
-    public SiteSettingsActivityTestRule mSiteSettingsTestRule = new SiteSettingsActivityTestRule();
+    public SettingsActivityTestRule mSettingsTestRule = new SettingsActivityTestRule();
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(84)
     public void testSiteSettingsLaunches() throws InterruptedException {
-        mSiteSettingsTestRule.launchCategoryListWithProfile(PROFILE_NAME);
+        mSettingsTestRule.launchActivity(
+                SiteSettingsActivity.createIntentForSiteSettingsCategoryList(
+                        mSettingsTestRule.getContext(), PROFILE_NAME, /*isIncognito=*/false));
 
         onView(withText("All sites")).check(matches(isDisplayed()));
     }
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(84)
     public void testAllSitesLaunches() throws InterruptedException {
-        mSiteSettingsTestRule.launchCategoryListWithProfile(PROFILE_NAME);
+        mSettingsTestRule.launchActivity(
+                SiteSettingsActivity.createIntentForSiteSettingsCategoryList(
+                        mSettingsTestRule.getContext(), PROFILE_NAME, /*isIncognito=*/false));
 
         onView(withText("All sites")).perform(click());
 
@@ -66,9 +69,10 @@ public class SiteSettingsTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(84)
     public void testJavascriptExceptionPopupLaunches() throws InterruptedException {
-        mSiteSettingsTestRule.launchCategoryListWithProfile(PROFILE_NAME);
+        mSettingsTestRule.launchActivity(
+                SiteSettingsActivity.createIntentForSiteSettingsCategoryList(
+                        mSettingsTestRule.getContext(), PROFILE_NAME, /*isIncognito=*/false));
 
         onView(withText("JavaScript")).perform(click());
         onView(withText("Add site exception")).perform(click());
@@ -78,9 +82,9 @@ public class SiteSettingsTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(84)
     public void testSingleSiteSoundPopupLaunches() throws InterruptedException {
-        mSiteSettingsTestRule.launchSingleSiteSettingsWithProfile(PROFILE_NAME, GOOGLE_URL);
+        mSettingsTestRule.launchActivity(SettingsTestUtils.createIntentForSiteSettingsSingleWebsite(
+                mSettingsTestRule.getContext(), PROFILE_NAME, /*isIncognito=*/false, GOOGLE_URL));
 
         onView(withText("Sound")).perform(click());
 
@@ -89,9 +93,9 @@ public class SiteSettingsTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(84)
     public void testSingleSiteClearPopupLaunches() throws InterruptedException {
-        mSiteSettingsTestRule.launchSingleSiteSettingsWithProfile(PROFILE_NAME, GOOGLE_URL);
+        mSettingsTestRule.launchActivity(SettingsTestUtils.createIntentForSiteSettingsSingleWebsite(
+                mSettingsTestRule.getContext(), PROFILE_NAME, /*isIncognito=*/false, GOOGLE_URL));
 
         onView(withText("Clear & reset")).perform(click());
 
@@ -101,19 +105,20 @@ public class SiteSettingsTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(84)
-    @DisabledTest(message = "TODO(crbug.com/1128184): Fix flakiness.")
     public void testSingleSiteLocationAccess() throws InterruptedException {
         try {
             Intents.init();
-            mSiteSettingsTestRule.launchSingleSiteSettingsWithProfile(PROFILE_NAME, GOOGLE_URL);
-
-            onView(withText("Location access")).perform(click());
+            mSettingsTestRule.launchActivity(
+                    SettingsTestUtils.createIntentForSiteSettingsSingleWebsite(
+                            mSettingsTestRule.getContext(), PROFILE_NAME, /*isIncognito=*/false,
+                            GOOGLE_URL));
 
             Matcher<Intent> settingsMatcher =
                     IntentMatchers.hasAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
             intending(settingsMatcher)
                     .respondWith(new ActivityResult(Activity.RESULT_OK, new Intent()));
+
+            onView(withText("Location")).perform(click());
 
             intended(settingsMatcher);
         } finally {

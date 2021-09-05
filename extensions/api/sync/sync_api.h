@@ -144,7 +144,7 @@ class SyncRestoreEncryptionTokenFunction : public ExtensionFunction {
   ~SyncRestoreEncryptionTokenFunction() override = default;
   // ExtensionFunction:
   ResponseAction Run() override;
-  void OnRestoreDone(bool result);
+  void OnRestoreDone(std::unique_ptr<std::string> token, bool result);
 
   DISALLOW_COPY_AND_ASSIGN(SyncRestoreEncryptionTokenFunction);
 };

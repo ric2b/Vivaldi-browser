@@ -70,13 +70,15 @@ class POLICY_EXPORT PolicyMap {
     // Returns true if |this| equals |other|.
     bool Equals(const Entry& other) const;
 
-    // Add a non-localized error given its UTF-8 string contents.
-    void AddError(base::StringPiece error);
     // Add a localized error given its l10n message ID.
     void AddError(int message_id);
+    // Add a localized error given its l10n message ID and placeholder args.
+    void AddError(int message_id, std::vector<base::string16> message_args);
 
-    // Add a localized error given its l10n message ID.
+    // Add a localized warning given its l10n message ID.
     void AddWarning(int message_id);
+    // Add a localized warning given its l10n message ID and placeholder args.
+    void AddWarning(int message_id, std::vector<base::string16> message_args);
 
     // Adds a conflicting policy.
     void AddConflictingPolicy(Entry&& conflict);
@@ -124,9 +126,10 @@ class POLICY_EXPORT PolicyMap {
     base::Optional<base::Value> value_;
     bool ignored_ = false;
     bool is_default_value_ = false;
-    std::string error_strings_;
-    std::set<int> error_message_ids_;
-    std::set<int> warning_message_ids_;
+    std::map<int, base::Optional<std::vector<base::string16>>>
+        error_message_ids_;
+    std::map<int, base::Optional<std::vector<base::string16>>>
+        warning_message_ids_;
   };
 
   typedef std::map<std::string, Entry> PolicyMapType;
@@ -158,15 +161,20 @@ class POLICY_EXPORT PolicyMap {
 
   void Set(const std::string& policy, Entry entry);
 
-  // Adds non-localized |error| to the map for the key |policy| that should be
-  // shown to the user alongside the value in the policy UI. This should only be
-  // called for policies that are already stored in this map.
-  void AddError(const std::string& policy, const std::string& error);
-
   // Adds a localized error with |message_id| to the map for the key |policy|
   // that should be shown to the user alongisde the value in the policy UI. This
   // should only be called for policies that are already stored in the map.
   void AddError(const std::string& policy, int message_id);
+
+  // Adds a localized error with |message_id| and placeholder arguments
+  // |message_args| to the map for the key |policy| that should be shown to the
+  // user alongisde the value in the policy UI. The number of placeholders in
+  // the policy string corresponding to |message_id| must be equal to the number
+  // of arguments in |message_args|. This should only be called for policies
+  // that are already stored in the map.
+  void AddError(const std::string& policy,
+                int message_id,
+                std::vector<base::string16> message_args);
 
   // Return True if the policy is set but its value is ignored because it does
   // not share the highest priority from its atomic group. Returns False if the

@@ -393,8 +393,6 @@ class UtilitiesGetSystemCountryFunction : public ExtensionFunction {
  private:
   ~UtilitiesGetSystemCountryFunction() override = default;
 
-  std::string ReadCountry();
-
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetSystemCountryFunction);

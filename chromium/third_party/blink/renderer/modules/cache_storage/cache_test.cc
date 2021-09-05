@@ -162,6 +162,12 @@ class ErrorCacheForTests : public mojom::blink::CacheStorageCache {
     result->set_status(error_);
     std::move(callback).Run(std::move(result));
   }
+  void GetAllMatchedEntries(mojom::blink::FetchAPIRequestPtr request,
+                            mojom::blink::CacheQueryOptionsPtr query_options,
+                            int64_t trace_id,
+                            GetAllMatchedEntriesCallback callback) override {
+    NOTREACHED();
+  }
   void Keys(mojom::blink::FetchAPIRequestPtr fetch_api_request,
             mojom::blink::CacheQueryOptionsPtr query_options,
             int64_t trace_id,
@@ -182,6 +188,13 @@ class ErrorCacheForTests : public mojom::blink::CacheStorageCache {
     last_error_web_cache_method_called_ = "dispatchBatch";
     CheckBatchOperationsIfProvided(batch_operations);
     std::move(callback).Run(CacheStorageVerboseError::New(error_, String()));
+  }
+  void WriteSideData(const blink::KURL& url,
+                     base::Time expected_response_time,
+                     mojo_base::BigBuffer data,
+                     int64_t trace_id,
+                     WriteSideDataCallback callback) override {
+    NOTREACHED();
   }
 
  protected:
@@ -753,12 +766,13 @@ TEST_F(CacheStorageTest, Add) {
   fetcher->SetExpectedFetchUrl(&url);
 
   Request* request = NewRequestFromUrl(url);
-  Response* response = Response::Create(
-      GetScriptState(),
-      BodyStreamBuffer::Create(
-          GetScriptState(),
-          MakeGarbageCollected<FormDataBytesConsumer>(content), nullptr),
-      content_type, ResponseInit::Create(), exception_state);
+  Response* response =
+      Response::Create(GetScriptState(),
+                       BodyStreamBuffer::Create(
+                           GetScriptState(),
+                           MakeGarbageCollected<FormDataBytesConsumer>(content),
+                           nullptr, /*cached_metadata_handler=*/nullptr),
+                       content_type, ResponseInit::Create(), exception_state);
   fetcher->SetResponse(response);
 
   Vector<mojom::blink::BatchOperationPtr> expected_put_operations(size_t(1));

@@ -41,6 +41,10 @@ class TabStripRegionView final : public views::AccessiblePaneView,
 
   TabSearchButton* tab_search_button() { return tab_search_button_; }
 
+  views::View* reserved_grab_handle_space_for_testing() {
+    return reserved_grab_handle_space_;
+  }
+
   // views::AccessiblePaneView:
   const char* GetClassName() const override;
   void ChildPreferredSizeChanged(views::View* child) override;
@@ -80,7 +84,7 @@ class TabStripRegionView final : public views::AccessiblePaneView,
   views::ImageButton* leading_scroll_button_;
   views::ImageButton* trailing_scroll_button_;
 
-  const std::unique_ptr<ui::TouchUiController::Subscription> subscription_ =
+  const base::CallbackListSubscription subscription_ =
       ui::TouchUiController::Get()->RegisterCallback(
           base::BindRepeating(&TabStripRegionView::UpdateNewTabButtonBorder,
                               base::Unretained(this)));

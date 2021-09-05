@@ -15,9 +15,11 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
@@ -77,7 +79,7 @@ class TopControlsSlideControllerTest;
 class WebContentsCloseHandler;
 class WebUITabStripContainerView;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 namespace ui {
 class ThroughputTracker;
 }
@@ -110,7 +112,7 @@ class BrowserView : public BrowserWindow,
                     public ExclusiveAccessBubbleViewsContext,
                     public extensions::ExtensionKeybindingRegistry::Delegate,
                     public ImmersiveModeController::Observer,
-                    public banners::AppBannerManager::Observer {
+                    public webapps::AppBannerManager::Observer {
  public:
   // The browser view's class name.
   static const char kViewClassName[];
@@ -321,14 +323,12 @@ class BrowserView : public BrowserWindow,
       base::RepeatingCallback<void(WindowOpenDisposition)>;
   using OnLinkOpeningFromGestureCallbackList =
       base::RepeatingCallbackList<OnLinkOpeningFromGestureCallback::RunType>;
-  using OnLinkOpeningFromGestureSubscription =
-      std::unique_ptr<OnLinkOpeningFromGestureCallbackList::Subscription>;
 
   // Listens to the "link opened from gesture" event. Callback will be called
   // when a link is opened from user interaction in the same browser window, but
   // before the tabstrip is actually modified. Useful for doing certain types
   // of animations (e.g. "flying link" animation in tablet mode).
-  OnLinkOpeningFromGestureSubscription AddOnLinkOpeningFromGestureCallback(
+  base::CallbackListSubscription AddOnLinkOpeningFromGestureCallback(
       OnLinkOpeningFromGestureCallback callback);
 
   // BrowserWindow:
@@ -453,7 +453,7 @@ class BrowserView : public BrowserWindow,
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
       Browser::DownloadCloseType dialog_type,
-      const base::Callback<void(bool)>& callback) override;
+      base::OnceCallback<void(bool)> callback) override;
   void UserChangedTheme(BrowserThemeChangeType theme_change_type) override;
   void ShowAppMenu() override;
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
@@ -589,7 +589,7 @@ class BrowserView : public BrowserWindow,
   void OnImmersiveFullscreenExited() override;
   void OnImmersiveModeControllerDestroyed() override;
 
-  // banners::AppBannerManager::Observer:
+  // webapps::AppBannerManager::Observer:
   void OnInstallableWebAppStatusUpdated() override;
 
   // Creates an accessible tab label for screen readers that includes the tab
@@ -732,7 +732,7 @@ class BrowserView : public BrowserWindow,
                                    int* command_id) const;
 
   // Updates AppBannerManager::Observer to observe |new_manager| exclusively.
-  void ObserveAppBannerManager(banners::AppBannerManager* new_manager);
+  void ObserveAppBannerManager(webapps::AppBannerManager* new_manager);
 
   // Called by GetAccessibleWindowTitle, split out to make it testable.
   base::string16 GetAccessibleWindowTitleForChannelAndProfile(
@@ -929,7 +929,7 @@ class BrowserView : public BrowserWindow,
 
   std::unique_ptr<ImmersiveModeController> immersive_mode_controller_;
 
-  std::unique_ptr<ui::TouchUiController::Subscription> subscription_ =
+  base::CallbackListSubscription subscription_ =
       ui::TouchUiController::Get()->RegisterCallback(
           base::BindRepeating(&BrowserView::TouchModeChanged,
                               base::Unretained(this)));
@@ -949,10 +949,12 @@ class BrowserView : public BrowserWindow,
   // exited to restore the original pre-fullscreen bounds of the window.
   base::OnceClosure restore_pre_fullscreen_bounds_callback_;
 
-  ScopedObserver<banners::AppBannerManager, banners::AppBannerManager::Observer>
-      app_banner_manager_observer_{this};
+  base::ScopedObservation<webapps::AppBannerManager,
+                          webapps::AppBannerManager::Observer>
+      app_banner_manager_observation_{this};
 
-  ScopedObserver<views::Widget, views::WidgetObserver> widget_observer_{this};
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 
   bool interactive_resize_in_progress_ = false;
 
@@ -965,7 +967,7 @@ class BrowserView : public BrowserWindow,
 
   OnLinkOpeningFromGestureCallbackList link_opened_from_gesture_callbacks_;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // |loading_animation_tracker_| is used to measure animation smoothness for
   // tab loading animation.
   base::Optional<ui::ThroughputTracker> loading_animation_tracker_;

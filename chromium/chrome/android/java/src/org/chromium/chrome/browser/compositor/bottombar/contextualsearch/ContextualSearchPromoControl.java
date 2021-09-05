@@ -23,8 +23,8 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelInflater;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchPreferenceFragment;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
@@ -96,11 +96,8 @@ public class ContextualSearchPromoControl extends OverlayPanelInflater {
      * @param container         The container View used to inflate the View.
      * @param resourceLoader    The resource loader that will handle the snapshot capturing.
      */
-    public ContextualSearchPromoControl(OverlayPanel panel,
-                                        ContextualSearchPromoHost host,
-                                        Context context,
-                                        ViewGroup container,
-                                        DynamicResourceLoader resourceLoader) {
+    ContextualSearchPromoControl(OverlayPanel panel, ContextualSearchPromoHost host,
+            Context context, ViewGroup container, DynamicResourceLoader resourceLoader) {
         super(panel, R.layout.contextual_search_promo_view,
                 R.id.contextual_search_promo, context, container, resourceLoader);
 

@@ -11,8 +11,8 @@ import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/poly
 import {BrowserApi, ZoomBehavior} from './browser_api.js';
 import {FittingType, Point} from './constants.js';
 import {ContentController, MessageData, PluginController, PluginControllerEventType} from './controller.js';
-import {PDFMetrics, UserAction} from './metrics.js';
-import {OpenPdfParamsParser} from './open_pdf_params_parser.js';
+import {record, recordFitTo, recordZoomAction, UserAction} from './metrics.js';
+import {OpenPdfParams, OpenPdfParamsParser} from './open_pdf_params_parser.js';
 import {LoadState} from './pdf_scripting_api.js';
 import {DocumentDimensionsMessageData, MessageObject} from './pdf_viewer_utils.js';
 import {Viewport} from './viewport.js';
@@ -115,11 +115,6 @@ export class PDFViewerBaseElement extends PolymerElement {
     return 0;
   }
 
-  /** @return {boolean} Whether the top toolbar is fixed (does not auto-hide) */
-  hasFixedToolbar() {
-    return false;
-  }
-
   /**
    * @return {!HTMLDivElement}
    * @protected
@@ -219,7 +214,7 @@ export class PDFViewerBaseElement extends PolymerElement {
     this.browserApi = browserApi;
     this.originalUrl = this.browserApi.getStreamInfo().originalUrl;
 
-    PDFMetrics.record(UserAction.DOCUMENT_OPENED);
+    record(UserAction.DOCUMENT_OPENED);
 
     // Parse open pdf parameters.
     this.paramsParser = new OpenPdfParamsParser(destination => {
@@ -248,8 +243,7 @@ export class PDFViewerBaseElement extends PolymerElement {
 
     this.viewport_ = new Viewport(
         scrollContainer, this.getSizer(), this.getContent(),
-        getScrollbarWidth(), defaultZoom, this.getToolbarHeight(),
-        this.hasFixedToolbar());
+        getScrollbarWidth(), defaultZoom, this.getToolbarHeight());
     this.viewport_.setViewportChangedCallback(() => this.viewportChanged_());
     this.viewport_.setBeforeZoomCallback(
         () => this.currentController.beforeZoom());
@@ -324,8 +318,8 @@ export class PDFViewerBaseElement extends PolymerElement {
       if (this.lastViewportPosition) {
         this.viewport_.position = this.lastViewportPosition;
       }
-      this.paramsParser.getViewportFromUrlParams(
-          this.originalUrl, params => this.handleURLParams_(params));
+      this.paramsParser.getViewportFromUrlParams(this.originalUrl)
+          .then(this.handleURLParams_.bind(this));
       this.setLoadState(LoadState.SUCCESS);
       this.sendDocumentLoadedMessage();
       while (this.delayedScriptingMessages_.length > 0) {
@@ -503,7 +497,7 @@ export class PDFViewerBaseElement extends PolymerElement {
    * Handle open pdf parameters. This function updates the viewport as per
    * the parameters mentioned in the url while opening pdf. The order is
    * important as later actions can override the effects of previous actions.
-   * @param {Object} params The open params passed in the URL.
+   * @param {!OpenPdfParams} params The open params passed in the URL.
    * @private
    */
   handleURLParams_(params) {
@@ -601,13 +595,13 @@ export class PDFViewerBaseElement extends PolymerElement {
    */
   onFitToChanged(e) {
     this.updateViewportFit(e.detail);
-    PDFMetrics.recordFitTo(e.detail);
+    recordFitTo(e.detail);
   }
 
   /** @protected */
   onZoomIn() {
     this.viewport_.zoomIn();
-    PDFMetrics.recordZoomAction(/*isZoomIn=*/ true);
+    recordZoomAction(/*isZoomIn=*/ true);
   }
 
   /**
@@ -616,13 +610,13 @@ export class PDFViewerBaseElement extends PolymerElement {
    */
   onZoomChanged(e) {
     this.viewport_.setZoom(e.detail / 100);
-    PDFMetrics.record(UserAction.ZOOM_CUSTOM);
+    record(UserAction.ZOOM_CUSTOM);
   }
 
   /** @protected */
   onZoomOut() {
     this.viewport_.zoomOut();
-    PDFMetrics.recordZoomAction(/*isZoomIn=*/ false);
+    recordZoomAction(/*isZoomIn=*/ false);
   }
 
   /**
@@ -645,14 +639,14 @@ export class PDFViewerBaseElement extends PolymerElement {
 
   /** @protected */
   rotateClockwise() {
-    PDFMetrics.record(UserAction.ROTATE);
+    record(UserAction.ROTATE);
     this.viewport_.rotateClockwise();
     this.currentController.rotateClockwise();
   }
 
   /** @protected */
   rotateCounterclockwise() {
-    PDFMetrics.record(UserAction.ROTATE);
+    record(UserAction.ROTATE);
     this.viewport_.rotateCounterclockwise();
     this.currentController.rotateCounterclockwise();
   }

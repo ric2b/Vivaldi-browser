@@ -105,7 +105,6 @@
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> godtok ikkje påloggingssertifikatet ditt eller det vart ikkje synt fram.</translation>
 <translation id="4506599922270137252">kontakt systemadministratoren</translation>
 <translation id="4522570452068850558">Detaljar</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Prøv å slå av utvidingane dine.</translation>
 <translation id="4592951414987517459">Tilkoplinga di til <ph name="DOMAIN" /> er kryptert med ein moderne krypteringspakke.</translation>
 <translation id="4690462567478992370">Ikkje lenger godta ugyldige sertifikat</translation>
@@ -207,7 +206,7 @@
 <translation id="8150722005171944719">Klarer ikkje å lesa fila hos <ph name="URL" /> .  Ho kan vera fjerna, flytta eller du manglar løyve til å få tilgang.</translation>
 <translation id="8184538546369750125">Bruk systemstandarden (tillat)</translation>
 <translation id="8211406090763984747">Sambandet er trygt</translation>
-<translation id="8225771182978767009">Personen som sette opp opp denne maskina har valt å blokkera denne nettstaden.</translation>
+<translation id="8225771182978767009">Personen som sette opp denne maskina har valt å blokkera denne nettstaden.</translation>
 <translation id="8241707690549784388">Sida du ser etter brukte opplysningar du skreiv inn. Ved å gå attende til ho vil kanskje handlingane du utførte verta repeterte. Vil du halda fram?</translation>
 <translation id="8241712895048303527">Blokker på denne sida</translation>
 <translation id="8286036467436129157">Logg på</translation>

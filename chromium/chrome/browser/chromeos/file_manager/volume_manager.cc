@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -19,7 +20,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -513,10 +513,9 @@ VolumeManager* VolumeManager::Get(content::BrowserContext* context) {
 }
 
 void VolumeManager::Initialize() {
-  // If in the Sign in profile pr the lock screen app profile, skip mounting
-  // and listening for mount events.
-  if (chromeos::ProfileHelper::IsSigninProfile(profile_) ||
-      chromeos::ProfileHelper::IsLockScreenAppProfile(profile_)) {
+  // If in the Sign in profile or the lock screen app profile or lock screen
+  // profile, skip mounting and listening for mount events.
+  if (!chromeos::ProfileHelper::IsRegularProfile(profile_)) {
     return;
   }
 
@@ -901,36 +900,24 @@ void VolumeManager::OnMountEvent(
     chromeos::MountError error_code,
     const chromeos::disks::DiskMountManager::MountPointInfo& mount_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  switch (mount_info.mount_type) {
-    case chromeos::MOUNT_TYPE_ARCHIVE:
-    case chromeos::MOUNT_TYPE_DEVICE: {
-      // Notify a mounting/unmounting event to observers.
-      const chromeos::disks::Disk* const disk =
-          disk_mount_manager_->FindDiskBySourcePath(mount_info.source_path);
-      std::unique_ptr<Volume> volume =
-          Volume::CreateForRemovable(mount_info, disk);
-      switch (event) {
-        case chromeos::disks::DiskMountManager::MOUNTING: {
-          DoMountEvent(error_code, std::move(volume));
-          return;
-        }
-        case chromeos::disks::DiskMountManager::UNMOUNTING:
-          DoUnmountEvent(error_code, *volume);
-          return;
-      }
-      NOTREACHED();
-    }
+  // Network storage is responsible for doing its own mounting.
+  if (mount_info.mount_type == chromeos::MOUNT_TYPE_NETWORK_STORAGE)
+    return;
 
-    // Network storage is responsible for doing its own mounting.
-    case chromeos::MOUNT_TYPE_NETWORK_STORAGE: {
-      break;
+  // Notify a mounting/unmounting event to observers.
+  const chromeos::disks::Disk* const disk =
+      disk_mount_manager_->FindDiskBySourcePath(mount_info.source_path);
+  std::unique_ptr<Volume> volume = Volume::CreateForRemovable(mount_info, disk);
+  switch (event) {
+    case chromeos::disks::DiskMountManager::MOUNTING: {
+      DoMountEvent(error_code, std::move(volume));
+      return;
     }
-
-    case chromeos::MOUNT_TYPE_INVALID: {
-      NOTREACHED();
-      break;
-    }
+    case chromeos::disks::DiskMountManager::UNMOUNTING:
+      DoUnmountEvent(error_code, *volume);
+      return;
   }
+  NOTREACHED();
 }
 
 void VolumeManager::OnFormatEvent(

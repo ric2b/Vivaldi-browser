@@ -6,6 +6,7 @@
 
 <link rel="import" href="/components/common_styles.html">
 <link rel="import" href="/components/hd_iron_icon.html">
+<link rel="import" href="/components/oobe_dialog.html">
 <link rel="import" href="/components/oobe_i18n_behavior.html">
 
 <dom-module id="security-token-pin">
@@ -31,17 +32,15 @@
       </paper-progress>
       <div slot="footer">
         <div id="pinKeyboardContainer" hidden="[[processingCompletion_]]">
-          <pin-keyboard id="pinKeyboard" enable-letters
-              has-error="[[isErrorLabelVisible_(errorLabelId_, userEdited_)]]"
-              aria-label="[[getLabel_(locale, parameters, errorLabelId_,
-                                      userEdited_)]]"
+          <pin-keyboard id="pinKeyboard" enable-letters allow-non-digit
+              has-error="[[isErrorLabelVisible_(parameters, userEdited_)]]"
+              aria-label="[[getLabel_(parameters, userEdited_)]]"
               on-pin-change="onPinChange_" on-submit="onSubmit_"
               disabled="[[!canEdit_]]">
             <div id="errorContainer" role="alert" problem
                 invisible$="[[!isLabelVisible_(parameters, userEdited_)]]">
               <iron-icon id="errorIcon" icon="cr:error-outline"></iron-icon>
-              <span id="error">[[getLabel_(locale, parameters, errorLabelId_,
-                                           userEdited_)]]</span>
+              <span id="error">[[getLabel_(parameters, userEdited_)]]</span>
             </div>
           </pin-keyboard>
         </div>

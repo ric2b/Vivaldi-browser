@@ -97,8 +97,9 @@ void NativeRendererMessagingService::ValidateMessagePort(
   // synchronous.
   context_set->ForEach(
       render_frame,
-      base::Bind(&NativeRendererMessagingService::ValidateMessagePortInContext,
-                 base::Unretained(this), port_id, &has_port));
+      base::BindRepeating(
+          &NativeRendererMessagingService::ValidateMessagePortInContext,
+          base::Unretained(this), port_id, &has_port));
 
   // A reply is only sent if the port is missing, because the port is assumed to
   // exist unless stated otherwise.
@@ -122,7 +123,7 @@ void NativeRendererMessagingService::DispatchOnConnect(
   bool port_created = false;
   context_set->ForEach(
       info.target_id, restrict_to_render_frame,
-      base::Bind(
+      base::BindRepeating(
           &NativeRendererMessagingService::DispatchOnConnectToScriptContext,
           base::Unretained(this), target_port_id, channel_name, &source, info,
           &port_created));
@@ -143,8 +144,9 @@ void NativeRendererMessagingService::DeliverMessage(
     content::RenderFrame* restrict_to_render_frame) {
   context_set->ForEach(
       restrict_to_render_frame,
-      base::Bind(&NativeRendererMessagingService::DeliverMessageToScriptContext,
-                 base::Unretained(this), message, target_port_id));
+      base::BindRepeating(
+          &NativeRendererMessagingService::DeliverMessageToScriptContext,
+          base::Unretained(this), message, target_port_id));
 }
 
 void NativeRendererMessagingService::DispatchOnDisconnect(
@@ -154,7 +156,7 @@ void NativeRendererMessagingService::DispatchOnDisconnect(
     content::RenderFrame* restrict_to_render_frame) {
   context_set->ForEach(
       restrict_to_render_frame,
-      base::Bind(
+      base::BindRepeating(
           &NativeRendererMessagingService::DispatchOnDisconnectToScriptContext,
           base::Unretained(this), port_id, error_message));
 }

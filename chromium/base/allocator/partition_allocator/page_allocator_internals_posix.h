@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/mman.h>
 
+#include "base/allocator/partition_allocator/oom.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/check_op.h"
 #include "base/notreached.h"
@@ -216,29 +217,15 @@ void SetSystemPagesAccessInternal(
     void* address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
-  if (!HANDLE_EINTR(mprotect(address, length, GetAccessFlags(accessibility))))
-    return;
-
-  // mprotect() failed, let's get more data on errno in crash reports. Values
-  // taken from man mprotect(2) on Linux:
-  switch (errno) {
-    case EACCES:
-      PCHECK(false);
-      break;
-    case EINVAL:
-      PCHECK(false);
-      break;
-    case ENOMEM:
-      PCHECK(false);
-      break;
-    default:
-      PCHECK(false);
-      break;
-  }
+  const int ret =
+      HANDLE_EINTR(mprotect(address, length, GetAccessFlags(accessibility)));
+  if (ret == -1 && errno == ENOMEM)
+    OOM_CRASH(length);
+  PA_PCHECK(0 == ret);
 }
 
 void FreePagesInternal(void* address, size_t length) {
-  PCHECK(!munmap(address, length));
+  PA_PCHECK(0 == munmap(address, length));
 }
 
 void* TrimMappingInternal(void* base,
@@ -260,31 +247,43 @@ void* TrimMappingInternal(void* base,
   return ret;
 }
 
-void DecommitSystemPagesInternal(void* address, size_t length) {
+void DecommitSystemPagesInternal(
+    void* address,
+    size_t length,
+    PageAccessibilityDisposition accessibility_disposition) {
   // In POSIX, there is no decommit concept. Discarding is an effective way of
   // implementing the Windows semantics where the OS is allowed to not swap the
   // pages in the region.
-  //
-  // TODO(ajwong): Also explore setting PageInaccessible to make the protection
-  // semantics consistent between Windows and POSIX. This might have a perf cost
-  // though as both decommit and recommit would incur an extra syscall.
-  // http://crbug.com/766882
   DiscardSystemPages(address, length);
+
+  // Make pages inaccessible, unless the caller requested to keep permissions.
+  //
+  // Note, there is a small window between these calls when the pages can be
+  // incorrectly touched and brought back to memory. Not ideal, but doing those
+  // operaions in the opposite order resulted in PMF regression on Mac (see
+  // crbug.com/1153021).
+  if (accessibility_disposition == PageUpdatePermissions) {
+    SetSystemPagesAccess(address, length, PageInaccessible);
+  }
 }
 
-bool RecommitSystemPagesInternal(void* address,
-                                 size_t length,
-                                 PageAccessibilityConfiguration accessibility) {
+void RecommitSystemPagesInternal(
+    void* address,
+    size_t length,
+    PageAccessibilityConfiguration accessibility,
+    PageAccessibilityDisposition accessibility_disposition) {
+  // On POSIX systems, the caller needs to simply read the memory to recommit
+  // it. However, if decommit changed the permissions, recommit has to change
+  // them back.
+  if (accessibility_disposition == PageUpdatePermissions) {
+    SetSystemPagesAccess(address, length, accessibility);
+  }
+
 #if defined(OS_APPLE)
   // On macOS, to update accounting, we need to make another syscall. For more
   // details, see https://crbug.com/823915.
   madvise(address, length, MADV_FREE_REUSE);
 #endif
-
-  // On POSIX systems, the caller need simply read the memory to recommit it.
-  // This has the correct behavior because the API requires the permissions to
-  // be the same as before decommitting and all configurations can read.
-  return true;
 }
 
 void DiscardSystemPagesInternal(void* address, size_t length) {
@@ -294,7 +293,7 @@ void DiscardSystemPagesInternal(void* address, size_t length) {
     // MADV_FREE_REUSABLE sometimes fails, so fall back to MADV_DONTNEED.
     ret = madvise(address, length, MADV_DONTNEED);
   }
-  PCHECK(0 == ret);
+  PA_PCHECK(ret == 0);
 #else
   // We have experimented with other flags, but with suboptimal results.
   //
@@ -302,7 +301,7 @@ void DiscardSystemPagesInternal(void* address, size_t length) {
   // performance benefits unclear.
   //
   // Therefore, we just do the simple thing: MADV_DONTNEED.
-  PCHECK(!madvise(address, length, MADV_DONTNEED));
+  PA_PCHECK(0 == madvise(address, length, MADV_DONTNEED));
 #endif
 }
 

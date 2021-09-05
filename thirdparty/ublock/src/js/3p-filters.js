@@ -30,7 +30,7 @@
 /******************************************************************************/
 
 const lastUpdateTemplateString = vAPI.i18n('3pLastUpdate');
-const reValidExternalList = /[a-z-]+:\/\/\S*\/\S+/;
+const reValidExternalList = /^[a-z-]+:\/\/(?:\S+\/\S*|\/\S+)/m;
 
 let listDetails = {};
 let filteringSettingsHash = '';
@@ -678,7 +678,7 @@ uDom('#ignoreGenericCosmeticFilters').on('change', onFilteringSettingsChanged);
 uDom('#buttonApply').on('click', ( ) => { buttonApplyHandler(); });
 uDom('#buttonUpdate').on('click', ( ) => { buttonUpdateHandler(); });
 uDom('#buttonPurgeAll').on('click', ev => {
-    buttonPurgeAllHandler(ev.ctrlKey && ev.shiftKey);
+    buttonPurgeAllHandler(ev.shiftKey);
 });
 uDom('#lists').on('change', '.listEntry input', onListsetChanged);
 uDom('#lists').on('click', '.listEntry .remove', onRemoveExternalList);

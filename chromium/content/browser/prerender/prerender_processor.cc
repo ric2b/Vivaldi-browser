@@ -30,15 +30,23 @@ PrerenderProcessor::~PrerenderProcessor() {
 // no-state-prefetch implementation. See PrerenderContents::StartPrerendering()
 // for example.
 void PrerenderProcessor::Start(
-    blink::mojom::PrerenderAttributesPtr attributes,
-    mojo::PendingRemote<blink::mojom::PrerenderProcessorClient>
-        pending_remote) {
+    blink::mojom::PrerenderAttributesPtr attributes) {
   // Start() must be called only one time.
   if (state_ != State::kInitial) {
     mojo::ReportBadMessage("PP_START_TWICE");
     return;
   }
   state_ = State::kStarted;
+
+  // Prerendering is only supported for <link rel=prerender>.
+  // We may want to support it for <link rel=next> if NoStatePrefetch re-enables
+  // it again. See https://crbug.com/1161545.
+  switch (attributes->rel_type) {
+    case blink::mojom::PrerenderRelType::kPrerender:
+      break;
+    case blink::mojom::PrerenderRelType::kNext:
+      return;
+  }
 
   // TODO(https://crbug.com/1132746): Validate the origin, etc and send
   // mojo::ReportBadMessage() if necessary like the legacy prerender
@@ -49,17 +57,10 @@ void PrerenderProcessor::Start(
 
   prerendering_url_ = attributes->url;
 
-  // Start prerendering.
-  auto prerender_host = std::make_unique<PrerenderHost>(
+  GetPrerenderHostRegistry().CreateAndStartHost(
       std::move(attributes),
       initiator_render_frame_host_.GetGlobalFrameRoutingId(),
       initiator_origin_);
-  prerender_host->StartPrerendering();
-
-  // Register the prerender host to PrerenderHostRegistry so that navigation can
-  // find this prerendered contents.
-  GetPrerenderHostRegistry().RegisterHost(prerendering_url_,
-                                          std::move(prerender_host));
 }
 
 void PrerenderProcessor::Cancel() {

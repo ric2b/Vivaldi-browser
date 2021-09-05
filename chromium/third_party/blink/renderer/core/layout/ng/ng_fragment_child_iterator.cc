@@ -100,8 +100,7 @@ void NGFragmentChildIterator::UpdateSelfFromFragment(
     if (layout_object &&
         layout_object !=
             current_.block_break_token_->InputNode().GetLayoutBox()) {
-      DCHECK(current_.link_.fragment->IsColumnSpanAll() ||
-             current_.block_break_token_->InputNode().IsOutOfFlowPositioned());
+      DCHECK(current_.link_.fragment->IsColumnSpanAll());
       current_.break_token_for_fragmentainer_only_ = true;
     } else {
       current_.break_token_for_fragmentainer_only_ = false;
@@ -156,7 +155,7 @@ void NGFragmentChildIterator::UpdateSelfFromCursor() {
     current_.link_.fragment = nullptr;
     return;
   }
-  current_.link_ = {item->BoxFragment(), item->OffsetInContainerBlock()};
+  current_.link_ = {item->BoxFragment(), item->OffsetInContainerFragment()};
 }
 
 void NGFragmentChildIterator::SkipToBoxFragment() {

@@ -88,6 +88,7 @@ static_library("apis") {
   sources = [
     "access_keys/access_keys_api.cc",
     "access_keys/access_keys_api.h",
+    "auto_update/auto_update_api.cc",
     "auto_update/auto_update_api.h",
     "bookmark_context_menu/bookmark_context_menu_api.cc",
     "bookmark_context_menu/bookmark_context_menu_api.h",

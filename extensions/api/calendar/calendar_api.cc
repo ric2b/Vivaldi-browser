@@ -1069,9 +1069,11 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
 void CalendarUpdateFunction::UpdateCalendarComplete(
     std::shared_ptr<calendar::UpdateCalendarResult> results) {
   if (!results->success) {
-    Respond(Error("Error updating calendar"));
+    Respond(
+        ErrorWithArguments(vivaldi::calendar::Update::Results::Create(false),
+                           "Error updating calendar"));
   } else {
-    Respond(NoArguments());
+    Respond(ArgumentList(vivaldi::calendar::Update::Results::Create(true)));
   }
 }
 

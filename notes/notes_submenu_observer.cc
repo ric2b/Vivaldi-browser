@@ -33,23 +33,74 @@ NotesSubMenuObserver::NotesSubMenuObserver(
 
 NotesSubMenuObserver::~NotesSubMenuObserver() {}
 
+void NotesSubMenuObserver::SetRootModel(ui::SimpleMenuModel* model, int id,
+                                        bool is_folder) {
+  root_menu_model_ = model;
+  root_id_ = id;
+  root_is_folder_ = is_folder;
+}
+
 void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   content::BrowserContext* browser_context = proxy_->GetBrowserContext();
   Profile* profile = Profile::FromBrowserContext(browser_context);
 
   if (!profile->IsGuestSession()) {
-    ui::SimpleMenuModel* menu_model = new ui::SimpleMenuModel(helper_.get());
-    models_.push_back(base::WrapUnique(menu_model));
     vivaldi::NotesModel* model =
         NotesModelFactory::GetForBrowserContext(browser_context);
-    menumodel_to_note_map_[menu_model] = model->main_node();
-    proxy_->AddSubMenu(root_id_,
-      l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
-      menu_model);
-    if (!helper_->SupportsDelayedLoading()) {
-      PopulateModel(menu_model);
+
+    root_id_map_[root_id_] = true;
+
+    // 'root_menu_model_' is set when we use configurable menus to allow
+    // placement in all locations of the menu tree.
+    if (root_menu_model_) {
+      // Register top nodes. Since we have a custom root menu we have to map all
+      // children of the main node as well.
+      for (auto& node : model->main_node()->children()) {
+        root_id_map_[node->id()] = true;
+      }
+      menumodel_to_note_map_[root_menu_model_] = model->main_node();
+      if (!root_is_folder_ || !helper_->SupportsDelayedLoading()) {
+        // We have to populate right away if there is not folder to listen for
+        // or when the system does not provide such a listen method.
+        PopulateModel(root_menu_model_);
+      }
+    } else {
+      ui::SimpleMenuModel* menu_model = new ui::SimpleMenuModel(helper_.get());
+      models_.push_back(base::WrapUnique(menu_model));
+      menumodel_to_note_map_[menu_model] = model->main_node();
+      if (root_menu_model_) {
+        root_menu_model_->AddSubMenu(root_id_,
+          l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
+          menu_model);
+      } else {
+        proxy_->AddSubMenu(root_id_,
+          l10n_util::GetStringUTF16(IDS_VIV_CONTENT_INSERT_NOTE),
+          menu_model);
+      }
+      if (!helper_->SupportsDelayedLoading()) {
+        PopulateModel(menu_model);
+      }
     }
+  }
+}
+
+int NotesSubMenuObserver::GetRootId() {
+  if (root_menu_model_ && !root_is_folder_) {
+    // Inline layout (no top root). Use the id of the first child.
+    content::BrowserContext* browser_context = proxy_->GetBrowserContext();
+    vivaldi::NotesModel* model =
+        NotesModelFactory::GetForBrowserContext(browser_context);
+    if (model->main_node() && model->main_node()->children().front()) {
+      return model->main_node()->children().front()->id();
+    }
+  }
+  return root_id_;
+}
+
+void NotesSubMenuObserver::RootMenuWillOpen() {
+  if (root_menu_model_ && root_is_folder_) {
+    helper_->OnMenuWillShow(root_menu_model_);
   }
 }
 
@@ -95,7 +146,6 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
         // Escape any '&' with a double set to prevent underlining.
         title = ui::EscapeMenuLabelAmpersands(title);
       }
-
       if (node->is_folder()) {
         ui::SimpleMenuModel* child_menu_model =
             new ui::SimpleMenuModel(helper_.get());
@@ -119,7 +169,8 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
 }
 
 bool NotesSubMenuObserver::IsCommandIdSupported(int command_id) {
-  return command_id == root_id_;
+  auto it = root_id_map_.find(command_id);
+  return it != root_id_map_.end();
 }
 
 bool NotesSubMenuObserver::IsCommandIdChecked(int command_id) {
@@ -127,7 +178,7 @@ bool NotesSubMenuObserver::IsCommandIdChecked(int command_id) {
 }
 
 bool NotesSubMenuObserver::IsCommandIdEnabled(int command_id) {
-  return command_id == root_id_;
+  return true;
 }
 
 vivaldi::NoteNode* GetNodeFromId(vivaldi::NoteNode* node, int id) {

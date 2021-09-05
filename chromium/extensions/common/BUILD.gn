@@ -40,6 +40,8 @@ if (enable_extensions) {
 
     sources = [
       "mojom/app_window.mojom",
+      "mojom/channel.mojom",
+      "mojom/feature_session_type.mojom",
       "mojom/guest_view.mojom",
       "mojom/keep_alive.mojom",
       "mojom/renderer.mojom",
@@ -57,6 +59,18 @@ if (enable_extensions) {
       "//url/mojom:url_mojom_gurl",
     ]
 
+    cpp_typemaps = [
+      {
+        types = [
+          {
+            mojom = "extensions.mojom.Channel"
+            cpp = "version_info::Channel"
+          },
+        ]
+        traits_headers = [ "//extensions/common/mojom/channel_mojom_traits.h" ]
+        traits_public_deps = [ "//components/version_info:channel" ]
+      },
+    ]
     overridden_deps = [ "//content/public/common:interfaces" ]
 
     component_deps = [ "//content/public/common" ]
@@ -345,6 +359,7 @@ if (enable_extensions) {
       "//device/bluetooth",
       "//device/bluetooth/public/cpp",
       "//extensions:extensions_resources",
+      "//extensions/common:mojom",
       "//extensions/common/api",
       "//extensions/strings",
       "//net",
@@ -407,8 +422,6 @@ if (enable_extensions) {
       "api/extension_action/action_info_test_util.h",
       "file_test_util.cc",
       "file_test_util.h",
-      "scoped_worker_based_extensions_channel.cc",
-      "scoped_worker_based_extensions_channel.h",
     ]
 
     deps = [
@@ -489,6 +502,7 @@ if (enable_extensions) {
       "//components/version_info:version_info",
       "//content/test:test_support",
       "//extensions:extensions_resources",
+      "//extensions/common:mojom",
       "//extensions/common/api",
       "//tools/json_schema_compiler:generated_api_util",
 

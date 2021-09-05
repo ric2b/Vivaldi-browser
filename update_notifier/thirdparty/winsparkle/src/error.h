@@ -66,6 +66,8 @@ class Error {
 
   const std::string& message() const { return message_; }
 
+  std::string log_message() const;
+
   void set(Kind kind, std::string message = std::string()) {
     DCHECK(kind != kNone);
     DCHECK(kind_ == kNone);
@@ -80,18 +82,6 @@ class Error {
 
 std::string LastWin32Error(const char* api_function,
                            std::string message = std::string());
-
-/// Logs error to, currently, debug output.
-void LogError(const char* msg);
-
-inline void LogError(const std::string& msg) {
-  LogError(msg.c_str());
-}
-
-inline void LogError(const Error& error) {
-  LogError(error.message());
-}
-
 }  // namespace winsparkle
 
 #endif  // UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_ERROR_H_

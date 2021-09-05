@@ -13,11 +13,12 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/chromeos/base/file_flusher.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager.h"
@@ -35,13 +36,11 @@
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/account_id/account_id.h"
 #include "components/crx_file/id_util.h"
-#include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "extensions/browser/extension_system.h"
-#include "extensions/browser/pref_names.h"
 
 namespace chromeos {
 
@@ -108,6 +107,31 @@ bool IsSigninProfilePath(const base::FilePath& profile_path) {
 
 bool IsLockScreenAppProfilePath(const base::FilePath& profile_path) {
   return profile_path.value() == chrome::kLockScreenAppProfile;
+}
+
+bool IsLockScreenProfilePath(const base::FilePath& profile_path) {
+  return profile_path.value() == chrome::kLockScreenProfile;
+}
+
+// Returns the path that corresponds to the passed profile.
+base::FilePath GetProfileDir(base::StringPiece profile) {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  // profile_manager can be null in unit tests.
+  if (!profile_manager)
+    return base::FilePath();
+  base::FilePath user_data_dir = profile_manager->user_data_dir();
+  return user_data_dir.AppendASCII(profile);
+}
+
+// Returns an incognito profile that corresponds to the passed path.
+Profile* GetIncognitoProfile(base::FilePath profile_dir) {
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  // |profile_manager| could be null in tests.
+  if (!profile_manager) {
+    return nullptr;
+  }
+
+  return profile_manager->GetProfile(profile_dir)->GetPrimaryOTRProfile();
 }
 
 }  // anonymous namespace
@@ -234,24 +258,12 @@ base::FilePath ProfileHelper::GetProfilePathByUserIdHash(
 
 // static
 base::FilePath ProfileHelper::GetSigninProfileDir() {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  // profile_manager can be null in unit tests.
-  if (!profile_manager)
-    return base::FilePath();
-  base::FilePath user_data_dir = profile_manager->user_data_dir();
-  return user_data_dir.AppendASCII(chrome::kInitialProfile);
+  return GetProfileDir(chrome::kInitialProfile);
 }
 
 // static
 Profile* ProfileHelper::GetSigninProfile() {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  // |profile_manager| could be null in tests.
-  if (!profile_manager) {
-    return nullptr;
-  }
-
-  return profile_manager->GetProfile(GetSigninProfileDir())
-      ->GetPrimaryOTRProfile();
+  return GetIncognitoProfile(GetSigninProfileDir());
 }
 
 // static
@@ -297,32 +309,33 @@ bool ProfileHelper::IsSigninProfileInitialized() {
 }
 
 // static
-bool ProfileHelper::SigninProfileHasLoginScreenExtensions() {
-  DCHECK(IsSigninProfileInitialized());
-  const Profile* profile = GetSigninProfile();
-  const PrefService* prefs = profile->GetPrefs();
-  DCHECK(prefs->GetInitializationStatus() ==
-         PrefService::INITIALIZATION_STATUS_SUCCESS);
-  const base::DictionaryValue* pref_value =
-      prefs->GetDictionary(extensions::pref_names::kLoginScreenExtensions);
-  return !pref_value->DictEmpty();
-}
-
-// static
 bool ProfileHelper::IsLockScreenAppProfile(const Profile* profile) {
   return profile && IsLockScreenAppProfilePath(profile->GetPath().BaseName());
 }
 
 // static
 base::FilePath ProfileHelper::GetLockScreenAppProfilePath() {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  return profile_manager->user_data_dir().AppendASCII(
-      chrome::kLockScreenAppProfile);
+  return GetProfileDir(chrome::kLockScreenAppProfile);
 }
 
 // static
 std::string ProfileHelper::GetLockScreenAppProfileName() {
   return chrome::kLockScreenAppProfile;
+}
+
+// static
+base::FilePath ProfileHelper::GetLockScreenProfileDir() {
+  return GetProfileDir(chrome::kLockScreenProfile);
+}
+
+// static
+Profile* ProfileHelper::GetLockScreenIncognitoProfile() {
+  return GetIncognitoProfile(GetLockScreenProfileDir());
+}
+
+// static
+bool ProfileHelper::IsLockScreenProfile(const Profile* profile) {
+  return profile && IsLockScreenProfilePath(profile->GetPath().BaseName());
 }
 
 // static
@@ -376,13 +389,15 @@ bool ProfileHelper::IsEphemeralUserProfile(const Profile* profile) {
 // static
 bool ProfileHelper::IsRegularProfile(const Profile* profile) {
   return !chromeos::ProfileHelper::IsSigninProfile(profile) &&
-         !chromeos::ProfileHelper::IsLockScreenAppProfile(profile);
+         !chromeos::ProfileHelper::IsLockScreenAppProfile(profile) &&
+         !chromeos::ProfileHelper::IsLockScreenProfile(profile);
 }
 
 // static
 bool ProfileHelper::IsRegularProfilePath(const base::FilePath& profile_path) {
   return !IsSigninProfilePath(profile_path) &&
-         !IsLockScreenAppProfilePath(profile_path);
+         !IsLockScreenAppProfilePath(profile_path) &&
+         !IsLockScreenProfilePath(profile_path);
 }
 
 // static
@@ -462,8 +477,8 @@ void ProfileHelperImpl::ClearSigninProfile(
   browsing_data_remover_->AddObserver(this);
   browsing_data_remover_->RemoveAndReply(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA,
-      ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES, this);
+      chrome_browsing_data_remover::DATA_TYPE_SITE_DATA,
+      chrome_browsing_data_remover::ALL_ORIGIN_TYPES, this);
 
   // Close the current session with SigninPartitionManager. This clears cached
   // data from the last-used sign-in StoragePartition.

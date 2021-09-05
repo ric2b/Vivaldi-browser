@@ -4,6 +4,8 @@
 
 #include "ui/views/metadata/type_conversion.h"
 
+#include <string>
+
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -11,6 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/url_formatter/url_fixer.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/native_theme/native_theme.h"
@@ -18,6 +21,24 @@
 
 namespace views {
 namespace metadata {
+
+base::Optional<SkColor> RgbaPiecesToSkColor(
+    const std::vector<base::StringPiece16>& pieces,
+    size_t start_piece) {
+  int r, g, b;
+  double a;
+  return ((pieces.size() >= start_piece + 4) &&
+          base::StringToInt(pieces[start_piece], &r) &&
+          base::IsValueInRangeForNumericType<uint8_t>(r) &&
+          base::StringToInt(pieces[start_piece + 1], &g) &&
+          base::IsValueInRangeForNumericType<uint8_t>(g) &&
+          base::StringToInt(pieces[start_piece + 2], &b) &&
+          base::IsValueInRangeForNumericType<uint8_t>(b) &&
+          base::StringToDouble(pieces[start_piece + 3], &a))
+             ? base::make_optional(SkColorSetARGB(
+                   base::ClampRound<SkAlpha>(a * SK_AlphaOPAQUE), r, g, b))
+             : base::nullopt;
+}
 
 const base::string16& GetNullOptStr() {
   static const base::NoDestructor<base::string16> kNullOptStr(
@@ -45,6 +66,10 @@ CONVERT_NUMBER_TO_STRING(double)
 
 base::string16 TypeConverter<bool>::ToString(bool source_value) {
   return base::ASCIIToUTF16(source_value ? "true" : "false");
+}
+
+ValidStrings TypeConverter<bool>::GetValidStrings() {
+  return {base::ASCIIToUTF16("false"), base::ASCIIToUTF16("true")};
 }
 
 base::string16 TypeConverter<const char*>::ToString(const char* source_value) {
@@ -76,14 +101,14 @@ base::string16 TypeConverter<gfx::ShadowValues>::ToString(
 
 base::string16 TypeConverter<gfx::Size>::ToString(
     const gfx::Size& source_value) {
-  return base::ASCIIToUTF16(base::StringPrintf("{%i, %i}", source_value.width(),
+  return base::ASCIIToUTF16(base::StringPrintf("{%d, %d}", source_value.width(),
                                                source_value.height()));
 }
 
 base::string16 TypeConverter<gfx::Range>::ToString(
     const gfx::Range& source_value) {
   return base::ASCIIToUTF16(base::StringPrintf(
-      "{%i, %i}", source_value.GetMin(), source_value.GetMax()));
+      "{%d, %d}", source_value.GetMin(), source_value.GetMax()));
 }
 
 base::string16 TypeConverter<gfx::Insets>::ToString(
@@ -91,6 +116,16 @@ base::string16 TypeConverter<gfx::Insets>::ToString(
   return base::ASCIIToUTF16(base::StringPrintf(
       "{%d, %d, %d, %d}", source_value.top(), source_value.left(),
       source_value.bottom(), source_value.right()));
+}
+
+base::string16 TypeConverter<GURL>::ToString(const GURL& source_value) {
+  return base::ASCIIToUTF16(source_value.possibly_invalid_spec());
+}
+
+base::string16 TypeConverter<url::Component>::ToString(
+    const url::Component& source_value) {
+  return base::ASCIIToUTF16(
+      base::StringPrintf("{%d, %d}", source_value.begin, source_value.len));
 }
 
 base::Optional<int8_t> TypeConverter<int8_t>::FromString(
@@ -215,16 +250,15 @@ base::Optional<gfx::ShadowValues> TypeConverter<gfx::ShadowValues>::FromString(
     const auto members = base::SplitStringPiece(
         member_string, base::ASCIIToUTF16(","), base::TRIM_WHITESPACE,
         base::SPLIT_WANT_NONEMPTY);
-    int x, y, r, g, b, a;
+    int x, y;
     double blur;
+    const auto color = RgbaPiecesToSkColor(members, 3);
 
     if ((members.size() == 7) && base::StringToInt(members[0], &x) &&
         base::StringToInt(members[1], &y) &&
         base::StringToDouble(UTF16ToASCII(members[2]), &blur) &&
-        base::StringToInt(members[3], &r) &&
-        base::StringToInt(members[4], &g) &&
-        base::StringToInt(members[5], &b) && base::StringToInt(members[6], &a))
-      ret.emplace_back(gfx::Vector2d(x, y), blur, SkColorSetARGB(a, r, g, b));
+        color.has_value())
+      ret.emplace_back(gfx::Vector2d(x, y), blur, color.value());
   }
   return ret;
 }
@@ -266,6 +300,26 @@ base::Optional<gfx::Insets> TypeConverter<gfx::Insets>::FromString(
       base::StringToInt(values[2], &bottom) &&
       base::StringToInt(values[3], &right)) {
     return gfx::Insets(top, left, bottom, right);
+  }
+  return base::nullopt;
+}
+
+base::Optional<GURL> TypeConverter<GURL>::FromString(
+    const base::string16& source_value) {
+  const GURL url =
+      url_formatter::FixupURL(base::UTF16ToUTF8(source_value), std::string());
+  return url.is_valid() ? base::make_optional(url) : base::nullopt;
+}
+
+base::Optional<url::Component> TypeConverter<url::Component>::FromString(
+    const base::string16& source_value) {
+  const auto values =
+      base::SplitStringPiece(source_value, base::ASCIIToUTF16("{,}"),
+                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  int begin, len;
+  if ((values.size() == 2) && base::StringToInt(values[0], &begin) &&
+      base::StringToInt(values[1], &len) && len >= -1) {
+    return url::Component(begin, len);
   }
   return base::nullopt;
 }

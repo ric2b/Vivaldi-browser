@@ -8,12 +8,12 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "components/signin/public/android/jni_headers/ProfileOAuth2TokenServiceDelegate_jni.h"
 #include "components/signin/public/base/account_consistency_method.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -28,6 +28,8 @@ using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace {
+
+using TokenResponseBuilder = OAuth2AccessTokenConsumer::TokenResponse::Builder;
 
 // Callback from FetchOAuth2TokenWithUsername().
 // Arguments:
@@ -113,8 +115,10 @@ void AndroidAccessTokenFetcher::OnAccessTokenResponse(
     return;
   }
   if (error.state() == GoogleServiceAuthError::NONE) {
-    FireOnGetTokenSuccess(OAuth2AccessTokenConsumer::TokenResponse(
-        access_token, expiration_time, std::string()));
+    FireOnGetTokenSuccess(TokenResponseBuilder()
+                              .WithAccessToken(access_token)
+                              .WithExpirationTime(expiration_time)
+                              .build());
   } else {
     FireOnGetTokenFailure(error);
   }

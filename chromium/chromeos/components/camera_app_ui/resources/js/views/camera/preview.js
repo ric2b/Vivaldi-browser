@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {browserProxy} from '../../browser_proxy/browser_proxy.js';
+import * as barcodeChip from '../../barcode_chip.js';
 import * as dom from '../../dom.js';
+import {BarcodeScanner} from '../../models/barcode.js';
 import {DeviceOperator, parseMetadata} from '../../mojo/device_operator.js';
 import * as nav from '../../nav.js';
 import * as state from '../../state.js';
+import {Mode} from '../../type.js';
 import * as util from '../../util.js';
-import {windowController} from '../../window_controller/window_controller.js';
 
 /**
  * Creates a controller for the video preview of Camera view.
@@ -67,16 +68,19 @@ export class Preview {
     this.focus_ = null;
 
     /**
-     * Timeout for resizing the window.
-     * @type {?number}
+     * @type {?BarcodeScanner}
      * @private
      */
-    this.resizeWindowTimeout_ = null;
+    this.scanner_ = null;
+
 
     window.addEventListener('resize', () => this.onWindowResize_());
 
     [state.State.EXPERT, state.State.SHOW_METADATA].forEach((s) => {
       state.addObserver(s, this.updateShowMetadata_.bind(this));
+    });
+    [state.State.EXPERT, state.State.SCAN_BARCODE].forEach((s) => {
+      state.addObserver(s, this.updateScanBarcode_.bind(this));
     });
   }
 
@@ -109,8 +113,8 @@ export class Preview {
    * @return {!Promise} Promise for the operation.
    */
   async setSource_(stream) {
-    const node = util.instantiateTemplate('#preview-video-template');
-    const video = dom.getFrom(node, 'video', HTMLVideoElement);
+    const tpl = util.instantiateTemplate('#preview-video-template');
+    const video = dom.getFrom(tpl, 'video', HTMLVideoElement);
     await new Promise((resolve) => {
       const handler = () => {
         video.removeEventListener('canplay', handler);
@@ -120,7 +124,7 @@ export class Preview {
       video.srcObject = stream;
     });
     await video.play();
-    this.video_.parentElement.replaceChild(node, this.video_);
+    this.video_.parentElement.replaceChild(tpl, this.video_);
     this.video_.removeAttribute('srcObject');
     this.video_.load();
     this.video_ = video;
@@ -130,42 +134,52 @@ export class Preview {
   }
 
   /**
-   * Starts the preview with the source stream.
-   * @param {!MediaStream} stream Stream to be the source.
-   * @return {!Promise} Promise for the operation.
+   * Opens preview stream.
+   * @param {!MediaStreamConstraints} constraints Constraints of preview stream.
+   * @return {!Promise<!MediaStream>} Promise resolved to opened preview stream.
    */
-  start(stream) {
-    return this.setSource_(stream).then(() => {
+  async open(constraints) {
+    this.stream_ = await navigator.mediaDevices.getUserMedia(constraints);
+    try {
+      await this.setSource_(this.stream_);
       // Use a watchdog since the stream.onended event is unreliable in the
       // recent version of Chrome. As of 55, the event is still broken.
       this.watchdog_ = setInterval(() => {
         // Check if video stream is ended (audio stream may still be live).
-        if (!stream.getVideoTracks().length ||
-            stream.getVideoTracks()[0].readyState === 'ended') {
+        if (this.stream_.getVideoTracks().length === 0 ||
+            this.stream_.getVideoTracks()[0].readyState === 'ended') {
           clearInterval(this.watchdog_);
           this.watchdog_ = null;
           this.stream_ = null;
           this.onNewStreamNeeded_();
         }
       }, 100);
-      this.stream_ = stream;
+      this.scanner_ = new BarcodeScanner(this.video_, (value) => {
+        barcodeChip.show(value);
+      });
+      this.updateScanBarcode_();
       this.updateShowMetadata_();
+
       state.set(state.State.STREAMING, true);
-    });
+    } catch (e) {
+      await this.close();
+      throw e;
+    }
+    return this.stream_;
   }
 
   /**
-   * Stops the preview.
+   * Closes the preview.
    * @return {!Promise}
    */
-  async stop() {
-    if (this.watchdog_) {
+  async close() {
+    if (this.watchdog_ !== null) {
       clearInterval(this.watchdog_);
       this.watchdog_ = null;
     }
     // Pause video element to avoid black frames during transition.
     this.video_.pause();
-    if (this.stream_) {
+    if (this.stream_ !== null) {
       const track = this.stream_.getVideoTracks()[0];
       const {deviceId} = track.getSettings();
       track.stop();
@@ -175,7 +189,27 @@ export class Preview {
       }
       this.stream_ = null;
     }
+    if (this.scanner_ !== null) {
+      this.scanner_.stop();
+      this.scanner_ = null;
+    }
     state.set(state.State.STREAMING, false);
+  }
+
+  /**
+   * Checks whether to scan barcode on preview or not.
+   * @private
+   */
+  updateScanBarcode_() {
+    if (this.scanner_ === null) {
+      return;
+    }
+    if (state.get(Mode.PHOTO) && state.get(state.State.SCAN_BARCODE)) {
+      this.scanner_.start();
+    } else {
+      this.scanner_.stop();
+      barcodeChip.dismiss();
+    }
   }
 
   /**
@@ -405,37 +439,10 @@ export class Preview {
 
   /**
    * Handles resizing the window for preview's aspect ratio changes.
-   * @param {number=} aspectRatio Aspect ratio changed.
-   * @return {!Promise}
    * @private
    */
-  onWindowResize_(aspectRatio) {
-    if (this.resizeWindowTimeout_) {
-      clearTimeout(this.resizeWindowTimeout_);
-      this.resizeWindowTimeout_ = null;
-    }
+  onWindowResize_() {
     nav.onWindowResized();
-
-    // Resize window for changed preview's aspect ratio or restore window size
-    // by the last known window's aspect ratio.
-    return new Promise((resolve) => {
-             if (aspectRatio) {
-               resolve();
-             } else {
-               this.resizeWindowTimeout_ = setTimeout(() => {
-                 this.resizeWindowTimeout_ = null;
-                 resolve();
-               }, 500);  // Delay further resizing for smooth UX.
-             }
-           })
-        .then(() => {
-          // Resize window by aspect ratio only if it's not maximized or
-          // fullscreen.
-          if (windowController.isFullscreenOrMaximized()) {
-            return;
-          }
-          return browserProxy.fitWindow();
-        });
   }
 
   /**
@@ -445,8 +452,7 @@ export class Preview {
    */
   async onIntrinsicSizeChanged_() {
     if (this.video_.videoWidth && this.video_.videoHeight) {
-      await this.onWindowResize_(
-          this.video_.videoWidth / this.video_.videoHeight);
+      this.onWindowResize_();
     }
     this.cancelFocus_();
   }

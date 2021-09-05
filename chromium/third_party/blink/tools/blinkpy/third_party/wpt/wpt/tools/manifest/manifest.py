@@ -1,7 +1,7 @@
 import io
 import itertools
-import json
 import os
+import sys
 from atomicwrites import atomic_write
 from copy import deepcopy
 from multiprocessing import Pool, cpu_count
@@ -13,6 +13,7 @@ from six import (
     string_types,
 )
 
+from . import jsonlib
 from . import vcs
 from .item import (ConformanceCheckerTest,
                    CrashTest,
@@ -45,11 +46,6 @@ if MYPY:
     from typing import Type
     from typing import Union
 
-try:
-    import ujson
-    fast_json = ujson
-except ImportError:
-    fast_json = json  # type: ignore
 
 CURRENT_VERSION = 8  # type: int
 
@@ -178,6 +174,8 @@ class Manifest(object):
         constructed in the case we are not updating a path, but the absence of an item from
         the iterator may be used to remove defunct entries from the manifest."""
 
+        logger = get_logger()
+
         changed = False
 
         # Create local variable references to these dicts so we avoid the
@@ -226,20 +224,34 @@ class Manifest(object):
                     to_update.append(source_file)
 
         if to_update:
+            logger.debug("Computing manifest update for %s items" % len(to_update))
             changed = True
 
+
+        # 25 items was derived experimentally (2020-01) to be approximately the
+        # point at which it is quicker to create a Pool and parallelize update.
+        pool = None
         if parallel and len(to_update) > 25 and cpu_count() > 1:
-            # 25 derived experimentally (2020-01) to be approximately
-            # the point at which it is quicker to create Pool and
-            # parallelize this
-            pool = Pool()
+            # On Python 3 on Windows, using >= MAXIMUM_WAIT_OBJECTS processes
+            # causes a crash in the multiprocessing module. Whilst this enum
+            # can technically have any value, it is usually 64. For safety,
+            # restrict manifest regeneration to 48 processes on Windows.
+            #
+            # See https://bugs.python.org/issue26903 and https://bugs.python.org/issue40263
+            processes = cpu_count()
+            if sys.platform == "win32" and processes > 48:
+                processes = 48
+            pool = Pool(processes)
 
             # chunksize set > 1 when more than 10000 tests, because
             # chunking is a net-gain once we get to very large numbers
             # of items (again, experimentally, 2020-01)
+            chunksize = max(1, len(to_update) // 10000)
+            logger.debug("Doing a multiprocessed update. CPU count: %s, "
+                "processes: %s, chunksize: %s" % (cpu_count(), processes, chunksize))
             results = pool.imap_unordered(compute_manifest_items,
                                           to_update,
-                                          chunksize=max(1, len(to_update) // 10000)
+                                          chunksize=chunksize
                                           )  # type: Iterator[Tuple[Tuple[Text, ...], Text, Set[ManifestItem], Text]]
         elif PY3:
             results = map(compute_manifest_items, to_update)
@@ -250,6 +262,11 @@ class Manifest(object):
             rel_path_parts, new_type, manifest_items, file_hash = result
             data[new_type][rel_path_parts] = manifest_items
             data[new_type].hashes[rel_path_parts] = file_hash
+
+        # Make sure to terminate the Pool, to avoid hangs on Python 3.
+        # https://docs.python.org/3/library/multiprocessing.html#multiprocessing.pool.Pool
+        if pool is not None:
+            pool.terminate()
 
         if remaining_manifest_paths:
             changed = True
@@ -354,7 +371,7 @@ def _load(logger,  # type: Logger
         try:
             with io.open(manifest, "r", encoding="utf-8") as f:
                 rv = Manifest.from_json(tests_root,
-                                        fast_json.load(f),
+                                        jsonlib.load(f),
                                         types=types,
                                         callee_owns_obj=True)
         except IOError:
@@ -364,7 +381,7 @@ def _load(logger,  # type: Logger
             return None
     else:
         rv = Manifest.from_json(tests_root,
-                                fast_json.load(manifest),
+                                jsonlib.load(manifest),
                                 types=types,
                                 callee_owns_obj=True)
 
@@ -449,6 +466,7 @@ def _load_and_update(tests_root,  # type: Text
         update = True
 
     if rebuild or update:
+        logger.info("Updating manifest")
         for retry in range(2):
             try:
                 tree = vcs.get_tree(tests_root, manifest, manifest_path, cache_root,
@@ -476,6 +494,5 @@ def write(manifest, manifest_path):
     with atomic_write(manifest_path, overwrite=True) as f:
         # Use ',' instead of the default ', ' separator to prevent trailing
         # spaces: https://docs.python.org/2/library/json.html#json.dump
-        json.dump(manifest.to_json(caller_owns_obj=True), f,
-                  sort_keys=True, indent=1, separators=(',', ': '))
+        jsonlib.dump_dist(manifest.to_json(caller_owns_obj=True), f)
         f.write("\n")

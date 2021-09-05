@@ -45,7 +45,7 @@ void PrefetchImagesTask::Run() {
 
   load_from_store_task_ = std::make_unique<LoadStreamFromStoreTask>(
       LoadStreamFromStoreTask::LoadType::kFullLoad, stream_->GetStore(),
-      stream_->GetClock(),
+      /*missed_last_refresh=*/false,
       base::BindOnce(&PrefetchImagesTask::LoadStreamComplete,
                      base::Unretained(this)));
 

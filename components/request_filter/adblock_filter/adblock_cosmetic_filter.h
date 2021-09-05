@@ -25,9 +25,6 @@ class CosmeticFilter : public mojom::CosmeticFilter {
   void Initialize(std::array<base::WeakPtr<RulesIndexManager>, kRuleGroupCount>
                       index_managers);
 
-  // Implementing mojom::CosmeticFilter
-  void GetStyleSheet(const ::GURL& url,
-                     GetStyleSheetCallback callback) override;
   void ShouldAllowWebRTC(const ::GURL& document_url,
                          const std::vector<::GURL>& ice_servers,
                          ShouldAllowWebRTCCallback callback) override;

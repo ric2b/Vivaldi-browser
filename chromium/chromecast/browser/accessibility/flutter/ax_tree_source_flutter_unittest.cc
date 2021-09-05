@@ -11,6 +11,8 @@
 #include "content/public/browser/tts_controller.h"
 #include "content/public/browser/tts_platform.h"
 #include "content/public/common/content_client.h"
+#include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_browser_context.h"
 #include "extensions/browser/api/automation_internal/automation_event_router_interface.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -121,10 +123,12 @@ class AXTreeSourceFlutterTest : public testing::Test,
                                 public AXTreeSourceFlutter::Delegate {
  public:
   AXTreeSourceFlutterTest()
-      : tree_(
-            std::make_unique<AXTreeSourceFlutter>(this,
-                                                  nullptr /* browser_context */,
-                                                  &router_)) {}
+      : tree_(std::make_unique<AXTreeSourceFlutter>(this,
+                                                    &browser_context_,
+                                                    &router_)) {
+    // Enable by default.
+    tree_->SetAccessibilityEnabled(true);
+  }
   AXTreeSourceFlutterTest(const AXTreeSourceFlutterTest&) = delete;
   ~AXTreeSourceFlutterTest() override {
     EXPECT_CALL(router_, DispatchTreeDestroyedEvent).Times(1);
@@ -134,6 +138,10 @@ class AXTreeSourceFlutterTest : public testing::Test,
  protected:
   void CallNotifyAccessibilityEvent(OnAccessibilityEventRequest* event_data) {
     tree_->NotifyAccessibilityEvent(event_data);
+  }
+
+  void SetAccessibilityEnabled(bool value) {
+    tree_->SetAccessibilityEnabled(value);
   }
 
   void CallGetChildren(SemanticsNode* node,
@@ -199,6 +207,9 @@ class AXTreeSourceFlutterTest : public testing::Test,
  private:
   void OnAction(const ui::AXActionData& data) override {}
 
+  // Required for the TestBrowserContext.
+  content::BrowserTaskEnvironment task_environment_;
+  content::TestBrowserContext browser_context_;
   MockAutomationEventRouter router_;
   std::unique_ptr<AXTreeSourceFlutter> tree_;
 };
@@ -939,6 +950,9 @@ TEST_F(AXTreeSourceFlutterTest, ScopesRouteNoNames) {
   ASSERT_EQ(0, tree_data.focus_id);
   ASSERT_TRUE(mock_tts_platform.GetLastSpokenUtterance() == "");
   EXPECT_EQ(0, GetDispatchedEventCount(ax::mojom::Event::kFocus));
+
+  // Cleanup since the mock will expire at the end of this test.
+  tts_controller->SetTtsPlatform(content::TtsPlatform::GetInstance());
 }
 
 TEST_F(AXTreeSourceFlutterTest, Announce) {
@@ -955,12 +969,23 @@ TEST_F(AXTreeSourceFlutterTest, Announce) {
 
   // Setup an announcement event
   OnAccessibilityEventRequest event;
+  SetAccessibilityEnabled(false);
   event.set_event_type(OnAccessibilityEventRequest_EventType_ANNOUNCEMENT);
   event.set_text("Say this please");
   CallNotifyAccessibilityEvent(&event);
 
+  // Child 3 should NOT have been spoken
+  ASSERT_EQ(mock_tts_platform.GetLastSpokenUtterance(), "");
+
+  // This time with a11y enabled.
+  SetAccessibilityEnabled(true);
+  CallNotifyAccessibilityEvent(&event);
+
   // Child 3 should have been spoken
   ASSERT_EQ(mock_tts_platform.GetLastSpokenUtterance(), "Say this please");
+
+  // Cleanup since the mock will expire at the end of this test.
+  tts_controller->SetTtsPlatform(content::TtsPlatform::GetInstance());
 }
 
 }  // namespace accessibility

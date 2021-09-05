@@ -17,8 +17,8 @@
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
-#include "content/browser/file_system_access/fixed_native_file_system_permission_grant.h"
-#include "content/browser/file_system_access/mock_native_file_system_permission_context.h"
+#include "content/browser/file_system_access/fixed_file_system_access_permission_grant.h"
+#include "content/browser/file_system_access/mock_file_system_access_permission_context.h"
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/system/data_pipe_producer.h"
 #include "mojo/public/cpp/system/string_data_source.h"
@@ -34,7 +34,7 @@
 #include "storage/browser/test/test_file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using blink::mojom::NativeFileSystemStatus;
+using blink::mojom::FileSystemAccessStatus;
 using storage::FileSystemURL;
 using storage::IsolatedContext;
 
@@ -103,7 +103,7 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
   NativeFileSystemFileWriterImplTest()
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO) {}
 
-  virtual NativeFileSystemPermissionContext* permission_context() {
+  virtual FileSystemAccessPermissionContext* permission_context() {
     return nullptr;
   }
 
@@ -163,18 +163,18 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
           quarantine_receivers_.Add(&quarantine_, std::move(receiver));
         });
 
-    handle_ = std::make_unique<NativeFileSystemFileWriterImpl>(
-        manager_.get(),
+    handle_ = manager_->CreateFileWriter(
         NativeFileSystemManagerImpl::BindingContext(kTestOrigin, kTestURL,
                                                     kFrameId),
         test_file_url_, test_swap_url_,
         NativeFileSystemManagerImpl::SharedHandleState(
             permission_grant_, permission_grant_, std::move(fs)),
-        /*has_transient_user_activation=*/false, quarantine_callback_);
+        remote_.InitWithNewPipeAndPassReceiver(),
+        /*has_transient_user_activation=*/false,
+        /*auto_close=*/false, quarantine_callback_);
   }
 
   void TearDown() override {
-    handle_.reset();
     manager_.reset();
 
     task_environment_.RunUntilIdle();
@@ -239,15 +239,15 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
     }
   }
 
-  NativeFileSystemStatus WriteBlobSync(
+  FileSystemAccessStatus WriteBlobSync(
       uint64_t position,
       mojo::PendingRemote<blink::mojom::Blob> blob,
       uint64_t* bytes_written_out) {
     base::RunLoop loop;
-    NativeFileSystemStatus result_out;
+    FileSystemAccessStatus result_out;
     handle_->Write(position, std::move(blob),
                    base::BindLambdaForTesting(
-                       [&](blink::mojom::NativeFileSystemErrorPtr result,
+                       [&](blink::mojom::FileSystemAccessErrorPtr result,
                            uint64_t bytes_written) {
                          result_out = result->status;
                          *bytes_written_out = bytes_written;
@@ -257,15 +257,15 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
     return result_out;
   }
 
-  NativeFileSystemStatus WriteStreamSync(
+  FileSystemAccessStatus WriteStreamSync(
       uint64_t position,
       mojo::ScopedDataPipeConsumerHandle data_pipe,
       uint64_t* bytes_written_out) {
     base::RunLoop loop;
-    NativeFileSystemStatus result_out;
+    FileSystemAccessStatus result_out;
     handle_->WriteStream(position, std::move(data_pipe),
                          base::BindLambdaForTesting(
-                             [&](blink::mojom::NativeFileSystemErrorPtr result,
+                             [&](blink::mojom::FileSystemAccessErrorPtr result,
                                  uint64_t bytes_written) {
                                result_out = result->status;
                                *bytes_written_out = bytes_written;
@@ -275,12 +275,12 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
     return result_out;
   }
 
-  NativeFileSystemStatus TruncateSync(uint64_t length) {
+  FileSystemAccessStatus TruncateSync(uint64_t length) {
     base::RunLoop loop;
-    NativeFileSystemStatus result_out;
+    FileSystemAccessStatus result_out;
     handle_->Truncate(length,
                       base::BindLambdaForTesting(
-                          [&](blink::mojom::NativeFileSystemErrorPtr result) {
+                          [&](blink::mojom::FileSystemAccessErrorPtr result) {
                             result_out = result->status;
                             loop.Quit();
                           }));
@@ -288,11 +288,23 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
     return result_out;
   }
 
-  NativeFileSystemStatus CloseSync() {
+  FileSystemAccessStatus CloseSync() {
     base::RunLoop loop;
-    NativeFileSystemStatus result_out;
+    FileSystemAccessStatus result_out;
     handle_->Close(base::BindLambdaForTesting(
-        [&](blink::mojom::NativeFileSystemErrorPtr result) {
+        [&](blink::mojom::FileSystemAccessErrorPtr result) {
+          result_out = result->status;
+          loop.Quit();
+        }));
+    loop.Run();
+    return result_out;
+  }
+
+  FileSystemAccessStatus AbortSync() {
+    base::RunLoop loop;
+    FileSystemAccessStatus result_out;
+    handle_->Abort(base::BindLambdaForTesting(
+        [&](blink::mojom::FileSystemAccessErrorPtr result) {
           result_out = result->status;
           loop.Quit();
         }));
@@ -302,7 +314,7 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
 
   virtual bool WriteUsingBlobs() { return true; }
 
-  NativeFileSystemStatus WriteSync(uint64_t position,
+  FileSystemAccessStatus WriteSync(uint64_t position,
                                    const std::string& contents,
                                    uint64_t* bytes_written_out) {
     if (WriteUsingBlobs())
@@ -332,11 +344,13 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
   mojo::ReceiverSet<quarantine::mojom::Quarantine> quarantine_receivers_;
   download::QuarantineConnectionCallback quarantine_callback_;
 
-  scoped_refptr<FixedNativeFileSystemPermissionGrant> permission_grant_ =
-      base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
-          FixedNativeFileSystemPermissionGrant::PermissionStatus::GRANTED,
+  scoped_refptr<FixedFileSystemAccessPermissionGrant> permission_grant_ =
+      base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
+          FixedFileSystemAccessPermissionGrant::PermissionStatus::GRANTED,
           base::FilePath());
-  std::unique_ptr<NativeFileSystemFileWriterImpl> handle_;
+
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> remote_;
+  base::WeakPtr<NativeFileSystemFileWriterImpl> handle_;
 };
 
 class NativeFileSystemFileWriterImplWriteTest
@@ -360,20 +374,20 @@ TEST_F(NativeFileSystemFileWriterImplTest, WriteInvalidBlob) {
   ignore_result(blob.InitWithNewPipeAndPassReceiver());
 
   uint64_t bytes_written;
-  NativeFileSystemStatus result =
+  FileSystemAccessStatus result =
       WriteBlobSync(0, std::move(blob), &bytes_written);
   EXPECT_EQ(bytes_written, 0u);
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
 
   EXPECT_EQ("", ReadFile(test_file_url_));
 }
 
 TEST_F(NativeFileSystemFileWriterImplTest, HashSimpleOK) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   base::RunLoop loop;
@@ -423,8 +437,8 @@ TEST_F(NativeFileSystemFileWriterImplTest, HashLargerFileOK) {
   size_t target_size = 9 * 1024u;
   std::string file_data(target_size, '0');
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, file_data, &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, file_data, &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, target_size);
 
   base::RunLoop loop;
@@ -443,12 +457,12 @@ TEST_F(NativeFileSystemFileWriterImplTest, HashLargerFileOK) {
 
 TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteValidEmptyString) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 0u);
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   EXPECT_EQ("", ReadFile(test_file_url_));
@@ -457,12 +471,12 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteValidEmptyString) {
 TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteValidNonEmpty) {
   std::string test_data("abcdefghijklmnopqrstuvwxyz");
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, test_data, &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, test_data, &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, test_data.size());
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   EXPECT_EQ(test_data, ReadFile(test_file_url_));
@@ -470,18 +484,18 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteValidNonEmpty) {
 
 TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteWithOffsetInFile) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result;
+  FileSystemAccessStatus result;
 
   result = WriteSync(0, "1234567890", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 10u);
 
   result = WriteSync(4, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   EXPECT_EQ("1234abc890", ReadFile(test_file_url_));
@@ -489,12 +503,12 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteWithOffsetInFile) {
 
 TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteWithOffsetPastFile) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(4, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kFileError);
+  FileSystemAccessStatus result = WriteSync(4, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kFileError);
   EXPECT_EQ(bytes_written, 0u);
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_TRUE(base::Contains(quarantine_.paths, test_file_url_.path()));
 
   using std::string_literals::operator""s;
@@ -503,74 +517,65 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteWithOffsetPastFile) {
 
 TEST_F(NativeFileSystemFileWriterImplTest, TruncateShrink) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result;
+  FileSystemAccessStatus result;
 
   result = WriteSync(0, "1234567890", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 10u);
 
   result = TruncateSync(5);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
 
   EXPECT_EQ("12345", ReadFile(test_file_url_));
 }
 
 TEST_F(NativeFileSystemFileWriterImplTest, TruncateGrow) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result;
+  FileSystemAccessStatus result;
 
   result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   result = TruncateSync(5);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
 
   EXPECT_EQ(std::string("abc\0\0", 5), ReadFile(test_file_url_));
 }
 
-TEST_F(NativeFileSystemFileWriterImplTest, CloseAfterCloseNotOK) {
+TEST_F(NativeFileSystemFileWriterImplTest, WriterDestroyedAfterClose) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
-  result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kInvalidState);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(handle_.WasInvalidated());
+  EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_swap_url_,
+      storage::AsyncFileTestHelper::kDontCheckSize));
 }
 
-TEST_F(NativeFileSystemFileWriterImplTest, TruncateAfterCloseNotOK) {
+TEST_F(NativeFileSystemFileWriterImplTest, WriterDestroyedAfterAbort) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
-  result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
-
-  result = TruncateSync(0);
-  EXPECT_EQ(result, NativeFileSystemStatus::kInvalidState);
-}
-
-TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteAfterCloseNotOK) {
-  uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
-  EXPECT_EQ(bytes_written, 3u);
-
-  result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
-
-  result = WriteSync(0, "bcd", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kInvalidState);
+  result = AbortSync();
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
+  EXPECT_EQ("", ReadFile(test_file_url_));
+  EXPECT_TRUE(handle_.WasInvalidated());
+  EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_swap_url_,
+      storage::AsyncFileTestHelper::kDontCheckSize));
 }
 
 // TODO(mek): More tests, particularly for error conditions.
@@ -578,19 +583,19 @@ TEST_P(NativeFileSystemFileWriterImplWriteTest, WriteAfterCloseNotOK) {
 class NativeFileSystemFileWriterAfterWriteChecksTest
     : public NativeFileSystemFileWriterImplTest {
  public:
-  NativeFileSystemPermissionContext* permission_context() override {
+  FileSystemAccessPermissionContext* permission_context() override {
     return &permission_context_;
   }
 
  protected:
-  testing::StrictMock<MockNativeFileSystemPermissionContext>
+  testing::StrictMock<MockFileSystemAccessPermissionContext>
       permission_context_;
 };
 
 TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Allow) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   std::string expected_hash;
@@ -602,20 +607,20 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Allow) {
       permission_context_,
       PerformAfterWriteChecks_(
           AllOf(
-              Field(&NativeFileSystemWriteItem::target_file_path,
+              Field(&FileSystemAccessWriteItem::target_file_path,
                     Eq(test_file_url_.path())),
-              Field(&NativeFileSystemWriteItem::full_path,
+              Field(&FileSystemAccessWriteItem::full_path,
                     Eq(test_swap_url_.path())),
-              Field(&NativeFileSystemWriteItem::sha256_hash, Eq(expected_hash)),
-              Field(&NativeFileSystemWriteItem::size, Eq(3)),
-              Field(&NativeFileSystemWriteItem::frame_url, Eq(kTestURL)),
-              Field(&NativeFileSystemWriteItem::has_user_gesture, Eq(false))),
+              Field(&FileSystemAccessWriteItem::sha256_hash, Eq(expected_hash)),
+              Field(&FileSystemAccessWriteItem::size, Eq(3)),
+              Field(&FileSystemAccessWriteItem::frame_url, Eq(kTestURL)),
+              Field(&FileSystemAccessWriteItem::has_user_gesture, Eq(false))),
           kFrameId, _))
       .WillOnce(base::test::RunOnceCallback<2>(
-          NativeFileSystemPermissionContext::AfterWriteCheckResult::kAllow));
+          FileSystemAccessPermissionContext::AfterWriteCheckResult::kAllow));
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
 
   task_environment_.RunUntilIdle();
   EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
@@ -627,16 +632,16 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Allow) {
 
 TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Block) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   EXPECT_CALL(permission_context_, PerformAfterWriteChecks_(_, kFrameId, _))
       .WillOnce(base::test::RunOnceCallback<2>(
-          NativeFileSystemPermissionContext::AfterWriteCheckResult::kBlock));
+          FileSystemAccessPermissionContext::AfterWriteCheckResult::kBlock));
 
   result = CloseSync();
-  EXPECT_EQ(result, NativeFileSystemStatus::kOperationAborted);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOperationAborted);
 
   task_environment_.RunUntilIdle();
   EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
@@ -646,18 +651,19 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Block) {
       file_system_context_.get(), test_file_url_, 0));
 }
 
-TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, HandleCloseDuringCheck) {
+TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest,
+       HandleCloseDuringCheckOK) {
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "abc", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   using SBCallback = base::OnceCallback<void(
-      NativeFileSystemPermissionContext::AfterWriteCheckResult)>;
+      FileSystemAccessPermissionContext::AfterWriteCheckResult)>;
   SBCallback sb_callback;
   base::RunLoop loop;
   EXPECT_CALL(permission_context_, PerformAfterWriteChecks_)
-      .WillOnce(testing::Invoke([&](NativeFileSystemWriteItem* item,
+      .WillOnce(testing::Invoke([&](FileSystemAccessWriteItem* item,
                                     GlobalFrameRoutingId frame_id,
                                     SBCallback& callback) {
         sb_callback = std::move(callback);
@@ -667,7 +673,7 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, HandleCloseDuringCheck) {
   handle_->Close(base::DoNothing());
   loop.Run();
 
-  handle_.reset();
+  remote_.reset();
   // Destructor should not have deleted swap file with an active safe browsing
   // check pending.
   task_environment_.RunUntilIdle();
@@ -676,7 +682,49 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, HandleCloseDuringCheck) {
       storage::AsyncFileTestHelper::kDontCheckSize));
 
   std::move(sb_callback)
-      .Run(NativeFileSystemPermissionContext::AfterWriteCheckResult::kAllow);
+      .Run(FileSystemAccessPermissionContext::AfterWriteCheckResult::kAllow);
+
+  // Swap file should now be deleted, target file should be written out.
+  task_environment_.RunUntilIdle();
+  EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_swap_url_,
+      storage::AsyncFileTestHelper::kDontCheckSize));
+  EXPECT_TRUE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_file_url_, 3));
+}
+
+TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest,
+       HandleCloseDuringCheckNotOK) {
+  uint64_t bytes_written;
+  FileSystemAccessStatus result = WriteSync(0, "abc", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
+  EXPECT_EQ(bytes_written, 3u);
+
+  using SBCallback = base::OnceCallback<void(
+      FileSystemAccessPermissionContext::AfterWriteCheckResult)>;
+  SBCallback sb_callback;
+  base::RunLoop loop;
+  EXPECT_CALL(permission_context_, PerformAfterWriteChecks_)
+      .WillOnce(testing::Invoke([&](FileSystemAccessWriteItem* item,
+                                    GlobalFrameRoutingId frame_id,
+                                    SBCallback& callback) {
+        sb_callback = std::move(callback);
+        loop.Quit();
+      }));
+
+  handle_->Close(base::DoNothing());
+  loop.Run();
+
+  remote_.reset();
+  // Destructor should not have deleted swap file with an active safe browsing
+  // check pending.
+  task_environment_.RunUntilIdle();
+  EXPECT_TRUE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_swap_url_,
+      storage::AsyncFileTestHelper::kDontCheckSize));
+
+  std::move(sb_callback)
+      .Run(FileSystemAccessPermissionContext::AfterWriteCheckResult::kBlock);
 
   // Swap file should now be deleted, target file should be unmodified.
   task_environment_.RunUntilIdle();
@@ -707,26 +755,28 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest,
             storage::AsyncFileTestHelper::CreateFile(file_system_context_.get(),
                                                      test_swap_url_));
 
-  handle_ = std::make_unique<NativeFileSystemFileWriterImpl>(
-      manager_.get(),
-      NativeFileSystemManagerImpl::BindingContext(kTestOrigin, kTestURL,
-                                                  kFrameId),
-      test_file_url_, test_swap_url_,
-      NativeFileSystemManagerImpl::SharedHandleState(permission_grant_,
-                                                     permission_grant_, {}),
-      /*has_transient_user_activation=*/false, quarantine_callback_);
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> remote;
+  handle_ =
+      manager_->CreateFileWriter(NativeFileSystemManagerImpl::BindingContext(
+                                     kTestOrigin, kTestURL, kFrameId),
+                                 test_file_url_, test_swap_url_,
+                                 NativeFileSystemManagerImpl::SharedHandleState(
+                                     permission_grant_, permission_grant_, {}),
+                                 remote.InitWithNewPipeAndPassReceiver(),
+                                 /*has_transient_user_activation=*/false,
+                                 /*auto_close=*/false, quarantine_callback_);
 
   uint64_t bytes_written;
-  NativeFileSystemStatus result = WriteSync(0, "foo", &bytes_written);
-  EXPECT_EQ(result, NativeFileSystemStatus::kOk);
+  FileSystemAccessStatus result = WriteSync(0, "foo", &bytes_written);
+  EXPECT_EQ(result, FileSystemAccessStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
   using SBCallback = base::OnceCallback<void(
-      NativeFileSystemPermissionContext::AfterWriteCheckResult)>;
+      FileSystemAccessPermissionContext::AfterWriteCheckResult)>;
   SBCallback sb_callback;
   base::RunLoop sb_loop;
   EXPECT_CALL(permission_context_, PerformAfterWriteChecks_)
-      .WillOnce(testing::Invoke([&](NativeFileSystemWriteItem* item,
+      .WillOnce(testing::Invoke([&](FileSystemAccessWriteItem* item,
                                     GlobalFrameRoutingId frame_id,
                                     SBCallback& callback) {
         sb_callback = std::move(callback);
@@ -736,7 +786,7 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest,
   handle_->Close(base::DoNothing());
   sb_loop.Run();
   std::move(sb_callback)
-      .Run(NativeFileSystemPermissionContext::AfterWriteCheckResult::kAllow);
+      .Run(FileSystemAccessPermissionContext::AfterWriteCheckResult::kAllow);
 
   base::RunLoop move_loop;
   test_file_system_backend_->SetOperationCreatedCallback(
@@ -748,7 +798,7 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest,
   // About to start the move operation. Now destroy the writer. The
   // move will still complete, but make sure that quarantine was also
   // applied to the resulting file.
-  handle_.reset();
+  remote_.reset();
   task_environment_.RunUntilIdle();
 
   // Swap file should have been deleted since writer was closed.

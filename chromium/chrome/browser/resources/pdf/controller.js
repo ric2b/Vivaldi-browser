@@ -150,6 +150,33 @@ export class PluginController {
   constructor() {
     /** @private {!EventTarget} */
     this.eventTarget_ = new EventTarget();
+
+    /** @private {boolean} */
+    this.isActive_ = false;
+
+    /** @private {!HTMLEmbedElement} */
+    this.plugin_;
+
+    /** @private {!Viewport} */
+    this.viewport_;
+
+    /** @private {!function():boolean} */
+    this.getIsUserInitiatedCallback_;
+
+    /** @private {!function():?Promise} */
+    this.getLoadedCallback_;
+
+    /** @private {!Map<string, PromiseResolver>} */
+    this.pendingTokens_;
+
+    /** @private {!Map<string, !PromiseResolver>} */
+    this.requestResolverMap_;
+
+    /**
+     * Counter for use with createUid
+     * @private {number}
+     */
+    this.uidCounter_ = 1;
   }
 
   /**
@@ -159,34 +186,15 @@ export class PluginController {
    * @param {function():?Promise} getLoadedCallback
    */
   init(plugin, viewport, getIsUserInitiatedCallback, getLoadedCallback) {
-    /** @private {boolean} */
-    this.isActive_ = false;
-
-    /** @private {!HTMLEmbedElement} */
     this.plugin_ = plugin;
-
-    /** @private {!Viewport} */
     this.viewport_ = viewport;
-
-    /** @private {!function():boolean} */
     this.getIsUserInitiatedCallback_ = getIsUserInitiatedCallback;
-
-    /** @private {!function():?Promise} */
     this.getLoadedCallback_ = getLoadedCallback;
-
-    /** @private {!Map<string, PromiseResolver>} */
     this.pendingTokens_ = new Map();
+    this.requestResolverMap_ = new Map();
+
     this.plugin_.addEventListener(
         'message', e => this.handlePluginMessage_(e), false);
-
-    /**
-     * Counter for use with createUid
-     * @private {number}
-     */
-    this.uidCounter_ = 1;
-
-    /** @private {!Map<string, !PromiseResolver>} */
-    this.requestResolverMap_ = new Map();
   }
 
   /**
@@ -420,6 +428,14 @@ export class PluginController {
     return this.postMessageWithReply_({
       type: 'getNamedDestination',
       namedDestination: destination,
+    });
+  }
+
+  /** @param {boolean} enableReadOnly */
+  setReadOnly(enableReadOnly) {
+    this.postMessage_({
+      type: 'setReadOnly',
+      enableReadOnly: enableReadOnly,
     });
   }
 

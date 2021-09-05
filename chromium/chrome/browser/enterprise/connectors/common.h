@@ -28,6 +28,7 @@ constexpr char kKeyBlockPasswordProtected[] = "block_password_protected";
 constexpr char kKeyBlockLargeFiles[] = "block_large_files";
 constexpr char kKeyBlockUnsupportedFileTypes[] = "block_unsupported_file_types";
 constexpr char kKeyMinimumDataSize[] = "minimum_data_size";
+constexpr char kKeyEnabledEventNames[] = "enabled_event_names";
 
 enum class ReportingConnector {
   SECURITY_EVENT,
@@ -58,21 +59,35 @@ struct AnalysisSettings {
 
   // Minimum text size for BulkDataEntry scans. 0 means no minimum.
   size_t minimum_data_size = 100;
+
+  // The DM token to be used for scanning. May be empty, for example if this
+  // scan is initiated by APP.
+  std::string dm_token = "";
 };
 
 struct ReportingSettings {
   ReportingSettings();
-  explicit ReportingSettings(GURL url);
+  explicit ReportingSettings(GURL url,
+                             const std::string& dm_token,
+                             bool per_profile);
   ReportingSettings(ReportingSettings&&);
   ReportingSettings& operator=(ReportingSettings&&);
   ~ReportingSettings();
 
   GURL reporting_url;
+  std::set<std::string> enabled_event_names;
+  std::string dm_token;
+
+  // Indicates if the report should be made for the profile, or the browser if
+  // false.
+  bool per_profile = false;
 };
 
 // Returns the pref path corresponding to a connector.
 const char* ConnectorPref(AnalysisConnector connector);
 const char* ConnectorPref(ReportingConnector connector);
+const char* ConnectorScopePref(AnalysisConnector connector);
+const char* ConnectorScopePref(ReportingConnector connector);
 
 // Returns the highest precedence action in the given parameters.
 TriggeredRule::Action GetHighestPrecedenceAction(

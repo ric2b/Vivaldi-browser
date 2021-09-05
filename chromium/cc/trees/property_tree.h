@@ -21,7 +21,7 @@
 #include "cc/input/scroll_snap_data.h"
 #include "cc/paint/element_id.h"
 #include "cc/paint/filter_operations.h"
-#include "cc/trees/mutator_host_client.h"
+#include "cc/trees/mutator_host.h"
 #include "cc/trees/sticky_position_constraint.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
@@ -540,39 +540,23 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
 };
 
 struct AnimationScaleData {
-  // Variable used to invalidate cached animation scale data when transform tree
+  // Variable used to invalidate cached maximum scale data when transform tree
   // updates.
-  int update_number;
+  int update_number = -1;
 
-  // The maximum scale that this node's |to_target| transform will have during
-  // current animations, considering only scales at keyframes not incuding the
-  // starting keyframe of each animation.
-  float combined_maximum_animation_target_scale;
+  // The maximum scale that this node's |to_screen| transform will have during
+  // current animations of this node and its ancestors, or the current scale of
+  // this node's |to_screen| transform if there are no animations.
+  float maximum_to_screen_scale = kInvalidScale;
 
-  // The maximum scale that this node's |to_target| transform will have during
-  // current animations, considering only the starting scale of each animation.
-  float combined_starting_animation_scale;
+  // Whether |maximum_to_screen_scale| is affected by any animation of this
+  // node or its ancestors. A scale animation having maximum scale of 1 is
+  // treated as not affecting |maximum_to_screen_scale|.
+  bool affected_by_animation_scale = false;
 
-  bool to_screen_has_scale_animation;
-
-  AnimationScaleData() {
-    update_number = -1;
-    combined_maximum_animation_target_scale = 0.f;
-    combined_starting_animation_scale = 0.f;
-    to_screen_has_scale_animation = false;
-  }
-};
-
-struct CombinedAnimationScale {
-  float maximum_animation_scale;
-  float starting_animation_scale;
-
-  CombinedAnimationScale(float maximum, float starting)
-      : maximum_animation_scale(maximum), starting_animation_scale(starting) {}
-  bool operator==(const CombinedAnimationScale& other) const {
-    return maximum_animation_scale == other.maximum_animation_scale &&
-           starting_animation_scale == other.starting_animation_scale;
-  }
+  // Whether |maximum_to_screen_scale| is affected by any non-calculatable
+  // scale.
+  bool affected_by_invalid_scale = false;
 };
 
 struct DrawTransforms {
@@ -686,9 +670,7 @@ class CC_EXPORT PropertyTrees final {
                                  const PropertyAnimationState& mask,
                                  const PropertyAnimationState& state,
                                  bool check_node_existence);
-  void AnimationScalesChanged(ElementId element_id,
-                              float maximum_scale,
-                              float starting_scale);
+  void MaximumAnimationScaleChanged(ElementId element_id, float maximum_scale);
   void SetInnerViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetOuterViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void UpdateChangeTracking();
@@ -711,11 +693,13 @@ class CC_EXPORT PropertyTrees final {
   void AsValueInto(base::trace_event::TracedValue* value) const;
   std::string ToString() const;
 
-  CombinedAnimationScale GetAnimationScales(int transform_node_id,
-                                            LayerTreeImpl* layer_tree_impl);
-  void SetAnimationScalesForTesting(int transform_id,
-                                    float maximum_animation_scale,
-                                    float starting_animation_scale);
+  float MaximumAnimationToScreenScale(int transform_id);
+  bool AnimationAffectedByInvalidScale(int transform_id);
+
+  void SetMaximumAnimationToScreenScaleForTesting(
+      int transform_id,
+      float maximum_scale,
+      bool affected_by_invalid_scale);
 
   bool GetToTarget(int transform_id,
                    int effect_id,
@@ -737,6 +721,8 @@ class CC_EXPORT PropertyTrees final {
  private:
   gfx::Vector2dF inner_viewport_container_bounds_delta_;
   gfx::Vector2dF outer_viewport_container_bounds_delta_;
+
+  const AnimationScaleData& GetAnimationScaleData(int transform_id);
 
   // GetDrawTransforms may change the value of cached_data_.
   DrawTransforms& GetDrawTransforms(int transform_id, int effect_id) const;

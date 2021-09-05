@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.language.settings;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.base.LocaleUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 
@@ -36,16 +37,17 @@ public class LanguagesManager {
     // Constants used to log UMA enum histogram, must stay in sync with
     // LanguageSettingsActionType. Further actions can only be appended, existing
     // entries must not be overwritten.
-    @IntDef({LanguageSettingsActionType.CLICK_ON_ADD_LANGUAGE,
-            LanguageSettingsActionType.LANGUAGE_ADDED, LanguageSettingsActionType.LANGUAGE_REMOVED,
+    @IntDef({LanguageSettingsActionType.LANGUAGE_ADDED, LanguageSettingsActionType.LANGUAGE_REMOVED,
             LanguageSettingsActionType.DISABLE_TRANSLATE_GLOBALLY,
             LanguageSettingsActionType.ENABLE_TRANSLATE_GLOBALLY,
             LanguageSettingsActionType.DISABLE_TRANSLATE_FOR_SINGLE_LANGUAGE,
             LanguageSettingsActionType.ENABLE_TRANSLATE_FOR_SINGLE_LANGUAGE,
-            LanguageSettingsActionType.LANGUAGE_LIST_REORDERED})
+            LanguageSettingsActionType.LANGUAGE_LIST_REORDERED,
+            LanguageSettingsActionType.CHANGE_CHROME_LANGUAGE,
+            LanguageSettingsActionType.CHANGE_TARGET_LANGUAGE})
     @Retention(RetentionPolicy.SOURCE)
     @interface LanguageSettingsActionType {
-        int CLICK_ON_ADD_LANGUAGE = 1;
+        // int CLICK_ON_ADD_LANGUAGE = 1; // Removed M89
         int LANGUAGE_ADDED = 2;
         int LANGUAGE_REMOVED = 3;
         int DISABLE_TRANSLATE_GLOBALLY = 4;
@@ -53,18 +55,26 @@ public class LanguagesManager {
         int DISABLE_TRANSLATE_FOR_SINGLE_LANGUAGE = 6;
         int ENABLE_TRANSLATE_FOR_SINGLE_LANGUAGE = 7;
         int LANGUAGE_LIST_REORDERED = 8;
-        int NUM_ENTRIES = 9;
+        int CHANGE_CHROME_LANGUAGE = 9;
+        int CHANGE_TARGET_LANGUAGE = 10;
+        int NUM_ENTRIES = 11;
     }
 
     // Constants used to log UMA enum histogram, must stay in sync with
     // LanguageSettingsPageType. Further actions can only be appended, existing
     // entries must not be overwritten.
-    @IntDef({LanguageSettingsPageType.PAGE_MAIN, LanguageSettingsPageType.PAGE_ADD_LANGUAGE})
+    @IntDef({LanguageSettingsPageType.PAGE_MAIN, LanguageSettingsPageType.PAGE_ADD_LANGUAGE,
+            LanguageSettingsPageType.CHROME_LANGUAGE, LanguageSettingsPageType.TARGET_LANGUAGE,
+            LanguageSettingsPageType.ADVANCED_LANGUAGE_SETTINGS})
     @Retention(RetentionPolicy.SOURCE)
     @interface LanguageSettingsPageType {
         int PAGE_MAIN = 0;
         int PAGE_ADD_LANGUAGE = 1;
-        int NUM_ENTRIES = 2;
+        // int LANGUAGE_DETAILS = 2; // iOS only
+        int CHROME_LANGUAGE = 3;
+        int ADVANCED_LANGUAGE_SETTINGS = 4;
+        int TARGET_LANGUAGE = 5;
+        int NUM_ENTRIES = 6;
     }
 
     private static LanguagesManager sManager;
@@ -121,6 +131,43 @@ public class LanguagesManager {
             if (!codes.contains(item.getCode())) results.add(item);
         }
         return results;
+    }
+
+    /**
+     * Get a list of LanguageItems that can be Chrome UI languages.
+     * @return List of LanguageItems.
+     */
+    public List<LanguageItem> getAvailableUiLanguageItems() {
+        List<LanguageItem> results = new ArrayList<>();
+        for (LanguageItem item : mLanguagesMap.values()) {
+            if (item.isUISupported()) results.add(item);
+        }
+        return results;
+    }
+
+    /**
+     * Get a list of LanguageItems that are translatable.
+     * @return List of LanguageItems.
+     */
+    public List<LanguageItem> getTranslateLanguageItems() {
+        List<LanguageItem> results = new ArrayList<>();
+        for (LanguageItem item : mLanguagesMap.values()) {
+            if (item.isSupported()) results.add(item);
+        }
+        return results;
+    }
+
+    /**
+     * Get a LanguageItem given the iso639 locale code (e.g. en-US).  If no direct match is found
+     * only the language is checked. If there is still no match null is returned.
+     * @return LanguageItem or null if none found
+     */
+    public LanguageItem getLanguageItem(String localeCode) {
+        LanguageItem result = mLanguagesMap.get(localeCode);
+        if (result != null) return result;
+
+        String baseLanguage = LocaleUtils.toLanguage(localeCode);
+        return mLanguagesMap.get(baseLanguage);
     }
 
     /**

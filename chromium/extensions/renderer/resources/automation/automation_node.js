@@ -527,6 +527,20 @@ var GetWordEndOffsets = natives.GetWordEndOffsets;
 /**
  * @param {string} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
+ * @return {!Array<number>}
+ */
+var GetSentenceStartOffsets = natives.GetSentenceStartOffsets;
+
+/**
+ * @param {string} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {!Array<number>}
+ */
+var GetSentenceEndOffsets = natives.GetSentenceEndOffsets;
+
+/**
+ * @param {string} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
  */
 var SetAccessibilityFocus = natives.SetAccessibilityFocus;
 
@@ -817,7 +831,7 @@ AutomationNodeImpl.prototype = {
   },
 
   get tableCellRowHeaders() {
-    var id = GetTableCellRowHeaders(this.treeID, this.id);
+    var ids = GetTableCellRowHeaders(this.treeID, this.id);
     if (ids && this.rootImpl) {
       var result = [];
       for (var i = 0; i < ids.length; i++)
@@ -857,6 +871,14 @@ AutomationNodeImpl.prototype = {
 
   get nonInlineTextWordEnds() {
     return GetWordEndOffsets(this.treeID, this.id);
+  },
+
+  get sentenceStarts() {
+    return GetSentenceStartOffsets(this.treeID, this.id);
+  },
+
+  get sentenceEnds() {
+    return GetSentenceEndOffsets(this.treeID, this.id);
   },
 
   get markers() {
@@ -1084,8 +1106,7 @@ AutomationNodeImpl.prototype = {
              attributes: this.attributes };
   },
 
-  dispatchEvent: function(
-      eventType, eventFrom, mouseX, mouseY, intents) {
+  dispatchEvent: function(eventType, eventFrom, mouseX, mouseY, intents) {
     var path = [];
     var parent = this.parent;
     while (parent) {
@@ -1301,6 +1322,7 @@ var stringAttributes = [
     'accessKey',
     'ariaInvalidValue',
     'autoComplete',
+    'checkedStateDescription',
     'className',
     'containerLiveRelevant',
     'containerLiveStatus',
@@ -1751,7 +1773,6 @@ AutomationRootNodeImpl.prototype = {
   },
 
   destroy: function() {
-    this.dispatchEvent('destroyed', 'none');
     for (var id in this.axNodeDataCache_)
       this.remove(id);
     this.detach();
@@ -1910,6 +1931,8 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
         'sortDirection',
         'standardActions',
         'state',
+        'sentenceStarts',
+        'sentenceEnds',
         'tableCellAriaColumnIndex',
         'tableCellAriaRowIndex',
         'tableCellColumnHeaders',

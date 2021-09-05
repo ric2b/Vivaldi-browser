@@ -36,6 +36,7 @@ source_set("browser_context_keyed_service_factories") {
     "//build:chromeos_buildflags",
     "//extensions/browser:browser_sources",
     "//extensions/browser/api",
+    "//extensions/browser/api:api_implementations",
   ]
 }
 
@@ -45,6 +46,7 @@ source_set("browser_sources") {
   sources = [
     "activity.cc",
     "activity.h",
+    "allowlist_state.h",
     "api_activity_monitor.cc",
     "api_activity_monitor.h",
     "app_sorting.h",
@@ -407,12 +409,14 @@ source_set("browser_sources") {
     "//extensions/browser/guest_view/web_view/web_ui",
     "//extensions/buildflags",
     "//extensions/common",
+    "//extensions/common:mojom",
     "//extensions/common/api",
     "//extensions/strings",
     "//google_apis",
     "//ppapi/buildflags",
     "//services/device/public/mojom",
     "//services/metrics/public/cpp:metrics_cpp",
+    "//services/network/public/mojom",
     "//services/preferences/public/cpp",
     "//services/service_manager/public/cpp",
     "//skia",
@@ -527,7 +531,6 @@ source_set("browser_tests") {
       "api/audio/audio_apitest_chromeos.cc",
       "api/cec_private/cec_private_apitest.cc",
       "api/media_perception_private/media_perception_private_apitest.cc",
-      "api/system_power_source/system_power_source_apitest.cc",
       "api/virtual_keyboard/virtual_keyboard_apitest.cc",
     ]
 
@@ -544,6 +547,7 @@ source_set("browser_tests") {
       "//chromeos/login/login_state",
       "//chromeos/network",
       "//components/crash/content/browser/error_reporting:mock_crash_endpoint",
+      "//extensions/common:mojom",
     ]
   }
 }
@@ -770,7 +774,6 @@ source_set("unit_tests") {
       "api/media_perception_private/conversion_utils_unittest.cc",
       "api/media_perception_private/media_perception_api_manager_unittest.cc",
       "api/networking_private/networking_private_chromeos_unittest.cc",
-      "api/system_power_source/system_power_source_api_unittest.cc",
       "api/virtual_keyboard_private/virtual_keyboard_private_api_unittest.cc",
       "api/webcam_private/visca_webcam_unittest.cc",
     ]

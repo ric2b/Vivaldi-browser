@@ -140,7 +140,7 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   WorkerOrWorkletScriptController* ScriptController() {
     return script_controller_.Get();
   }
-  mojom::blink::V8CacheOptions GetV8CacheOptions() const {
+  mojom::blink::V8CacheOptions GetV8CacheOptions() const override {
     return v8_cache_options_;
   }
 
@@ -150,11 +150,15 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
 
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) override;
 
-  void ApplySandboxFlags(network::mojom::blink::WebSandboxFlags mask);
+  void SetSandboxFlags(network::mojom::blink::WebSandboxFlags mask);
 
   void SetDefersLoadingForResourceFetchers(WebURLLoader::DeferType defers);
 
   virtual int GetOutstandingThrottledLimit() const;
+
+  // TODO(crbug.com/1146824): Remove this once PlzDedicatedWorker and
+  // PlzServiceWorker ship.
+  virtual bool IsInitialized() const = 0;
 
   Deprecation& GetDeprecation() { return deprecation_; }
 

@@ -22,7 +22,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="UMA.ActualLogUploadInterval" units="minutes"
-    expires_after="2021-04-15">
+    expires_after="2021-06-20">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -53,7 +53,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.ClientIdBackupRecoveredWithAge" units="hours"
-    expires_after="2021-02-25">
+    expires_after="2021-05-16">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -65,7 +65,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.EnrollmentStatus" enum="EnrollmentStatus"
-    expires_after="2021-04-15">
+    expires_after="2021-06-20">
   <owner>asvitkine@chromium.org</owner>
   <owner>kaznacheev@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -119,7 +119,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.InitSequence" enum="UmaInitSequence"
-    expires_after="2021-04-15">
+    expires_after="2021-06-20">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -132,7 +132,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.IsClonedInstall" enum="BooleanCloned"
-    expires_after="2021-04-15">
+    expires_after="2021-07-11">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -212,7 +212,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="UMA.LogSize.OnSuccess" units="KB" expires_after="2021-04-15">
+<histogram name="UMA.LogSize.OnSuccess" units="KB" expires_after="2021-06-20">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -225,7 +225,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.LogUpload.Canceled.CellularConstraint"
-    enum="BooleanCanceled" expires_after="2021-05-09">
+    enum="BooleanCanceled" expires_after="2021-07-11">
   <owner>holte@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -236,7 +236,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.LogUpload.ResponseOrErrorCode"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2021-04-15">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2021-06-20">
   <owner>holte@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -258,7 +258,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.LowEntropySource3Value" units="units"
-    expires_after="2021-04-15">
+    expires_after="2021-06-20">
   <owner>asvitkine@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -283,7 +283,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.MachineIdState" enum="UmaMachineIdState"
-    expires_after="M77">
+    expires_after="2021-12-06">
   <owner>jwd@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -295,12 +295,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.MetricsIDsReset" enum="BooleanHit"
-    expires_after="2020-12-06">
+    expires_after="2021-12-06">
   <owner>jwd@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    A count of the number of times the metrics ids (client id and low entropy
-    source) have been reset due to a cloned install being detected.
+    Records when the metrics IDs (client id and low entry source) are reset due
+    to a cloned install detection. This is done during startup when
+    MetricsStateManager is created.
+
+    A cloned install is detected when the current machine ID (24-bit hash of
+    machine characteristics) is different than the one stored in local state. A
+    pref is then written to local state to indicate a clone. The metrics IDs are
+    reset on the next startup assuming the cloned install pref is still set.
   </summary>
 </histogram>
 
@@ -315,7 +321,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.MetricsService.Initialize" enum="Boolean"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -325,7 +331,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.NegativeSamples.Histogram" enum="HistogramNameHash"
-    expires_after="2021-04-15">
+    expires_after="2021-06-20">
   <owner>asvitkine@chromium.org</owner>
   <owner>bcwhite@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -427,7 +433,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.PersistentHistograms.InitResult"
-    enum="PersistentHistogramsInitResult" expires_after="2021-04-25">
+    enum="PersistentHistogramsInitResult" expires_after="2021-06-27">
   <owner>bcwhite@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -437,7 +443,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.PrimaryUserType" enum="UserType"
-    expires_after="2021-03-15">
+    expires_after="2021-05-16">
   <owner>michaelpg@chromium.org</owner>
   <owner>yilkal@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -462,7 +468,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.ProtoCompressionRatio" units="%"
-    expires_after="2021-04-15">
+    expires_after="2021-06-20">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -473,7 +479,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.SamplingRatePerMille" units="samples per mille"
-    expires_after="2021-04-15">
+    expires_after="2021-06-27">
   <owner>jwd@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -501,7 +507,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.EventRecordingState"
-    enum="StructuredMetricsEventRecordingState" expires_after="2021-04-04">
+    enum="StructuredMetricsEventRecordingState" expires_after="2021-06-06">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -524,7 +530,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.KeyValidationState"
-    enum="StructuredMetricsKeyValidationState" expires_after="2021-04-04">
+    enum="StructuredMetricsKeyValidationState" expires_after="2021-06-06">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -536,7 +542,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.NumEventsInUpload" units="count"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -547,7 +553,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.PrefReadError"
-    enum="PrefServiceReadError" expires_after="2021-04-04">
+    enum="PrefServiceReadError" expires_after="2021-06-06">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -571,7 +577,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.TruncatedEvents.UserAction" units="events"
-    expires_after="2021-05-09">
+    expires_after="2021-07-11">
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -584,13 +590,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     expires_after="2021-08-30">
   <owner>holte@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
-  <owner>mpearson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    The number of UMA unsent logs removed from persistent storage.
-
-    Useful in comparison with UMA.UnsentLogs.IntendingToSend (that counts hte
-    number of UMA unsent logs that are intended to be sent, i.e., not dropped).
+    Counter for number of UMA unsent logs removed from persistent storage.
   </summary>
 </histogram>
 
@@ -608,20 +610,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="UMA.UnsentLogs.IntendingToSend" units="logs"
-    expires_after="2021-04-01">
-  <owner>mpearson@chromium.org</owner>
-  <owner>src/base/metrics/OWNERS</owner>
-  <summary>
-    The number of UMA unsent logs from persistent storage that will be staged /
-    are intended to be sent. These logs are not dropped from persistent storage.
-
-    Useful in comparison with UMA.UnsentLogs.Dropped (to see how many persistent
-    logs are intended to be sent versus are not intended to be sent) and with
-    UMA.UnsentLogs.IntendingToSend (to see how many are actually sent).
-  </summary>
-</histogram>
-
 <histogram name="UMA.UnsentLogs.PersistedSizeInKB" units="KB"
     expires_after="2021-05-30">
   <owner>michaelbai@chromium.org</owner>
@@ -631,17 +619,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     The size of all persistent initial or ongoing logs that have been
     proto-encoded and compressed in the previous browser run; it is recorded on
     the browser start up. The value '0' means no unsent logs.
-  </summary>
-</histogram>
-
-<histogram name="UMA.UnsentLogs.Sent" enum="Boolean" expires_after="2021-04-01">
-  <owner>mpearson@chromium.org</owner>
-  <owner>src/base/metrics/OWNERS</owner>
-  <summary>
-    Emitted when a UMA unsent log is marked as sent.
-
-    Useful in comparison with UMA.UnsentLogs.Dropped and
-    UMA.UnsentLogs.IntendingToSend.
   </summary>
 </histogram>
 
@@ -698,8 +675,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="UMA.UserDemographics.IsNoisedAgeOver21Under85"
+    enum="BooleanNoisedAgeOver21Under85" expires_after="2021-11-04">
+  <owner>tobyhuang@chromium.org</owner>
+  <owner>cros-families-eng@google.com</owner>
+  <summary>
+    True indicates that the current user is over the age of 21 and under the age
+    of 85 inclusive, and unknown otherwise. Specifically, this histogram can't
+    identify users under 21 and over 85. The user's age includes a random offset
+    for privacy. This metric is logged periodically through
+    ProvideCurrentSessionData().
+  </summary>
+</histogram>
+
 <histogram name="UMA.UserDemographics.Status" enum="UserDemographicsStatus"
-    expires_after="2021-04-15">
+    expires_after="2021-06-20">
   <owner>vincb@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>

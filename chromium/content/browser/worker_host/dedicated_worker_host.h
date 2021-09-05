@@ -18,6 +18,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/isolation_info.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom-forward.h"
@@ -53,8 +54,10 @@ class DedicatedWorkerHost final : public RenderProcessHostObserver {
       const blink::DedicatedWorkerToken& token,
       RenderProcessHost* worker_process_host,
       base::Optional<GlobalFrameRoutingId> creator_render_frame_host_id,
+      base::Optional<blink::DedicatedWorkerToken> creator_worker_token,
       GlobalFrameRoutingId ancestor_render_frame_host_id,
       const url::Origin& creator_origin,
+      const net::IsolationInfo& isolation_info,
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter);
@@ -66,6 +69,12 @@ class DedicatedWorkerHost final : public RenderProcessHostObserver {
   const blink::DedicatedWorkerToken& GetToken() const { return token_; }
   RenderProcessHost* GetProcessHost() const { return worker_process_host_; }
   const url::Origin& GetWorkerOrigin() const { return worker_origin_; }
+  const GlobalFrameRoutingId& GetAncestorRenderFrameHostId() const {
+    return ancestor_render_frame_host_id_;
+  }
+  const base::Optional<GURL>& GetFinalResponseURL() const {
+    return final_response_url_;
+  }
 
   void CreateContentSecurityNotifier(
       mojo::PendingReceiver<blink::mojom::ContentSecurityNotifier> receiver);
@@ -102,9 +111,17 @@ class DedicatedWorkerHost final : public RenderProcessHostObserver {
 
   void ReportNoBinderForInterface(const std::string& error);
 
+  const net::NetworkIsolationKey& GetNetworkIsolationKey() const {
+    return isolation_info_.network_isolation_key();
+  }
+
   const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy()
       const {
     return cross_origin_embedder_policy_;
+  }
+
+  ServiceWorkerMainResourceHandle* service_worker_handle() {
+    return service_worker_handle_.get();
   }
 
  private:
@@ -175,6 +192,10 @@ class DedicatedWorkerHost final : public RenderProcessHostObserver {
   // when this worker is nested.
   const base::Optional<GlobalFrameRoutingId> creator_render_frame_host_id_;
 
+  // The token of the dedicated worker that directly starts this worker. This is
+  // base::nullopt when this worker is created from a frame.
+  const base::Optional<blink::DedicatedWorkerToken> creator_worker_token_;
+
   // The ID of the frame that owns this worker, either directly, or (in the case
   // of nested workers) indirectly via a tree of dedicated workers.
   const GlobalFrameRoutingId ancestor_render_frame_host_id_;
@@ -185,6 +206,10 @@ class DedicatedWorkerHost final : public RenderProcessHostObserver {
   // The origin of this worker.
   // https://html.spec.whatwg.org/C/#concept-settings-object-origin
   const url::Origin worker_origin_;
+
+  // The IsolationInfo associated with this worker. Same as that of the
+  // frame or the worker that created this worker.
+  const net::IsolationInfo isolation_info_;
 
   // The DedicatedWorker's Cross-Origin-Embedder-Policy(COEP). It is equals to
   // the nearest ancestor frame host's COEP:
@@ -200,7 +225,7 @@ class DedicatedWorkerHost final : public RenderProcessHostObserver {
   std::unique_ptr<ServiceWorkerMainResourceHandle> service_worker_handle_;
 
   BrowserInterfaceBrokerImpl<DedicatedWorkerHost, const url::Origin&> broker_{
-      this};
+      this, /*policy_applier=*/nullptr};
   mojo::Receiver<blink::mojom::BrowserInterfaceBroker> broker_receiver_{
       &broker_};
 
@@ -221,6 +246,8 @@ class DedicatedWorkerHost final : public RenderProcessHostObserver {
   // context_url.
   mojo::Remote<network::mojom::CrossOriginEmbedderPolicyReporter>
       coep_reporter_;  // Never null.
+  // Will be set once the worker script started loading.
+  base::Optional<GURL> final_response_url_;
 
   base::WeakPtrFactory<DedicatedWorkerHost> weak_factory_{this};
 

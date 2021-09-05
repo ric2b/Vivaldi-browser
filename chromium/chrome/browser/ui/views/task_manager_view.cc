@@ -8,6 +8,7 @@
 
 #include "base/callback_helpers.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
@@ -34,14 +35,15 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/window_properties.h"
+#include "chrome/browser/ui/app_list/icon_standardizer.h"
 #include "chrome/grit/theme_resources.h"
 #include "ui/aura/window.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_WIN)
 #include "chrome/browser/shell_integration_win.h"
@@ -97,7 +99,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
   g_task_manager_view->SelectTaskOfActiveTab(browser);
   g_task_manager_view->GetWidget()->Show();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   aura::Window* window = g_task_manager_view->GetWidget()->GetNativeWindow();
   // An app id for task manager windows, also used to identify the shelf item.
   // Generated as crx_file::id_util::GenerateId("org.chromium.taskmanager")
@@ -106,6 +108,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
   window->SetProperty(ash::kShelfIDKey, shelf_id.Serialize());
   window->SetProperty(ash::kAppIDKey, shelf_id.app_id);
   window->SetProperty<int>(ash::kShelfItemTypeKey, ash::TYPE_DIALOG);
+  window->SetTitle(l10n_util::GetStringUTF16(IDS_TASK_MANAGER_TITLE));
 #endif
   return g_task_manager_view->table_model_.get();
 }
@@ -162,7 +165,9 @@ bool TaskManagerView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 }
 
 views::View* TaskManagerView::GetInitiallyFocusedView() {
-  return nullptr;
+  // Set initial focus to |table_view_| so that screen readers can navigate the
+  // UI when the dialog is opened without having to manually assign focus first.
+  return tab_table_;
 }
 
 bool TaskManagerView::ExecuteWindowsCommand(int command_id) {
@@ -170,9 +175,12 @@ bool TaskManagerView::ExecuteWindowsCommand(int command_id) {
 }
 
 gfx::ImageSkia TaskManagerView::GetWindowIcon() {
-#if defined(OS_CHROMEOS)
-  return *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-      IDR_ASH_SHELF_ICON_TASK_MANAGER);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(crbug.com/1162514): Move app_list::CreateStandardIconImage to some
+  // where lower in the stack.
+  return app_list::CreateStandardIconImage(
+      *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+          IDR_ASH_SHELF_ICON_TASK_MANAGER));
 #else
   return views::DialogDelegateView::GetWindowIcon();
 #endif
@@ -278,7 +286,10 @@ TaskManagerView::TaskManagerView()
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(IDS_TASK_MANAGER_KILL));
   SetHasWindowSizeControls(true);
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+  // On Chrome OS, the widget's frame should not show the window title.
   SetTitle(IDS_TASK_MANAGER_TITLE);
+#endif
 
   // Avoid calling Accept() when closing the dialog, since Accept() here means
   // "kill task" (!).
@@ -321,7 +332,7 @@ void TaskManagerView::Init() {
   tab_table_parent_ = AddChildView(
       views::TableView::CreateScrollViewWithTable(std::move(tab_table)));
 
-  SetLayoutManager(std::make_unique<views::FillLayout>());
+  SetUseDefaultFillLayout(true);
 
   const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   const gfx::Insets dialog_insets =

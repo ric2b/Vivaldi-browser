@@ -4,26 +4,26 @@
 
 #include "chrome/browser/ui/thumbnails/thumbnail_image.h"
 
+#include <algorithm>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "chrome/browser/ui/thumbnails/thumbnail_stats_tracker.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/skia_util.h"
 
-void ThumbnailImage::Observer::OnThumbnailImageAvailable(
-    gfx::ImageSkia thumbnail_image) {}
+ThumbnailImage::Subscription::Subscription(
+    scoped_refptr<ThumbnailImage> thumbnail)
+    : thumbnail_(std::move(thumbnail)) {}
 
-void ThumbnailImage::Observer::OnCompressedThumbnailDataAvailable(
-    CompressedThumbnailData thumbnail_data) {}
-
-base::Optional<gfx::Size> ThumbnailImage::Observer::GetThumbnailSizeHint()
-    const {
-  return base::nullopt;
+ThumbnailImage::Subscription::~Subscription() {
+  thumbnail_->HandleSubscriptionDestroyed(this);
 }
 
 ThumbnailImage::Delegate::~Delegate() {
@@ -46,39 +46,46 @@ ThumbnailImage::~ThumbnailImage() {
     delegate_->thumbnail_ = nullptr;
 }
 
-void ThumbnailImage::AddObserver(Observer* observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(observer);
-  if (!observers_.HasObserver(observer)) {
-    const bool is_first_observer = !observers_.might_have_observers();
-    observers_.AddObserver(observer);
-    if (is_first_observer && delegate_)
-      delegate_->ThumbnailImageBeingObservedChanged(true);
-  }
+std::unique_ptr<ThumbnailImage::Subscription> ThumbnailImage::Subscribe() {
+  // Use explicit new since Subscription constructor is private.
+  auto subscription =
+      base::WrapUnique(new Subscription(base::WrapRefCounted(this)));
+  subscribers_.insert(subscribers_.end(), subscription.get());
+
+  // Notify |delegate_| if this is the first subscriber.
+  if (subscribers_.size() == 1)
+    delegate_->ThumbnailImageBeingObservedChanged(true);
+
+  return subscription;
 }
 
-void ThumbnailImage::RemoveObserver(Observer* observer) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(observer);
-  if (observers_.HasObserver(observer)) {
-    observers_.RemoveObserver(observer);
-    if (delegate_ && !observers_.might_have_observers())
-      delegate_->ThumbnailImageBeingObservedChanged(false);
-  }
-}
-
-bool ThumbnailImage::HasObserver(const Observer* observer) const {
-  return observers_.HasObserver(observer);
-}
-
-void ThumbnailImage::AssignSkBitmap(SkBitmap bitmap) {
+void ThumbnailImage::AssignSkBitmap(SkBitmap bitmap,
+                                    base::Optional<uint64_t> frame_id) {
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&ThumbnailImage::CompressBitmap, std::move(bitmap)),
+      base::BindOnce(&ThumbnailImage::CompressBitmap, std::move(bitmap),
+                     frame_id),
       base::BindOnce(&ThumbnailImage::AssignJPEGData,
-                     weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
+                     weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now(),
+                     frame_id));
+}
+
+void ThumbnailImage::ClearData() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // TODO(crbug.com/1163121): Update this to notify the observers that the data
+  // has changed. It may be necessary to re-engineer them to accept
+  // empty/invalid data. crbug.com/1152894
+  if (!data_)
+    return;
+
+  // TODO(crbug.com/1163121): Cancel existing thumbnail request. If
+  // called after ConvertJPEGDataToImageSkiaAndNotifyObservers() but
+  // before observers get notified, the observers will receive the stale
+  // thumbnail.
+  data_.reset();
 }
 
 void ThumbnailImage::RequestThumbnailImage() {
@@ -98,19 +105,39 @@ size_t ThumbnailImage::GetCompressedDataSizeInBytes() const {
 }
 
 void ThumbnailImage::AssignJPEGData(base::TimeTicks assign_sk_bitmap_time,
+                                    base::Optional<uint64_t> frame_id,
                                     std::vector<uint8_t> data) {
   data_ = base::MakeRefCounted<base::RefCountedData<std::vector<uint8_t>>>(
       std::move(data));
+
   UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
       "Tab.Preview.TimeToNotifyObserversAfterCaptureReceived",
       base::TimeTicks::Now() - assign_sk_bitmap_time,
       base::TimeDelta::FromMicroseconds(100),
       base::TimeDelta::FromMilliseconds(100), 50);
-  NotifyCompressedDataObservers(data_);
-  ConvertJPEGDataToImageSkiaAndNotifyObservers();
+
+  // We select a TRACE_EVENT_* macro based on |frame_id|'s presence.
+  // Since these are scoped traces, the macro invocation must be in the
+  // enclosing scope of these operations. Extract them into a common
+  // function.
+  auto notify = [&]() {
+    NotifyCompressedDataObservers(data_);
+    ConvertJPEGDataToImageSkiaAndNotifyObservers();
+  };
+
+  if (frame_id) {
+    TRACE_EVENT_WITH_FLOW0("ui", "Tab.Preview.JPEGReceivedOnUIThreadWithFlow",
+                           *frame_id, TRACE_EVENT_FLAG_FLOW_IN);
+    notify();
+  } else {
+    TRACE_EVENT0("ui", "Tab.Preview.JPEGReceivedOnUIThread");
+    notify();
+  }
 }
 
 bool ThumbnailImage::ConvertJPEGDataToImageSkiaAndNotifyObservers() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (!data_) {
     if (async_operation_finished_callback_)
       async_operation_finished_callback_.Run();
@@ -129,27 +156,49 @@ void ThumbnailImage::NotifyUncompressedDataObservers(gfx::ImageSkia image) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (async_operation_finished_callback_)
     async_operation_finished_callback_.Run();
-  for (auto& observer : observers_) {
-    auto size_hint = observer.GetThumbnailSizeHint();
-    observer.OnThumbnailImageAvailable(
-        size_hint ? CropPreviewImage(image, *size_hint) : image);
+
+  for (Subscription* subscription : subscribers_) {
+    auto size_hint = subscription->size_hint_;
+    if (subscription->uncompressed_image_callback_)
+      subscription->uncompressed_image_callback_.Run(
+          size_hint ? CropPreviewImage(image, *size_hint) : image);
   }
 }
 
 void ThumbnailImage::NotifyCompressedDataObservers(
     CompressedThumbnailData data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  for (auto& observer : observers_)
-    observer.OnCompressedThumbnailDataAvailable(data);
+  for (Subscription* subscription : subscribers_) {
+    if (subscription->compressed_image_callback_)
+      subscription->compressed_image_callback_.Run(data);
+  }
 }
 
 // static
-std::vector<uint8_t> ThumbnailImage::CompressBitmap(SkBitmap bitmap) {
+std::vector<uint8_t> ThumbnailImage::CompressBitmap(
+    SkBitmap bitmap,
+    base::Optional<uint64_t> frame_id) {
   constexpr int kCompressionQuality = 97;
   std::vector<uint8_t> data;
-  const bool result =
-      gfx::JPEGCodec::Encode(bitmap, kCompressionQuality, &data);
-  DCHECK(result);
+
+  // Similar to above, extract logic into function so we can select a
+  // TRACE_EVENT_* macro.
+  auto compress = [&]() {
+    const bool result =
+        gfx::JPEGCodec::Encode(bitmap, kCompressionQuality, &data);
+    DCHECK(result);
+  };
+
+  if (frame_id) {
+    TRACE_EVENT_WITH_FLOW0(
+        "ui", "Tab.Preview.CompressJPEGWithFlow", *frame_id,
+        TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
+    compress();
+  } else {
+    TRACE_EVENT0("ui", "Tab.Preview.CompressJPEG");
+    compress();
+  }
+
   return data;
 }
 
@@ -197,4 +246,18 @@ gfx::ImageSkia ThumbnailImage::CropPreviewImage(
   SkBitmap cropped;
   source_image.bitmap()->extractSubset(&cropped, gfx::RectToSkIRect(clip_rect));
   return gfx::ImageSkia::CreateFrom1xBitmap(cropped);
+}
+
+void ThumbnailImage::HandleSubscriptionDestroyed(Subscription* subscription) {
+  // The order of |subscribers_| does not matter. We can simply swap
+  // |subscription| in |subscribers_| with the last element, then pop it
+  // off the back.
+  auto it = std::find(subscribers_.begin(), subscribers_.end(), subscription);
+  DCHECK(it != subscribers_.end());
+  std::swap(*it, *(subscribers_.end() - 1));
+  subscribers_.pop_back();
+
+  // If that was the last subscriber, tell |delegate_| (if it still exists).
+  if (delegate_ && subscribers_.empty())
+    delegate_->ThumbnailImageBeingObservedChanged(false);
 }

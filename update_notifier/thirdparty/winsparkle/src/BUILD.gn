@@ -1,8 +1,7 @@
 import("//vivaldi/gn/config/version.gni")
 import("//build/util/version.gni")
 
-wxwidgets_top =
-    "//vivaldi/thirdparty/winsparkle/3rdparty/wxWidgets"
+wxwidgets_top = "../../wxWidgets"
 
 config("wxwidgets_common_config") {
   include_dirs = [
@@ -266,6 +265,7 @@ source_set("winsparkle_no_gui") {
   ]
   public_deps = [
     "//base:base",
+    "//crypto",
     "//url:url",
   ]
 }
@@ -283,7 +283,6 @@ source_set("winsparkle") {
   deps = [
     ":winsparkle_no_gui",
     ":wxwidgets",
-    "../translations:resources",
     "//vivaldi/app:resources",
   ]
 }

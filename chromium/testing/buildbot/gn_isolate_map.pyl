@@ -151,6 +151,41 @@
     "type": "script",
     "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
   },
+  "angle_deqp_khr_gles32_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_khr_gles32_tests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+  },
+  "angle_deqp_gles3_rotate180_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles3_rotate180_tests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+  },
+  "angle_deqp_gles3_rotate270_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles3_rotate270_tests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+  },
+  "angle_deqp_gles3_rotate90_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles3_rotate90_tests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+  },
+  "angle_deqp_gles31_rotate180_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles31_rotate180_tests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+  },
+  "angle_deqp_gles31_rotate270_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles31_rotate270_tests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+  },
+  "angle_deqp_gles31_rotate90_tests": {
+    "label": "//third_party/angle/src/tests:angle_deqp_gles31_rotate90_tests",
+    "type": "script",
+    "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
+  },
   "angle_end2end_tests": {
     "label": "//third_party/angle/src/tests:angle_end2end_tests",
     "script": "//third_party/angle/scripts/run_gtest_angle_test.py",
@@ -305,6 +340,10 @@
   "capture_unittests": {
     "label": "//media/capture:capture_unittests",
     "type": "windowed_test_launcher",
+  },
+  "cast_accessibility_unittests": {
+    "label": "//chromecast/browser/accessibility/flutter:cast_accessibility_unittests",
+    "type": "console_test_launcher",
   },
   "cast_runner_browsertests": {
     "label": "//fuchsia/runners:cast_runner_browsertests",
@@ -783,7 +822,7 @@
     "type": "additional_compile_target",
   },
   "errorprone_plugin_tests": {
-    "label": "//tools/android/errorprone_plugin:errorprone_plugin_tests",
+    "label": "//tools/android/errorprone_plugin/test:errorprone_plugin_tests",
     "type": "additional_compile_target",
   },
   "events_unittests": {
@@ -798,14 +837,6 @@
     "label": "//extensions:extensions_browsertests",
     "type": "windowed_test_launcher",
   },
-  "extension_docserver_python_unittests": {
-    "args": [
-      "../../chrome/common/extensions/docs/server2/run_all_unittests.py",
-    ],
-    "label": "//chrome/common/extensions/docs/server2:extension_docserver_python_unittests",
-    "script": "//testing/scripts/run_isolated_script_test.py",
-    "type": "script",
-  },
   "extensions_unittests": {
     "label": "//extensions:extensions_unittests",
     "type": "windowed_test_launcher",
@@ -818,6 +849,10 @@
     "label": "//third_party/flatbuffers:flatbuffers_unittests",
     "script": "//testing/scripts/run_flatbuffers_unittests.py",
     "type": "script",
+  },
+  "fuchsia_sizes": {
+    "label": "//fuchsia/release:fuchsia_sizes",
+    "type": "generated_script",
   },
   "fuchsia_telemetry_gpu_integration_test": {
     "args": [
@@ -1071,6 +1106,10 @@
   "lacros_chrome_browsertests": {
     "label": "//chrome/test:lacros_chrome_browsertests",
     "type": "windowed_test_launcher",
+  },
+  "lacros_chrome_unittests": {
+    "label": "//chrome/test:lacros_chrome_unittests",
+    "type": "console_test_launcher",
   },
   "latency_unittests": {
     "label": "//ui/latency:latency_unittests",

@@ -8,6 +8,7 @@
 #include "base/path_service.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/component_updater/autofill_regex_component_installer.h"
@@ -20,7 +21,6 @@
 #include "chrome/browser/component_updater/games_component_installer.h"
 #include "chrome/browser/component_updater/hyphenation_component_installer.h"
 #include "chrome/browser/component_updater/mei_preload_component_installer.h"
-#include "chrome/browser/component_updater/optimization_hints_component_installer.h"
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
 #include "chrome/browser/component_updater/pepper_flash_component_installer.h"
 #include "chrome/browser/component_updater/ssl_error_assistant_component_installer.h"
@@ -35,6 +35,7 @@
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/crl_set_remover.h"
 #include "components/component_updater/installer_policies/on_device_head_suggest_component_installer.h"
+#include "components/component_updater/installer_policies/optimization_hints_component_installer.h"
 #include "components/component_updater/installer_policies/safety_tips_component_installer.h"
 #include "components/nacl/common/buildflags.h"
 #include "device/vr/buildflags/buildflags.h"
@@ -59,9 +60,9 @@
 #include "media/base/media_switches.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/component_updater/smart_dim_component_installer.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ENABLE_NACL)
 #include "chrome/browser/component_updater/pnacl_component_installer.h"
@@ -77,10 +78,6 @@
 
 #if defined(USE_AURA)
 #include "ui/aura/env.h"
-#endif
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
 #endif
 
 namespace component_updater {
@@ -104,27 +101,24 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #endif  // BUILDFLAG(ENABLE_WIDEVINE_CDM_COMPONENT)
 
 #if BUILDFLAG(ENABLE_NACL) && !defined(OS_ANDROID)
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // PNaCl on Chrome OS is on rootfs and there is no need to download it. But
   // Chrome4ChromeOS on Linux doesn't contain PNaCl so enable component
   // installer when running on Linux. See crbug.com/422121 for more details.
-  if (!base::SysInfo::IsRunningOnChromeOS())
-#endif  // defined(OS_CHROMEOS)
+  if (!base::SysInfo::IsRunningOnChromeOS()) {
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     RegisterPnaclComponent(cus);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 #endif  // BUILDFLAG(ENABLE_NACL) && !defined(OS_ANDROID)
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  component_updater::SupervisedUserWhitelistInstaller* whitelist_installer =
-      g_browser_process->supervised_user_whitelist_installer();
-  whitelist_installer->RegisterComponents();
-#endif
 
   RegisterSubresourceFilterComponent(cus);
   RegisterFlocComponent(cus,
                         g_browser_process->floc_sorting_lsh_clusters_service());
   RegisterOnDeviceHeadSuggestComponent(
       cus, g_browser_process->GetApplicationLocale());
-  RegisterOptimizationHintsComponent(cus, is_off_the_record_profile);
+  RegisterOptimizationHintsComponent(cus);
   RegisterTrustTokenKeyCommitmentsComponentIfTrustTokensEnabled(cus);
   RegisterFirstPartySetsComponent(cus);
 
@@ -134,7 +128,7 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
     // the old file.
     component_updater::DeleteLegacyCRLSet(path);
 
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !defined(OS_ANDROID)
     // Clean up previous STH sets that may have been installed. This is not
     // done for:
     // Android: Because STH sets were never used
@@ -144,12 +138,12 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
   }
   RegisterSSLErrorAssistantComponent(cus);
   RegisterFileTypePoliciesComponent(cus);
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   // CRLSetFetcher attempts to load a CRL set from either the local disk or
   // network.
   // For Chrome OS this registration is delayed until user login.
   component_updater::RegisterCRLSetComponent(cus);
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   RegisterOriginTrialsComponent(cus);
   RegisterMediaEngagementPreloadComponent(cus, base::OnceClosure());
@@ -182,16 +176,17 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #if !defined(OS_ANDROID)
   base::UmaHistogramBoolean("Accessibility.LiveCaption.FeatureEnabled",
                             base::FeatureList::IsEnabled(media::kLiveCaption));
-  component_updater::RegisterSodaComponent(cus, profile_prefs,
-                                           g_browser_process->local_state(),
-                                           base::OnceClosure());
+  component_updater::RegisterSodaComponent(
+      cus, profile_prefs, g_browser_process->local_state(), base::OnceClosure(),
+      base::OnceClosure());
   component_updater::RegisterSodaLanguageComponent(
-      cus, profile_prefs, g_browser_process->local_state());
+      cus, profile_prefs, g_browser_process->local_state(),
+      base::OnceClosure());
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   RegisterSmartDimComponent(cus);
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(USE_MINIKIN_HYPHENATION) && !defined(OS_ANDROID)
   RegisterHyphenationComponent(cus);

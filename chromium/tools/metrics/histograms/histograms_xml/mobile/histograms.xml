@@ -105,6 +105,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     <variant name="ReadingListEntry" summary="Reading List entry"/>
     <variant name="RecentTabsEntry" summary="Recent Tabs entry"/>
     <variant name="RecentTabsHeader" summary="Recent Tabs header/device"/>
+    <variant name="WebImage" summary="Image on a Web page"/>
+    <variant name="WebImageLink" summary="Image-Link on a Web page"/>
+    <variant name="WebLink" summary="Link on a Web page"/>
   </token>
 </histogram>
 
@@ -170,7 +173,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Badge.Tapped"
-    enum="MobileMessagesBadgeState" expires_after="2021-03-20">
+    enum="MobileMessagesBadgeState" expires_after="2021-05-23">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -179,7 +182,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Banner.Dismiss"
-    enum="MobileMessagesBannerDismissType" expires_after="2021-03-20">
+    enum="MobileMessagesBannerDismissType" expires_after="2021-05-23">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -188,7 +191,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Banner.Event"
-    enum="MobileMessagesBannerEvent" expires_after="2021-03-20">
+    enum="MobileMessagesBannerEvent" expires_after="2021-05-23">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -197,7 +200,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Mobile.Messages.Banner.OnScreenTime" units="ms"
-    expires_after="2021-03-20">
+    expires_after="2021-07-11">
   <owner>sczs@chromium.org</owner>
   <owner>thegreenfrog@google.com</owner>
   <summary>
@@ -218,7 +221,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Confirm.Accept.Time" units="ms"
-    expires_after="2021-03-20">
+    expires_after="2021-05-23">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Confirm.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -230,7 +233,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Mobile.Messages.Confirm.Event"
-    enum="MobileMessagesConfirmInfobarEvents" expires_after="2021-03-20">
+    enum="MobileMessagesConfirmInfobarEvents" expires_after="2021-05-23">
 <!-- Name completed by histogram_suffixes name="Mobile.Messages.Confirm.Type" -->
 
   <owner>sczs@chromium.org</owner>
@@ -587,7 +590,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.Dialog.Result"
-    enum="DownloadLocationDialogResult" expires_after="2021-03-01">
+    enum="DownloadLocationDialogResult" expires_after="2021-06-06">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -597,7 +600,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.Dialog.Suggestion.Events"
-    enum="DownloadLocationSuggestionEvent" expires_after="2021-05-02">
+    enum="DownloadLocationSuggestionEvent" expires_after="2021-07-04">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>Records the download location suggestion event.</summary>
@@ -611,7 +614,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.Dialog.Type"
-    enum="DownloadLocationDialogType" expires_after="2021-05-02">
+    enum="DownloadLocationDialogType" expires_after="2021-07-04">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -819,8 +822,36 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="MobileFre.NativeInitialized" units="ms"
+    expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: The amount of time spent between FRE started and native
+    initialization. Recorded when native is fully initialized.
+  </summary>
+</histogram>
+
+<histogram name="MobileFre.PolicyServiceInitDelayAfterNative{PolicyPresence}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: The amount of time spent between native initialized and the
+    decision &quot;whether we need to wait to load policy service from
+    native&quot; has been made. The decision is made when no on-device policy is
+    found, or policy service is fully initialized. If the decision has been made
+    before native initialization, 0 will be recorded. Recorded during FRE only,
+    when on-device policy is {PolicyPresence}
+  </summary>
+  <token key="PolicyPresence">
+    <variant name=".WithoutPolicy" summary="not presented."/>
+    <variant name=".WithPolicy" summary="presented."/>
+  </token>
+</histogram>
+
 <histogram name="MobileFre.Progress" enum="MobileFreProgress"
-    expires_after="2021-04-18">
+    expires_after="2021-06-20">
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
@@ -840,6 +871,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Android: How the user left the sign-in part of the &quot;first run
     experience&quot; activity (M-38+).
+  </summary>
+</histogram>
+
+<histogram name="MobileFre.TosFragment.SpinnerVisibleDuration" units="ms"
+    expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: The amount of time that the small spinner, which become visible
+    after the ToS is accepted, is showing on screen.
   </summary>
 </histogram>
 
@@ -919,7 +960,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileIntent.FirstPartyToInternalScheme" enum="Boolean"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -966,7 +1007,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileOmnibox.PressedClipboardSuggestionAge" units="ms"
-    expires_after="2021-04-18">
+    expires_after="2021-06-20">
   <owner>jdonnelly@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <summary>
@@ -1024,7 +1065,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileSignInPromo.SettingsManager.ImpressionsTilSigninButtons"
-    units="impressions" expires_after="2021-04-20">
+    units="impressions" expires_after="2021-06-20">
   <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -1046,7 +1087,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileStartup.DailyLaunchCount" units="units"
-    expires_after="2021-05-02">
+    expires_after="2021-07-04">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -1078,8 +1119,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="MobileStartup.Experimental.LaunchCause" enum="LaunchCause"
+    expires_after="2022-01-07">
+  <owner>mthiesse@chromium.org</owner>
+  <owner>tedchoc@chromium.org</owner>
+  <owner>yfriedman@chromium.org</owner>
+  <summary>
+    Records what caused Chrome to be launched.
+
+    Recorded for all types of ChromeActivity, in all cases where Chrome becomes
+    visible to the user.
+  </summary>
+</histogram>
+
 <histogram name="MobileStartup.IntentToCreationTime" units="ms"
-    expires_after="2021-05-02">
+    expires_after="2021-07-04">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
@@ -1091,7 +1145,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileStartup.LaunchType" enum="LaunchType"
-    expires_after="2021-05-02">
+    expires_after="2021-07-04">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>

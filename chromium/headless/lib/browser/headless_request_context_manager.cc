@@ -8,6 +8,7 @@
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/resource_context.h"
@@ -22,11 +23,18 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/url_request_context_builder_mojo.h"
 
+#if defined(HEADLESS_USE_PREFS)
+#include "components/os_crypt/os_crypt.h"
+#include "content/public/common/network_service_util.h"
+#endif
+
 namespace headless {
 
 namespace {
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 constexpr char kProductName[] = "HeadlessChrome";
 #endif
 
@@ -56,13 +64,15 @@ net::NetworkTrafficAnnotationTag GetProxyConfigTrafficAnnotationTag() {
   return traffic_annotation;
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-::network::mojom::CryptConfigPtr BuildCryptConfigOnce(
-    const base::FilePath& user_data_path) {
+void SetCryptConfigOnce(const base::FilePath& user_data_path) {
   static bool done_once = false;
   if (done_once)
-    return nullptr;
+    return;
   done_once = true;
+
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   ::network::mojom::CryptConfigPtr config =
       ::network::mojom::CryptConfig::New();
   config->store = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -70,9 +80,17 @@ net::NetworkTrafficAnnotationTag GetProxyConfigTrafficAnnotationTag() {
   config->product_name = kProductName;
   config->should_use_preference = false;
   config->user_data_path = user_data_path;
-  return config;
-}
+  content::GetNetworkService()->SetCryptConfig(std::move(config));
+#elif defined(OS_WIN) && defined(HEADLESS_USE_PREFS)
+  // The OSCrypt keys are process bound, so if network service is out of
+  // process, send it the required key if it is available.
+  if (content::IsOutOfProcessNetworkService() &&
+      OSCrypt::IsEncryptionAvailable()) {
+    content::GetNetworkService()->SetEncryptionKey(
+        OSCrypt::GetRawEncryptionKey());
+  }
 #endif
+}
 
 }  // namespace
 
@@ -192,9 +210,8 @@ HeadlessRequestContextManager::HeadlessRequestContextManager(
     const HeadlessBrowserContextOptions* options,
     base::FilePath user_data_path)
     :
-// On Windows, Cookie encryption requires access to local_state prefs, which are
-// unavailable.
-#if defined(OS_WIN)
+// On Windows, Cookie encryption requires access to local_state prefs.
+#if defined(OS_WIN) && !defined(HEADLESS_USE_PREFS)
       cookie_encryption_enabled_(false),
 #else
       cookie_encryption_enabled_(
@@ -218,11 +235,8 @@ HeadlessRequestContextManager::HeadlessRequestContextManager(
           base::ThreadTaskRunnerHandle::Get());
     }
   }
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-  auto crypt_config = BuildCryptConfigOnce(user_data_path_);
-  if (crypt_config)
-    content::GetNetworkService()->SetCryptConfig(std::move(crypt_config));
-#endif
+
+  SetCryptConfigOnce(user_data_path_);
 }
 
 HeadlessRequestContextManager::~HeadlessRequestContextManager() {

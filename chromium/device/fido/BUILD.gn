@@ -129,6 +129,8 @@ component("fido") {
       "credential_management_handler.cc",
       "credential_management_handler.h",
       "ctap2_device_operation.h",
+      "ctap_authenticator_selection_request.cc",
+      "ctap_authenticator_selection_request.h",
       "ctap_get_assertion_request.cc",
       "ctap_get_assertion_request.h",
       "ctap_make_credential_request.cc",
@@ -153,6 +155,8 @@ component("fido") {
       "fido_task.cc",
       "fido_task.h",
       "fido_types.h",
+      "filter.cc",
+      "filter.h",
       "get_assertion_request_handler.cc",
       "get_assertion_request_handler.h",
       "get_assertion_task.cc",
@@ -255,7 +259,7 @@ component("fido") {
     ]
   }
 
-  if (is_ash) {
+  if (is_chromeos_ash) {
     sources += [
       "cros/authenticator.cc",
       "cros/authenticator.h",
@@ -314,7 +318,7 @@ static_library("cablev2_test_util") {
   ]
 }
 
-if (is_ash) {
+if (is_chromeos_ash) {
   proto_library("u2f_proto") {
     sources = [ "//third_party/cros_system_api/dbus/u2f/u2f_interface.proto" ]
 
@@ -420,10 +424,15 @@ source_set("test_support") {
       "hid/fake_hid_impl_for_testing.cc",
       "hid/fake_hid_impl_for_testing.h",
     ]
+    deps += [ "//services/device/public/cpp/hid" ]
   }
 
   if (!is_android) {
     sources += [
+      "multiple_virtual_fido_device_factory.cc",
+      "multiple_virtual_fido_device_factory.h",
+      "virtual_fido_device_discovery.cc",
+      "virtual_fido_device_discovery.h",
       "virtual_fido_device_factory.cc",
       "virtual_fido_device_factory.h",
     ]

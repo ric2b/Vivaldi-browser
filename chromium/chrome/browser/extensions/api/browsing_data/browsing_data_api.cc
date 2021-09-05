@@ -14,7 +14,7 @@
 #include "base/bind.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -91,13 +91,13 @@ const char kInvalidOriginError[] = "'%s' is not a valid origin.";
 namespace {
 
 const int64_t kFilterableDataTypes =
-    ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA |
+    chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
     content::BrowsingDataRemover::DATA_TYPE_CACHE;
 
 static_assert((kFilterableDataTypes &
-               ~ChromeBrowsingDataRemoverDelegate::FILTERABLE_DATA_TYPES) == 0,
+               ~chrome_browsing_data_remover::FILTERABLE_DATA_TYPES) == 0,
               "kFilterableDataTypes must be a subset of "
-              "ChromeBrowsingDataRemoverDelegate::FILTERABLE_DATA_TYPES");
+              "chrome_browsing_data_remover::FILTERABLE_DATA_TYPES");
 
 uint64_t MaskForKey(const char* key) {
   if (strcmp(key, extension_browsing_data_api_constants::kAppCacheKey) == 0)
@@ -111,15 +111,15 @@ uint64_t MaskForKey(const char* key) {
   if (strcmp(key, extension_browsing_data_api_constants::kFileSystemsKey) == 0)
     return content::BrowsingDataRemover::DATA_TYPE_FILE_SYSTEMS;
   if (strcmp(key, extension_browsing_data_api_constants::kFormDataKey) == 0)
-    return ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA;
+    return chrome_browsing_data_remover::DATA_TYPE_FORM_DATA;
   if (strcmp(key, extension_browsing_data_api_constants::kHistoryKey) == 0)
-    return ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY;
+    return chrome_browsing_data_remover::DATA_TYPE_HISTORY;
   if (strcmp(key, extension_browsing_data_api_constants::kIndexedDBKey) == 0)
     return content::BrowsingDataRemover::DATA_TYPE_INDEXED_DB;
   if (strcmp(key, extension_browsing_data_api_constants::kLocalStorageKey) == 0)
     return content::BrowsingDataRemover::DATA_TYPE_LOCAL_STORAGE;
   if (strcmp(key, extension_browsing_data_api_constants::kPasswordsKey) == 0)
-    return ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS;
+    return chrome_browsing_data_remover::DATA_TYPE_PASSWORDS;
   if (strcmp(key, extension_browsing_data_api_constants::kServiceWorkersKey) ==
       0)
     return content::BrowsingDataRemover::DATA_TYPE_SERVICE_WORKERS;
@@ -131,10 +131,10 @@ uint64_t MaskForKey(const char* key) {
   // Vivaldi addition:
   if (strcmp(key, extension_browsing_data_api_constants::kSiteUsageDataKey) ==
       0)
-    return ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA;
+    return chrome_browsing_data_remover::DATA_TYPE_SITE_USAGE_DATA;
   if (strcmp(key,
              extension_browsing_data_api_constants::kSiteSettingsDataKey) == 0)
-    return ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS;
+    return chrome_browsing_data_remover::DATA_TYPE_CONTENT_SETTINGS;
 
   return 0ULL;
 }
@@ -144,7 +144,7 @@ uint64_t MaskForKey(const char* key) {
 bool IsRemovalPermitted(uint64_t removal_mask, PrefService* prefs) {
   // Enterprise policy or user preference might prohibit deleting browser or
   // download history.
-  if ((removal_mask & ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY) ||
+  if ((removal_mask & chrome_browsing_data_remover::DATA_TYPE_HISTORY) ||
       (removal_mask & content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS)) {
     return prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory);
   }
@@ -474,7 +474,7 @@ bool BrowsingDataRemoverFunction::ParseOriginTypeMask(
         return false;
       }
       *origin_type_mask |=
-          value ? ChromeBrowsingDataRemoverDelegate::ORIGIN_TYPE_EXTENSION : 0;
+          value ? chrome_browsing_data_remover::ORIGIN_TYPE_EXTENSION : 0;
     }
   }
 
@@ -559,12 +559,12 @@ bool BrowsingDataRemoveFileSystemsFunction::GetRemovalMask(
 
 bool BrowsingDataRemoveFormDataFunction::GetRemovalMask(
     uint64_t* removal_mask) {
-  *removal_mask = ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA;
+  *removal_mask = chrome_browsing_data_remover::DATA_TYPE_FORM_DATA;
   return true;
 }
 
 bool BrowsingDataRemoveHistoryFunction::GetRemovalMask(uint64_t* removal_mask) {
-  *removal_mask = ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY;
+  *removal_mask = chrome_browsing_data_remover::DATA_TYPE_HISTORY;
   return true;
 }
 
@@ -589,7 +589,7 @@ bool BrowsingDataRemovePluginDataFunction::GetRemovalMask(
 
 bool BrowsingDataRemovePasswordsFunction::GetRemovalMask(
     uint64_t* removal_mask) {
-  *removal_mask = ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS;
+  *removal_mask = chrome_browsing_data_remover::DATA_TYPE_PASSWORDS;
   return true;
 }
 

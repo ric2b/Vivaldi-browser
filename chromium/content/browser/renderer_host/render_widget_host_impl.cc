@@ -18,6 +18,7 @@
 #include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/debug/alias.h"
 #include "base/files/file_path.h"
 #include "base/hash/hash.h"
 #include "base/i18n/rtl.h"
@@ -110,10 +111,10 @@
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/common/widget/visual_properties.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom.h"
 #include "third_party/blink/public/mojom/input/touch_event.mojom.h"
 #include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/base/clipboard/clipboard_constants.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/screen.h"
@@ -145,9 +146,6 @@
 #include "app/vivaldi_apptools.h"
 #include "ui/content/vivaldi_event_hooks.h"
 
-using base::TimeDelta;
-using base::TimeTicks;
-using blink::DragOperation;
 using blink::DragOperationsMask;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -331,13 +329,43 @@ base::LazyInstance<UnboundWidgetInputHandler>::Leaky g_unbound_input_handler =
 ///////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostImpl
 
+// static
+std::unique_ptr<RenderWidgetHostImpl> RenderWidgetHostImpl::Create(
+    RenderWidgetHostDelegate* delegate,
+    AgentSchedulingGroupHost& agent_scheduling_host,
+    int32_t routing_id,
+    bool hidden,
+    bool renderer_initiated_creation,
+    std::unique_ptr<FrameTokenMessageQueue> frame_token_message_queue) {
+  return base::WrapUnique(new RenderWidgetHostImpl(
+      /*self_owned=*/false, delegate, agent_scheduling_host, routing_id, hidden,
+      renderer_initiated_creation, std::move(frame_token_message_queue)));
+}
+
+// static
+RenderWidgetHostImpl* RenderWidgetHostImpl::CreateSelfOwned(
+    RenderWidgetHostDelegate* delegate,
+    AgentSchedulingGroupHost& agent_scheduling_host,
+    int32_t routing_id,
+    bool hidden,
+    std::unique_ptr<FrameTokenMessageQueue> frame_token_message_queue) {
+  return new RenderWidgetHostImpl(/*self_owned=*/true, delegate,
+                                  agent_scheduling_host, routing_id, hidden,
+                                  /*renderer_initiated_creation=*/true,
+                                  std::move(frame_token_message_queue));
+}
+
 RenderWidgetHostImpl::RenderWidgetHostImpl(
+    bool self_owned,
     RenderWidgetHostDelegate* delegate,
     AgentSchedulingGroupHost& agent_scheduling_group,
     int32_t routing_id,
     bool hidden,
+    bool renderer_initiated_creation,
     std::unique_ptr<FrameTokenMessageQueue> frame_token_message_queue)
-    : delegate_(delegate),
+    : self_owned_(self_owned),
+      waiting_for_init_(renderer_initiated_creation),
+      delegate_(delegate),
       agent_scheduling_group_(agent_scheduling_group),
       routing_id_(routing_id),
       clock_(base::DefaultTickClock::GetInstance()),
@@ -377,7 +405,13 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
                              routing_id_),
           this));
   CHECK(result.second) << "Inserting a duplicate item!";
-  agent_scheduling_group.GetProcess()->AddObserver(this);
+
+  // Self-owned RenderWidgetHost lifetime is managed by the renderer process.
+  // To avoid leaking any instance. They self-delete when their renderer process
+  // is gone.
+  if (self_owned_)
+    agent_scheduling_group.GetProcess()->AddObserver(this);
+
   render_process_blocked_state_changed_subscription_ =
       agent_scheduling_group.GetProcess()->RegisterBlockStateChangedCallback(
           base::BindRepeating(
@@ -399,6 +433,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(
 }
 
 RenderWidgetHostImpl::~RenderWidgetHostImpl() {
+  CHECK(!self_owned_);
   render_frame_metadata_provider_.RemoveObserver(this);
   if (!destroyed_)
     Destroy(false);
@@ -466,6 +501,20 @@ void RenderWidgetHostImpl::SetView(RenderWidgetHostViewBase* view) {
     view_ = view->GetWeakPtr();
     if (!create_frame_sink_callback_.is_null())
       std::move(create_frame_sink_callback_).Run(view_->GetFrameSinkId());
+
+    // SendScreenRects() and SynchronizeVisualProperties() delay until a view
+    // is set, however we come here with a newly created `view` that is not
+    // initialized and ready to be used.
+    // The portal codepath comes here because it replaces the view while the
+    // renderer-side widget is already created. In that case the renderer will
+    // hear about geometry changes from the view being moved/resized as a result
+    // of the change.
+    // Speculative RenderViews also end up setting a `view` after creating the
+    // renderer-side widget, as per https://crbug.com/1161585. That path must
+    // be responsible for updating the renderer geometry itself, which it does
+    // because it will start hidden, and will send them when shown.
+    // TODO(crbug.com/1161585): Once RendererWidgetCreated() is always called
+    // with a non-null `view` then this comment can go away. :)
   } else {
     view_.reset();
   }
@@ -492,17 +541,25 @@ const viz::FrameSinkId& RenderWidgetHostImpl::GetFrameSinkId() {
 }
 
 void RenderWidgetHostImpl::SendScreenRects() {
-  if (!renderer_initialized_ || !blink_widget_ || waiting_for_screen_rects_ack_)
+  // Sending screen rects are deferred until we have a connection to a
+  // renderer-side Widget to send them to. Further, if we're waiting for the
+  // renderer to show (aka Init()) the widget then we defer sending updates
+  // until the renderer is ready.
+  if (!renderer_widget_created_ || waiting_for_init_)
     return;
-
+  // TODO(danakj): The `renderer_widget_created_` flag is set to true for
+  // widgets owned by inactive RenderViewHosts, even though there is no widget
+  // created. In that case the `view_` will not be created.
+  if (!view_)
+    return;
+  // Throttle to one update at a time.
+  if (waiting_for_screen_rects_ack_)
+    return;
   if (is_hidden_) {
     // On GTK, this comes in for backgrounded tabs. Ignore, to match what
     // happens on Win & Mac, and when the view is shown it'll call this again.
     return;
   }
-
-  if (!view_)
-    return;
 
   last_view_screen_rect_ = view_->GetViewBounds();
   last_window_screen_rect_ = view_->GetBoundsInRootWindow();
@@ -533,35 +590,6 @@ void RenderWidgetHostImpl::SetIntersectsViewport(bool intersects) {
 void RenderWidgetHostImpl::UpdatePriority() {
   if (!destroyed_)
     GetProcess()->UpdateClientPriority(this);
-}
-
-void RenderWidgetHostImpl::Init() {
-  DCHECK(GetProcess()->IsInitializedAndNotDead());
-
-  set_renderer_initialized(true);
-
-  blink_widget_->GetWidgetInputHandler(
-      widget_input_handler_.BindNewPipeAndPassReceiver(),
-      input_router_->BindNewHost());
-  // If this is for a frame be sure to connect that handler too.
-  if (blink_frame_widget_) {
-    widget_input_handler_->GetFrameWidgetInputHandler(
-        frame_widget_input_handler_.BindNewEndpointAndPassReceiver());
-    blink_frame_widget_->BindInputTargetClient(
-        input_target_client_.BindNewPipeAndPassReceiver());
-  }
-
-  SendScreenRects();
-  SynchronizeVisualProperties();
-
-  if (owner_delegate_)
-    owner_delegate_->RenderWidgetDidInit();
-
-  if (view_)
-    view_->OnRenderWidgetInit();
-
-  if (pending_show_closure_)
-    std::move(pending_show_closure_).Run();
 }
 
 std::pair<mojo::PendingAssociatedRemote<blink::mojom::WidgetHost>,
@@ -626,27 +654,54 @@ void RenderWidgetHostImpl::BindFrameWidgetInterfaces(
   blink_frame_widget_.Bind(std::move(frame_widget));
 }
 
-void RenderWidgetHostImpl::InitForFrame() {
+void RenderWidgetHostImpl::RendererWidgetCreated(bool for_frame_widget) {
   DCHECK(GetProcess()->IsInitializedAndNotDead());
-  set_renderer_initialized(true);
 
-  // In situations where RenderFrameHostImpl::CreateNewFrame calls this
-  // the |blink_widget_| will not be bound before this method is called.
-  // However RenderWidgetHostImpl::Init will be called once the widget
-  // is shown and these handlers will be bound there.
-  if (blink_widget_) {
-    blink_widget_->GetWidgetInputHandler(
-        widget_input_handler_.BindNewPipeAndPassReceiver(),
-        input_router_->BindNewHost());
+  renderer_widget_created_ = true;
+
+  blink_widget_->GetWidgetInputHandler(
+      widget_input_handler_.BindNewPipeAndPassReceiver(),
+      input_router_->BindNewHost());
+  if (for_frame_widget) {
     widget_input_handler_->GetFrameWidgetInputHandler(
         frame_widget_input_handler_.BindNewEndpointAndPassReceiver());
     blink_frame_widget_->BindInputTargetClient(
         input_target_client_.BindNewPipeAndPassReceiver());
   }
 
+  // TODO(crbug.com/1161585): The `view_` can be null. :( Speculative
+  // RenderViews along with the main frame and its widget before the
+  // RenderWidgetHostView is created. Normally the RenderWidgetHostView should
+  // come first. Historically, unit tests also set things up in the wrong order
+  // and could get here with a null, but that is no longer the case (hopefully
+  // that remains true).
   if (view_)
-    view_->OnRenderWidgetInit();
+    view_->OnRendererWidgetCreated();
 
+  // These two methods avoid running until `renderer_widget_created_` is true,
+  // so we run them here after we set it.
+  SendScreenRects();
+  SynchronizeVisualProperties();
+}
+
+void RenderWidgetHostImpl::SetRendererWidgetCreatedForInactiveRenderView() {
+  renderer_widget_created_ = true;
+}
+
+void RenderWidgetHostImpl::Init() {
+  DCHECK(renderer_widget_created_);
+  DCHECK(waiting_for_init_);
+
+  waiting_for_init_ = false;
+
+  // These two methods avoid running while we are `waiting_for_init_`, so we
+  // run them here after we clear it.
+  SendScreenRects();
+  SynchronizeVisualProperties();
+  // Show/Hide state is not given to the renderer while we are
+  // `waiting_for_init_`, but Init() signals that the renderer is ready to
+  // receive them. This closure will inform the renderer that the widget is
+  // shown.
   if (pending_show_closure_)
     std::move(pending_show_closure_).Run();
 }
@@ -685,12 +740,17 @@ void RenderWidgetHostImpl::WasHidden() {
   // Don't bother reporting hung state when we aren't active.
   StopInputEventAckTimeout();
 
-  // If we have bound the blink widget interface, then inform it that we are
-  // being hidden so it can reduce its resource utilization.
-  if (blink_widget_)
-    blink_widget_->WasHidden();
-  else
+  // Show/Hide state is not sent to the renderer when it has requested for us to
+  // wait until it requests them via Init().
+  if (pending_show_closure_) {
     pending_show_closure_.Reset();
+  } else {
+    // Widgets start out hidden, so we must have previously been shown to get
+    // here, and we'd have a `pending_show_closure_` if we are
+    // `waiting_for_init_`.
+    DCHECK(!waiting_for_init_);
+    blink_widget_->WasHidden();
+  }
 
   // Tell the RenderProcessHost we were hidden.
   GetProcess()->UpdateClientPriority(this);
@@ -716,14 +776,20 @@ void RenderWidgetHostImpl::WasShown(
   // If we navigated in background, clear the displayed graphics of the
   // previous page before going visible.
   ForceFirstFrameAfterNavigationTimeout();
-
-  SendScreenRects();
   RestartInputEventAckTimeoutIfNecessary();
+
+  // This methods avoids running when the widget is hidden, so we run it here
+  // once it is no longer hidden.
+  SendScreenRects();
+  // SendScreenRects() and SynchronizeVisualProperties() should happen
+  // together as one message, but we send them back-to-back for now so that
+  // all state gets to the renderer as close together as possible.
+  SynchronizeVisualProperties();
 
   auto show_request_timestamp = record_tab_switch_time_request
                                     ? base::TimeTicks::Now()
                                     : base::TimeTicks();
-  if (blink_widget_) {
+  if (!waiting_for_init_) {
     blink_widget_->WasShown(show_request_timestamp, view_->is_evicted(),
                             std::move(record_tab_switch_time_request));
   } else {
@@ -817,7 +883,7 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
   // Historically this was done by finding the RenderViewHost for the widget,
   // but a child local root would not convert to a RenderViewHost but is for a
   // frame.
-  const bool is_frame_widget = owner_delegate_ || owned_by_render_frame_host_;
+  const bool is_frame_widget = !self_owned_;
 
   blink::VisualProperties visual_properties;
 
@@ -937,6 +1003,9 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
         properties_from_parent_local_root_.is_pinch_gesture_active;
   }
 
+  visual_properties.compositing_scale_factor =
+      properties_from_parent_local_root_.compositing_scale_factor;
+
   // The |visible_viewport_size| is affected by auto-resize which is magical and
   // tricky.
   //
@@ -1027,22 +1096,26 @@ bool RenderWidgetHostImpl::SynchronizeVisualProperties(
   // inactive, so there is no focused node, or anything to scroll and display.
   if (owner_delegate_ && !owner_delegate_->IsMainFrameActive())
     return false;
-  // This is similar to the above but when the renderer process has crashed, so
-  // more objects are gone than the RenderWidget.
-  if (!renderer_initialized_)
+  // Sending VisualProperties are deferred until we have a connection to a
+  // renderer-side Widget to send them to. Further, if we're waiting for the
+  // renderer to show (aka Init()) the widget then we defer sending updates
+  // until the renderer is ready.
+  if (!renderer_widget_created_ || waiting_for_init_)
     return false;
-
-  // If we have not bound the blink widget interface put this request off.
-  // SynchronizeVisualProperties will get called after the channel is bound.
-  if (!blink_widget_)
+  // TODO(danakj): The `renderer_widget_created_` flag is set to true for
+  // widgets owned by inactive RenderViewHosts, even though there is no widget
+  // created. In that case the `view_` will not be created.
+  if (!view_)
+    return false;
+  // Throttle to one update at a time.
+  if (visual_properties_ack_pending_)
     return false;
 
   // Skip if the |delegate_| has already been detached because it's web contents
   // is being deleted, or if LocalSurfaceId is suppressed, as we are
   // first updating our internal state from a child's request, before
   // subsequently merging ids to send.
-  if (visual_properties_ack_pending_ ||
-      !GetProcess()->IsInitializedAndNotDead() || !view_ || !view_->HasSize() ||
+  if (!GetProcess()->IsInitializedAndNotDead() || !view_->HasSize() ||
       !delegate_ || surface_id_allocation_suppressed_ ||
       !view_->CanSynchronizeVisualProperties()) {
     return false;
@@ -1111,6 +1184,8 @@ void RenderWidgetHostImpl::LostFocus() {
 }
 
 void RenderWidgetHostImpl::Focus() {
+  // TODO(crbug.com/689777): This sends it to the main frame RenderWidgetHost
+  // should it be going to the local root instead?
   RenderWidgetHostImpl* focused_widget =
       delegate_ ? delegate_->GetRenderWidgetHostWithPageFocus() : nullptr;
 
@@ -1120,6 +1195,8 @@ void RenderWidgetHostImpl::Focus() {
 }
 
 void RenderWidgetHostImpl::Blur() {
+  // TODO(crbug.com/689777): This sends it to the main frame RenderWidgetHost
+  // should it be going to the local root instead?
   RenderWidgetHostImpl* focused_widget =
       delegate_ ? delegate_->GetRenderWidgetHostWithPageFocus() : nullptr;
 
@@ -1159,6 +1236,11 @@ void RenderWidgetHostImpl::SetPageFocus(bool focused) {
 
   // Also send page-level focus state to other SiteInstances involved in
   // rendering the current FrameTree, if this widget is for a main frame.
+  // TODO(crbug.com/689777): We should be telling the delegate which
+  // RenderWidgetHost was focused (if we send it to the focused one instead
+  // of the main frame in order to order it correctly with other input events),
+  // so that the delegate can propagate it to all other WebViews based on
+  // where this RenderWidgetHost lives.
   if (owner_delegate_ && delegate_)
     delegate_->ReplicatePageFocus(focused);
 }
@@ -1698,10 +1780,12 @@ void RenderWidgetHostImpl::RemoveInputEventObserver(
 
 void RenderWidgetHostImpl::AddObserver(RenderWidgetHostObserver* observer) {
   observers_.AddObserver(observer);
+  observers_size_for_debug_++;
 }
 
 void RenderWidgetHostImpl::RemoveObserver(RenderWidgetHostObserver* observer) {
   observers_.RemoveObserver(observer);
+  observers_size_for_debug_--;
 }
 
 void RenderWidgetHostImpl::GetScreenInfo(blink::ScreenInfo* result) {
@@ -1802,9 +1886,10 @@ void RenderWidgetHostImpl::DragTargetDrop(const DropData& drop_data,
   }
 }
 
-void RenderWidgetHostImpl::DragSourceEndedAt(const gfx::PointF& client_point,
-                                             const gfx::PointF& screen_point,
-                                             blink::DragOperation operation) {
+void RenderWidgetHostImpl::DragSourceEndedAt(
+    const gfx::PointF& client_point,
+    const gfx::PointF& screen_point,
+    ui::mojom::DragOperation operation) {
   // TODO(https://crbug.com/1102769): Replace with a for_frame() check.
   if (blink_frame_widget_) {
     blink_frame_widget_->DragSourceEndedAt(
@@ -1829,20 +1914,7 @@ void RenderWidgetHostImpl::FilterDropData(DropData* drop_data) {
   }
 }
 
-void RenderWidgetHostImpl::SetCursor(const ui::Cursor& unsafe_cursor) {
-  SkBitmap bitmap;
-  // On receipt of an arbitrary bitmap from the renderer, we convert to an N32
-  // 32bpp bitmap. Other pixel sizes can lead to out-of-bounds mistakes when
-  // transferring the pixels out of the/ bitmap into other buffers.
-  if (!skia::SkBitmapToN32OpaqueOrPremul(unsafe_cursor.custom_bitmap(),
-                                         &bitmap)) {
-    NOTREACHED() << "Unable to convert bitmap for cursor";
-    return;
-  }
-
-  ui::Cursor cursor = unsafe_cursor;
-  cursor.set_custom_bitmap(std::move(bitmap));
-
+void RenderWidgetHostImpl::SetCursor(const ui::Cursor& cursor) {
   if (view_)
     view_->UpdateCursor(WebCursor(cursor));
 }
@@ -1894,11 +1966,8 @@ RenderProcessHost::Priority RenderWidgetHostImpl::GetPriority() {
 void RenderWidgetHostImpl::RenderProcessExited(
     RenderProcessHost* host,
     const ChildProcessTerminationInfo& info) {
-  // When the RenderViewHost or the RenderFrameHost own this instance, they
-  // manage its destruction. Otherwise it is owned by the renderer process and
-  // must self-destroy when it exits.
-  if (!owner_delegate_ && !owned_by_render_frame_host_)
-    Destroy(true);
+  CHECK(self_owned_);
+  Destroy(/*also_delete=*/true);  // Delete |this|.
 }
 
 blink::mojom::WidgetInputHandler*
@@ -1971,22 +2040,22 @@ void RenderWidgetHostImpl::SelectionBoundsChanged(
                                   focus_dir, is_anchor_first);
 }
 
-void RenderWidgetHostImpl::OnUpdateDragCursor(DragOperation current_op) {
-  if (delegate_->OnUpdateDragCursor())
-    return;
-
+void RenderWidgetHostImpl::OnUpdateDragCursor(
+    ui::mojom::DragOperation current_op) {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (view)
     view->UpdateDragCursor(current_op);
 }
 
 void RenderWidgetHostImpl::RendererExited() {
-  if (!renderer_initialized_)
+  if (!renderer_widget_created_)
     return;
 
   // Clearing this flag causes us to re-create the renderer when recovering
   // from a crashed renderer.
-  set_renderer_initialized(false);
+  renderer_widget_created_ = false;
+  // This flag is set when creating the renderer widget.
+  waiting_for_init_ = false;
 
   // After the renderer crashes, the view is destroyed and so the
   // RenderWidgetHost cannot track its visibility anymore. We assume such
@@ -2143,11 +2212,14 @@ bool RenderWidgetHostImpl::IsMouseLocked() const {
 
 void RenderWidgetHostImpl::SetVisualPropertiesFromParentFrame(
     float page_scale_factor,
+    float compositing_scale_factor,
     bool is_pinch_gesture_active,
     const gfx::Size& visible_viewport_size,
     const gfx::Rect& compositor_viewport,
     std::vector<gfx::Rect> root_widget_window_segments) {
   properties_from_parent_local_root_.page_scale_factor = page_scale_factor;
+  properties_from_parent_local_root_.compositing_scale_factor =
+      compositing_scale_factor;
   properties_from_parent_local_root_.is_pinch_gesture_active =
       is_pinch_gesture_active;
   properties_from_parent_local_root_.visible_viewport_size =
@@ -2166,11 +2238,29 @@ void RenderWidgetHostImpl::SetAutoResize(bool enable,
 }
 
 void RenderWidgetHostImpl::Destroy(bool also_delete) {
-  DCHECK(!destroyed_);
+  // TODO(https://crbug.com/1153966): Turns this back into a DCHECK once the bug
+  // is fixed.
+  CHECK(!destroyed_);
   destroyed_ = true;
 
-  for (auto& observer : observers_)
+  // TODO(https://crbug.com/1153966): This is instrumentation about a bug
+  // happening while iterating on the |observers_|. Remove this when the bug
+  // will be fixed.
+  base::WeakPtr<RenderWidgetHostImpl> weak_ptr = GetWeakPtr();
+  int observer_list_iteration_before_call = 0;
+  int observer_list_iteration_after_call = 0;
+  int observer_list_size = observers_size_for_debug_;
+  base::debug::Alias(&observer_list_iteration_before_call);
+  base::debug::Alias(&observer_list_iteration_after_call);
+  base::debug::Alias(&observer_list_size);
+
+  for (auto& observer : observers_) {
+    observer_list_iteration_before_call++;
     observer.RenderWidgetHostDestroyed(this);
+    observer_list_iteration_after_call++;
+    CHECK(weak_ptr);
+  }
+
   NotificationService::current()->Notify(
       NOTIFICATION_RENDER_WIDGET_HOST_DESTROYED, Source<RenderWidgetHost>(this),
       NotificationService::NoDetails());
@@ -2188,8 +2278,7 @@ void RenderWidgetHostImpl::Destroy(bool also_delete) {
   // on the renderer to delete Popup widgets.
   blink_popup_widget_host_receiver_.reset();
 
-  render_process_blocked_state_changed_subscription_.reset();
-  pending_show_closure_.Reset();
+  render_process_blocked_state_changed_subscription_ = {};
   GetProcess()->RemovePriorityClient(this);
   GetProcess()->RemoveObserver(this);
   g_routing_id_widget_map.Get().erase(
@@ -2201,7 +2290,10 @@ void RenderWidgetHostImpl::Destroy(bool also_delete) {
     delegate_->RenderWidgetDeleted(this);
 
   if (also_delete) {
-    CHECK(!owner_delegate_);
+    CHECK(self_owned_);
+    // The destructor CHECKs self-owned RenderWidgetHostImpl aren't destroyed
+    // externally. This bit needs to be reset to allow internal deletion.
+    self_owned_ = false;
     delete this;
   }
 }
@@ -2333,7 +2425,7 @@ void RenderWidgetHostImpl::OnUpdateScreenRectsAck() {
 void RenderWidgetHostImpl::OnLocalSurfaceIdChanged(
     const cc::RenderFrameMetadata& metadata) {
   TRACE_EVENT_WITH_FLOW1(
-      "renderer_host,disabled-by-default-viz.surface_id_flow",
+      "renderer_host," TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
       "RenderWidgetHostImpl::OnLocalSurfaceIdChanged",
       metadata.local_surface_id && metadata.local_surface_id->is_valid()
           ? metadata.local_surface_id->submission_trace_id() +
@@ -2452,6 +2544,8 @@ bool RenderWidgetHostImpl::StoredVisualPropertiesNeedsUpdate(
              new_visual_properties.capture_sequence_number ||
          old_visual_properties->page_scale_factor !=
              new_visual_properties.page_scale_factor ||
+         old_visual_properties->compositing_scale_factor !=
+             new_visual_properties.compositing_scale_factor ||
          old_visual_properties->is_pinch_gesture_active !=
              new_visual_properties.is_pinch_gesture_active ||
          old_visual_properties->root_widget_window_segments !=
@@ -2523,21 +2617,11 @@ void RenderWidgetHostImpl::DidFirstVisuallyNonEmptyPaint() {
 void RenderWidgetHostImpl::StartDragging(
     blink::mojom::DragDataPtr drag_data,
     blink::DragOperationsMask drag_operations_mask,
-    const SkBitmap& unsafe_bitmap,
+    const SkBitmap& bitmap,
     const gfx::Vector2d& bitmap_offset_in_dip,
     blink::mojom::DragEventSourceInfoPtr event_info) {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (!view || !GetView()) {
-    // Need to clear drag and drop state in blink.
-    DragSourceSystemDragEnded();
-    return;
-  }
-  SkBitmap bitmap;
-  // On receipt of an arbitrary bitmap from the renderer, we convert to an N32
-  // 32bpp bitmap. Other pixel sizes can lead to out-of-bounds mistakes when
-  // transferring the pixels out of the/ bitmap into other buffers.
-  if (!skia::SkBitmapToN32OpaqueOrPremul(unsafe_bitmap, &bitmap)) {
-    NOTREACHED() << "Unable to convert bitmap for drag-and-drop";
     // Need to clear drag and drop state in blink.
     DragSourceSystemDragEnded();
     return;
@@ -2578,7 +2662,7 @@ void RenderWidgetHostImpl::StartDragging(
   }
 
   float scale = GetScaleFactorForView(GetView());
-  gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, scale));
+  gfx::ImageSkia image = gfx::ImageSkia::CreateFromBitmap(bitmap, scale);
   view->StartDragging(filtered_data, drag_operations_mask, image,
                       bitmap_offset_in_dip, *event_info, this);
 }
@@ -3024,7 +3108,7 @@ void RenderWidgetHostImpl::GotResponseToForceRedraw(int snapshot_id) {
       FROM_HERE,
       base::BindOnce(&RenderWidgetHostImpl::WindowSnapshotReachedScreen,
                      weak_factory_.GetWeakPtr(), snapshot_id),
-      TimeDelta::FromSecondsD(1. / 6));
+      base::TimeDelta::FromSecondsD(1. / 6));
 #else
   WindowSnapshotReachedScreen(snapshot_id);
 #endif
@@ -3248,7 +3332,7 @@ void RenderWidgetHostImpl::SetInputTargetClientForTesting(
   input_target_client_ = std::move(input_target_client);
 }
 
-void RenderWidgetHostImpl::ProgressFlingIfNeeded(TimeTicks current_time) {
+void RenderWidgetHostImpl::ProgressFlingIfNeeded(base::TimeTicks current_time) {
   fling_scheduler_->ProgressFlingOnBeginFrameIfneeded(current_time);
 }
 

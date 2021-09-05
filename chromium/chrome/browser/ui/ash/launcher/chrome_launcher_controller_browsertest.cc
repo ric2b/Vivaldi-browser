@@ -313,7 +313,6 @@ class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
     return item.id;
   }
 
-
   // Get the index of an item which has the given type.
   int GetIndexOfShelfItemType(ash::ShelfItemType type) const {
     return shelf_model()->GetItemIndexForType(type);
@@ -408,8 +407,7 @@ class ShelfAppBrowserTestNoDefaultBrowser : public ShelfAppBrowserTest {
 class ShelfWebAppBrowserTest : public ShelfAppBrowserTest {
  protected:
   ShelfWebAppBrowserTest()
-      : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
-  }
+      : https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
 
   ~ShelfWebAppBrowserTest() override = default;
 
@@ -2614,9 +2612,9 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest,
 
 // Verify that the in-app shelf should be shown when the app icon receives
 // the accessibility focus.
-IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
+IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, DISABLED_EnableChromeVox) {
   ash::Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-  chromeos::SpeechMonitor speech_monitor;
+  chromeos::test::SpeechMonitor speech_monitor;
 
   // Enable ChromeVox.
   ASSERT_FALSE(
@@ -2654,8 +2652,8 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
       ash::Shell::GetRootWindowControllerWithDisplayId(
           display::Screen::GetScreen()->GetPrimaryDisplay().id());
   speech_monitor.Call([controller]() {
-    // Hotseat is expected to be extended if spoken feedback is enabled.
-    ASSERT_EQ(ash::HotseatState::kExtended,
+    // Hotseat is expected to be hidden (by default).
+    ASSERT_EQ(ash::HotseatState::kHidden,
               controller->shelf()->shelf_layout_manager()->hotseat_state());
   });
 
@@ -2664,7 +2662,7 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
 
   speech_monitor.Call([generator_ptr]() {
     // Press the search + right. Expects that the browser icon receives the
-    // accessibility focus and the hotseat remains in kExtended state.
+    // accessibility focus and the hotseat switches to kExtended state.
     generator_ptr->PressKey(ui::VKEY_RIGHT, ui::EF_COMMAND_DOWN);
   });
 

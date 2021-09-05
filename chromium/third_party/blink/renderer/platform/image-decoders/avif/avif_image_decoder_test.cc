@@ -480,10 +480,12 @@ void TestInvalidStaticImage(const char* avif_file, ErrorPhase error_phase) {
   decoder->SetData(data.get(), true);
 
   if (error_phase == ErrorPhase::kParse) {
+    EXPECT_FALSE(decoder->IsSizeAvailable());
     EXPECT_TRUE(decoder->Failed());
     EXPECT_EQ(0u, decoder->FrameCount());
     EXPECT_FALSE(decoder->DecodeFrameBufferAtIndex(0));
   } else {
+    EXPECT_TRUE(decoder->IsSizeAvailable());
     EXPECT_FALSE(decoder->Failed());
     EXPECT_GT(decoder->FrameCount(), 0u);
     ImageFrame* frame = decoder->DecodeFrameBufferAtIndex(0);
@@ -512,8 +514,12 @@ void ReadYUV(const char* file_name,
   auto decoder = CreateAVIFDecoder();
   decoder->SetData(data.get(), true);
 
-  ASSERT_TRUE(decoder->IsSizeAvailable());
+  ASSERT_TRUE(decoder->IsDecodedSizeAvailable());
   ASSERT_TRUE(decoder->CanDecodeToYUV());
+  EXPECT_NE(decoder->GetYUVSubsampling(), cc::YUVSubsampling::kUnknown);
+  EXPECT_NE(decoder->GetYUVColorSpace(),
+            SkYUVColorSpace::kIdentity_SkYUVColorSpace);
+  EXPECT_EQ(decoder->GetYUVBitDepth(), bit_depth);
 
   IntSize size = decoder->DecodedSize();
   IntSize y_size = decoder->DecodedYUVSize(cc::YUVIndex::kY);

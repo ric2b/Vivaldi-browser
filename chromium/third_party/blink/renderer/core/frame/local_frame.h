@@ -49,11 +49,13 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/link_to_text/link_to_text.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/media/fullscreen_video_element.mojom-blink.h"
 #include "third_party/blink/public/mojom/optimization_guide/optimization_guide.mojom-blink.h"
 #include "third_party/blink/public/mojom/reporting/reporting.mojom-blink.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/renderer/core/clipboard/raw_system_clipboard.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -127,6 +129,7 @@ class LayoutView;
 class LocalDOMWindow;
 class LocalWindowProxy;
 class LocalFrameClient;
+class BackgroundColorPaintImageGenerator;
 class Node;
 class NodeTraversal;
 class PerformanceMonitor;
@@ -151,6 +154,7 @@ class CORE_EXPORT LocalFrame final
       public Supplementable<LocalFrame>,
       public mojom::blink::LocalFrame,
       public mojom::blink::LocalMainFrame,
+      public mojom::blink::FullscreenVideoElementHandler,
       public mojom::blink::HighPriorityLocalFrame {
  public:
   // Returns the LocalFrame instance for the given |frame_token|.
@@ -202,12 +206,24 @@ class CORE_EXPORT LocalFrame final
       Frame* child) override;
   void DidFocus() override;
 
+  // Triggers eviction of this frame by notifying the browser side.
   void EvictFromBackForwardCache(mojom::blink::RendererEvictionReason reason);
+  // Called when a network request buffered an additional `num_bytes` while the
+  // frame is in back-forward cache. Updates the total amount of bytes buffered
+  // for back-forward cache in the frame and in the process. Note that
+  // `num_bytes` is the amount of additional bytes that are newly buffered, on
+  // top of any previously buffered bytes for this frame.
+  void DidBufferLoadWhileInBackForwardCache(size_t num_bytes);
+  // Returns true if the total amount of bytes buffered while in back-forward
+  // cache in the whole renderer process is still under the per-process limit,
+  // false otherwise.
+  bool CanContinueBufferingWhileInBackForwardCache();
 
   void DidChangeThemeColor();
   void DidChangeBackgroundColor(SkColor background_color, bool color_adjust);
 
-  void DetachChildren();
+  // Returns false if detaching child frames reentrantly detached `this`.
+  bool DetachChildren();
   // After Document is attached, resets state related to document, and sets
   // context to the current document.
   void DidAttachDocument();
@@ -218,7 +234,8 @@ class CORE_EXPORT LocalFrame final
   // corresponding method in the Frame base class to return the
   // LocalFrame-specific subclass.
   LocalWindowProxy* WindowProxy(DOMWrapperWorld&);
-  LocalDOMWindow* DomWindow() const;
+  LocalDOMWindow* DomWindow();
+  const LocalDOMWindow* DomWindow() const;
   void SetDOMWindow(LocalDOMWindow*);
   LocalFrameView* View() const override;
   Document* GetDocument() const;
@@ -237,6 +254,7 @@ class CORE_EXPORT LocalFrame final
   TextSuggestionController& GetTextSuggestionController() const;
   SpellChecker& GetSpellChecker() const;
   FrameConsole& Console() const;
+  BackgroundColorPaintImageGenerator* GetBackgroundColorPaintImageGenerator();
 
   // A local root is the root of a connected subtree that contains only
   // LocalFrames. The local root is responsible for coordinating input, layout,
@@ -452,7 +470,7 @@ class CORE_EXPORT LocalFrame final
   // |mime_type| and populated with the contents of |data|. Only intended for
   // use in internal-implementation LocalFrames that aren't in the frame tree.
   void ForceSynchronousDocumentInstall(const AtomicString& mime_type,
-                                       scoped_refptr<SharedBuffer> data);
+                                       scoped_refptr<const SharedBuffer> data);
 
   bool should_send_resource_timing_info_to_parent() const {
     return should_send_resource_timing_info_to_parent_;
@@ -603,6 +621,7 @@ class CORE_EXPORT LocalFrame final
                            const WTF::String& message,
                            bool discard_duplicates) final;
   void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr) final;
+  void SwapInImmediately() final;
   void StopLoading() final;
   void Collapse(bool collapsed) final;
   void EnableViewSourceMode() final;
@@ -660,7 +679,6 @@ class CORE_EXPORT LocalFrame final
   void SetScaleFactor(float scale) override;
   void ClosePage(
       mojom::blink::LocalMainFrame::ClosePageCallback callback) override;
-  // Performs the specified plugin action on the node at the given location.
   void PluginActionAt(const gfx::Point& location,
                       mojom::blink::PluginActionType action) override;
   void SetInitialFocus(bool reverse) override;
@@ -689,6 +707,12 @@ class CORE_EXPORT LocalFrame final
   void ForwardMessageFromHost(
       BlinkTransferableMessage message,
       const scoped_refptr<const SecurityOrigin>& source_origin) final;
+  void UpdateBrowserControlsState(cc::BrowserControlsState constraints,
+                                  cc::BrowserControlsState current,
+                                  bool animate) override;
+
+  // mojom::FullscreenVideoElementHandler implementation:
+  void RequestFullscreenVideoElement() final;
 
   SystemClipboard* GetSystemClipboard();
   RawSystemClipboard* GetRawSystemClipboard();
@@ -724,12 +748,14 @@ class CORE_EXPORT LocalFrame final
   WebURLLoader::DeferType GetLoadDeferType();
   bool IsLoadDeferred();
 
+  bool SwapIn();
+
  private:
   friend class FrameNavigationDisabler;
   FRIEND_TEST_ALL_PREFIXES(LocalFrameTest, CharacterIndexAtPointWithPinchZoom);
 
   // Frame protected overrides:
-  void DetachImpl(FrameDetachType) override;
+  bool DetachImpl(FrameDetachType) override;
 
   // Intentionally private to prevent redundant checks when the type is
   // already LocalFrame.
@@ -785,6 +811,10 @@ class CORE_EXPORT LocalFrame final
   mojom::blink::TextInputHost& GetTextInputHost();
 #endif
 
+  // Returns the `Frame` for which `provisional_frame_ == this`. May only be
+  // called on a provisional frame.
+  Frame* GetProvisionalOwnerFrame();
+
   static void BindToReceiver(
       blink::LocalFrame* frame,
       mojo::PendingAssociatedReceiver<mojom::blink::LocalFrame> receiver);
@@ -793,7 +823,9 @@ class CORE_EXPORT LocalFrame final
       mojo::PendingAssociatedReceiver<mojom::blink::LocalMainFrame> receiver);
   void BindToHighPriorityReceiver(
       mojo::PendingReceiver<mojom::blink::HighPriorityLocalFrame> receiver);
-
+  void BindFullscreenVideoElementReceiver(
+      mojo::PendingAssociatedReceiver<
+          mojom::blink::FullscreenVideoElementHandler> receiver);
   void BindTextFragmentSelectorProducer(
       mojo::PendingReceiver<mojom::blink::TextFragmentSelectorProducer>
           receiver);
@@ -848,6 +880,11 @@ class CORE_EXPORT LocalFrame final
 
   float page_zoom_factor_;
   float text_zoom_factor_;
+
+  // The total bytes buffered by all network requests in this frame while frozen
+  // due to back-forward cache. This number gets reset when the frame gets out
+  // of the back-forward cache.
+  size_t total_bytes_buffered_while_in_back_forward_cache_ = 0;
 
   Member<CoreProbeSink> probe_sink_;
   scoped_refptr<InspectorTaskRunner> inspector_task_runner_;
@@ -927,6 +964,11 @@ class CORE_EXPORT LocalFrame final
                    LocalFrame,
                    HeapMojoWrapperMode::kWithoutContextObserver>
       high_priority_frame_receiver_{this, nullptr};
+  // LocalFrame can be reused by multiple ExecutionContext.
+  HeapMojoAssociatedReceiver<mojom::blink::FullscreenVideoElementHandler,
+                             LocalFrame,
+                             HeapMojoWrapperMode::kWithoutContextObserver>
+      fullscreen_video_receiver_{this, nullptr};
 
   // Variable to control burst of download requests.
   int num_burst_download_requests_ = 0;
@@ -936,6 +978,9 @@ class CORE_EXPORT LocalFrame final
   Member<SystemClipboard> system_clipboard_;
   // Access to the global raw/unsanitized system clipboard
   Member<RawSystemClipboard> raw_system_clipboard_;
+
+  Member<BackgroundColorPaintImageGenerator>
+      background_color_paint_image_generator_;
 
   using SavedScrollOffsets = HeapHashMap<Member<Node>, ScrollOffset>;
   Member<SavedScrollOffsets> saved_scroll_offsets_;

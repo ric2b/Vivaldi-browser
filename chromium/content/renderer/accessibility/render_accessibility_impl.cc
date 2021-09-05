@@ -24,9 +24,11 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/accessibility/ax_action_target_factory.h"
 #include "content/renderer/accessibility/ax_image_annotator.h"
+#include "content/renderer/accessibility/ax_tree_snapshotter_impl.h"
 #include "content/renderer/accessibility/blink_ax_action_target.h"
 #include "content/renderer/accessibility/render_accessibility_manager.h"
 #include "content/renderer/render_frame_impl.h"
@@ -40,6 +42,7 @@
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_page_popup.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/accessibility/accessibility_switches.h"
@@ -90,95 +93,6 @@ void SetAccessibilityCrashKey(ui::AXMode mode) {
 
 namespace content {
 
-// Cap the number of nodes returned in an accessibility
-// tree snapshot to avoid outrageous memory or bandwidth
-// usage.
-const size_t kMaxSnapshotNodeCount = 5000;
-
-AXTreeSnapshotterImpl::AXTreeSnapshotterImpl(RenderFrameImpl* render_frame)
-    : render_frame_(render_frame) {
-  DCHECK(render_frame->GetWebFrame());
-  blink::WebDocument document_ = render_frame->GetWebFrame()->GetDocument();
-  context_ = std::make_unique<WebAXContext>(document_);
-}
-
-AXTreeSnapshotterImpl::~AXTreeSnapshotterImpl() = default;
-
-void AXTreeSnapshotterImpl::Snapshot(ui::AXMode ax_mode,
-                                     size_t max_node_count,
-                                     ui::AXTreeUpdate* response) {
-  // Get a snapshot of the accessibility tree as an AXNodeData.
-  ui::AXTreeUpdate content_tree;
-  SnapshotContentTree(ax_mode, max_node_count, &content_tree);
-
-  // As a sanity check, node_id_to_clear and event_from should be uninitialized
-  // if this is a full tree snapshot. They'd only be set to something if
-  // this was indeed a partial update to the tree (which we don't want).
-  DCHECK_EQ(0, content_tree.node_id_to_clear);
-  DCHECK_EQ(ax::mojom::EventFrom::kNone, content_tree.event_from);
-
-  // We now have a complete serialization of the accessibility tree, but it
-  // includes a few fields we don't want to export outside of content/,
-  // so copy it into a more generic ui::AXTreeUpdate instead.
-  response->root_id = content_tree.root_id;
-  response->nodes.resize(content_tree.nodes.size());
-  response->node_id_to_clear = content_tree.node_id_to_clear;
-  response->event_from = content_tree.event_from;
-  response->nodes.assign(content_tree.nodes.begin(), content_tree.nodes.end());
-}
-
-void AXTreeSnapshotterImpl::SnapshotContentTree(ui::AXMode ax_mode,
-                                                size_t max_node_count,
-                                                ui::AXTreeUpdate* response) {
-  if (!render_frame_->GetWebFrame())
-    return;
-  if (!WebAXObject::MaybeUpdateLayoutAndCheckValidity(
-          render_frame_->GetWebFrame()->GetDocument()))
-    return;
-  WebAXObject root = context_->Root();
-
-  BlinkAXTreeSource tree_source(render_frame_, ax_mode);
-  tree_source.SetRoot(root);
-  ScopedFreezeBlinkAXTreeSource freeze(&tree_source);
-
-  // The serializer returns an ui::AXTreeUpdate, which can store a complete
-  // or a partial accessibility tree. AXTreeSerializer is stateful, but the
-  // first time you serialize from a brand-new tree you're guaranteed to get a
-  // complete tree.
-  BlinkAXTreeSerializer serializer(&tree_source);
-  if (max_node_count)
-    serializer.set_max_node_count(max_node_count);
-  if (serializer.SerializeChanges(root, response))
-    return;
-
-  // It's possible for the page to fail to serialize the first time due to
-  // aria-owns rearranging the page while it's being scanned. Try a second
-  // time.
-  *response = ui::AXTreeUpdate();
-  if (serializer.SerializeChanges(root, response))
-    return;
-
-  // It failed again. Clear the response object because it might have errors.
-  *response = ui::AXTreeUpdate();
-  LOG(WARNING) << "Unable to serialize accessibility tree.";
-}
-
-// static
-void RenderAccessibilityImpl::SnapshotAccessibilityTree(
-    RenderFrameImpl* render_frame,
-    ui::AXTreeUpdate* response,
-    ui::AXMode ax_mode) {
-  TRACE_EVENT0("accessibility",
-               "RenderAccessibilityImpl::SnapshotAccessibilityTree");
-  DCHECK(render_frame);
-  DCHECK(response);
-  if (!render_frame->GetWebFrame())
-    return;
-
-  AXTreeSnapshotterImpl snapshotter(render_frame);
-  snapshotter.SnapshotContentTree(ax_mode, kMaxSnapshotNodeCount, response);
-}
-
 RenderAccessibilityImpl::RenderAccessibilityImpl(
     RenderAccessibilityManager* const render_accessibility_manager,
     RenderFrameImpl* const render_frame,
@@ -219,7 +133,7 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(
   settings->SetAriaModalPrunesAXTree(true);
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Do not ignore SVG grouping (<g>) elements on ChromeOS, which is needed so
   // Select-to-Speak can read SVG text nodes in natural reading order.
   settings->SetAccessibilityIncludeSvgGElement(true);
@@ -231,7 +145,7 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(
   // UI for a select element directly accessible. Disable by default on
   // Chrome OS, but some tests may override.
   bool disable_ax_menu_list = false;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   disable_ax_menu_list = true;
 #endif
   auto* command_line = base::CommandLine::ForCurrentProcess();
@@ -330,14 +244,9 @@ void RenderAccessibilityImpl::AccessibilityModeChanged(const ui::AXMode& mode) {
   if (!document.IsNull()) {
     StartOrStopLabelingImages(old_mode, mode);
 
-    // If there are any events in flight, |HandleAXEvent| will refuse to process
-    // our new event.
-    pending_events_.clear();
-    auto root_object = WebAXObject::FromWebDocument(document, false);
-    ax::mojom::Event event = root_object.IsLoaded()
-                                 ? ax::mojom::Event::kLoadComplete
-                                 : ax::mojom::Event::kLayoutComplete;
-    HandleAXEvent(ui::AXEvent(root_object.AxID(), event));
+    needs_initial_ax_tree_root_ = true;
+    event_schedule_mode_ = EventScheduleMode::kProcessEventsImmediately;
+    ScheduleSendPendingAccessibilityEvents();
   }
 }
 
@@ -541,11 +450,11 @@ void RenderAccessibilityImpl::Reset(int32_t reset_token) {
   if (!document.IsNull()) {
     // Tree-only mode gets used by the automation extension API which requires a
     // load complete event to invoke listener callbacks.
-    auto root_object = WebAXObject::FromWebDocument(document, false);
-    ax::mojom::Event event = root_object.IsLoaded()
-                                 ? ax::mojom::Event::kLoadComplete
-                                 : ax::mojom::Event::kLayoutComplete;
-    HandleAXEvent(ui::AXEvent(root_object.AxID(), event));
+    // SendPendingAccessibilityEvents() will fire the load complete event
+    // if the page is loaded.
+    needs_initial_ax_tree_root_ = true;
+    event_schedule_mode_ = EventScheduleMode::kProcessEventsImmediately;
+    ScheduleSendPendingAccessibilityEvents();
   }
 }
 
@@ -862,10 +771,20 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
     // complete for the entire document, in order to initialize the browser's
     // cached accessibility tree.
     needs_initial_ax_tree_root_ = false;
-    auto obj = WebAXObject::FromWebDocument(document);
+    auto root_obj = WebAXObject::FromWebDocument(document);
+    // Always fire layout complete for a new root object.
     pending_events_.insert(
         pending_events_.begin(),
-        ui::AXEvent(obj.AxID(), ax::mojom::Event::kLayoutComplete));
+        ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
+
+    // If loaded and has some content, insert load complete at the top, so that
+    // screen readers are informed a new document is ready.
+    if (root_obj.IsLoaded() && !document.Body().IsNull() &&
+        !document.Body().FirstChild().IsNull()) {
+      pending_events_.insert(
+          pending_events_.begin(),
+          ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLoadComplete));
+    }
   }
 
   if (pending_events_.empty() && dirty_objects_.empty()) {
@@ -899,8 +818,8 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
   // location changes.
   bool need_to_send_location_changes = false;
 
-  // If there's a load complete message, we need to change the event schedule
-  // mode.
+  // Keep track of load complete messages. When a load completes, it's a good
+  // time to inject a stylesheet for image annotation debugging.
   bool had_load_complete_messages = false;
 
   ScopedFreezeBlinkAXTreeSource freeze(tree_source_.get());

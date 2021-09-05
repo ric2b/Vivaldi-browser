@@ -745,16 +745,13 @@ PaintWorkletJobMap LayerTreeHostImpl::GatherDirtyPaintWorklets(
 
       PaintWorkletJob::AnimatedPropertyValues animated_property_values;
       for (const auto& element : input->GetPropertyKeys()) {
-        // We should not have multiple property ids with the same name.
-        DCHECK(!animated_property_values.contains(element.first));
+        DCHECK(!animated_property_values.contains(element));
         const PaintWorkletInput::PropertyValue& animated_property_value =
             paint_worklet_tracker_.GetPropertyAnimationValue(element);
         // No value indicates that the input property was not mutated by CC
         // animation.
-        if (animated_property_value.has_value()) {
-          animated_property_values.emplace(element.first,
-                                           animated_property_value);
-        }
+        if (animated_property_value.has_value())
+          animated_property_values.emplace(element, animated_property_value);
       }
 
       job_vector->data.emplace_back(layer->id(), input,
@@ -1173,8 +1170,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
         render_surface->EffectTreeIndex() == EffectTree::kContentsRootNodeId;
     bool should_draw_into_render_pass =
         is_root_surface || render_surface->contributes_to_drawn_surface() ||
-        render_surface->HasCopyRequest() ||
-        render_surface->ShouldCacheRenderSurface();
+        render_surface->CopyOfOutputRequired();
     if (should_draw_into_render_pass)
       frame->render_passes.push_back(render_surface->CreateRenderPass());
   }
@@ -1601,7 +1597,8 @@ void LayerTreeHostImpl::RemoveRenderPasses(FrameData* frame) {
     }
 
     if (pass->quad_list.empty() && pass->copy_requests.empty() &&
-        pass->filters.IsEmpty() && pass->backdrop_filters.IsEmpty()) {
+        !pass->subtree_capture_id.is_valid() && pass->filters.IsEmpty() &&
+        pass->backdrop_filters.IsEmpty()) {
       // Remove the pass and decrement |i| to counter the for loop's increment,
       // so we don't skip the next pass in the loop.
       frame->render_passes.erase(frame->render_passes.begin() + i);
@@ -2429,7 +2426,7 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
 
   memory_history_->SaveEntry(tile_manager_.memory_stats_from_last_assign());
 
-  if (debug_state_.ShowHudRects()) {
+  if (debug_state_.ShowDebugRects()) {
     debug_rect_history_->SaveDebugRectsForCurrentFrame(
         active_tree(), active_tree_->hud_layer(), *frame->render_surface_list,
         debug_state_);
@@ -2484,8 +2481,7 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
 
   frame_rate_estimator_.WillDraw(CurrentBeginFrameArgs().frame_time);
 
-  if (settings_.force_preferred_interval_for_video ||
-      enable_frame_rate_throttling_) {
+  if (enable_frame_rate_throttling_) {
     metadata.preferred_frame_interval = viz::BeginFrameArgs::MaxInterval();
   } else {
     metadata.preferred_frame_interval =
@@ -2499,8 +2495,11 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
 
   if (render_frame_metadata_observer_) {
     last_draw_render_frame_metadata_ = MakeRenderFrameMetadata(frame);
-    last_draw_render_frame_metadata_->has_delegated_ink_metadata =
-        metadata.delegated_ink_metadata.get();
+    if (viz::DelegatedInkMetadata* ink_metadata =
+            metadata.delegated_ink_metadata.get()) {
+      last_draw_render_frame_metadata_->delegated_ink_metadata =
+          DelegatedInkBrowserMetadata(ink_metadata->is_hovering());
+    }
 
     // We cache the value of any new vertical scroll direction so that we can
     // accurately determine when the next change in vertical scroll direction
@@ -2772,6 +2771,9 @@ bool LayerTreeHostImpl::WillBeginImplFrame(const viz::BeginFrameArgs& args) {
   frame_trackers_.NotifyBeginImplFrame(args);
   total_frame_counter_.OnBeginFrame(args);
 
+  UMA_HISTOGRAM_CUSTOM_COUNTS("GPU.AcceleratedSurfaceRefreshRate",
+                              1 / args.interval.InSecondsF(), 0, 121, 122);
+
   if (is_likely_to_require_a_draw_) {
     // Optimistically schedule a draw. This will let us expect the tile manager
     // to complete its work so that we can draw new tiles within the impl frame
@@ -3002,7 +3004,7 @@ void LayerTreeHostImpl::DidLoseLayerTreeFrameSink() {
   client_->DidLoseLayerTreeFrameSinkOnImplThread();
   lag_tracking_manager_.Clear();
 
-  dropped_frame_counter_.ResetFrameSorter();
+  dropped_frame_counter_.ResetPendingFrames(base::TimeTicks::Now());
 }
 
 bool LayerTreeHostImpl::OnlyExpandTopControlsAtPageTop() const {
@@ -3269,10 +3271,14 @@ void LayerTreeHostImpl::SetVisible(bool visible) {
   if (visible_ == visible)
     return;
   visible_ = visible;
-  if (visible_)
-    total_frame_counter_.OnShow(base::TimeTicks::Now());
-  else
-    total_frame_counter_.OnHide(base::TimeTicks::Now());
+  if (visible_) {
+    auto now = base::TimeTicks::Now();
+    total_frame_counter_.OnShow(now);
+  } else {
+    auto now = base::TimeTicks::Now();
+    total_frame_counter_.OnHide(now);
+    dropped_frame_counter_.ResetPendingFrames(now);
+  }
   DidVisibilityChange(this, visible_);
   UpdateTileManagerMemoryPolicy(ActualManagedMemoryPolicy());
 
@@ -3358,8 +3364,6 @@ void LayerTreeHostImpl::RecreateTileResources() {
 }
 
 void LayerTreeHostImpl::CreateTileManagerResources() {
-  raster_buffer_provider_ = CreateRasterBufferProvider();
-
   viz::ResourceFormat tile_format = TileRasterBufferFormat(
       settings_, layer_tree_frame_sink_->context_provider(),
       use_gpu_rasterization_);
@@ -3372,6 +3376,11 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
                                                 tile_format),
         settings_.decoded_image_working_set_budget_bytes, max_texture_size_,
         paint_image_generator_client_id_, dark_mode_filter_);
+
+    pending_raster_queries_ = std::make_unique<RasterQueryQueue>(
+        layer_tree_frame_sink_->worker_context_provider(),
+        can_use_oop_rasterization_);
+
   } else {
     bool gpu_compositing = !!layer_tree_frame_sink_->context_provider();
     image_decode_cache_ = std::make_unique<SoftwareImageDecodeCache>(
@@ -3379,6 +3388,8 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
         settings_.decoded_image_working_set_budget_bytes,
         paint_image_generator_client_id_);
   }
+
+  raster_buffer_provider_ = CreateRasterBufferProvider();
 
   // Pass the single-threaded synchronous task graph runner to the worker pool
   // if we're in synchronous single-threaded mode.
@@ -3392,7 +3403,8 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
 
   tile_manager_.SetResources(resource_pool_.get(), image_decode_cache_.get(),
                              task_graph_runner, raster_buffer_provider_.get(),
-                             use_gpu_rasterization_, use_oop_rasterization());
+                             use_gpu_rasterization_, use_oop_rasterization(),
+                             pending_raster_queries_.get());
   tile_manager_.SetCheckerImagingForceDisabled(
       settings_.only_checker_images_with_gpu_raster && !use_gpu_rasterization_);
   UpdateTileManagerMemoryPolicy(ActualManagedMemoryPolicy());
@@ -3423,7 +3435,7 @@ LayerTreeHostImpl::CreateRasterBufferProvider() {
         settings_.resource_settings.use_gpu_memory_buffer_resources,
         tile_format, settings_.max_gpu_raster_tile_size,
         settings_.unpremultiply_and_dither_low_bit_depth_tiles,
-        can_use_oop_rasterization_);
+        can_use_oop_rasterization_, pending_raster_queries_.get());
   }
 
   bool use_zero_copy = settings_.use_zero_copy;
@@ -3520,6 +3532,7 @@ void LayerTreeHostImpl::CleanUpTileManagerResources() {
   single_thread_synchronous_task_graph_runner_ = nullptr;
   image_decode_cache_ = nullptr;
   raster_buffer_provider_ = nullptr;
+  pending_raster_queries_ = nullptr;
   // Any resources that were allocated previously should be considered not good
   // for reuse, as the RasterBufferProvider will be replaced and it may choose
   // to allocate future resources differently.
@@ -3873,6 +3886,15 @@ float LayerTreeHostImpl::PageScaleFactor() const {
 void LayerTreeHostImpl::BindToInputHandler(
     std::unique_ptr<InputDelegateForCompositor> delegate) {
   input_delegate_ = std::move(delegate);
+}
+
+void LayerTreeHostImpl::SetVisualDeviceViewportSize(
+    const gfx::Size& visual_device_viewport_size) {
+  visual_device_viewport_size_ = visual_device_viewport_size;
+}
+
+gfx::Size LayerTreeHostImpl::VisualDeviceViewportSize() const {
+  return visual_device_viewport_size_;
 }
 
 ScrollTree& LayerTreeHostImpl::GetScrollTree() const {
@@ -4641,11 +4663,10 @@ void LayerTreeHostImpl::SetElementFilterMutated(
 }
 
 void LayerTreeHostImpl::OnCustomPropertyMutated(
-    ElementId element_id,
-    const std::string& custom_property_name,
-    PaintWorkletInput::PropertyValue custom_property_value) {
-  paint_worklet_tracker_.OnCustomPropertyMutated(
-      element_id, custom_property_name, std::move(custom_property_value));
+    PaintWorkletInput::PropertyKey property_key,
+    PaintWorkletInput::PropertyValue property_value) {
+  paint_worklet_tracker_.OnCustomPropertyMutated(std::move(property_key),
+                                                 std::move(property_value));
 }
 
 void LayerTreeHostImpl::SetElementBackdropFilterMutated(
@@ -4716,15 +4737,14 @@ void LayerTreeHostImpl::ElementIsAnimatingChanged(
     tree->set_needs_update_draw_properties();
 }
 
-void LayerTreeHostImpl::AnimationScalesChanged(ElementId element_id,
-                                               ElementListType list_type,
-                                               float maximum_scale,
-                                               float starting_scale) {
+void LayerTreeHostImpl::MaximumScaleChanged(ElementId element_id,
+                                            ElementListType list_type,
+                                            float maximum_scale) {
   if (LayerTreeImpl* tree = list_type == ElementListType::ACTIVE
                                 ? active_tree()
                                 : pending_tree()) {
-    tree->property_trees()->AnimationScalesChanged(element_id, maximum_scale,
-                                                   starting_scale);
+    tree->property_trees()->MaximumAnimationScaleChanged(element_id,
+                                                         maximum_scale);
   }
 }
 

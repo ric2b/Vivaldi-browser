@@ -15,14 +15,11 @@ extern const wchar_t kChromeArchive[];
 extern const wchar_t kChromeCompressedArchive[];
 extern const wchar_t kVisualElements[];
 extern const wchar_t kVisualElementsManifest[];
-extern const wchar_t kStandaloneProfileHelper[];
 
 extern const wchar_t kInstallSourceDir[];
 extern const wchar_t kInstallSourceChromeDir[];
 
 extern const wchar_t kMediaPlayerRegPath[];
-
-extern const char kUninstallMetricsName[];
 
 // The range of error values among the installer, Courgette, BSDiff and
 // Zucchini overlap. These offset values disambiguate between different sets

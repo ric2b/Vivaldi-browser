@@ -46,7 +46,7 @@
         "id": "ContainerContent",
         "type": "string",
         "description": "Defines functionality to set up on the C++ side. One or more menu items may be created.",
-        "enum": ["pwa"]
+        "enum": ["extensions", "imageinprofile", "linkinprofile", "notes", "pwa", "sendlinktodevices", "sendpagetodevices", "spellcheck", "spellcheckoptions", "speech"]
       },
       {
         "id": "Item",
@@ -66,6 +66,11 @@
             "optional": false,
             "description": "The kind of menu element"
           },
+          "action": {
+            "type": "string",
+            "optional": true,
+            "description": "Action to execute. This is used for actions that needs to execute in C++. The value must be well defined"
+          },
           "radiogroup": {
             "type": "integer",
             "optional": true,
@@ -75,6 +80,11 @@
             "type": "boolean",
             "optional": true,
             "description": "true if the checkbox is checked, otherwise false. Only applies for type='checkbox'."
+          },
+          "enabled": {
+            "type": "boolean",
+            "optional": true,
+            "description": "true if the item is enabled."
           },
           "url": {
             "type": "string",
@@ -134,6 +144,148 @@
           "separator": {"$ref": "Separator", "optional": true},
           "children": {"type": "array", "items": {"$ref": "Element"}, "optional": true, "description": "Child menu items."}
         }
+      },
+      {
+        "id": "DocumentType",
+        "type": "string",
+        "description": "The kind of document menu.",
+        "enum": ["page", "link", "image", "selection"]
+      },
+      {
+        "id": "TextfieldType",
+        "type": "string",
+        "description": "Defines the type of textfield",
+        "enum": ["addressfield", "searchfield", "regular", "document"]
+      },
+      {
+        "id": "DocumentSupport",
+        "type": "object",
+        "properties": {
+          "copy": {
+            "type": "boolean",
+            "description": "For elements outside editor"
+          },
+          "audio": {
+            "type": "boolean"
+          },
+          "canvas": {
+            "type": "boolean"
+          },
+          "editoptions":{
+            "type": "boolean"
+          },
+          "emoji": {
+            "type": "boolean"
+          },
+          "extensions": {
+            "type": "boolean"
+          },
+          "pictureinpicture": {
+            "type": "boolean"
+          },
+          "password": {
+            "type": "boolean"
+          },
+          "passwordgeneration": {
+            "type": "boolean"
+          },
+          "passwordshowall": {
+            "type": "boolean"
+          },
+          "paste": {
+            "type": "boolean"
+          },
+          "plugin": {
+            "type": "boolean"
+          },
+          "qrcode": {
+            "type": "boolean"
+          },
+          "sendlinktodevices": {
+            "type": "boolean"
+          },
+          "sendpagetodevices": {
+            "type": "boolean"
+          },
+          "video": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "DocumentArea",
+        "type": "object",
+        "properties": {
+          "devtools": {
+            "type": "boolean"
+          },
+          "editor": {
+            "type": "boolean"
+          },
+          "image": {
+            "type": "boolean"
+          },
+          "frame": {
+            "type": "boolean"
+          },
+          "webpanel": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "DocumentParams",
+        "type": "object",
+        "description": "Properties of the document that requests a menu",
+        "properties": {
+          "linkurl": {
+            "type": "string"
+          },
+          "linktitle": {
+            "type": "string"
+          },
+          "pageurl": {
+            "type": "string"
+          },
+          "pagetitle": {
+            "type": "string"
+          },
+          "srcurl": {
+            "type": "string"
+          },
+          "selection": {
+            "type": "string"
+          },
+          "printableselection": {
+            "type": "string"
+          },
+          "selectionurl": {
+            "type": "string"
+          },
+          "keywordurl": {
+            "type": "string"
+          },
+          "isdevtools": {
+            "type": "boolean"
+          },
+          "iseditable": {
+            "type": "boolean"
+          },
+          "isimage": {
+            "type": "boolean"
+          },
+          "isframe": {
+            "type": "boolean"
+          },
+          "iswebpanel": {
+            "type": "boolean"
+          },
+          "ismailto": {
+            "type": "boolean"
+          },
+          "support": {"$ref": "DocumentSupport"},
+          "textfield": {"$ref": "TextfieldType"}
+        }
       }
     ],
     "functions": [
@@ -149,6 +301,7 @@
               "children": {"type": "array", "items": {"$ref": "Element"}},
               "rect": {"$ref": "Rect"},
               "origin": {"$ref": "Origin"},
+              "documentId": {"type": "integer"},
               "windowId": {"type": "integer"},
               "icons": {"$ref": "Icons", "description": "Default and folder icons."}
             }
@@ -158,6 +311,32 @@
             "name": "callback",
             "optional": false,
             "description": "Notifies caller that menu has closed."
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onDocumentMenu",
+        "type": "function",
+        "description": "Fires when a document menu is requested.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "window",
+            "minimum": 0,
+            "description": "id of window where command occurred."
+          },
+          {
+            "type": "integer",
+            "name": "document",
+            "minimum": 0,
+            "description": "id of the document requesting this menu."
+          },
+          {
+            "$ref": "DocumentParams",
+            "name": "state",
+            "description": "Document data for the given type of menu."
           }
         ]
       }

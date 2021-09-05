@@ -1,6 +1,8 @@
 <link rel="import" href="chrome://oobe/custom_elements.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 
+<link rel="import" href="/components/oobe_dialog.html">
+
 <div id="error-message" class="step hidden show-offline-error" hidden>
 
   <iron-iconset-svg name="error-message-24" size="24">
@@ -114,7 +116,7 @@
             class="guest-signin"></span>
       </div>
       <div id="error-offline-login"
-          class="offline-login"></div>
+          class="error-offline-login"></div>
       <div id="connecting-indicator"
           class="connecting-indicator">
       </div>
@@ -134,8 +136,12 @@
           </network-select-login>
         </div>
       </div>
-      <div id="error-message-md-footer-spacer" class="flex"></div>
-      <div id="buttons" class="layout horizontal center end-justified">
+    </div>
+    <div slot="back-navigation">
+      <oobe-back-button id="error-message-back-button"></oobe-back-button>
+    </div>
+    <div slot="bottom-buttons">
+      <div id="buttons" class="layout horizontal">
         <oobe-text-button id="error-message-md-reboot-button"
             text-key="rebootButton"
             class="show-with-ui-state-kiosk-mode">
@@ -162,10 +168,6 @@
             class="show-with-ui-state-local-state-error">
         </oobe-text-button>
       </div>
-      <div id="error-message-md-bottom-margin"></div>
-    </div>
-    <div slot="back-navigation">
-      <oobe-back-button id="error-message-back-button"></oobe-back-button>
     </div>
   </oobe-dialog>
 </div>

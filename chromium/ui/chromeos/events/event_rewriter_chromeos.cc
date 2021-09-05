@@ -965,7 +965,7 @@ bool EventRewriterChromeOS::ShouldRemapToRightClick(
       *matched_mask = kSearchLeftButton;
     }
   } else {
-    if (AreFlagsSet(flags, kAltLeftButton)) {
+    if (AreFlagsSet(flags, kAltLeftButton) && is_alt_down_remapping_enabled_) {
       *matched_mask = kAltLeftButton;
     }
   }
@@ -1251,7 +1251,7 @@ void EventRewriterChromeOS::RewriteExtendedKeys(const KeyEvent& key_event,
     }
   }
 
-  if (incoming.flags & EF_ALT_DOWN) {
+  if ((incoming.flags & EF_ALT_DOWN) && is_alt_down_remapping_enabled_) {
     static const KeyboardRemapping kNonSearchRemappings[] = {
         {// Alt+BackSpace -> Delete
          {EF_ALT_DOWN, VKEY_BACK},

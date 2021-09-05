@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "components/policy/core/common/policy_merger.h"
 #include "components/strings/grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace policy {
 
@@ -22,12 +23,16 @@ namespace {
 
 const base::string16 GetLocalizedString(
     PolicyMap::Entry::L10nLookupFunction lookup,
-    const base::string16& initial_string,
-    const std::set<int>& localized_string_ids) {
-  base::string16 result = initial_string;
+    const std::map<int, base::Optional<std::vector<base::string16>>>&
+        localized_string_ids) {
+  base::string16 result = base::string16();
   base::string16 line_feed = base::UTF8ToUTF16("\n");
-  for (int id : localized_string_ids) {
-    result += lookup.Run(id);
+  for (const auto& string_pairs : localized_string_ids) {
+    if (string_pairs.second)
+      result += l10n_util::GetStringFUTF16(
+          string_pairs.first, string_pairs.second.value(), nullptr);
+    else
+      result += lookup.Run(string_pairs.first);
     result += line_feed;
   }
   // Remove the trailing newline.
@@ -64,7 +69,6 @@ PolicyMap::Entry PolicyMap::Entry::DeepCopy() const {
                  ? std::make_unique<ExternalDataFetcher>(*external_data_fetcher)
                  : nullptr);
   copy.ignored_ = ignored_;
-  copy.error_strings_ = error_strings_;
   copy.error_message_ids_ = error_message_ids_;
   copy.warning_message_ids_ = warning_message_ids_;
   copy.is_default_value_ = is_default_value_;
@@ -94,7 +98,6 @@ bool PolicyMap::Entry::Equals(const PolicyMap::Entry& other) const {
       conflicts_are_equal && level == other.level && scope == other.scope &&
       source == other.source &&  // Necessary for PolicyUIHandler observers.
                                  // They have to update when sources change.
-      error_strings_ == other.error_strings_ &&
       error_message_ids_ == other.error_message_ids_ &&
       warning_message_ids_ == other.warning_message_ids_ &&
       is_default_value_ == other.is_default_value_ &&
@@ -105,16 +108,22 @@ bool PolicyMap::Entry::Equals(const PolicyMap::Entry& other) const {
   return equals;
 }
 
-void PolicyMap::Entry::AddError(base::StringPiece error) {
-  base::StrAppend(&error_strings_, {error, "\n"});
+void PolicyMap::Entry::AddError(int message_id) {
+  error_message_ids_.emplace(message_id, base::nullopt);
 }
 
-void PolicyMap::Entry::AddError(int message_id) {
-  error_message_ids_.insert(message_id);
+void PolicyMap::Entry::AddError(int message_id,
+                                std::vector<base::string16> message_args) {
+  error_message_ids_.emplace(message_id, message_args);
 }
 
 void PolicyMap::Entry::AddWarning(int message_id) {
-  warning_message_ids_.insert(message_id);
+  warning_message_ids_.emplace(message_id, base::nullopt);
+}
+
+void PolicyMap::Entry::AddWarning(int message_id,
+                                  std::vector<base::string16> message_args) {
+  warning_message_ids_.emplace(message_id, message_args);
 }
 
 void PolicyMap::Entry::AddConflictingPolicy(Entry&& conflict) {
@@ -136,13 +145,12 @@ void PolicyMap::Entry::ClearConflicts() {
 
 base::string16 PolicyMap::Entry::GetLocalizedErrors(
     L10nLookupFunction lookup) const {
-  return GetLocalizedString(lookup, base::UTF8ToUTF16(error_strings_),
-                            error_message_ids_);
+  return GetLocalizedString(lookup, error_message_ids_);
 }
 
 base::string16 PolicyMap::Entry::GetLocalizedWarnings(
     L10nLookupFunction lookup) const {
-  return GetLocalizedString(lookup, base::string16(), warning_message_ids_);
+  return GetLocalizedString(lookup, warning_message_ids_);
 }
 
 bool PolicyMap::Entry::ignored() const {
@@ -155,17 +163,17 @@ void PolicyMap::Entry::SetIgnored() {
 
 void PolicyMap::Entry::SetBlocked() {
   SetIgnored();
-  error_message_ids_.insert(IDS_POLICY_BLOCKED);
+  AddError(IDS_POLICY_BLOCKED);
 }
 
 void PolicyMap::Entry::SetInvalid() {
   SetIgnored();
-  error_message_ids_.insert(IDS_POLICY_INVALID);
+  AddError(IDS_POLICY_INVALID);
 }
 
 void PolicyMap::Entry::SetIgnoredByPolicyAtomicGroup() {
   SetIgnored();
-  error_message_ids_.insert(IDS_POLICY_IGNORED_BY_GROUP_MERGING);
+  AddError(IDS_POLICY_IGNORED_BY_GROUP_MERGING);
 }
 
 bool PolicyMap::Entry::IsIgnoredByAtomicGroup() const {
@@ -238,12 +246,14 @@ void PolicyMap::Set(const std::string& policy, Entry entry) {
   map_[policy] = std::move(entry);
 }
 
-void PolicyMap::AddError(const std::string& policy, const std::string& error) {
-  map_[policy].AddError(error);
-}
-
 void PolicyMap::AddError(const std::string& policy, int message_id) {
   map_[policy].AddError(message_id);
+}
+
+void PolicyMap::AddError(const std::string& policy,
+                         int message_id,
+                         std::vector<base::string16> message_args) {
+  map_[policy].AddError(message_id, message_args);
 }
 
 bool PolicyMap::IsPolicyIgnoredByAtomicGroup(const std::string& policy) const {

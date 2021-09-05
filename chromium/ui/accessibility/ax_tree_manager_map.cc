@@ -4,7 +4,7 @@
 
 #include "ui/accessibility/ax_tree_manager_map.h"
 
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 
 namespace ui {
@@ -13,6 +13,7 @@ AXTreeManagerMap::AXTreeManagerMap() {}
 
 AXTreeManagerMap::~AXTreeManagerMap() {}
 
+// static
 AXTreeManagerMap& AXTreeManagerMap::GetInstance() {
   static base::NoDestructor<AXTreeManagerMap> instance;
   return *instance;
@@ -25,8 +26,10 @@ void AXTreeManagerMap::AddTreeManager(AXTreeID tree_id,
 }
 
 void AXTreeManagerMap::RemoveTreeManager(AXTreeID tree_id) {
-  if (tree_id != AXTreeIDUnknown())
+  if (auto* manager = GetManager(tree_id)) {
+    manager->WillBeRemovedFromMap();
     map_.erase(tree_id);
+  }
 }
 
 AXTreeManager* AXTreeManagerMap::GetManager(AXTreeID tree_id) {

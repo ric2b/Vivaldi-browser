@@ -4,6 +4,7 @@
 #define IMPORTER_VIV_IMPORTER_UTILS_H_
 
 base::FilePath GetProfileDir();
+base::FilePath GetMailDirectory();
 base::FilePath GetOperaInstallPathFromRegistry();
 
 #endif  // IMPORTER_VIV_IMPORTER_UTILS_H_

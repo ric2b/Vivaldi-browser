@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/webauthn/authenticator_request_sheet_model.h"
 #include "chrome/browser/ui/webauthn/transport_hover_list_model.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
+#include "device/fido/pin.h"
 
 namespace gfx {
 struct VectorIcon;
@@ -225,12 +226,12 @@ class AuthenticatorBlePowerOnAutomaticSheetModel
   bool busy_powering_on_ble_ = false;
 };
 
-class AuthenticatorTouchIdIncognitoBumpSheetModel
+class AuthenticatorOffTheRecordInterstitialSheetModel
     : public AuthenticatorSheetModelBase {
  public:
-  explicit AuthenticatorTouchIdIncognitoBumpSheetModel(
+  explicit AuthenticatorOffTheRecordInterstitialSheetModel(
       AuthenticatorRequestDialogModel* dialog_model);
-  ~AuthenticatorTouchIdIncognitoBumpSheetModel() override;
+  ~AuthenticatorOffTheRecordInterstitialSheetModel() override;
 
  private:
   // AuthenticatorSheetModelBase:
@@ -292,12 +293,13 @@ class AuthenticatorPaaskV2SheetModel : public AuthenticatorSheetModelBase {
 class AuthenticatorClientPinEntrySheetModel
     : public AuthenticatorSheetModelBase {
  public:
-  // Indicates whether the view should accommodate setting up a new PIN or
-  // entering an existing one.
-  enum class Mode { kPinEntry, kPinSetup };
+  // Indicates whether the view should accommodate changing an existing PIN,
+  // setting up a new PIN or entering an existing one.
+  enum class Mode { kPinChange, kPinEntry, kPinSetup };
   AuthenticatorClientPinEntrySheetModel(
       AuthenticatorRequestDialogModel* dialog_model,
-      Mode mode);
+      Mode mode,
+      device::pin::PINEntryError error);
   ~AuthenticatorClientPinEntrySheetModel() override;
 
   using AuthenticatorSheetModelBase::AuthenticatorSheetModelBase;
@@ -388,8 +390,7 @@ class AuthenticatorRetryUvSheetModel : public AuthenticatorSheetModelBase {
   base::string16 GetError() const override;
 };
 
-// Generic error dialog that can only be dismissed. Backwards navigation is
-// not visible.
+// Generic error dialog that allows starting the request over.
 class AuthenticatorGenericErrorSheetModel : public AuthenticatorSheetModelBase {
  public:
   static std::unique_ptr<AuthenticatorGenericErrorSheetModel>
@@ -411,12 +412,16 @@ class AuthenticatorGenericErrorSheetModel : public AuthenticatorSheetModelBase {
       base::string16 description);
 
   // AuthenticatorSheetModelBase:
+  bool IsAcceptButtonVisible() const override;
+  bool IsAcceptButtonEnabled() const override;
+  base::string16 GetAcceptButtonLabel() const override;
   bool IsBackButtonVisible() const override;
   base::string16 GetCancelButtonLabel() const override;
   const gfx::VectorIcon& GetStepIllustration(
       ImageColorScheme color_scheme) const override;
   base::string16 GetStepTitle() const override;
   base::string16 GetStepDescription() const override;
+  void OnAccept() override;
 
   base::string16 title_;
   base::string16 description_;
@@ -425,7 +430,7 @@ class AuthenticatorGenericErrorSheetModel : public AuthenticatorSheetModelBase {
 class AuthenticatorResidentCredentialConfirmationSheetView
     : public AuthenticatorSheetModelBase {
  public:
-  AuthenticatorResidentCredentialConfirmationSheetView(
+  explicit AuthenticatorResidentCredentialConfirmationSheetView(
       AuthenticatorRequestDialogModel* dialog_model);
   ~AuthenticatorResidentCredentialConfirmationSheetView() override;
 

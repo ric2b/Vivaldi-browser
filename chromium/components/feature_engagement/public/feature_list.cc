@@ -45,6 +45,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHKeyboardAccessoryBarSwipingFeature,
     &kIPHKeyboardAccessoryPasswordFillingFeature,
     &kIPHKeyboardAccessoryPaymentFillingFeature,
+    &kIPHKeyboardAccessoryPaymentOfferFeature,
     &kIPHNewTabPageHomeButtonFeature,
     &kIPHPreviewsOmniboxUIFeature,
     &kIPHPwaInstallAvailableFeature,
@@ -52,6 +53,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHReadLaterContextMenuFeature,
     &kIPHReadLaterAppMenuBookmarkThisPageFeature,
     &kIPHReadLaterAppMenuBookmarksFeature,
+    &kIPHReadLaterBottomSheetFeature,
     &kIPHTabGroupsQuicklyComparePagesFeature,
     &kIPHTabGroupsTapToSeeAnotherTabFeature,
     &kIPHTabGroupsYourTabsAreTogetherFeature,
@@ -65,6 +67,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHVideoTutorialNTPSummaryFeature,
     &kIPHExploreSitesTileFeature,
     &kIPHFeedHeaderMenuFeature,
+    &kIPHShareScreenshotFeature,
 #endif  // defined(OS_ANDROID)
 #if defined(OS_IOS)
     &kIPHBottomToolbarTipFeature,

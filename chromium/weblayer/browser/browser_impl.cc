@@ -103,8 +103,7 @@ bool BrowserImpl::CompositorHasSurface() {
                                                java_impl_);
 }
 
-void BrowserImpl::AddTab(JNIEnv* env,
-                         long native_tab) {
+void BrowserImpl::AddTab(JNIEnv* env, long native_tab) {
   AddTab(reinterpret_cast<TabImpl*>(native_tab));
 }
 
@@ -122,8 +121,7 @@ ScopedJavaLocalRef<jobjectArray> BrowserImpl::GetTabs(JNIEnv* env) {
   return ScopedJavaLocalRef<jobjectArray>(env, tabs);
 }
 
-void BrowserImpl::SetActiveTab(JNIEnv* env,
-                               long native_tab) {
+void BrowserImpl::SetActiveTab(JNIEnv* env, long native_tab) {
   SetActiveTab(reinterpret_cast<TabImpl*>(native_tab));
 }
 
@@ -274,7 +272,7 @@ void BrowserImpl::SetActiveTab(Tab* tab) {
   for (BrowserObserver& obs : browser_observers_)
     obs.OnActiveTabChanged(active_tab_);
   if (active_tab_)
-    active_tab_->web_contents()->GetController().LoadIfNecessary();
+    active_tab_->OnGainedActive();
 }
 
 Tab* BrowserImpl::GetActiveTab() {
@@ -396,7 +394,7 @@ std::unique_ptr<Tab> BrowserImpl::RemoveTab(Tab* tab) {
 }
 
 base::FilePath BrowserImpl::GetBrowserPersisterDataPath() {
-  return BuildPathForBrowserPersister(
+  return BuildBasePathForBrowserPersister(
       profile_->GetBrowserPersisterDataBaseDir(), GetPersistenceId());
 }
 

@@ -10,6 +10,7 @@
 #include "base/time/time.h"
 #include "base/timer/mock_timer.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/extensions/forced_extensions/force_installed_test_base.h"
 #include "chrome/browser/extensions/forced_extensions/force_installed_tracker.h"
@@ -21,23 +22,23 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/install/crx_install_error.h"
+#include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/browser/updater/safe_manifest_parser.h"
 #include "extensions/common/extension.h"
-#include "extensions/common/extension_builder.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/value_builder.h"
 #include "net/base/net_errors.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "components/arc/arc_prefs.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_names.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 
@@ -81,10 +82,10 @@ constexpr char kFetchRetriesManifestFetchFailedStats[] =
     "Extensions.ForceInstalledManifestFetchFailedFetchTries";
 constexpr char kSandboxUnpackFailureReason[] =
     "Extensions.ForceInstalledFailureSandboxUnpackFailureReason";
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kFailureSessionStats[] =
     "Extensions.ForceInstalledFailureSessionType";
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kPossibleNonMisconfigurationFailures[] =
     "Extensions.ForceInstalledSessionsWithNonMisconfigurationFailureOccured";
 constexpr char kDisableReason[] =
@@ -120,6 +121,7 @@ constexpr char kCrxHeaderInvalidFailureFromCache[] =
 
 namespace extensions {
 
+using ExtensionStatus = ForceInstalledTracker::ExtensionStatus;
 using testing::_;
 using testing::Return;
 
@@ -198,13 +200,13 @@ TEST_F(ForceInstalledMetricsTest, EmptyForcelist) {
 
 TEST_F(ForceInstalledMetricsTest, ExtensionsInstalled) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
 
   histogram_tester_.ExpectTotalCount(kLoadTimeStats, 0);
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   histogram_tester_.ExpectTotalCount(kLoadTimeStats, 0);
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::LOADED);
 
   histogram_tester_.ExpectTotalCount(kLoadTimeStats, 1);
   histogram_tester_.ExpectTotalCount(kReadyTimeStats, 0);
@@ -225,8 +227,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsInstalled) {
 TEST_F(ForceInstalledMetricsTest, ExtensionSettingsOverrideForcedList) {
   SetupForceList(true /*is_from_store */);
   SetupExtensionManagementPref();
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::LOADED);
   // ForceInstalledMetrics shuts down timer because all extension are either
   // loaded or failed.
   EXPECT_FALSE(fake_timer_->IsRunning());
@@ -237,8 +239,9 @@ TEST_F(ForceInstalledMetricsTest, ExtensionSettingsOverrideForcedList) {
 
 TEST_F(ForceInstalledMetricsTest, ExtensionsInstallationTimedOut) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  registry()->AddEnabled(ext1.get());
+  scoped_refptr<const Extension> ext = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::PENDING);
+  registry()->AddEnabled(ext.get());
   EXPECT_TRUE(fake_timer_->IsRunning());
   fake_timer_->Fire();
   // Metrics are reported due to timeout.
@@ -265,8 +268,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsManifestDownloadTime) {
   task_environment_.FastForwardBy(manifest_download_time);
   install_stage_tracker()->ReportDownloadingStage(
       kExtensionId1, ExtensionDownloaderDelegate::Stage::MANIFEST_LOADED);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::MANIFEST_INVALID);
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -284,8 +287,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsCrxDownloadTime) {
   ReportDownloadingManifestStage();
   const base::TimeDelta install_time = base::TimeDelta::FromMilliseconds(200);
   ReportInstallationStarted(install_time);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::MANIFEST_INVALID);
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -306,8 +309,8 @@ TEST_F(ForceInstalledMetricsTest,
       kExtensionId1, ExtensionDownloaderDelegate::Stage::FINISHED);
   install_stage_tracker()->ReportInstallationStage(
       kExtensionId1, InstallStageTracker::Stage::INSTALLING);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::MANIFEST_INVALID);
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -349,8 +352,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsReportInstallationStageTimes) {
   install_stage_tracker()->ReportCRXInstallationStage(
       kExtensionId1, InstallationStage::kComplete);
 
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::MANIFEST_INVALID);
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -378,11 +381,13 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsReportInstallationStageTimes) {
 TEST_F(ForceInstalledMetricsTest,
        ExtensionsInstalledButNotLoadedUniqueDisableReason) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::PENDING);
   registry()->AddDisabled(ext1.get());
   ExtensionPrefs::Get(profile())->AddDisableReason(
       kExtensionId1, disable_reason::DisableReason::DISABLE_NOT_VERIFIED);
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext2.get());
   force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
   // ForceInstalledMetrics should still keep running as kExtensionId1 is
@@ -398,13 +403,15 @@ TEST_F(ForceInstalledMetricsTest,
 TEST_F(ForceInstalledMetricsTest,
        ExtensionsInstalledButNotLoadedMultipleDisableReason) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::PENDING);
   registry()->AddDisabled(ext1.get());
   ExtensionPrefs::Get(profile())->AddDisableReasons(
       kExtensionId1,
       disable_reason::DisableReason::DISABLE_NOT_VERIFIED |
           disable_reason::DisableReason::DISABLE_UNSUPPORTED_REQUIREMENT);
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext2.get());
   force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
   // ForceInstalledMetrics should still keep running as kExtensionId1 is
@@ -422,9 +429,11 @@ TEST_F(ForceInstalledMetricsTest,
 TEST_F(ForceInstalledMetricsTest,
        ExtensionsInstalledButNotLoadedNoDisableReason) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext1.get());
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext2.get());
   force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
   // ForceInstalledMetrics should still keep running as kExtensionId1 is
@@ -437,9 +446,11 @@ TEST_F(ForceInstalledMetricsTest,
 
 TEST_F(ForceInstalledMetricsTest, ExtensionForceInstalledAndBlocklisted) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::PENDING);
   registry()->AddBlocklisted(ext1.get());
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext2.get());
   force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
   // ForceInstalledMetrics should still keep running as kExtensionId1 is
@@ -473,9 +484,8 @@ TEST_F(ForceInstalledMetricsTest, ForcedExtensionsAddedAfterManualExtensions) {
   EXPECT_TRUE(fake_timer_->IsRunning());
   SetupForceList(true /*is_from_store */);
 
-  auto ext = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext.get());
-  force_installed_tracker()->OnExtensionReady(profile(), ext.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::READY);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::INVALID_ID);
   // ForceInstalledMetrics shuts down timer because kExtensionId1 was loaded and
@@ -520,9 +530,13 @@ TEST_F(ForceInstalledMetricsTest,
        ExtensionsCrxInstallErrorSandboxUnpackFailure) {
   SetupForceList(true /*is_from_store */);
   install_stage_tracker()->ReportSandboxedUnpackerFailureReason(
-      kExtensionId1, SandboxedUnpackerFailureReason::CRX_FILE_NOT_READABLE);
+      kExtensionId1,
+      CrxInstallError(SandboxedUnpackerFailureReason::CRX_FILE_NOT_READABLE,
+                      base::string16()));
   install_stage_tracker()->ReportSandboxedUnpackerFailureReason(
-      kExtensionId2, SandboxedUnpackerFailureReason::UNZIP_FAILED);
+      kExtensionId2,
+      CrxInstallError(SandboxedUnpackerFailureReason::UNZIP_FAILED,
+                      base::string16()));
   // ForceInstalledMetrics shuts down timer because all extension are either
   // loaded or failed.
   EXPECT_FALSE(fake_timer_->IsRunning());
@@ -542,8 +556,11 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsCrxHeaderInvalidFromCache) {
   install_stage_tracker()->ReportDownloadingCacheStatus(
       kExtensionId1, ExtensionDownloaderDelegate::CacheStatus::CACHE_HIT);
   install_stage_tracker()->ReportSandboxedUnpackerFailureReason(
-      kExtensionId1, SandboxedUnpackerFailureReason::CRX_HEADER_INVALID);
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
+      kExtensionId1,
+      CrxInstallError(SandboxedUnpackerFailureReason::CRX_HEADER_INVALID,
+                      base::string16()));
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext2.get());
   force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -565,8 +582,11 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsCrxHeaderInvalidNotFromCache) {
   install_stage_tracker()->ReportDownloadingCacheStatus(
       kExtensionId1, ExtensionDownloaderDelegate::CacheStatus::CACHE_MISS);
   install_stage_tracker()->ReportSandboxedUnpackerFailureReason(
-      kExtensionId1, SandboxedUnpackerFailureReason::CRX_HEADER_INVALID);
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
+      kExtensionId1,
+      CrxInstallError(SandboxedUnpackerFailureReason::CRX_HEADER_INVALID,
+                      base::string16()));
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext2.get());
   force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -589,8 +609,11 @@ TEST_F(ForceInstalledMetricsTest,
   install_stage_tracker()->ReportDownloadingCacheStatus(
       kExtensionId1, ExtensionDownloaderDelegate::CacheStatus::CACHE_MISS);
   install_stage_tracker()->ReportSandboxedUnpackerFailureReason(
-      kExtensionId1, SandboxedUnpackerFailureReason::CRX_HEADER_INVALID);
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
+      kExtensionId1,
+      CrxInstallError(SandboxedUnpackerFailureReason::CRX_HEADER_INVALID,
+                      base::string16()));
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext2.get());
   force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -605,6 +628,32 @@ TEST_F(ForceInstalledMetricsTest,
                                       1);
   histogram_tester_.ExpectBucketCount(kPossibleNonMisconfigurationFailures, 0,
                                       1);
+}
+
+// Verifies that extension failing with REPLACED_BY_SYSTEM_APP error is
+// considered as a misconfiguration in ChromeOS.
+TEST_F(ForceInstalledMetricsTest,
+       ExtensionsFailureReplacedBySystemAppIsMisconfiguration) {
+  SetupForceList(true);
+  install_stage_tracker()->ReportFailure(
+      kExtensionId1,
+      InstallStageTracker::FailureReason::REPLACED_BY_SYSTEM_APP);
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::PENDING);
+  registry()->AddEnabled(ext2.get());
+  force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
+  // ForceInstalledMetrics shuts down timer because all extension are either
+  // loaded or failed.
+  EXPECT_FALSE(fake_timer_->IsRunning());
+  histogram_tester_.ExpectBucketCount(
+      kFailureReasonsCWS,
+      InstallStageTracker::FailureReason::REPLACED_BY_SYSTEM_APP, 1);
+  bool expected_non_misconfiguration_failure = true;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  expected_non_misconfiguration_failure = false;
+#endif
+  histogram_tester_.ExpectBucketCount(kPossibleNonMisconfigurationFailures,
+                                      expected_non_misconfiguration_failure, 1);
 }
 
 // Reporting info when the force installed extension fails to install with error
@@ -637,12 +686,12 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsNoUpdatesInfoReporting) {
 TEST_F(ForceInstalledMetricsTest,
        ExtensionLoadedThenFailedWithAlreadyInstalledError) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId1, InstallStageTracker::FailureReason::ALREADY_INSTALLED);
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::LOADED);
   // ForceInstalledMetrics shuts down timer because all extension are either
   // loaded or failed.
   EXPECT_FALSE(fake_timer_->IsRunning());
@@ -656,14 +705,12 @@ TEST_F(ForceInstalledMetricsTest,
 // after READY state is not reflected in the statistics.
 TEST_F(ForceInstalledMetricsTest, ExtensionsReady) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
-  force_installed_tracker()->OnExtensionReady(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::READY);
   install_stage_tracker()->ReportFailure(
       kExtensionId1, InstallStageTracker::FailureReason::ALREADY_INSTALLED);
-  auto ext2 = ExtensionBuilder(kExtensionName2).SetID(kExtensionId2).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext2.get());
-  force_installed_tracker()->OnExtensionReady(profile(), ext2.get());
+  scoped_refptr<const Extension> ext2 = CreateNewExtension(
+      kExtensionName2, kExtensionId2, ExtensionStatus::READY);
   // ForceInstalledMetrics shuts down timer because all extension are either
   // loaded or failed.
   EXPECT_FALSE(fake_timer_->IsRunning());
@@ -678,9 +725,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsReady) {
 // extensions are failed.
 TEST_F(ForceInstalledMetricsTest, AllExtensionsNotReady) {
   SetupForceList(true /*is_from_store */);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), ext1.get());
-  force_installed_tracker()->OnExtensionReady(profile(), ext1.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::READY);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::INVALID_ID);
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -696,9 +742,8 @@ TEST_F(ForceInstalledMetricsTest, AllExtensionsNotReady) {
 TEST_F(ForceInstalledMetricsTest,
        ExtensionsPreviousInstallationStageReportedAgain) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportInstallationStage(
       kExtensionId2, InstallStageTracker::Stage::CREATED);
   install_stage_tracker()->ReportInstallationStage(
@@ -717,9 +762,8 @@ TEST_F(ForceInstalledMetricsTest,
 // reported again after INSTALLING stage.
 TEST_F(ForceInstalledMetricsTest, ExtensionsDownloadingStageReportedAgain) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportInstallationStage(
       kExtensionId2, InstallStageTracker::Stage::DOWNLOADING);
   install_stage_tracker()->ReportInstallationStage(
@@ -763,9 +807,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionsStuck) {
 
 TEST_F(ForceInstalledMetricsTest, ExtensionStuckInCreatedStage) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportInstallationStage(
       kExtensionId2, InstallStageTracker::Stage::CREATED);
   install_stage_tracker()->ReportInstallCreationStage(
@@ -784,7 +827,7 @@ TEST_F(ForceInstalledMetricsTest, ExtensionStuckInCreatedStage) {
       1);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ForceInstalledMetricsTest, ReportManagedGuestSessionOnExtensionFailure) {
   chromeos::FakeChromeUserManager* fake_user_manager =
       new chromeos::FakeChromeUserManager();
@@ -839,7 +882,7 @@ TEST_F(ForceInstalledMetricsTest, ReportGuestSessionOnExtensionFailure) {
       kFailureSessionStats, ForceInstalledMetrics::UserType::USER_TYPE_GUEST,
       2);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(ForceInstalledMetricsTest, ExtensionsAreDownloading) {
   SetupForceList(true /*is_from_store */);
@@ -925,9 +968,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionManifestFetchFailed) {
 // Errors occurred because the fetched update manifest was invalid.
 TEST_F(ForceInstalledMetricsTest, ExtensionManifestInvalid) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportManifestInvalidFailure(
       kExtensionId2,
       ExtensionDownloaderDelegate::FailureData(
@@ -945,9 +987,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionManifestInvalid) {
 // "error-unknownApplication" is considered as a misconfiguration.
 TEST_F(ForceInstalledMetricsTest, ExtensionManifestInvalidAppStatusError) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportManifestInvalidFailure(
       kExtensionId2,
       ExtensionDownloaderDelegate::FailureData(
@@ -974,9 +1015,8 @@ TEST_F(ForceInstalledMetricsTest, ExtensionManifestInvalidAppStatusError) {
 TEST_F(ForceInstalledMetricsTest,
        NonMisconfigurationFailureNotPresentKioskModeOnlyError) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportCrxInstallError(
       kExtensionId2,
       InstallStageTracker::FailureReason::CRX_INSTALL_ERROR_DECLINED,
@@ -1001,9 +1041,8 @@ TEST_F(ForceInstalledMetricsTest,
       ListBuilder().Append("extension").Append("theme").Build();
   prefs()->SetManagedPref(pref_names::kAllowedTypes, std::move(list));
 
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   // Hosted app is not a valid extension type, so this should report an error.
   install_stage_tracker()->ReportExtensionType(kExtensionId2,
                                                Manifest::Type::TYPE_HOSTED_APP);
@@ -1032,9 +1071,8 @@ TEST_F(ForceInstalledMetricsTest,
       ListBuilder().Append("extension").Append("theme").Build();
   prefs()->SetManagedPref(pref_names::kAllowedTypes, std::move(list));
 
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportExtensionType(kExtensionId2,
                                                Manifest::Type::TYPE_EXTENSION);
   install_stage_tracker()->ReportCrxInstallError(
@@ -1068,7 +1106,7 @@ TEST_F(ForceInstalledMetricsTest, NonMisconfigurationFailurePresent) {
                                       1);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Session in which either all the extensions installed successfully, or all
 // failures are admin-side misconfigurations. This test verifies that failure
 // REPLACED_BY_ARC_APP is not considered as misconfiguration when ARC++ is
@@ -1079,9 +1117,8 @@ TEST_F(ForceInstalledMetricsTest,
   prefs()->SetManagedPref(arc::prefs::kArcEnabled,
                           std::make_unique<base::Value>(true));
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::REPLACED_BY_ARC_APP);
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -1100,9 +1137,8 @@ TEST_F(ForceInstalledMetricsTest,
   prefs()->SetManagedPref(arc::prefs::kArcEnabled,
                           std::make_unique<base::Value>(false));
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::REPLACED_BY_ARC_APP);
   // ForceInstalledMetrics shuts down timer because all extension are either
@@ -1111,7 +1147,7 @@ TEST_F(ForceInstalledMetricsTest,
   histogram_tester_.ExpectBucketCount(kPossibleNonMisconfigurationFailures, 1,
                                       1);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Session in which either all the extensions installed successfully, or all
 // failures are admin-side misconfigurations. This test verifies that failure
@@ -1119,9 +1155,8 @@ TEST_F(ForceInstalledMetricsTest,
 TEST_F(ForceInstalledMetricsTest,
        NonMisconfigurationFailureNotPresentNotPerformingNewInstallError) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportFailure(
       kExtensionId2,
       InstallStageTracker::FailureReason::NOT_PERFORMING_NEW_INSTALL);
@@ -1138,9 +1173,8 @@ TEST_F(ForceInstalledMetricsTest,
 TEST_F(ForceInstalledMetricsTest,
        NonMisconfigurationFailureNotPresentCrxFetchUrlEmptyError) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportInfoOnNoUpdatesFailure(kExtensionId2, "");
   install_stage_tracker()->ReportFailure(
       kExtensionId2, InstallStageTracker::FailureReason::CRX_FETCH_URL_EMPTY);
@@ -1156,9 +1190,8 @@ TEST_F(ForceInstalledMetricsTest,
 TEST_F(ForceInstalledMetricsTest,
        NonMisconfigurationFailurePresentCrxFetchUrlEmptyError) {
   SetupForceList(true /*is_from_store */);
-  auto extension =
-      ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
-  force_installed_tracker()->OnExtensionLoaded(profile(), extension.get());
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::LOADED);
   install_stage_tracker()->ReportInfoOnNoUpdatesFailure(kExtensionId2,
                                                         "rate limit");
   install_stage_tracker()->ReportFailure(
@@ -1189,7 +1222,8 @@ TEST_F(ForceInstalledMetricsTest, CachedExtensions) {
       kExtensionId1, ExtensionDownloaderDelegate::CacheStatus::CACHE_HIT);
   install_stage_tracker()->ReportDownloadingCacheStatus(
       kExtensionId2, ExtensionDownloaderDelegate::CacheStatus::CACHE_MISS);
-  auto ext1 = ExtensionBuilder(kExtensionName1).SetID(kExtensionId1).Build();
+  scoped_refptr<const Extension> ext1 = CreateNewExtension(
+      kExtensionName1, kExtensionId1, ExtensionStatus::PENDING);
   registry()->AddEnabled(ext1.get());
   EXPECT_TRUE(fake_timer_->IsRunning());
   fake_timer_->Fire();

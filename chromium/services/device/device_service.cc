@@ -48,7 +48,7 @@
 #include "services/device/hid/input_service_linux.h"
 #endif
 
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/lacros/lacros_chrome_service_impl.h"
 #endif
 
@@ -56,7 +56,7 @@ namespace {
 
 #if !defined(OS_ANDROID)
 constexpr bool IsLaCrOS() {
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   return true;
 #else
   return false;
@@ -67,7 +67,7 @@ constexpr bool IsLaCrOS() {
 #if !defined(OS_ANDROID)
 void BindLaCrOSHidManager(
     mojo::PendingReceiver<device::mojom::HidManager> receiver) {
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   // LaCrOS does not have direct access to the permission_broker service over
   // D-Bus. Use the HidManager interface from ash-chrome instead.
   auto* lacros_chrome_service = chromeos::LacrosChromeServiceImpl::Get();
@@ -183,7 +183,7 @@ DeviceService::DeviceService(
 #endif
 
 DeviceService::~DeviceService() {
-#if !defined(OS_ANDROID) && !BUILDFLAG(IS_ASH)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   // NOTE: We don't call this on Chrome OS due to https://crbug.com/856771, as
   // Shutdown() implicitly depends on DBusThreadManager, which may already be
   // destroyed by the time DeviceService is destroyed. Fortunately on Chrome OS
@@ -223,15 +223,12 @@ void DeviceService::BindBatteryMonitor(
 #endif
 }
 
+#if defined(OS_ANDROID)
 void DeviceService::BindNFCProvider(
     mojo::PendingReceiver<mojom::NFCProvider> receiver) {
-#if defined(OS_ANDROID)
   GetJavaInterfaceProvider()->GetInterface(std::move(receiver));
-#else
-  LOG(ERROR) << "NFC is only supported on Android";
-  NOTREACHED();
-#endif
 }
+#endif
 
 void DeviceService::BindVibrationManager(
     mojo::PendingReceiver<mojom::VibrationManager> receiver) {
@@ -255,7 +252,7 @@ void DeviceService::BindHidManager(
 }
 #endif
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void DeviceService::BindBluetoothSystemFactory(
     mojo::PendingReceiver<mojom::BluetoothSystemFactory> receiver) {
   BluetoothSystemFactory::CreateFactory(std::move(receiver));

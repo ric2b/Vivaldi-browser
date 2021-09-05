@@ -14,6 +14,9 @@
 #include "ui/views/views_export.h"
 
 namespace views {
+
+class View;
+
 namespace metadata {
 
 enum class PropertyFlags : uint32_t {
@@ -140,6 +143,7 @@ class VIEWS_EXPORT ClassMetaData {
 // accessors to get/set the value of the member on an object.
 class VIEWS_EXPORT MemberMetaDataBase {
  public:
+  using ValueStrings = std::vector<base::string16>;
   MemberMetaDataBase(const std::string& member_name,
                      const std::string& member_type)
       : member_name_(member_name), member_type_(member_type) {}
@@ -150,15 +154,19 @@ class VIEWS_EXPORT MemberMetaDataBase {
   // Access the value of this member and return it as a string.
   // |obj| is the instance on which to obtain the value of the property this
   // metadata represents.
-  virtual base::string16 GetValueAsString(void* obj) const = 0;
+  virtual base::string16 GetValueAsString(View* obj) const = 0;
 
   // Set the value of this member through a string on a specified object.
   // |obj| is the instance on which to set the value of the property this
   // metadata represents.
-  virtual void SetValueAsString(void* obj, const base::string16& new_value);
+  virtual void SetValueAsString(View* obj, const base::string16& new_value);
 
   // Return various information flags about the property.
   virtual PropertyFlags GetPropertyFlags() const = 0;
+
+  // Return a list of valid property values as a vector of strings. An empty
+  // vector indicates that the natural limits of the underlying type applies.
+  virtual ValueStrings GetValidValues() const;
 
   const std::string& member_name() const { return member_name_; }
   const std::string& member_type() const { return member_type_; }

@@ -6,6 +6,7 @@ import 'chrome://resources/cr_elements/cr_grid/cr_grid.js';
 
 import '../../img.js';
 import '../../strings.m.js';
+import '../module_header.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -31,6 +32,9 @@ class DummyModuleElement extends PolymerElement {
     return {
       /** @type {!Array<!foo.mojom.FooDataItem>} */
       tiles: Array,
+
+      /** @type {!string} */
+      title: String,
     };
   }
 
@@ -48,18 +52,24 @@ class DummyModuleElement extends PolymerElement {
 
 customElements.define(DummyModuleElement.is, DummyModuleElement);
 
+/**
+ * @param {!string} titleId
+ * @return {!DummyModuleElement}
+ */
+function createDummyElement(titleId) {
+  const element = new DummyModuleElement();
+  element.title = loadTimeData.getString(titleId);
+  return element;
+}
+
 /** @type {!ModuleDescriptor} */
 export const dummyDescriptor = new ModuleDescriptor(
     /*id=*/ 'dummy',
-    /*heightPx=*/ 260, () => Promise.resolve({
-      element: new DummyModuleElement(),
-      title: loadTimeData.getString('modulesDummyTitle'),
-    }));
+    /*heightPx=*/ 314,
+    () => Promise.resolve(createDummyElement('modulesDummyTitle')));
 
 /** @type {!ModuleDescriptor} */
 export const dummyDescriptor2 = new ModuleDescriptor(
     /*id=*/ 'dummy2',
-    /*heightPx=*/ 260, () => Promise.resolve({
-      element: new DummyModuleElement(),
-      title: loadTimeData.getString('modulesDummy2Title'),
-    }));
+    /*heightPx=*/ 314,
+    () => Promise.resolve(createDummyElement('modulesDummy2Title')));

@@ -6,11 +6,11 @@
 
 #include "content/browser/file_system_access/native_file_system_directory_handle_impl.h"
 #include "content/browser/file_system_access/native_file_system_file_handle_impl.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_directory_handle.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_directory_handle.mojom.h"
 
 namespace content {
 
-using HandleType = NativeFileSystemPermissionContext::HandleType;
+using HandleType = FileSystemAccessPermissionContext::HandleType;
 using SharedHandleState = NativeFileSystemManagerImpl::SharedHandleState;
 
 NativeFileSystemTransferTokenImpl::NativeFileSystemTransferTokenImpl(
@@ -19,7 +19,7 @@ NativeFileSystemTransferTokenImpl::NativeFileSystemTransferTokenImpl(
     const NativeFileSystemManagerImpl::SharedHandleState& handle_state,
     HandleType handle_type,
     NativeFileSystemManagerImpl* manager,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemTransferToken> receiver)
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken> receiver)
     : token_(base::UnguessableToken::Create()),
       handle_type_(handle_type),
       manager_(manager),
@@ -55,12 +55,12 @@ NativeFileSystemTransferTokenImpl::CreateDirectoryHandle(
       manager_, binding_context, url_, handle_state_);
 }
 
-NativeFileSystemPermissionGrant*
+FileSystemAccessPermissionGrant*
 NativeFileSystemTransferTokenImpl::GetReadGrant() const {
   return handle_state_.read_grant.get();
 }
 
-NativeFileSystemPermissionGrant*
+FileSystemAccessPermissionGrant*
 NativeFileSystemTransferTokenImpl::GetWriteGrant() const {
   return handle_state_.write_grant.get();
 }
@@ -77,7 +77,7 @@ void NativeFileSystemTransferTokenImpl::OnMojoDisconnect() {
 }
 
 void NativeFileSystemTransferTokenImpl::Clone(
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemTransferToken>
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken>
         clone_receiver) {
   receivers_.Add(this, std::move(clone_receiver));
 }

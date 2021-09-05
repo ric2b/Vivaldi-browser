@@ -15,6 +15,7 @@
 #include "third_party/blink/public/platform/web_private_ptr.h"
 #include "third_party/blink/renderer/platform/heap/gc_task_runner.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
 class BlinkGCMemoryDumpProvider;
@@ -41,7 +42,6 @@ class PLATFORM_EXPORT WorkerThread : public Thread {
   // Thread implementation.
   void Init() override;
   ThreadScheduler* Scheduler() override;
-  PlatformThreadId ThreadId() const override;
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const override;
 
   scheduler::NonMainThreadSchedulerImpl* GetNonMainThreadScheduler() {
@@ -70,7 +70,7 @@ class PLATFORM_EXPORT WorkerThread : public Thread {
         std::unique_ptr<scheduler::NonMainThreadSchedulerImpl>(
             base::sequence_manager::SequenceManager*)>;
 
-    explicit SimpleThreadImpl(const String& name_prefix,
+    explicit SimpleThreadImpl(const WTF::String& name_prefix,
                               const base::SimpleThread::Options& options,
                               NonMainThreadSchedulerFactory factory,
                               bool supports_gc,

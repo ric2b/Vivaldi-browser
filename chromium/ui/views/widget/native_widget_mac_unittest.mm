@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #import "components/remote_cocoa/app_shim/bridged_content_view.h"
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
@@ -432,8 +433,6 @@ TEST_F(NativeWidgetMacTest, ChildWidgetOnInactiveSpace) {
 // Test minimized states triggered externally, implied visibility and restored
 // bounds whilst minimized.
 TEST_F(NativeWidgetMacTest, MiniaturizeExternally) {
-  if (base::mac::IsOS10_10())
-    return;  // Fails when swarmed. http://crbug.com/660582
   Widget* widget = new Widget;
   Widget::InitParams init_params(Widget::InitParams::TYPE_WINDOW);
   widget->Init(std::move(init_params));
@@ -833,10 +832,6 @@ TEST_F(NativeWidgetMacTest, NonWidgetParentLastReference) {
 // deminiaturize on the parent window (after attempting to show the child while
 // the parent was miniaturized).
 TEST_F(NativeWidgetMacTest, VisibleAfterNativeParentDeminiaturize) {
-  // Disabled on 10.10 due to flakes. See http://crbug.com/777247.
-  if (base::mac::IsOS10_10())
-    return;
-
   NSWindow* native_parent = MakeBorderlessNativeParent();
   [native_parent makeKeyAndOrderFront:nil];
   [native_parent miniaturize:nil];
@@ -1244,7 +1239,13 @@ void AssertNoChildrenForWindowWithSheet(NSArray<NSWindow*>* children) {
 }
 
 // Tests behavior of window-modal dialogs, displayed as sheets.
-TEST_F(NativeWidgetMacTest, WindowModalSheet) {
+#if defined(ARCH_CPU_ARM64)
+// Bulk-disabled as part of arm64 bot stabilization: https://crbug.com/1154345
+#define MAYBE_WindowModalSheet DISABLED_WindowModalSheet
+#else
+#define MAYBE_WindowModalSheet WindowModalSheet
+#endif
+TEST_F(NativeWidgetMacTest, MAYBE_WindowModalSheet) {
   NSWindow* native_parent = MakeClosableTitledNativeParent();
 
   Widget* sheet_widget = views::DialogDelegate::CreateDialogWidget(

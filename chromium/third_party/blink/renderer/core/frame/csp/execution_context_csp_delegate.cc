@@ -61,7 +61,7 @@ void ExecutionContextCSPDelegate::SetSandboxFlags(
   WorkerOrWorkletGlobalScope* worklet_or_worker =
       DynamicTo<WorkerOrWorkletGlobalScope>(execution_context_.Get());
   if (worklet_or_worker) {
-    worklet_or_worker->ApplySandboxFlags(mask);
+    worklet_or_worker->SetSandboxFlags(mask);
   }
   // Just check that all the sandbox flags that are set by CSP have
   // already been set on the security context. Meta tags can't set them
@@ -166,7 +166,7 @@ void ExecutionContextCSPDelegate::PostViolationReport(
     const Vector<String>& report_endpoints,
     bool use_reporting_api) {
   DCHECK_EQ(is_frame_ancestors_violation,
-            ContentSecurityPolicy::DirectiveType::kFrameAncestors ==
+            network::mojom::blink::CSPDirectiveName::FrameAncestors ==
                 ContentSecurityPolicy::GetDirectiveType(
                     violation_data.effectiveDirective()));
 

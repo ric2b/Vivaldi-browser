@@ -10,10 +10,11 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/ui/settings_window_manager_observer_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/web_applications/test/web_app_navigation_browsertest.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
@@ -54,13 +55,15 @@ void CreateAndStartUserSession(const AccountId& account_id) {
   SessionManager::Get()->SessionStarted();
 }
 
-class SettingsTestObserver : public chrome::SettingsWindowManagerObserver {
- public:
-  void OnNewSettingsWindow(Browser* settings_browser) override {
-    ++new_settings_count_;
-  }
-  int new_settings_count_ = 0;
-};
+// Return the number of windows that hosts OS Settings.
+size_t GetNumberOfSettingsWindows() {
+  auto* browser_list = BrowserList::GetInstance();
+  return std::count_if(browser_list->begin(), browser_list->end(),
+                       [](Browser* browser) {
+                         return web_app::IsBrowserForSystemWebApp(
+                             browser, web_app::SystemAppType::SETTINGS);
+                       });
+}
 
 // Give the underlying function a clearer name.
 Browser* GetLastActiveBrowser() {
@@ -182,25 +185,19 @@ IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientWebAppBrowserTest, OpenWebApp) {
 void TestOpenSettingFromArc(Browser* browser,
                             ChromePage page,
                             const GURL& expected_url,
-                            int expected_setting_window_count) {
+                            size_t expected_setting_window_count) {
   // Install the Settings App.
   web_app::WebAppProvider::Get(browser->profile())
       ->system_web_app_manager()
       .InstallSystemAppsForTesting();
 
-  SettingsTestObserver observer;
-  auto* settings = chrome::SettingsWindowManager::GetInstance();
-  settings->AddObserver(&observer);
-
   ChromeNewWindowClient::Get()->OpenChromePageFromArc(page);
-  EXPECT_EQ(expected_setting_window_count, observer.new_settings_count_);
+  EXPECT_EQ(expected_setting_window_count, GetNumberOfSettingsWindows());
 
   // The right settings are loaded (not just the settings main page).
   content::WebContents* contents =
       GetLastActiveBrowser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(expected_url, contents->GetVisibleURL());
-
-  settings->RemoveObserver(&observer);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTest,
@@ -209,30 +206,24 @@ IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTest,
   TestOpenSettingFromArc(
       browser(), ChromePage::AUTOFILL,
       GURL("chrome://settings/").Resolve(chrome::kAutofillSubPage),
-      /*expected_setting_window_count=*/0);
+      /*expected_setting_window_count=*/0u);
 
   // But opening an OS setting should open the OS setting window.
   TestOpenSettingFromArc(
       browser(), ChromePage::POWER,
       GURL("chrome://os-settings/")
           .Resolve(chromeos::settings::mojom::kPowerSubpagePath),
-      /*expected_setting_window_count=*/1);
+      /*expected_setting_window_count=*/1u);
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTest, OpenAboutChromePage) {
-  SettingsTestObserver observer;
-  auto* settings = chrome::SettingsWindowManager::GetInstance();
-  settings->AddObserver(&observer);
-
   // Opening an about: chrome page opens a new tab, and not the Settings window.
   ChromeNewWindowClient::Get()->OpenChromePageFromArc(ChromePage::ABOUTHISTORY);
-  EXPECT_EQ(0, observer.new_settings_count_);
+  EXPECT_EQ(0u, GetNumberOfSettingsWindows());
 
   content::WebContents* contents =
       GetLastActiveBrowser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(GURL(chrome::kChromeUIHistoryURL), contents->GetVisibleURL());
-
-  settings->RemoveObserver(&observer);
 }
 
 void TestOpenChromePage(ChromePage page, const GURL& expected_url) {

@@ -174,15 +174,15 @@ GURL TestPageURL() {
                                           grey_sufficientlyVisible(), nil)]
       performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
 
-  // Sign-in promo should be visible with cold state.
+  // Sign-in promo should be visible with no accounts on the device.
   [SigninEarlGreyUI
-      verifySigninPromoVisibleWithMode:SigninPromoViewModeColdState
+      verifySigninPromoVisibleWithMode:IdentityPromoViewModeNoAccounts
                            closeButton:NO];
   FakeChromeIdentity* fakeIdentity = [SigninEarlGrey fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
-  // Sign-in promo should be visible with warm state.
+  // Sign-in promo should be visible with an account on the device.
   [SigninEarlGreyUI
-      verifySigninPromoVisibleWithMode:SigninPromoViewModeWarmState
+      verifySigninPromoVisibleWithMode:IdentityPromoViewModeSigninWithAccount
                            closeButton:NO];
   [self closeRecentTabs];
   [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
@@ -200,7 +200,7 @@ GURL TestPageURL() {
       performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
 
   [SigninEarlGreyUI
-      verifySigninPromoVisibleWithMode:SigninPromoViewModeColdState
+      verifySigninPromoVisibleWithMode:IdentityPromoViewModeNoAccounts
                            closeButton:NO];
 
   // Tap on "Other Devices", to hide the sign-in promo.
@@ -226,7 +226,7 @@ GURL TestPageURL() {
                                           grey_sufficientlyVisible(), nil)]
       performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
   [SigninEarlGreyUI
-      verifySigninPromoVisibleWithMode:SigninPromoViewModeWarmState
+      verifySigninPromoVisibleWithMode:IdentityPromoViewModeSigninWithAccount
                            closeButton:NO];
   [self closeRecentTabs];
   [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
@@ -314,7 +314,7 @@ GURL TestPageURL() {
       performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
 
   [SigninEarlGreyUI
-      verifySigninPromoVisibleWithMode:SigninPromoViewModeColdState
+      verifySigninPromoVisibleWithMode:IdentityPromoViewModeNoAccounts
                            closeButton:NO];
 }
 
@@ -352,6 +352,48 @@ GURL TestPageURL() {
   // Verify that Recent Tabs closed.
   [[EarlGrey selectElementWithMatcher:RecentTabsTable()]
       assertWithMatcher:grey_notVisible()];
+}
+
+// Tests the Open in New Window action on a recent tab's context menu.
+- (void)testContextMenuOpenInNewWindow {
+  if (![ChromeEarlGrey areMultipleWindowsSupported]) {
+    EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
+  }
+
+  if (![ChromeEarlGrey isNativeContextMenusEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Test disabled when Native Context Menus feature flag is off.");
+  }
+
+  [self loadTestURL];
+  OpenRecentTabsPanel();
+
+  [ChromeEarlGrey waitForForegroundWindowCount:1];
+
+  [self longPressTestURLTab];
+
+  // Select "Open in New Window" and confirm that new tab is opened with
+  // selected URL in the new window.
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::OpenLinkInNewWindowButton()]
+      performAction:grey_tap()];
+  [ChromeEarlGrey waitForForegroundWindowCount:2];
+
+  // Validate that one window has the URL loaded.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
+                                          TestPageURL().GetContent())]
+      assertWithMatcher:grey_notNil()];
+
+  // Validate that Recent tabs was not closed in the original window. The
+  // Accessibility Element matcher is added as there are other (non-accessible)
+  // recent tabs tables in each window's TabGrid (but hidden).
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(RecentTabsTable(),
+                                          grey_accessibilityElement(), nil)]
+      assertWithMatcher:grey_notNil()];
+
+  [ChromeEarlGrey closeAllExtraWindowsAndForceRelaunchWithAppConfig:
+                      [self appConfigurationForTestCase]];
 }
 
 // Tests the Share action on a recent tab's context menu.

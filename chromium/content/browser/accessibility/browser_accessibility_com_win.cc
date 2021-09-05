@@ -10,6 +10,8 @@
 #include <string>
 #include <utility>
 
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -21,6 +23,7 @@
 #include "content/browser/accessibility/browser_accessibility_win.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "ui/accessibility/ax_common.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_role_properties.h"
@@ -485,12 +488,18 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_nHyperlinks(
     return E_INVALIDARG;
 
   *hyperlink_count = hypertext_.hyperlink_offset_to_index.size();
+
+  DCHECK(!ui::IsIframe(owner()->GetRole()) || *hyperlink_count <= 1)
+      << "iframes should have 1 hyperlink, unless the child document is "
+         "destroyed/unloaded, in which case it should have 0";
+
   return S_OK;
 }
 
 IFACEMETHODIMP BrowserAccessibilityComWin::get_hyperlink(
     LONG index,
     IAccessibleHyperlink** hyperlink) {
+  *hyperlink = nullptr;
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_GET_HYPERLINK);
   AddAccessibilityModeFlags(kScreenReaderAndHTMLAccessibilityModes);
   if (!owner())
@@ -501,9 +510,40 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_hyperlink(
     return E_INVALIDARG;
   }
 
+  DCHECK(!ui::IsIframe(owner()->GetRole()) || index == 0)
+      << "An iframe cannot have more than 1 hyperlink";
+
   int32_t id = hypertext_.hyperlinks[index];
-  auto* link = static_cast<BrowserAccessibilityComWin*>(
-      AXPlatformNodeWin::GetFromUniqueId(id));
+  AXPlatformNode* node = AXPlatformNodeWin::GetFromUniqueId(id);
+  if (!node) {
+    // TODO(https://crbug.com/id=1164043) Fix illegal hyperlink of iframes.
+    // Based on information received from DumpWithoutCrashing() reports, this
+    // is still sometimes occurring when get_hyperlink() is called on an
+    // iframe, which would have exactly 1 hyperlink and no text. The
+    // DumpWithoutCrashing() was removed to reduced crash report noise.
+    // Interestingly, the top url reported was always called "empty".
+    // Sample report for iframe issue: go/crash/93d7fce137a15ef0
+#if defined(AX_FAIL_FAST_BUILD)  // Fail in debug/sanitizers/clusterfuzz.
+    bool do_report = true;
+#else
+    std::srand(std::time(nullptr));             // Use current time as seed.
+    bool do_report = (std::rand() % 100 == 0);  // Roughly 1% of the time.
+#endif
+    if (do_report) {
+      LONG num_hyperlinks = -1;
+      get_nHyperlinks(&num_hyperlinks);
+      std::ostringstream error;
+      CHECK(false) << "Hyperlink error:\n index=" << index
+                   << " nHyperLinks#1=" << hypertext_.hyperlinks.size()
+                   << " nHyperLinks#2="
+                   << hypertext_.hyperlink_offset_to_index.size()
+                   << " needs_update=" << hypertext_.needs_update
+                   << " hyperlink_id=" << id
+                   << "\nparent=" << GetData().ToString();
+    }
+    return E_FAIL;
+  }
+  auto* link = static_cast<BrowserAccessibilityComWin*>(node);
   if (!link)
     return E_FAIL;
 
@@ -895,7 +935,7 @@ IFACEMETHODIMP BrowserAccessibilityComWin::get_nodeInfo(
   *num_children = owner()->PlatformChildCount();
   *unique_id = -AXPlatformNodeWin::GetUniqueId();
 
-  if (owner()->IsDocument()) {
+  if (owner()->IsPlatformDocument()) {
     *node_type = NODETYPE_DOCUMENT;
   } else if (owner()->IsText()) {
     *node_type = NODETYPE_TEXT;
@@ -1378,7 +1418,7 @@ STDMETHODIMP BrowserAccessibilityComWin::InternalQueryInterface(
       return E_NOINTERFACE;
     }
   } else if (iid == IID_ISimpleDOMDocument) {
-    if (!accessibility->IsDocument()) {
+    if (!accessibility->IsPlatformDocument()) {
       *object = nullptr;
       return E_NOINTERFACE;
     }

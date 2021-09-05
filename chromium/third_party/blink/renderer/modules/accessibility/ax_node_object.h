@@ -37,7 +37,6 @@
 namespace blink {
 
 class AXObjectCacheImpl;
-class AXSVGRoot;
 class Element;
 class HTMLLabelElement;
 class Node;
@@ -77,7 +76,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsTextControl() const override;
   Element* MenuItemElementForMenu() const;
   Element* MouseButtonListener() const;
-  bool IsNativeCheckboxOrRadio() const;
   void SetNode(Node*);
   AXObject* CorrespondingControlAXObjectForLabelElement() const;
   AXObject* CorrespondingLabelAXObject() const;
@@ -121,7 +119,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   // Check object state.
   bool IsClickable() const final;
   AccessibilityExpanded IsExpanded() const override;
-  bool IsModal() const final;
   bool IsRequired() const final;
   bool IsControl() const override;
   AXRestriction Restriction() const override;
@@ -142,9 +139,13 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
                           Vector<AXRange>* marker_ranges) const override;
   AXObject* InPageLinkTarget() const override;
   AccessibilityOrientation Orientation() const override;
+
+  // Used to compute kRadioGroupIds, which is only used on Mac.
+  // TODO(accessibility) Consider computing on browser side and removing here.
   AXObjectVector RadioButtonsInGroup() const override;
   static HeapVector<Member<HTMLInputElement>> FindAllRadioButtonsWithSameName(
       HTMLInputElement* radio_button);
+
   String GetText() const override;
   String ImageDataUrl(const IntSize& max_size) const final;
   int TextLength() const override;
@@ -179,10 +180,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void Dropeffects(
       Vector<ax::mojom::blink::Dropeffect>& dropeffects) const override;
 
-  // ARIA live-region features.
-  const AtomicString& LiveRegionStatus() const override;
-  const AtomicString& LiveRegionRelevant() const override;
-
   ax::mojom::blink::HasPopup HasPopup() const override;
 
   // AX name calculation.
@@ -215,15 +212,14 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   AXObject* ComputeParent() const override;
   AXObject* ComputeParentIfExists() const override;
 
-  // Low-level accessibility tree exploration.
-  AXObject* RawFirstChild() const override;
-  AXObject* RawNextSibling() const override;
   void AddChildren() override;
 
   bool CanHaveChildren() const override;
   // Set is_from_aria_owns to true if the child is being added because it was
   // pointed to from aria-owns.
   void AddChild(AXObject*, bool is_from_aria_owns = false);
+  // If node is non-null, GetOrCreate an AXObject for it and add as a child.
+  void AddNodeChild(Node*);
   // Set is_from_aria_owns to true if the child is being insert because it was
   // pointed to from aria-owns.
   void InsertChild(AXObject*, unsigned index, bool is_from_aria_owns = false);
@@ -272,10 +268,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   // Inline text boxes.
   void LoadInlineTextBoxes() override;
 
-  // SVG.
-  bool IsSVGImage() const { return RemoteSVGRootElement(); }
-  AXSVGRoot* RemoteSVGRootElement() const;
-
   virtual LayoutBoxModelObject* GetLayoutBoxModelObject() const {
     return nullptr;
   }
@@ -309,16 +301,17 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
                                bool* found_text_alternative) const;
   bool IsDescendantOfElementType(HashSet<QualifiedName>& tag_names) const;
   String PlaceholderFromNativeAttribute() const;
+  String GetValueContributionToName() const;
+  bool UseNameFromSelectedOption() const;
 
+  void AddNodeChildren();
+  void AddLayoutChildren();
   void AddInlineTextBoxChildren(bool force);
   void AddImageMapChildren();
-  void AddHiddenChildren();
   void AddPopupChildren();
-  void AddRemoteSVGChildren();
+  bool IsHtmlTable() const;
   void AddTableChildren();
   void AddValidationMessageChild();
-  // For some nodes, only LayoutBuilderTraversal visits the necessary children.
-  bool ShouldUseLayoutBuilderTraversal() const;
   ax::mojom::blink::Dropeffect ParseDropeffect(String& dropeffect) const;
 
   DISALLOW_COPY_AND_ASSIGN(AXNodeObject);

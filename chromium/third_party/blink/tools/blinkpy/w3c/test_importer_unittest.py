@@ -27,10 +27,10 @@ MOCK_WEB_TESTS = '/mock-checkout/' + RELATIVE_WEB_TESTS
 MANIFEST_INSTALL_CMD = [
     'python',
     '/mock-checkout/third_party/blink/tools/blinkpy/third_party/wpt/wpt/wpt',
-    'manifest',
-    '--no-download',
-    '--tests-root',
-    MOCK_WEB_TESTS + 'external/wpt']
+    '--py2', 'manifest', '-v', '--no-download', '--tests-root',
+    MOCK_WEB_TESTS + 'external/wpt'
+]
+
 
 class TestImporterTest(LoggingTestCase):
 
@@ -404,7 +404,7 @@ class TestImporterTest(LoggingTestCase):
             'NOAUTOREVERT=true\n'
             'No-Export: true\n'
             'Cq-Include-Trybots: luci.chromium.try:linux-wpt-identity-fyi-rel,'
-            'linux-wpt-payments-fyi-rel')
+            'linux-wpt-input-fyi-rel')
         print host.executive.calls
         self.assertEqual(host.executive.calls,
                          [MANIFEST_INSTALL_CMD] +

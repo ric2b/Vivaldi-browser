@@ -17,6 +17,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotTabObserver;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
@@ -27,7 +28,7 @@ import org.chromium.chrome.browser.send_tab_to_self.SendTabToSelfShareActivity;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetCoordinator;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder;
-import org.chromium.chrome.browser.sync.AndroidSyncSettings;
+import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
@@ -108,9 +109,10 @@ public class ShareDelegateImpl implements ShareDelegate {
         if (mShareStartTime == 0L) {
             mShareStartTime = System.currentTimeMillis();
         }
+        boolean isSyncEnabled =
+                ProfileSyncService.get() != null && ProfileSyncService.get().isSyncRequested();
         mDelegate.share(params, chromeShareExtras, mBottomSheetController, mLifecycleDispatcher,
-                mTabProvider, this::printTab, shareOrigin,
-                AndroidSyncSettings.get().isSyncEnabled(), mShareStartTime,
+                mTabProvider, this::printTab, shareOrigin, isSyncEnabled, mShareStartTime,
                 isSharingHubV1Enabled());
         mShareStartTime = 0;
     }
@@ -337,7 +339,8 @@ public class ShareDelegateImpl implements ShareDelegate {
                                 ContextUtils.getApplicationContext().getPackageManager()),
                         printCallback, new LargeIconBridge(Profile.getLastUsedRegularProfile()),
                         new SettingsLauncherImpl(), isSyncEnabled,
-                        AppHooks.get().getImageEditorModuleProvider());
+                        AppHooks.get().getImageEditorModuleProvider(),
+                        TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile()));
                 // TODO(crbug/1009124): open custom share sheet.
                 coordinator.showShareSheet(params, chromeShareExtras, shareStartTime);
             } else {

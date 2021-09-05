@@ -64,10 +64,11 @@ class CONTENT_EXPORT IndexedDBExternalObject {
                           const base::Time& last_modified,
                           const int64_t size);
   // These are for Native File System handles.
-  IndexedDBExternalObject(
-      mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken>
+  explicit IndexedDBExternalObject(
+      mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken>
           token_remote);
-  IndexedDBExternalObject(std::vector<uint8_t> native_file_system_token);
+  explicit IndexedDBExternalObject(
+      std::vector<uint8_t> native_file_system_token);
 
   IndexedDBExternalObject(const IndexedDBExternalObject& other);
   ~IndexedDBExternalObject();
@@ -102,7 +103,7 @@ class CONTENT_EXPORT IndexedDBExternalObject {
   bool is_native_file_system_remote_valid() const {
     return token_remote_.is_bound();
   }
-  blink::mojom::NativeFileSystemTransferToken* native_file_system_token_remote()
+  blink::mojom::FileSystemAccessTransferToken* native_file_system_token_remote()
       const {
     return token_remote_.get();
   }
@@ -141,7 +142,7 @@ class CONTENT_EXPORT IndexedDBExternalObject {
   base::Time last_modified_;
 
   // Only for Native File System handle.
-  mojo::SharedRemote<blink::mojom::NativeFileSystemTransferToken> token_remote_;
+  mojo::SharedRemote<blink::mojom::FileSystemAccessTransferToken> token_remote_;
   std::vector<uint8_t> native_file_system_token_;
 
   // Valid only when this comes out of the database. Only for Blob and File.

@@ -15,16 +15,18 @@
 #include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/system/sys_info.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/child_accounts/edu_coexistence_tos_store_utils.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/ui/webui/chromeos/edu_coexistence_consent_tracker.h"
+#include "chrome/browser/ui/webui/chromeos/edu_coexistence_state_tracker.h"
 #include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos.h"
 #include "chrome/common/channel_info.h"
 #include "chromeos/constants/chromeos_pref_names.h"
@@ -50,7 +52,7 @@ namespace {
 
 constexpr char kEduCoexistenceLoginURLSwitch[] = "edu-coexistence-url";
 constexpr char kEduCoexistenceLoginDefaultURL[] =
-    "https://families.google.com/supervision/coexistence";
+    "https://families.google.com/supervision/coexistence/intro";
 constexpr char kOobe[] = "oobe";
 constexpr char kInSession[] = "in_session";
 constexpr char kOnErrorWebUIListener[] = "show-error-screen";
@@ -83,12 +85,20 @@ std::string GetSourceUI() {
 std::string GetOrCreateEduCoexistenceUserId() {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   PrefService* pref_service = profile->GetPrefs();
-  std::string id = pref_service->GetString(chromeos::prefs::kEduCoexistenceId);
+  std::string id = pref_service->GetString(prefs::kEduCoexistenceId);
   if (id.empty()) {
     id = base::GenerateGUID();
-    pref_service->SetString(chromeos::prefs::kEduCoexistenceId, id);
+    pref_service->SetString(prefs::kEduCoexistenceId, id);
   }
   return id;
+}
+
+base::Time GetSigninTime() {
+  const Profile* profile = ProfileManager::GetActiveUserProfile();
+  const PrefService* pref_service = profile->GetPrefs();
+  base::Time signin_time = pref_service->GetTime(prefs::kOobeOnboardingTime);
+  DCHECK(!signin_time.is_min());
+  return signin_time;
 }
 
 // Tries to get the policy device id for the family link user profile if
@@ -134,7 +144,7 @@ EduCoexistenceLoginHandler::EduCoexistenceLoginHandler(
 
   OAuth2AccessTokenManager::ScopeSet scopes;
   scopes.insert(GaiaConstants::kKidsSupervisionSetupChildOAuth2Scope);
-  scopes.insert(GaiaConstants::kPeopleApiReadOnlyOAuth2Scope);
+  scopes.insert(GaiaConstants::kKidManagementOAuth2Scope);
   scopes.insert(GaiaConstants::kAccountsReauthOAuth2Scope);
   scopes.insert(GaiaConstants::kAuditRecordingOAuth2Scope);
   scopes.insert(GaiaConstants::kClearCutOAuth2Scope);
@@ -154,11 +164,17 @@ EduCoexistenceLoginHandler::EduCoexistenceLoginHandler(
 EduCoexistenceLoginHandler::~EduCoexistenceLoginHandler() {
   identity_manager_->RemoveObserver(this);
 
-  EduCoexistenceConsentTracker::Get()->OnDialogClosed(web_ui());
+  EduCoexistenceStateTracker::Get()->OnDialogClosed(web_ui());
   close_dialog_closure_.Run();
 }
 
 void EduCoexistenceLoginHandler::RegisterMessages() {
+  // Notifying |EduCoexistenceStateTracker| here instead of in the constructor
+  // because the WebUI has not yet been set there.
+  EduCoexistenceStateTracker::Get()->OnDialogCreated(
+      web_ui(), /* is_onboarding */ session_manager::SessionManager::Get()
+                    ->IsUserSessionBlocked());
+
   web_ui()->RegisterMessageCallback(
       "initializeEduArgs",
       base::BindRepeating(&EduCoexistenceLoginHandler::InitializeEduArgs,
@@ -196,6 +212,9 @@ void EduCoexistenceLoginHandler::OnRefreshTokenUpdatedForAccount(
       profile, edu_coexistence::UserConsentInfo(
                    account_info.gaia, terms_of_service_version_number_));
 
+  EduCoexistenceStateTracker::Get()->OnWebUiStateChanged(
+      web_ui(), EduCoexistenceStateTracker::FlowResult::kAccountAdded);
+
   // Otherwise, notify the ui that account addition was successful!!
   ResolveJavascriptCallback(base::Value(account_added_callback_),
                             base::Value(true));
@@ -214,6 +233,9 @@ void EduCoexistenceLoginHandler::OnOAuthAccessTokensFetched(
     if (initialize_edu_args_callback_.has_value()) {
       FireWebUIListener(kOnErrorWebUIListener);
     }
+
+    EduCoexistenceStateTracker::Get()->OnWebUiStateChanged(
+        web_ui(), EduCoexistenceStateTracker::FlowResult::kError);
     in_error_state_ = true;
     return;
   }
@@ -265,6 +287,8 @@ void EduCoexistenceLoginHandler::SendInitializeEduArgs() {
   params.SetStringKey("releaseChannel", chrome::GetChannelName());
   params.SetStringKey("deviceId", GetDeviceIdForActiveUserProfile());
 
+  params.SetDoubleKey("signinTime", GetSigninTime().ToJsTimeIgnoringNull());
+
   // If the secondary edu account is being reauthenticated, the email address
   // will be provided via the url of the webcontent. Example
   // chrome://chrome-signin/edu-coexistence?email=testuser1%40gmail.com
@@ -291,7 +315,8 @@ void EduCoexistenceLoginHandler::SendInitializeEduArgs() {
 void EduCoexistenceLoginHandler::ConsentValid(const base::ListValue* args) {
   AllowJavascript();
   DCHECK(!in_error_state_);
-  // TODO(yilkal): Have a state enum to record the progress.
+  EduCoexistenceStateTracker::Get()->OnWebUiStateChanged(
+      web_ui(), EduCoexistenceStateTracker::FlowResult::kConsentValid);
 }
 
 void EduCoexistenceLoginHandler::ConsentLogged(const base::ListValue* args) {
@@ -307,8 +332,11 @@ void EduCoexistenceLoginHandler::ConsentLogged(const base::ListValue* args) {
   edu_account_email_ = arguments[0].GetString();
   terms_of_service_version_number_ = arguments[1].GetString();
 
-  EduCoexistenceConsentTracker::Get()->OnConsentLogged(web_ui(),
-                                                       edu_account_email_);
+  EduCoexistenceStateTracker::Get()->OnConsentLogged(web_ui(),
+                                                     edu_account_email_);
+
+  EduCoexistenceStateTracker::Get()->OnWebUiStateChanged(
+      web_ui(), EduCoexistenceStateTracker::FlowResult::kConsentLogged);
 }
 
 void EduCoexistenceLoginHandler::OnError(const base::ListValue* args) {
@@ -321,6 +349,9 @@ void EduCoexistenceLoginHandler::OnError(const base::ListValue* args) {
     DCHECK(message.is_string());
     LOG(ERROR) << message.GetString();
   }
+
+  EduCoexistenceStateTracker::Get()->OnWebUiStateChanged(
+      web_ui(), EduCoexistenceStateTracker::FlowResult::kError);
 }
 
 }  // namespace chromeos

@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-GEN_INCLUDE(['assert_additions.js', 'callback_helper.js', 'doc_utils.js']);
+GEN_INCLUDE(
+    ['assert_additions.js', 'callback_helper.js', 'common.js', 'doc_utils.js']);
 
 /**
  * Base test fixture for end to end tests (tests that need a full extension
@@ -132,6 +133,33 @@ E2ETestBase = class extends testing.Test {
 
       const createParams = {active: true, url};
       chrome.tabs.create(createParams);
+    });
+  }
+
+  /**
+   * Opens the options page for the running extension and calls |callback| with
+   * the options page root once ready.
+   * @param {function(chrome.automation.AutomationNode)} callback
+   * @param {!RegExp} matchUrlRegExp The url pattern of the options page if
+   *     different than the supplied default pattern below.
+   */
+  runWithLoadedOptionsPage(callback, matchUrlRegExp = /options.html/) {
+    callback = this.newCallback(callback);
+    chrome.automation.getDesktop((desktop) => {
+      const listener = (event) => {
+        if (!matchUrlRegExp.test(event.target.docUrl) ||
+            !event.target.docLoaded) {
+          return;
+        }
+
+        desktop.removeEventListener(
+            chrome.automation.EventType.LOAD_COMPLETE, listener);
+
+        callback(event.target);
+      };
+      desktop.addEventListener(
+          chrome.automation.EventType.LOAD_COMPLETE, listener);
+      chrome.runtime.openOptionsPage();
     });
   }
 

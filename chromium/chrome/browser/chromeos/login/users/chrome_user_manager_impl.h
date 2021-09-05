@@ -104,7 +104,8 @@ class ChromeUserManagerImpl
   void AsyncRemoveCryptohome(const AccountId& account_id) const override;
   bool IsGuestAccountId(const AccountId& account_id) const override;
   bool IsStubAccountId(const AccountId& account_id) const override;
-  bool IsSupervisedAccountId(const AccountId& account_id) const override;
+  bool IsDeprecatedSupervisedAccountId(
+      const AccountId& account_id) const override;
   bool HasBrowserRestarted() const override;
   const gfx::ImageSkia& GetResourceImagekiaNamed(int id) const override;
   base::string16 GetResourceStringUTF16(int string_id) const override;
@@ -264,11 +265,10 @@ class ChromeUserManagerImpl
   FlowMap specific_flows_;
 
   // Cros settings change subscriptions.
-  std::unique_ptr<CrosSettings::ObserverSubscription> allow_guest_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription> users_subscription_;
+  base::CallbackListSubscription allow_guest_subscription_;
+  base::CallbackListSubscription users_subscription_;
 
-  std::unique_ptr<CrosSettings::ObserverSubscription>
-      local_accounts_subscription_;
+  base::CallbackListSubscription local_accounts_subscription_;
 
   std::unique_ptr<MultiProfileUserController> multi_profile_user_controller_;
 

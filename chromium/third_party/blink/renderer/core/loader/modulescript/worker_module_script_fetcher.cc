@@ -10,6 +10,7 @@
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_source_location_type.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
@@ -28,7 +29,7 @@ namespace blink {
 
 WorkerModuleScriptFetcher::WorkerModuleScriptFetcher(
     WorkerGlobalScope* global_scope,
-    util::PassKey<ModuleScriptLoader> pass_key)
+    base::PassKey<ModuleScriptLoader> pass_key)
     : ModuleScriptFetcher(pass_key), global_scope_(global_scope) {}
 
 // <specdef href="https://html.spec.whatwg.org/C/#run-a-worker">
@@ -37,6 +38,7 @@ void WorkerModuleScriptFetcher::Fetch(
     ResourceFetcher* fetch_client_settings_object_fetcher,
     ModuleGraphLevel level,
     ModuleScriptFetcher::Client* client) {
+  DCHECK_EQ(fetch_params.GetScriptType(), mojom::blink::ScriptType::kModule);
   DCHECK(global_scope_->IsContextThread());
   DCHECK(!fetch_client_settings_object_fetcher_);
   fetch_client_settings_object_fetcher_ = fetch_client_settings_object_fetcher;
@@ -88,25 +90,25 @@ void WorkerModuleScriptFetcher::NotifyFinished(Resource* resource) {
   DCHECK(global_scope_->IsContextThread());
   ClearResource();
 
-  ScriptResource* script_resource = ToScriptResource(resource);
-  HeapVector<Member<ConsoleMessage>> error_messages;
-  ModuleScriptCreationParams::ModuleType module_type;
-  if (!WasModuleLoadSuccessful(script_resource, &error_messages,
-                               &module_type)) {
-    client_->NotifyFetchFinished(base::nullopt, error_messages);
-    return;
+  auto* script_resource = To<ScriptResource>(resource);
+  ModuleType module_type;
+  {
+    HeapVector<Member<ConsoleMessage>> error_messages;
+    if (!WasModuleLoadSuccessful(script_resource, &error_messages,
+                                 &module_type)) {
+      client_->NotifyFetchFinishedError(error_messages);
+      return;
+    }
   }
 
   NotifyClient(resource->Url(), module_type,
-               script_resource->GetResourceRequest().GetCredentialsMode(),
                script_resource->SourceText(), resource->GetResponse(),
                script_resource->CacheHandler());
 }
 
 void WorkerModuleScriptFetcher::NotifyClient(
     const KURL& request_url,
-    ModuleScriptCreationParams::ModuleType module_type,
-    const network::mojom::CredentialsMode credentials_mode,
+    ModuleType module_type,
     const ParkableString& source_text,
     const ResourceResponse& response,
     SingleCachedMetadataHandler* cache_handler) {
@@ -146,7 +148,7 @@ void WorkerModuleScriptFetcher::NotifyClient(
           mojom::ConsoleMessageSource::kSecurity,
           mojom::ConsoleMessageLevel::kError,
           "Refused to cross-origin redirects of the top-level worker script."));
-      client_->NotifyFetchFinished(base::nullopt, error_messages);
+      client_->NotifyFetchFinishedError(error_messages);
       return;
     }
 
@@ -175,13 +177,16 @@ void WorkerModuleScriptFetcher::NotifyClient(
         response_origin_trial_tokens.get(), response.AppCacheID());
   }
 
-  ModuleScriptCreationParams params(response.CurrentRequestUrl(), module_type,
-                                    source_text, cache_handler,
-                                    credentials_mode);
 
   // <spec step="12.7">Asynchronously complete the perform the fetch steps with
   // response.</spec>
-  client_->NotifyFetchFinished(params, error_messages);
+  const KURL& url = response.CurrentRequestUrl();
+  // Create an external module script where base_url == source_url.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-script-base-url
+  client_->NotifyFetchFinishedSuccess(ModuleScriptCreationParams(
+      /*source_url=*/url, /*base_url=*/url,
+      ScriptSourceLocationType::kExternalFile, module_type, source_text,
+      cache_handler));
 }
 
 void WorkerModuleScriptFetcher::DidReceiveData(base::span<const char> span) {
@@ -212,7 +217,7 @@ void WorkerModuleScriptFetcher::OnStartLoadingBody(
         resource_response.CurrentRequestUrl().GetString(), /*loader=*/nullptr,
         -1));
     worker_main_script_loader_->Cancel();
-    client_->NotifyFetchFinished(base::nullopt, error_messages);
+    client_->NotifyFetchFinishedError(error_messages);
     return;
   }
 }
@@ -222,15 +227,13 @@ void WorkerModuleScriptFetcher::OnFinishedLoadingWorkerMainScript() {
   if (decoder_)
     source_text_.Append(decoder_->Flush());
   NotifyClient(worker_main_script_loader_->GetRequestURL(),
-               ModuleScriptCreationParams::ModuleType::kJavaScriptModule,
-               network::mojom::CredentialsMode::kSameOrigin,
+               ModuleType::kJavaScript,
                ParkableString(source_text_.ToString().ReleaseImpl()), response,
                worker_main_script_loader_->CreateCachedMetadataHandler());
 }
 
 void WorkerModuleScriptFetcher::OnFailedLoadingWorkerMainScript() {
-  client_->NotifyFetchFinished(base::nullopt,
-                               HeapVector<Member<ConsoleMessage>>());
+  client_->NotifyFetchFinishedError(HeapVector<Member<ConsoleMessage>>());
 }
 
 }  // namespace blink

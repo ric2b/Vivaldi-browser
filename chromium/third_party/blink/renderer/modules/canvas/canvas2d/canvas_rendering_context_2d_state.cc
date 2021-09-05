@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/skia/include/effects/SkDashPathEffect.h"
-#include "third_party/skia/include/effects/SkDropShadowImageFilter.h"
 
 static const char defaultFont[] = "10px sans-serif";
 static const char defaultFilter[] = "none";
@@ -105,6 +104,7 @@ CanvasRenderingContext2DState::CanvasRenderingContext2DState(
       word_spacing_(other.word_spacing_),
       text_rendering_mode_(other.text_rendering_mode_),
       font_kerning_(other.font_kerning_),
+      font_stretch_(other.font_stretch_),
       font_variant_caps_(other.font_variant_caps_),
       realized_font_(other.realized_font_),
       is_transform_invertible_(other.is_transform_invertible_),
@@ -288,6 +288,16 @@ void CanvasRenderingContext2DState::SetFontKerning(
   FontDescription font_description(GetFontDescription());
   font_description.SetKerning(font_kerning);
   font_kerning_ = font_kerning;
+  SetFont(font_description, selector);
+}
+
+void CanvasRenderingContext2DState::SetFontStretch(
+    FontSelectionValue font_stretch,
+    FontSelector* selector) {
+  DCHECK(realized_font_);
+  FontDescription font_description(GetFontDescription());
+  font_description.SetStretch(font_stretch);
+  font_stretch_ = font_stretch;
   SetFont(font_description, selector);
 }
 
@@ -486,24 +496,24 @@ SkDrawLooper* CanvasRenderingContext2DState::ShadowAndForegroundDrawLooper()
 
 sk_sp<PaintFilter> CanvasRenderingContext2DState::ShadowOnlyImageFilter()
     const {
+  using ShadowMode = DropShadowPaintFilter::ShadowMode;
   if (!shadow_only_image_filter_) {
     const auto sigma = BlurRadiusToStdDev(shadow_blur_);
     shadow_only_image_filter_ = sk_make_sp<DropShadowPaintFilter>(
         shadow_offset_.Width(), shadow_offset_.Height(), sigma, sigma,
-        shadow_color_, SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode,
-        nullptr);
+        shadow_color_, ShadowMode::kDrawShadowOnly, nullptr);
   }
   return shadow_only_image_filter_;
 }
 
 sk_sp<PaintFilter>
 CanvasRenderingContext2DState::ShadowAndForegroundImageFilter() const {
+  using ShadowMode = DropShadowPaintFilter::ShadowMode;
   if (!shadow_and_foreground_image_filter_) {
     const auto sigma = BlurRadiusToStdDev(shadow_blur_);
     shadow_and_foreground_image_filter_ = sk_make_sp<DropShadowPaintFilter>(
         shadow_offset_.Width(), shadow_offset_.Height(), sigma, sigma,
-        shadow_color_,
-        SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode, nullptr);
+        shadow_color_, ShadowMode::kDrawShadowAndForeground, nullptr);
   }
   return shadow_and_foreground_image_filter_;
 }

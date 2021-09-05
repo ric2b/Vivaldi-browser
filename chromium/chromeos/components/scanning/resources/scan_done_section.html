@@ -1,0 +1,51 @@
+<style include="scanning-fonts">
+  .container,
+  #doneButtonContainer {
+    width: 272px;
+  }
+
+  .container {
+    @apply --scanning-done-section-option-font;
+    align-items: center;
+    color: var(--scanning-done-section-option-text-color);
+    display: flex;
+    height: 36px;
+    margin-bottom: 8px;
+    margin-inline-end: 32px;
+    margin-inline-start: 32px;
+    margin-top: 8px;
+    padding-inline-end: 16px;
+  }
+
+  #doneButtonContainer {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0;
+    margin-inline-end: 32px;
+    margin-inline-start: 32px;
+    margin-top: 32px;
+    padding-inline-end: 16px;
+  }
+
+  .label {
+    flex-basis: 252px;
+    flex-grow: 0;
+    flex-shrink: 0;
+  }
+
+  #folderLink {
+    color: var(--google-blue-600);
+    text-decoration: none;
+  }
+</style>
+<div class="container">
+  <span id="fileSavedText" class="label"
+      inner-h-t-m-l="[[fileSavedTextContent_]]">
+  </span>
+</div>
+<div id="doneButtonContainer">
+  <cr-button id="doneButton" class="action-button"
+      on-click="onDoneClick_">
+    [[i18n('doneButtonText')]]
+  </cr-button>
+</div>

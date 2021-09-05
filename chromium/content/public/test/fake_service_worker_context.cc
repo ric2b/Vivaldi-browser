@@ -50,10 +50,10 @@ FakeServiceWorkerContext::FinishedExternalRequest(
   NOTREACHED();
   return ServiceWorkerExternalRequestResult::kWorkerNotFound;
 }
-void FakeServiceWorkerContext::CountExternalRequestsForTest(
-    const url::Origin& origin,
-    CountExternalRequestsCallback callback) {
+size_t FakeServiceWorkerContext::CountExternalRequestsForTest(
+    const url::Origin& origin) {
   NOTREACHED();
+  return 0u;
 }
 bool FakeServiceWorkerContext::MaybeHasRegistrationForOrigin(
     const url::Origin& origin) {
@@ -93,7 +93,7 @@ void FakeServiceWorkerContext::ClearAllServiceWorkersForTest(
 void FakeServiceWorkerContext::StartWorkerForScope(
     const GURL& scope,
     ServiceWorkerContext::StartWorkerCallback info_callback,
-    base::OnceClosure failure_callback) {
+    ServiceWorkerContext::StartWorkerFailureCallback failure_callback) {
   NOTREACHED();
 }
 void FakeServiceWorkerContext::StartServiceWorkerForNavigationHint(

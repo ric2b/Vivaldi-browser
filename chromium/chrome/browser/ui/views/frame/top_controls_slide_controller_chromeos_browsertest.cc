@@ -19,6 +19,7 @@
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/strings/safe_sprintf.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/base/math_util.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -745,7 +746,7 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest,
       scrollable_page_contents));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // http://crbug.com/1127805: Flaky on Chrome OS builders
 #define MAYBE_TestClosingATab DISABLED_TestClosingATab
 #else
@@ -1036,7 +1037,8 @@ class PageStateUpdateWaiter : content::WebContentsObserver {
 // Verifies that we ignore the shown ratios sent from widgets other than that of
 // the main frame (such as widgets of the drop-down menus in web pages).
 // https://crbug.com/891471.
-IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, TestDropDowns) {
+// TODO(crbug.com/1110442): flaky.
+IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, DISABLED_TestDropDowns) {
   browser_view()->frame()->Maximize();
   ToggleTabletMode();
   ASSERT_TRUE(GetTabletModeEnabled());

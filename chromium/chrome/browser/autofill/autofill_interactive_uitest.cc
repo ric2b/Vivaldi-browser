@@ -277,16 +277,11 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
 
   // InProcessBrowserTest:
   void SetUp() override {
-    LOG(ERROR) << "crbug/967588: AutofillInteractiveTestBase::SetUp() entered";
     ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
-    LOG(ERROR) << "crbug/967588: embedded_test_server InitializeAndListen";
     InProcessBrowserTest::SetUp();
-    LOG(ERROR) << "crbug/967588: AutofillInteractiveTestBase::SetUp() exited";
   }
 
   void SetUpOnMainThread() override {
-    LOG(ERROR) << "crbug/967588: "
-                  "AutofillInteractiveTestBase::SetUpOnMainThread() entered";
     AutofillUiTest::SetUpOnMainThread();
 
     https_server_.SetSSLConfig(net::EmbeddedTestServer::CERT_OK);
@@ -295,7 +290,6 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
         &AutofillInteractiveTestBase::HandleTestURL, base::Unretained(this)));
     ASSERT_TRUE(https_server_.InitializeAndListen());
     https_server_.StartAcceptingConnections();
-    LOG(ERROR) << "crbug/967588: https_server started accepting connections";
 
     controllable_http_response_ =
         std::make_unique<net::test_server::ControllableHttpResponse>(
@@ -307,19 +301,10 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
     embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
         &AutofillInteractiveTestBase::HandleTestURL, base::Unretained(this)));
     embedded_test_server()->StartAcceptingConnections();
-    LOG(ERROR)
-        << "crbug/967588: embedded_test_server started accepting connections";
-
-    // Load the MatchingPattern definitions.
-    base::RunLoop run_loop;
-    field_type_parsing::PopulateFromResourceBundle(run_loop.QuitClosure());
-    run_loop.Run();
 
     // By default, all SSL cert checks are valid. Can be overriden in tests if
     // needed.
     cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
-    LOG(ERROR) << "crbug/967588: "
-                  "AutofillInteractiveTestBase::SetUpOnMainThread() exited";
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -356,7 +341,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
                          "4120 Freidrich Lane", "Basement", "Austin", "Texas",
                          "78744", "US", "15125551234");
     profile.set_use_count(9999999);  // We want this to be the first profile.
-    AddTestProfile(browser(), profile);
+    AddTestProfile(browser()->profile(), profile);
   }
 
   void CreateSecondTestProfile() {
@@ -365,14 +350,14 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
                          "alice@wonderland.com", "Magic", "333 Cat Queen St.",
                          "Rooftop", "Liliput", "CA", "10003", "US",
                          "15166900292");
-    AddTestProfile(browser(), profile);
+    AddTestProfile(browser()->profile(), profile);
   }
 
   void CreateTestCreditCart() {
     CreditCard card;
     test::SetCreditCardInfo(&card, "Milton Waddams", "4111111111111111", "09",
                             "2999", "");
-    AddTestCreditCard(browser(), card);
+    AddTestCreditCard(browser()->profile(), card);
   }
 
   // Populates a webpage form using autofill data and keypress events.
@@ -527,7 +512,6 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
     ExpectFieldValue("zip", "78744");
     ExpectFieldValue("country", "US");
     ExpectFieldValue("phone", "15125551234");
-    LOG(ERROR) << "crbug/967588: Verified form was filled as expected";
   }
 
   void ExpectClearedForm() {
@@ -571,21 +555,16 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
 
   void TryBasicFormFill() {
     FocusFirstNameField();
-    LOG(ERROR) << "crbug/967588: Focussed first name field";
 
     // Start filling the first name field with "M" and wait for the popup to be
     // shown.
     SendKeyToPageAndWait(ui::DomKey::FromCharacter('M'), ui::DomCode::US_M,
                          ui::VKEY_M, {ObservedUiEvents::kSuggestionShown});
 
-    LOG(ERROR) << "crbug/967588: Sent 'M' and saw suggestion";
-
     // Press the down arrow to select the suggestion and preview the autofilled
     // form.
     SendKeyToPopupAndWait(ui::DomKey::ARROW_DOWN,
                           {ObservedUiEvents::kPreviewFormData});
-
-    LOG(ERROR) << "crbug/967588: Sent '<down arrow>' and saw preview";
 
     // The previewed values should not be accessible to JavaScript.
     ExpectFieldValue("firstname", "M");
@@ -600,14 +579,9 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
     // TODO(isherman): It would be nice to test that the previewed values are
     // displayed: http://crbug.com/57220
 
-    LOG(ERROR)
-        << "crbug/967588: Verified field contents remain unfilled for preview";
-
     // Press Enter to accept the autofill suggestions.
     SendKeyToPopupAndWait(ui::DomKey::ENTER,
                           {ObservedUiEvents::kFormDataFilled});
-
-    LOG(ERROR) << "crbug/967588: Form was filled after pressing enter";
 
     // The form should be filled.
     ExpectFilledTestForm();
@@ -769,20 +743,15 @@ class AutofillInteractiveTestWithHistogramTester
 // Test that basic form fill is working.
 IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestWithHistogramTester,
                        MAYBE_BasicFormFill) {
-  LOG(ERROR) << "crbug/967588: In case of flakes, report log statements to "
-                "crbug.com/967588";
   CreateTestProfile();
-  LOG(ERROR) << "crbug/967588: Test profile created";
 
   // Load the test page.
   SetTestUrlResponse(kTestShippingFormString);
   ASSERT_NO_FATAL_FAILURE(
       ui_test_utils::NavigateToURL(browser(), GetTestUrl()));
-  LOG(ERROR) << "crbug/967588: Loaded test page";
 
   // Invoke Autofill.
   TryBasicFormFill();
-  LOG(ERROR) << "crbug/967588: Basic form filling completed";
 
   metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
   // Assert that the network isolation key is populated for 2 requests:
@@ -1031,11 +1000,9 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   TryClearForm();
 }
 
-// TODO(crbug.com/967588): Disabled due to flakiness
 // Test that multiple autofillings work.
-IN_PROC_BROWSER_TEST_F(
-    AutofillInteractiveTest,
-    DISABLED_FillChangeSecondFieldRefillSecondFieldClearFirst) {
+IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
+                       FillChangeSecondFieldRefillSecondFieldClearFirst) {
   CreateTestProfile();
 
   // Load the test page.
@@ -2027,7 +1994,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, ComparePhoneNumbers) {
   profile.SetRawInfo(ADDRESS_HOME_ZIP, ASCIIToUTF16("95110"));
   profile.SetRawInfo(ADDRESS_HOME_COUNTRY, ASCIIToUTF16("US"));
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("1-408-555-4567"));
-  SetTestProfile(browser(), profile);
+  SetTestProfile(browser()->profile(), profile);
 
   GURL url = embedded_test_server()->GetURL("/autofill/form_phones.html");
   ui_test_utils::NavigateToURL(browser(), url);
@@ -2081,7 +2048,7 @@ IN_PROC_BROWSER_TEST_F(AutofillCompanyInteractiveTest,
   profile.SetRawInfo(ADDRESS_HOME_ZIP, ASCIIToUTF16("95110"));
   profile.SetRawInfo(COMPANY_NAME, ASCIIToUTF16(company_name));
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("408-871-4567"));
-  SetTestProfile(browser(), profile);
+  SetTestProfile(browser()->profile(), profile);
 
   GURL url =
       embedded_test_server()->GetURL("/autofill/read_only_field_test.html");
@@ -2140,7 +2107,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest, NoAutofillForReadOnlyFields) {
   profile.SetRawInfo(ADDRESS_HOME_ZIP, ASCIIToUTF16("95110"));
   profile.SetRawInfo(COMPANY_NAME, ASCIIToUTF16("Company X"));
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("408-871-4567"));
-  SetTestProfile(browser(), profile);
+  SetTestProfile(browser()->profile(), profile);
 
   GURL url =
       embedded_test_server()->GetURL("/autofill/read_only_field_test.html");
@@ -2214,7 +2181,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
   profile.SetRawInfo(NAME_LAST, ASCIIToUTF16("Smith"));
   profile.SetRawInfo(EMAIL_ADDRESS, ASCIIToUTF16(email));
   profile.SetRawInfo(PHONE_HOME_WHOLE_NUMBER, ASCIIToUTF16("4088714567"));
-  SetTestProfile(browser(), profile);
+  SetTestProfile(browser()->profile(), profile);
 
   GURL url = embedded_test_server()->GetURL(
       "/autofill/autofill_confirmemail_form.html");
@@ -2265,7 +2232,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTest,
     profile.SetRawInfo(ADDRESS_HOME_COUNTRY, ASCIIToUTF16("US"));
     profiles.push_back(profile);
   }
-  SetTestProfiles(browser(), &profiles);
+  SetTestProfiles(browser()->profile(), &profiles);
 
   GURL url = embedded_test_server()->GetURL(
       "/autofill/latency_after_submit_test.html");

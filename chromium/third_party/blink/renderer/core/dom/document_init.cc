@@ -38,7 +38,6 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
-#include "third_party/blink/renderer/core/html/custom/v0_custom_element_registration_context.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_view_source_document.h"
@@ -137,8 +136,7 @@ DocumentInit::Type DocumentInit::ComputeDocumentType(
   if (HTMLMediaElement::GetSupportsType(ContentType(mime_type)))
     return Type::kMedia;
 
-  if (frame && frame->GetPage() &&
-      frame->Loader().AllowPlugins(kNotAboutToInstantiatePlugin)) {
+  if (frame && frame->GetPage() && frame->Loader().AllowPlugins()) {
     PluginData* plugin_data = GetPluginData(frame, url);
 
     // Everything else except text/plain can be overridden by plugins.
@@ -222,32 +220,6 @@ DocumentInit& DocumentInit::WithSrcdocDocument(bool is_srcdoc_document) {
   return *this;
 }
 
-
-DocumentInit& DocumentInit::WithRegistrationContext(
-    V0CustomElementRegistrationContext* registration_context) {
-  DCHECK(!create_new_registration_context_);
-  DCHECK(!registration_context_);
-  registration_context_ = registration_context;
-  return *this;
-}
-
-DocumentInit& DocumentInit::WithNewRegistrationContext() {
-  DCHECK(!create_new_registration_context_);
-  DCHECK(!registration_context_);
-  create_new_registration_context_ = true;
-  return *this;
-}
-
-V0CustomElementRegistrationContext* DocumentInit::RegistrationContext(
-    Document* document) const {
-  if (!IsA<HTMLDocument>(document) && !document->IsXHTMLDocument())
-    return nullptr;
-
-  if (create_new_registration_context_)
-    return MakeGarbageCollected<V0CustomElementRegistrationContext>();
-
-  return registration_context_;
-}
 
 DocumentInit& DocumentInit::WithWebBundleClaimedUrl(
     const KURL& web_bundle_claimed_url) {

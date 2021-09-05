@@ -1,0 +1,12 @@
+* h.figuiere@eyeo.com a.giammarchi@eyeo.com
+
+# Snippets
+/lib/content/snippets.js h.figuiere@eyeo.com a.giammarchi@eyeo.com
+/test/browser/snippets.js h.figuiere@eyeo.com a.giammarchi@eyeo.com
+
+# Automation
+/build/ sebastian@adblockplus.org tristan@adblockplus.org
+/test/runners/ sebastian@adblockplus.org tristan@adblockplus.org
+/test_runner.js sebastian@adblockplus.org tristan@adblockplus.org
+/.gitlab-ci.yml sebastian@adblockplus.org tristan@adblockplus.org
+/.gitlab-pages.yml sebastian@adblockplus.org tristan@adblockplus.org

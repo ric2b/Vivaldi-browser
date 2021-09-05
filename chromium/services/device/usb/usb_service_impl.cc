@@ -14,12 +14,12 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
@@ -245,7 +245,8 @@ UsbServiceImpl::~UsbServiceImpl() {
     libusb_hotplug_deregister_callback(context_->context(), hotplug_handle_);
 }
 
-void UsbServiceImpl::GetDevices(GetDevicesCallback callback) {
+void UsbServiceImpl::GetDevices(bool allow_restricted_devices,
+                                GetDevicesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (usb_unavailable_) {
@@ -257,7 +258,7 @@ void UsbServiceImpl::GetDevices(GetDevicesCallback callback) {
 
   if (hotplug_enabled_ && !enumeration_in_progress_) {
     // The device list is updated live when hotplug events are supported.
-    UsbService::GetDevices(std::move(callback));
+    UsbService::GetDevices(allow_restricted_devices, std::move(callback));
   } else {
     pending_enumeration_callbacks_.push_back(std::move(callback));
     RefreshDevices();
@@ -489,7 +490,7 @@ void UsbServiceImpl::AddDevice(scoped_refptr<UsbDeviceImpl> device) {
                 << device->serial_number() << "\", guid=" << device->guid();
 
   if (enumeration_ready_)
-    NotifyDeviceAdded(device);
+    NotifyDeviceAdded(device, /*is_restricted_device=*/false);
 }
 
 void UsbServiceImpl::RemoveDevice(scoped_refptr<UsbDeviceImpl> device) {
@@ -498,7 +499,7 @@ void UsbServiceImpl::RemoveDevice(scoped_refptr<UsbDeviceImpl> device) {
 
   USB_LOG(USER) << "USB device removed: guid=" << device->guid();
 
-  NotifyDeviceRemoved(device);
+  NotifyDeviceRemoved(device, /*is_restricted_device=*/false);
   device->OnDisconnect();
 }
 

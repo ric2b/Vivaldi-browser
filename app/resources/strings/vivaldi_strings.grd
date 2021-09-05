@@ -12,11 +12,13 @@
       <output filename="google_chrome_strings_io.pak" type="data_package" lang="io" />
       <output filename="google_chrome_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
       <output filename="google_chrome_strings_jbo.pak" type="data_package" lang="jbo" />
+      <output filename="google_chrome_strings_kab.pak" type="data_package" lang="kab" />
       <output filename="google_chrome_strings_ku.pak" type="data_package" lang="ku" />
       <output filename="google_chrome_strings_sc.pak" type="data_package" lang="sc" />
       <output filename="google_chrome_strings_nn.pak" type="data_package" lang="nn" />
       <if expr="not is_android">
         <output filename="google_chrome_strings_af.pak" type="data_package" lang="af" />
+        <output filename="google_chrome_strings_az.pak" type="data_package" lang="az" />
         <output filename="google_chrome_strings_be.pak" type="data_package" lang="be" />
         <output filename="google_chrome_strings_eu.pak" type="data_package" lang="eu" />
         <output filename="google_chrome_strings_gl.pak" type="data_package" lang="gl" />
@@ -24,7 +26,9 @@
         <output filename="google_chrome_strings_is.pak" type="data_package" lang="is" />
         <output filename="google_chrome_strings_ka.pak" type="data_package" lang="ka" />
         <output filename="google_chrome_strings_mk.pak" type="data_package" lang="mk" />
+        <output filename="google_chrome_strings_pa.pak" type="data_package" lang="pa" />
         <output filename="google_chrome_strings_sq.pak" type="data_package" lang="sq" />
+        <output filename="google_chrome_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
       </if>
     </if>
   </outputs>
@@ -58,6 +62,7 @@
     <file path="strings/vivaldi_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_strings_ja.xtb" lang="ja" />
     <file path="strings/vivaldi_strings_ja-KS.xtb" lang="ja-KS" />
+    <file path="strings/vivaldi_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_strings_kk.xtb" lang="kk" />
     <file path="strings/vivaldi_strings_km.xtb" lang="km" />
     <file path="strings/vivaldi_strings_kn.xtb" lang="kn" />

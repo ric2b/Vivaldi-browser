@@ -118,7 +118,7 @@ Widget* CreateBubbleWidget(BubbleDialogDelegate* bubble) {
   bubble_params.layer_type = bubble->GetLayerType();
 
   // Use a window default shadow if the bubble doesn't provides its own.
-  if (bubble->GetShadow() == BubbleBorder::NO_ASSETS)
+  if (bubble->GetShadow() == BubbleBorder::NO_SHADOW)
     bubble_params.shadow_type = Widget::InitParams::ShadowType::kDefault;
   else if (CustomShadowsSupported())
     bubble_params.shadow_type = Widget::InitParams::ShadowType::kNone;
@@ -417,17 +417,6 @@ ClientView* BubbleDialogDelegate::CreateClientView(Widget* widget) {
   return client_view_;
 }
 
-bool BubbleDialogDelegateView::AcceleratorPressed(
-    const ui::Accelerator& accelerator) {
-  if (accelerator.key_code() == ui::VKEY_DOWN ||
-      accelerator.key_code() == ui::VKEY_UP) {
-    // Move the focus up or down.
-    GetFocusManager()->AdvanceFocus(accelerator.key_code() != ui::VKEY_DOWN);
-    return true;
-  }
-  return View::AcceleratorPressed(accelerator);
-}
-
 Widget* BubbleDialogDelegateView::GetWidget() {
   return View::GetWidget();
 }
@@ -512,9 +501,9 @@ void BubbleDialogDelegate::OnBubbleWidgetPaintAsActiveChanged() {
 }
 
 BubbleBorder::Shadow BubbleDialogDelegate::GetShadow() const {
-  if (CustomShadowsSupported() || shadow_ == BubbleBorder::NO_ASSETS)
+  if (CustomShadowsSupported() || shadow_ == BubbleBorder::NO_SHADOW)
     return shadow_;
-  return BubbleBorder::NO_SHADOW;
+  return BubbleBorder::NO_SHADOW_LEGACY;
 }
 
 View* BubbleDialogDelegate::GetAnchorView() const {

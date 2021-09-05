@@ -264,7 +264,7 @@ void MediaNotificationContainerImplView::CreateDragImageWidget() {
                         true /* is_pixel_canvas */)
           .context(),
       GetPreferredSize()));
-  gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, 1.f));
+  gfx::ImageSkia image = gfx::ImageSkia::CreateFromBitmap(bitmap, 1.f);
   image_view->SetImage(image);
 
   drag_image_widget_->Show();
@@ -451,9 +451,7 @@ void MediaNotificationContainerImplView::OnDeviceSelectorViewSizeChanged() {
   OnSizeChanged();
 }
 
-std::unique_ptr<
-    MediaNotificationDeviceProvider::GetOutputDevicesCallbackList::Subscription>
-MediaNotificationContainerImplView::
+base::CallbackListSubscription MediaNotificationContainerImplView::
     RegisterAudioOutputDeviceDescriptionsCallback(
         MediaNotificationDeviceProvider::GetOutputDevicesCallbackList::
             CallbackType callback) {
@@ -461,8 +459,7 @@ MediaNotificationContainerImplView::
       std::move(callback));
 }
 
-std::unique_ptr<base::RepeatingCallbackList<void(bool)>::Subscription>
-MediaNotificationContainerImplView::
+base::CallbackListSubscription MediaNotificationContainerImplView::
     RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
         base::RepeatingCallback<void(bool)> callback) {
   return service_->RegisterIsAudioOutputDeviceSwitchingSupportedCallback(

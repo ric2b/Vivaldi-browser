@@ -8,11 +8,11 @@
 #include <string>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -40,11 +40,10 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/google/core/common/google_util.h"
 #include "components/omnibox/common/omnibox_features.h"
-#include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
+#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/browser/ui/password_check_referrer.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -91,6 +90,7 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/safe_browsing/android/password_reuse_controller_android.h"
+#include "chrome/browser/safe_browsing/android/safe_browsing_referring_app_bridge_android.h"
 #else
 #include "chrome/browser/ui/browser_list.h"
 #endif
@@ -123,7 +123,6 @@ const int kPasswordEventAttributionUserGestureLimit = 2;
 // allowlist for users opted into extended reporting, from non-incognito window.
 const float kProbabilityForSendingReportsFromSafeURLs = 0.01;
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 // If user specifically mark a site as legitimate, we will keep this decision
 // for 2 days.
 const int kOverrideVerdictCacheDurationSec = 2 * 24 * 60 * 60;
@@ -222,7 +221,6 @@ std::unique_ptr<UserEventSpecifics> GetUserEventSpecifics(
   return GetUserEventSpecificsWithNavigationId(
       GetLastCommittedNavigationID(web_contents));
 }
-#endif
 
 }  // namespace
 
@@ -242,7 +240,6 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
       cache_manager_(VerdictCacheManagerFactory::GetForProfile(profile)) {
   pref_change_registrar_->Init(profile_->GetPrefs());
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   scoped_refptr<password_manager::PasswordStore> password_store =
       GetProfilePasswordStore();
   // Password store can be null in tests.
@@ -269,7 +266,7 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
       base::BindRepeating(
           &ChromePasswordProtectionService::OnEnterprisePasswordUrlChanged,
           base::Unretained(this)));
-#endif
+
   // TODO(nparker) Move the rest of the above code into Init()
   // without crashing unittests.
   Init();
@@ -323,7 +320,6 @@ ChromePasswordProtectionService::GetPasswordProtectionService(
   return nullptr;
 }
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 // static
 bool ChromePasswordProtectionService::ShouldShowPasswordReusePageInfoBubble(
     content::WebContents* web_contents,
@@ -988,8 +984,7 @@ void ChromePasswordProtectionService::OpenChangePasswordUrl(
     // Opens accounts.google.com in a new tab.
     OpenUrl(web_contents, GetDefaultChangePasswordURL(), content::Referrer(),
             /*in_new_tab=*/true);
-  } else if (base::FeatureList::IsEnabled(
-                 password_manager::features::kPasswordCheck)) {
+  } else {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
     // Opens chrome://settings/passwords/check in a new tab.
     chrome::ShowPasswordCheck(chrome::FindBrowserWithWebContents(web_contents));
@@ -1168,29 +1163,10 @@ ChromePasswordProtectionService::GetWarningDetailTextForSavedPasswords(
       GetPlaceholdersForSavedPasswordWarningText();
   // If showing the saved passwords domain experiment is not on or if there is
   // are no saved domains, default to original saved passwords reuse warning.
-  if (placeholders.size() == 0) {
-    return l10n_util::GetStringUTF16(
-        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED);
-  }
-
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordCheck)) {
-    return GetWarningDetailTextToCheckSavedPasswords(placeholder_offsets);
-  }
-
-  if (placeholders.size() == 1) {
-    return l10n_util::GetStringFUTF16(
-        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_1_DOMAIN, placeholders,
-        placeholder_offsets);
-  } else if (placeholders.size() == 2) {
-    return l10n_util::GetStringFUTF16(
-        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_2_DOMAINS, placeholders,
-        placeholder_offsets);
-  } else {
-    return l10n_util::GetStringFUTF16(
-        IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_3_DOMAINS, placeholders,
-        placeholder_offsets);
-  }
+  return placeholders.empty()
+             ? l10n_util::GetStringUTF16(
+                   IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED)
+             : GetWarningDetailTextToCheckSavedPasswords(placeholder_offsets);
 }
 
 base::string16
@@ -1225,7 +1201,6 @@ std::string ChromePasswordProtectionService::GetOrganizationName(
           : GetSignedInNonSyncAccount(username_for_last_shown_warning()).email;
   return email.empty() ? std::string() : gaia::ExtractDomainName(email);
 }
-#endif
 
 // Disabled on Android, because enterprise reporting extension is not supported.
 #if !defined(OS_ANDROID)
@@ -1255,22 +1230,29 @@ void ChromePasswordProtectionService::MaybeReportPasswordReuseDetected(
     // is called.
     std::string username_or_email =
         username.empty() ? GetAccountInfo().email : username;
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile_)
-        ->OnPolicySpecifiedPasswordReuseDetected(
-            web_contents->GetLastCommittedURL(), username_or_email,
-            is_phishing_url);
+    auto* router =
+        extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(
+            profile_);
+    if (router) {
+      router->OnPolicySpecifiedPasswordReuseDetected(
+          web_contents->GetLastCommittedURL(), username_or_email,
+          is_phishing_url);
+    }
   }
 }
 
 void ChromePasswordProtectionService::ReportPasswordChanged() {
   if (!IsIncognito()) {
-    extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile_)
-        ->OnPolicySpecifiedPasswordChanged(GetAccountInfo().email);
+    auto* router =
+        extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(
+            profile_);
+    if (router) {
+      router->OnPolicySpecifiedPasswordChanged(GetAccountInfo().email);
+    }
   }
 }
 #endif
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
 bool ChromePasswordProtectionService::HasUnhandledEnterprisePasswordReuse(
     content::WebContents* web_contents) const {
   return web_contents_with_unhandled_enterprise_reuses_.find(web_contents) !=
@@ -1394,7 +1376,6 @@ void ChromePasswordProtectionService::UpdateSecurityState(
   ui_manager_->AddToWhitelistUrlSet(url_with_empty_path, web_contents,
                                     /*is_pending=*/true, threat_type);
 }
-#endif
 
 const policy::BrowserPolicyConnector*
 ChromePasswordProtectionService::GetBrowserPolicyConnector() const {
@@ -1644,7 +1625,8 @@ void ChromePasswordProtectionService::
 }
 
 bool ChromePasswordProtectionService::UserClickedThroughSBInterstitial(
-    content::WebContents* web_contents) {
+    PasswordProtectionRequest* request) {
+  content::WebContents* web_contents = request->web_contents();
   SBThreatType current_threat_type;
   if (!ui_manager_->IsUrlWhitelistedOrPendingForWebContents(
           web_contents->GetLastCommittedURL().GetWithEmptyPath(),
@@ -1741,8 +1723,10 @@ void ChromePasswordProtectionService::PersistPhishedSavedPasswordCredential(
       continue;
     }
     password_store->AddCompromisedCredentials(
-        {credential.signon_realm, credential.username, base::Time::Now(),
-         password_manager::CompromiseType::kPhished});
+        password_manager::CompromisedCredentials(
+            credential.signon_realm, credential.username, base::Time::Now(),
+            password_manager::CompromiseType::kPhished,
+            password_manager::IsMuted(false)));
   }
 }
 
@@ -1765,6 +1749,14 @@ void ChromePasswordProtectionService::RemovePhishedSavedPasswordCredential(
             kMarkSiteAsLegitimate);
   }
 }
+
+#if defined(OS_ANDROID)
+LoginReputationClientRequest::ReferringAppInfo
+ChromePasswordProtectionService::GetReferringAppInfo(
+    content::WebContents* web_contents) {
+  return safe_browsing::GetReferringAppInfo(web_contents);
+}
+#endif
 
 password_manager::PasswordStore*
 ChromePasswordProtectionService::GetProfilePasswordStore() const {

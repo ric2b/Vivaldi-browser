@@ -287,7 +287,6 @@ const OncFieldSignature cellular_fields[] = {
     {::onc::kRecommended, &kRecommendedSignature},
     {::onc::cellular::kAPN, &kCellularApnSignature},
     {::onc::cellular::kAPNList, &kCellularApnListSignature},
-    {::onc::cellular::kCarrier, &kStringSignature},
     {::onc::cellular::kAutoConnect, &kBoolSignature},
     {NULL}};
 
@@ -301,6 +300,7 @@ const OncFieldSignature cellular_with_state_fields[] = {
     {::onc::cellular::kFoundNetworks, &kCellularFoundNetworkListSignature},
     {::onc::cellular::kHardwareRevision, &kStringSignature},
     {::onc::cellular::kHomeProvider, &kCellularProviderSignature},
+    {::onc::cellular::kEID, &kStringSignature},
     {::onc::cellular::kICCID, &kStringSignature},
     {::onc::cellular::kIMEI, &kStringSignature},
     {::onc::cellular::kIMSI, &kStringSignature},

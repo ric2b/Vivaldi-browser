@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/script/js_module_script.h"
 #include "third_party/blink/renderer/core/script/modulator.h"
 #include "third_party/blink/renderer/core/testing/dummy_modulator.h"
+#include "third_party/blink/renderer/core/testing/module_test_base.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
@@ -58,7 +59,7 @@ class TestModuleTreeClient final : public ModuleTreeClient {
 
 class ModuleTreeLinkerTestModulator final : public DummyModulator {
  public:
-  ModuleTreeLinkerTestModulator(ScriptState* script_state)
+  explicit ModuleTreeLinkerTestModulator(ScriptState* script_state)
       : script_state_(script_state) {}
   ~ModuleTreeLinkerTestModulator() override = default;
 
@@ -81,10 +82,8 @@ class ModuleTreeLinkerTestModulator final : public DummyModulator {
     }
     source_text.Append("export default 'grapes';");
 
-    v8::Local<v8::Module> module_record = ModuleRecord::Compile(
-        script_state_->GetIsolate(), source_text.ToString(), url, url,
-        ScriptFetchOptions(), TextPosition::MinimumPosition(),
-        ASSERT_NO_EXCEPTION);
+    v8::Local<v8::Module> module_record = ModuleTestBase::CompileModule(
+        script_state_->GetIsolate(), source_text.ToString(), url);
     auto* module_script =
         JSModuleScript::CreateForTest(this, module_record, url);
 
@@ -129,7 +128,7 @@ class ModuleTreeLinkerTestModulator final : public DummyModulator {
                               String* failure_reason) final {
     return KURL(base_url, module_request);
   }
-  void ClearIsAcquiringImportMaps() final {}
+  void SetAcquiringImportMapsState(AcquiringImportMapsState) final {}
 
   void FetchSingle(const ModuleScriptFetchRequest& request,
                    ResourceFetcher*,
@@ -140,7 +139,8 @@ class ModuleTreeLinkerTestModulator final : public DummyModulator {
     pending_clients_.Set(request.Url(), client);
   }
 
-  ModuleScript* GetFetchedModuleScript(const KURL& url) override {
+  ModuleScript* GetFetchedModuleScript(const KURL& url,
+                                       ModuleType module_type) override {
     const auto& it = module_map_.find(url);
     if (it == module_map_.end())
       return nullptr;

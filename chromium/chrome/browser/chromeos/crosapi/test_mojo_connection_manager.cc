@@ -9,11 +9,13 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/path_service.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/chromeos/crosapi/ash_chrome_service_impl.h"
 #include "chrome/browser/chromeos/crosapi/browser_util.h"
+#include "chrome/common/chrome_paths.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "mojo/public/cpp/platform/named_platform_channel.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
@@ -24,6 +26,8 @@ namespace crosapi {
 
 namespace {
 
+constexpr char kFakeGaiaId[] = "fake-gaia-id";
+
 class FakeEnvironmentProvider : public EnvironmentProvider {
   crosapi::mojom::SessionType GetSessionType() override {
     return crosapi::mojom::SessionType::kRegularSession;
@@ -31,6 +35,13 @@ class FakeEnvironmentProvider : public EnvironmentProvider {
   mojom::DeviceMode GetDeviceMode() override {
     return crosapi::mojom::DeviceMode::kConsumer;
   }
+  mojom::DefaultPathsPtr GetDefaultPaths() override {
+    mojom::DefaultPathsPtr paths = mojom::DefaultPaths::New();
+    base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &paths->documents);
+    base::PathService::Get(chrome::DIR_DEFAULT_DOWNLOADS, &paths->downloads);
+    return paths;
+  }
+  std::string GetDeviceAccountGaiaId() override { return kFakeGaiaId; }
 };
 
 // TODO(crbug.com/1124494): Refactor the code to share with ARC.
@@ -96,8 +107,16 @@ void TestMojoConnectionManager::OnTestingSocketAvailable() {
           &TestMojoConnectionManager::OnAshChromeServiceReceiverReceived,
           weak_factory_.GetWeakPtr()));
 
+  base::ScopedFD startup_fd =
+      browser_util::CreateStartupData(environment_provider_.get());
+  if (!startup_fd.is_valid()) {
+    LOG(ERROR) << "Failed to create startup data";
+    return;
+  }
+
   std::vector<base::ScopedFD> fds;
-  fds.emplace_back(channel.TakeRemoteEndpoint().TakePlatformHandle().TakeFD());
+  fds.push_back(channel.TakeRemoteEndpoint().TakePlatformHandle().TakeFD());
+  fds.push_back(std::move(startup_fd));
 
   // Version of protocol Chrome is using.
   uint8_t protocol_version = 0;

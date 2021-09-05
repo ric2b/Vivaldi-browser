@@ -109,10 +109,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorInterface {
   virtual ~OverlayProcessorInterface() = default;
 
   virtual bool IsOverlaySupported() const = 0;
-  // Returns a bounding rectangle of the last set of overlay planes scheduled.
-  // It's expected to be called after ProcessForOverlays at frame N-1 has been
-  // called and before GetAndResetOverlayDamage at frame N.
-  virtual gfx::Rect GetPreviousFrameOverlaysBoundingRect() const = 0;
   virtual gfx::Rect GetAndResetOverlayDamage() = 0;
 
   // Returns true if the platform supports hw overlays and surface occluding
@@ -128,7 +124,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorInterface {
       const SkMatrix44& output_color_matrix,
       const FilterOperationsMap& render_pass_filters,
       const FilterOperationsMap& render_pass_backdrop_filters,
-      SurfaceDamageRectList* surface_damage_rect_list,
+      SurfaceDamageRectList surface_damage_rect_list,
       OutputSurfaceOverlayPlane* output_surface_plane,
       CandidateList* overlay_candidates,
       gfx::Rect* damage_rect,
@@ -165,8 +161,12 @@ class VIZ_SERVICE_EXPORT OverlayProcessorInterface {
   virtual void SetDisplayTransformHint(gfx::OverlayTransform transform) {}
   virtual void SetViewportSize(const gfx::Size& size) {}
 
+  // Overlay processor uses a frame counter to determine the potential power
+  // benefits of individual overlay candidates.
+  virtual void SetFrameSequenceNumber(uint64_t frame_sequence_number) {}
+
  protected:
-  OverlayProcessorInterface() {}
+  OverlayProcessorInterface() = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(OverlayProcessorInterface);

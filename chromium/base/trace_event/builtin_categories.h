@@ -63,9 +63,9 @@
   X("compositor")                                                        \
   X("content")                                                           \
   X("content_capture")                                                   \
+  X("device")                                                            \
   X("devtools")                                                          \
   X("devtools.timeline")                                                 \
-  X("devtools.timeline.async")                                           \
   X("disk_cache")                                                        \
   X("download")                                                          \
   X("download_service")                                                  \
@@ -88,6 +88,7 @@
   X("headless")                                                          \
   X("hwoverlays")                                                        \
   X("identity")                                                          \
+  X("ime")                                                               \
   X("IndexedDB")                                                         \
   X("input")                                                             \
   X("io")                                                                \
@@ -123,6 +124,7 @@
   X("paint_preview")                                                     \
   X("pepper")                                                            \
   X("PlatformMalloc")                                                    \
+  X("power")                                                             \
   X("ppapi")                                                             \
   X("ppapi proxy")                                                       \
   X("print")                                                             \
@@ -245,6 +247,7 @@
   X(TRACE_DISABLED_BY_DEFAULT("v8.stack_trace"))                         \
   X(TRACE_DISABLED_BY_DEFAULT("v8.turbofan"))                            \
   X(TRACE_DISABLED_BY_DEFAULT("v8.wasm.detailed"))                       \
+  X(TRACE_DISABLED_BY_DEFAULT("v8.wasm.turbofan"))                       \
   X(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"))                \
   X(TRACE_DISABLED_BY_DEFAULT("viz.gpu_composite_time"))                 \
   X(TRACE_DISABLED_BY_DEFAULT("viz.debug.overlay_planes"))               \
@@ -367,7 +370,6 @@ class BASE_EXPORT BuiltinCategories {
       "Testing",
       "TraceEventAgentTestCategory",
       "unfiltered_cat",
-      "whitewashed",
       "x",
       TRACE_DISABLED_BY_DEFAULT("c9"),
       TRACE_DISABLED_BY_DEFAULT("cat"),

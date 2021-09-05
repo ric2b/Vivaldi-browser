@@ -40,9 +40,21 @@ class ModelTest(unittest.TestCase):
         'path/to/idl_namespace_non_specific_platforms.idl')
     self.idl_namespace_non_specific_platforms = self.model.namespaces.get(
         'idl_namespace_non_specific_platforms')
+    self.returns_async_json = CachedLoad('test/returns_async.json')
+    self.model.AddNamespace(self.returns_async_json[0],
+        'path/to/returns_async.json')
+    self.returns_async = self.model.namespaces.get('returns_async')
+    self.nodoc_json = CachedLoad('test/namespace_nodoc.json')
+    self.model.AddNamespace(self.nodoc_json[0],
+        'path/to/namespace_nodoc.json')
+    self.nodoc = self.model.namespaces.get('nodoc')
+    self.fakeapi_json = CachedLoad('test/namespace_fakeapi.json')
+    self.model.AddNamespace(self.fakeapi_json[0],
+        'path/to/namespace_fakeapi.json')
+    self.fakeapi = self.model.namespaces.get('fakeapi')
 
   def testNamespaces(self):
-    self.assertEquals(6, len(self.model.namespaces))
+    self.assertEquals(9, len(self.model.namespaces))
     self.assertTrue(self.permissions)
 
   def testHasFunctions(self):
@@ -98,6 +110,12 @@ class ModelTest(unittest.TestCase):
         'True if the extension has the specified permissions.', self.
         permissions.functions['contains'].returns_async.params[0].description)
 
+  def testAsyncPromise(self):
+    returnsFunction = self.returns_async.functions['returnsObject']
+    self.assertTrue(returnsFunction.returns_async.can_return_promise)
+    callbackFunction = self.returns_async.functions['callbackObject']
+    self.assertFalse(callbackFunction.returns_async.can_return_promise)
+
   def testPropertyUnixName(self):
     param = self.tabs.functions['move'].params[0]
     self.assertEquals('tab_ids', param.unix_name)
@@ -143,6 +161,27 @@ class ModelTest(unittest.TestCase):
         self.idl_namespace_all_platforms.platforms)
     self.assertEqual(None,
         self.idl_namespace_non_specific_platforms.platforms)
+
+  def testHasNoDoc(self):
+    fakeapi_NoDocType = self.fakeapi.types['NoDocType']
+    self.assertTrue(fakeapi_NoDocType.nodoc)
+
+    fakeapi_FakeType = self.fakeapi.types['FakeType']
+    selected_property = fakeapi_FakeType.properties['nodocProperty']
+    self.assertTrue(selected_property.nodoc)
+
+    nodocMethod_method = self.fakeapi.functions['nodocMethod']
+    self.assertTrue(nodocMethod_method.nodoc)
+
+    onFooNoDoc_event = self.fakeapi.events['onFooNoDoc']
+    self.assertTrue(onFooNoDoc_event.nodoc)
+
+    onFoo_event = self.fakeapi.events['onFoo']
+    self.assertFalse(onFoo_event.nodoc)
+
+    self.assertTrue(self.nodoc.nodoc, 'Namespace should also be marked nodoc')
+    nodoc_ValidType = self.nodoc.types['ValidType']
+    self.assertFalse(nodoc_ValidType.nodoc)
 
 if __name__ == '__main__':
   unittest.main()

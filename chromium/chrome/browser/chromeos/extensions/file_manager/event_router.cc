@@ -10,10 +10,11 @@
 #include <set>
 #include <utility>
 
+#include "ash/public/cpp/tablet_mode.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/files/file_util.h"
-#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/extensions/api/file_system/chrome_file_system_delegate.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -433,6 +435,10 @@ void EventRouter::OnIntentFiltersUpdated(
 void EventRouter::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  ash::TabletMode* tablet_mode = ash::TabletMode::Get();
+  if (tablet_mode)
+    tablet_mode->RemoveObserver(this);
+
   auto* intent_helper =
       arc::ArcIntentHelperBridge::GetForBrowserContext(profile_);
   if (intent_helper)
@@ -540,6 +546,10 @@ void EventRouter::ObserveEvents() {
       guest_os::GuestOsSharePath::GetForProfile(profile_);
   if (guest_os_share_path)
     guest_os_share_path->AddObserver(this);
+
+  ash::TabletMode* tablet_mode = ash::TabletMode::Get();
+  if (tablet_mode)
+    tablet_mode->AddObserver(this);
 }
 
 // File watch setup routines.
@@ -922,6 +932,28 @@ void EventRouter::OnUnshare(const std::string& vm_name,
   }
 }
 
+void EventRouter::OnTabletModeStarted() {
+  for (const auto& extension_id : GetEventListenerExtensionIds(
+           profile_, file_manager_private::OnTabletModeChanged::kEventName)) {
+    DispatchEventToExtension(
+        profile_, extension_id,
+        extensions::events::FILE_MANAGER_PRIVATE_ON_TABLET_MODE_CHANGED,
+        file_manager_private::OnTabletModeChanged::kEventName,
+        file_manager_private::OnTabletModeChanged::Create(/*enabled=*/true));
+  }
+}
+
+void EventRouter::OnTabletModeEnded() {
+  for (const auto& extension_id : GetEventListenerExtensionIds(
+           profile_, file_manager_private::OnTabletModeChanged::kEventName)) {
+    DispatchEventToExtension(
+        profile_, extension_id,
+        extensions::events::FILE_MANAGER_PRIVATE_ON_TABLET_MODE_CHANGED,
+        file_manager_private::OnTabletModeChanged::kEventName,
+        file_manager_private::OnTabletModeChanged::Create(/*enabled=*/false));
+  }
+}
+
 void EventRouter::OnCrostiniChanged(
     const std::string& vm_name,
     const std::string& pref_name,
@@ -951,6 +983,21 @@ void EventRouter::NotifyDriveConnectionStatusChanged() {
           FILE_MANAGER_PRIVATE_ON_DRIVE_CONNECTION_STATUS_CHANGED,
       file_manager_private::OnDriveConnectionStatusChanged::kEventName,
       file_manager_private::OnDriveConnectionStatusChanged::Create());
+}
+
+void EventRouter::DropFailedPluginVmDirectoryNotShared() {
+  for (const auto& extension_id : GetEventListenerExtensionIds(
+           profile_, file_manager_private::OnCrostiniChanged::kEventName)) {
+    file_manager_private::CrostiniEvent event;
+    event.vm_name = plugin_vm::kPluginVmName;
+    event.event_type = file_manager_private::
+        CROSTINI_EVENT_TYPE_DROP_FAILED_PLUGIN_VM_DIRECTORY_NOT_SHARED;
+    DispatchEventToExtension(
+        profile_, extension_id,
+        extensions::events::FILE_MANAGER_PRIVATE_ON_CROSTINI_CHANGED,
+        file_manager_private::OnCrostiniChanged::kEventName,
+        file_manager_private::OnCrostiniChanged::Create(event));
+  }
 }
 
 base::WeakPtr<EventRouter> EventRouter::GetWeakPtr() {

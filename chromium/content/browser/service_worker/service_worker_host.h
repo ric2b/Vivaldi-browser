@@ -22,6 +22,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "net/base/network_isolation_key.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
@@ -72,6 +73,8 @@ class CONTENT_EXPORT ServiceWorkerHost {
     return container_host_.get();
   }
 
+  net::NetworkIsolationKey GetNetworkIsolationKey() const;
+
   base::WeakPtr<ServiceWorkerHost> GetWeakPtr();
 
   void ReportNoBinderForInterface(const std::string& error);
@@ -84,7 +87,7 @@ class CONTENT_EXPORT ServiceWorkerHost {
   ServiceWorkerVersion* const version_;
 
   BrowserInterfaceBrokerImpl<ServiceWorkerHost, const ServiceWorkerVersionInfo&>
-      broker_{this};
+      broker_{this, /*policy_applier=*/nullptr};
   mojo::Receiver<blink::mojom::BrowserInterfaceBroker> broker_receiver_{
       &broker_};
 

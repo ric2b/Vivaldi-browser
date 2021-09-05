@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/data_use_measurement/chrome_data_use_measurement.h"
@@ -26,8 +27,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
-#include "chrome/browser/subresource_redirect/https_image_compression_bypass_decider.h"
 #include "chrome/browser/subresource_redirect/https_image_compression_infobar_decider.h"
+#include "chrome/browser/subresource_redirect/litepages_service_bypass_decider.h"
+#include "chrome/browser/subresource_redirect/origin_robots_rules_cache.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
@@ -249,8 +251,11 @@ void DataReductionProxyChromeSettings::InitDataReductionProxySettings(
     https_image_compression_infobar_decider_ =
         std::make_unique<HttpsImageCompressionInfoBarDecider>(profile_prefs,
                                                               this);
-    https_image_compression_bypass_decider_ =
-        std::make_unique<HttpsImageCompressionBypassDecider>();
+    litepages_service_bypass_decider_ =
+        std::make_unique<LitePagesServiceBypassDecider>();
+    origin_robots_rules_cache_ =
+        std::make_unique<subresource_redirect::OriginRobotsRulesCache>(
+            url_loader_factory, litepages_service_bypass_decider_->AsWeakPtr());
   }
 }
 
@@ -287,7 +292,7 @@ data_reduction_proxy::Client DataReductionProxyChromeSettings::GetClient() {
   return data_reduction_proxy::Client::CHROME_ANDROID;
 #elif defined(OS_MAC)
   return data_reduction_proxy::Client::CHROME_MAC;
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
   return data_reduction_proxy::Client::CHROME_CHROMEOS;
 #elif defined(OS_LINUX) || defined(OS_CHROMEOS)
   return data_reduction_proxy::Client::CHROME_LINUX;

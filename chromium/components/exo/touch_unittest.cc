@@ -15,7 +15,7 @@
 #include "components/exo/shell_surface.h"
 #include "components/exo/surface.h"
 #include "components/exo/test/exo_test_base.h"
-#include "components/exo/test/exo_test_file_helper.h"
+#include "components/exo/test/exo_test_data_exchange_delegate.h"
 #include "components/exo/test/exo_test_helper.h"
 #include "components/exo/touch_delegate.h"
 #include "components/exo/touch_stylus_delegate.h"
@@ -501,13 +501,13 @@ TEST_F(TouchTest, OnTouchTilt) {
 }
 
 TEST_F(TouchTest, DragDropAbort) {
-  Seat seat;
+  Seat seat(std::make_unique<TestDataExchangeDelegate>());
+
   MockTouchDelegate touch_delegate;
   std::unique_ptr<Touch> touch(new Touch(&touch_delegate, &seat));
   TestDataSourceDelegate data_source_delegate;
   DataSource source(&data_source_delegate);
   Surface origin, icon;
-  TestFileHelper file_helper;
 
   // Make origin into a real window so the touch can click it
   ShellSurface shell_surface(&origin);
@@ -522,8 +522,7 @@ TEST_F(TouchTest, DragDropAbort) {
   EXPECT_CALL(touch_delegate, OnTouchFrame()).Times(2);
   generator.MoveTouch(origin.window()->GetBoundsInScreen().origin());
 
-  seat.StartDrag(&file_helper, &source, &origin, &icon,
-                 ui::mojom::DragEventSource::kMouse);
+  seat.StartDrag(&source, &origin, &icon, ui::mojom::DragEventSource::kMouse);
   EXPECT_TRUE(seat.get_drag_drop_operation_for_testing());
 
   EXPECT_CALL(touch_delegate, OnTouchDown).Times(1);

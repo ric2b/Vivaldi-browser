@@ -411,6 +411,26 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
     @MediumTest
     @Feature({"Browser"})
     @Features.EnableFeatures({ChromeFeatureList.CONTEXT_MENU_GOOGLE_LENS_CHIP})
+    public void testLensChipNotShowingIfNotEnabled() throws Throwable {
+        // Required to avoid runtime error.
+        Looper.prepare();
+
+        Tab tab = mDownloadTestRule.getActivity().getActivityTab();
+        hardcodeTestImageForSharing(TEST_JPG_IMAGE_FILE_EXTENSION);
+
+        RevampedContextMenuCoordinator menuCoordinator =
+                RevampedContextMenuUtils.openContextMenu(tab, "testImage");
+        // Needs to run on UI thread so creation happens on same thread as dismissal.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNull("Chip popoup was initialized.",
+                    menuCoordinator.getCurrentPopupWindowForTesting());
+        });
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"Browser"})
+    @Features.EnableFeatures({ChromeFeatureList.CONTEXT_MENU_GOOGLE_LENS_CHIP})
     public void testSelectLensChip() throws Throwable {
         // Required to avoid runtime error.
         Looper.prepare();
@@ -600,9 +620,10 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
                 R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_save_link_as,
                 R.id.contextmenu_copy_link_text, R.id.contextmenu_copy_link_address,
                 R.id.contextmenu_share_link};
-        Integer[] featureItems = {R.id.contextmenu_open_in_ephemeral_tab};
-        expectedItems =
-                addItemsIf(EphemeralTabCoordinator.isSupported(), expectedItems, featureItems);
+        expectedItems = addItemsIf(EphemeralTabCoordinator.isSupported(), expectedItems,
+                new Integer[] {R.id.contextmenu_open_in_ephemeral_tab});
+        expectedItems = addItemsIf(ChromeFeatureList.isEnabled(ChromeFeatureList.READ_LATER),
+                expectedItems, new Integer[] {R.id.contextmenu_read_later});
         assertMenuItemsAreEqual(menu, expectedItems);
     }
 

@@ -10,9 +10,14 @@
 #include "base/logging.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "build/chromeos_buildflags.h"
+#include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/lacros/lacros_chrome_service_delegate.h"
+#include "chromeos/startup/startup.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "url/gurl.h"
+
+using AshChromeService = crosapi::mojom::AshChromeService;
 
 namespace chromeos {
 namespace {
@@ -32,6 +37,23 @@ crosapi::mojom::LacrosInfoPtr ToMojo(const std::string& lacros_version) {
   return mojo_lacros_info;
 }
 
+// Reads and parses the startup data to LacrosInitParams.
+// If data is missing, or failed to parse, returns a null StructPtr.
+crosapi::mojom::LacrosInitParamsPtr ReadStartupLacrosInitParams() {
+  base::Optional<std::string> content = ReadStartupData();
+  if (!content)
+    return {};
+
+  crosapi::mojom::LacrosInitParamsPtr result;
+  if (!crosapi::mojom::LacrosInitParams::Deserialize(
+          content->data(), content->size(), &result)) {
+    LOG(ERROR) << "Failed to parse startup data";
+    return {};
+  }
+
+  return result;
+}
+
 }  // namespace
 
 // This class that holds all state that is affine to a single, never-blocking
@@ -47,7 +69,6 @@ class LacrosChromeServiceNeverBlockingState
       : owner_sequence_(owner_sequence),
         owner_(owner),
         init_params_(init_params) {
-    DCHECK(init_params);
     DETACH_FROM_SEQUENCE(sequence_checker_);
   }
   ~LacrosChromeServiceNeverBlockingState() override {
@@ -55,8 +76,9 @@ class LacrosChromeServiceNeverBlockingState
   }
 
   // crosapi::mojom::LacrosChromeService:
-  void Init(crosapi::mojom::LacrosInitParamsPtr params) override {
-    *init_params_ = std::move(params);
+  void InitDeprecated(crosapi::mojom::LacrosInitParamsPtr params) override {
+    if (init_params_)
+      *init_params_ = std::move(params);
     initialized_.Signal();
   }
 
@@ -162,6 +184,19 @@ class LacrosChromeServiceNeverBlockingState
     ash_chrome_service_->BindFeedback(std::move(pending_receiver));
   }
 
+  void BindCertDbReceiver(
+      mojo::PendingReceiver<crosapi::mojom::CertDatabase> pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindCertDatabase(std::move(pending_receiver));
+  }
+
+  void BindDeviceAttributesReceiver(
+      mojo::PendingReceiver<crosapi::mojom::DeviceAttributes>
+          pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindDeviceAttributes(std::move(pending_receiver));
+  }
+
   void OnLacrosStartup(crosapi::mojom::LacrosInfoPtr lacros_info) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     ash_chrome_service_->OnLacrosStartup(std::move(lacros_info));
@@ -178,6 +213,54 @@ class LacrosChromeServiceNeverBlockingState
       mojo::PendingReceiver<crosapi::mojom::FileManager> pending_receiver) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     ash_chrome_service_->BindFileManager(std::move(pending_receiver));
+  }
+
+  void BindClipboardReceiver(
+      mojo::PendingReceiver<crosapi::mojom::Clipboard> pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindClipboard(std::move(pending_receiver));
+  }
+
+  void BindMediaSessionAudioFocusReceiver(
+      mojo::PendingReceiver<media_session::mojom::AudioFocusManager>
+          pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindMediaSessionAudioFocus(
+        std::move(pending_receiver));
+  }
+
+  void BindMediaSessionAudioFocusDebugReceiver(
+      mojo::PendingReceiver<media_session::mojom::AudioFocusManagerDebug>
+          pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindMediaSessionAudioFocusDebug(
+        std::move(pending_receiver));
+  }
+
+  void BindMediaSessionControllerReceiver(
+      mojo::PendingReceiver<media_session::mojom::MediaControllerManager>
+          pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindMediaSessionController(
+        std::move(pending_receiver));
+  }
+
+  void BindMetricsReportingReceiver(
+      mojo::PendingReceiver<crosapi::mojom::MetricsReporting> receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindMetricsReporting(std::move(receiver));
+  }
+
+  void BindPrefsReceiver(
+      mojo::PendingReceiver<crosapi::mojom::Prefs> pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindPrefs(std::move(pending_receiver));
+  }
+
+  void BindTestControllerReceiver(
+      mojo::PendingReceiver<crosapi::mojom::TestController> pending_receiver) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ash_chrome_service_->BindTestController(std::move(pending_receiver));
   }
 
   base::WeakPtr<LacrosChromeServiceNeverBlockingState> GetWeakPtr() {
@@ -205,7 +288,7 @@ class LacrosChromeServiceNeverBlockingState
   // Owned by LacrosChromeServiceImpl.
   crosapi::mojom::LacrosInitParamsPtr* const init_params_;
 
-  // Lock to wait for Init() invocation.
+  // Lock to wait for InitDeprecated() invocation.
   // Because the parameters are needed before starting the affined thread's
   // message pumping, it is necessary to use sync primitive here, instead.
   base::WaitableEvent initialized_;
@@ -226,9 +309,13 @@ LacrosChromeServiceImpl::LacrosChromeServiceImpl(
     : delegate_(std::move(delegate)),
       sequenced_state_(nullptr, base::OnTaskRunnerDeleter(nullptr)) {
   if (g_disable_all_crosapi_for_tests) {
-    // Tests don't call LacrosChromeService::Init(), so provide LacrosInitParams
-    // with default values.
+    // Tests don't call LacrosChromeService::InitDeprecated(), so provide
+    // LacrosInitParams with default values.
     init_params_ = crosapi::mojom::LacrosInitParams::New();
+  } else {
+    // Try to read the startup data. If ash-chrome is too old, the data
+    // may not available, then fallback to the older approach.
+    init_params_ = ReadStartupLacrosInitParams();
   }
 
   // The sequence on which this object was constructed, and thus affine to.
@@ -242,7 +329,8 @@ LacrosChromeServiceImpl::LacrosChromeServiceImpl(
   sequenced_state_ = std::unique_ptr<LacrosChromeServiceNeverBlockingState,
                                      base::OnTaskRunnerDeleter>(
       new LacrosChromeServiceNeverBlockingState(
-          affine_sequence, weak_factory_.GetWeakPtr(), &init_params_),
+          affine_sequence, weak_factory_.GetWeakPtr(),
+          init_params_.is_null() ? &init_params_ : nullptr),
       base::OnTaskRunnerDeleter(never_blocking_sequence_));
   weak_sequenced_state_ = sequenced_state_->GetWeakPtr();
 
@@ -268,7 +356,13 @@ void LacrosChromeServiceImpl::BindReceiver(
       FROM_HERE, base::BindOnce(&LacrosChromeServiceNeverBlockingState::
                                     BindLacrosChromeServiceReceiver,
                                 weak_sequenced_state_, std::move(receiver)));
-  sequenced_state_->WaitForInit();
+  // If ash-chrome is too old, LacrosInitParams may not be passed from
+  // a memory backed file directly. Then, try to wait for InitDeprecated()
+  // invocation for backward compatibility.
+  if (!init_params_)
+    sequenced_state_->WaitForInit();
+  DCHECK(init_params_);
+  delegate_->OnInitialized(*init_params_);
   did_bind_receiver_ = true;
 
   // Bind the remote for MessageCenter on the current thread, and then pass the
@@ -327,26 +421,30 @@ void LacrosChromeServiceImpl::BindReceiver(
             feedback_remote_.BindNewPipeAndPassReceiver()));
   }
 
+  if (IsCertDbAvailable()) {
+    never_blocking_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &LacrosChromeServiceNeverBlockingState::BindCertDbReceiver,
+            weak_sequenced_state_,
+            cert_database_remote_.BindNewPipeAndPassReceiver()));
+  }
+
+  if (IsDeviceAttributesAvailable()) {
+    never_blocking_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&LacrosChromeServiceNeverBlockingState::
+                           BindDeviceAttributesReceiver,
+                       weak_sequenced_state_,
+                       device_attributes_remote_.BindNewPipeAndPassReceiver()));
+  }
+
   if (IsOnLacrosStartupAvailable()) {
     never_blocking_sequence_->PostTask(
         FROM_HERE,
         base::BindOnce(&LacrosChromeServiceNeverBlockingState::OnLacrosStartup,
                        weak_sequenced_state_,
                        ToMojo(delegate_->GetChromeVersion())));
-  }
-
-  if (IsAccountManagerAvailable()) {
-    mojo::PendingReceiver<crosapi::mojom::AccountManager>
-        account_manager_receiver =
-            account_manager_remote_.BindNewPipeAndPassReceiver();
-    never_blocking_sequence_->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            &LacrosChromeServiceNeverBlockingState::BindAccountManagerReceiver,
-            weak_sequenced_state_, std::move(account_manager_receiver)));
-  } else {
-    LOG(WARNING) << "Connected to an older version of ash. Account consistency "
-                    "will not be available";
   }
 
   if (IsFileManagerAvailable()) {
@@ -358,6 +456,36 @@ void LacrosChromeServiceImpl::BindReceiver(
             &LacrosChromeServiceNeverBlockingState::BindFileManagerReceiver,
             weak_sequenced_state_, std::move(pending_receiver)));
   }
+
+  if (IsTestControllerAvailable()) {
+    mojo::PendingReceiver<crosapi::mojom::TestController> pending_receiver =
+        test_controller_remote_.BindNewPipeAndPassReceiver();
+    never_blocking_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &LacrosChromeServiceNeverBlockingState::BindTestControllerReceiver,
+            weak_sequenced_state_, std::move(pending_receiver)));
+  }
+
+  if (IsClipboardAvailable()) {
+    mojo::PendingReceiver<crosapi::mojom::Clipboard> pending_receiver =
+        clipboard_remote_.BindNewPipeAndPassReceiver();
+    never_blocking_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &LacrosChromeServiceNeverBlockingState::BindClipboardReceiver,
+            weak_sequenced_state_, std::move(pending_receiver)));
+  }
+
+  if (IsPrefsAvailable()) {
+    mojo::PendingReceiver<crosapi::mojom::Prefs> pending_receiver =
+        prefs_remote_.BindNewPipeAndPassReceiver();
+    never_blocking_sequence_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &LacrosChromeServiceNeverBlockingState::BindPrefsReceiver,
+            weak_sequenced_state_, std::move(pending_receiver)));
+  }
 }
 
 // static
@@ -365,40 +493,188 @@ void LacrosChromeServiceImpl::DisableCrosapiForTests() {
   g_disable_all_crosapi_for_tests = true;
 }
 
-bool LacrosChromeServiceImpl::IsMessageCenterAvailable() {
-  return AshChromeServiceVersion() >= 0;
+bool LacrosChromeServiceImpl::IsMessageCenterAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindMessageCenterMinVersion;
 }
 
-bool LacrosChromeServiceImpl::IsSelectFileAvailable() {
-  return AshChromeServiceVersion() >= 0;
+bool LacrosChromeServiceImpl::IsSelectFileAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindSelectFileMinVersion;
 }
 
-bool LacrosChromeServiceImpl::IsKeystoreServiceAvailable() {
-  return AshChromeServiceVersion() >= 0;
+bool LacrosChromeServiceImpl::IsKeystoreServiceAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version && version.value() >= AshChromeService::MethodMinVersions::
+                                           kBindKeystoreServiceMinVersion;
 }
 
-bool LacrosChromeServiceImpl::IsHidManagerAvailable() {
-  return AshChromeServiceVersion() >= 0;
+bool LacrosChromeServiceImpl::IsHidManagerAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindHidManagerMinVersion;
 }
 
-bool LacrosChromeServiceImpl::IsFeedbackAvailable() {
-  return AshChromeServiceVersion() >= 3;
+bool LacrosChromeServiceImpl::IsFeedbackAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindFeedbackMinVersion;
 }
 
-bool LacrosChromeServiceImpl::IsAccountManagerAvailable() {
-  return AshChromeServiceVersion() >= 4;
+bool LacrosChromeServiceImpl::IsAccountManagerAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindAccountManagerMinVersion;
 }
 
-bool LacrosChromeServiceImpl::IsFileManagerAvailable() {
-  return AshChromeServiceVersion() >= 5;
+void LacrosChromeServiceImpl::BindAccountManagerReceiver(
+    mojo::PendingReceiver<crosapi::mojom::AccountManager> pending_receiver) {
+  DCHECK(IsAccountManagerAvailable());
+  never_blocking_sequence_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &LacrosChromeServiceNeverBlockingState::BindAccountManagerReceiver,
+          weak_sequenced_state_, std::move(pending_receiver)));
 }
 
-bool LacrosChromeServiceImpl::IsScreenManagerAvailable() {
-  return AshChromeServiceVersion() >= 0;
+bool LacrosChromeServiceImpl::IsFileManagerAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindFileManagerMinVersion;
 }
 
-bool LacrosChromeServiceImpl::IsOnLacrosStartupAvailable() {
-  return AshChromeServiceVersion() >= 3;
+bool LacrosChromeServiceImpl::IsTestControllerAvailable() const {
+#if BUILDFLAG(IS_CHROMEOS_DEVICE)
+  // The test controller is not available on production devices as tests only
+  // run on Linux.
+  return false;
+#else
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindTestControllerMinVersion;
+#endif
+}
+
+bool LacrosChromeServiceImpl::IsClipboardAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindClipboardMinVersion;
+}
+
+bool LacrosChromeServiceImpl::IsScreenManagerAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindScreenManagerMinVersion;
+}
+
+bool LacrosChromeServiceImpl::IsMediaSessionAudioFocusAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version && version.value() >=
+                        AshChromeService::MethodMinVersions::
+                            kBindMediaSessionAudioFocusMinVersion;
+}
+
+void LacrosChromeServiceImpl::BindAudioFocusManager(
+    mojo::PendingReceiver<media_session::mojom::AudioFocusManager> remote) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+  DCHECK(IsMediaSessionAudioFocusAvailable());
+
+  never_blocking_sequence_->PostTask(
+      FROM_HERE, base::BindOnce(&LacrosChromeServiceNeverBlockingState::
+                                    BindMediaSessionAudioFocusReceiver,
+                                weak_sequenced_state_, std::move(remote)));
+}
+
+bool LacrosChromeServiceImpl::IsMediaSessionAudioFocusDebugAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version && version.value() >=
+                        AshChromeService::MethodMinVersions::
+                            kBindMediaSessionAudioFocusDebugMinVersion;
+}
+
+void LacrosChromeServiceImpl::BindAudioFocusManagerDebug(
+    mojo::PendingReceiver<media_session::mojom::AudioFocusManagerDebug>
+        remote) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+  DCHECK(IsMediaSessionAudioFocusAvailable());
+
+  never_blocking_sequence_->PostTask(
+      FROM_HERE, base::BindOnce(&LacrosChromeServiceNeverBlockingState::
+                                    BindMediaSessionAudioFocusDebugReceiver,
+                                weak_sequenced_state_, std::move(remote)));
+}
+
+bool LacrosChromeServiceImpl::IsMediaSessionControllerAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version && version.value() >=
+                        AshChromeService::MethodMinVersions::
+                            kBindMediaSessionControllerMinVersion;
+}
+
+void LacrosChromeServiceImpl::BindMediaControllerManager(
+    mojo::PendingReceiver<media_session::mojom::MediaControllerManager>
+        remote) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(affine_sequence_checker_);
+  DCHECK(IsMediaSessionAudioFocusAvailable());
+
+  never_blocking_sequence_->PostTask(
+      FROM_HERE, base::BindOnce(&LacrosChromeServiceNeverBlockingState::
+                                    BindMediaSessionControllerReceiver,
+                                weak_sequenced_state_, std::move(remote)));
+}
+
+bool LacrosChromeServiceImpl::IsMetricsReportingAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version && version.value() >= AshChromeService::MethodMinVersions::
+                                           kBindMetricsReportingMinVersion;
+}
+
+void LacrosChromeServiceImpl::BindMetricsReporting(
+    mojo::PendingReceiver<crosapi::mojom::MetricsReporting> receiver) {
+  DCHECK(IsMetricsReportingAvailable());
+  never_blocking_sequence_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &LacrosChromeServiceNeverBlockingState::BindMetricsReportingReceiver,
+          weak_sequenced_state_, std::move(receiver)));
+}
+
+bool LacrosChromeServiceImpl::IsCertDbAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindCertDatabaseMinVersion;
+}
+
+bool LacrosChromeServiceImpl::IsDeviceAttributesAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version && version.value() >= AshChromeService::MethodMinVersions::
+                                           kBindDeviceAttributesMinVersion;
+}
+
+bool LacrosChromeServiceImpl::IsPrefsAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kBindPrefsMinVersion;
+}
+
+bool LacrosChromeServiceImpl::IsOnLacrosStartupAvailable() const {
+  base::Optional<uint32_t> version = AshChromeServiceVersion();
+  return version &&
+         version.value() >=
+             AshChromeService::MethodMinVersions::kOnLacrosStartupMinVersion;
 }
 
 int LacrosChromeServiceImpl::GetInterfaceVersion(
@@ -413,6 +689,11 @@ int LacrosChromeServiceImpl::GetInterfaceVersion(
   if (it == versions.end())
     return -1;
   return it->second;
+}
+
+void LacrosChromeServiceImpl::SetInitParamsForTests(
+    crosapi::mojom::LacrosInitParamsPtr init_params) {
+  init_params_ = std::move(init_params);
 }
 
 void LacrosChromeServiceImpl::BindScreenManagerReceiver(
@@ -448,9 +729,10 @@ void LacrosChromeServiceImpl::GetActiveTabUrlAffineSequence(
   delegate_->GetActiveTabUrl(std::move(callback));
 }
 
-int LacrosChromeServiceImpl::AshChromeServiceVersion() {
+base::Optional<uint32_t> LacrosChromeServiceImpl::AshChromeServiceVersion()
+    const {
   if (g_disable_all_crosapi_for_tests)
-    return -1;
+    return base::nullopt;
   DCHECK(did_bind_receiver_);
   return init_params_->ash_chrome_service_version;
 }

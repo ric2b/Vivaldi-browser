@@ -16,7 +16,6 @@
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/core/browser/autofill_driver.h"
-#include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -63,7 +62,7 @@ class ContentAutofillDriver : public AutofillDriver,
       content::RenderFrameHost* render_frame_host,
       AutofillClient* client,
       const std::string& app_locale,
-      AutofillManager::AutofillDownloadManagerState enable_download_manager,
+      AutofillHandler::AutofillDownloadManagerState enable_download_manager,
       AutofillProvider* provider);
   ~ContentAutofillDriver() override;
 
@@ -107,8 +106,7 @@ class ContentAutofillDriver : public AutofillDriver,
   // mojom::AutofillDriver:
   void SetFormToBeProbablySubmitted(
       const base::Optional<FormData>& form) override;
-  void FormsSeen(const std::vector<FormData>& forms,
-                 base::TimeTicks timestamp) override;
+  void FormsSeen(const std::vector<FormData>& forms) override;
   void FormSubmitted(const FormData& form,
                      bool known_success,
                      mojom::SubmissionSource source) override;
@@ -157,8 +155,7 @@ class ContentAutofillDriver : public AutofillDriver,
 
   void SetAutofillProviderForTesting(AutofillProvider* provider);
 
-  // Sets the manager to |manager| and sets |manager|'s external delegate
-  // to |autofill_external_delegate_|. Takes ownership of |manager|.
+  // Sets the manager to |manager|. Takes ownership of |manager|.
   void SetAutofillManager(std::unique_ptr<AutofillManager> manager);
 
   // Reports whether a document collects phone numbers, uses one time code, uses
@@ -182,7 +179,9 @@ class ContentAutofillDriver : public AutofillDriver,
   void RemoveHandler(
       const content::RenderWidgetHost::KeyPressEventCallback& handler) override;
 
-  void SetAutofillProvider(AutofillProvider* provider);
+  void SetAutofillProvider(
+      AutofillProvider* provider,
+      AutofillHandler::AutofillDownloadManagerState enable_download_manager);
 
   // Returns whether navigator.credentials.get({otp: {transport:"sms"}}) has
   // been used.
@@ -212,10 +211,6 @@ class ContentAutofillDriver : public AutofillDriver,
 
   // Pointer to an implementation of InternalAuthenticator.
   std::unique_ptr<InternalAuthenticator> authenticator_impl_;
-
-  // AutofillExternalDelegate instance that this object instantiates in the
-  // case where the Autofill native UI is enabled.
-  std::unique_ptr<AutofillExternalDelegate> autofill_external_delegate_;
 
   KeyPressHandlerManager key_press_handler_manager_;
 

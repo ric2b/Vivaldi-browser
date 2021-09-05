@@ -86,8 +86,7 @@ constexpr base::TimeDelta kAllowedDeltaFromFuture =
 // difficult to associate the trace-events with the particular displays.
 int64_t GetStartingTraceId() {
   static int64_t client = 0;
-  // https://crbug.com/956695
-  return ((++client & 0xffff) << 16);
+  return ((++client & 0xffffffff) << 16);
 }
 
 gfx::PresentationFeedback SanitizePresentationFeedback(
@@ -365,8 +364,7 @@ Display::~Display() {
 void Display::Initialize(DisplayClient* client,
                          SurfaceManager* surface_manager,
                          bool enable_shared_images,
-                         bool hw_support_for_multiple_refresh_rates,
-                         size_t num_of_frames_to_toggle_interval) {
+                         bool hw_support_for_multiple_refresh_rates) {
   DCHECK(client);
   DCHECK(surface_manager);
   gpu::ScopedAllowScheduleGpuTask allow_schedule_gpu_task;
@@ -379,8 +377,7 @@ void Display::Initialize(DisplayClient* client,
 
   frame_rate_decider_ = std::make_unique<FrameRateDecider>(
       surface_manager_, this, hw_support_for_multiple_refresh_rates,
-      SupportsSetFrameRate(output_surface_.get()),
-      num_of_frames_to_toggle_interval);
+      SupportsSetFrameRate(output_surface_.get()));
 
   InitializeRenderer(enable_shared_images);
 
@@ -547,13 +544,10 @@ void Display::InitializeRenderer(bool enable_shared_images) {
 
   // Outputting a partial list of quads might not work in cases where contents
   // outside the damage rect might be needed by the renderer.
-  bool might_invalidate_outside_damage =
-      !output_surface_->capabilities().only_invalidates_damage_rect ||
-      overlay_processor_->IsOverlaySupported();
   bool output_partial_list =
+      output_surface_->capabilities().only_invalidates_damage_rect &&
       renderer_->use_partial_swap() &&
-      (!might_invalidate_outside_damage ||
-       output_surface_->capabilities().supports_target_damage);
+      !overlay_processor_->IsOverlaySupported();
 
   aggregator_ = std::make_unique<SurfaceAggregator>(
       surface_manager_, resource_provider_.get(), output_partial_list,
@@ -636,14 +630,10 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
   {
     FrameRateDecider::ScopedAggregate scoped_aggregate(
         frame_rate_decider_.get());
-    gfx::Rect target_damage_bounding_rect;
-    if (output_surface_->capabilities().supports_target_damage)
-      target_damage_bounding_rect = renderer_->GetTargetDamageBoundingRect();
-
     // Ensure that the surfaces that were damaged by any delegated ink trail are
     // aggregated again so that the trail exists for a single frame.
-    target_damage_bounding_rect.Union(
-        renderer_->GetDelegatedInkTrailDamageRect());
+    gfx::Rect target_damage_bounding_rect =
+        renderer_->GetDelegatedInkTrailDamageRect();
 
     frame = aggregator_->Aggregate(
         current_surface_id_, expected_display_time, current_display_transform,
@@ -770,9 +760,10 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
 
     draw_timer.emplace();
     renderer_->DecideRenderPassAllocationsForFrame(frame.render_pass_list);
+    overlay_processor_->SetFrameSequenceNumber(frame_sequence_number_);
     renderer_->DrawFrame(&frame.render_pass_list, device_scale_factor_,
                          current_surface_size, display_color_spaces_,
-                         &frame.surface_damage_rect_list_);
+                         std::move(frame.surface_damage_rect_list_));
     switch (output_surface_->type()) {
       case OutputSurface::Type::kSoftware:
         UMA_HISTOGRAM_COUNTS_1M(
@@ -868,7 +859,6 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
   }
 
   client_->DisplayDidDrawAndSwap();
-
   // Garbage collection can lead to sync IPCs to the GPU service to verify sync
   // tokens. We defer garbage collection until the end of DrawAndSwap to avoid
   // stalling the critical path for compositing.
@@ -1009,6 +999,8 @@ void Display::DidFinishFrame(const BeginFrameAck& ack) {
       !renderer_->GetDelegatedInkTrailDamageRect().IsEmpty()) {
     scheduler_->SetNeedsOneBeginFrame(true);
   }
+
+  frame_sequence_number_ = ack.frame_id.sequence_number;
 }
 
 const SurfaceId& Display::CurrentSurfaceId() {

@@ -7,6 +7,8 @@
 #include <cmath>
 #include <string>
 
+#include "base/allocator/partition_allocator/checked_ptr_support.h"
+#include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
@@ -50,7 +52,9 @@
 #include <cpu-features.h>
 #endif  // defined(OS_ANDROID) && defined(__arm__)
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include <gnu/libc-version.h>
 
 #include "base/linux_util.h"
@@ -61,7 +65,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/base/x/x11_util.h"
 #endif
-#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#endif  // defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if defined(USE_OZONE) || defined(USE_X11)
 #include "ui/events/devices/device_data_manager.h"
@@ -229,7 +233,9 @@ void RecordStartupMetrics() {
 #endif
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 void RecordLinuxDistroSpecific(const std::string& version_string,
                                size_t parts,
                                const char* histogram_name) {
@@ -305,10 +311,12 @@ void RecordLinuxDistro() {
 
   base::UmaHistogramSparse("Linux.Distro2", distro_result);
 }
-#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#endif  // defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 void RecordLinuxGlibcVersion() {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   base::Version version(gnu_get_libc_version());
 
   UMALinuxGlibcVersion glibc_version_result = UMA_LINUX_GLIBC_NOT_PARSEABLE;
@@ -549,6 +557,60 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
       "Disabled"
 #endif
   );
+
+#if defined(OS_WIN) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  // Records whether or not PartitionAlloc-Everywhere is enabled, and whether
+  // PCScan is enabled on top of it. This is meant for a 3-way experiment with 2
+  // binaries:
+  // - binary A: deployed to 33% users, with PA-E and PCScan off.
+  // - binary B: deployed to 66% users, with PA-E on, half of which having
+  //             PCScan on
+  //
+  // NOTE, deliberately don't use ALLOW_PCSCAN which depends on bitness. In the
+  // 32-bit case, PCScan is always disabled, but we'll deliberately misrepresent
+  // it as enabled here (and later ignored when analyzing results), in order to
+  // keep each population at 33%.
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+      "PartitionAllocEverywhereAndPCScan",
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+      base::FeatureList::IsEnabled(
+          base::features::kPartitionAllocPCScanBrowserOnly)
+          ? "EnabledWithPCScan"
+          : "EnabledWithoutPCScan"
+#else
+      "Disabled"
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  );
+#endif  // defined(OS_WIN) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+
+#if defined(OS_WIN) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  // Records whether or not BackupRefPtr and/or PCScan is enabled. This is meant
+  // for a 3-way experiment with 2 binaries:
+  // - binary A: deployed to 66% users, with half of them having PCScan on and
+  //             half off (BackupRefPtr fully off)
+  // - binary B: deployed to 33% users, with BackupRefPtr on (PCSCan fully off)
+  //
+  // NOTE, deliberately don't use ALLOW_PCSCAN which depends on bitness. In the
+  // 32-bit case, PCScan is always disabled, but we'll deliberately misrepresent
+  // it as enabled here (and later ignored when analyzing results), in order to
+  // keep each population at 33%.
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+      "BackupRefPtrAndPCScan",
+#if ENABLE_REF_COUNT_FOR_BACKUP_REF_PTR
+      "BackupRefPtrEnabled"
+#else
+      base::FeatureList::IsEnabled(
+          base::features::kPartitionAllocPCScanBrowserOnly)
+          ? "PCScanEnabled"
+          : "Disabled"
+#endif
+  );
+#endif  // defined(OS_WIN) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+      "PartitionAllocGigaCageSynthetic",
+      base::features::IsPartitionAllocGigaCageEnabled() ? "Enabled"
+                                                        : "Disabled");
 }
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
@@ -565,7 +627,9 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   constexpr base::TaskTraits kBestEffortTaskTraits = {
       base::MayBlock(), base::TaskPriority::BEST_EFFORT,
       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   base::ThreadPool::PostTask(FROM_HERE, kBestEffortTaskTraits,
                              base::BindOnce(&RecordLinuxDistro));
 #endif

@@ -26,6 +26,7 @@
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/wait_for_document_operation.h"
 #include "components/autofill_assistant/browser/web/element_finder.h"
+#include "components/autofill_assistant/browser/web/element_store.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
 #include "components/strings/grit/components_strings.h"
 #include "net/http/http_status_code.h"
@@ -214,6 +215,20 @@ bool ScriptExecutor::ShouldInterruptOnPause(const ActionProto& proto) {
     case ActionProto::ActionInfoCase::kConfigureUiState:
     case ActionProto::ActionInfoCase::kPresaveGeneratedPassword:
     case ActionProto::ActionInfoCase::kGetElementStatus:
+    case ActionProto::ActionInfoCase::kScrollIntoView:
+    case ActionProto::ActionInfoCase::kWaitForDocumentToBecomeInteractive:
+    case ActionProto::ActionInfoCase::kWaitForDocumentToBecomeComplete:
+    case ActionProto::ActionInfoCase::kSendClickEvent:
+    case ActionProto::ActionInfoCase::kSendTapEvent:
+    case ActionProto::ActionInfoCase::kJsClick:
+    case ActionProto::ActionInfoCase::kSendKeystrokeEvents:
+    case ActionProto::ActionInfoCase::kSendChangeEvent:
+    case ActionProto::ActionInfoCase::kSetElementAttribute:
+    case ActionProto::ActionInfoCase::kSelectFieldValue:
+    case ActionProto::ActionInfoCase::kFocusField:
+    case ActionProto::ActionInfoCase::kWaitForElementToBecomeStable:
+    case ActionProto::ActionInfoCase::kCheckElementIsOnTop:
+    case ActionProto::ActionInfoCase::kReleaseElements:
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET:
       return false;
   }
@@ -232,7 +247,7 @@ void ScriptExecutor::OnPause(const std::string& message,
   }
 
   delegate_->ClearInfoBox();
-  delegate_->SetDetails(nullptr);
+  delegate_->SetDetails(nullptr, base::TimeDelta());
   delegate_->SetCollectUserDataOptions(nullptr);
   delegate_->SetForm(nullptr, base::DoNothing(), base::DoNothing());
 
@@ -281,6 +296,9 @@ void ScriptExecutor::ShortWaitForElement(
                           weak_ptr_factory_.GetWeakPtr(), selector),
       base::BindOnce(&ScriptExecutor::OnShortWaitForElement,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  current_action_data_.wait_for_dom->SetTimeoutWarningCallback(
+      base::BindOnce(&ScriptExecutor::MaybeShowSlowWebsiteWarning,
+                     weak_ptr_factory_.GetWeakPtr()));
   current_action_data_.wait_for_dom->Run();
 }
 
@@ -295,6 +313,9 @@ void ScriptExecutor::WaitForDom(
       this, delegate_, max_wait_time, allow_interrupt, check_elements,
       base::BindOnce(&ScriptExecutor::OnWaitForElementVisibleWithInterrupts,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  current_action_data_.wait_for_dom->SetTimeoutWarningCallback(
+      base::BindOnce(&ScriptExecutor::MaybeShowSlowWebsiteWarning,
+                     weak_ptr_factory_.GetWeakPtr()));
   current_action_data_.wait_for_dom->Run();
 }
 
@@ -329,25 +350,13 @@ void ScriptExecutor::FindAllElements(const Selector& selector,
   delegate_->GetWebController()->FindAllElements(selector, std::move(callback));
 }
 
-void ScriptExecutor::ScrollIntoView(
-    const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
-  delegate_->GetWebController()->ScrollIntoView(element, std::move(callback));
-}
-
 void ScriptExecutor::WaitUntilElementIsStable(
     int max_rounds,
     base::TimeDelta check_interval,
     const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
+    base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback) {
   delegate_->GetWebController()->WaitUntilElementIsStable(
       element, max_rounds, check_interval, std::move(callback));
-}
-
-void ScriptExecutor::CheckOnTop(
-    const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
-  delegate_->GetWebController()->CheckOnTop(element, std::move(callback));
 }
 
 void ScriptExecutor::ClickOrTapElement(
@@ -419,10 +428,8 @@ void ScriptExecutor::OnTermsAndConditionsLinkClicked(
   std::move(callback).Run(link, user_data, user_model);
 }
 
-void ScriptExecutor::GetFullCard(
-    const autofill::CreditCard* credit_card,
-    base::OnceCallback<void(std::unique_ptr<autofill::CreditCard> card,
-                            const base::string16& cvc)> callback) {
+void ScriptExecutor::GetFullCard(const autofill::CreditCard* credit_card,
+                                 GetFullCardCallback callback) {
   DCHECK(credit_card);
 
   // User might be asked to provide the cvc.
@@ -438,10 +445,11 @@ void ScriptExecutor::GetFullCard(
 }
 
 void ScriptExecutor::OnGetFullCard(GetFullCardCallback callback,
+                                   const ClientStatus& status,
                                    std::unique_ptr<autofill::CreditCard> card,
                                    const base::string16& cvc) {
   delegate_->EnterState(AutofillAssistantState::RUNNING);
-  std::move(callback).Run(std::move(card), cvc);
+  std::move(callback).Run(status, std::move(card), cvc);
 }
 
 void ScriptExecutor::Prompt(
@@ -538,18 +546,14 @@ void ScriptExecutor::RetrieveElementFormAndFieldData(
 }
 
 void ScriptExecutor::SelectOption(
-    const std::string& value,
-    DropdownSelectStrategy select_strategy,
+    const std::string& re2,
+    bool case_sensitive,
+    SelectOptionProto::OptionComparisonAttribute option_comparison_attribute,
     const ElementFinder::Result& element,
     base::OnceCallback<void(const ClientStatus&)> callback) {
-  delegate_->GetWebController()->SelectOption(element, value, select_strategy,
+  delegate_->GetWebController()->SelectOption(element, re2, case_sensitive,
+                                              option_comparison_attribute,
                                               std::move(callback));
-}
-
-void ScriptExecutor::HighlightElement(
-    const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
-  delegate_->GetWebController()->HighlightElement(element, std::move(callback));
 }
 
 void ScriptExecutor::ScrollToElementPosition(
@@ -628,18 +632,6 @@ void ScriptExecutor::SetAttribute(
                                               std::move(callback));
 }
 
-void ScriptExecutor::SelectFieldValue(
-    const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
-  delegate_->GetWebController()->SelectFieldValue(element, std::move(callback));
-}
-
-void ScriptExecutor::FocusField(
-    const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
-  delegate_->GetWebController()->FocusField(element, std::move(callback));
-}
-
 void ScriptExecutor::SendKeyboardInput(
     const std::vector<UChar32>& codepoints,
     int key_press_delay_in_millisecond,
@@ -647,27 +639,6 @@ void ScriptExecutor::SendKeyboardInput(
     base::OnceCallback<void(const ClientStatus&)> callback) {
   delegate_->GetWebController()->SendKeyboardInput(
       element, codepoints, key_press_delay_in_millisecond, std::move(callback));
-}
-
-void ScriptExecutor::GetOuterHtml(
-    const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&, const std::string&)>
-        callback) {
-  delegate_->GetWebController()->GetOuterHtml(element, std::move(callback));
-}
-
-void ScriptExecutor::GetOuterHtmls(
-    const ElementFinder::Result& elements,
-    base::OnceCallback<void(const ClientStatus&,
-                            const std::vector<std::string>&)> callback) {
-  delegate_->GetWebController()->GetOuterHtmls(elements, std::move(callback));
-}
-
-void ScriptExecutor::GetElementTag(
-    const ElementFinder::Result& element,
-    base::OnceCallback<void(const ClientStatus&, const std::string&)>
-        callback) {
-  delegate_->GetWebController()->GetElementTag(element, std::move(callback));
 }
 
 void ScriptExecutor::ExpectNavigation() {
@@ -701,14 +672,6 @@ bool ScriptExecutor::WaitForNavigation(
   return true;
 }
 
-void ScriptExecutor::GetDocumentReadyState(
-    const ElementFinder::Result& optional_frame_element,
-    base::OnceCallback<void(const ClientStatus&, DocumentReadyState)>
-        callback) {
-  delegate_->GetWebController()->GetDocumentReadyState(optional_frame_element,
-                                                       std::move(callback));
-}
-
 void ScriptExecutor::WaitForDocumentReadyState(
     base::TimeDelta max_wait_time,
     DocumentReadyState min_ready_state,
@@ -727,7 +690,7 @@ void ScriptExecutor::WaitUntilDocumentIsInReadyState(
     base::TimeDelta max_wait_time,
     DocumentReadyState min_ready_state,
     const ElementFinder::Result& optional_frame_element,
-    base::OnceCallback<void(const ClientStatus&)> callback) {
+    base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback) {
   WaitForDocumentReadyState(
       max_wait_time, min_ready_state, optional_frame_element,
       base::BindOnce(&ScriptExecutor::OnWaitForDocumentReadyState,
@@ -735,22 +698,23 @@ void ScriptExecutor::WaitUntilDocumentIsInReadyState(
 }
 
 void ScriptExecutor::OnWaitForDocumentReadyState(
-    base::OnceCallback<void(const ClientStatus&)> callback,
+    base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback,
     const ClientStatus& status,
     DocumentReadyState ready_state,
     base::TimeDelta wait_time) {
-  std::move(callback).Run(status);
+  std::move(callback).Run(status, wait_time);
 }
 
 void ScriptExecutor::LoadURL(const GURL& url) {
   delegate_->GetWebController()->LoadURL(url);
 }
 
-void ScriptExecutor::Shutdown() {
+void ScriptExecutor::Shutdown(bool show_feedback_chip) {
   // The following handles the case where scripts end with tell + stop
   // differently from just stop. TODO(b/806868): Make that difference explicit:
   // add an optional message to stop and update the scripts to use that.
   if (previous_action_type_ == ActionProto::kTell) {
+    delegate_->SetShowFeedbackChip(show_feedback_chip);
     at_end_ = SHUTDOWN_GRACEFULLY;
   } else {
     at_end_ = SHUTDOWN;
@@ -774,6 +738,14 @@ content::WebContents* ScriptExecutor::GetWebContents() {
   return delegate_->GetWebContents();
 }
 
+ElementStore* ScriptExecutor::GetElementStore() const {
+  return delegate_->GetElementStore();
+}
+
+WebController* ScriptExecutor::GetWebController() const {
+  return delegate_->GetWebController();
+}
+
 std::string ScriptExecutor::GetEmailAddressForAccessTokenAccount() {
   return delegate_->GetEmailAddressForAccessTokenAccount();
 }
@@ -782,8 +754,14 @@ std::string ScriptExecutor::GetLocale() {
   return delegate_->GetLocale();
 }
 
-void ScriptExecutor::SetDetails(std::unique_ptr<Details> details) {
-  return delegate_->SetDetails(std::move(details));
+void ScriptExecutor::SetDetails(std::unique_ptr<Details> details,
+                                base::TimeDelta delay) {
+  return delegate_->SetDetails(std::move(details), delay);
+}
+
+void ScriptExecutor::AppendDetails(std::unique_ptr<Details> details,
+                                   base::TimeDelta delay) {
+  return delegate_->AppendDetails(std::move(details), delay);
 }
 
 void ScriptExecutor::ClearInfoBox() {
@@ -858,6 +836,73 @@ void ScriptExecutor::SetOverlayBehavior(
   delegate_->SetOverlayBehavior(overlay_behavior);
 }
 
+void ScriptExecutor::MaybeShowSlowWebsiteWarning(
+    base::OnceCallback<void(bool)> callback) {
+  bool should_show_warning =
+      !delegate_->GetSettings().only_show_website_warning_once ||
+      !website_warning_already_shown_;
+  // MaybeShowSlowWarning is only called if should_sown_warning is true.
+  bool warning_was_shown =
+      should_show_warning &&
+      MaybeShowSlowWarning(
+          delegate_->GetSettings().slow_website_message,
+          delegate_->GetSettings().enable_slow_website_warnings);
+  website_warning_already_shown_ |= warning_was_shown;
+  if (callback) {
+    std::move(callback).Run(warning_was_shown);
+  }
+}
+
+void ScriptExecutor::MaybeShowSlowConnectionWarning() {
+  bool should_show_warning =
+      !delegate_->GetSettings().only_show_connection_warning_once ||
+      !connection_warning_already_shown_;
+  base::TimeDelta delay = base::TimeDelta::FromMilliseconds(0);
+  // MaybeShowSlowWarning is only called if should_sown_warning is true.
+  bool warning_was_shown =
+      should_show_warning &&
+      MaybeShowSlowWarning(
+          delegate_->GetSettings().slow_connection_message,
+          delegate_->GetSettings().enable_slow_connection_warnings);
+  if (warning_was_shown) {
+    delay = delegate_->GetSettings().minimum_warning_duration;
+  }
+  connection_warning_already_shown_ |= warning_was_shown;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&ScriptExecutor::ProcessNextAction,
+                     weak_ptr_factory_.GetWeakPtr()),
+      delay);
+}
+
+bool ScriptExecutor::MaybeShowSlowWarning(const std::string& message,
+                                          bool enabled) {
+  if (message.empty() || !enabled || !delegate_->ShouldShowWarning()) {
+    return false;
+  }
+
+  if (delegate_->GetSettings().only_show_warning_once &&
+      (connection_warning_already_shown_ || website_warning_already_shown_)) {
+    return false;
+  }
+
+  const std::string& previous_message = GetStatusMessage();
+  switch (delegate_->GetSettings().message_mode) {
+    case ClientSettingsProto::SlowWarningSettings::CONCATENATE:
+      if (previous_message.find(message) == std::string::npos) {
+        SetStatusMessage(previous_message + message);
+      }
+      break;
+    case ClientSettingsProto::SlowWarningSettings::REPLACE:
+      SetStatusMessage(message);
+      break;
+    case ClientSettingsProto::SlowWarningSettings::UNKNOWN:
+      return false;
+  }
+
+  return true;
+}
+
 base::WeakPtr<ActionDelegate> ScriptExecutor::GetWeakPtr() const {
   return weak_ptr_factory_.GetWeakPtr();
 }
@@ -867,8 +912,10 @@ void ScriptExecutor::OnGetActions(base::TimeTicks start_time,
                                   const std::string& response) {
   VLOG(2) << __func__ << " http-status=" << http_status;
   batch_start_time_ = base::TimeTicks::Now();
+  const base::TimeDelta& roundtrip_duration = batch_start_time_ - start_time;
+  // Doesn't trigger when the script is completed.
   roundtrip_timing_stats_.set_roundtrip_time_ms(
-      (batch_start_time_ - start_time).InMilliseconds());
+      roundtrip_duration.InMilliseconds());
   bool success =
       http_status == net::HTTP_OK && ProcessNextActionResponse(response);
   if (should_stop_script_) {
@@ -885,8 +932,20 @@ void ScriptExecutor::OnGetActions(base::TimeTicks start_time,
     return;
   }
 
+  if (roundtrip_duration < delegate_->GetSettings().slow_roundtrip_threshold) {
+    consecutive_slow_roundtrip_counter_ = 0;
+  } else {
+    consecutive_slow_roundtrip_counter_++;
+  }
+
   if (!actions_.empty()) {
-    ProcessNextAction();
+    if (consecutive_slow_roundtrip_counter_ >=
+        delegate_->GetSettings().max_consecutive_slow_roundtrips) {
+      consecutive_slow_roundtrip_counter_ = 0;
+      MaybeShowSlowConnectionWarning();
+    } else {
+      ProcessNextAction();
+    }
     return;
   }
 
@@ -930,7 +989,7 @@ void ScriptExecutor::ReportScriptsUpdateToListener(
 
 void ScriptExecutor::RunCallback(bool success) {
   if (should_clean_contextual_ui_on_finish_ || !success) {
-    SetDetails(nullptr);
+    SetDetails(nullptr, base::TimeDelta());
     should_clean_contextual_ui_on_finish_ = false;
   }
 
@@ -1106,6 +1165,8 @@ ScriptExecutor::WaitForDomOperation::WaitForDomOperation(
       allow_interrupt_(allow_interrupt),
       check_elements_(std::move(check_elements)),
       callback_(std::move(callback)),
+      timeout_warning_delay_(
+          main_script->delegate_->GetSettings().warning_delay),
       retry_timer_(main_script->delegate_->GetSettings()
                        .periodic_element_check_interval) {}
 
@@ -1117,6 +1178,11 @@ void ScriptExecutor::WaitForDomOperation::Run() {
   delegate_->AddNavigationListener(this);
   wait_time_stopwatch_.Start();
   Start();
+}
+
+void ScriptExecutor::WaitForDomOperation::SetTimeoutWarningCallback(
+    WarningCallback warning_callback) {
+  warning_callback_ = std::move(warning_callback);
 }
 
 void ScriptExecutor::WaitForDomOperation::Start() {
@@ -1166,8 +1232,30 @@ void ScriptExecutor::WaitForDomOperation::OnScriptListChanged(
   main_script_->ReportScriptsUpdateToListener(std::move(scripts));
 }
 
+void ScriptExecutor::WaitForDomOperation::TimeoutWarning() {
+  if (warning_callback_) {
+    std::move(warning_callback_)
+        .Run(base::BindOnce(
+            &ScriptExecutor::WaitForDomOperation::SetSlowWarningStatus,
+            weak_ptr_factory_.GetWeakPtr()));
+  }
+}
+
+void ScriptExecutor::WaitForDomOperation::SetSlowWarningStatus(bool was_shown) {
+  if (was_shown) {
+    warning_status_ = WARNING_SHOWN;
+  } else {
+    warning_status_ = WARNING_TRIGGERED;
+  }
+}
+
 void ScriptExecutor::WaitForDomOperation::RunChecks(
     base::OnceCallback<void(const ClientStatus&)> report_attempt_result) {
+  warning_timer_ = std::make_unique<base::OneShotTimer>();
+  warning_timer_->Start(
+      FROM_HERE, timeout_warning_delay_,
+      base::BindOnce(&ScriptExecutor::WaitForDomOperation::TimeoutWarning,
+                     weak_ptr_factory_.GetWeakPtr()));
   wait_time_total_ =
       (wait_time_stopwatch_.TotalElapsed() < retry_timer_.period())
           // It's the first run of the checks, set the total time waited to 0.
@@ -1225,6 +1313,7 @@ void ScriptExecutor::WaitForDomOperation::OnElementCheckDone(
 
 void ScriptExecutor::WaitForDomOperation::OnAllChecksDone(
     base::OnceCallback<void(const ClientStatus&)> report_attempt_result) {
+  warning_timer_->Stop();
   if (runnable_interrupts_.empty()) {
     // Since no interrupts fired, allow previously-run interrupts to be run
     // again in the next round. This is meant to give elements one round to
@@ -1294,10 +1383,15 @@ void ScriptExecutor::WaitForDomOperation::RunCallbackWithResult(
   // stop element checking if one is still in progress
   batch_element_checker_.reset();
   retry_timer_.Cancel();
+  warning_timer_->Stop();
+
   if (!callback_)
     return;
 
-  std::move(callback_).Run(element_status, result, wait_time_total_);
+  ClientStatus status(element_status);
+  status.set_slow_warning_status(warning_status_);
+
+  std::move(callback_).Run(status, result, wait_time_total_);
 }
 
 void ScriptExecutor::WaitForDomOperation::SavePreInterruptState() {
@@ -1322,11 +1416,12 @@ void ScriptExecutor::WaitForDomOperation::RestorePreInterruptScroll() {
   if (!main_script_->last_focused_element_selector_.empty()) {
     auto actions =
         std::make_unique<action_delegate_util::ElementActionVector>();
-    actions->emplace_back(
+    action_delegate_util::AddStepIgnoreTiming(
         base::BindOnce(&ActionDelegate::WaitUntilDocumentIsInReadyState,
                        main_script_->GetWeakPtr(),
                        delegate_->GetSettings().document_ready_check_timeout,
-                       DOCUMENT_INTERACTIVE));
+                       DOCUMENT_INTERACTIVE),
+        actions.get());
     actions->emplace_back(base::BindOnce(
         &ActionDelegate::ScrollToElementPosition, main_script_->GetWeakPtr(),
         main_script_->last_focused_element_selector_,

@@ -25,6 +25,10 @@ import convert_dex_profile
 _IGNORE_WARNINGS = (
     # Caused by Play Services:
     r'Type `libcore.io.Memory` was not found',
+    # Caused by a missing final class in flogger:
+    r'Type `dalvik.system.VMStack` was not found',
+    # Caused by jacoco code coverage:
+    r'Type `java.lang.management.ManagementFactory` was not found',
     # Filter out warnings caused by our fake main dex list used to enable
     # multidex on library targets.
     # Warning: Application does not contain `Foo` as referenced in main-dex-list
@@ -142,14 +146,16 @@ def _ParseArgs(args):
 
 def CreateStderrFilter(show_desugar_default_interface_warnings):
   def filter_stderr(output):
-    patterns = _IGNORE_WARNINGS
+    patterns = list(_IGNORE_WARNINGS)
+
     # When using Bazel's Desugar tool to desugar lambdas and interface methods,
-    # we do not provide D8 with a classpath, which causes a lot of warnings
-    # from D8's default interface desugaring pass.
-    # Not having a classpath makes incremental dexing much more effective.
-    # D8 still does backported method desugaring.
+    # we do not provide D8 with a classpath, which causes a lot of warnings from
+    # D8's default interface desugaring pass. Not having a classpath makes
+    # incremental dexing much more effective. D8 still does backported method
+    # desugaring.
+    # These warnings are also turned off when bytecode checks are turned off.
     if not show_desugar_default_interface_warnings:
-      patterns = list(patterns) + ['default or static interface methods']
+      patterns += ['default or static interface methods']
 
     combined_pattern = '|'.join(re.escape(p) for p in patterns)
     output = build_utils.FilterLines(output, combined_pattern)

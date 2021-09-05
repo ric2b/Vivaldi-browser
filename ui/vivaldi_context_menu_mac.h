@@ -30,7 +30,9 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   VivaldiContextMenuMac(content::WebContents* web_contents,
                         ui::SimpleMenuModel* menu_model,
                         const gfx::Rect& rect);
-  void Show() override;
+  void Init(ui::SimpleMenuModel* menu_model,
+            vivaldi::ContextMenuPostitionDelegate* delegate) override;
+  bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
 
  private:

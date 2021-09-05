@@ -5140,6 +5140,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5185,6 +5188,9 @@
             "android_browsertests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -5233,6 +5239,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5279,6 +5288,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5320,6 +5332,9 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -5349,6 +5364,9 @@
             "base_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -5396,6 +5414,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5441,6 +5462,9 @@
             "blink_common_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -5488,6 +5512,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5533,6 +5560,9 @@
             "blink_platform_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -5581,6 +5611,9 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "name": "webkit_unit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5628,6 +5661,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5674,6 +5710,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5719,6 +5758,9 @@
             "breakpad_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -5767,6 +5809,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5812,6 +5857,9 @@
             "cast_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -5859,6 +5907,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -5904,6 +5955,9 @@
             "chrome_public_smoke_test"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6065,6 +6119,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6113,6 +6170,9 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "name": "network_service_out_of_process_components_browsertests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6158,6 +6218,9 @@
             "components_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6205,6 +6268,9 @@
             "content_browsertests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6255,6 +6321,9 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "name": "network_service_out_of_process_content_browsertests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6301,6 +6370,9 @@
             "content_shell_test_apk"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6351,6 +6423,9 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "name": "network_service_out_of_process_content_shell_test_apk",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6397,6 +6472,9 @@
             "content_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6445,6 +6523,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6490,6 +6571,9 @@
             "crypto_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6537,6 +6621,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6582,6 +6669,9 @@
             "display_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6629,6 +6719,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6674,6 +6767,9 @@
             "gcm_unit_tests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6721,6 +6817,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6766,6 +6865,9 @@
             "gin_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6815,6 +6917,9 @@
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
         "name": "gl_tests_validating",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6860,6 +6965,9 @@
             "gl_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6907,6 +7015,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -6952,6 +7063,9 @@
             "gpu_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -6999,6 +7113,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7044,6 +7161,9 @@
             "ipc_tests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7091,6 +7211,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7136,6 +7259,9 @@
             "latency_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7183,6 +7309,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7228,6 +7357,9 @@
             "liburlpattern_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7275,6 +7407,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7320,6 +7455,9 @@
             "media_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7367,6 +7505,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7412,6 +7553,9 @@
             "mojo_test_apk"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7459,6 +7603,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7504,6 +7651,9 @@
             "net_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7552,6 +7702,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7597,6 +7750,9 @@
             "services_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7644,6 +7800,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7689,6 +7848,9 @@
             "skia_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7736,6 +7898,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7781,6 +7946,9 @@
             "storage_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7828,6 +7996,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7873,6 +8044,9 @@
             "ui_base_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7920,6 +8094,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -7965,6 +8142,9 @@
             "unit_tests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -8013,6 +8193,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -8058,6 +8241,9 @@
             "viz_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -8105,6 +8291,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -8150,6 +8339,9 @@
             "vr_common_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -8197,6 +8389,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -8242,6 +8437,9 @@
             "wtf_unittests"
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
+        },
+        "resultdb": {
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -8289,6 +8487,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -8330,6 +8531,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "monochrome_public_apk_checker",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8346,136 +8550,189 @@
     "junit_tests": [
       {
         "name": "android_webview_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "android_webview_junit_tests",
         "test_id_prefix": "ninja://android_webview/test:android_webview_junit_tests/"
       },
       {
         "name": "base_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "base_junit_tests",
         "test_id_prefix": "ninja://base:base_junit_tests/"
       },
       {
         "name": "chrome_java_test_pagecontroller_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "chrome_java_test_pagecontroller_junit_tests",
         "test_id_prefix": "ninja://chrome/test/android:chrome_java_test_pagecontroller_junit_tests/"
       },
       {
         "name": "chrome_junit_tests",
-        "swarming": {},
-        "test": "chrome_junit_tests",
-        "test_id_prefix": "ninja://chrome/android:chrome_junit_tests/"
-      },
-      {
-        "args": [
-          "--shards=6"
-        ],
-        "experiment_percentage": 10,
-        "name": "chrome_junit_tests_with_shards",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "chrome_junit_tests",
         "test_id_prefix": "ninja://chrome/android:chrome_junit_tests/"
       },
       {
         "name": "components_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "components_junit_tests",
         "test_id_prefix": "ninja://components:components_junit_tests/"
       },
       {
         "name": "content_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "content_junit_tests",
         "test_id_prefix": "ninja://content/public/android:content_junit_tests/"
       },
       {
         "name": "device_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "device_junit_tests",
         "test_id_prefix": "ninja://device:device_junit_tests/"
       },
       {
         "name": "junit_unit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "junit_unit_tests",
         "test_id_prefix": "ninja://testing/android/junit:junit_unit_tests/"
       },
       {
         "name": "keyboard_accessory_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "keyboard_accessory_junit_tests",
         "test_id_prefix": "ninja://chrome/android/features/keyboard_accessory:keyboard_accessory_junit_tests/"
       },
       {
         "name": "media_base_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "media_base_junit_tests",
         "test_id_prefix": "ninja://media/base/android:media_base_junit_tests/"
       },
       {
         "name": "module_installer_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "module_installer_junit_tests",
         "test_id_prefix": "ninja://components/module_installer/android:module_installer_junit_tests/"
       },
       {
         "name": "net_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "net_junit_tests",
         "test_id_prefix": "ninja://net/android:net_junit_tests/"
       },
       {
         "name": "paint_preview_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "paint_preview_junit_tests",
         "test_id_prefix": "ninja://components/paint_preview/player/android:paint_preview_junit_tests/"
       },
       {
         "name": "password_check_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "password_check_junit_tests",
         "test_id_prefix": "ninja://chrome/browser/password_check/android:password_check_junit_tests/"
       },
       {
         "name": "password_manager_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "password_manager_junit_tests",
         "test_id_prefix": "ninja://chrome/browser/password_manager/android:password_manager_junit_tests/"
       },
       {
         "name": "services_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "services_junit_tests",
         "test_id_prefix": "ninja://services:services_junit_tests/"
       },
       {
         "name": "touch_to_fill_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "touch_to_fill_junit_tests",
         "test_id_prefix": "ninja://chrome/browser/touch_to_fill/android:touch_to_fill_junit_tests/"
       },
       {
         "name": "ui_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "ui_junit_tests",
         "test_id_prefix": "ninja://ui/android:ui_junit_tests/"
       },
       {
         "name": "webapk_client_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "webapk_client_junit_tests",
         "test_id_prefix": "ninja://chrome/android/webapk/libs/client:webapk_client_junit_tests/"
       },
       {
         "name": "webapk_shell_apk_h2o_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "webapk_shell_apk_h2o_junit_tests",
         "test_id_prefix": "ninja://chrome/android/webapk/shell_apk:webapk_shell_apk_h2o_junit_tests/"
       },
       {
         "name": "webapk_shell_apk_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "webapk_shell_apk_junit_tests",
         "test_id_prefix": "ninja://chrome/android/webapk/shell_apk:webapk_shell_apk_junit_tests/"
@@ -8517,6 +8774,9 @@
           ],
           "script": "//build/android/pylib/results/presentation/test_results_presentation.py"
         },
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "cipd_packages": [
@@ -8553,6 +8813,9 @@
     "junit_tests": [
       {
         "name": "base_junit_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {},
         "test": "base_junit_tests",
         "test_id_prefix": "ninja://base:base_junit_tests/"
@@ -24081,22 +24344,6 @@
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
       },
       {
-        "isolate_name": "extension_docserver_python_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
-      },
-      {
         "isolate_name": "flatbuffers_unittests",
         "merge": {
           "args": [],
@@ -24235,19 +24482,6 @@
         "test_id_prefix": "ninja://chrome/test:telemetry_unittests/"
       },
       {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
-      },
-      {
         "args": [
           "--gtest-benchmark-name=views_perftests"
         ],
@@ -24274,7 +24508,7 @@
   },
   "ToTMacASan": {
     "additional_compile_targets": [
-      "all"
+      "chromium_builder_asan"
     ],
     "gtest_tests": [
       {
@@ -26582,22 +26816,6 @@
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
       },
       {
-        "isolate_name": "extension_docserver_python_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
-      },
-      {
         "isolate_name": "flatbuffers_unittests",
         "merge": {
           "args": [],
@@ -26734,19 +26952,6 @@
           "shards": 4
         },
         "test_id_prefix": "ninja://chrome/test:telemetry_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       },
       {
         "args": [
@@ -28032,24 +28237,6 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "integrity": "high"
-            }
-          ],
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -30550,24 +30737,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "integrity": "high"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -30585,8 +30754,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30603,8 +30771,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30624,8 +30791,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30643,8 +30809,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30661,8 +30826,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30679,8 +30843,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30697,8 +30860,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30715,8 +30877,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30733,8 +30894,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30751,8 +30911,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30769,8 +30928,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30788,8 +30946,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30806,8 +30963,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30824,8 +30980,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30842,8 +30997,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30860,8 +31014,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -30882,8 +31035,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30900,8 +31052,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30918,8 +31069,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30936,8 +31086,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30954,8 +31103,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30972,8 +31120,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -30990,8 +31137,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31008,8 +31154,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31026,8 +31171,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31044,8 +31188,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31062,8 +31205,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -31081,8 +31223,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31099,8 +31240,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31117,8 +31257,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31135,8 +31274,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31153,8 +31291,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31171,8 +31308,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31189,8 +31325,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31207,8 +31342,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31225,8 +31359,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31243,8 +31376,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31261,8 +31393,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31279,8 +31410,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31297,8 +31427,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31315,8 +31444,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31333,8 +31461,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31351,8 +31478,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31369,8 +31495,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31387,8 +31512,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31405,8 +31529,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31423,8 +31546,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31441,8 +31563,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31459,8 +31580,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31477,8 +31597,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31495,8 +31614,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31514,8 +31632,7 @@
           "dimension_sets": [
             {
               "cpu": "x86-64",
-              "integrity": "high",
-              "os": "Windows-10-18363"
+              "integrity": "high"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31532,8 +31649,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -31551,8 +31667,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31569,8 +31684,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31587,8 +31701,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31605,8 +31718,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31623,8 +31735,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31641,8 +31752,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31659,8 +31769,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31677,8 +31786,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31695,8 +31803,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31713,8 +31820,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31731,8 +31837,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31749,8 +31854,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31767,8 +31871,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31785,8 +31888,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31803,8 +31905,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31821,8 +31922,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31839,8 +31939,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31857,8 +31956,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31875,8 +31973,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31894,8 +31991,7 @@
           "dimension_sets": [
             {
               "cpu": "x86-64",
-              "integrity": "high",
-              "os": "Windows-10-18363"
+              "integrity": "high"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31912,8 +32008,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31930,8 +32025,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31948,8 +32042,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31966,8 +32059,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -31985,8 +32077,7 @@
           "dimension_sets": [
             {
               "cpu": "x86-64",
-              "integrity": "high",
-              "os": "Windows-10-18363"
+              "integrity": "high"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32003,8 +32094,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32021,8 +32111,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32039,8 +32128,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32057,8 +32145,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32075,8 +32162,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32093,8 +32179,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32111,8 +32196,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32129,8 +32213,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32147,8 +32230,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32165,8 +32247,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32183,8 +32264,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32201,8 +32281,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32219,8 +32298,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32237,8 +32315,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32255,8 +32332,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32273,8 +32349,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32291,8 +32366,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32309,8 +32383,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32327,8 +32400,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32345,8 +32417,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32363,8 +32434,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32381,8 +32451,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32404,8 +32473,7 @@
           "dimension_sets": [
             {
               "cpu": "x86-64",
-              "integrity": "high",
-              "os": "Windows-10-18363"
+              "integrity": "high"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -32424,33 +32492,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "cpu": "x86-64",
-              "os": "Windows-10-18363"
+              "cpu": "x86-64"
             }
           ],
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "integrity": "high",
-              "os": "Windows-10-18363"
-            }
-          ],
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -34314,26 +34361,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "integrity": "high",
-              "os": "Windows-10-18363"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -36197,26 +36224,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "cpu": "x86-64",
-              "integrity": "high",
-              "os": "Windows-10-18363"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -37489,24 +37496,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "integrity": "high"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -38774,24 +38763,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "integrity": "high"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -40059,24 +40030,6 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "integrity": "high"
-            }
-          ],
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -41344,24 +41297,6 @@
           "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://tools/polymer:polymer_tools_python_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "integrity": "high"
-            }
-          ],
-          "service_account": "chrome-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       }
     ]
   },
@@ -41389,7 +41324,7 @@
         },
         "name": "absl_hardening_tests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41434,7 +41369,7 @@
         },
         "name": "base_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41479,7 +41414,7 @@
         },
         "name": "boringssl_crypto_tests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41524,7 +41459,7 @@
         },
         "name": "boringssl_ssl_tests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41569,7 +41504,7 @@
         },
         "name": "components_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41614,7 +41549,7 @@
         },
         "name": "crypto_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41659,7 +41594,7 @@
         },
         "name": "gfx_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41704,7 +41639,7 @@
         },
         "name": "google_apis_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41749,7 +41684,7 @@
         },
         "name": "ios_chrome_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41794,7 +41729,7 @@
         },
         "name": "ios_net_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41839,7 +41774,7 @@
         },
         "name": "ios_web_inttests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41884,7 +41819,7 @@
         },
         "name": "ios_web_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41929,7 +41864,7 @@
         },
         "name": "ios_web_view_inttests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -41974,7 +41909,7 @@
         },
         "name": "net_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42019,7 +41954,7 @@
         },
         "name": "skia_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42064,7 +41999,7 @@
         },
         "name": "sql_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42109,7 +42044,7 @@
         },
         "name": "ui_base_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42154,7 +42089,7 @@
         },
         "name": "url_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42219,7 +42154,7 @@
         },
         "name": "absl_hardening_tests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42263,7 +42198,7 @@
         },
         "name": "base_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42307,7 +42242,7 @@
         },
         "name": "boringssl_crypto_tests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42351,7 +42286,7 @@
         },
         "name": "boringssl_ssl_tests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42395,7 +42330,7 @@
         },
         "name": "components_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42439,7 +42374,7 @@
         },
         "name": "crypto_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42483,7 +42418,7 @@
         },
         "name": "gfx_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42527,7 +42462,7 @@
         },
         "name": "google_apis_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42571,7 +42506,7 @@
         },
         "name": "ios_chrome_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42615,7 +42550,7 @@
         },
         "name": "ios_net_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42659,7 +42594,7 @@
         },
         "name": "ios_web_inttests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42703,7 +42638,7 @@
         },
         "name": "ios_web_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42747,7 +42682,7 @@
         },
         "name": "ios_web_view_inttests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42791,7 +42726,7 @@
         },
         "name": "net_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42835,7 +42770,7 @@
         },
         "name": "skia_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42879,7 +42814,7 @@
         },
         "name": "sql_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42923,7 +42858,7 @@
         },
         "name": "ui_base_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42967,7 +42902,7 @@
         },
         "name": "url_unittests_iPhone 6S 12.3.1",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -42994,1569 +42929,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://url:url_unittests/"
-      }
-    ]
-  },
-  "UBSanVptr Linux": {
-    "gtest_tests": [
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "absl_hardening_tests",
-        "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "accessibility_unittests",
-        "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
-      },
-      {
-        "args": [
-          "angle_unittests"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
-        "use_isolated_scripts_api": true
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "app_shell_unittests",
-        "test_id_prefix": "ninja://extensions/shell:app_shell_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "aura_unittests",
-        "test_id_prefix": "ninja://ui/aura:aura_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "base_unittests",
-        "test_id_prefix": "ninja://base:base_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "base_util_unittests",
-        "test_id_prefix": "ninja://base/util:base_util_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_common_unittests",
-        "test_id_prefix": "ninja://third_party/blink/common:blink_common_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_fuzzer_unittests",
-        "test_id_prefix": "ninja://third_party/blink/renderer/platform:blink_fuzzer_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_heap_unittests",
-        "test_id_prefix": "ninja://third_party/blink/renderer/platform/heap:blink_heap_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_platform_unittests",
-        "test_id_prefix": "ninja://third_party/blink/renderer/platform:blink_platform_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "webkit_unit_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "blink_unittests",
-        "test_id_prefix": "ninja://third_party/blink/renderer/controller:blink_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "boringssl_crypto_tests",
-        "test_id_prefix": "ninja://third_party/boringssl:boringssl_crypto_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "boringssl_ssl_tests",
-        "test_id_prefix": "ninja://third_party/boringssl:boringssl_ssl_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 10
-        },
-        "test": "browser_tests",
-        "test_id_prefix": "ninja://chrome/test:browser_tests/"
-      },
-      {
-        "args": [
-          "--gtest_filter=-*UsingRealWebcam*"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "capture_unittests",
-        "test_id_prefix": "ninja://media/capture:capture_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cast_unittests",
-        "test_id_prefix": "ninja://media/cast:cast_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cc_unittests",
-        "test_id_prefix": "ninja://cc:cc_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "chrome_app_unittests",
-        "test_id_prefix": "ninja://chrome/test:chrome_app_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "chromedriver_unittests",
-        "test_id_prefix": "ninja://chrome/test/chromedriver:chromedriver_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "components_browsertests",
-        "test_id_prefix": "ninja://components:components_browsertests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "components_unittests",
-        "test_id_prefix": "ninja://components:components_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "compositor_unittests",
-        "test_id_prefix": "ninja://ui/compositor:compositor_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 6
-        },
-        "test": "content_browsertests",
-        "test_id_prefix": "ninja://content/test:content_browsertests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "content_unittests",
-        "test_id_prefix": "ninja://content/test:content_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "crashpad_tests",
-        "test_id_prefix": "ninja://third_party/crashpad/crashpad:crashpad_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cronet_tests",
-        "test_id_prefix": "ninja://components/cronet:cronet_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "cronet_unittests",
-        "test_id_prefix": "ninja://components/cronet:cronet_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "crypto_unittests",
-        "test_id_prefix": "ninja://crypto:crypto_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "dbus_unittests",
-        "test_id_prefix": "ninja://dbus:dbus_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "device_unittests",
-        "test_id_prefix": "ninja://device:device_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "display_unittests",
-        "test_id_prefix": "ninja://ui/display:display_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "events_unittests",
-        "test_id_prefix": "ninja://ui/events:events_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "extensions_browsertests",
-        "test_id_prefix": "ninja://extensions:extensions_browsertests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "extensions_unittests",
-        "test_id_prefix": "ninja://extensions:extensions_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "filesystem_service_unittests",
-        "test_id_prefix": "ninja://components/services/filesystem:filesystem_service_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gcm_unit_tests",
-        "test_id_prefix": "ninja://google_apis/gcm:gcm_unit_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gfx_unittests",
-        "test_id_prefix": "ninja://ui/gfx:gfx_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gin_unittests",
-        "test_id_prefix": "ninja://gin:gin_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "google_apis_unittests",
-        "test_id_prefix": "ninja://google_apis:google_apis_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gpu_unittests",
-        "test_id_prefix": "ninja://gpu:gpu_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "gwp_asan_unittests",
-        "test_id_prefix": "ninja://components/gwp_asan:gwp_asan_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "headless_browsertests",
-        "test_id_prefix": "ninja://headless:headless_browsertests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "headless_unittests",
-        "test_id_prefix": "ninja://headless:headless_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 3
-        },
-        "test": "interactive_ui_tests",
-        "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "ipc_tests",
-        "test_id_prefix": "ninja://ipc:ipc_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "jingle_unittests",
-        "test_id_prefix": "ninja://jingle:jingle_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "latency_unittests",
-        "test_id_prefix": "ninja://ui/latency:latency_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "libjingle_xmpp_unittests",
-        "test_id_prefix": "ninja://third_party/libjingle_xmpp:libjingle_xmpp_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "liburlpattern_unittests",
-        "test_id_prefix": "ninja://third_party/liburlpattern:liburlpattern_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "media_blink_unittests",
-        "test_id_prefix": "ninja://media/blink:media_blink_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "media_unittests",
-        "test_id_prefix": "ninja://media:media_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "message_center_unittests",
-        "test_id_prefix": "ninja://ui/message_center:message_center_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "midi_unittests",
-        "test_id_prefix": "ninja://media/midi:midi_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "mojo_core_unittests",
-        "test_id_prefix": "ninja://mojo/core:mojo_core_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "mojo_unittests",
-        "test_id_prefix": "ninja://mojo:mojo_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "nacl_helper_nonsfi_unittests",
-        "test_id_prefix": "ninja://components/nacl/loader:nacl_helper_nonsfi_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "nacl_loader_unittests",
-        "test_id_prefix": "ninja://components/nacl/loader:nacl_loader_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "native_theme_unittests",
-        "test_id_prefix": "ninja://ui/native_theme:native_theme_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "net_unittests",
-        "test_id_prefix": "ninja://net:net_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "openscreen_unittests",
-        "test_id_prefix": "ninja://chrome/browser/media/router:openscreen_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "pdf_unittests",
-        "test_id_prefix": "ninja://pdf:pdf_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "perfetto_unittests",
-        "test_id_prefix": "ninja://third_party/perfetto:perfetto_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "ppapi_unittests",
-        "test_id_prefix": "ninja://ppapi:ppapi_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "printing_unittests",
-        "test_id_prefix": "ninja://printing:printing_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "remoting_unittests",
-        "test_id_prefix": "ninja://remoting:remoting_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "sandbox_linux_unittests",
-        "test_id_prefix": "ninja://sandbox/linux:sandbox_linux_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "service_manager_unittests",
-        "test_id_prefix": "ninja://services/service_manager/tests:service_manager_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "services_unittests",
-        "test_id_prefix": "ninja://services:services_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "shell_dialogs_unittests",
-        "test_id_prefix": "ninja://ui/shell_dialogs:shell_dialogs_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "skia_unittests",
-        "test_id_prefix": "ninja://skia:skia_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "snapshot_unittests",
-        "test_id_prefix": "ninja://ui/snapshot:snapshot_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "sql_unittests",
-        "test_id_prefix": "ninja://sql:sql_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "storage_unittests",
-        "test_id_prefix": "ninja://storage:storage_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "sync_integration_tests",
-        "test_id_prefix": "ninja://chrome/test:sync_integration_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "traffic_annotation_auditor_unittests",
-        "test_id_prefix": "ninja://tools/traffic_annotation/auditor:traffic_annotation_auditor_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "ui_base_unittests",
-        "test_id_prefix": "ninja://ui/base:ui_base_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "ui_touch_selection_unittests",
-        "test_id_prefix": "ninja://ui/touch_selection:ui_touch_selection_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "unit_tests",
-        "test_id_prefix": "ninja://chrome/test:unit_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "url_unittests",
-        "test_id_prefix": "ninja://url:url_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "views_unittests",
-        "test_id_prefix": "ninja://ui/views:views_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "viz_unittests",
-        "test_id_prefix": "ninja://components/viz:viz_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "vr_common_unittests",
-        "test_id_prefix": "ninja://chrome/browser/vr:vr_common_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "vr_pixeltests",
-        "test_id_prefix": "ninja://chrome/browser/vr:vr_pixeltests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "weblayer_browsertests",
-        "test_id_prefix": "ninja://weblayer/test:weblayer_browsertests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "weblayer_unittests",
-        "test_id_prefix": "ninja://weblayer/test:weblayer_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "wm_unittests",
-        "test_id_prefix": "ninja://ui/wm:wm_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "wtf_unittests",
-        "test_id_prefix": "ninja://third_party/blink/renderer/platform/wtf:wtf_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "x11_unittests",
-        "test_id_prefix": "ninja://ui/platform_window/x11:x11_unittests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "xr_browser_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "xr_browser_tests",
-        "test_id_prefix": "ninja://chrome/test:xr_browser_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "zlib_unittests",
-        "test_id_prefix": "ninja://third_party/zlib:zlib_unittests/"
       }
     ]
   },

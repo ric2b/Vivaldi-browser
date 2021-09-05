@@ -4,13 +4,16 @@
 <translation id="1033008476608128425">Maisema 3</translation>
 <translation id="1118377629180821201">Maisema 12</translation>
 <translation id="1158503667684816647">Älä kysy enää vahvistusta</translation>
+<translation id="1222195720020481779">Käynnistetään asenninta…</translation>
 <translation id="1276145862619442150">Pikavalinnat</translation>
 <translation id="1281950884873973195">Eläin 6</translation>
 <translation id="1411638389238344450">Lähetä linkki sähköpostitse</translation>
 <translation id="1454726940098520109">Älä kysy enää vahvistusta</translation>
 <translation id="1462666970065907900">Haluatko varmasti sulkea tämän ikkunan?</translation>
+<translation id="1526344461589023948">Ladattua päivitystä tallennettaessa tapahtui virhe. Tarkista, että koneella on riittävästi levytilaa, ja yritä myöhemmin uudelleen.</translation>
 <translation id="1657174850639146440">Hirviö 9</translation>
 <translation id="1676595396635191120">Uusi yksityisikkuna</translation>
+<translation id="1702758681952953055">Jos virhe toistuu, ilmoita siitä mainiten seuraavat tiedot:</translation>
 <translation id="1728549374069268714">Liitä ja siirry</translation>
 <translation id="1756026472674246267">Avaa linkki uuteen välilehteen</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -19,23 +22,33 @@
 <translation id="1921101374471252440">Lataa &amp;kuva uudelleen</translation>
 <translation id="1924750141060565109">Maisema 15</translation>
 <translation id="19598411548897379">Yleinen</translation>
+<translation id="1985669426322966465">Ohjelmistopäivitys</translation>
 <translation id="2079036669923635404">Päivitä Vivaldi versioon <ph name="VERSION" /> napsauttamalla tästä.</translation>
+<translation id="2141974047387702305">Päivitystiedostoja ladattaessa tapahtui virhe. Tarkista internetyhteytesi ja yritä myöhemmin uudelleen.</translation>
+<translation id="2339641773402824483">Tarkistetaan päivityksiä…</translation>
 <translation id="2441056087170876076">Hirviö 2</translation>
 <translation id="2444387452209867610">Lisää muistiinpano</translation>
 <translation id="2486841023299517366">Eläin 4</translation>
+<translation id="2612127540243995147">Valmis asennukseen. Vivaldi suljetaan ja käynnistetään uudelleen.</translation>
+<translation id="2613387515621326337">Näytä päivityssivusto</translation>
+<translation id="2647368062414805334">Edgen asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Edge-ikkunat ja napsauta sitten Jatka.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Eläin 3</translation>
 <translation id="2873951654529031587">Roskakori</translation>
 <translation id="292258461174562431">Hirviö 4</translation>
 <translation id="2923448633003185837">Liitä ja siirry</translation>
 <translation id="2977472760057091832">Avaa linkki yksityisikkunaan</translation>
 <translation id="2989805286512600854">Avaa uuteen välilehteen</translation>
-<translation id="3027988479108856431">Yandexin asetukset eivät valitettavasti ole käytettävissä selaimen ollessa auki. Tuodaksesi asetukset Vivaldiin tallenna työsi ja sulje kaikki Yandex-ikkunat. Napsauta sitten Jatka.</translation>
+<translation id="3027988479108856431">Yandexin asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Yandex-ikkunat ja napsauta sitten Jatka.</translation>
 <translation id="3084011186245865060">Maisema 6</translation>
 <translation id="3127383884976966729">Eläin 7</translation>
 <translation id="3156398087075132709">Uusi kirjanmerkki</translation>
+<translation id="3255747772218936245">Asenna päivitys</translation>
 <translation id="3259769196742189631">Varmista</translation>
 <translation id="3302905971452834934">Hirviö 1</translation>
 <translation id="3334610655141903168">(ei otsikkoa)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> on uusin saatavilla oleva versio.</translation>
+<translation id="3383198080133834965">Olet ajan tasalla!</translation>
 <translation id="3402602684546832928">Valitse Operan kirjanmerkkitiedosto</translation>
 <translation id="3451317331714872347">Maisema 8</translation>
 <translation id="3457498675806041407">Vahvista lopettaminen</translation>
@@ -45,13 +58,17 @@
 <translation id="3542768452570884558">Avaa linkki uuteen ikkunaan</translation>
 <translation id="3588820906588687999">Avaa kuva uuteen välilehteen</translation>
 <translation id="3601066750251199488">Hirviö 3</translation>
+<translation id="3680031241659195730">Vivaldista on saatavilla uusi versio!</translation>
+<translation id="3708982624815781692">Lataus peruttiin.</translation>
 <translation id="3732157130969736834">Kirjanmerkkilinkki</translation>
 <translation id="3732388226447288666">Eläin 2</translation>
 <translation id="3732439195215136813">Eläin 5</translation>
+<translation id="3795800845758778870">Braven asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Brave-ikkunat ja napsauta sitten Jatka.</translation>
 <translation id="3832132597516774400">Maisema 5</translation>
 <translation id="3914946330804881301">Tuotu Operasta</translation>
 <translation id="3921292902397893431">Hirviö 8</translation>
 <translation id="3943857333388298514">Liitä</translation>
+<translation id="4005270918754737597">Sivuuta tämä versio</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Älä näytä enää</translation>
 <translation id="4074744496918018786">Avaa kuva yksityisikkunaan</translation>
@@ -68,6 +85,7 @@
 <translation id="4677434526832593569">Eläin 8</translation>
 <translation id="474217410105706308">Vaimenna välilehti</translation>
 <translation id="4881695831933465202">Avaa</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> / <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Tuodut pikavalinnat</translation>
 <translation id="5092656712000637858">Lisää sivu verkkopaneeliin</translation>
 <translation id="5177818338935286353">Hirviö 7</translation>
@@ -81,11 +99,14 @@
 <translation id="5594602170491763400">Hirviö 5</translation>
 <translation id="5615637589913244581">Operan versio 15+ (beeta)</translation>
 <translation id="5648110075441906505">Avaa linkki uuteen ikkunaan</translation>
+<translation id="5656371807944747581">Päivitysvirhe!</translation>
 <translation id="5716238312826274098">Poista ilmoitukset käytöstä</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> on nyt saatavilla (sinulla on <ph name="OLD_VERSION" />). Haluatko ladata sen nyt?</translation>
 <translation id="5770433027661640693">Maisema 10</translation>
 <translation id="5857090052475505287">Uusi kansio</translation>
 <translation id="588258955323874662">Kokoruutu</translation>
-<translation id="5916080360077521750">Chromen asetukset eivät valitettavasti ole käytettävissä selaimen ollessa auki. Tuodaksesi asetukset Vivaldiin tallenna työsi ja sulje kaikki Chrome-ikkunat. Napsauta sitten Jatka.</translation>
+<translation id="5916080360077521750">Chromen asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Chrome-ikkunat ja napsauta sitten Jatka.</translation>
+<translation id="6040143037577758943">Sulje</translation>
 <translation id="6229528619562190452">Päivitä Vivaldi napsauttamalla tästä.</translation>
 <translation id="6234173136417926046">Käytä kuvaa aloitussivun taustana</translation>
 <translation id="630690498669249215">Operan kirjanmerkkitiedosto</translation>
@@ -96,15 +117,23 @@
 <translation id="6538338088414940408">Avaa linkki taustavälilehteen</translation>
 <translation id="6551219277044048123">Lisää &amp;hakukoneeksi…</translation>
 <translation id="6630781781151951863">Maisema 18</translation>
-<translation id="6804831687363620480">Operan (15+) asetukset eivät valitettavasti ole käytettävissä selaimen ollessa auki. Tuodaksesi asetukset Vivaldiin tallenna työsi ja sulje kaikki Opera 15+ -ikkunat. Napsauta sitten Jatka.</translation>
+<translation id="6635049669875534328">Julkaisutiedot:</translation>
+<translation id="6693585104974197539">Valitse tuotava Edgen profiilikansio</translation>
+<translation id="6726279523566323394">Valitse tuotava Braven profiilikansio</translation>
+<translation id="6804831687363620480">Operan (15+) asetuksia ei valitettavasti voi lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin tallenna työsi, sulje kaikki Opera 15+ -ikkunat ja napsauta sitten Jatka.</translation>
+<translation id="6892812721183419409">Avaa linkki käyttäjänä <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopioi</translation>
 <translation id="7086554968911045110">Maisema 7</translation>
 <translation id="7111492742514999492">Maisema 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldin on mahdollistanut avoin lähdekoodiprojekti <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> sekä muut <ph name="BEGIN_LINK_OSS" />avoimen koodin ohjelmat<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Päivitysasenninta ei saatu käyntiin. Tarkista, että koneen muisti ja levytila riittävät, ja yritä myöhemmin uudelleen.</translation>
+<translation id="7658239707568436148">Peru</translation>
 <translation id="7715497554424665066">&amp;Ohita päivitys</translation>
 <translation id="7724603315864178912">Leikkaa</translation>
+<translation id="7727481996062361502">Tarkistetaan päivitystä…</translation>
 <translation id="7793738202466490491">Lisää kalenteritapahtumaksi</translation>
+<translation id="7848222781052558334">Ladattujen tiedostojen digitaalisen allekirjoituksen tarkistaminen epäonnistui.</translation>
 <translation id="7865983598101744945">Vahvista lopettaminen</translation>
 <translation id="7957213167373139414">Kalenteri</translation>
 <translation id="8027581147000338959">Avaa uuteen ikkunaan</translation>
@@ -113,9 +142,13 @@
 <translation id="8261506727792406068">Poista</translation>
 <translation id="8331671104904436324">Avaa taustavälilehteen</translation>
 <translation id="8373293945112511707">Maisema 1</translation>
+<translation id="8388552048012645975">Ladataan päivitystä…</translation>
 <translation id="8427094907586191051">Maisema 17</translation>
+<translation id="8439034818057146672">Vivaldin uusi versio on valmiina asennukseen.</translation>
 <translation id="8446668873108041390">JavaScriptin suoritus AppleScriptin kautta on poistettu käytöstä. Kohdassa Asetukset &gt; Yksityisyys &gt; Apple-tapahtumat on asetus tämän sallimiseksi.</translation>
 <translation id="8539196077526389150">Maisema 13</translation>
+<translation id="8562339533180097902">Sulje Vivaldi ja asenna nyt</translation>
+<translation id="8567452685425968223">Puretaan päivitystä…</translation>
 <translation id="8624587806981488221">Lataa &amp;kuva uudelleen</translation>
 <translation id="864444594187862076">Operan versio 15+ (kehitysversio)</translation>
 <translation id="8651348004684669199">Lisää aktiivinen välilehti</translation>
@@ -123,12 +156,15 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Maisema 14</translation>
 <translation id="8773635261052182196">Et saa enää näitä ilmoituksia. Voit ottaa ne uudelleen käyttöön Vivaldin asetuksista.</translation>
+<translation id="8813277370772331957">Muistuta myöhemmin</translation>
 <translation id="8894900864683381599">Lisää linkki verkkopaneeliin</translation>
 <translation id="8912720443398351457">Halutko varmasti poistua Vivaldista?</translation>
 <translation id="8947109330183116400">Valitse HTML-kirjanmerkkitiedosto</translation>
 <translation id="9017566390391482291">Valitse Vivaldin profiilikansio tuomista varten</translation>
 <translation id="9065203028668620118">Muokkaa</translation>
+<translation id="912022491595344261">Avaa kuva käyttäjänä <ph name="USER" /></translation>
 <translation id="9157539936604258187">Avaa linkki</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Maisema 16</translation>
 </translationbundle>

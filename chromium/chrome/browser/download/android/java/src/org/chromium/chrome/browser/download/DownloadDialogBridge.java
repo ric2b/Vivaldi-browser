@@ -364,7 +364,8 @@ public class DownloadDialogBridge
                 && (urlToDownload.toLowerCase(Locale.ROOT).startsWith("http:")
                         || urlToDownload.toLowerCase(Locale.ROOT).startsWith("https:")
                         || urlToDownload.toLowerCase(Locale.ROOT).startsWith("magnet:")
-                        || urlToDownload.toLowerCase(Locale.ROOT).startsWith("ftp:"))) {
+                        || urlToDownload.toLowerCase(Locale.ROOT).startsWith("ftp:")
+                        || urlToDownload.toLowerCase(Locale.ROOT).startsWith("data:"))) {
             Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(urlToDownload));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.setClassName(

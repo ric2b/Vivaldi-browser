@@ -36,18 +36,36 @@ network::mojom::ContentSecurityPolicyPtr BuildContentSecurityPolicy(
     const blink::WebContentSecurityPolicy& policy_in) {
   auto policy = network::mojom::ContentSecurityPolicy::New();
 
+  policy->self_origin = BuildCSPSource(policy_in.self_origin);
+
   policy->header = network::mojom::ContentSecurityPolicyHeader::New(
       policy_in.header.Utf8(), policy_in.disposition, policy_in.source);
   policy->use_reporting_api = policy_in.use_reporting_api;
 
+  for (const auto& directive : policy_in.raw_directives) {
+    policy->raw_directives[directive.name] = directive.value.Utf8();
+  }
   for (const auto& directive : policy_in.directives) {
-    auto name = network::ToCSPDirectiveName(directive.name.Utf8());
-    policy->directives[name] = BuildCSPSourceList(directive.source_list);
+    policy->directives[directive.name] =
+        BuildCSPSourceList(directive.source_list);
   }
   policy->upgrade_insecure_requests = policy_in.upgrade_insecure_requests;
+  policy->block_all_mixed_content = policy_in.block_all_mixed_content;
 
   for (const blink::WebString& endpoint : policy_in.report_endpoints)
     policy->report_endpoints.push_back(endpoint.Utf8());
+
+  policy->require_trusted_types_for = policy_in.require_trusted_types_for;
+
+  if (policy_in.trusted_types) {
+    std::vector<std::string> list;
+    for (const auto& type : policy_in.trusted_types->list) {
+      list.emplace_back(type.Utf8());
+    }
+    policy->trusted_types = network::mojom::CSPTrustedTypes::New(
+        std::move(list), policy_in.trusted_types->allow_any,
+        policy_in.trusted_types->allow_duplicates);
+  }
 
   return policy;
 }

@@ -10,8 +10,8 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/android/shortcut_info.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
+#include "components/webapps/browser/android/shortcut_info.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -19,6 +19,8 @@
 namespace favicon_base {
 struct FaviconRawBitmapResult;
 }
+
+namespace webapps {
 
 class InstallableManager;
 struct InstallableData;
@@ -116,5 +118,7 @@ class AddToHomescreenDataFetcher : public content::WebContentsObserver {
   AddToHomescreenDataFetcher& operator=(const AddToHomescreenDataFetcher&) =
       delete;
 };
+
+}  // namespace webapps
 
 #endif  // CHROME_BROWSER_ANDROID_WEBAPPS_ADD_TO_HOMESCREEN_DATA_FETCHER_H_

@@ -37,6 +37,7 @@
 #include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -55,6 +56,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
@@ -140,7 +142,6 @@
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
-#include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
@@ -171,6 +172,7 @@
 #include "third_party/blink/renderer/core/testing/fake_remote_frame_host.h"
 #include "third_party/blink/renderer/core/testing/fake_remote_main_frame_host.h"
 #include "third_party/blink/renderer/core/testing/mock_clipboard_host.h"
+#include "third_party/blink/renderer/core/testing/mock_policy_container_host.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/testing/scoped_fake_plugin_registry.h"
@@ -351,6 +353,7 @@ class WebFrameTest : public testing::Test {
       frame_test_helpers::WebViewHelper* web_view_helper) {
     web_view_helper->InitializeAndLoad(url);
     web_view_helper->GetWebView()->GetSettings()->SetDefaultFontSize(12);
+    web_view_helper->GetWebView()->MainFrameWidget()->SetFocus(true);
     web_view_helper->Resize(gfx::Size(640, 480));
   }
 
@@ -1209,18 +1212,6 @@ TEST_F(WebFrameTest, PostMessageThenDetach) {
 
 namespace {
 
-class FixedLayoutTestWebWidgetClient
-    : public frame_test_helpers::TestWebWidgetClient {
- public:
-  FixedLayoutTestWebWidgetClient() = default;
-  ~FixedLayoutTestWebWidgetClient() override = default;
-
-  // frame_test_helpers::TestWebWidgetClient:
-  ScreenInfo GetInitialScreenInfo() override { return screen_info_; }
-
-  ScreenInfo screen_info_;
-};
-
 // Helper function to set autosizing multipliers on a document.
 bool SetTextAutosizingMultiplier(Document* document, float multiplier) {
   bool multiplier_set = false;
@@ -1253,39 +1244,40 @@ bool CheckTextAutosizingMultiplier(Document* document, float multiplier) {
 }
 
 void UpdateScreenInfoAndResizeView(
-    FixedLayoutTestWebWidgetClient* client,
+    frame_test_helpers::WebViewHelper* web_view_helper,
+    const ScreenInfo& screen_info) {
+  web_view_helper->GetWebView()->MainFrameViewWidget()->UpdateScreenInfo(
+      screen_info);
+  web_view_helper->Resize(screen_info.rect.size());
+}
+
+void UpdateScreenInfoAndResizeView(
     frame_test_helpers::WebViewHelper* web_view_helper,
     int viewport_width,
     int viewport_height) {
-  client->screen_info_.rect = gfx::Rect(viewport_width, viewport_height);
-  web_view_helper->GetWebView()->MainFrameViewWidget()->UpdateScreenInfo(
-      client->screen_info_);
-  web_view_helper->Resize(gfx::Size(viewport_width, viewport_height));
+  ScreenInfo screen_info =
+      web_view_helper->GetMainFrameWidget()->GetOriginalScreenInfo();
+  screen_info.rect = gfx::Rect(viewport_width, viewport_height);
+  UpdateScreenInfoAndResizeView(web_view_helper, screen_info);
 }
 
 }  // namespace
 
-class WebFixedLayoutFrameTest : public WebFrameTest {
- protected:
-  FixedLayoutTestWebWidgetClient widget_client_;
-};
-
 TEST_F(WebFrameTest, ChangeInFixedLayoutResetsTextAutosizingMultipliers) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "fixed_layout.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
 
   Document* document =
       To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame())
           ->GetDocument();
   document->GetSettings()->SetTextAutosizingEnabled(true);
-  EXPECT_TRUE(document->GetSettings()->TextAutosizingEnabled());
+  EXPECT_TRUE(document->GetSettings()->GetTextAutosizingEnabled());
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   EXPECT_TRUE(SetTextAutosizingMultiplier(document, 2));
@@ -1306,17 +1298,15 @@ TEST_F(WebFrameTest, WorkingTextAutosizingMultipliers_VirtualViewport) {
   const std::string html_file = "fixed_layout.html";
   RegisterMockedHttpURLLoad(html_file);
 
-  FixedLayoutTestWebWidgetClient client;
-
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + html_file, nullptr, nullptr,
-                                    &client, ConfigureAndroid);
+                                    ConfigureAndroid);
 
   Document* document =
       To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame())
           ->GetDocument();
   document->GetSettings()->SetTextAutosizingEnabled(true);
-  EXPECT_TRUE(document->GetSettings()->TextAutosizingEnabled());
+  EXPECT_TRUE(document->GetSettings()->GetTextAutosizingEnabled());
 
   web_view_helper.Resize(gfx::Size(490, 800));
 
@@ -1329,20 +1319,19 @@ TEST_F(WebFrameTest,
   RegisterMockedHttpURLLoad("iframe_reload.html");
   RegisterMockedHttpURLLoad("visible_iframe.html");
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "iframe_reload.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
 
   auto* main_frame =
       To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
   Document* document = main_frame->GetDocument();
   LocalFrameView* frame_view = web_view_helper.LocalMainFrame()->GetFrameView();
   document->GetSettings()->SetTextAutosizingEnabled(true);
-  EXPECT_TRUE(document->GetSettings()->TextAutosizingEnabled());
+  EXPECT_TRUE(document->GetSettings()->GetTextAutosizingEnabled());
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   for (Frame* frame = main_frame; frame; frame = frame->Tree().TraverseNext()) {
@@ -1374,13 +1363,11 @@ TEST_F(WebFrameTest,
 }
 
 TEST_F(WebFrameTest, ZeroHeightPositiveWidthNotIgnored) {
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 1280;
   int viewport_height = 0;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client, ConfigureAndroid);
+  web_view_helper.Initialize(nullptr, nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   EXPECT_EQ(viewport_width, web_view_helper.GetWebView()
@@ -1401,13 +1388,12 @@ TEST_F(WebFrameTest, DeviceScaleFactorUsesDefaultWithoutViewportTag) {
   int viewport_width = 640;
   int viewport_height = 480;
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 2;
-
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "no_viewport_tag.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
-
+                                    nullptr, ConfigureAndroid);
+  web_view_helper.GetWebView()
+      ->MainFrameWidget()
+      ->SetDeviceScaleFactorForTesting(2.f);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   EXPECT_EQ(
@@ -1427,15 +1413,13 @@ TEST_F(WebFrameTest, DeviceScaleFactorUsesDefaultWithoutViewportTag) {
 TEST_F(WebFrameTest, FixedLayoutInitializeAtMinimumScale) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   // Make sure we initialize to minimum scale, even if the window size
   // only becomes available after the load begins.
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client, ConfigureAndroid);
+  web_view_helper.Initialize(nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
                                 base_url_ + "fixed_layout.html");
@@ -1470,15 +1454,13 @@ TEST_F(WebFrameTest, FixedLayoutInitializeAtMinimumScale) {
 TEST_F(WebFrameTest, WideDocumentInitializeAtMinimumScale) {
   RegisterMockedHttpURLLoad("wide_document.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   // Make sure we initialize to minimum scale, even if the window size
   // only becomes available after the load begins.
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client, ConfigureAndroid);
+  web_view_helper.Initialize(nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
                                 base_url_ + "wide_document.html");
@@ -1512,14 +1494,12 @@ TEST_F(WebFrameTest, WideDocumentInitializeAtMinimumScale) {
 TEST_F(WebFrameTest, DelayedViewportInitialScale) {
   RegisterMockedHttpURLLoad("viewport-auto-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr, &client,
+      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
@@ -1539,14 +1519,12 @@ TEST_F(WebFrameTest, DelayedViewportInitialScale) {
 TEST_F(WebFrameTest, setLoadWithOverviewModeToFalse) {
   RegisterMockedHttpURLLoad("viewport-auto-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr, &client,
+      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -1560,14 +1538,12 @@ TEST_F(WebFrameTest, setLoadWithOverviewModeToFalse) {
 TEST_F(WebFrameTest, SetLoadWithOverviewModeToFalseAndNoWideViewport) {
   RegisterMockedHttpURLLoad("large-div.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "large-div.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetLoadWithOverviewMode(false);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -1582,14 +1558,12 @@ TEST_F(WebFrameTest, SetLoadWithOverviewModeToFalseAndNoWideViewport) {
 TEST_F(WebFrameTest, NoWideViewportIgnoresPageViewportWidth) {
   RegisterMockedHttpURLLoad("viewport-auto-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr, &client,
+      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -1613,15 +1587,13 @@ TEST_F(WebFrameTest, NoWideViewportIgnoresPageViewportWidth) {
 TEST_F(WebFrameTest, NoWideViewportIgnoresPageViewportWidthButAccountsScale) {
   RegisterMockedHttpURLLoad("viewport-wide-2x-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-wide-2x-initial-scale.html", nullptr, nullptr,
-      &client, ConfigureAndroid);
+      ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
   web_view_helper.GetWebView()->GetSettings()->SetUseWideViewport(false);
@@ -1645,14 +1617,12 @@ TEST_F(WebFrameTest, NoWideViewportIgnoresPageViewportWidthButAccountsScale) {
 TEST_F(WebFrameTest, WideViewportSetsTo980WithoutViewportTag) {
   RegisterMockedHttpURLLoad("no_viewport_tag.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "no_viewport_tag.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
   web_view_helper.GetWebView()->GetSettings()->SetUseWideViewport(true);
@@ -1676,13 +1646,11 @@ TEST_F(WebFrameTest, WideViewportSetsTo980WithoutViewportTag) {
 TEST_F(WebFrameTest, WideViewportSetsTo980WithXhtmlMp) {
   RegisterMockedHttpURLLoad("viewport/viewport-legacy-xhtmlmp.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client, ConfigureAndroid);
+  web_view_helper.Initialize(nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
   web_view_helper.GetWebView()->GetSettings()->SetUseWideViewport(true);
@@ -1706,15 +1674,12 @@ TEST_F(WebFrameTest, WideViewportSetsTo980WithXhtmlMp) {
 TEST_F(WebFrameTest, NoWideViewportAndHeightInMeta) {
   RegisterMockedHttpURLLoad("viewport-height-1000.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "viewport-height-1000.html",
-                                    nullptr, nullptr, &client,
-                                    ConfigureAndroid);
+                                    nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
   web_view_helper.GetWebView()->GetSettings()->SetUseWideViewport(false);
@@ -1730,14 +1695,12 @@ TEST_F(WebFrameTest, NoWideViewportAndHeightInMeta) {
 TEST_F(WebFrameTest, WideViewportSetsTo980WithAutoWidth) {
   RegisterMockedHttpURLLoad("viewport-2x-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-2x-initial-scale.html", nullptr, nullptr, &client,
+      base_url_ + "viewport-2x-initial-scale.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -1760,15 +1723,13 @@ TEST_F(WebFrameTest, WideViewportSetsTo980WithAutoWidth) {
 TEST_F(WebFrameTest, PageViewportInitialScaleOverridesLoadWithOverviewMode) {
   RegisterMockedHttpURLLoad("viewport-wide-2x-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-wide-2x-initial-scale.html", nullptr, nullptr,
-      &client, ConfigureAndroid);
+      ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetLoadWithOverviewMode(false);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
@@ -1780,13 +1741,11 @@ TEST_F(WebFrameTest, PageViewportInitialScaleOverridesLoadWithOverviewMode) {
 TEST_F(WebFrameTest, setInitialPageScaleFactorPermanently) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   float enforced_page_scale_factor = 2.0f;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "fixed_layout.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
   web_view_helper.GetWebView()->GetSettings()->SetLoadWithOverviewMode(false);
@@ -1813,15 +1772,13 @@ TEST_F(WebFrameTest,
        PermanentInitialPageScaleFactorOverridesLoadWithOverviewMode) {
   RegisterMockedHttpURLLoad("viewport-auto-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
   float enforced_page_scale_factor = 0.5f;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr, &client,
+      base_url_ + "viewport-auto-initial-scale.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetLoadWithOverviewMode(false);
   web_view_helper.GetWebView()->SetInitialPageScaleOverride(
@@ -1836,8 +1793,6 @@ TEST_F(WebFrameTest,
        PermanentInitialPageScaleFactorOverridesPageViewportInitialScale) {
   RegisterMockedHttpURLLoad("viewport-wide-2x-initial-scale.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
   float enforced_page_scale_factor = 0.5f;
@@ -1845,7 +1800,7 @@ TEST_F(WebFrameTest,
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-wide-2x-initial-scale.html", nullptr, nullptr,
-      &client, ConfigureAndroid);
+      ConfigureAndroid);
   web_view_helper.GetWebView()->SetInitialPageScaleOverride(
       enforced_page_scale_factor);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
@@ -1867,8 +1822,6 @@ TEST_F(WebFrameTest, SmallPermanentInitialPageScaleFactorIsClobbered) {
   for (size_t i = 0; i < base::size(pages); ++i)
     RegisterMockedHttpURLLoad(pages[i]);
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 400;
   int viewport_height = 300;
   float enforced_page_scale_factor = 0.75f;
@@ -1877,7 +1830,7 @@ TEST_F(WebFrameTest, SmallPermanentInitialPageScaleFactorIsClobbered) {
     for (int quirk_enabled = 0; quirk_enabled <= 1; ++quirk_enabled) {
       frame_test_helpers::WebViewHelper web_view_helper;
       web_view_helper.InitializeAndLoad(base_url_ + pages[i], nullptr, nullptr,
-                                        &client, ConfigureAndroid);
+                                        ConfigureAndroid);
       web_view_helper.GetWebView()
           ->GetSettings()
           ->SetClobberUserAgentInitialScaleQuirk(quirk_enabled);
@@ -1896,14 +1849,12 @@ TEST_F(WebFrameTest, SmallPermanentInitialPageScaleFactorIsClobbered) {
 }
 
 TEST_F(WebFrameTest, PermanentInitialPageScaleFactorAffectsLayoutWidth) {
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
   float enforced_page_scale_factor = 0.5;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.InitializeAndLoad("about:blank", nullptr, nullptr, &client,
+  web_view_helper.InitializeAndLoad("about:blank", nullptr, nullptr,
                                     ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -1926,15 +1877,13 @@ TEST_F(WebFrameTest, PermanentInitialPageScaleFactorAffectsLayoutWidth) {
 TEST_F(WebFrameTest, DocumentElementClientHeightWorksWithWrapContentMode) {
   RegisterMockedHttpURLLoad("0-by-0.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
 
   web_view_helper.InitializeAndLoad(base_url_ + "0-by-0.html", nullptr, nullptr,
-                                    &client, ConfigureAndroid);
+                                    ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetForceZeroLayoutHeight(true);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
@@ -1947,15 +1896,13 @@ TEST_F(WebFrameTest, DocumentElementClientHeightWorksWithWrapContentMode) {
 TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksWithWrapContentMode) {
   RegisterMockedHttpURLLoad("0-by-0.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
 
   web_view_helper.InitializeAndLoad(base_url_ + "0-by-0.html", nullptr, nullptr,
-                                    &client, ConfigureAndroid);
+                                    ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetForceZeroLayoutHeight(true);
   UpdateAllLifecyclePhases(web_view_helper.GetWebView());
 
@@ -1993,15 +1940,13 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksWithWrapContentMode) {
 TEST_F(WebFrameTest, SetForceZeroLayoutHeight) {
   RegisterMockedHttpURLLoad("200-by-300.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
 
   web_view_helper.InitializeAndLoad(base_url_ + "200-by-300.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   EXPECT_LE(viewport_height, web_view_helper.GetWebView()
@@ -2050,14 +1995,12 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeight) {
 TEST_F(WebFrameTest, ToggleViewportMetaOnOff) {
   RegisterMockedHttpURLLoad("viewport-device-width.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "viewport-device-width.html",
-                                    nullptr, nullptr, &client);
+                                    nullptr, nullptr);
   WebSettings* settings = web_view_helper.GetWebView()->GetSettings();
   settings->SetViewportMetaEnabled(false);
   settings->SetViewportEnabled(true);
@@ -2088,15 +2031,13 @@ TEST_F(WebFrameTest,
   // because the layout is only updated if either width or height is changed
   RegisterMockedHttpURLLoad("button.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
 
   web_view_helper.InitializeAndLoad(base_url_ + "button.html", nullptr, nullptr,
-                                    &client, ConfigureAndroid);
+                                    ConfigureAndroid);
   // set view height to zero so that if the height of the view is not
   // successfully updated during later resizes touch events will fail
   // (as in not hit content included in the view)
@@ -2137,7 +2078,7 @@ TEST_F(WebFrameTest, FrameOwnerPropertiesMargin) {
   WebFrameOwnerProperties properties;
   properties.margin_width = 11;
   properties.margin_height = 22;
-  WebLocalFrameImpl* local_frame = frame_test_helpers::CreateLocalChild(
+  WebLocalFrameImpl* local_frame = helper.CreateLocalChild(
       *helper.RemoteMainFrame(), "frameName", properties);
 
   RegisterMockedHttpURLLoad("frame_owner_properties.html");
@@ -2168,7 +2109,7 @@ TEST_F(WebFrameTest, FrameOwnerPropertiesScrolling) {
   WebFrameOwnerProperties properties;
   // Turn off scrolling in the subframe.
   properties.scrollbar_mode = mojom::blink::ScrollbarMode::kAlwaysOff;
-  WebLocalFrameImpl* local_frame = frame_test_helpers::CreateLocalChild(
+  WebLocalFrameImpl* local_frame = helper.CreateLocalChild(
       *helper.RemoteMainFrame(), "frameName", properties);
 
   RegisterMockedHttpURLLoad("frame_owner_properties.html");
@@ -2190,15 +2131,13 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksAcrossNavigations) {
   RegisterMockedHttpURLLoad("200-by-300.html");
   RegisterMockedHttpURLLoad("large-div.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
 
   web_view_helper.InitializeAndLoad(base_url_ + "200-by-300.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetForceZeroLayoutHeight(true);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
@@ -2216,15 +2155,13 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksAcrossNavigations) {
 TEST_F(WebFrameTest, SetForceZeroLayoutHeightWithWideViewportQuirk) {
   RegisterMockedHttpURLLoad("200-by-300.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
 
   web_view_helper.InitializeAndLoad(base_url_ + "200-by-300.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
   web_view_helper.GetWebView()->GetSettings()->SetUseWideViewport(true);
@@ -2241,13 +2178,11 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeightWithWideViewportQuirk) {
 TEST_F(WebFrameTest, WideViewportQuirkClobbersHeight) {
   RegisterMockedHttpURLLoad("viewport-height-1000.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 600;
   int viewport_height = 800;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.InitializeAndLoad("about:blank", nullptr, nullptr, &client,
+  web_view_helper.InitializeAndLoad("about:blank", nullptr, nullptr,
                                     ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -2269,13 +2204,11 @@ TEST_F(WebFrameTest, WideViewportQuirkClobbersHeight) {
 TEST_F(WebFrameTest, OverflowHiddenDisablesScrolling) {
   RegisterMockedHttpURLLoad("body-overflow-hidden.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client);
+  web_view_helper.Initialize(nullptr, nullptr);
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
                                 base_url_ + "body-overflow-hidden.html");
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
@@ -2289,13 +2222,11 @@ TEST_F(WebFrameTest, OverflowHiddenDisablesScrolling) {
 TEST_F(WebFrameTest, OverflowHiddenDisablesScrollingWithSetCanHaveScrollbars) {
   RegisterMockedHttpURLLoad("body-overflow-hidden-short.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client);
+  web_view_helper.Initialize(nullptr, nullptr);
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
                                 base_url_ + "body-overflow-hidden-short.html");
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
@@ -2314,13 +2245,11 @@ TEST_F(WebFrameTest, OverflowHiddenDisablesScrollingWithSetCanHaveScrollbars) {
 TEST_F(WebFrameTest, IgnoreOverflowHiddenQuirk) {
   RegisterMockedHttpURLLoad("body-overflow-hidden.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client);
+  web_view_helper.Initialize(nullptr, nullptr);
   web_view_helper.GetWebView()
       ->GetSettings()
       ->SetIgnoreMainFrameOverflowHiddenQuirk(true);
@@ -2335,14 +2264,12 @@ TEST_F(WebFrameTest, IgnoreOverflowHiddenQuirk) {
 TEST_F(WebFrameTest, NonZeroValuesNoQuirk) {
   RegisterMockedHttpURLLoad("viewport-nonzero-values.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
   float expected_page_scale_factor = 0.5f;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client, ConfigureAndroid);
+  web_view_helper.Initialize(nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->GetSettings()->SetViewportMetaZeroValuesQuirk(
       true);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
@@ -2375,15 +2302,13 @@ TEST_F(WebFrameTest, NonZeroValuesNoQuirk) {
 TEST_F(WebFrameTest, setPageScaleFactorDoesNotLayout) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   // Small viewport to ensure there are always scrollbars.
   int viewport_width = 64;
   int viewport_height = 48;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "fixed_layout.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   unsigned prev_layout_count =
@@ -2402,14 +2327,12 @@ TEST_F(WebFrameTest, setPageScaleFactorDoesNotLayout) {
 TEST_F(WebFrameTest, setPageScaleFactorWithOverlayScrollbarsDoesNotLayout) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "fixed_layout.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   unsigned prev_layout_count =
@@ -2428,14 +2351,12 @@ TEST_F(WebFrameTest, setPageScaleFactorWithOverlayScrollbarsDoesNotLayout) {
 TEST_F(WebFrameTest, pageScaleFactorWrittenToHistoryItem) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "fixed_layout.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   web_view_helper.GetWebView()->SetPageScaleFactor(3);
@@ -2451,13 +2372,11 @@ TEST_F(WebFrameTest, pageScaleFactorWrittenToHistoryItem) {
 TEST_F(WebFrameTest, initialScaleWrittenToHistoryItem) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client, ConfigureAndroid);
+  web_view_helper.Initialize(nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
                                 base_url_ + "fixed_layout.html");
@@ -2478,15 +2397,13 @@ TEST_F(WebFrameTest, initialScaleWrittenToHistoryItem) {
 TEST_F(WebFrameTest, pageScaleFactorDoesntShrinkFrameView) {
   RegisterMockedHttpURLLoad("large-div.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   // Small viewport to ensure there are always scrollbars.
   int viewport_width = 64;
   int viewport_height = 48;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "large-div.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   LocalFrameView* view = web_view_helper.LocalMainFrame()->GetFrameView();
@@ -2521,14 +2438,12 @@ TEST_F(WebFrameTest, pageScaleFactorDoesntShrinkFrameView) {
 TEST_F(WebFrameTest, pageScaleFactorDoesNotApplyCssTransform) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "fixed_layout.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   web_view_helper.GetWebView()->SetPageScaleFactor(2);
@@ -2549,7 +2464,6 @@ TEST_F(WebFrameTest, pageScaleFactorDoesNotApplyCssTransform) {
 TEST_F(WebFrameTest, targetDensityDpiHigh) {
   RegisterMockedHttpURLLoad("viewport-target-densitydpi-high.html");
 
-  FixedLayoutTestWebWidgetClient client;
   // high-dpi = 240
   float target_dpi = 240.0f;
   float device_scale_factors[] = {1.0f, 4.0f / 3.0f, 2.0f};
@@ -2559,12 +2473,14 @@ TEST_F(WebFrameTest, targetDensityDpiHigh) {
   for (size_t i = 0; i < base::size(device_scale_factors); ++i) {
     float device_scale_factor = device_scale_factors[i];
     float device_dpi = device_scale_factor * 160.0f;
-    client.screen_info_.device_scale_factor = device_scale_factor;
 
     frame_test_helpers::WebViewHelper web_view_helper;
     web_view_helper.InitializeAndLoad(
         base_url_ + "viewport-target-densitydpi-high.html", nullptr, nullptr,
-        &client, ConfigureAndroid);
+        ConfigureAndroid);
+    web_view_helper.GetWebView()
+        ->MainFrameWidget()
+        ->SetDeviceScaleFactorForTesting(device_scale_factor);
     web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
         true);
     web_view_helper.GetWebView()
@@ -2600,17 +2516,17 @@ TEST_F(WebFrameTest, targetDensityDpiDevice) {
 
   float device_scale_factors[] = {1.0f, 4.0f / 3.0f, 2.0f};
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
 
   for (size_t i = 0; i < base::size(device_scale_factors); ++i) {
-    client.screen_info_.device_scale_factor = device_scale_factors[i];
-
     frame_test_helpers::WebViewHelper web_view_helper;
     web_view_helper.InitializeAndLoad(
         base_url_ + "viewport-target-densitydpi-device.html", nullptr, nullptr,
-        &client, ConfigureAndroid);
+        ConfigureAndroid);
+    web_view_helper.GetWebView()
+        ->MainFrameWidget()
+        ->SetDeviceScaleFactorForTesting(device_scale_factors[i]);
     web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
         true);
     web_view_helper.GetWebView()
@@ -2618,21 +2534,21 @@ TEST_F(WebFrameTest, targetDensityDpiDevice) {
         ->SetSupportDeprecatedTargetDensityDPI(true);
     web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
-    EXPECT_NEAR(viewport_width * client.screen_info_.device_scale_factor,
+    EXPECT_NEAR(viewport_width * device_scale_factors[i],
                 web_view_helper.GetWebView()
                     ->MainFrameImpl()
                     ->GetFrameView()
                     ->GetLayoutSize()
                     .Width(),
                 1.0f);
-    EXPECT_NEAR(viewport_height * client.screen_info_.device_scale_factor,
+    EXPECT_NEAR(viewport_height * device_scale_factors[i],
                 web_view_helper.GetWebView()
                     ->MainFrameImpl()
                     ->GetFrameView()
                     ->GetLayoutSize()
                     .Height(),
                 1.0f);
-    EXPECT_NEAR(1.0f / client.screen_info_.device_scale_factor,
+    EXPECT_NEAR(1.0f / device_scale_factors[i],
                 web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
   }
 }
@@ -2643,17 +2559,17 @@ TEST_F(WebFrameTest, targetDensityDpiDeviceAndFixedWidth) {
 
   float device_scale_factors[] = {1.0f, 4.0f / 3.0f, 2.0f};
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
 
   for (size_t i = 0; i < base::size(device_scale_factors); ++i) {
-    client.screen_info_.device_scale_factor = device_scale_factors[i];
-
     frame_test_helpers::WebViewHelper web_view_helper;
     web_view_helper.InitializeAndLoad(
         base_url_ + "viewport-target-densitydpi-device-and-fixed-width.html",
-        nullptr, nullptr, &client, ConfigureAndroid);
+        nullptr, nullptr, ConfigureAndroid);
+    web_view_helper.GetWebView()
+        ->MainFrameWidget()
+        ->SetDeviceScaleFactorForTesting(device_scale_factors[i]);
     web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
         true);
     web_view_helper.GetWebView()
@@ -2683,15 +2599,17 @@ TEST_F(WebFrameTest, targetDensityDpiDeviceAndFixedWidth) {
 TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOne) {
   RegisterMockedHttpURLLoad("viewport-initial-scale-less-than-1.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1.33f;
+  float device_scale_factor = 1.33f;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-initial-scale-less-than-1.html", nullptr, nullptr,
-      &client, ConfigureAndroid);
+      ConfigureAndroid);
+  web_view_helper.GetWebView()
+      ->MainFrameWidget()
+      ->SetDeviceScaleFactorForTesting(device_scale_factor);
   web_view_helper.GetWebView()
       ->GetSettings()
       ->SetSupportDeprecatedTargetDensityDPI(true);
@@ -2700,21 +2618,21 @@ TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOne) {
   web_view_helper.GetWebView()->GetSettings()->SetUseWideViewport(false);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
-  EXPECT_NEAR(viewport_width * client.screen_info_.device_scale_factor,
+  EXPECT_NEAR(viewport_width * device_scale_factor,
               web_view_helper.GetWebView()
                   ->MainFrameImpl()
                   ->GetFrameView()
                   ->GetLayoutSize()
                   .Width(),
               1.0f);
-  EXPECT_NEAR(viewport_height * client.screen_info_.device_scale_factor,
+  EXPECT_NEAR(viewport_height * device_scale_factor,
               web_view_helper.GetWebView()
                   ->MainFrameImpl()
                   ->GetFrameView()
                   ->GetLayoutSize()
                   .Height(),
               1.0f);
-  EXPECT_NEAR(1.0f / client.screen_info_.device_scale_factor,
+  EXPECT_NEAR(1.0f / device_scale_factor,
               web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
 }
 
@@ -2722,15 +2640,17 @@ TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOneWithDeviceWidth) {
   RegisterMockedHttpURLLoad(
       "viewport-initial-scale-less-than-1-device-width.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1.33f;
+  float device_scale_factor = 1.33f;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-initial-scale-less-than-1-device-width.html",
-      nullptr, nullptr, &client, ConfigureAndroid);
+      nullptr, nullptr, ConfigureAndroid);
+  web_view_helper.GetWebView()
+      ->MainFrameWidget()
+      ->SetDeviceScaleFactorForTesting(device_scale_factor);
   web_view_helper.GetWebView()
       ->GetSettings()
       ->SetSupportDeprecatedTargetDensityDPI(true);
@@ -2740,37 +2660,34 @@ TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOneWithDeviceWidth) {
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   const float kPageZoom = 0.25f;
-  EXPECT_NEAR(
-      viewport_width * client.screen_info_.device_scale_factor / kPageZoom,
-      web_view_helper.GetWebView()
-          ->MainFrameImpl()
-          ->GetFrameView()
-          ->GetLayoutSize()
-          .Width(),
-      1.0f);
-  EXPECT_NEAR(
-      viewport_height * client.screen_info_.device_scale_factor / kPageZoom,
-      web_view_helper.GetWebView()
-          ->MainFrameImpl()
-          ->GetFrameView()
-          ->GetLayoutSize()
-          .Height(),
-      1.0f);
-  EXPECT_NEAR(1.0f / client.screen_info_.device_scale_factor,
+  EXPECT_NEAR(viewport_width * device_scale_factor / kPageZoom,
+              web_view_helper.GetWebView()
+                  ->MainFrameImpl()
+                  ->GetFrameView()
+                  ->GetLayoutSize()
+                  .Width(),
+              1.0f);
+  EXPECT_NEAR(viewport_height * device_scale_factor / kPageZoom,
+              web_view_helper.GetWebView()
+                  ->MainFrameImpl()
+                  ->GetFrameView()
+                  ->GetLayoutSize()
+                  .Height(),
+              1.0f);
+  EXPECT_NEAR(1.0f / device_scale_factor,
               web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
 }
 
 TEST_F(WebFrameTest, NoWideViewportAndNoViewportWithInitialPageScaleOverride) {
   RegisterMockedHttpURLLoad("large-div.html");
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
   float enforced_page_scale_factor = 5.0f;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "large-div.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -2800,14 +2717,13 @@ TEST_F(WebFrameTest, NoWideViewportAndNoViewportWithInitialPageScaleOverride) {
 TEST_F(WebFrameTest, NoUserScalableQuirkIgnoresViewportScale) {
   RegisterMockedHttpURLLoad("viewport-initial-scale-and-user-scalable-no.html");
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-initial-scale-and-user-scalable-no.html", nullptr,
-      nullptr, &client, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()
       ->GetSettings()
       ->SetViewportMetaNonUserScalableQuirk(true);
@@ -2834,15 +2750,17 @@ TEST_F(WebFrameTest,
        NoUserScalableQuirkIgnoresViewportScaleForNonWideViewport) {
   RegisterMockedHttpURLLoad("viewport-initial-scale-and-user-scalable-no.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1.33f;
+  float device_scale_factor = 1.33f;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-initial-scale-and-user-scalable-no.html", nullptr,
-      nullptr, &client, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
+  web_view_helper.GetWebView()
+      ->MainFrameWidget()
+      ->SetDeviceScaleFactorForTesting(device_scale_factor);
   web_view_helper.GetWebView()
       ->GetSettings()
       ->SetSupportDeprecatedTargetDensityDPI(true);
@@ -2854,35 +2772,34 @@ TEST_F(WebFrameTest,
   web_view_helper.GetWebView()->GetSettings()->SetUseWideViewport(false);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
-  EXPECT_NEAR(viewport_width * client.screen_info_.device_scale_factor,
+  EXPECT_NEAR(viewport_width * device_scale_factor,
               web_view_helper.GetWebView()
                   ->MainFrameImpl()
                   ->GetFrameView()
                   ->GetLayoutSize()
                   .Width(),
               1.0f);
-  EXPECT_NEAR(viewport_height * client.screen_info_.device_scale_factor,
+  EXPECT_NEAR(viewport_height * device_scale_factor,
               web_view_helper.GetWebView()
                   ->MainFrameImpl()
                   ->GetFrameView()
                   ->GetLayoutSize()
                   .Height(),
               1.0f);
-  EXPECT_NEAR(1.0f / client.screen_info_.device_scale_factor,
+  EXPECT_NEAR(1.0f / device_scale_factor,
               web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
 }
 
 TEST_F(WebFrameTest, NoUserScalableQuirkIgnoresViewportScaleForWideViewport) {
   RegisterMockedHttpURLLoad("viewport-2x-initial-scale-non-user-scalable.html");
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "viewport-2x-initial-scale-non-user-scalable.html", nullptr,
-      nullptr, &client, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()
       ->GetSettings()
       ->SetViewportMetaNonUserScalableQuirk(true);
@@ -2911,13 +2828,12 @@ TEST_F(WebFrameTest, NoUserScalableQuirkIgnoresViewportScaleForWideViewport) {
 TEST_F(WebFrameTest, DesktopPageCanBeZoomedInWhenWideViewportIsTurnedOff) {
   RegisterMockedHttpURLLoad("no_viewport_tag.html");
 
-  FixedLayoutTestWebWidgetClient client;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "no_viewport_tag.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -2954,7 +2870,7 @@ class WebFrameResizeTest : public WebFrameTest {
 
     frame_test_helpers::WebViewHelper web_view_helper;
     web_view_helper.InitializeAndLoad(base_url_ + url, nullptr, nullptr,
-                                      nullptr, ConfigureAndroid);
+                                      ConfigureAndroid);
     web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
 
     // Origin scrollOffsets preserved under resize.
@@ -3066,14 +2982,12 @@ TEST_F(WebFrameResizeTest, ResizeYieldsCorrectScrollAndScaleForFixedLayout) {
 TEST_F(WebFrameTest, pageScaleFactorUpdatesScrollbars) {
   RegisterMockedHttpURLLoad("fixed_layout.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "fixed_layout.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   LocalFrameView* view = web_view_helper.LocalMainFrame()->GetFrameView();
@@ -3094,15 +3008,12 @@ TEST_F(WebFrameTest, pageScaleFactorUpdatesScrollbars) {
 TEST_F(WebFrameTest, CanOverrideScaleLimits) {
   RegisterMockedHttpURLLoad("no_scale_for_you.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "no_scale_for_you.html",
-                                    nullptr, nullptr, &client,
-                                    ConfigureAndroid);
+                                    nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.25f, 5);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
@@ -3134,10 +3045,8 @@ TEST_F(WebFrameTest, updateOverlayScrollbarLayers)
   int view_width = 500;
   int view_height = 500;
 
-  FixedLayoutTestWebWidgetClient client;
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client,
-                             &ConfigureCompositingWebView);
+  web_view_helper.Initialize(nullptr, nullptr, &ConfigureCompositingWebView);
 
   web_view_helper.Resize(gfx::Size(view_width, view_height));
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
@@ -3176,7 +3085,7 @@ WebRect ComputeBlockBoundHelper(WebViewImpl* web_view_impl,
                                 const gfx::Point& point,
                                 bool ignore_clipping) {
   DCHECK(web_view_impl->MainFrameImpl());
-  WebFrameWidgetBase* widget =
+  WebFrameWidgetImpl* widget =
       web_view_impl->MainFrameImpl()->FrameWidgetImpl();
   DCHECK(widget);
   return widget->ComputeBlockBound(point, ignore_clipping);
@@ -3201,7 +3110,7 @@ TEST_F(WebFrameTest, DivAutoZoomParamsTest) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_scale_for_auto_zoom_into_div_test.html", nullptr,
-      nullptr, nullptr, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.01f, 4);
   web_view_helper.GetWebView()->SetPageScaleFactor(0.5f);
@@ -3265,7 +3174,7 @@ TEST_F(WebFrameTest, DivAutoZoomWideDivTest) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_wide_div_for_auto_zoom_test.html", nullptr, nullptr,
-      nullptr, ConfigureAndroid);
+      ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
   web_view_helper.GetWebView()->SetPageScaleFactor(1.0f);
@@ -3303,7 +3212,7 @@ TEST_F(WebFrameTest, DivAutoZoomVeryTallTest) {
   int viewport_height = 1280 / kDeviceScaleFactor;
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "very_tall_div.html", nullptr,
-                                    nullptr, nullptr, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
   web_view_helper.GetWebView()->SetPageScaleFactor(1.0f);
@@ -3332,7 +3241,7 @@ TEST_F(WebFrameTest, DivAutoZoomMultipleDivsTest) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_multiple_divs_for_auto_zoom_test.html", nullptr, nullptr,
-      nullptr, ConfigureAndroid);
+      ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   web_view_helper.GetWebView()->SetDefaultPageScaleLimits(0.5f, 4);
   web_view_helper.GetWebView()->SetDeviceScaleFactor(kDeviceScaleFactor);
@@ -3403,7 +3312,7 @@ TEST_F(WebFrameTest, DivAutoZoomScaleBoundsTest) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_scale_bounds_check_for_auto_zoom_test.html", nullptr,
-      nullptr, nullptr, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   web_view_helper.GetWebView()->SetDeviceScaleFactor(1.5f);
   web_view_helper.GetWebView()->SetMaximumLegibleScale(1.f);
@@ -3493,7 +3402,7 @@ TEST_F(WebFrameTest, DivAutoZoomScaleLegibleScaleTest) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_scale_bounds_check_for_auto_zoom_test.html", nullptr,
-      nullptr, nullptr, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   web_view_helper.GetWebView()->SetMaximumLegibleScale(
       maximum_legible_scale_factor);
@@ -3616,7 +3525,7 @@ TEST_F(WebFrameTest, DivAutoZoomScaleFontScaleFactorTest) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_scale_bounds_check_for_auto_zoom_test.html", nullptr,
-      nullptr, nullptr, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   web_view_helper.GetWebView()->SetMaximumLegibleScale(1.f);
   UpdateAllLifecyclePhases(web_view_helper.GetWebView());
@@ -3737,7 +3646,7 @@ TEST_F(WebFrameTest, BlockBoundTest) {
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "block_bound.html", nullptr,
-                                    nullptr, nullptr, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(300, 300));
 
   IntRect rect_back = IntRect(0, 0, 200, 200);
@@ -4121,7 +4030,7 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTestWithDeviceScaleFactor) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "get_scale_for_zoom_into_editable_test.html", nullptr,
-      nullptr, nullptr, ConfigureAndroid);
+      nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()
       ->GetPage()
       ->GetSettings()
@@ -4224,9 +4133,12 @@ class ClearScrollStateOnCommitWebFrameClient
   ~ClearScrollStateOnCommitWebFrameClient() override = default;
 
   // frame_test_helpers::TestWebFrameClient:
-  void DidCommitNavigation(const WebHistoryItem&,
-                           WebHistoryCommitType,
-                           bool) override {
+  void DidCommitNavigation(
+      WebHistoryCommitType commit_type,
+      bool should_reset_browser_interface_broker,
+      network::mojom::WebSandboxFlags sandbox_flags,
+      const ParsedFeaturePolicy& feature_policy_header,
+      const DocumentPolicyFeatureState& document_policy_header) override {
     Frame()->View()->ResetScrollAndScaleState();
   }
 };
@@ -4264,8 +4176,10 @@ TEST_F(WebFrameTest, ReloadWhileProvisional) {
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.Initialize();
-  WebURLRequest request(ToKURL(base_url_ + "fixed_layout.html"));
-  web_view_helper.GetWebView()->MainFrameImpl()->StartNavigation(request);
+  WebLocalFrameImpl* main_frame = web_view_helper.LocalMainFrame();
+  FrameLoadRequest frame_load_request(
+      nullptr, ResourceRequest(ToKURL(base_url_ + "fixed_layout.html")));
+  main_frame->GetFrame()->Loader().StartNavigation(frame_load_request);
   // start reload before first request is delivered.
   frame_test_helpers::ReloadFrameBypassingCache(
       web_view_helper.GetWebView()->MainFrameImpl());
@@ -4439,14 +4353,16 @@ class ContextLifetimeTestWebFrameClient
 
   // WebLocalFrameClient:
   WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
       mojom::blink::TreeScopeType scope,
       const WebString& name,
       const WebString& fallback_name,
       const FramePolicy&,
       const WebFrameOwnerProperties&,
-      mojom::blink::FrameOwnerElementType) override {
-    return CreateLocalChild(*parent, scope,
+      mojom::blink::FrameOwnerElementType,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) override {
+    return CreateLocalChild(*Frame(), scope,
                             std::make_unique<ContextLifetimeTestWebFrameClient>(
                                 create_notifications_, release_notifications_));
   }
@@ -6133,7 +6049,7 @@ class CompositedSelectionBoundsTest
       : ScopedCompositedSelectionUpdateForTest(true) {
     RegisterMockedHttpURLLoad("Ahem.ttf");
 
-    web_view_helper_.Initialize(nullptr, nullptr, &web_widget_client_);
+    web_view_helper_.Initialize(nullptr, nullptr);
     web_view_helper_.GetWebView()->GetSettings()->SetDefaultFontSize(12);
     web_view_helper_.GetWebView()->SetDefaultPageScaleLimits(1, 1);
     web_view_helper_.Resize(gfx::Size(640, 480));
@@ -6146,7 +6062,7 @@ class CompositedSelectionBoundsTest
         web_view_helper_.GetWebView()->MainFrameImpl(), base_url_ + test_file);
     UpdateAllLifecyclePhases(web_view_helper_.GetWebView());
 
-    cc::LayerTreeHost* layer_tree_host = web_widget_client_.layer_tree_host();
+    cc::LayerTreeHost* layer_tree_host = web_view_helper_.GetLayerTreeHost();
     const cc::LayerSelection& selection = layer_tree_host->selection();
 
     ASSERT_EQ(selection, cc::LayerSelection());
@@ -6245,7 +6161,7 @@ class CompositedSelectionBoundsTest
         ->GetEventHandler()
         .HandleGestureEvent(gesture_event);
 
-    cc::LayerTreeHost* layer_tree_host = web_widget_client_.layer_tree_host();
+    cc::LayerTreeHost* layer_tree_host = web_view_helper_.GetLayerTreeHost();
     const cc::LayerSelection& selection = layer_tree_host->selection();
 
     ASSERT_NE(selection, cc::LayerSelection());
@@ -6333,7 +6249,6 @@ class CompositedSelectionBoundsTest
                                          : clm->MainGraphicsLayer();
   }
 
-  frame_test_helpers::TestWebWidgetClient web_widget_client_;
   frame_test_helpers::WebViewHelper web_view_helper_;
 };
 
@@ -6387,17 +6302,23 @@ TEST_F(CompositedSelectionBoundsTest, InputScrolled) {
 class TestWillInsertBodyWebFrameClient
     : public frame_test_helpers::TestWebFrameClient {
  public:
-  TestWillInsertBodyWebFrameClient() : did_load_(false) {}
-  ~TestWillInsertBodyWebFrameClient() override = default;
+  TestWillInsertBodyWebFrameClient() = default;
+  ~TestWillInsertBodyWebFrameClient() final = default;
+
+  bool did_load() const { return did_load_; }
 
   // frame_test_helpers::TestWebFrameClient:
-  void DidCommitNavigation(const WebHistoryItem&,
-                           WebHistoryCommitType,
-                           bool) override {
+  void DidCommitNavigation(
+      WebHistoryCommitType commit_type,
+      bool should_reset_browser_interface_broker,
+      network::mojom::WebSandboxFlags sandbox_flags,
+      const ParsedFeaturePolicy& feature_policy_header,
+      const DocumentPolicyFeatureState& document_policy_header) final {
     did_load_ = true;
   }
 
-  bool did_load_;
+ private:
+  bool did_load_ = false;
 };
 
 TEST_F(WebFrameTest, HTMLDocument) {
@@ -6408,7 +6329,7 @@ TEST_F(WebFrameTest, HTMLDocument) {
   web_view_helper.InitializeAndLoad(base_url_ + "clipped-body.html",
                                     &web_frame_client);
 
-  EXPECT_TRUE(web_frame_client.did_load_);
+  EXPECT_TRUE(web_frame_client.did_load());
 }
 
 TEST_F(WebFrameTest, EmptyDocument) {
@@ -6418,7 +6339,7 @@ TEST_F(WebFrameTest, EmptyDocument) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.Initialize(&web_frame_client);
 
-  EXPECT_FALSE(web_frame_client.did_load_);
+  EXPECT_FALSE(web_frame_client.did_load());
 }
 
 TEST_F(WebFrameTest, MoveCaretSelectionTowardsWindowPointWithNoSelection) {
@@ -7080,9 +7001,9 @@ class TestNewWindowWebViewClient
                       const WebString&,
                       WebNavigationPolicy,
                       network::mojom::blink::WebSandboxFlags,
-                      const FeaturePolicyFeatureState&,
                       const SessionStorageNamespaceId&,
-                      bool& consumed_user_gesture) override {
+                      bool& consumed_user_gesture,
+                      const base::Optional<WebImpression>&) override {
     EXPECT_TRUE(false);
     return nullptr;
   }
@@ -7137,7 +7058,8 @@ TEST_F(WebFrameTest, ModifiedClickNewWindow) {
       MouseEvent::Create(nullptr, event_type_names::kClick, mouse_initializer);
   FrameLoadRequest frame_request(window, ResourceRequest(destination));
   frame_request.SetNavigationPolicy(NavigationPolicyFromEvent(event));
-  frame_request.SetTriggeringEventInfo(TriggeringEventInfo::kFromTrustedEvent);
+  frame_request.SetTriggeringEventInfo(
+      mojom::blink::TriggeringEventInfo::kFromTrustedEvent);
   LocalFrame::NotifyUserActivation(
       frame, mojom::UserActivationNotificationType::kTest);
   web_frame_client.IgnoreNavigations();
@@ -7233,17 +7155,19 @@ class TestCachePolicyWebFrameClient
 
   // frame_test_helpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
       mojom::blink::TreeScopeType scope,
       const WebString&,
       const WebString&,
       const FramePolicy&,
       const WebFrameOwnerProperties& frame_owner_properties,
-      mojom::blink::FrameOwnerElementType) override {
+      mojom::blink::FrameOwnerElementType,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) override {
     auto child = std::make_unique<TestCachePolicyWebFrameClient>();
     auto* child_ptr = child.get();
     child_clients_.push_back(std::move(child));
-    return CreateLocalChild(*parent, scope, child_ptr);
+    return CreateLocalChild(*Frame(), scope, child_ptr);
   }
   void BeginNavigation(std::unique_ptr<WebNavigationInfo> info) override {
     cache_mode_ = info->url_request.GetCacheMode();
@@ -7357,9 +7281,9 @@ TEST_F(WebFrameTest, MainFrameIntersectionChanged) {
   frame_test_helpers::WebViewHelper helper;
   helper.InitializeRemote();
 
-  WebLocalFrameImpl* local_frame = frame_test_helpers::CreateLocalChild(
-      *helper.RemoteMainFrame(), "frameName", WebFrameOwnerProperties(),
-      nullptr, &client);
+  WebLocalFrameImpl* local_frame =
+      helper.CreateLocalChild(*helper.RemoteMainFrame(), "frameName",
+                              WebFrameOwnerProperties(), nullptr, &client);
 
   WebFrameWidget* widget = local_frame->FrameWidget();
   ASSERT_TRUE(widget);
@@ -7371,11 +7295,11 @@ TEST_F(WebFrameTest, MainFrameIntersectionChanged) {
   gfx::Transform transform;
   transform.Translate(100, 100);
 
-  auto intersection_state = blink::mojom::blink::ViewportIntersectionState(
+  auto intersection_state = blink::mojom::blink::ViewportIntersectionState::New(
       viewport_intersection, mainframe_intersection, gfx::Rect(),
       occlusion_state, gfx::Size(), gfx::Point(), transform);
-  static_cast<WebFrameWidgetBase*>(widget)->SetRemoteViewportIntersection(
-      intersection_state);
+  static_cast<WebFrameWidgetImpl*>(widget)->SetViewportIntersection(
+      std::move(intersection_state));
   EXPECT_EQ(client.MainFrameIntersection(), blink::WebRect(100, 100, 200, 140));
 }
 
@@ -7407,7 +7331,7 @@ TEST_F(WebFrameTest, NavigateToSameNoConditionalRequestForSubresource) {
   TestSameDocumentWithImageWebFrameClient client;
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "foo_with_image.html", &client,
-                                    nullptr, nullptr,
+                                    nullptr,
                                     &ConfigureLoadsImagesAutomatically);
 
   WebCache::Clear();
@@ -7554,7 +7478,9 @@ TEST_F(WebFrameTest, IPAddressSpace) {
     params->navigation_timings.navigation_start = base::TimeTicks::Now();
     params->navigation_timings.fetch_start = base::TimeTicks::Now();
     params->is_browser_initiated = true;
-    params->ip_address_space = value;
+    params->policy_container = std::make_unique<WebPolicyContainer>(
+        WebPolicyContainerDocumentPolicies(), mojo::NullAssociatedRemote());
+    params->policy_container->policies.ip_address_space = value;
     web_view_helper.LocalMainFrame()->CommitNavigation(std::move(params),
                                                        nullptr);
     frame_test_helpers::PumpPendingRequestsForFrameToLoad(
@@ -7574,9 +7500,10 @@ class TestDidNavigateCommitTypeWebFrameClient
   ~TestDidNavigateCommitTypeWebFrameClient() override = default;
 
   // frame_test_helpers::TestWebFrameClient:
-  void DidFinishSameDocumentNavigation(const WebHistoryItem&,
-                                       WebHistoryCommitType type,
-                                       bool content_initiated) override {
+  void DidFinishSameDocumentNavigation(
+      WebHistoryCommitType type,
+      bool content_initiated,
+      bool is_history_api_navigation) override {
     last_commit_type_ = type;
   }
 
@@ -7662,10 +7589,8 @@ TEST_F(WebFrameTest, FirstNonBlankSubframeNavigation) {
 // Test verifies that layout will change a layer's scrollable attibutes
 TEST_F(WebFrameTest, overflowHiddenRewrite) {
   RegisterMockedHttpURLLoad("non-scrollable.html");
-  FixedLayoutTestWebWidgetClient client;
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &client,
-                             &ConfigureCompositingWebView);
+  web_view_helper.Initialize(nullptr, nullptr, &ConfigureCompositingWebView);
 
   web_view_helper.Resize(gfx::Size(100, 100));
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
@@ -7701,15 +7626,14 @@ TEST_F(WebFrameTest, CurrentHistoryItem) {
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.Initialize();
-  WebLocalFrame* frame = web_view_helper.GetWebView()->MainFrameImpl();
-  const FrameLoader& main_frame_loader =
+  FrameLoader& main_frame_loader =
       web_view_helper.LocalMainFrame()->GetFrame()->Loader();
-  WebURLRequest request(ToKURL(url));
 
   // Before navigation, there is no history item.
   EXPECT_FALSE(main_frame_loader.GetDocumentLoader()->GetHistoryItem());
 
-  frame->StartNavigation(request);
+  FrameLoadRequest frame_load_request(nullptr, ResourceRequest(ToKURL(url)));
+  main_frame_loader.StartNavigation(frame_load_request);
   frame_test_helpers::PumpPendingRequestsForFrameToLoad(
       web_view_helper.LocalMainFrame());
 
@@ -7726,13 +7650,15 @@ class FailCreateChildFrame : public frame_test_helpers::TestWebFrameClient {
 
   // frame_test_helpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
       mojom::blink::TreeScopeType scope,
       const WebString& name,
       const WebString& fallback_name,
       const FramePolicy&,
       const WebFrameOwnerProperties& frame_owner_properties,
-      mojom::blink::FrameOwnerElementType) override {
+      mojom::blink::FrameOwnerElementType,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) override {
     ++call_count_;
     return nullptr;
   }
@@ -7759,7 +7685,7 @@ TEST_F(WebFrameTest, fixedPositionInFixedViewport) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(
       base_url_ + "fixed-position-in-fixed-viewport.html", nullptr, nullptr,
-      nullptr, ConfigureAndroid);
+      ConfigureAndroid);
 
   WebViewImpl* web_view = web_view_helper.GetWebView();
   web_view_helper.Resize(gfx::Size(100, 100));
@@ -7796,11 +7722,10 @@ TEST_F(WebFrameTest, FrameViewMoveWithSetFrameRect) {
 }
 
 TEST_F(WebFrameTest, FrameViewScrollAccountsForBrowserControls) {
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("long_scroll.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "long_scroll.html", nullptr,
-                                    nullptr, &client, ConfigureAndroid);
+                                    nullptr, ConfigureAndroid);
 
   WebViewImpl* web_view = web_view_helper.GetWebView();
   LocalFrameView* frame_view = web_view_helper.LocalMainFrame()->GetFrameView();
@@ -7887,15 +7812,12 @@ TEST_F(WebFrameTest, FrameViewScrollAccountsForBrowserControls) {
 TEST_F(WebFrameTest, MaximumScrollPositionCanBeNegative) {
   RegisterMockedHttpURLLoad("rtl-overview-mode.html");
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.device_scale_factor = 1;
   int viewport_width = 640;
   int viewport_height = 480;
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "rtl-overview-mode.html",
-                                    nullptr, nullptr, &client,
-                                    ConfigureAndroid);
+                                    nullptr, nullptr, ConfigureAndroid);
   web_view_helper.GetWebView()->SetInitialPageScaleOverride(-1);
   web_view_helper.GetWebView()->GetSettings()->SetWideViewportQuirkEnabled(
       true);
@@ -7910,15 +7832,14 @@ TEST_F(WebFrameTest, MaximumScrollPositionCanBeNegative) {
 }
 
 TEST_F(WebFrameTest, FullscreenLayerSize) {
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("fullscreen_div.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
   int viewport_width = 640;
   int viewport_height = 480;
-  client.screen_info_.rect = gfx::Rect(viewport_width, viewport_height);
+
+  frame_test_helpers::WebViewHelper web_view_helper;
+  //  client.screen_info_.rect = gfx::Rect(viewport_width, viewport_height);
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "fullscreen_div.html", nullptr, nullptr, &client,
-      ConfigureAndroid);
+      base_url_ + "fullscreen_div.html", nullptr, nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   UpdateAllLifecyclePhases(web_view_impl);
 
@@ -7941,7 +7862,7 @@ TEST_F(WebFrameTest, FullscreenLayerSize) {
   EXPECT_EQ(viewport_height, fullscreen_layout_object->LogicalHeight().ToInt());
 
   // Verify it's updated after a device rotation.
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper, viewport_height,
+  UpdateScreenInfoAndResizeView(&web_view_helper, viewport_height,
                                 viewport_width);
   UpdateAllLifecyclePhases(web_view_impl);
   EXPECT_EQ(viewport_height, fullscreen_layout_object->LogicalWidth().ToInt());
@@ -7949,14 +7870,12 @@ TEST_F(WebFrameTest, FullscreenLayerSize) {
 }
 
 TEST_F(WebFrameTest, FullscreenLayerNonScrollable) {
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("fullscreen_div.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   int viewport_width = 640;
   int viewport_height = 480;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "fullscreen_div.html", nullptr, nullptr, &client,
-      ConfigureAndroid);
+      base_url_ + "fullscreen_div.html", nullptr, nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   UpdateAllLifecyclePhases(web_view_impl);
 
@@ -8007,14 +7926,12 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable) {
 }
 
 TEST_F(WebFrameTest, FullscreenMainFrame) {
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("fullscreen_div.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   int viewport_width = 640;
   int viewport_height = 480;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "fullscreen_div.html", nullptr, nullptr, &client,
-      ConfigureAndroid);
+      base_url_ + "fullscreen_div.html", nullptr, nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   UpdateAllLifecyclePhases(web_view_impl);
 
@@ -8062,16 +7979,14 @@ TEST_F(WebFrameTest, FullscreenMainFrame) {
 }
 
 TEST_F(WebFrameTest, FullscreenSubframe) {
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("fullscreen_iframe.html");
   RegisterMockedHttpURLLoad("fullscreen_div.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "fullscreen_iframe.html", nullptr, nullptr, &client,
-      ConfigureAndroid);
+      base_url_ + "fullscreen_iframe.html", nullptr, nullptr, ConfigureAndroid);
   int viewport_width = 640;
   int viewport_height = 480;
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper, viewport_width,
+  UpdateScreenInfoAndResizeView(&web_view_helper, viewport_width,
                                 viewport_height);
   UpdateAllLifecyclePhases(web_view_impl);
 
@@ -8094,7 +8009,7 @@ TEST_F(WebFrameTest, FullscreenSubframe) {
   EXPECT_EQ(viewport_height, fullscreen_layout_object->LogicalHeight().ToInt());
 
   // Verify it's updated after a device rotation.
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper, viewport_height,
+  UpdateScreenInfoAndResizeView(&web_view_helper, viewport_height,
                                 viewport_width);
   UpdateAllLifecyclePhases(web_view_impl);
   EXPECT_EQ(viewport_height, fullscreen_layout_object->LogicalWidth().ToInt());
@@ -8148,15 +8063,13 @@ TEST_F(WebFrameTest, FullscreenNestedExit) {
 }
 
 TEST_F(WebFrameTest, FullscreenWithTinyViewport) {
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("viewport-tiny.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-tiny.html", nullptr, nullptr, &client,
-      ConfigureAndroid);
+      base_url_ + "viewport-tiny.html", nullptr, nullptr, ConfigureAndroid);
   int viewport_width = 384;
   int viewport_height = 640;
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper, viewport_width,
+  UpdateScreenInfoAndResizeView(&web_view_helper, viewport_width,
                                 viewport_height);
   UpdateAllLifecyclePhases(web_view_impl);
 
@@ -8192,15 +8105,13 @@ TEST_F(WebFrameTest, FullscreenWithTinyViewport) {
 }
 
 TEST_F(WebFrameTest, FullscreenResizeWithTinyViewport) {
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("viewport-tiny.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-tiny.html", nullptr, nullptr, &client,
-      ConfigureAndroid);
+      base_url_ + "viewport-tiny.html", nullptr, nullptr, ConfigureAndroid);
   int viewport_width = 384;
   int viewport_height = 640;
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper, viewport_width,
+  UpdateScreenInfoAndResizeView(&web_view_helper, viewport_width,
                                 viewport_height);
   UpdateAllLifecyclePhases(web_view_impl);
 
@@ -8222,7 +8133,7 @@ TEST_F(WebFrameTest, FullscreenResizeWithTinyViewport) {
 
   viewport_width = 640;
   viewport_height = 384;
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper, viewport_width,
+  UpdateScreenInfoAndResizeView(&web_view_helper, viewport_width,
                                 viewport_height);
   UpdateAllLifecyclePhases(web_view_impl);
   EXPECT_EQ(640, layout_view->LogicalWidth().Floor());
@@ -8249,15 +8160,13 @@ TEST_F(WebFrameTest, FullscreenRestoreScaleFactorUponExiting) {
   WebSize screen_size_minus_status_bars(598, 359);
   WebSize screen_size(640, 384);
 
-  FixedLayoutTestWebWidgetClient client;
   RegisterMockedHttpURLLoad("fullscreen_restore_scale_factor.html");
   frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
       base_url_ + "fullscreen_restore_scale_factor.html", nullptr, nullptr,
-      &client, &ConfigureAndroid);
+      &ConfigureAndroid);
   UpdateScreenInfoAndResizeView(
-      &client, &web_view_helper,
-      screen_size_minus_status_bars_minus_url_bar.width,
+      &web_view_helper, screen_size_minus_status_bars_minus_url_bar.width,
       screen_size_minus_status_bars_minus_url_bar.height);
   auto* layout_view = web_view_helper.GetWebView()
                           ->MainFrameImpl()
@@ -8280,10 +8189,10 @@ TEST_F(WebFrameTest, FullscreenRestoreScaleFactorUponExiting) {
 
   web_view_impl->DidEnterFullscreen();
   UpdateAllLifecyclePhases(web_view_impl);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
+  UpdateScreenInfoAndResizeView(&web_view_helper,
                                 screen_size_minus_status_bars.width,
                                 screen_size_minus_status_bars.height);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper, screen_size.width,
+  UpdateScreenInfoAndResizeView(&web_view_helper, screen_size.width,
                                 screen_size.height);
   EXPECT_EQ(screen_size.width, layout_view->LogicalWidth().Floor());
   EXPECT_EQ(screen_size.height, layout_view->LogicalHeight().Floor());
@@ -8293,12 +8202,11 @@ TEST_F(WebFrameTest, FullscreenRestoreScaleFactorUponExiting) {
 
   web_view_impl->DidExitFullscreen();
   UpdateAllLifecyclePhases(web_view_impl);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
+  UpdateScreenInfoAndResizeView(&web_view_helper,
                                 screen_size_minus_status_bars.width,
                                 screen_size_minus_status_bars.height);
   UpdateScreenInfoAndResizeView(
-      &client, &web_view_helper,
-      screen_size_minus_status_bars_minus_url_bar.width,
+      &web_view_helper, screen_size_minus_status_bars_minus_url_bar.width,
       screen_size_minus_status_bars_minus_url_bar.height);
   EXPECT_EQ(screen_size_minus_status_bars_minus_url_bar.width,
             layout_view->LogicalWidth().Floor());
@@ -8318,8 +8226,7 @@ TEST_F(WebFrameTest, ClearFullscreenConstraintsOnNavigation) {
   int viewport_height = 200;
 
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "viewport-tiny.html", nullptr, nullptr, nullptr,
-      ConfigureAndroid);
+      base_url_ + "viewport-tiny.html", nullptr, nullptr, ConfigureAndroid);
 
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
   UpdateAllLifecyclePhases(web_view_impl);
@@ -8369,19 +8276,16 @@ TEST_F(WebFrameTest, ClearFullscreenConstraintsOnNavigation) {
 TEST_F(WebFrameTest, OverlayFullscreenVideo) {
   ScopedForceOverlayFullscreenVideoForTest force_overlay_fullscreen_video(true);
   RegisterMockedHttpURLLoad("fullscreen_video.html");
-  frame_test_helpers::TestWebWidgetClient web_widget_client;
   frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view_impl =
-      web_view_helper.InitializeAndLoad(base_url_ + "fullscreen_video.html",
-                                        nullptr, nullptr, &web_widget_client);
+  WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
+      base_url_ + "fullscreen_video.html", nullptr, nullptr);
 
   // Ensure that the local frame view has a paint artifact compositor. It's
   // created lazily, and doing so after entering fullscreen would undo the
   // overlay video layer modification.
   UpdateAllLifecyclePhases(web_view_impl);
 
-  const cc::LayerTreeHost* layer_tree_host =
-      web_widget_client.layer_tree_host();
+  const cc::LayerTreeHost* layer_tree_host = web_view_helper.GetLayerTreeHost();
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   LocalFrame::NotifyUserActivation(
@@ -8426,14 +8330,11 @@ TEST_F(WebFrameTest, OverlayFullscreenVideoInIframe) {
   ScopedForceOverlayFullscreenVideoForTest force_overlay_fullscreen_video(true);
   RegisterMockedHttpURLLoad("fullscreen_video_in_iframe.html");
   RegisterMockedHttpURLLoad("fullscreen_video.html");
-  frame_test_helpers::TestWebWidgetClient web_widget_client;
   frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "fullscreen_video_in_iframe.html", nullptr, nullptr,
-      &web_widget_client);
+      base_url_ + "fullscreen_video_in_iframe.html", nullptr, nullptr);
 
-  const cc::LayerTreeHost* layer_tree_host =
-      web_widget_client.layer_tree_host();
+  const cc::LayerTreeHost* layer_tree_host = web_view_helper.GetLayerTreeHost();
   LocalFrame* iframe =
       To<WebLocalFrameImpl>(
           web_view_helper.GetWebView()->MainFrame()->FirstChild())
@@ -8461,10 +8362,9 @@ TEST_F(WebFrameTest, OverlayFullscreenVideoInIframe) {
 
 TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   RegisterMockedHttpURLLoad("webxr_overlay.html");
-  frame_test_helpers::TestWebWidgetClient web_widget_client;
   frame_test_helpers::WebViewHelper web_view_helper;
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "webxr_overlay.html", nullptr, nullptr, &web_widget_client);
+      base_url_ + "webxr_overlay.html", nullptr, nullptr);
   web_view_helper.Resize(gfx::Size(640, 480));
 
   // Ensure that the local frame view has a paint artifact compositor. It's
@@ -8472,8 +8372,7 @@ TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   // overlay layer modification.
   UpdateAllLifecyclePhases(web_view_impl);
 
-  const cc::LayerTreeHost* layer_tree_host =
-      web_widget_client.layer_tree_host();
+  const cc::LayerTreeHost* layer_tree_host = web_view_helper.GetLayerTreeHost();
 
   LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
   Document* document = frame->GetDocument();
@@ -8841,7 +8740,7 @@ TEST_F(WebFrameTest, EmbedderTriggeredDetachWithRemoteMainFrame) {
   frame_test_helpers::WebViewHelper helper;
   helper.InitializeRemote();
   WebLocalFrame* child_frame =
-      frame_test_helpers::CreateLocalChild(*helper.RemoteMainFrame());
+      helper.CreateLocalChild(*helper.RemoteMainFrame());
 
   // Purposely keep the LocalFrame alive so it's the last thing to be destroyed.
   Persistent<Frame> child_core_frame = WebFrame::ToCoreFrame(*child_frame);
@@ -8859,14 +8758,16 @@ class WebFrameSwapTestClient : public frame_test_helpers::TestWebFrameClient {
   }
 
   WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
       mojom::blink::TreeScopeType scope,
       const WebString& name,
       const WebString& fallback_name,
       const FramePolicy&,
       const WebFrameOwnerProperties&,
-      mojom::blink::FrameOwnerElementType) override {
-    return CreateLocalChild(*parent, scope,
+      mojom::blink::FrameOwnerElementType,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) override {
+    return CreateLocalChild(*Frame(), scope,
                             std::make_unique<WebFrameSwapTestClient>(this));
   }
 
@@ -8922,8 +8823,10 @@ class WebFrameSwapTest : public WebFrameTest {
   WebLocalFrame* MainFrame() const { return web_view_helper_.LocalMainFrame(); }
   WebViewImpl* WebView() const { return web_view_helper_.GetWebView(); }
 
- private:
+ protected:
   frame_test_helpers::WebViewHelper web_view_helper_;
+
+ private:
   WebFrameSwapTestClient main_frame_client_;
 };
 
@@ -8932,16 +8835,25 @@ TEST_F(WebFrameSwapTest, SwapMainFrame) {
   MainFrame()->Swap(remote_frame);
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
-  remote_frame->Swap(local_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
 
-  // Finally, make sure an embedder triggered load in the local frame swapped
-  // back in works.
+  // Committing a navigation in `local_frame` should swap it back in.
   frame_test_helpers::LoadFrame(local_frame, base_url_ + "subframe-hello.html");
 
   std::string content =
       WebFrameContentDumper::DumpWebViewAsText(WebView(), 1024).Utf8();
   EXPECT_EQ("hello", content);
+}
+
+TEST_F(WebFrameSwapTest, SwapMainFrameWithPageScaleReset) {
+  WebView()->SetDefaultPageScaleLimits(1, 2);
+  WebView()->SetPageScaleFactor(1.25);
+  EXPECT_EQ(1.25, WebView()->PageScaleFactor());
+
+  WebRemoteFrame* remote_frame = frame_test_helpers::CreateRemote();
+  MainFrame()->Swap(remote_frame);
+  WebView()->DidAttachRemoteMainFrame();
+  EXPECT_EQ(1.0, WebView()->PageScaleFactor());
 }
 
 TEST_F(WebFrameSwapTest, ValidateSizeOnRemoteToLocalMainFrameSwap) {
@@ -8950,10 +8862,10 @@ TEST_F(WebFrameSwapTest, ValidateSizeOnRemoteToLocalMainFrameSwap) {
   WebRemoteFrame* remote_frame = frame_test_helpers::CreateRemote();
   MainFrame()->Swap(remote_frame);
 
-  remote_frame->View()->Resize(size);
+  static_cast<WebViewImpl*>(remote_frame->View())->Resize(size);
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
   remote_frame->Swap(local_frame);
 
   // Verify that the size that was set with a remote main frame is correct
@@ -8976,7 +8888,7 @@ TEST_F(WebFrameSwapTest,
 
   // Create a provisional main frame frame but don't swap it in yet.
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
 
   WebViewImpl* web_view = static_cast<WebViewImpl*>(local_frame->View());
   EXPECT_TRUE(web_view->MainFrame() &&
@@ -9036,6 +8948,34 @@ TEST_F(WebFrameTest, SwapMainFrameWhileLoading) {
                                     &frame_client);
 }
 
+TEST_F(WebFrameTest, SwapChildAddFrameInUnload) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+
+  // This sets up a main frame with one child frame. When the document in the
+  // child frame is unloaded (e.g. due to the `Frame::Swap()` call below), the
+  // unload handler will insert a new <iframe> into the main frame's document.
+  RegisterMockedHttpURLLoad("add-frame-in-unload-main.html");
+  RegisterMockedHttpURLLoad("add-frame-in-unload-subframe.html");
+  web_view_helper.InitializeAndLoad(base_url_ +
+                                    "add-frame-in-unload-main.html");
+
+  WebLocalFrame* new_frame = web_view_helper.CreateProvisional(
+      *web_view_helper.LocalMainFrame()->FirstChild());
+
+  // This triggers the unload handler in the child frame's Document, mutating
+  // the frame tree during the `Frame::Swap()` call.
+  web_view_helper.LocalMainFrame()->FirstChild()->Swap(new_frame);
+
+  // TODO(dcheng): This is currently required to trigger a crash when the bug is
+  // not fixed. Removing a frame from the frame tree will fail one of the
+  // consistency checks in `Frame::RemoveChild()` if the frame tree is
+  // corrupted.  This should be replaced with a test helper that comprehensively
+  // validates that a frame tree is not corrupted: this helper could also be
+  // used to simplify the various SwapAndVerify* helpers below.
+  web_view_helper.LocalMainFrame()->ExecuteScript(
+      WebScriptSource("document.querySelector('iframe').remove()"));
+}
+
 void WebFrameTest::SwapAndVerifyFirstChildConsistency(const char* const message,
                                                       WebFrame* parent,
                                                       WebFrame* new_child) {
@@ -9055,7 +8995,7 @@ TEST_F(WebFrameSwapTest, SwapFirstChild) {
                                      remote_frame);
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
   SwapAndVerifyFirstChildConsistency("remote->local", MainFrame(), local_frame);
 
   // FIXME: This almost certainly fires more load events on the iframe element
@@ -9082,7 +9022,7 @@ TEST_F(WebFrameSwapTest, DoNotPropagateDisplayNonePropertyOnSwap) {
   EXPECT_FALSE(main_frame_client->DidPropagateDisplayNoneProperty());
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
   remote_frame->Swap(local_frame);
   EXPECT_FALSE(main_frame_client->DidPropagateDisplayNoneProperty());
   Reset();
@@ -9113,7 +9053,7 @@ TEST_F(WebFrameSwapTest, SwapMiddleChild) {
                                       remote_frame);
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
   SwapAndVerifyMiddleChildConsistency("remote->local", MainFrame(),
                                       local_frame);
 
@@ -9145,7 +9085,7 @@ TEST_F(WebFrameSwapTest, SwapLastChild) {
   SwapAndVerifyLastChildConsistency("local->remote", MainFrame(), remote_frame);
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
   SwapAndVerifyLastChildConsistency("remote->local", MainFrame(), local_frame);
 
   // FIXME: This almost certainly fires more load events on the iframe element
@@ -9164,7 +9104,7 @@ TEST_F(WebFrameSwapTest, DetachProvisionalFrame) {
                                       remote_frame);
 
   WebLocalFrameImpl* provisional_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
 
   // The provisional frame should have a local frame owner.
   FrameOwner* owner = provisional_frame->GetFrame()->Owner();
@@ -9203,8 +9143,8 @@ TEST_F(WebFrameSwapTest, EventsOnDisconnectedSubDocumentSkipped) {
   remote_frame->SetReplicatedOrigin(
       WebSecurityOrigin(SecurityOrigin::CreateUniqueOpaque()), false);
 
-  WebLocalFrameImpl* local_child = frame_test_helpers::CreateLocalChild(
-      *remote_frame, "local-inside-remote");
+  WebLocalFrameImpl* local_child =
+      web_view_helper_.CreateLocalChild(*remote_frame, "local-inside-remote");
 
   LocalFrame* main_frame = WebView()->MainFrameImpl()->GetFrame();
   Document* child_document = local_child->GetFrame()->GetDocument();
@@ -9226,8 +9166,8 @@ TEST_F(WebFrameSwapTest, EventsOnDisconnectedElementSkipped) {
   remote_frame->SetReplicatedOrigin(
       WebSecurityOrigin(SecurityOrigin::CreateUniqueOpaque()), false);
 
-  WebLocalFrameImpl* local_child = frame_test_helpers::CreateLocalChild(
-      *remote_frame, "local-inside-remote");
+  WebLocalFrameImpl* local_child =
+      web_view_helper_.CreateLocalChild(*remote_frame, "local-inside-remote");
 
   LocalFrame* main_frame = WebView()->MainFrameImpl()->GetFrame();
 
@@ -9260,7 +9200,7 @@ TEST_F(WebFrameSwapTest, SwapParentShouldDetachChildren) {
   frame_test_helpers::CreateRemoteChild(*remote_frame);
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
   SwapAndVerifySubframeConsistency("remote->local", target_frame, local_frame);
 
   // FIXME: This almost certainly fires more load events on the iframe element
@@ -9299,7 +9239,7 @@ TEST_F(WebFrameSwapTest, SwapPreservesGlobalContext) {
   // Now check that remote -> local works too, since it goes through a different
   // code path.
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
   remote_frame->Swap(local_frame);
   v8::Local<v8::Value> local_window = MainFrame()->ExecuteScriptAndReturnValue(
       WebScriptSource("document.querySelector('#frame2').contentWindow;"));
@@ -9360,12 +9300,14 @@ TEST_F(WebFrameSwapTest, SwapInitializesGlobal) {
   EXPECT_TRUE(window_top->StrictEquals(remote_window_top));
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
-  remote_frame->Swap(local_frame);
+      web_view_helper_.CreateProvisional(*remote_frame);
+  // Committing a navigation in a provisional frame will swap it in.
+  frame_test_helpers::LoadFrame(local_frame, "data:text/html,");
   v8::Local<v8::Value> local_window_top =
       MainFrame()->ExecuteScriptAndReturnValue(WebScriptSource("saved.top"));
   EXPECT_TRUE(local_window_top->IsObject());
   EXPECT_TRUE(window_top->StrictEquals(local_window_top));
+  local_frame->ExecuteScriptAndReturnValue(WebScriptSource("42"));
 }
 
 TEST_F(WebFrameSwapTest, RemoteFramesAreIndexable) {
@@ -9436,7 +9378,7 @@ TEST_F(WebFrameSwapTest, FramesOfRemoteParentAreIndexable) {
       WebSecurityOrigin(SecurityOrigin::CreateUniqueOpaque()), false);
 
   WebLocalFrame* child_frame =
-      frame_test_helpers::CreateLocalChild(*remote_parent_frame);
+      web_view_helper_.CreateLocalChild(*remote_parent_frame);
   frame_test_helpers::LoadFrame(child_frame, base_url_ + "subframe-hello.html");
 
   v8::Local<v8::Value> window =
@@ -9464,7 +9406,7 @@ TEST_F(WebFrameSwapTest, FrameElementInFramesWithRemoteParent) {
       WebSecurityOrigin(SecurityOrigin::CreateUniqueOpaque()), false);
 
   WebLocalFrame* child_frame =
-      frame_test_helpers::CreateLocalChild(*remote_parent_frame);
+      web_view_helper_.CreateLocalChild(*remote_parent_frame);
   frame_test_helpers::LoadFrame(child_frame, base_url_ + "subframe-hello.html");
 
   v8::Local<v8::Value> frame_element = child_frame->ExecuteScriptAndReturnValue(
@@ -9477,25 +9419,23 @@ TEST_F(WebFrameSwapTest, FrameElementInFramesWithRemoteParent) {
 class RemoteToLocalSwapWebFrameClient
     : public frame_test_helpers::TestWebFrameClient {
  public:
-  explicit RemoteToLocalSwapWebFrameClient(WebRemoteFrame* remote_frame)
-      : history_commit_type_(kWebHistoryInertCommit),
-        remote_frame_(remote_frame) {}
   ~RemoteToLocalSwapWebFrameClient() override = default;
 
   // frame_test_helpers::TestWebFrameClient:
-  void DidCommitNavigation(const WebHistoryItem&,
-                           WebHistoryCommitType history_commit_type,
-                           bool) override {
+  void DidCommitNavigation(
+      WebHistoryCommitType history_commit_type,
+      bool should_reset_browser_interface_broker,
+      network::mojom::WebSandboxFlags sandbox_flags,
+      const ParsedFeaturePolicy& feature_policy_header,
+      const DocumentPolicyFeatureState& document_policy_header) override {
     history_commit_type_ = history_commit_type;
-    remote_frame_->Swap(Frame());
   }
 
   WebHistoryCommitType HistoryCommitType() const {
-    return history_commit_type_;
+    return *history_commit_type_;
   }
 
-  WebHistoryCommitType history_commit_type_;
-  WebRemoteFrame* remote_frame_;
+  base::Optional<WebHistoryCommitType> history_commit_type_;
 };
 
 // The commit type should be Initial if we are swapping a RemoteFrame to a
@@ -9510,9 +9450,9 @@ TEST_F(WebFrameSwapTest, HistoryCommitTypeAfterNewRemoteToLocalSwap) {
   ASSERT_TRUE(MainFrame()->FirstChild());
   ASSERT_EQ(MainFrame()->FirstChild(), remote_frame);
 
-  RemoteToLocalSwapWebFrameClient client(remote_frame);
+  RemoteToLocalSwapWebFrameClient client;
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame, &client);
+      web_view_helper_.CreateProvisional(*remote_frame, &client);
   frame_test_helpers::LoadFrame(local_frame, base_url_ + "subframe-hello.html");
   EXPECT_EQ(kWebHistoryInertCommit, client.HistoryCommitType());
 
@@ -9532,9 +9472,9 @@ TEST_F(WebFrameSwapTest, HistoryCommitTypeAfterExistingRemoteToLocalSwap) {
   ASSERT_TRUE(MainFrame()->FirstChild());
   ASSERT_EQ(MainFrame()->FirstChild(), remote_frame);
 
-  RemoteToLocalSwapWebFrameClient client(remote_frame);
+  RemoteToLocalSwapWebFrameClient client;
   WebLocalFrameImpl* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame, &client);
+      web_view_helper_.CreateProvisional(*remote_frame, &client);
   local_frame->SetCommittedFirstRealLoad();
   frame_test_helpers::LoadFrame(local_frame, base_url_ + "subframe-hello.html");
   EXPECT_EQ(kWebStandardCommit, client.HistoryCommitType());
@@ -9709,13 +9649,14 @@ TEST_F(WebFrameTest, NavigateRemoteToLocalWithOpener) {
 
   // Do a remote-to-local swap in the popup.
   WebLocalFrame* popup_local_frame =
-      frame_test_helpers::CreateProvisional(*popup_remote_frame);
+      popup_helper.CreateProvisional(*popup_remote_frame);
   popup_remote_frame->Swap(popup_local_frame);
 
-  // The initial document created during the remote-to-local swap should have
-  // inherited its opener's SecurityOrigin.
-  EXPECT_TRUE(main_frame->GetSecurityOrigin().CanAccess(
+  // The initial document created in a provisional frame should not be
+  // scriptable by any other frame.
+  EXPECT_FALSE(main_frame->GetSecurityOrigin().CanAccess(
       popup_helper.LocalMainFrame()->GetSecurityOrigin()));
+  EXPECT_TRUE(popup_helper.LocalMainFrame()->GetSecurityOrigin().IsOpaque());
 }
 
 TEST_F(WebFrameTest, SwapWithOpenerCycle) {
@@ -9727,8 +9668,7 @@ TEST_F(WebFrameTest, SwapWithOpenerCycle) {
       ->SetOpenerDoNotNotify(WebFrame::ToCoreFrame(*remote_frame));
 
   // Now swap in a local frame. It shouldn't crash.
-  WebLocalFrame* local_frame =
-      frame_test_helpers::CreateProvisional(*remote_frame);
+  WebLocalFrame* local_frame = helper.CreateProvisional(*remote_frame);
   remote_frame->Swap(local_frame);
 
   // And the opener cycle should still be preserved.
@@ -9737,22 +9677,25 @@ TEST_F(WebFrameTest, SwapWithOpenerCycle) {
 
 class CommitTypeWebFrameClient : public frame_test_helpers::TestWebFrameClient {
  public:
-  CommitTypeWebFrameClient() : history_commit_type_(kWebHistoryInertCommit) {}
-  ~CommitTypeWebFrameClient() override = default;
-
-  // frame_test_helpers::TestWebFrameClient:
-  void DidCommitNavigation(const WebHistoryItem&,
-                           WebHistoryCommitType history_commit_type,
-                           bool) override {
-    history_commit_type_ = history_commit_type;
-  }
+  CommitTypeWebFrameClient() = default;
+  ~CommitTypeWebFrameClient() final = default;
 
   WebHistoryCommitType HistoryCommitType() const {
     return history_commit_type_;
   }
 
+  // frame_test_helpers::TestWebFrameClient:
+  void DidCommitNavigation(
+      WebHistoryCommitType history_commit_type,
+      bool should_reset_browser_interface_broker,
+      network::mojom::WebSandboxFlags sandbox_flags,
+      const ParsedFeaturePolicy& feature_policy_header,
+      const DocumentPolicyFeatureState& document_policy_header) final {
+    history_commit_type_ = history_commit_type;
+  }
+
  private:
-  WebHistoryCommitType history_commit_type_;
+  WebHistoryCommitType history_commit_type_ = kWebHistoryInertCommit;
 };
 
 TEST_F(WebFrameTest, RemoteFrameInitialCommitType) {
@@ -9763,7 +9706,7 @@ TEST_F(WebFrameTest, RemoteFrameInitialCommitType) {
   // If an iframe has a remote main frame, ensure the inital commit is correctly
   // identified as kWebHistoryInertCommit.
   CommitTypeWebFrameClient child_frame_client;
-  WebLocalFrame* child_frame = frame_test_helpers::CreateLocalChild(
+  WebLocalFrame* child_frame = helper.CreateLocalChild(
       *helper.RemoteMainFrame(), "frameName", WebFrameOwnerProperties(),
       nullptr, &child_frame_client);
   RegisterMockedHttpURLLoad("foo.html");
@@ -9827,7 +9770,7 @@ TEST_F(WebFrameTest, CrossDomainAccessErrorsUseCallingWindow) {
   ASSERT_EQ(1u, popup_web_frame_client.messages.size());
   EXPECT_TRUE(std::string::npos !=
               popup_web_frame_client.messages[0].text.Utf8().find(
-                  "Unsafe JavaScript attempt to initiate navigation"));
+                  "Unsafe attempt to initiate navigation"));
 
   // Try setting a cross-origin iframe element's source to a javascript: URL,
   // and check that this error is also printed on the calling window.
@@ -9848,55 +9791,43 @@ TEST_F(WebFrameTest, CrossDomainAccessErrorsUseCallingWindow) {
 
 TEST_F(WebFrameTest, ResizeInvalidatesDeviceMediaQueries) {
   RegisterMockedHttpURLLoad("device_media_queries.html");
-  FixedLayoutTestWebWidgetClient client;
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "device_media_queries.html",
-                                    nullptr, nullptr, &client,
-                                    ConfigureAndroid);
+                                    nullptr, nullptr, ConfigureAndroid);
   auto* frame =
       To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
   Element* element = frame->GetDocument()->getElementById("test");
   ASSERT_TRUE(element);
 
-  client.screen_info_.available_rect = gfx::Rect(700, 500);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
-                                client.screen_info_.available_rect.width(),
-                                client.screen_info_.available_rect.height());
+  ScreenInfo screen_info =
+      web_view_helper.GetMainFrameWidget()->GetOriginalScreenInfo();
+  screen_info.rect = screen_info.available_rect = gfx::Rect(700, 500);
+  UpdateScreenInfoAndResizeView(&web_view_helper, screen_info);
   EXPECT_EQ(300, element->OffsetWidth());
   EXPECT_EQ(300, element->OffsetHeight());
 
-  client.screen_info_.available_rect = gfx::Rect(710, 500);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
-                                client.screen_info_.available_rect.width(),
-                                client.screen_info_.available_rect.height());
+  screen_info.rect = screen_info.available_rect = gfx::Rect(710, 500);
+  UpdateScreenInfoAndResizeView(&web_view_helper, screen_info);
   EXPECT_EQ(400, element->OffsetWidth());
   EXPECT_EQ(300, element->OffsetHeight());
 
-  client.screen_info_.available_rect = gfx::Rect(690, 500);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
-                                client.screen_info_.available_rect.width(),
-                                client.screen_info_.available_rect.height());
+  screen_info.rect = screen_info.available_rect = gfx::Rect(690, 500);
+  UpdateScreenInfoAndResizeView(&web_view_helper, screen_info);
   EXPECT_EQ(200, element->OffsetWidth());
   EXPECT_EQ(300, element->OffsetHeight());
 
-  client.screen_info_.available_rect = gfx::Rect(700, 510);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
-                                client.screen_info_.available_rect.width(),
-                                client.screen_info_.available_rect.height());
+  screen_info.rect = screen_info.available_rect = gfx::Rect(700, 510);
+  UpdateScreenInfoAndResizeView(&web_view_helper, screen_info);
   EXPECT_EQ(300, element->OffsetWidth());
   EXPECT_EQ(400, element->OffsetHeight());
 
-  client.screen_info_.available_rect = gfx::Rect(700, 490);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
-                                client.screen_info_.available_rect.width(),
-                                client.screen_info_.available_rect.height());
+  screen_info.rect = screen_info.available_rect = gfx::Rect(700, 490);
+  UpdateScreenInfoAndResizeView(&web_view_helper, screen_info);
   EXPECT_EQ(300, element->OffsetWidth());
   EXPECT_EQ(200, element->OffsetHeight());
 
-  client.screen_info_.available_rect = gfx::Rect(690, 510);
-  UpdateScreenInfoAndResizeView(&client, &web_view_helper,
-                                client.screen_info_.available_rect.width(),
-                                client.screen_info_.available_rect.height());
+  screen_info.rect = screen_info.available_rect = gfx::Rect(690, 510);
+  UpdateScreenInfoAndResizeView(&web_view_helper, screen_info);
   EXPECT_EQ(200, element->OffsetWidth());
   EXPECT_EQ(400, element->OffsetHeight());
 }
@@ -9905,16 +9836,15 @@ class DeviceEmulationTest : public WebFrameTest {
  protected:
   DeviceEmulationTest() {
     RegisterMockedHttpURLLoad("device_emulation.html");
-    client_.screen_info_.device_scale_factor = 1;
     web_view_helper_.InitializeAndLoad(base_url_ + "device_emulation.html",
-                                       nullptr, nullptr, &client_);
+                                       nullptr, nullptr);
   }
 
   void TestResize(const gfx::Size& size, const String& expected_size) {
-    client_.screen_info_.available_rect = gfx::Rect(size);
-    UpdateScreenInfoAndResizeView(&client_, &web_view_helper_,
-                                  client_.screen_info_.available_rect.width(),
-                                  client_.screen_info_.available_rect.height());
+    ScreenInfo screen_info =
+        web_view_helper_.GetMainFrameWidget()->GetOriginalScreenInfo();
+    screen_info.rect = screen_info.available_rect = gfx::Rect(size);
+    UpdateScreenInfoAndResizeView(&web_view_helper_, screen_info);
     EXPECT_EQ(expected_size, DumpSize("test"));
   }
 
@@ -9932,7 +9862,6 @@ class DeviceEmulationTest : public WebFrameTest {
     return callback_helper.StringValue();
   }
 
-  FixedLayoutTestWebWidgetClient client_;
   frame_test_helpers::WebViewHelper web_view_helper_;
 };
 
@@ -9968,14 +9897,12 @@ TEST_F(WebFrameTest, CreateLocalChildWithPreviousSibling) {
   helper.InitializeRemote();
   WebRemoteFrame* parent = helper.RemoteMainFrame();
 
-  WebLocalFrame* second_frame(
-      frame_test_helpers::CreateLocalChild(*parent, "name2"));
-  WebLocalFrame* fourth_frame(frame_test_helpers::CreateLocalChild(
+  WebLocalFrame* second_frame(helper.CreateLocalChild(*parent, "name2"));
+  WebLocalFrame* fourth_frame(helper.CreateLocalChild(
       *parent, "name4", WebFrameOwnerProperties(), second_frame));
-  WebLocalFrame* third_frame(frame_test_helpers::CreateLocalChild(
+  WebLocalFrame* third_frame(helper.CreateLocalChild(
       *parent, "name3", WebFrameOwnerProperties(), second_frame));
-  WebLocalFrame* first_frame(
-      frame_test_helpers::CreateLocalChild(*parent, "name1"));
+  WebLocalFrame* first_frame(helper.CreateLocalChild(*parent, "name1"));
 
   EXPECT_EQ(first_frame, parent->FirstChild());
   EXPECT_EQ(nullptr, first_frame->PreviousSibling());
@@ -10002,7 +9929,7 @@ TEST_F(WebFrameTest, SendBeaconFromChildWithRemoteMainFrame) {
   helper.InitializeRemote();
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateLocalChild(*helper.RemoteMainFrame());
+      helper.CreateLocalChild(*helper.RemoteMainFrame());
 
   // Finally, make sure an embedder triggered load in the local frame swapped
   // back in works.
@@ -10019,7 +9946,7 @@ TEST_F(WebFrameTest, SiteForCookiesFromChildWithRemoteMainFrame) {
                           SecurityOrigin::Create(ToKURL(not_base_url_)));
 
   WebLocalFrame* local_frame =
-      frame_test_helpers::CreateLocalChild(*helper.RemoteMainFrame());
+      helper.CreateLocalChild(*helper.RemoteMainFrame());
 
   RegisterMockedHttpURLLoad("foo.html");
   frame_test_helpers::LoadFrame(local_frame, base_url_ + "foo.html");
@@ -10036,11 +9963,11 @@ TEST_F(WebFrameTest, RemoteToLocalSwapOnMainFrameInitializesCoreFrame) {
   frame_test_helpers::WebViewHelper helper;
   helper.InitializeRemote();
 
-  frame_test_helpers::CreateLocalChild(*helper.RemoteMainFrame());
+  helper.CreateLocalChild(*helper.RemoteMainFrame());
 
   // Do a remote-to-local swap of the top frame.
   WebLocalFrame* local_root =
-      frame_test_helpers::CreateProvisional(*helper.RemoteMainFrame());
+      helper.CreateProvisional(*helper.RemoteMainFrame());
   helper.RemoteMainFrame()->Swap(local_root);
 
   // Load a page with a child frame in the new root to make sure this doesn't
@@ -10068,8 +9995,7 @@ TEST_F(WebFrameTest, PausedPageLoadWithRemoteMainFrame) {
 
   // Repeat this for a page with a local child frame, and ensure that the
   // child frame's loads are also suspended.
-  WebLocalFrameImpl* web_local_child =
-      frame_test_helpers::CreateLocalChild(*remote_root);
+  WebLocalFrameImpl* web_local_child = helper.CreateLocalChild(*remote_root);
   RegisterMockedHttpURLLoad("foo.html");
   frame_test_helpers::LoadFrame(web_local_child, base_url_ + "foo.html");
   LocalFrame* local_child = web_local_child->GetFrame();
@@ -10105,10 +10031,11 @@ class OverscrollWidgetInputHandlerHost
   }
 };
 
-class OverscrollWebWidgetClient
-    : public frame_test_helpers::TestWebWidgetClient {
+class OverscrollWebFrameWidget : public frame_test_helpers::TestWebFrameWidget {
  public:
-  OverscrollWebWidgetClient() = default;
+  template <typename... Args>
+  explicit OverscrollWebFrameWidget(Args&&... args)
+      : frame_test_helpers::TestWebFrameWidget(std::forward<Args>(args)...) {}
 
   frame_test_helpers::TestWidgetInputHandlerHost* GetInputHandlerHost()
       override {
@@ -10178,109 +10105,121 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 TEST_P(WebFrameOverscrollTest,
        AccumulatedRootOverscrollAndUnsedDeltaValuesOnOverscroll) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/overscroll.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   web_view_helper.InitializeAndLoad(base_url_ + "overscroll/overscroll.html",
-                                    nullptr, nullptr, &client,
-                                    ConfigureAndroid);
+                                    nullptr, nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
+
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
 
   // Calculation of accumulatedRootOverscroll and unusedDelta on multiple
   // scrollUpdate.
   ScrollBegin(&web_view_helper, -300, -316);
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(8, 16), gfx::Vector2dF(8, 16),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, -308, -316);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, 13), gfx::Vector2dF(8, 29),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0, -13);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(20, 13), gfx::Vector2dF(28, 42),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, -20, -13);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   // Overscroll is not reported.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 0, 1);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 1, 0);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   // Overscroll is reported.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, -701), gfx::Vector2dF(0, -701),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0, 1000);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   // Overscroll is not reported.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollEnd(&web_view_helper);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 }
 
 TEST_P(WebFrameOverscrollTest,
        AccumulatedOverscrollAndUnusedDeltaValuesOnDifferentAxesOverscroll) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/div-overscroll.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   web_view_helper.InitializeAndLoad(
-      base_url_ + "overscroll/div-overscroll.html", nullptr, nullptr, &client,
+      base_url_ + "overscroll/div-overscroll.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
 
   ScrollBegin(&web_view_helper, 0, -316);
 
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
+
   // Scroll the Div to the end.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 0, -316);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   ScrollEnd(&web_view_helper);
   ScrollBegin(&web_view_helper, 0, -100);
 
   // Now On Scrolling DIV, scroll is bubbled and root layer is over-scrolled.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, 100), gfx::Vector2dF(0, 100),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
@@ -10288,7 +10227,7 @@ TEST_P(WebFrameOverscrollTest,
   ScrollUpdate(&web_view_helper, 0, -100);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   // TODO(bokan): This has never worked but by the accident that this test was
   // being run in a WebView without a size. This test should be fixed along with
@@ -10312,54 +10251,64 @@ TEST_P(WebFrameOverscrollTest,
 }
 
 TEST_P(WebFrameOverscrollTest, RootLayerOverscrolledOnInnerDivOverScroll) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/div-overscroll.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   web_view_helper.InitializeAndLoad(
-      base_url_ + "overscroll/div-overscroll.html", nullptr, nullptr, &client,
+      base_url_ + "overscroll/div-overscroll.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
 
   ScrollBegin(&web_view_helper, 0, -316);
 
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
   // Scroll the Div to the end.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 0, -316);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   ScrollEnd(&web_view_helper);
   ScrollBegin(&web_view_helper, 0, -150);
 
   // Now On Scrolling DIV, scroll is bubbled and root layer is over-scrolled.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, 50), gfx::Vector2dF(0, 50),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0, -150);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 }
 
 TEST_P(WebFrameOverscrollTest, RootLayerOverscrolledOnInnerIFrameOverScroll) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/iframe-overscroll.html");
   RegisterMockedHttpURLLoad("overscroll/scrollable-iframe.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   web_view_helper.InitializeAndLoad(
       base_url_ + "overscroll/iframe-overscroll.html", nullptr, nullptr,
-      &client, ConfigureAndroid);
+      ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
 
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
   ScrollBegin(&web_view_helper, 0, -320);
   // Scroll the IFrame to the end.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
 
@@ -10372,193 +10321,206 @@ TEST_P(WebFrameOverscrollTest, RootLayerOverscrolledOnInnerIFrameOverScroll) {
   ScrollUpdate(&web_view_helper, 0, -50);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   ScrollEnd(&web_view_helper);
   ScrollBegin(&web_view_helper, 0, -150);
 
   // Now On Scrolling IFrame, scroll is bubbled and root layer is over-scrolled.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, 50), gfx::Vector2dF(0, 50),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0, -150);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   ScrollEnd(&web_view_helper);
 }
 
 TEST_P(WebFrameOverscrollTest, ScaledPageRootLayerOverscrolled) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/overscroll.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "overscroll/overscroll.html", nullptr, nullptr, &client,
+      base_url_ + "overscroll/overscroll.html", nullptr, nullptr,
       ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
   web_view_impl->SetPageScaleFactor(3.0);
 
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
   // Calculation of accumulatedRootOverscroll and unusedDelta on scaled page.
   // The point is (99, 99) because we clamp in the division by 3 to 33 so when
   // we go back to viewport coordinates it becomes (99, 99).
   ScrollBegin(&web_view_helper, 0, 30);
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, -30), gfx::Vector2dF(0, -30),
                             gfx::PointF(99, 99), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0, 30);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, -30), gfx::Vector2dF(0, -60),
                             gfx::PointF(99, 99), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0, 30);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-30, -30), gfx::Vector2dF(-30, -90),
                             gfx::PointF(99, 99), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 30, 30);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-30, 0), gfx::Vector2dF(-60, -90),
                             gfx::PointF(99, 99), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 30, 0);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   // Overscroll is not reported.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollEnd(&web_view_helper);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 }
 
 TEST_P(WebFrameOverscrollTest, NoOverscrollForSmallvalues) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/overscroll.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   web_view_helper.InitializeAndLoad(base_url_ + "overscroll/overscroll.html",
-                                    nullptr, nullptr, &client,
-                                    ConfigureAndroid);
+                                    nullptr, nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
 
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
   ScrollBegin(&web_view_helper, 10, 10);
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-10, -10), gfx::Vector2dF(-10, -10),
                             gfx::PointF(100, 100), gfx::Vector2dF(),
                             kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 10, 10);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(0, -0.10),
                             gfx::Vector2dF(-10, -10.10), gfx::PointF(100, 100),
                             gfx::Vector2dF(), kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0, 0.10);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   EXPECT_CALL(
-      client.GetOverscrollWidgetInputHandlerHost(),
+      widget->GetOverscrollWidgetInputHandlerHost(),
       DidOverscroll(gfx::Vector2dF(-0.10, 0), gfx::Vector2dF(-10.10, -10.10),
                     gfx::PointF(100, 100), gfx::Vector2dF(),
                     kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 0.10, 0);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
   // For residual values overscrollDelta should be reset and DidOverscroll
   // shouldn't be called.
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 0, 0.09);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 0.09, 0.09);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 0.09, 0);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, 0, -0.09);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, -0.09, -0.09);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollUpdate(&web_view_helper, -0.09, 0);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(_, _, _, _, _))
       .Times(0);
   ScrollEnd(&web_view_helper);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
 }
 
 TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/overscroll.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   web_view_helper.InitializeAndLoad(base_url_ + "overscroll/overscroll.html",
-                                    nullptr, nullptr, &client,
-                                    ConfigureAndroid);
+                                    nullptr, nullptr, ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
 
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
   WebLocalFrame* mainFrame =
       web_view_helper.GetWebView()->MainFrame()->ToWebLocalFrame();
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
@@ -10567,14 +10529,14 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: auto;'")));
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-100, -100),
                             gfx::Vector2dF(-100, -100), gfx::PointF(100, 100),
                             gfx::Vector2dF(), kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 100, 100);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
             kOverscrollBehaviorAuto);
 
@@ -10582,14 +10544,14 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: contain;'")));
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-100, -100),
                             gfx::Vector2dF(-200, -200), gfx::PointF(100, 100),
                             gfx::Vector2dF(), kOverscrollBehaviorContain));
   ScrollUpdate(&web_view_helper, 100, 100);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
             kOverscrollBehaviorContain);
 
@@ -10597,29 +10559,34 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: none;'")));
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-100, -100),
                             gfx::Vector2dF(-300, -300), gfx::PointF(100, 100),
                             gfx::Vector2dF(), kOverscrollBehaviorNone));
   ScrollUpdate(&web_view_helper, 100, 100);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
             kOverscrollBehaviorNone);
 }
 
 TEST_P(WebFrameOverscrollTest, OnlyMainFrameOverscrollBehaviorHasEffect) {
-  OverscrollWebWidgetClient client;
   RegisterMockedHttpURLLoad("overscroll/iframe-overscroll.html");
   RegisterMockedHttpURLLoad("overscroll/scrollable-iframe.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
+  frame_test_helpers::CreateTestWebFrameWidgetCallback create_widget_callback =
+      base::BindRepeating(
+          &frame_test_helpers::WebViewHelper::CreateTestWebFrameWidget<
+              OverscrollWebFrameWidget>);
+  frame_test_helpers::WebViewHelper web_view_helper(create_widget_callback);
 
   web_view_helper.InitializeAndLoad(
       base_url_ + "overscroll/iframe-overscroll.html", nullptr, nullptr,
-      &client, ConfigureAndroid);
+      ConfigureAndroid);
   web_view_helper.Resize(gfx::Size(200, 200));
 
+  OverscrollWebFrameWidget* widget = static_cast<OverscrollWebFrameWidget*>(
+      web_view_helper.GetMainFrameWidget());
   WebLocalFrame* mainFrame =
       web_view_helper.GetWebView()->MainFrame()->ToWebLocalFrame();
   mainFrame->ExecuteScript(
@@ -10634,28 +10601,28 @@ TEST_P(WebFrameOverscrollTest, OnlyMainFrameOverscrollBehaviorHasEffect) {
                                 "'overscroll-behavior: none;'")));
 
   ScrollBegin(&web_view_helper, 100, 116);
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-100, -100),
                             gfx::Vector2dF(-100, -100), gfx::PointF(100, 100),
                             gfx::Vector2dF(), kOverscrollBehaviorAuto));
   ScrollUpdate(&web_view_helper, 100, 100);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
             kOverscrollBehaviorAuto);
 
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: contain;'")));
-  EXPECT_CALL(client.GetOverscrollWidgetInputHandlerHost(),
+  EXPECT_CALL(widget->GetOverscrollWidgetInputHandlerHost(),
               DidOverscroll(gfx::Vector2dF(-100, -100),
                             gfx::Vector2dF(-200, -200), gfx::PointF(100, 100),
                             gfx::Vector2dF(), kOverscrollBehaviorContain));
   ScrollUpdate(&web_view_helper, 100, 100);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(
-      &client.GetOverscrollWidgetInputHandlerHost());
+      &widget->GetOverscrollWidgetInputHandlerHost());
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
             kOverscrollBehaviorContain);
 }
@@ -10675,7 +10642,7 @@ TEST_F(WebFrameTest, MaxFrames) {
   Page* page = web_view_helper.GetWebView()->GetPage();
 
   WebLocalFrameImpl* frame =
-      frame_test_helpers::CreateLocalChild(*web_view_helper.RemoteMainFrame());
+      web_view_helper.CreateLocalChild(*web_view_helper.RemoteMainFrame());
   while (page->SubframeCount() < Page::MaxNumberOfFrames()) {
     frame_test_helpers::CreateRemoteChild(*web_view_helper.RemoteMainFrame());
   }
@@ -10996,14 +10963,16 @@ class WebLocalFrameVisibilityChangeTest
 
   // frame_test_helpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
       mojom::blink::TreeScopeType scope,
       const WebString& name,
       const WebString& fallback_name,
       const FramePolicy&,
       const WebFrameOwnerProperties&,
-      mojom::blink::FrameOwnerElementType) override {
-    return CreateLocalChild(*parent, scope, &child_client_);
+      mojom::blink::FrameOwnerElementType,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) override {
+    return CreateLocalChild(*Frame(), scope, &child_client_);
   }
 
   TestLocalFrameHostForVisibility& ChildHost() { return child_host_; }
@@ -11071,8 +11040,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithNoOpener) {
 // injected script before the initial navigation.
 TEST(WebFrameGlobalReuseTest, ChildFrame) {
   frame_test_helpers::WebViewHelper helper;
-  helper.Initialize(nullptr, nullptr, nullptr,
-                    EnableGlobalReuseForUnownedMainFrames);
+  helper.Initialize(nullptr, nullptr, EnableGlobalReuseForUnownedMainFrames);
 
   WebLocalFrame* main_frame = helper.LocalMainFrame();
   frame_test_helpers::LoadFrame(main_frame, "data:text/html,<iframe></iframe>");
@@ -11094,8 +11062,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithOpener) {
   opener_helper.Initialize();
   frame_test_helpers::WebViewHelper helper;
   helper.InitializeWithOpener(opener_helper.GetWebView()->MainFrame(), nullptr,
-                              nullptr, nullptr,
-                              EnableGlobalReuseForUnownedMainFrames);
+                              nullptr, EnableGlobalReuseForUnownedMainFrames);
 
   WebLocalFrame* main_frame = helper.LocalMainFrame();
   v8::HandleScope scope(v8::Isolate::GetCurrent());
@@ -11113,8 +11080,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithOpener) {
 // to persist on the first navigation away from the initial empty document.
 TEST(WebFrameGlobalReuseTest, ReuseForMainFrameIfEnabled) {
   frame_test_helpers::WebViewHelper helper;
-  helper.Initialize(nullptr, nullptr, nullptr,
-                    EnableGlobalReuseForUnownedMainFrames);
+  helper.Initialize(nullptr, nullptr, EnableGlobalReuseForUnownedMainFrames);
 
   WebLocalFrame* main_frame = helper.LocalMainFrame();
   v8::HandleScope scope(v8::Isolate::GetCurrent());
@@ -11554,7 +11520,7 @@ TEST_F(WebFrameTest, RootLayerMinimumHeight) {
   constexpr int kBrowserControlsHeight = 100;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, nullptr, ConfigureAndroid);
+  web_view_helper.Initialize(nullptr, nullptr, ConfigureAndroid);
   WebViewImpl* web_view = web_view_helper.GetWebView();
   web_view->ResizeWithBrowserControls(
       gfx::Size(kViewportWidth, kViewportHeight - kBrowserControlsHeight),
@@ -12697,14 +12663,16 @@ TEST_F(WebFrameTest, NoLoadingCompletionCallbacksInDetach) {
 
     // frame_test_helpers::TestWebFrameClient:
     WebLocalFrame* CreateChildFrame(
-        WebLocalFrame* parent,
         mojom::blink::TreeScopeType scope,
         const WebString& name,
         const WebString& fallback_name,
         const FramePolicy&,
         const WebFrameOwnerProperties&,
-        mojom::blink::FrameOwnerElementType) override {
-      return CreateLocalChild(*parent, scope, &child_client_);
+        mojom::blink::FrameOwnerElementType,
+        blink::CrossVariantMojoAssociatedReceiver<
+            blink::mojom::PolicyContainerHostInterfaceBase>
+            policy_container_host_receiver) override {
+      return CreateLocalChild(*Frame(), scope, &child_client_);
     }
 
     LoadingObserverFrameClient& ChildClient() { return child_client_; }
@@ -12742,32 +12710,18 @@ TEST_F(WebFrameTest, ClearClosedOpener) {
   EXPECT_EQ(nullptr, helper.LocalMainFrame()->Opener());
 }
 
-class ShowVirtualKeyboardObserverWidgetClient
-    : public frame_test_helpers::TestWebWidgetClient {
- public:
-  ShowVirtualKeyboardObserverWidgetClient() = default;
-  ~ShowVirtualKeyboardObserverWidgetClient() override = default;
-
-  // frame_test_helpers::TestWebWidgetClient:
-  void TextInputStateChanged(
-      ui::mojom::blink::TextInputStatePtr state) override {
-    did_show_virtual_keyboard_ |= state->show_ime_if_needed;
-  }
-
-  bool DidShowVirtualKeyboard() const { return did_show_virtual_keyboard_; }
-
- private:
-  bool did_show_virtual_keyboard_ = false;
-};
-
 TEST_F(WebFrameTest, ShowVirtualKeyboardOnElementFocus) {
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeRemote();
 
-  ShowVirtualKeyboardObserverWidgetClient web_widget_client;
-  WebLocalFrameImpl* local_frame = frame_test_helpers::CreateLocalChild(
+  WebLocalFrameImpl* local_frame = web_view_helper.CreateLocalChild(
       *web_view_helper.RemoteMainFrame(), "child", WebFrameOwnerProperties(),
-      nullptr, nullptr, &web_widget_client);
+      nullptr, nullptr);
+
+  frame_test_helpers::TestWebFrameWidgetHost& widget_host =
+      static_cast<frame_test_helpers::TestWebFrameWidget*>(
+          local_frame->FrameWidgetImpl())
+          ->WidgetHost();
 
   RegisterMockedHttpURLLoad("input_field_default.html");
   frame_test_helpers::LoadFrame(local_frame,
@@ -12782,11 +12736,11 @@ TEST_F(WebFrameTest, ShowVirtualKeyboardOnElementFocus) {
                       "document.querySelector('input').focus();"));
 
   RunPendingTasks();
-  // Verify that the right WebWidgetClient has been notified.
-#if BUILDFLAG(IS_ASH)
-  EXPECT_FALSE(web_widget_client.DidShowVirtualKeyboard());
+  // Verify that the right WidgetHost has been notified.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  EXPECT_EQ(0u, widget_host.VirtualKeyboardRequestCount());
 #else
-  EXPECT_TRUE(web_widget_client.DidShowVirtualKeyboard());
+  EXPECT_LT(0u, widget_host.VirtualKeyboardRequestCount());
 #endif
   web_view_helper.Reset();
 }
@@ -12949,7 +12903,7 @@ TEST_F(WebFrameTest, LocalFrameWithRemoteParentIsTransparent) {
   helper.InitializeRemote();
 
   WebLocalFrameImpl* local_frame =
-      frame_test_helpers::CreateLocalChild(*helper.RemoteMainFrame());
+      helper.CreateLocalChild(*helper.RemoteMainFrame());
   frame_test_helpers::LoadFrame(local_frame, "data:text/html,some page");
 
   // Local frame with remote parent should have transparent baseBackgroundColor.
@@ -12969,15 +12923,17 @@ class TestFallbackWebFrameClient
 
   // frame_test_helpers::TestWebFrameClient:
   WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
       mojom::blink::TreeScopeType scope,
       const WebString&,
       const WebString&,
       const FramePolicy&,
       const WebFrameOwnerProperties& frameOwnerProperties,
-      mojom::blink::FrameOwnerElementType) override {
+      mojom::blink::FrameOwnerElementType,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) override {
     DCHECK(child_client_);
-    return CreateLocalChild(*parent, scope, child_client_);
+    return CreateLocalChild(*Frame(), scope, child_client_);
   }
   void BeginNavigation(std::unique_ptr<WebNavigationInfo> info) override {
     if (child_client_ || KURL(info->url_request.Url()) == BlankURL()) {
@@ -13001,8 +12957,9 @@ TEST_F(WebFrameTest, FallbackForNonexistentProvisionalNavigation) {
   web_view_helper_.Initialize(&main_client);
 
   WebLocalFrameImpl* main_frame = web_view_helper_.LocalMainFrame();
-  WebURLRequest request(ToKURL(base_url_ + "fallback.html"));
-  main_frame->StartNavigation(request);
+  KURL url = ToKURL(base_url_ + "fallback.html");
+  FrameLoadRequest frame_load_request(nullptr, ResourceRequest(url));
+  main_frame->GetFrame()->Loader().StartNavigation(frame_load_request);
 
   // Because the child frame will have placeholder document loader, the main
   // frame will not finish loading, so
@@ -13019,7 +12976,7 @@ TEST_F(WebFrameTest, FallbackForNonexistentProvisionalNavigation) {
   // page.
   EXPECT_EQ(WebNavigationControl::NoLoadInProgress,
             To<WebLocalFrameImpl>(child)->MaybeRenderFallbackContent(
-                WebURLError(ResourceError::Failure(request.Url()))));
+                WebURLError(ResourceError::Failure(url))));
 }
 
 TEST_F(WebFrameTest, AltTextOnAboutBlankPage) {
@@ -13499,13 +13456,17 @@ TEST_F(WebFrameTest, MediaQueriesInLocalFrameInsideRemote) {
   frame_test_helpers::WebViewHelper helper;
   helper.InitializeRemote();
 
-  FixedLayoutTestWebWidgetClient client;
-  client.screen_info_.is_monochrome = false;
-  client.screen_info_.depth_per_component = 8;
+  WebLocalFrameImpl* local_frame =
+      helper.CreateLocalChild(*helper.RemoteMainFrame(), WebString(),
+                              WebFrameOwnerProperties(), nullptr, nullptr);
 
-  WebLocalFrameImpl* local_frame = frame_test_helpers::CreateLocalChild(
-      *helper.RemoteMainFrame(), WebString(), WebFrameOwnerProperties(),
-      nullptr, nullptr, &client);
+  frame_test_helpers::TestWebFrameWidget* local_frame_widget =
+      static_cast<frame_test_helpers::TestWebFrameWidget*>(
+          local_frame->FrameWidgetImpl());
+  ScreenInfo screen_info = local_frame_widget->GetOriginalScreenInfo();
+  screen_info.is_monochrome = false;
+  screen_info.depth_per_component = 8;
+  local_frame_widget->UpdateScreenInfo(screen_info);
 
   ASSERT_TRUE(local_frame->GetFrame());
   MediaValues* media_values =
@@ -13521,8 +13482,8 @@ TEST_F(WebFrameTest, MediaQueriesInLocalFrameInsideRemote) {
 TEST_F(WebFrameTest, RemoteViewportAndMainframeIntersections) {
   frame_test_helpers::WebViewHelper helper;
   helper.InitializeRemote();
-  WebLocalFrameImpl* local_frame = frame_test_helpers::CreateLocalChild(
-      *helper.RemoteMainFrame(), "frameName");
+  WebLocalFrameImpl* local_frame =
+      helper.CreateLocalChild(*helper.RemoteMainFrame(), "frameName");
   frame_test_helpers::LoadHTMLString(local_frame, R"HTML(
       <!DOCTYPE html>
       <style>
@@ -13556,9 +13517,10 @@ TEST_F(WebFrameTest, RemoteViewportAndMainframeIntersections) {
   blink::mojom::FrameOcclusionState occlusion_state =
       blink::mojom::FrameOcclusionState::kUnknown;
 
-  static_cast<WebFrameWidgetBase*>(widget)->SetRemoteViewportIntersection(
-      {viewport_intersection, mainframe_intersection, viewport_intersection,
-       occlusion_state, gfx::Size(), gfx::Point(), viewport_transform});
+  static_cast<WebFrameWidgetImpl*>(widget)->SetViewportIntersection(
+      blink::mojom::blink::ViewportIntersectionState::New(
+          viewport_intersection, mainframe_intersection, viewport_intersection,
+          occlusion_state, gfx::Size(), gfx::Point(), viewport_transform));
 
   // The viewport intersection should be applied by the layout geometry mapping
   // code when these flags are used.
@@ -13737,6 +13699,9 @@ class TestLocalFrameHostForAnchorWithDownloadAttr : public FakeLocalFrameHost {
 };
 
 TEST_F(WebFrameTest, DownloadReferrerPolicy) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kPolicyContainer);
+
   TestLocalFrameHostForAnchorWithDownloadAttr frame_host;
   frame_test_helpers::TestWebFrameClient web_frame_client;
   frame_host.Init(web_frame_client.GetRemoteNavigationAssociatedInterfaces());
@@ -13745,53 +13710,220 @@ TEST_F(WebFrameTest, DownloadReferrerPolicy) {
 
   WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
   KURL test_url = ToKURL("http://www.test.com/foo/index.html");
-  // 1.<meta name='referrer' content='no-referrer'>
-  frame_test_helpers::LoadHTMLString(
-      frame, GetHTMLStringForReferrerPolicy("no-referrer", std::string()),
-      test_url);
-  EXPECT_TRUE(frame_host.referrer_.IsEmpty());
-  EXPECT_EQ(frame_host.referrer_policy_,
-            network::mojom::ReferrerPolicy::kNever);
 
-  // 2.<meta name='referrer' content='origin'>
-  frame_test_helpers::LoadHTMLString(
-      frame, GetHTMLStringForReferrerPolicy("origin", std::string()), test_url);
-  EXPECT_EQ(frame_host.referrer_, ToKURL("http://www.test.com/"));
-  EXPECT_EQ(frame_host.referrer_policy_,
-            network::mojom::ReferrerPolicy::kOrigin);
+  {
+    // 1.<meta name='referrer' content='no-referrer'>
+    MockPolicyContainerHost policy_container_host;
+    frame->GetFrame()->SetPolicyContainer(std::make_unique<PolicyContainer>(
+        policy_container_host.BindNewEndpointAndPassDedicatedRemote(),
+        mojom::blink::PolicyContainerDocumentPolicies::New()));
+    EXPECT_CALL(policy_container_host,
+                SetReferrerPolicy(network::mojom::ReferrerPolicy::kNever));
+    frame_test_helpers::LoadHTMLString(
+        frame, GetHTMLStringForReferrerPolicy("no-referrer", std::string()),
+        test_url);
+    EXPECT_TRUE(frame_host.referrer_.IsEmpty());
+    EXPECT_EQ(frame_host.referrer_policy_,
+              network::mojom::ReferrerPolicy::kNever);
+    policy_container_host.FlushForTesting();
+  }
 
-  // 3.Without any declared referrer-policy attribute
-  frame_test_helpers::LoadHTMLString(
-      frame, GetHTMLStringForReferrerPolicy(std::string(), std::string()),
-      test_url);
-  EXPECT_EQ(frame_host.referrer_, test_url);
-  EXPECT_EQ(frame_host.referrer_policy_,
-            ReferrerUtils::MojoReferrerPolicyResolveDefault(
-                network::mojom::ReferrerPolicy::kDefault));
+  {
+    // 2.<meta name='referrer' content='origin'>
+    MockPolicyContainerHost policy_container_host;
+    frame->GetFrame()->SetPolicyContainer(std::make_unique<PolicyContainer>(
+        policy_container_host.BindNewEndpointAndPassDedicatedRemote(),
+        mojom::blink::PolicyContainerDocumentPolicies::New()));
+    EXPECT_CALL(policy_container_host,
+                SetReferrerPolicy(network::mojom::ReferrerPolicy::kOrigin));
+    frame_test_helpers::LoadHTMLString(
+        frame, GetHTMLStringForReferrerPolicy("origin", std::string()),
+        test_url);
+    EXPECT_EQ(frame_host.referrer_, ToKURL("http://www.test.com/"));
+    EXPECT_EQ(frame_host.referrer_policy_,
+              network::mojom::ReferrerPolicy::kOrigin);
+    policy_container_host.FlushForTesting();
+  }
 
-  // 4.referrerpolicy='origin'
-  frame_test_helpers::LoadHTMLString(
-      frame, GetHTMLStringForReferrerPolicy(std::string(), "origin"), test_url);
-  EXPECT_EQ(frame_host.referrer_, ToKURL("http://www.test.com/"));
-  EXPECT_EQ(frame_host.referrer_policy_,
-            network::mojom::ReferrerPolicy::kOrigin);
+  {
+    // 3.Without any declared referrer-policy attribute
+    MockPolicyContainerHost policy_container_host;
+    frame->GetFrame()->SetPolicyContainer(std::make_unique<PolicyContainer>(
+        policy_container_host.BindNewEndpointAndPassDedicatedRemote(),
+        mojom::blink::PolicyContainerDocumentPolicies::New()));
+    EXPECT_CALL(policy_container_host, SetReferrerPolicy(_)).Times(0);
+    frame_test_helpers::LoadHTMLString(
+        frame, GetHTMLStringForReferrerPolicy(std::string(), std::string()),
+        test_url);
+    EXPECT_EQ(frame_host.referrer_, test_url);
+    EXPECT_EQ(frame_host.referrer_policy_,
+              ReferrerUtils::MojoReferrerPolicyResolveDefault(
+                  network::mojom::ReferrerPolicy::kDefault));
+    policy_container_host.FlushForTesting();
+  }
 
-  // 5.referrerpolicy='same-origin'
-  frame_test_helpers::LoadHTMLString(
-      frame, GetHTMLStringForReferrerPolicy(std::string(), "same-origin"),
-      test_url);
-  EXPECT_EQ(frame_host.referrer_, test_url);
-  EXPECT_EQ(frame_host.referrer_policy_,
-            network::mojom::ReferrerPolicy::kSameOrigin);
+  {
+    // 4.referrerpolicy='origin'
+    MockPolicyContainerHost policy_container_host;
+    frame->GetFrame()->SetPolicyContainer(std::make_unique<PolicyContainer>(
+        policy_container_host.BindNewEndpointAndPassDedicatedRemote(),
+        mojom::blink::PolicyContainerDocumentPolicies::New()));
+    EXPECT_CALL(policy_container_host, SetReferrerPolicy(_)).Times(0);
+    frame_test_helpers::LoadHTMLString(
+        frame, GetHTMLStringForReferrerPolicy(std::string(), "origin"),
+        test_url);
+    EXPECT_EQ(frame_host.referrer_, ToKURL("http://www.test.com/"));
+    EXPECT_EQ(frame_host.referrer_policy_,
+              network::mojom::ReferrerPolicy::kOrigin);
+    policy_container_host.FlushForTesting();
+  }
 
-  // 6.referrerpolicy='no-referrer'
-  frame_test_helpers::LoadHTMLString(
-      frame, GetHTMLStringForReferrerPolicy(std::string(), "no-referrer"),
-      test_url);
-  EXPECT_TRUE(frame_host.referrer_.IsEmpty());
-  EXPECT_EQ(frame_host.referrer_policy_,
-            network::mojom::ReferrerPolicy::kNever);
+  {
+    // 5.referrerpolicy='same-origin'
+    MockPolicyContainerHost policy_container_host;
+    frame->GetFrame()->SetPolicyContainer(std::make_unique<PolicyContainer>(
+        policy_container_host.BindNewEndpointAndPassDedicatedRemote(),
+        mojom::blink::PolicyContainerDocumentPolicies::New()));
+    EXPECT_CALL(policy_container_host, SetReferrerPolicy(_)).Times(0);
+    frame_test_helpers::LoadHTMLString(
+        frame, GetHTMLStringForReferrerPolicy(std::string(), "same-origin"),
+        test_url);
+    EXPECT_EQ(frame_host.referrer_, test_url);
+    EXPECT_EQ(frame_host.referrer_policy_,
+              network::mojom::ReferrerPolicy::kSameOrigin);
+    policy_container_host.FlushForTesting();
+  }
+
+  {
+    // 6.referrerpolicy='no-referrer'
+    MockPolicyContainerHost policy_container_host;
+    frame->GetFrame()->SetPolicyContainer(std::make_unique<PolicyContainer>(
+        policy_container_host.BindNewEndpointAndPassDedicatedRemote(),
+        mojom::blink::PolicyContainerDocumentPolicies::New()));
+    EXPECT_CALL(policy_container_host, SetReferrerPolicy(_)).Times(0);
+    frame_test_helpers::LoadHTMLString(
+        frame, GetHTMLStringForReferrerPolicy(std::string(), "no-referrer"),
+        test_url);
+    EXPECT_TRUE(frame_host.referrer_.IsEmpty());
+    EXPECT_EQ(frame_host.referrer_policy_,
+              network::mojom::ReferrerPolicy::kNever);
+    policy_container_host.FlushForTesting();
+  }
+
   web_view_helper.Reset();
+}
+
+TEST_F(WebFrameTest, RemoteFrameCompositingScaleFactor) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebViewImpl* web_view = web_view_helper.GetWebView();
+  web_view->Resize(gfx::Size(800, 800));
+  InitializeWithHTML(*web_view->MainFrameImpl()->GetFrame(), R"HTML(
+      <!DOCTYPE html>
+      <style>
+        iframe {
+          width: 1600;
+          height: 1200;
+          transform-origin: top left;
+          transform: scale(0.5);
+          border: none;
+        }
+      </style>
+      <iframe></iframe>
+  )HTML");
+
+  WebRemoteFrameImpl* remote_frame = frame_test_helpers::CreateRemote();
+  web_view_helper.LocalMainFrame()->FirstChild()->Swap(remote_frame);
+  remote_frame->SetReplicatedOrigin(
+      WebSecurityOrigin(SecurityOrigin::CreateUniqueOpaque()), false);
+
+  // Call directly into frame view since we need to RunPostLifecycleSteps() too.
+  web_view->MainFrameImpl()
+      ->GetFrame()
+      ->View()
+      ->UpdateAllLifecyclePhasesForTest();
+  RunPendingTasks();
+
+  // The compositing scale factor tells the OOPIF compositor to raster at a
+  // lower scale since the frame is scaled down in the parent webview.
+  EXPECT_EQ(remote_frame->GetCompositingRect(), WebRect(0, 0, 1600, 1200));
+  EXPECT_EQ(remote_frame->GetCompositingScaleFactor(), 0.5f);
+}
+
+TEST_F(WebFrameTest, RotatedRemoteFrameCompositingScaleFactor) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebViewImpl* web_view = web_view_helper.GetWebView();
+  web_view->Resize(gfx::Size(800, 800));
+  InitializeWithHTML(*web_view->MainFrameImpl()->GetFrame(), R"HTML(
+      <!DOCTYPE html>
+      <style>
+        iframe {
+          width: 1600;
+          height: 1200;
+          transform-origin: top left;
+          transform: scale(0.5) rotate(45deg);
+          border: none;
+        }
+      </style>
+      <iframe></iframe>
+  )HTML");
+
+  WebRemoteFrameImpl* remote_frame = frame_test_helpers::CreateRemote();
+  web_view_helper.LocalMainFrame()->FirstChild()->Swap(remote_frame);
+  remote_frame->SetReplicatedOrigin(
+      WebSecurityOrigin(SecurityOrigin::CreateUniqueOpaque()), false);
+
+  // Call directly into frame view since we need to RunPostLifecycleSteps() too.
+  web_view->MainFrameImpl()
+      ->GetFrame()
+      ->View()
+      ->UpdateAllLifecyclePhasesForTest();
+  RunPendingTasks();
+
+  // The compositing scale factor tells the OOPIF compositor to raster at a
+  // lower scale since the frame is scaled down in the parent webview.
+  EXPECT_EQ(remote_frame->GetCompositingRect(), WebRect(0, 0, 1600, 1200));
+  EXPECT_EQ(remote_frame->GetCompositingScaleFactor(), 0.5f);
+}
+
+TEST_F(WebFrameTest, ZeroScaleRemoteFrameCompositingScaleFactor) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebViewImpl* web_view = web_view_helper.GetWebView();
+  web_view->Resize(gfx::Size(800, 800));
+  InitializeWithHTML(*web_view->MainFrameImpl()->GetFrame(), R"HTML(
+      <!DOCTYPE html>
+      <style>
+        iframe {
+          width: 1600;
+          height: 1200;
+          transform-origin: top left;
+          transform: scale(0);
+          border: none;
+        }
+      </style>
+      <iframe></iframe>
+  )HTML");
+
+  WebRemoteFrameImpl* remote_frame = frame_test_helpers::CreateRemote();
+  web_view_helper.LocalMainFrame()->FirstChild()->Swap(remote_frame);
+  remote_frame->SetReplicatedOrigin(
+      WebSecurityOrigin(SecurityOrigin::CreateUniqueOpaque()), false);
+
+  // Call directly into frame view since we need to RunPostLifecycleSteps() too.
+  web_view->MainFrameImpl()
+      ->GetFrame()
+      ->View()
+      ->UpdateAllLifecyclePhasesForTest();
+  RunPendingTasks();
+
+  // The compositing scale factor tells the OOPIF compositor to raster at a
+  // reasonable minimum scale even though the iframe's transform scale is zero.
+  EXPECT_EQ(remote_frame->GetCompositingScaleFactor(), 0.25f);
 }
 
 }  // namespace blink

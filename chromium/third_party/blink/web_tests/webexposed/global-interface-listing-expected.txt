@@ -271,6 +271,7 @@ interface AudioContext : BaseAudioContext
     method resume
     method suspend
 interface AudioDecoder
+    static method isConfigSupported
     attribute @@toStringTag
     getter decodeQueueSize
     getter state
@@ -284,6 +285,16 @@ interface AudioDestinationNode : AudioNode
     attribute @@toStringTag
     getter maxChannelCount
     method constructor
+interface AudioEncoder
+    attribute @@toStringTag
+    getter encodeQueueSize
+    getter state
+    method close
+    method configure
+    method constructor
+    method encode
+    method flush
+    method reset
 interface AudioFrame
     attribute @@toStringTag
     getter buffer
@@ -585,6 +596,12 @@ interface BroadcastChannel : EventTarget
     method postMessage
     setter onmessage
     setter onmessageerror
+interface BucketManager
+    attribute @@toStringTag
+    method constructor
+    method delete
+    method keys
+    method openOrCreate
 interface ByteLengthQueuingStrategy
     attribute @@toStringTag
     getter highWaterMark
@@ -601,6 +618,31 @@ interface CSSConditionRule : CSSGroupingRule
     attribute @@toStringTag
     getter conditionText
     method constructor
+interface CSSCounterStyleRule : CSSRule
+    attribute @@toStringTag
+    getter additiveSymbols
+    getter fallback
+    getter name
+    getter negative
+    getter pad
+    getter prefix
+    getter range
+    getter speakAs
+    getter suffix
+    getter symbols
+    getter system
+    method constructor
+    setter additiveSymbols
+    setter fallback
+    setter name
+    setter negative
+    setter pad
+    setter prefix
+    setter range
+    setter speakAs
+    setter suffix
+    setter symbols
+    setter system
 interface CSSFontFaceRule : CSSRule
     attribute @@toStringTag
     getter style
@@ -748,6 +790,7 @@ interface CSSRotate : CSSTransformComponent
 interface CSSRule
     attribute @@toStringTag
     attribute CHARSET_RULE
+    attribute COUNTER_STYLE_RULE
     attribute FONT_FACE_RULE
     attribute IMPORT_RULE
     attribute KEYFRAMES_RULE
@@ -939,6 +982,7 @@ interface CanvasRenderingContext2D
     getter filter
     getter font
     getter fontKerning
+    getter fontStretch
     getter fontVariantCaps
     getter globalAlpha
     getter globalCompositeOperation
@@ -1014,6 +1058,7 @@ interface CanvasRenderingContext2D
     setter filter
     setter font
     setter fontKerning
+    setter fontStretch
     setter fontVariantCaps
     setter globalAlpha
     setter globalCompositeOperation
@@ -1535,6 +1580,12 @@ interface DeviceOrientationEvent : Event
     getter beta
     getter gamma
     method constructor
+interface DeviceService : EventTarget
+    attribute @@toStringTag
+    getter onmanagedconfigurationchange
+    method constructor
+    method getManagedConfiguration
+    setter onmanagedconfigurationchange
 interface Document : Node
     attribute @@toStringTag
     attribute @@unscopables
@@ -2108,7 +2159,6 @@ interface Element : Node
     method setAttributeNS
     method setAttributeNode
     method setAttributeNodeNS
-    method setInnerHTML
     method setPointerCapture
     method toggleAttribute
     method webkitMatchesSelector
@@ -2862,12 +2912,6 @@ interface HTMLCollection
     method constructor
     method item
     method namedItem
-interface HTMLContentElement : HTMLElement
-    attribute @@toStringTag
-    getter select
-    method constructor
-    method getDistributedNodes
-    setter select
 interface HTMLDListElement : HTMLElement
     attribute @@toStringTag
     getter compact
@@ -3951,10 +3995,6 @@ interface HTMLSelectElement : HTMLElement
     setter selectedIndex
     setter size
     setter value
-interface HTMLShadowElement : HTMLElement
-    attribute @@toStringTag
-    method constructor
-    method getDistributedNodes
 interface HTMLSlotElement : HTMLElement
     attribute @@toStringTag
     getter name
@@ -4515,7 +4555,7 @@ interface ImageData
     getter height
     getter width
     method constructor
-    method getColorSettings
+    method getSettings
 interface ImageDecoder
     static method canDecodeType
     attribute @@toStringTag
@@ -5061,6 +5101,7 @@ interface MediaQueryListEvent : Event
 interface MediaRecorder : EventTarget
     static method isTypeSupported
     attribute @@toStringTag
+    getter audioBitrateMode
     getter audioBitsPerSecond
     getter mimeType
     getter ondataavailable
@@ -5345,12 +5386,13 @@ interface NDEFMessage
     method constructor
 interface NDEFReader : EventTarget
     attribute @@toStringTag
-    getter onerror
     getter onreading
+    getter onreadingerror
     method constructor
     method scan
-    setter onerror
+    method write
     setter onreading
+    setter onreadingerror
 interface NDEFReadingEvent : Event
     attribute @@toStringTag
     getter message
@@ -5366,10 +5408,6 @@ interface NDEFRecord
     getter recordType
     method constructor
     method toRecords
-interface NDEFWriter
-    attribute @@toStringTag
-    method constructor
-    method write
 interface NamedNodeMap
     attribute @@toStringTag
     getter length
@@ -5391,7 +5429,7 @@ interface NativeIOFile
     method read
     method setLength
     method write
-interface NativeIOManager
+interface NativeIOFileManager
     attribute @@toStringTag
     method constructor
     method delete
@@ -5415,6 +5453,7 @@ interface Navigator
     getter contacts
     getter cookieEnabled
     getter credentials
+    getter device
     getter deviceMemory
     getter doNotTrack
     getter geolocation
@@ -5441,6 +5480,7 @@ interface Navigator
     getter serial
     getter serviceWorker
     getter storage
+    getter storageBuckets
     getter usb
     getter userActivation
     getter userAgent
@@ -5449,6 +5489,7 @@ interface Navigator
     getter vendorSub
     getter virtualKeyboard
     getter wakeLock
+    getter webdriver
     getter webkitPersistentStorage
     getter webkitTemporaryStorage
     getter xr
@@ -5628,6 +5669,7 @@ interface OffscreenCanvasRenderingContext2D
     getter filter
     getter font
     getter fontKerning
+    getter fontStretch
     getter fontVariantCaps
     getter globalAlpha
     getter globalCompositeOperation
@@ -5697,6 +5739,7 @@ interface OffscreenCanvasRenderingContext2D
     setter filter
     setter font
     setter fontKerning
+    setter fontStretch
     setter fontVariantCaps
     setter globalAlpha
     setter globalCompositeOperation
@@ -5901,7 +5944,7 @@ interface Performance : EventTarget
     method getEntriesByType
     method mark
     method measure
-    method measureMemory
+    method measureUserAgentSpecificMemory
     method now
     method profile
     method setResourceTimingBufferSize
@@ -6490,12 +6533,15 @@ interface RTCRtpTransceiver
     attribute @@toStringTag
     getter currentDirection
     getter direction
+    getter headerExtensionsNegotiated
+    getter headerExtensionsToOffer
     getter mid
     getter receiver
     getter sender
     getter stopped
     method constructor
     method setCodecPreferences
+    method setOfferedRtpHeaderExtensions
     method stop
     setter direction
 interface RTCSctpTransport : EventTarget
@@ -6577,6 +6623,14 @@ interface Range
     method setStartBefore
     method surroundContents
     method toString
+interface ReadableByteStreamController
+    attribute @@toStringTag
+    getter byobRequest
+    getter desiredSize
+    method close
+    method constructor
+    method enqueue
+    method error
 interface ReadableStream
     attribute @@toStringTag
     getter locked
@@ -6586,6 +6640,26 @@ interface ReadableStream
     method pipeThrough
     method pipeTo
     method tee
+interface ReadableStreamBYOBReader
+    attribute @@toStringTag
+    getter closed
+    method cancel
+    method constructor
+    method read
+    method releaseLock
+interface ReadableStreamBYOBRequest
+    attribute @@toStringTag
+    getter view
+    method constructor
+    method respond
+    method respondWithNewView
+interface ReadableStreamDefaultController
+    attribute @@toStringTag
+    getter desiredSize
+    method close
+    method constructor
+    method enqueue
+    method error
 interface ReadableStreamDefaultReader
     attribute @@toStringTag
     getter closed
@@ -7953,12 +8027,10 @@ interface Serial : EventTarget
     method requestPort
     setter onconnect
     setter ondisconnect
-interface SerialConnectionEvent : Event
+interface SerialPort : EventTarget
     attribute @@toStringTag
-    getter port
-    method constructor
-interface SerialPort
-    attribute @@toStringTag
+    getter onconnect
+    getter ondisconnect
     getter readable
     getter writable
     method close
@@ -7967,6 +8039,8 @@ interface SerialPort
     method getSignals
     method open
     method setSignals
+    setter onconnect
+    setter ondisconnect
 interface ServiceWorker : EventTarget
     attribute @@toStringTag
     getter onerror
@@ -8031,8 +8105,8 @@ interface ShadowRoot : DocumentFragment
     method elementFromPoint
     method elementsFromPoint
     method getAnimations
+    method getInnerHTML
     method getSelection
-    method setInnerHTML
     setter adoptedStyleSheets
     setter fullscreenElement
     setter innerHTML
@@ -8060,6 +8134,7 @@ interface SourceBuffer : EventTarget
     getter videoTracks
     method abort
     method appendBuffer
+    method appendEncodedChunks
     method changeType
     method constructor
     method remove
@@ -8225,6 +8300,10 @@ interface SyncManager
     method register
 interface TCPSocket
     attribute @@toStringTag
+    getter readable
+    getter remoteAddress
+    getter remotePort
+    getter writable
     method close
     method constructor
 interface TaskAttributionTiming : PerformanceEntry
@@ -8529,6 +8608,11 @@ interface URL
     setter protocol
     setter search
     setter username
+interface URLPattern
+    attribute @@toStringTag
+    method constructor
+    method exec
+    method test
 interface URLSearchParams
     attribute @@toStringTag
     method @@iterator
@@ -8709,6 +8793,7 @@ interface ValidityState
     getter valueMissing
     method constructor
 interface VideoDecoder
+    static method isConfigSupported
     attribute @@toStringTag
     getter decodeQueueSize
     getter state
@@ -8743,6 +8828,7 @@ interface VideoFrame
     getter planes
     getter timestamp
     method clone
+    method close
     method constructor
     method createImageBitmap
     method destroy
@@ -10221,6 +10307,7 @@ interface WebTransport
     method constructor
     method createBidirectionalStream
     method createUnidirectionalStream
+    method setDatagramWritableQueueExpirationDuration
 interface WheelEvent : MouseEvent
     attribute @@toStringTag
     attribute DOM_DELTA_LINE
@@ -10408,9 +10495,9 @@ interface XRDepthInformation
     method getDepth
 interface XRFrame
     attribute @@toStringTag
+    getter detectedPlanes
     getter session
     getter trackedAnchors
-    getter worldInformation
     method constructor
     method createAnchor
     method getDepthInformation
@@ -10488,10 +10575,6 @@ interface XRPlane
     getter polygon
     method constructor
     method createAnchor
-interface XRPlaneDetectionState
-    attribute @@toStringTag
-    getter enabled
-    method constructor
 interface XRPlaneSet
     attribute @@toStringTag
     getter size
@@ -10556,7 +10639,6 @@ interface XRSession : EventTarget
     getter preferredReflectionFormat
     getter renderState
     getter visibilityState
-    getter worldTrackingState
     method cancelAnimationFrame
     method constructor
     method end
@@ -10636,14 +10718,6 @@ interface XRWebGLLayer : XRLayer
     getter ignoreDepthValues
     method constructor
     method getViewport
-interface XRWorldInformation
-    attribute @@toStringTag
-    getter detectedPlanes
-    method constructor
-interface XRWorldTrackingState
-    attribute @@toStringTag
-    getter planeDetectionState
-    method constructor
 interface XSLTProcessor
     attribute @@toStringTag
     method clearParameters

@@ -306,6 +306,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   void ClearRFHsPendingShutdown();
   void ClearWebUIInstances();
 
+  // Returns true if the current, or speculative, RenderFrameHost has a commit
+  // pending for a cross-document navigation.
+  bool HasPendingCommitForCrossDocumentNavigation() const;
+
   // Returns the routing id for a RenderFrameHost or RenderFrameProxyHost
   // that has the given SiteInstance and is associated with this
   // RenderFrameHostManager. Returns MSG_ROUTING_NONE if none is found.
@@ -336,6 +340,10 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Clean up any state for any ongoing navigation.
   void CleanUpNavigation();
+
+  // Determines whether any active navigations are associated with
+  // |speculative_render_frame_host_| and if not, discards it.
+  void MaybeCleanUpNavigation();
 
   // Clears the speculative members, returning the RenderFrameHost to the caller
   // for disposal.
@@ -847,7 +855,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Helper to reinitialize the RenderFrame, RenderView, and the opener chain
   // for the provided |render_frame_host|.  Used when the |render_frame_host|
   // needs to be reused for a new navigation, but it is not live.
-  bool ReinitializeRenderFrame(RenderFrameHostImpl* render_frame_host);
+  bool ReinitializeMainRenderFrame(RenderFrameHostImpl* render_frame_host);
 
   // Sets the |pending_rfh| to be the active one. Called when the pending
   // RenderFrameHost commits.

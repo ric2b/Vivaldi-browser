@@ -4,7 +4,6 @@
 
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_checkbox/cr_checkbox.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_dialog/cr_dialog.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
@@ -12,6 +11,7 @@
 <link rel="import" href="/components/common_styles.html">
 <link rel="import" href="/components/hd_iron_icon.html">
 <link rel="import" href="/components/oobe_i18n_behavior.html">
+<link rel="import" href="/components/oobe_dialog.html">
 
 <dom-module id="oobe-eula-element">
   <template>
@@ -80,15 +80,13 @@
       </div>
     </oobe-dialog>
     <oobe-dialog id="securitySettingsDialog" role="dialog" has-buttons
-      title-key="eulaSystemSecuritySettings" hidden
-      aria-label$="[[i18nDynamic(locale, 'eulaSystemSecuritySettings')]]">
+        title-key="eulaSystemSecuritySettings" hidden
+        aria-label$="[[i18nDynamic(locale, 'eulaSystemSecuritySettings')]]">
       <hd-iron-icon slot="oobe-icon"
           icon1x="oobe-32:googleg" icon2x="oobe-64:googleg">
       </hd-iron-icon>
       <div slot="subtitle" id="settingsSubtitle">
-        <div>
-          [[i18nDynamic(locale, 'eulaTpmDesc')]]
-        </div>
+        [[i18nDynamic(locale, 'eulaTpmDesc')]]
       </div>
       <div slot="bottom-buttons" class="flex layout horizontal">
         <div class="flex"></div>
@@ -98,18 +96,18 @@
             on-click="onSecuritySettingsCloseClicked_"></oobe-text-button>
       </div>
     </oobe-dialog>
-    <cr-dialog id="additionalToS" ignore-popstate
+    <oobe-modal-dialog id="additionalToS" ignore-popstate
         on-close="focusAdditionalTermsLink_"
         on-cancel="focusAdditionalTermsLink_">
       <div slot="title">
         [[i18nDynamic(locale, 'oobeEulaAditionalTerms')]]
       </div>
-      <webview slot="body" role="document" class="flex oobe-tos-webview"
+      <webview slot="content" role="document" class="flex oobe-tos-webview"
           id="additionalChromeToSFrame">
       </webview>
-      <oobe-text-button id="close-additional-tos" slot="button-container"
+      <oobe-text-button id="closeAdditionalTos" slot="buttons"
           on-click="hideToSDialog_" text-key="oobeModalDialogClose" inverse>
       </oobe-text-button>
-    </cr-dialog>
+    </oobe-modal-dialog>
   </template>
 </dom-module>

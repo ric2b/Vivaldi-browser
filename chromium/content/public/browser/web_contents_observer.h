@@ -536,12 +536,15 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
 
   // Called when a message is added to the console of the WebContents. This is
   // invoked before forwarding the message to the WebContents' delegate.
+  // |source_id| is a URL. |untrusted_stack_trace| is not present for most
+  // messages; only when requested in advance and only for exceptions.
   virtual void OnDidAddMessageToConsole(
       RenderFrameHost* source_frame,
       blink::mojom::ConsoleMessageLevel log_level,
       const base::string16& message,
       int32_t line_no,
-      const base::string16& source_id) {}
+      const base::string16& source_id,
+      const base::Optional<base::string16>& untrusted_stack_trace) {}
 
   // Invoked when media is playing or paused.  |id| is unique per player and per
   // RenderFrameHost.  There may be multiple players within a RenderFrameHost
@@ -581,6 +584,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
   virtual void MediaBufferUnderflow(const MediaPlayerId& id) {}
   virtual void MediaPlayerSeek(const MediaPlayerId& id) {}
+  virtual void MediaDestroyed(const MediaPlayerId& id) {}
 
   // Invoked when the renderer process changes the page scale factor.
   virtual void OnPageScaleFactorChanged(float page_scale_factor) {}

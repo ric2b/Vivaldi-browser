@@ -8,14 +8,20 @@ mojom("mojom") {
   sources = [
     "account_manager.mojom",
     "bitmap.mojom",
+    "cert_database.mojom",
+    "clipboard.mojom",
     "crosapi.mojom",
+    "device_attributes.mojom",
     "feedback.mojom",
     "file_manager.mojom",
     "keystore_service.mojom",
     "message_center.mojom",
+    "metrics_reporting.mojom",
     "notification.mojom",
+    "prefs.mojom",
     "screen_manager.mojom",
     "select_file.mojom",
+    "test_controller.mojom",
   ]
   disable_variants = true
 
@@ -31,7 +37,7 @@ mojom("mojom") {
       traits_headers = [ "//chromeos/crosapi/mojom/bitmap_mojom_traits.h" ]
       traits_public_deps = [
         ":mojom_traits",
-        "//chromeos/crosapi/cpp",
+        "//chromeos/crosapi/cpp:cpp_internal",
       ]
     },
   ]
@@ -39,6 +45,7 @@ mojom("mojom") {
   public_deps = [
     "//mojo/public/mojom/base",
     "//services/device/public/mojom:mojom",
+    "//services/media_session/public/mojom:mojom",
     "//ui/gfx/image/mojom",
     "//url/mojom:url_mojom_gurl",
   ]
@@ -56,7 +63,7 @@ component("mojom_traits") {
 
   public_deps = [
     ":mojom_shared",
-    "//chromeos/crosapi/cpp",
+    "//chromeos/crosapi/cpp:cpp_internal",
     "//mojo/public/cpp/base:shared_typemap_traits",
   ]
 }

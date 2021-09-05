@@ -11,8 +11,6 @@
 #include "base/strings/string_split.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
-#include "chrome/browser/engagement/site_engagement_score.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/metrics/ukm_background_recorder_service.h"
 #include "chrome/browser/offline_items_collection/offline_content_aggregator_factory.h"
@@ -21,6 +19,8 @@
 #include "components/offline_items_collection/core/offline_content_aggregator.h"
 #include "components/offline_items_collection/core/offline_item.h"
 #include "components/offline_items_collection/core/update_delta.h"
+#include "components/site_engagement/content/site_engagement_score.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_index_context.h"
@@ -106,7 +106,8 @@ ContentIndexProviderImpl::ContentIndexProviderImpl(Profile* profile)
       aggregator_(
           OfflineContentAggregatorFactory::GetForKey(profile->GetProfileKey())),
       site_engagement_service_(
-          SiteEngagementServiceFactory::GetForProfile(profile)) {
+          site_engagement::SiteEngagementServiceFactory::GetForProfile(
+              profile)) {
   aggregator_->RegisterProvider(kProviderNamespace, this);
 }
 
@@ -367,7 +368,7 @@ OfflineItem ContentIndexProviderImpl::EntryToOfflineItem(
   if (site_engagement_service_) {
     item.content_quality_score =
         site_engagement_service_->GetScore(entry.launch_url.GetOrigin()) /
-        SiteEngagementScore::kMaxPoints;
+        site_engagement::SiteEngagementScore::kMaxPoints;
   }
 
   return item;

@@ -59,9 +59,10 @@ WorkerThread::~WorkerThread() {
 
 void WorkerThread::Init() {
   thread_->StartAsync();
-  // TODO(carlscab): We could get rid of this if the NonMainThreadSchedulerImpl
-  // and the default_task_runner could be created on the main thread and then
-  // bound in the worker thread (similar to what happens with SequenceManager)
+  // TODO(https://crbug.com/1146622): We could get rid of this if the
+  // NonMainThreadSchedulerImpl and the default_task_runner could be created on
+  // the main thread and then bound in the worker thread (similar to what
+  // happens with SequenceManager)
   thread_->WaitForInit();
 }
 
@@ -70,10 +71,6 @@ WorkerThread::CreateNonMainThreadScheduler(
     base::sequence_manager::SequenceManager* sequence_manager) {
   return NonMainThreadSchedulerImpl::Create(thread_type_, sequence_manager,
                                             worker_scheduler_proxy_.get());
-}
-
-blink::PlatformThreadId WorkerThread::ThreadId() const {
-  return thread_->tid();
 }
 
 blink::ThreadScheduler* WorkerThread::Scheduler() {
@@ -91,7 +88,7 @@ void WorkerThread::ShutdownOnThread() {
 }
 
 WorkerThread::SimpleThreadImpl::SimpleThreadImpl(
-    const String& name_prefix,
+    const WTF::String& name_prefix,
     const base::SimpleThread ::Options& options,
     NonMainThreadSchedulerFactory factory,
     bool supports_gc,

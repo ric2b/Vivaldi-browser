@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Maastik 3</translation>
 <translation id="1118377629180821201">Maastik 12</translation>
 <translation id="1158503667684816647">Seda kinnitust rohkem ei näidata</translation>
+<translation id="1222195720020481779">Paigaldusprogrammi käivitamine...</translation>
 <translation id="1276145862619442150">Kiirvalimislehed</translation>
 <translation id="1281950884873973195">Loom 5</translation>
 <translation id="1411638389238344450">Saada link meiliga</translation>
@@ -20,11 +21,15 @@
 <translation id="1921101374471252440">Laadi pilt uuesti</translation>
 <translation id="1924750141060565109">Maastik 15</translation>
 <translation id="19598411548897379">Üldine</translation>
+<translation id="1985669426322966465">Tarkvarauuendus</translation>
 <translation id="2079036669923635404">Klõpsa siin, et uuendada Vivaldi versioonile <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Uuendusfailide allalaadimisel tekkis tõrge. Palun vaata, et Interneti-ühendus toimiks, ja proovi siis uuesti.</translation>
+<translation id="2339641773402824483">Uuenduste otsimine...</translation>
 <translation id="2441056087170876076">Koll 2</translation>
 <translation id="2444387452209867610">Sisesta märge</translation>
 <translation id="2486841023299517366">Loom 4</translation>
+<translation id="2612127540243995147">Valmis paigaldamiseks. Vivaldi suletakse ja avakse uuesti.</translation>
+<translation id="2613387515621326337">Ava uuenduste veebisait</translation>
 <translation id="2848085334714181751">Loom 3</translation>
 <translation id="2873951654529031587">Prügikast</translation>
 <translation id="292258461174562431">Koll 4</translation>
@@ -35,9 +40,12 @@
 <translation id="3084011186245865060">Maastik 6</translation>
 <translation id="3127383884976966729">Loom 7</translation>
 <translation id="3156398087075132709">Uus järjehoidja</translation>
+<translation id="3255747772218936245">Paigalda uuendus</translation>
 <translation id="3259769196742189631">Valideeri</translation>
 <translation id="3302905971452834934">Koll 1</translation>
 <translation id="3334610655141903168">(pealkirjata)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> on praegu uusim saadaolev versioon.</translation>
+<translation id="3383198080133834965">Sul juba on Vivaldi uusim versioon.</translation>
 <translation id="3402602684546832928">Opera järjehoidjate faili valimine</translation>
 <translation id="3451317331714872347">Maastik 8</translation>
 <translation id="3457498675806041407">Väljumiskinnitus</translation>
@@ -46,6 +54,7 @@
 <translation id="3542768452570884558">Ava link uues aknas</translation>
 <translation id="3588820906588687999">Ava pilt uuel kaardil</translation>
 <translation id="3601066750251199488">Koll 3</translation>
+<translation id="3680031241659195730">Vivaldi uus versioon on saadaval!</translation>
 <translation id="3708982624815781692">Allalaadimine katkestati.</translation>
 <translation id="3732157130969736834">Lisa link järjehoidjatesse</translation>
 <translation id="3732388226447288666">Loom 2</translation>
@@ -54,6 +63,7 @@
 <translation id="3914946330804881301">Operast imporditud</translation>
 <translation id="3921292902397893431">Koll 8</translation>
 <translation id="3943857333388298514">Aseta</translation>
+<translation id="4005270918754737597">Jäta see versioon vahele</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Rohkem ei näidata</translation>
 <translation id="4074744496918018786">Ava pilt uues privaatses aknas</translation>
@@ -69,6 +79,7 @@
 <translation id="4677434526832593569">Loom 5</translation>
 <translation id="474217410105706308">Vaigista kaart</translation>
 <translation id="4881695831933465202">Ava</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> / <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Imporditud kiirvalimisleht</translation>
 <translation id="5092656712000637858">Lisa leht veebipaneelina</translation>
 <translation id="5177818338935286353">Koll 7</translation>
@@ -84,6 +95,7 @@
 <translation id="5648110075441906505">Ava pilt uues aknas</translation>
 <translation id="5656371807944747581">Tõrge uuendamisel!</translation>
 <translation id="5716238312826274098">Märguannete keelamine</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> on saadaval (sinul on <ph name="OLD_VERSION" />). Kas soovid uue versiooni kohe alla laadida?</translation>
 <translation id="5770433027661640693">Maastik 10</translation>
 <translation id="5857090052475505287">Uus kaust</translation>
 <translation id="588258955323874662">Täisekraan</translation>
@@ -99,15 +111,19 @@
 <translation id="6538338088414940408">Ava link taustakaardil</translation>
 <translation id="6551219277044048123">Lisa otsingumootorina...</translation>
 <translation id="6630781781151951863">Maastik 18</translation>
+<translation id="6635049669875534328">Uuenduse märkmed:</translation>
 <translation id="6804831687363620480">Opera (15+) töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Opera (15+) aknad. Seejärel klõpsa „Jätka”.</translation>
+<translation id="6892812721183419409">Ava link kasutajana <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopeeri</translation>
 <translation id="7086554968911045110">Maastik 7</translation>
 <translation id="7111492742514999492">Maastik 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi on loodud avatud lähtekoodiga <ph name="BEGIN_LINK_CHROMIUM" />Chromiumi projekti<ph name="END_LINK_CHROMIUM" /> ja hulga <ph name="BEGIN_LINK_OSS" />muu avatud lähtekoodiga tarkvara<ph name="END_LINK_OSS" /> põhjal.</translation>
 <translation id="7581266044164103589">Uuenduse paigaldusprogrammi käivitamine ebaõnnestus. Palun vaata, et arvutil oleks piisavalt vaba mälumahtu ja kettaruumi, ja proovi siis uuesti.</translation>
+<translation id="7658239707568436148">Loobu</translation>
 <translation id="7715497554424665066">&amp;Eira uuendust</translation>
 <translation id="7724603315864178912">Lõika</translation>
+<translation id="7727481996062361502">Uuenduse verifitseerimine...</translation>
 <translation id="7793738202466490491">Lisa kalendrisündmusena</translation>
 <translation id="7848222781052558334">Allalaaditud failide digitaalallkirja verifitseerimine ebaõnnestus.</translation>
 <translation id="7865983598101744945">Väljumiskinnitus</translation>
@@ -118,9 +134,13 @@
 <translation id="8261506727792406068">Kustuta</translation>
 <translation id="8331671104904436324">Ava taustakaardil</translation>
 <translation id="8373293945112511707">Maastik 1</translation>
+<translation id="8388552048012645975">Uuenduse allalaadimine...</translation>
 <translation id="8427094907586191051">Maastik 17</translation>
+<translation id="8439034818057146672">Vivaldi uus versioon on paigaldamiseks valmis.</translation>
 <translation id="8446668873108041390">JavaScripti käitamine AppleScripti kaudu on välja lülitatud. Selle sisselülitamiseks ava Seaded &gt; Privaatsus &gt; Apple Events ja märgi ruut „Apple Eventsi JavaScripti lubamine”.</translation>
 <translation id="8539196077526389150">Maastik 13</translation>
+<translation id="8562339533180097902">Sulge Vivaldi ja paigalda kohe</translation>
+<translation id="8567452685425968223">Uuenduse lahtipakkimine...</translation>
 <translation id="8624587806981488221">Laadi pilt uuesti</translation>
 <translation id="864444594187862076">Opera versioon 15+ (arendus)</translation>
 <translation id="8651348004684669199">Lisa aktiivne kaart</translation>
@@ -128,10 +148,12 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Maastik 14</translation>
 <translation id="8773635261052182196">Neid märguandeid rohkem ei näidata. Kui soovid need hiljem taas sisse lülitada, saad seda teha Vivaldi seadetes.</translation>
+<translation id="8813277370772331957">Tuleta hiljem meelde</translation>
 <translation id="8894900864683381599">Lisa link veebipaneelina</translation>
 <translation id="8947109330183116400">Järjehoidjate HTML-faili valimine</translation>
 <translation id="9017566390391482291">Imporditava Vivaldi profiilikausta valimine</translation>
 <translation id="9065203028668620118">Muuda</translation>
+<translation id="912022491595344261">Ava pilt kasutajana <ph name="USER" /></translation>
 <translation id="9157539936604258187">Ava link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Maastik 16</translation>

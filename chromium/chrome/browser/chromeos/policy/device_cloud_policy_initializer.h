@@ -19,6 +19,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
+#include "components/policy/core/common/cloud/dm_auth.h"
 #include "components/policy/core/common/cloud/signing_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -47,7 +48,6 @@ namespace policy {
 class DeviceCloudPolicyManagerChromeOS;
 class DeviceCloudPolicyStoreChromeOS;
 class DeviceManagementService;
-class DMAuth;
 struct EnrollmentConfig;
 class EnrollmentHandlerChromeOS;
 class EnrollmentStatus;
@@ -84,7 +84,7 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
       DeviceManagementService* device_management_service,
       chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
       const EnrollmentConfig& enrollment_config,
-      std::unique_ptr<DMAuth> dm_auth,
+      DMAuth dm_auth,
       const EnrollmentCallback& enrollment_callback);
 
   // Starts enrollment.
@@ -169,7 +169,7 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
   // Non-NULL if there is an enrollment operation pending.
   std::unique_ptr<EnrollmentHandlerChromeOS> enrollment_handler_;
 
-  ServerBackedStateKeysBroker::Subscription state_keys_update_subscription_;
+  base::CallbackListSubscription state_keys_update_subscription_;
 
   // Our signing service.
   std::unique_ptr<SigningService> signing_service_;

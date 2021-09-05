@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_bubble_view.h"
 #include "chrome/browser/ui/views/permission_bubble/permission_prompt_style.h"
 #include "components/permissions/permission_request.h"
+#include "components/permissions/request_type.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -35,14 +36,13 @@
 #include "ui/views/widget/widget.h"
 
 namespace {
-bool IsCameraPermission(permissions::PermissionRequestType type) {
-  return type ==
-         permissions::PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA;
+bool IsCameraPermission(permissions::RequestType type) {
+  return type == permissions::RequestType::kCameraStream;
 }
 
-bool IsCameraOrMicPermission(permissions::PermissionRequestType type) {
+bool IsCameraOrMicPermission(permissions::RequestType type) {
   return IsCameraPermission(type) ||
-         type == permissions::PermissionRequestType::PERMISSION_MEDIASTREAM_MIC;
+         type == permissions::RequestType::kMicStream;
 }
 }  // namespace
 
@@ -102,9 +102,7 @@ PermissionChip::PermissionChip(Browser* browser)
       std::make_unique<views::Button::DefaultButtonControllerDelegate>(
           chip_button_)));
 
-  constexpr auto kAnimationDuration = base::TimeDelta::FromMilliseconds(350);
   animation_ = std::make_unique<gfx::SlideAnimation>(this);
-  animation_->SetSlideDuration(kAnimationDuration);
 }
 
 PermissionChip::~PermissionChip() {
@@ -113,7 +111,8 @@ PermissionChip::~PermissionChip() {
   CHECK(!IsInObserverList());
 }
 
-void PermissionChip::Show(permissions::PermissionPrompt::Delegate* delegate) {
+void PermissionChip::DisplayRequest(
+    permissions::PermissionPrompt::Delegate* delegate) {
   DCHECK(delegate);
   delegate_ = delegate;
 
@@ -124,10 +123,9 @@ void PermissionChip::Show(permissions::PermissionPrompt::Delegate* delegate) {
   // update delegate to contain only one request at a time.
   DCHECK(requests.size() == 1u || requests.size() == 2u);
   if (requests.size() == 2) {
-    DCHECK(IsCameraOrMicPermission(requests[0]->GetPermissionRequestType()));
-    DCHECK(IsCameraOrMicPermission(requests[1]->GetPermissionRequestType()));
-    DCHECK_NE(requests[0]->GetPermissionRequestType(),
-              requests[1]->GetPermissionRequestType());
+    DCHECK(IsCameraOrMicPermission(requests[0]->GetRequestType()));
+    DCHECK(IsCameraOrMicPermission(requests[1]->GetRequestType()));
+    DCHECK_NE(requests[0]->GetRequestType(), requests[1]->GetRequestType());
   }
 
   chip_button_->SetText(GetPermissionMessage());
@@ -136,13 +134,14 @@ void PermissionChip::Show(permissions::PermissionPrompt::Delegate* delegate) {
   SetVisible(true);
   // TODO(olesiamarukhno): Add tests for animation logic.
   animation_->Reset();
-  if (!delegate_->WasCurrentRequestAlreadyDisplayed())
-    animation_->Show();
+  if (!delegate_->WasCurrentRequestAlreadyDisplayed()) {
+    AnimateExpand();
+  }
   requested_time_ = base::TimeTicks::Now();
   PreferredSizeChanged();
 }
 
-void PermissionChip::Hide() {
+void PermissionChip::FinalizeRequest() {
   SetVisible(false);
   timer_.AbandonAndStop();
   delegate_ = nullptr;
@@ -150,6 +149,38 @@ void PermissionChip::Hide() {
     prompt_bubble_->GetWidget()->Close();
   already_recorded_interaction_ = false;
   PreferredSizeChanged();
+}
+
+void PermissionChip::Reshow() {
+  if (GetVisible())
+    return;
+
+  SetVisible(true);
+  // TODO(olesiamarukhno): Add tests for animation logic.
+  animation_->Reset();
+  if (!delegate_->WasCurrentRequestAlreadyDisplayed())
+    AnimateExpand();
+  PreferredSizeChanged();
+}
+
+void PermissionChip::Hide() {
+  SetVisible(false);
+}
+
+void PermissionChip::AnimateCollapse() {
+  constexpr auto kAnimationDuration = base::TimeDelta::FromMilliseconds(250);
+  animation_->SetSlideDuration(kAnimationDuration);
+  animation_->Hide();
+}
+
+void PermissionChip::AnimateExpand() {
+  constexpr auto kAnimationDuration = base::TimeDelta::FromMilliseconds(350);
+  animation_->SetSlideDuration(kAnimationDuration);
+  animation_->Show();
+}
+
+bool PermissionChip::HasActiveRequest() {
+  return delegate_;
 }
 
 gfx::Size PermissionChip::CalculatePreferredSize() const {
@@ -174,6 +205,7 @@ void PermissionChip::OnThemeChanged() {
 
 void PermissionChip::AnimationEnded(const gfx::Animation* animation) {
   DCHECK_EQ(animation, animation_.get());
+  is_collapsed_ = animation->GetCurrentValue() != 1.0;
   if (animation->GetCurrentValue() == 1.0)
     StartCollapseTimer();
 }
@@ -187,14 +219,10 @@ void PermissionChip::OnWidgetDestroying(views::Widget* widget) {
   DCHECK_EQ(widget, prompt_bubble_->GetWidget());
   widget->RemoveObserver(this);
   prompt_bubble_ = nullptr;
-  animation_->Hide();
+  AnimateCollapse();
 }
 
-bool PermissionChip::IsBubbleShowing() const {
-  return prompt_bubble_ != nullptr;
-}
-
-void PermissionChip::ChipButtonPressed() {
+void PermissionChip::OpenBubble() {
   // The prompt bubble is either not opened yet or already closed on
   // deactivation.
   DCHECK(!prompt_bubble_);
@@ -203,6 +231,14 @@ void PermissionChip::ChipButtonPressed() {
       browser_, delegate_, requested_time_, PermissionPromptStyle::kChip);
   prompt_bubble_->Show();
   prompt_bubble_->GetWidget()->AddObserver(this);
+}
+
+bool PermissionChip::IsBubbleShowing() const {
+  return prompt_bubble_ != nullptr;
+}
+
+void PermissionChip::ChipButtonPressed() {
+  OpenBubble();
   // Restart the timer after user clicks on the chip to open the bubble.
   StartCollapseTimer();
   if (!already_recorded_interaction_) {
@@ -216,7 +252,7 @@ void PermissionChip::Collapse() {
   if (IsMouseHovered() || prompt_bubble_) {
     StartCollapseTimer();
   } else {
-    animation_->Hide();
+    AnimateCollapse();
   }
 }
 
@@ -250,13 +286,13 @@ void PermissionChip::UpdatePermissionIconAndTextColor() {
 const gfx::VectorIcon& PermissionChip::GetPermissionIconId() {
   auto requests = delegate_->Requests();
   if (requests.size() == 1)
-    return requests[0]->GetIconId();
+    return permissions::GetIconId(requests[0]->GetRequestType());
 
   // When we have two requests, it must be microphone & camera. Then we need to
   // use the icon from the camera request.
-  return IsCameraPermission(requests[0]->GetPermissionRequestType())
-             ? requests[0]->GetIconId()
-             : requests[1]->GetIconId();
+  return IsCameraPermission(requests[0]->GetRequestType())
+             ? permissions::GetIconId(requests[0]->GetRequestType())
+             : permissions::GetIconId(requests[1]->GetRequestType());
 }
 
 base::string16 PermissionChip::GetPermissionMessage() {

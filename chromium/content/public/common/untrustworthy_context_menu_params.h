@@ -15,9 +15,9 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "content/public/common/impression.h"
 #include "content/public/common/menu_item.h"
 #include "services/network/public/mojom/referrer_policy.mojom.h"
+#include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/geometry/rect.h"
@@ -54,7 +54,7 @@ struct CONTENT_EXPORT UntrustworthyContextMenuParams {
   ~UntrustworthyContextMenuParams();
 
   // This is the type of Context Node that the context menu was invoked on.
-  blink::ContextMenuDataMediaType media_type;
+  blink::mojom::ContextMenuDataMediaType media_type;
 
   // These values represent the coordinates of the mouse when the context menu
   // was invoked.  Coords are relative to the associated RenderView's origin.
@@ -72,7 +72,7 @@ struct CONTENT_EXPORT UntrustworthyContextMenuParams {
 
   // The impression declared by the link. May be base::nullopt even if
   // |link_url| is non-empty.
-  base::Optional<Impression> impression;
+  base::Optional<blink::Impression> impression;
 
   // The link URL to be used ONLY for "copy link address". We don't validate
   // this field in the frontend process.

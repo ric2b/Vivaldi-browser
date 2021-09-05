@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/languages_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/main_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/multidevice_section.h"
+#include "chrome/browser/ui/webui/settings/chromeos/on_startup_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/people_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/personalization_section.h"
 #include "chrome/browser/ui/webui/settings/chromeos/printing_section.h"
@@ -94,13 +95,18 @@ OsSettingsSections::OsSettingsSections(
   sections_map_[mojom::Section::kCrostini] = crostini_section.get();
   sections_.push_back(std::move(crostini_section));
 
+  auto on_startup_section = std::make_unique<OnStartupSection>(
+      profile, search_tag_registry, profile->GetPrefs());
+  sections_map_[mojom::Section::kOnStartup] = on_startup_section.get();
+  sections_.push_back(std::move(on_startup_section));
+
   auto date_time_section =
       std::make_unique<DateTimeSection>(profile, search_tag_registry);
   sections_map_[mojom::Section::kDateAndTime] = date_time_section.get();
   sections_.push_back(std::move(date_time_section));
 
-  auto privacy_section =
-      std::make_unique<PrivacySection>(profile, search_tag_registry);
+  auto privacy_section = std::make_unique<PrivacySection>(
+      profile, search_tag_registry, profile->GetPrefs());
   sections_map_[mojom::Section::kPrivacyAndSecurity] = privacy_section.get();
   sections_.push_back(std::move(privacy_section));
 

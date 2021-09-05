@@ -20,6 +20,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -48,6 +49,18 @@ void AddKerberosTitleStrings(content::WebUIDataSource* html_source) {
       {"kerberosAccountsPageTitle", IDS_SETTINGS_KERBEROS_ACCOUNTS_PAGE_TITLE},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+}
+
+// Adds flags related to Kerberos settings visibility and its corresponding
+// settings section.
+void AddKerberosSettingsVisibilityFlags(
+    content::WebUIDataSource* html_source,
+    KerberosCredentialsManager* kerberos_credentials_manager) {
+  html_source->AddBoolean("isKerberosEnabled",
+                          IsKerberosEnabled(kerberos_credentials_manager));
+  html_source->AddBoolean(
+      "isKerberosSettingsSectionEnabled",
+      chromeos::features::IsKerberosSettingsSectionEnabled());
 }
 
 // Adds load time strings to Kerberos Add Accounts dialog.
@@ -118,9 +131,7 @@ void AddKerberosAddAccountDialogStrings(content::WebUIDataSource* html_source) {
 }
 
 // Adds load time strings to Kerberos Accounts page.
-void AddKerberosAccountsPageStrings(
-    content::WebUIDataSource* html_source,
-    KerberosCredentialsManager* kerberos_credentials_manager) {
+void AddKerberosAccountsPageStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"kerberosAccountsAddAccountLabel",
        IDS_SETTINGS_KERBEROS_ACCOUNTS_ADD_ACCOUNT_LABEL},
@@ -144,11 +155,6 @@ void AddKerberosAccountsPageStrings(
       {"kerberosAccountsSignedIn", IDS_SETTINGS_KERBEROS_ACCOUNTS_SIGNED_IN},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
-
-  // Toggles the Chrome OS Kerberos Accounts submenu in the People section.
-  // Note that the handler is also dependent on this pref.
-  html_source->AddBoolean("isKerberosEnabled",
-                          IsKerberosEnabled(kerberos_credentials_manager));
 
   PrefService* local_state = g_browser_process->local_state();
 
@@ -182,8 +188,9 @@ KerberosAccountsHandler::CreateIfKerberosEnabled(Profile* profile) {
 void KerberosAccountsHandler::AddLoadTimeKerberosStrings(
     content::WebUIDataSource* html_source,
     KerberosCredentialsManager* kerberos_credentials_manager) {
+  AddKerberosSettingsVisibilityFlags(html_source, kerberos_credentials_manager);
   AddKerberosTitleStrings(html_source);
-  AddKerberosAccountsPageStrings(html_source, kerberos_credentials_manager);
+  AddKerberosAccountsPageStrings(html_source);
   AddKerberosAddAccountDialogStrings(html_source);
 }
 
@@ -387,11 +394,11 @@ void KerberosAccountsHandler::HandleSetAsActiveKerberosAccount(
 }
 
 void KerberosAccountsHandler::OnJavascriptAllowed() {
-  credentials_manager_observer_.Add(kerberos_credentials_manager_);
+  credentials_manager_observation_.Observe(kerberos_credentials_manager_);
 }
 
 void KerberosAccountsHandler::OnJavascriptDisallowed() {
-  credentials_manager_observer_.RemoveAll();
+  credentials_manager_observation_.Reset();
 }
 
 void KerberosAccountsHandler::OnAccountsChanged() {

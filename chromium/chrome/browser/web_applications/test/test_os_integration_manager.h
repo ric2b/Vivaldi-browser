@@ -15,13 +15,15 @@ namespace web_app {
 
 class AppShortcutManager;
 class FileHandlerManager;
+class ProtocolHandlerManager;
 
 class TestOsIntegrationManager : public OsIntegrationManager {
  public:
   explicit TestOsIntegrationManager(
       Profile* profile,
       std::unique_ptr<AppShortcutManager> shortcut_manager,
-      std::unique_ptr<FileHandlerManager> file_handler_manager);
+      std::unique_ptr<FileHandlerManager> file_handler_manager,
+      std::unique_ptr<ProtocolHandlerManager> protocol_handler_manager);
   ~TestOsIntegrationManager() override;
 
   // OsIntegrationManager:
@@ -40,6 +42,10 @@ class TestOsIntegrationManager : public OsIntegrationManager {
 
   size_t num_create_shortcuts_calls() const {
     return num_create_shortcuts_calls_;
+  }
+
+  size_t num_create_file_handlers_calls() const {
+    return num_create_file_handlers_calls_;
   }
 
   size_t num_register_run_on_os_login_calls() const {
@@ -67,10 +73,14 @@ class TestOsIntegrationManager : public OsIntegrationManager {
   void SetFileHandlerManager(
       std::unique_ptr<FileHandlerManager> file_handler_manager);
 
+  void SetProtocolHandlerManager(
+      std::unique_ptr<ProtocolHandlerManager> protocol_handler_manager);
+
   TestOsIntegrationManager* AsTestOsIntegrationManager() override;
 
  private:
   size_t num_create_shortcuts_calls_ = 0;
+  size_t num_create_file_handlers_calls_ = 0;
   size_t num_register_run_on_os_login_calls_ = 0;
   size_t num_add_app_to_quick_launch_bar_calls_ = 0;
   base::Optional<bool> did_add_to_desktop_;

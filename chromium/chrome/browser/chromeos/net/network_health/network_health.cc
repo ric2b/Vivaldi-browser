@@ -30,6 +30,7 @@ constexpr mojom::NetworkState DeviceStateToNetworkState(
       // UI, but not for purposes of network health, we can treat as Disabled.
       return mojom::NetworkState::kDisabled;
     case network_config::mojom::DeviceStateType::kEnabled:
+    case network_config::mojom::DeviceStateType::kInhibited:
       return mojom::NetworkState::kNotConnected;
     case network_config::mojom::DeviceStateType::kProhibited:
       return mojom::NetworkState::kProhibited;
@@ -56,8 +57,7 @@ constexpr mojom::NetworkState ConnectionStateToNetworkState(
 }
 
 // Populates a mojom::NetworkPtr based on the given |device_prop| and
-// |network_prop| if a valid Network can be created. Returns a base::nullopt
-// otherwise. This function assumes that |device_prop| is populated, while
+// |network_prop|. This function assumes that |device_prop| is populated, while
 // |network_prop| could be null.
 mojom::NetworkPtr CreateNetwork(
     const network_config::mojom::DeviceStatePropertiesPtr& device_prop,

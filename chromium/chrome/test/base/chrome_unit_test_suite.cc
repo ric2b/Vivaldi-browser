@@ -9,6 +9,7 @@
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/data_use_measurement/chrome_data_use_measurement.h"
@@ -31,8 +32,9 @@
 #include "ui/base/ui_base_paths.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/constants/chromeos_paths.h"
+#include "chromeos/dbus/constants/dbus_paths.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -141,15 +143,16 @@ void ChromeUnitTestSuite::InitializeProviders() {
   content::RegisterPathProvider();
   ui::RegisterPathProvider();
   component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
                                           chromeos::DIR_PREINSTALLED_COMPONENTS,
 #else
                                           chrome::DIR_INTERNAL_PLUGINS,
 #endif
                                           chrome::DIR_USER_DATA);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::RegisterPathProvider();
+  chromeos::dbus_paths::RegisterPathProvider();
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -176,4 +179,10 @@ void ChromeUnitTestSuite::InitializeResourceBundle() {
   base::PathService::Get(chrome::FILE_RESOURCES_PACK, &resources_pack_path);
   ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
       resources_pack_path, ui::SCALE_FACTOR_NONE);
+
+  base::FilePath unit_tests_pack_path;
+  ASSERT_TRUE(base::PathService::Get(base::DIR_MODULE, &unit_tests_pack_path));
+  unit_tests_pack_path = unit_tests_pack_path.AppendASCII("unit_tests.pak");
+  ui::ResourceBundle::GetSharedInstance().AddDataPackFromPath(
+      unit_tests_pack_path, ui::SCALE_FACTOR_NONE);
 }

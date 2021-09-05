@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/horizontal_layout.h"
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/reordering_layout_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -28,43 +27,15 @@
   [super prepareLayout];
 
   self.itemSize = kGridCellSizeSmall;
-  CGFloat height = CGRectGetHeight(self.collectionView.bounds);
   CGFloat spacing = kGridLayoutLineSpacingCompactCompactLimitedWidth;
-  CGFloat topInset = spacing + kGridCellSelectionRingGapWidth +
-                     kGridCellSelectionRingTintWidth;
+  // Use the height of the available content area.
+  CGFloat height = CGRectGetHeight(UIEdgeInsetsInsetRect(
+      self.collectionView.bounds, self.collectionView.contentInset));
+  CGFloat topInset =
+      kGridCellSelectionRingGapWidth + kGridCellSelectionRingTintWidth;
   self.sectionInset = UIEdgeInsets{
-      topInset, spacing, height - self.itemSize.height - 2 * topInset, spacing};
+      topInset, spacing, height - self.itemSize.height - topInset, spacing};
   self.minimumLineSpacing = kGridLayoutLineSpacingRegularRegular;
-}
-
-@end
-
-@implementation HorizontalReorderingLayout
-
-#pragma mark - UICollectionViewLayout
-
-// Both -layoutAttributesForElementsInRect: and
-// -layoutAttributesForItemAtIndexPath: need to be overridden to change the
-// default layout attributes.
-- (NSArray<__kindof UICollectionViewLayoutAttributes*>*)
-    layoutAttributesForElementsInRect:(CGRect)rect {
-  return CopyAttributesArrayAndSetInactiveOpacity(
-      [super layoutAttributesForElementsInRect:rect]);
-}
-
-- (UICollectionViewLayoutAttributes*)layoutAttributesForItemAtIndexPath:
-    (NSIndexPath*)indexPath {
-  return CopyAttributesAndSetInactiveOpacity(
-      [super layoutAttributesForItemAtIndexPath:indexPath]);
-}
-
-- (UICollectionViewLayoutAttributes*)
-    layoutAttributesForInteractivelyMovingItemAtIndexPath:
-        (NSIndexPath*)indexPath
-                                       withTargetPosition:(CGPoint)position {
-  return CopyAttributesAndSetActiveProperties([super
-      layoutAttributesForInteractivelyMovingItemAtIndexPath:indexPath
-                                         withTargetPosition:position]);
 }
 
 @end

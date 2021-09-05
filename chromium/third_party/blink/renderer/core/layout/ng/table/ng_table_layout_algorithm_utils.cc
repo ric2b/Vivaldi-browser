@@ -32,7 +32,8 @@ void ApplyCellConstraintsToColumnConstraints(
     bool is_fixed_layout,
     NGTableTypes::ColspanCells* colspan_cell_constraints,
     NGTableTypes::Columns* column_constraints) {
-  column_constraints->data.resize(cell_constraints.size());
+  if (column_constraints->data.size() < cell_constraints.size())
+    column_constraints->data.resize(cell_constraints.size());
   // Distribute cell constraints to column constraints.
   for (wtf_size_t i = 0; i < cell_constraints.size(); ++i) {
     column_constraints->data[i].Encompass(cell_constraints[i]);
@@ -243,10 +244,12 @@ class ColumnConstraintsBuilder {
                 wtf_size_t span) {
     // COL creates SPAN constraints. Its width is col css width, or enclosing
     // colgroup css width.
-    NGTableTypes::Column col_constraint = NGTableTypes::CreateColumn(
-        column.Style(), !is_fixed_layout_ && colgroup_constraint_
-                            ? colgroup_constraint_->max_inline_size
-                            : base::nullopt);
+    NGTableTypes::Column col_constraint =
+        NGTableTypes::CreateColumn(column.Style(),
+                                   !is_fixed_layout_ && colgroup_constraint_
+                                       ? colgroup_constraint_->max_inline_size
+                                       : base::nullopt,
+                                   is_fixed_layout_);
     for (wtf_size_t i = 0; i < span; ++i)
       column_constraints_->data.push_back(col_constraint);
     column.GetLayoutBox()->ClearNeedsLayout();
@@ -254,8 +257,8 @@ class ColumnConstraintsBuilder {
 
   void EnterColgroup(const NGLayoutInputNode& colgroup,
                      wtf_size_t start_column_index) {
-    colgroup_constraint_ =
-        NGTableTypes::CreateColumn(colgroup.Style(), base::nullopt);
+    colgroup_constraint_ = NGTableTypes::CreateColumn(
+        colgroup.Style(), base::nullopt, is_fixed_layout_);
   }
 
   void LeaveColgroup(const NGLayoutInputNode& colgroup,
@@ -387,7 +390,6 @@ NGConstraintSpace NGTableAlgorithmUtils::CreateTableCellConstraintSpace(
     builder.SetOrthogonalFallbackInlineSize(
         table_writing_direction.IsHorizontal() ? icb_size.height
                                                : icb_size.width);
-    builder.SetIsShrinkToFit(cell.Style().LogicalWidth().IsAuto());
   }
 
   builder.SetAvailableSize(cell_size);
@@ -411,7 +413,6 @@ NGConstraintSpace NGTableAlgorithmUtils::CreateTableCellConstraintSpace(
   builder.SetIsTableCellWithCollapsedBorders(has_collapsed_borders);
   builder.SetHideTableCellIfEmpty(
       !has_collapsed_borders && cell_style.EmptyCells() == EEmptyCells::kHide);
-  builder.SetNeedsBaseline(true);
   builder.SetCacheSlot(cache_slot);
 
   return builder.ToConstraintSpace();
@@ -570,7 +571,8 @@ void NGRowBaselineTabulator::ProcessCell(
     const bool is_baseline_aligned,
     const bool is_parallel,
     const bool descendant_depends_on_percentage_block_size) {
-  if (is_parallel && is_baseline_aligned) {
+  if (is_parallel && is_baseline_aligned &&
+      fragment.HasDescendantsForTablePart()) {
     max_cell_baseline_depends_on_percentage_block_descendant_ |=
         descendant_depends_on_percentage_block_size;
     const LayoutUnit cell_baseline = fragment.FirstBaselineOrSynthesize();

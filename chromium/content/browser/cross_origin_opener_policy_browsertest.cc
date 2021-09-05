@@ -4,6 +4,7 @@
 
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
@@ -548,28 +549,21 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
 IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
                        CoopPageCrashIntoNonCoop) {
   IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+  GURL coop_allow_popups_page(https_server()->GetURL(
+      "a.com",
+      "/set-header?Cross-Origin-Opener-Policy: same-origin-allow-popups"));
   GURL non_coop_page(https_server()->GetURL("a.com", "/title1.html"));
-  GURL coop_page = https_server()->GetURL(
-      "a.com", "/set-header?Cross-Origin-Opener-Policy: same-origin");
+  GURL cross_origin_non_coop_page(
+      https_server()->GetURL("b.com", "/title1.html"));
   // Test a crash before the navigation.
   {
     // Navigate to a COOP page.
-    EXPECT_TRUE(NavigateToURL(shell(), coop_page));
+    EXPECT_TRUE(NavigateToURL(shell(), coop_allow_popups_page));
     scoped_refptr<SiteInstance> initial_site_instance(
         current_frame_host()->GetSiteInstance());
 
     // Ensure it has a RenderFrameHostProxy for another cross-site page.
-    Shell* popup_shell = OpenPopup(current_frame_host(), coop_page, "");
-    GURL cross_site_iframe(https_server()->GetURL("b.com", "/title1.html"));
-    TestNavigationManager iframe_navigation(popup_shell->web_contents(),
-                                            cross_site_iframe);
-    EXPECT_TRUE(
-        ExecJs(popup_shell->web_contents(),
-               JsReplace("var iframe = document.createElement('iframe');"
-                         "iframe.src = $1;"
-                         "document.body.appendChild(iframe);",
-                         cross_site_iframe)));
-    iframe_navigation.WaitForNavigationFinished();
+    OpenPopup(current_frame_host(), cross_origin_non_coop_page, "");
     EXPECT_EQ(web_contents()
                   ->GetFrameTree()
                   ->root()
@@ -606,22 +600,12 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
   // Test a crash during the navigation.
   {
     // Navigate to a COOP page.
-    EXPECT_TRUE(NavigateToURL(shell(), coop_page));
+    EXPECT_TRUE(NavigateToURL(shell(), coop_allow_popups_page));
     scoped_refptr<SiteInstance> initial_site_instance(
         current_frame_host()->GetSiteInstance());
 
     // Ensure it has a RenderFrameHostProxy for another cross-site page.
-    Shell* popup_shell = OpenPopup(current_frame_host(), coop_page, "");
-    GURL cross_site_iframe(https_server()->GetURL("b.com", "/title1.html"));
-    TestNavigationManager iframe_navigation(popup_shell->web_contents(),
-                                            cross_site_iframe);
-    EXPECT_TRUE(
-        ExecJs(popup_shell->web_contents(),
-               JsReplace("var iframe = document.createElement('iframe');"
-                         "iframe.src = $1;"
-                         "document.body.appendChild(iframe);",
-                         cross_site_iframe)));
-    iframe_navigation.WaitForNavigationFinished();
+    OpenPopup(current_frame_host(), cross_origin_non_coop_page, "");
     EXPECT_EQ(web_contents()
                   ->GetFrameTree()
                   ->root()
@@ -665,31 +649,24 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
 IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
                        CoopPageCrashIntoCoop) {
   IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
-  GURL non_coop_page(https_server()->GetURL("a.com", "/title1.html"));
-  GURL coop_page = https_server()->GetURL(
-      "a.com", "/set-header?Cross-Origin-Opener-Policy: same-origin");
+  GURL coop_allow_popups_page(https_server()->GetURL(
+      "a.com",
+      "/set-header?Cross-Origin-Opener-Policy: same-origin-allow-popups"));
+  GURL cross_origin_non_coop_page(
+      https_server()->GetURL("b.com", "/title1.html"));
 
   // Test a crash before the navigation.
   {
     // Navigate to a COOP page.
-    EXPECT_TRUE(NavigateToURL(shell(), coop_page));
+    EXPECT_TRUE(NavigateToURL(shell(), coop_allow_popups_page));
     scoped_refptr<SiteInstance> initial_site_instance(
         current_frame_host()->GetSiteInstance());
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              CoopSameOrigin());
+              CoopSameOriginAllowPopups());
 
     // Ensure it has a RenderFrameHostProxy for another cross-site page.
-    Shell* popup_shell = OpenPopup(current_frame_host(), coop_page, "");
-    GURL cross_site_iframe(https_server()->GetURL("b.com", "/title1.html"));
-    TestNavigationManager iframe_navigation(popup_shell->web_contents(),
-                                            cross_site_iframe);
-    EXPECT_TRUE(
-        ExecJs(popup_shell->web_contents(),
-               JsReplace("var iframe = document.createElement('iframe');"
-                         "iframe.src = $1;"
-                         "document.body.appendChild(iframe);",
-                         cross_site_iframe)));
-    iframe_navigation.WaitForNavigationFinished();
+    OpenPopup(current_frame_host(), cross_origin_non_coop_page, "");
+
     EXPECT_EQ(web_contents()
                   ->GetFrameTree()
                   ->root()
@@ -708,40 +685,29 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
     crash_observer.reset();
 
     // Navigate to a COOP page.
-    EXPECT_TRUE(NavigateToURL(shell(), coop_page));
+    EXPECT_TRUE(NavigateToURL(shell(), coop_allow_popups_page));
     EXPECT_TRUE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              CoopSameOrigin());
+              CoopSameOriginAllowPopups());
 
-    // TODO(pmeuleman): The COOP page should still have RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
                   ->GetFrameTree()
                   ->root()
                   ->render_manager()
                   ->GetProxyCount(),
-              0u);
+              1u);
   }
 
   // Test a crash during the navigation.
   {
     // Navigate to a COOP page.
-    EXPECT_TRUE(NavigateToURL(shell(), coop_page));
+    EXPECT_TRUE(NavigateToURL(shell(), coop_allow_popups_page));
     scoped_refptr<SiteInstance> initial_site_instance(
         current_frame_host()->GetSiteInstance());
 
     // Ensure it has a RenderFrameHostProxy for another cross-site page.
-    Shell* popup_shell = OpenPopup(current_frame_host(), coop_page, "");
-    GURL cross_site_iframe(https_server()->GetURL("b.com", "/title1.html"));
-    TestNavigationManager iframe_navigation(popup_shell->web_contents(),
-                                            cross_site_iframe);
-    EXPECT_TRUE(
-        ExecJs(popup_shell->web_contents(),
-               JsReplace("var iframe = document.createElement('iframe');"
-                         "iframe.src = $1;"
-                         "document.body.appendChild(iframe);",
-                         cross_site_iframe)));
-    iframe_navigation.WaitForNavigationFinished();
+    OpenPopup(current_frame_host(), cross_origin_non_coop_page, "");
     EXPECT_EQ(web_contents()
                   ->GetFrameTree()
                   ->root()
@@ -750,8 +716,9 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
               1u);
 
     // Start navigating to a COOP page.
-    TestNavigationManager coop_navigation(web_contents(), coop_page);
-    shell()->LoadURL(coop_page);
+    TestNavigationManager coop_navigation(web_contents(),
+                                          coop_allow_popups_page);
+    shell()->LoadURL(coop_allow_popups_page);
     EXPECT_TRUE(coop_navigation.WaitForRequestStart());
 
     // Simulate the renderer process crashing.
@@ -770,15 +737,14 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
     EXPECT_TRUE(current_frame_host()->GetSiteInstance()->IsRelatedSiteInstance(
         initial_site_instance.get()));
     EXPECT_EQ(current_frame_host()->cross_origin_opener_policy(),
-              CoopSameOrigin());
+              CoopSameOriginAllowPopups());
 
-    // TODO(pmeuleman): The COOP page should still have RenderFrameHostProxies.
     EXPECT_EQ(web_contents()
                   ->GetFrameTree()
                   ->root()
                   ->render_manager()
                   ->GetProxyCount(),
-              0u);
+              1u);
   }
 }
 
@@ -1970,8 +1936,16 @@ IN_PROC_BROWSER_TEST_P(VirtualBrowsingContextGroupTest,
   EXPECT_NE(group_4, group_1);
 }
 
+// This test is flaky on Win: https://crbug.com/1125998.
+#if defined(OS_WIN)
+#define MAYBE_CrossOriginIsolatedSiteInstance_MainFrame \
+  DISABLED_CrossOriginIsolatedSiteInstance_MainFrame
+#else
+#define MAYBE_CrossOriginIsolatedSiteInstance_MainFrame \
+  CrossOriginIsolatedSiteInstance_MainFrame
+#endif
 IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
-                       CrossOriginIsolatedSiteInstance_MainFrame) {
+                       MAYBE_CrossOriginIsolatedSiteInstance_MainFrame) {
   GURL isolated_page(
       https_server()->GetURL("a.com",
                              "/set-header?"
@@ -2390,6 +2364,62 @@ IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
   EXPECT_TRUE(current_si->GetCoopCoepCrossOriginIsolatedInfo()
                   .origin()
                   .IsSameOriginWith(url::Origin::Create(isolated_page)));
+}
+
+// Reproducer test for https://crbug.com/1150938.
+IN_PROC_BROWSER_TEST_P(CrossOriginOpenerPolicyBrowserTest,
+                       MainFrameA_IframeB_Opens_WindowA) {
+  GURL isolated_page(
+      https_server()->GetURL("a.com",
+                             "/set-header?"
+                             "Cross-Origin-Opener-Policy: same-origin&"
+                             "Cross-Origin-Embedder-Policy: require-corp"));
+  GURL isolated_page_b(
+      https_server()->GetURL("cdn.a.com",
+                             "/set-header?"
+                             "Cross-Origin-Embedder-Policy: require-corp&"
+                             "Cross-Origin-Resource-Policy: cross-origin"));
+
+  // Initial cross-origin isolated page.
+  EXPECT_TRUE(NavigateToURL(shell(), isolated_page));
+  SiteInstanceImpl* main_si = current_frame_host()->GetSiteInstance();
+  EXPECT_TRUE(main_si->IsCoopCoepCrossOriginIsolated());
+
+  TestNavigationManager cross_origin_iframe_navigation(web_contents(),
+                                                       isolated_page_b);
+
+  EXPECT_TRUE(ExecJs(web_contents(),
+                     JsReplace("var iframe = document.createElement('iframe'); "
+                               "iframe.src = $1; "
+                               "document.body.appendChild(iframe);",
+                               isolated_page_b)));
+
+  cross_origin_iframe_navigation.WaitForNavigationFinished();
+  EXPECT_TRUE(cross_origin_iframe_navigation.was_successful());
+  RenderFrameHostImpl* iframe =
+      current_frame_host()->child_at(0)->current_frame_host();
+  SiteInstanceImpl* iframe_si = iframe->GetSiteInstance();
+  EXPECT_TRUE(iframe_si->IsCoopCoepCrossOriginIsolated());
+  EXPECT_TRUE(iframe_si->IsRelatedSiteInstance(main_si));
+  EXPECT_EQ(iframe_si->GetProcess(), main_si->GetProcess());
+
+  // Open an isolated popup, but cross-origin.
+  {
+    RenderFrameHostImpl* popup_frame =
+        static_cast<WebContentsImpl*>(
+            OpenPopup(iframe, isolated_page, "")->web_contents())
+            ->GetFrameTree()
+            ->root()
+            ->current_frame_host();
+
+    EXPECT_TRUE(
+        popup_frame->GetSiteInstance()->IsCoopCoepCrossOriginIsolated());
+    EXPECT_FALSE(popup_frame->GetSiteInstance()->IsRelatedSiteInstance(
+        current_frame_host()->GetSiteInstance()));
+    EXPECT_FALSE(popup_frame->frame_tree_node()->opener());
+    EXPECT_NE(popup_frame->GetSiteInstance()->GetProcess(),
+              current_frame_host()->GetSiteInstance()->GetProcess());
+  }
 }
 
 // TODO(https://crbug.com/1101339). Test inheritance of the virtual browsing

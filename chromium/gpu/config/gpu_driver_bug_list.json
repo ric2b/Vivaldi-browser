@@ -3505,18 +3505,6 @@
       ]
     },
     {
-      "id": 350,
-      "cr_bugs": [1121061],
-      "description": "Intel GPUs need reset VP when colorspace changes",
-      "os": {
-        "type": "win"
-      },
-      "vendor_id": "0x8086",
-      "features": [
-        "reset_vp_when_colorspace_changes"
-      ]
-    },
-    {
       "id": 352,
       "cr_bugs": [1038006],
       "description": "Intel device 0x1066 can't use d3d11 video decoder",
@@ -3658,6 +3646,21 @@
       ]
     },
     {
+      "id": 362,
+      "description": "Promote 2 videos to hardware overlays on Windows Intel platforms",
+      "cr_bugs": [1105618],
+      "os": {
+        "type": "win"
+      },
+      "intel_gpu_series": [
+        "icelake",
+        "tigerlake"
+      ],
+      "features": [
+        "supports_two_yuv_hardware_overlays"
+      ]
+    },
+    {
       "id": 363,
       "description": "VP9 decoding is too slow on Intel Broadwell, Skylake, and CherryTrail",
       "cr_bugs": [616318, 1163111],
@@ -3671,6 +3674,42 @@
       ],
       "features": [
         "disable_accelerated_vp9_decode"
+      ]
+    },
+    {
+      "id": 364,
+      "cr_bugs": [1161215, 1160217],
+      "description": "Software overlays fail to work reliably on AMD devices",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x1002",
+      "features": [
+        "disable_direct_composition_sw_video_overlays"
+      ]
+    },
+    {
+      "id": 365,
+      "description": "Context lost recovery often fails on Adreno with SkiaRenderer GL.",
+      "cr_bugs": [1079161],
+      "os": {
+        "type": "android"
+      },
+      "gl_renderer": "Adreno.*",
+      "features": [
+        "exit_on_context_lost"
+      ]
+    },
+    {
+      "id": 368,
+      "cr_bugs": [1181358],
+      "description": "High D3D11VideoDecoder error rates for AV1 content on Intel GPUs",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "disable_accelerated_av1_decode_d3d11"
       ]
     }
   ]

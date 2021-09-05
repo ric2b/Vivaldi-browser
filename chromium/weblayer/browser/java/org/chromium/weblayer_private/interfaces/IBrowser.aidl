@@ -41,9 +41,11 @@ interface IBrowser {
                                       in boolean onlyExpandControlsAtPageTop,
                                       in boolean animate) = 12;
 
-  // Added in 87.
   boolean isRestoringPreviousState() = 14;
 
   // Added in 88.
   void setBrowserControlsOffsetsEnabled(in boolean enable) = 13;
+
+  // Added in 89.
+  void setMinimumSurfaceSize(in int width, in int height) = 15;
 }

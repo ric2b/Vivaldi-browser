@@ -13,8 +13,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/scoped_feature_list.h"
 #include "media/base/video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
@@ -286,6 +288,80 @@ TEST_F(MediaStreamRemoteVideoSourceTest, PreservesColorSpace) {
   track->RemoveSink(&sink);
 }
 
+TEST_F(MediaStreamRemoteVideoSourceTest,
+       UnspecifiedColorSpaceIsTreatedAsBt709) {
+  std::unique_ptr<blink::MediaStreamVideoTrack> track(CreateTrack());
+  blink::MockMediaStreamVideoSink sink;
+  track->AddSink(&sink, sink.GetDeliverFrameCB(), false);
+
+  base::RunLoop run_loop;
+  EXPECT_CALL(sink, OnVideoFrame)
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
+  rtc::scoped_refptr<webrtc::I420Buffer> buffer(
+      new rtc::RefCountedObject<webrtc::I420Buffer>(320, 240));
+  webrtc::ColorSpace kColorSpace(webrtc::ColorSpace::PrimaryID::kUnspecified,
+                                 webrtc::ColorSpace::TransferID::kUnspecified,
+                                 webrtc::ColorSpace::MatrixID::kUnspecified,
+                                 webrtc::ColorSpace::RangeID::kLimited);
+  const webrtc::VideoFrame& input_frame =
+      webrtc::VideoFrame::Builder()
+          .set_video_frame_buffer(buffer)
+          .set_timestamp_ms(0)
+          .set_rotation(webrtc::kVideoRotation_0)
+          .set_color_space(kColorSpace)
+          .build();
+  source()->SinkInterfaceForTesting()->OnFrame(input_frame);
+  run_loop.Run();
+
+  EXPECT_EQ(1, sink.number_of_frames());
+  scoped_refptr<media::VideoFrame> output_frame = sink.last_frame();
+  EXPECT_TRUE(output_frame);
+  EXPECT_TRUE(output_frame->ColorSpace() ==
+              gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709,
+                              gfx::ColorSpace::TransferID::BT709,
+                              gfx::ColorSpace::MatrixID::BT709,
+                              gfx::ColorSpace::RangeID::LIMITED));
+  track->RemoveSink(&sink);
+}
+
+TEST_F(MediaStreamRemoteVideoSourceTest, UnspecifiedColorSpaceIsIgnored) {
+  base::test::ScopedFeatureList scoped_feauture_list;
+  scoped_feauture_list.InitAndEnableFeature(
+      blink::features::kWebRtcIgnoreUnspecifiedColorSpace);
+  std::unique_ptr<blink::MediaStreamVideoTrack> track(CreateTrack());
+  blink::MockMediaStreamVideoSink sink;
+  track->AddSink(&sink, sink.GetDeliverFrameCB(), false);
+
+  base::RunLoop run_loop;
+  EXPECT_CALL(sink, OnVideoFrame)
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
+  rtc::scoped_refptr<webrtc::I420Buffer> buffer(
+      new rtc::RefCountedObject<webrtc::I420Buffer>(320, 240));
+  webrtc::ColorSpace kColorSpace(webrtc::ColorSpace::PrimaryID::kUnspecified,
+                                 webrtc::ColorSpace::TransferID::kUnspecified,
+                                 webrtc::ColorSpace::MatrixID::kUnspecified,
+                                 webrtc::ColorSpace::RangeID::kLimited);
+  const webrtc::VideoFrame& input_frame =
+      webrtc::VideoFrame::Builder()
+          .set_video_frame_buffer(buffer)
+          .set_timestamp_ms(0)
+          .set_rotation(webrtc::kVideoRotation_0)
+          .set_color_space(kColorSpace)
+          .build();
+  source()->SinkInterfaceForTesting()->OnFrame(input_frame);
+  run_loop.Run();
+
+  EXPECT_EQ(1, sink.number_of_frames());
+  scoped_refptr<media::VideoFrame> output_frame = sink.last_frame();
+  EXPECT_TRUE(output_frame);
+  EXPECT_TRUE(output_frame->ColorSpace() ==
+              gfx::ColorSpace(gfx::ColorSpace::PrimaryID::INVALID,
+                              gfx::ColorSpace::TransferID::INVALID,
+                              gfx::ColorSpace::MatrixID::INVALID,
+                              gfx::ColorSpace::RangeID::INVALID));
+  track->RemoveSink(&sink);
+}
+
 // These tests depend on measuring the difference between the internal WebRTC
 // clock and Chromium's clock. Due to this they are performance sensitive and
 // appear to be flaky for builds with ASAN enabled.
@@ -360,19 +436,19 @@ TEST_F(MediaStreamRemoteVideoSourceTest,
   scoped_refptr<media::VideoFrame> output_frame = sink.last_frame();
   EXPECT_TRUE(output_frame);
 
-  EXPECT_FLOAT_EQ(output_frame->metadata()->processing_time->InSecondsF(),
+  EXPECT_FLOAT_EQ(output_frame->metadata().processing_time->InSecondsF(),
                   kProcessingTime);
 
   EXPECT_NEAR(
-      (*output_frame->metadata()->capture_begin_time - kExpectedCaptureTime)
+      (*output_frame->metadata().capture_begin_time - kExpectedCaptureTime)
           .InMillisecondsF(),
       0.0f, kChromiumWebRtcMaxTimeDiffMs);
 
-  EXPECT_NEAR((*output_frame->metadata()->receive_time - kExpectedReceiveTime)
+  EXPECT_NEAR((*output_frame->metadata().receive_time - kExpectedReceiveTime)
                   .InMillisecondsF(),
               0.0f, kChromiumWebRtcMaxTimeDiffMs);
 
-  EXPECT_EQ(static_cast<uint32_t>(*output_frame->metadata()->rtp_timestamp),
+  EXPECT_EQ(static_cast<uint32_t>(*output_frame->metadata().rtp_timestamp),
             kRtpTimestamp);
 
   track->RemoveSink(&sink);
@@ -402,7 +478,7 @@ TEST_F(MediaStreamRemoteVideoSourceTest, MAYBE_ReferenceTimeEqualsTimestampUs) {
   scoped_refptr<media::VideoFrame> output_frame = sink.last_frame();
   EXPECT_TRUE(output_frame);
 
-  EXPECT_NEAR((*output_frame->metadata()->reference_time -
+  EXPECT_NEAR((*output_frame->metadata().reference_time -
                (base::TimeTicks() +
                 base::TimeDelta::FromMicroseconds(kTimestampUs) + time_diff()))
                   .InMillisecondsF(),
@@ -432,7 +508,7 @@ TEST_F(MediaStreamRemoteVideoSourceTest, NoTimestampUsMeansNoReferenceTime) {
   scoped_refptr<media::VideoFrame> output_frame = sink.last_frame();
   EXPECT_TRUE(output_frame);
 
-  EXPECT_FALSE(output_frame->metadata()->reference_time.has_value());
+  EXPECT_FALSE(output_frame->metadata().reference_time.has_value());
 
   track->RemoveSink(&sink);
 }

@@ -22,7 +22,6 @@
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/assistant/util/deep_link_util.h"
-#include "ash/home_screen/home_launcher_gesture_handler.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/app_list/app_list_client.h"
@@ -99,24 +98,6 @@ TabletModeAnimationTransition CalculateAnimationTransitionForMetrics(
                  ? TabletModeAnimationTransition::kFadeOutOverview
                  : TabletModeAnimationTransition::kFadeInOverview;
   }
-}
-
-int GetAssistantPrivacyInfoShownCount() {
-  PrefService* prefs =
-      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
-  return prefs->GetInteger(prefs::kAssistantPrivacyInfoShownInLauncher);
-}
-
-void SetAssistantPrivacyInfoShownCount(int count) {
-  PrefService* prefs =
-      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
-  prefs->SetInteger(prefs::kAssistantPrivacyInfoShownInLauncher, count);
-}
-
-void SetAssistantPrivacyInfoDismissed() {
-  PrefService* prefs =
-      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
-  prefs->SetBoolean(prefs::kAssistantPrivacyInfoDismissedInLauncher, true);
 }
 
 int GetSuggestedContentInfoShownCount() {
@@ -225,10 +206,6 @@ AppListControllerImpl::~AppListControllerImpl() {
 
 // static
 void AppListControllerImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(prefs::kAssistantPrivacyInfoShownInLauncher, 0);
-  registry->RegisterBooleanPref(
-      prefs::kAssistantPrivacyInfoDismissedInLauncher, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterIntegerPref(
       prefs::kSuggestedContentInfoShownInLauncher, 0,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
@@ -476,7 +453,8 @@ void AppListControllerImpl::GetAppInfoDialogBounds(
 }
 
 void AppListControllerImpl::ShowAppList() {
-  presenter_.Show(GetDisplayIdToShowAppListOn(), base::TimeTicks());
+  presenter_.Show(AppListViewState::kPeeking, GetDisplayIdToShowAppListOn(),
+                  base::TimeTicks());
 }
 
 aura::Window* AppListControllerImpl::GetWindow() {
@@ -500,7 +478,8 @@ void AppListControllerImpl::OnAppListItemAdded(AppListItem* item) {
     // Update the notification badge indicator for the newly added app list
     // item.
     cache_->ForOneApp(item->id(), [item](const apps::AppUpdate& update) {
-      item->UpdateBadge(update.HasBadge() == apps::mojom::OptionalBool::kTrue);
+      item->UpdateNotificationBadge(update.HasBadge() ==
+                                    apps::mojom::OptionalBool::kTrue);
     });
   }
 }
@@ -513,8 +492,9 @@ void AppListControllerImpl::OnActiveUserPrefServiceChanged(
 
     pref_change_registrar_->Add(
         prefs::kAppNotificationBadgingEnabled,
-        base::BindRepeating(&AppListControllerImpl::UpdateAppBadging,
-                            base::Unretained(this)));
+        base::BindRepeating(
+            &AppListControllerImpl::UpdateAppNotificationBadging,
+            base::Unretained(this)));
 
     // Observe AppRegistryCache for the current active account to get
     // notification updates.
@@ -524,10 +504,11 @@ void AppListControllerImpl::OnActiveUserPrefServiceChanged(
         apps::AppRegistryCacheWrapper::Get().GetAppRegistryCache(account_id);
     Observe(cache_);
 
-    // Resetting the recorded pref forces the next call to UpdateAppBadging()
-    // to update notification badging for every app item.
+    // Resetting the recorded pref forces the next call to
+    // UpdateAppNotificationBadging() to update notification badging for every
+    // app item.
     notification_badging_pref_enabled_.reset();
-    UpdateAppBadging();
+    UpdateAppNotificationBadging();
   }
 
   if (!IsTabletMode()) {
@@ -614,7 +595,7 @@ void AppListControllerImpl::Show(int64_t display_id,
   if (show_source.has_value())
     LogAppListShowSource(show_source.value());
 
-  presenter_.Show(display_id, event_time_stamp);
+  presenter_.Show(AppListViewState::kPeeking, display_id, event_time_stamp);
 
   // AppListControllerImpl::Show is called in ash at the first time of showing
   // app list view. So check whether the expand arrow view should be visible.
@@ -640,7 +621,7 @@ void AppListControllerImpl::EndDragFromShelf(AppListViewState app_list_state) {
 
 void AppListControllerImpl::ProcessMouseWheelEvent(
     const ui::MouseWheelEvent& event) {
-  presenter_.ProcessMouseWheelOffset(event.offset());
+  presenter_.ProcessMouseWheelOffset(event.location(), event.offset());
 }
 
 ShelfAction AppListControllerImpl::ToggleAppList(
@@ -1292,11 +1273,8 @@ void AppListControllerImpl::NotifySearchResultsForLogging(
   }
 }
 
-void AppListControllerImpl::MaybeIncreasePrivacyInfoShownCounts() {
-  if (ShouldShowAssistantPrivacyInfo()) {
-    const int count = GetAssistantPrivacyInfoShownCount();
-    SetAssistantPrivacyInfoShownCount(count + 1);
-  } else if (ShouldShowSuggestedContentInfo()) {
+void AppListControllerImpl::MaybeIncreaseSuggestedContentInfoShownCount() {
+  if (ShouldShowSuggestedContentInfo()) {
     const int count = GetSuggestedContentInfoShownCount();
     SetSuggestedContentInfoShownCount(count + 1);
   }
@@ -1312,16 +1290,6 @@ bool AppListControllerImpl::IsAssistantAllowedAndEnabled() const {
              chromeos::assistant::AssistantAllowedState::ALLOWED &&
          state->assistant_status() !=
              chromeos::assistant::AssistantStatus::NOT_READY;
-}
-
-bool AppListControllerImpl::ShouldShowAssistantPrivacyInfo() const {
-  // TODO(b/174506130) completely remove Assistant privacy info in followup.
-  return false;
-}
-
-void AppListControllerImpl::MarkAssistantPrivacyInfoDismissed() {
-  // User dismissed the privacy info view. Will not show the view again.
-  SetAssistantPrivacyInfoDismissed();
 }
 
 bool AppListControllerImpl::ShouldShowSuggestedContentInfo() const {
@@ -1725,7 +1693,7 @@ void AppListControllerImpl::OnAppRegistryCacheWillBeDestroyed(
 }
 
 void AppListControllerImpl::OnQuietModeChanged(bool in_quiet_mode) {
-  UpdateAppBadging();
+  UpdateAppNotificationBadging();
 }
 
 void AppListControllerImpl::UpdateTrackedAppWindow() {
@@ -1749,11 +1717,13 @@ void AppListControllerImpl::UpdateItemNotificationBadge(
     const std::string& app_id,
     apps::mojom::OptionalBool has_badge) {
   AppListItem* item = model_->FindItem(app_id);
-  if (item)
-    item->UpdateBadge(has_badge == apps::mojom::OptionalBool::kTrue);
+  if (item) {
+    item->UpdateNotificationBadge(has_badge ==
+                                  apps::mojom::OptionalBool::kTrue);
+  }
 }
 
-void AppListControllerImpl::UpdateAppBadging() {
+void AppListControllerImpl::UpdateAppNotificationBadging() {
   bool new_badging_enabled = pref_change_registrar_
                                  ? pref_change_registrar_->prefs()->GetBoolean(
                                        prefs::kAppNotificationBadgingEnabled)

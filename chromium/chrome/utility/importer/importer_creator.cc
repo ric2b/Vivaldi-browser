@@ -55,6 +55,8 @@ scoped_refptr<Importer> CreateImporterByType(ImporterType type) {
     case TYPE_OPERA_OPIUM_BETA:
     case TYPE_OPERA_OPIUM_DEV:
     case TYPE_VIVALDI:
+    case TYPE_BRAVE:
+    case TYPE_EDGE_CHROMIUM:
       return new ChromiumImporter();
     default:
       NOTREACHED();

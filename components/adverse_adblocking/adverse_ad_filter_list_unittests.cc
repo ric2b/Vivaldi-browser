@@ -52,7 +52,6 @@ TEST_F(VivaldiSubresourceFilterTest, SimpleAllowedLoad) {
   GURL url("https://example.test");
   SimulateNavigateAndCommit(url, main_rfh());
   EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-  EXPECT_FALSE(GetClient()->did_show_ui_for_navigation());
 }
 
 TEST_F(VivaldiSubresourceFilterTest, SimpleDisallowedLoad) {
@@ -60,7 +59,6 @@ TEST_F(VivaldiSubresourceFilterTest, SimpleDisallowedLoad) {
   ConfigureAsSubresourceFilterOnlyURL(url);
   SimulateNavigateAndCommit(url, main_rfh());
   EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-  EXPECT_TRUE(GetClient()->did_show_ui_for_navigation());
 }
 
 TEST_F(VivaldiSubresourceFilterTest, SimpleAllowedLoad_WithObserver) {

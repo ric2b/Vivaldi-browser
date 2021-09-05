@@ -15,7 +15,6 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
-import org.chromium.chrome.browser.omnibox.UrlBar.UrlTextChangeListener;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
 import org.chromium.chrome.browser.page_info.ChromePermissionParamsListBuilderDelegate;
@@ -36,7 +35,7 @@ import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
  * A component for displaying a status icon (e.g. security icon or navigation icon) and optional
  * verbose status text.
  */
-public class StatusCoordinator implements View.OnClickListener, UrlTextChangeListener {
+public class StatusCoordinator implements View.OnClickListener, LocationBarDataProvider.Observer {
     // TODO(crbug.com/1109369): Do not store the StatusView
     private final StatusView mStatusView;
     private final StatusMediator mMediator;
@@ -52,11 +51,19 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
      * @param isTablet Whether the UI is shown on a tablet.
      * @param statusView The status view, used to supply and manipulate child views.
      * @param urlBarEditingTextStateProvider The url coordinator.
+     * @param incognitoStateProvider Provider of incocognito-ness for the active TabModel.
+     * @param modalDialogManagerSupplier A supplier for {@link ModalDialogManager} used to display a
+     *         dialog.
      */
     public StatusCoordinator(boolean isTablet, StatusView statusView,
-            UrlBarEditingTextStateProvider urlBarEditingTextStateProvider) {
+            UrlBarEditingTextStateProvider urlBarEditingTextStateProvider,
+            IncognitoStateProvider incognitoStateProvider,
+            Supplier<ModalDialogManager> modalDialogManagerSupplier,
+            LocationBarDataProvider locationBarDataProvider) {
         mIsTablet = isTablet;
         mStatusView = statusView;
+        mModalDialogManagerSupplier = modalDialogManagerSupplier;
+        mLocationBarDataProvider = locationBarDataProvider;
 
         mModel = new PropertyModel(StatusProperties.ALL_KEYS);
 
@@ -70,7 +77,8 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
                     mModel.get(StatusProperties.SHOW_STATUS_ICON) ? View.VISIBLE : View.GONE);
         };
         mMediator = new StatusMediator(mModel, mStatusView.getResources(), mStatusView.getContext(),
-                urlBarEditingTextStateProvider, isTablet, forceModelViewReconciliationRunnable);
+                urlBarEditingTextStateProvider, isTablet, forceModelViewReconciliationRunnable,
+                incognitoStateProvider, locationBarDataProvider);
 
         Resources res = mStatusView.getResources();
         mMediator.setUrlMinWidth(res.getDimensionPixelSize(R.dimen.location_bar_min_url_width)
@@ -83,6 +91,14 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
 
         mMediator.setVerboseStatusTextMinWidth(
                 res.getDimensionPixelSize(R.dimen.location_bar_min_verbose_status_text_width));
+
+        mStatusView.setLocationBarDataProvider(mLocationBarDataProvider);
+        // Update status immediately after receiving the data provider to avoid initial presence
+        // glitch on tablet devices. This glitch would be typically seen upon launch of app, right
+        // before the landing page is presented to the user.
+        updateStatusIcon();
+        updateVerboseStatusVisibility();
+        mLocationBarDataProvider.addObserver(this);
     }
 
     /**
@@ -90,14 +106,18 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
      *
      * @param locationBarDataProvider The data provider.
      */
-    public void setLocationBarDataProvider(LocationBarDataProvider locationBarDataProvider) {
+    public void setLocationBarDataProviderForTesting(
+            LocationBarDataProvider locationBarDataProvider) {
+        mLocationBarDataProvider.removeObserver(this);
         mLocationBarDataProvider = locationBarDataProvider;
-        mMediator.setLocationBarDataProvider(mLocationBarDataProvider);
+        mMediator.setLocationBarDataProviderForTesting(mLocationBarDataProvider);
         mStatusView.setLocationBarDataProvider(mLocationBarDataProvider);
         // Update status immediately after receiving the data provider to avoid initial presence
         // glitch on tablet devices. This glitch would be typically seen upon launch of app, right
         // before the landing page is presented to the user.
         updateStatusIcon();
+        updateVerboseStatusVisibility();
+        mLocationBarDataProvider.addObserver(this);
     }
 
     /** Signals that native initialization has completed. */
@@ -147,30 +167,26 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
         updateStatusIcon();
     }
 
-    /** @param incognitoBadgeVisible Whether or not the incognito badge is visible. */
-    public void setIncognitoBadgeVisibility(boolean incognitoBadgeVisible) {
-        mMediator.setIncognitoBadgeVisibility(incognitoBadgeVisible);
-    }
+    // LocationBarData.Observer implementation
+    // Using the default empty onIncognitoStateChanged.
+    // Using the default empty onNtpStartedLoading.
+    // Using the default empty onPrimaryColorChanged.
+    // Using the default empty onTitleChanged.
+    // Using the default empty onUrlChanged.
 
-    /**
-     * @param modalDialogManagerSupplier A supplier for {@link ModalDialogManager} used
-     *         to display a dialog.
-     */
-    public void setModalDialogManagerSupplier(
-            Supplier<ModalDialogManager> modalDialogManagerSupplier) {
-        mModalDialogManagerSupplier = modalDialogManagerSupplier;
+    @Override
+    public void onSecurityStateChanged() {
+        updateStatusIcon();
+        updateVerboseStatusVisibility();
     }
 
     /** Updates the security icon displayed in the LocationBar. */
-    public void updateStatusIcon() {
+    private void updateStatusIcon() {
         mMediator.setSecurityIconResource(
                 mLocationBarDataProvider.getSecurityIconResource(mIsTablet));
         mMediator.setSecurityIconTint(mLocationBarDataProvider.getSecurityIconColorStateList());
         mMediator.setSecurityIconDescription(
                 mLocationBarDataProvider.getSecurityIconContentDescriptionResourceId());
-
-        // TODO(ender): drop these during final cleanup round.
-        updateVerboseStatusVisibility();
     }
 
     /** Returns the view displaying the security icon. */
@@ -210,8 +226,6 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
      * omnibox.
      */
     private void updateVerboseStatusVisibility() {
-        // TODO(ender): turn around logic for LocationBarDataProvider to offer
-        // notifications rather than polling for these attributes.
         mMediator.setPageSecurityLevel(mLocationBarDataProvider.getSecurityLevel());
         mMediator.setPageIsOffline(mLocationBarDataProvider.isOfflinePage());
         mMediator.setPageIsPreview(mLocationBarDataProvider.isPreview());
@@ -263,15 +277,6 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
         mMediator.setShowIconsWhenUrlFocused(showIconsWithUrlFocused);
     }
 
-    /** Specify whether suggestion for URL bar is a search action. */
-    public void setFirstSuggestionIsSearchType(boolean firstSuggestionIsSearchQuery) {
-        mMediator.setFirstSuggestionIsSearchType(firstSuggestionIsSearchQuery);
-    }
-
-    public void setIncognitoStateProvider(IncognitoStateProvider incognitoStateProvider) {
-        mMediator.setIncognitoStateProvider(incognitoStateProvider);
-    }
-
     /** Update information required to display the search engine icon. */
     public void updateSearchEngineStatusIcon(boolean shouldShowSearchEngineLogo,
             boolean isSearchEngineGoogle, String searchEngineUrl) {
@@ -299,8 +304,18 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
         return mMediator.getEndPaddingPixelSizeOnFocusDelta();
     }
 
-    @Override
-    public void onTextChanged(String textWithoutAutocomplete, String textWithAutocomplete) {
-        mMediator.onTextChanged(textWithoutAutocomplete);
+    /**
+     * Notifies StatusCoordinator that the default match for the currently entered autocomplete text
+     * has been classified, indicating whether the default match is a search.
+     *
+     * @param defaultMatchIsSearch Whether the default match is a search.
+     */
+    public void onDefaultMatchClassified(boolean defaultMatchIsSearch) {
+        mMediator.updateLocationBarIconForDefaultMatchCategory(defaultMatchIsSearch);
+    }
+
+    public void destroy() {
+        mLocationBarDataProvider.removeObserver(this);
+        mLocationBarDataProvider = null;
     }
 }

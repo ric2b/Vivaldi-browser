@@ -59,17 +59,17 @@ syncer::UpdateResponseData CreateUpdateResponseData(
     const BookmarkInfo& bookmark_info,
     const syncer::UniquePosition& unique_position,
     int response_version,
-    const std::string& guid) {
+    const base::GUID& guid) {
   syncer::EntityData data;
   data.id = bookmark_info.server_id;
   data.parent_id = bookmark_info.parent_id;
   data.server_defined_unique_tag = bookmark_info.server_tag;
   data.unique_position = unique_position.ToProto();
-  data.originator_client_item_id = guid;
+  data.originator_client_item_id = guid.AsLowercaseString();
 
   sync_pb::BookmarkSpecifics* bookmark_specifics =
       data.specifics.mutable_bookmark();
-  bookmark_specifics->set_guid(guid);
+  bookmark_specifics->set_guid(guid.AsLowercaseString());
   bookmark_specifics->set_legacy_canonicalized_title(bookmark_info.title);
   bookmark_specifics->set_full_title(bookmark_info.title);
   if (bookmark_info.url.empty()) {
@@ -89,7 +89,8 @@ syncer::UpdateResponseData CreateUpdateResponseData(
     const syncer::UniquePosition& unique_position,
     int response_version) {
   return CreateUpdateResponseData(bookmark_info, unique_position,
-                                  response_version, base::GenerateGUID());
+                                  response_version,
+                                  base::GUID::GenerateRandomV4());
 }
 
 sync_pb::ModelTypeState CreateDummyModelTypeState() {
@@ -107,7 +108,8 @@ sync_pb::BookmarkMetadata CreateNodeMetadata(
   bookmark_metadata.set_id(node->id());
   bookmark_metadata.mutable_metadata()->set_server_id(server_id);
   bookmark_metadata.mutable_metadata()->set_client_tag_hash(
-      syncer::ClientTagHash::FromUnhashed(syncer::BOOKMARKS, node->guid())
+      syncer::ClientTagHash::FromUnhashed(syncer::BOOKMARKS,
+                                          node->guid().AsLowercaseString())
           .value());
   return bookmark_metadata;
 }
@@ -704,14 +706,14 @@ TEST_F(BookmarkModelTypeProcessorTest,
       std::vector<std::unique_ptr<syncer::CommitRequestData>> &&)>
       callback;
   std::vector<std::unique_ptr<syncer::CommitRequestData>> callback_result;
-  ON_CALL(callback, Run(_))
+  ON_CALL(callback, Run)
       .WillByDefault(
           [&callback_result](
               std::vector<std::unique_ptr<syncer::CommitRequestData>>&&
                   commit_data) { callback_result = std::move(commit_data); });
 
   ASSERT_EQ(0u, bookmark_client()->GetTasksCount());
-  EXPECT_CALL(callback, Run(_));
+  EXPECT_CALL(callback, Run);
   processor()->GetLocalChanges(/*max_entries=*/10, callback.Get());
   EXPECT_TRUE(callback_result.empty());
   EXPECT_TRUE(node->is_favicon_loading());
@@ -719,7 +721,7 @@ TEST_F(BookmarkModelTypeProcessorTest,
   bookmark_client()->SimulateFaviconLoaded(GURL(kUrl), gfx::Image(),
                                            GURL(kIconUrl));
   ASSERT_TRUE(node->is_favicon_loaded());
-  EXPECT_CALL(callback, Run(_));
+  EXPECT_CALL(callback, Run);
   processor()->GetLocalChanges(/*max_entries=*/10, callback.Get());
   EXPECT_FALSE(callback_result.empty());
 }

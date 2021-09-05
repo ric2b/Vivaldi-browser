@@ -8,7 +8,7 @@ namespace content {
 
 PolicyContainerHost::PolicyContainerHost() = default;
 PolicyContainerHost::PolicyContainerHost(
-    PolicyContainerHost::DocumentPolicies document_policies)
+    const PolicyContainerHost::DocumentPolicies& document_policies)
     : document_policies_(document_policies) {}
 PolicyContainerHost::~PolicyContainerHost() = default;
 
@@ -29,7 +29,8 @@ PolicyContainerHost::CreatePolicyContainerForBlink() {
   policy_container_host_receiver_.reset();
   return blink::mojom::PolicyContainer::New(
       blink::mojom::PolicyContainerDocumentPolicies::New(
-          document_policies_.referrer_policy),
+          document_policies_.referrer_policy,
+          document_policies_.ip_address_space),
       policy_container_host_receiver_.BindNewEndpointAndPassRemote());
 }
 

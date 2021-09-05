@@ -4,6 +4,7 @@
 
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/pickle.h"
+#include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -52,7 +53,8 @@ void ServiceImpl::OnRenderProcessHostCreated(
     content::RenderProcessHost* process_host) {
   mojo::Remote<mojom::Manager> manager;
 
-  if (process_host->GetBrowserContext() != browser_context_)
+  if (chrome::GetBrowserContextRedirectedInIncognito(
+          process_host->GetBrowserContext()) != browser_context_)
     return;
 
   process_host->BindReceiver(manager.BindNewPipeAndPassReceiver());

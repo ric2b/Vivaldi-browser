@@ -13,6 +13,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -55,7 +56,6 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
-#include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/public/browser/ax_event_notification_details.h"
@@ -118,9 +118,6 @@
 #include "ui/base/ui_base_features.h"
 #endif
 
-using base::TimeDelta;
-
-using blink::WebConsoleMessage;
 using blink::WebInputEvent;
 
 namespace content {
@@ -424,8 +421,6 @@ bool RenderViewHostImpl::CreateRenderView(
   const FrameTreeNode* const frame_tree_node =
       main_rfh ? main_rfh->frame_tree_node() : main_rfph->frame_tree_node();
 
-  GetWidget()->set_renderer_initialized(true);
-
   mojom::CreateViewParamsPtr params = mojom::CreateViewParams::New();
   params->renderer_preferences = delegate_->GetRendererPrefs();
   RenderViewHostImpl::GetPlatformSpecificPrefs(&params->renderer_preferences);
@@ -435,14 +430,8 @@ bool RenderViewHostImpl::CreateRenderView(
     params->main_frame_routing_id = main_frame_routing_id_;
     params->main_frame_widget_routing_id =
         main_rfh->GetRenderWidgetHost()->GetRoutingID();
-    params->main_frame_interface_bundle =
-        mojom::DocumentScopedInterfaceBundle::New();
-    main_rfh->BindInterfaceProviderReceiver(
-        params->main_frame_interface_bundle->interface_provider
-            .InitWithNewPipeAndPassReceiver());
     main_rfh->BindBrowserInterfaceBrokerReceiver(
-        params->main_frame_interface_bundle->browser_interface_broker
-            .InitWithNewPipeAndPassReceiver());
+        params->main_frame_interface_broker.InitWithNewPipeAndPassReceiver());
 
     std::tie(params->widget_host, params->widget) =
         main_rfh->GetRenderWidgetHost()->BindNewWidgetInterfaces();
@@ -511,11 +500,19 @@ bool RenderViewHostImpl::CreateRenderView(
   // Let our delegate know that we created a RenderView.
   DispatchRenderViewCreated();
 
-  // Since this method can create the main RenderFrame in the renderer process,
-  // set the proper state on its corresponding RenderFrameHost.
+  // If there is a main frame in this RenderViewHost, then the renderer-side
+  // main frame will be created along with the RenderView. The RenderFrameHost
+  // initializes its RenderWidgetHost as well, if it exists. Otherwise we must
+  // mark the non-frame-attached RenderWidgetHost as live in order for the
+  // RenderViewHost to be considered live.
   if (main_rfh)
-    main_rfh->SetRenderFrameCreated(true);
+    main_rfh->RenderFrameCreated();
+  else
+    GetWidget()->SetRendererWidgetCreatedForInactiveRenderView();
+
   GetWidget()->delegate()->SendScreenRects();
+  // This must be posted after the RenderViewHost is marked live, which is done
+  // above by RenderFrameCreated() or set_renderer_initialized().
   PostRenderViewReady();
 
   return true;
@@ -524,6 +521,10 @@ bool RenderViewHostImpl::CreateRenderView(
 void RenderViewHostImpl::SetMainFrameRoutingId(int routing_id) {
   main_frame_routing_id_ = routing_id;
   GetWidget()->UpdatePriority();
+  // TODO(crbug.com/419087): If a local main frame is no longer attached to this
+  // RenderView then the RenderWidgetHostImpl owned by this class should be
+  // informed that its renderer widget is no longer created. The RenderViewHost
+  // will need to track its own live-ness then.
 }
 
 void RenderViewHostImpl::EnterBackForwardCache() {
@@ -535,6 +536,12 @@ void RenderViewHostImpl::EnterBackForwardCache() {
   is_in_back_forward_cache_ = true;
   page_lifecycle_state_manager_->SetIsInBackForwardCache(
       is_in_back_forward_cache_, /*page_restore_params=*/nullptr);
+}
+
+void RenderViewHostImpl::PrepareToLeaveBackForwardCache(
+    base::OnceClosure done_cb) {
+  page_lifecycle_state_manager_->SetIsLeavingBackForwardCache(
+      std::move(done_cb));
 }
 
 void RenderViewHostImpl::LeaveBackForwardCache(
@@ -755,10 +762,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
   ScopedActiveURL scoped_active_url(this);
 
   return delegate_->OnMessageReceived(this, msg);
-}
-
-void RenderViewHostImpl::RenderWidgetDidInit() {
-  PostRenderViewReady();
 }
 
 void RenderViewHostImpl::OnDidContentsPreferredSizeChange(

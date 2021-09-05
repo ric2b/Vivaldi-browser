@@ -234,7 +234,7 @@ void PerFrameContentTranslateDriver::NavigationEntryCommitted(
   // If not a reload, return.
   if (!ui::PageTransitionCoreTypeIs(entry->GetTransitionType(),
                                     ui::PAGE_TRANSITION_RELOAD) &&
-      load_details.type != content::NAVIGATION_TYPE_SAME_PAGE) {
+      load_details.type != content::NAVIGATION_TYPE_SAME_ENTRY) {
     return;
   }
 
@@ -250,7 +250,9 @@ void PerFrameContentTranslateDriver::NavigationEntryCommitted(
     return;
   }
 
-  if (!translate_manager()->GetLanguageState()->page_needs_translation())
+  if (!translate_manager()
+           ->GetLanguageState()
+           ->page_level_translation_critiera_met())
     return;
 
   // Note that we delay it as the ordering of the processing of this callback
@@ -330,7 +332,10 @@ void PerFrameContentTranslateDriver::StartLanguageDetection() {
           base::BindOnce(&PerFrameContentTranslateDriver::OnPageContents,
                          weak_pointer_factory_.GetWeakPtr(),
                          capture_begin_time)),
-      ui::AXMode::kWebContents);
+      ui::AXMode::kWebContents,
+      /* exclude_offscreen= */ false,
+      /* max_nodes= */ 5000,
+      /* timeout= */ {});
 
   // Kick off language detection by first requesting web language details.
   details_ = LanguageDetectionDetails();
@@ -345,23 +350,23 @@ void PerFrameContentTranslateDriver::StartLanguageDetection() {
 
 void PerFrameContentTranslateDriver::OnPageLanguageDetermined(
     const LanguageDetectionDetails& details,
-    bool page_needs_translation) {
+    bool page_level_translation_critiera_met) {
   language_determined_time_ = base::TimeTicks::Now();
   ReportLanguageDeterminedDuration(finish_navigation_time_,
                                    language_determined_time_);
 
   // If we have a language histogram (i.e. we're not in incognito), update it
   // with the detected language of every page visited.
-  if (language_histogram() && details.is_cld_reliable)
-    language_histogram()->OnPageVisited(details.cld_language);
+  if (language_histogram() && details.is_model_reliable)
+    language_histogram()->OnPageVisited(details.model_detected_language);
 
   if (translate_manager() && web_contents()) {
     translate_manager()->GetLanguageState()->LanguageDetermined(
-        details.adopted_language, page_needs_translation);
+        details.adopted_language, page_level_translation_critiera_met);
     translate_manager()->InitiateTranslation(details.adopted_language);
   }
 
-  for (auto& observer : observer_list())
+  for (auto& observer : language_detection_observers())
     observer.OnLanguageDetermined(details);
 }
 
@@ -404,8 +409,8 @@ void PerFrameContentTranslateDriver::OnPageContentsLanguage(
     const std::string& contents_language,
     bool is_contents_language_reliable) {
   awaiting_contents_ = false;
-  details_.cld_language = contents_language;
-  details_.is_cld_reliable = is_contents_language_reliable;
+  details_.model_detected_language = contents_language;
+  details_.is_model_reliable = is_contents_language_reliable;
 
   if (!details_.url.is_empty())
     ComputeActualPageLanguage();
@@ -416,7 +421,7 @@ void PerFrameContentTranslateDriver::ComputeActualPageLanguage() {
   // utility process.
   std::string language = DeterminePageLanguage(
       details_.content_language, details_.html_root_language,
-      details_.cld_language, details_.is_cld_reliable);
+      details_.model_detected_language, details_.is_model_reliable);
 
   if (!language.empty()) {
     details_.time = base::Time::Now();

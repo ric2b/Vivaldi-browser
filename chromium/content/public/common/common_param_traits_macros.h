@@ -9,14 +9,12 @@
 #define CONTENT_PUBLIC_COMMON_COMMON_PARAM_TRAITS_MACROS_H_
 
 #include "build/build_config.h"
-#include "content/public/common/browser_controls_state.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/webplugininfo_param_traits.h"
 #include "ipc/ipc_message_macros.h"
 #include "services/network/public/cpp/network_ipc_param_traits.h"
 #include "services/network/public/mojom/referrer_policy.mojom.h"
-#include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
@@ -36,9 +34,6 @@
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
-
-IPC_ENUM_TRAITS_MAX_VALUE(content::BrowserControlsState,
-                          content::BROWSER_CONTROLS_STATE_LAST)
 
 IPC_ENUM_TRAITS_VALIDATE(ui::PageTransition,
                          ((value &
@@ -136,7 +131,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(caret_browsing_enabled)
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
   IPC_STRUCT_TRAITS_MEMBER(system_font_family_name)
-  IPC_STRUCT_TRAITS_MEMBER(selection_clipboard_buffer_available)
 #endif
 #if defined(OS_WIN)
   IPC_STRUCT_TRAITS_MEMBER(caption_font_family_name)
@@ -165,7 +159,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(allow_access_keys)
 IPC_STRUCT_TRAITS_END()
 
-IPC_ENUM_TRAITS(blink::DragOperation)  // Bitmask.
 IPC_ENUM_TRAITS_MAX_VALUE(content::DropData::Kind,
                           content::DropData::Kind::LAST)
 

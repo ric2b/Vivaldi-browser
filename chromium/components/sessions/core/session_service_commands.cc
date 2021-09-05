@@ -17,12 +17,7 @@
 #include "base/pickle.h"
 #include "base/token.h"
 #include "components/sessions/core/base_session_service_commands.h"
-#include "components/sessions/core/command_storage_manager_delegate.h"
-#include "components/sessions/core/session_command.h"
-#include "components/sessions/core/session_types.h"
 #include "components/tab_groups/tab_group_color.h"
-#include "components/tab_groups/tab_group_id.h"
-#include "components/tab_groups/tab_group_visual_data.h"
 
 #include "components/sessions/vivaldi_session_service_commands.h"
 
@@ -74,12 +69,15 @@ static const SessionCommand::id_type kCommandSetWindowWorkspace2 = 25;
 static const SessionCommand::id_type kCommandTabNavigationPathPruned = 26;
 static const SessionCommand::id_type kCommandSetTabGroup = 27;
 // OBSOLETE Superseded by kCommandSetTabGroupMetadata2.
-// static const SessionCommand::id_type kCommandSetTabGroupMetadata = 28;
+// static const SessionCommand::id_type kCommandSetTabGroupMetadata = 26;
 static const SessionCommand::id_type kCommandSetTabGroupMetadata2 = 29;
 static const SessionCommand::id_type kCommandSetTabGuid = 30;
 static const SessionCommand::id_type kCommandSetTabUserAgentOverride2 = 31;
 static const SessionCommand::id_type kCommandSetTabData = 32;
 static const SessionCommand::id_type kCommandSetWindowUserTitle = 33;
+static const SessionCommand::id_type kCommandSetWindowVisibleOnAllWorkspaces =
+    34;
+// ID 255 is used by CommandStorageBackend.
 
 // VIVALDI SPECIFIC below, must not change or we must migrate data!
 static const SessionCommand::id_type kCommandPageActionOverrides = 200;
@@ -162,6 +160,11 @@ struct PinnedStatePayload {
 struct LastActiveTimePayload {
   SessionID::id_type tab_id;
   int64_t last_active_time;
+};
+
+struct VisibleOnAllWorkspacesPayload {
+  SessionID::id_type window_id;
+  bool visible_on_all_workspaces;
 };
 
 // Persisted versions of ui::WindowShowState that are written to disk and can
@@ -804,6 +807,17 @@ bool CreateTabsAndWindows(
         break;
       }
 
+      case kCommandSetWindowVisibleOnAllWorkspaces: {
+        VisibleOnAllWorkspacesPayload payload;
+        if (!command->GetPayload(&payload, sizeof(payload))) {
+          DVLOG(1) << "Failed reading command " << command->id();
+          return true;
+        }
+        GetWindow(SessionID::FromSerializedValue(payload.window_id), windows)
+            ->visible_on_all_workspaces = payload.visible_on_all_workspaces;
+        break;
+      }
+
       case kCommandSetTabGuid: {
         std::unique_ptr<base::Pickle> pickle(command->PayloadAsPickle());
         base::PickleIterator it(*pickle);
@@ -1025,6 +1039,16 @@ std::unique_ptr<SessionCommand> CreateSetWindowWorkspaceCommand(
   pickle.WriteInt(window_id.id());
   pickle.WriteString(workspace);
   return std::make_unique<SessionCommand>(kCommandSetWindowWorkspace2, pickle);
+}
+
+std::unique_ptr<SessionCommand> CreateSetWindowVisibleOnAllWorkspacesCommand(
+    const SessionID& window_id,
+    bool visible_on_all_workspaces) {
+  VisibleOnAllWorkspacesPayload payload = {0};
+  payload.window_id = window_id.id();
+  payload.visible_on_all_workspaces = visible_on_all_workspaces;
+  return CreateSessionCommandForPayload(kCommandSetWindowVisibleOnAllWorkspaces,
+                                        payload);
 }
 
 std::unique_ptr<SessionCommand> CreateTabNavigationPathPrunedCommand(

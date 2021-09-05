@@ -60,6 +60,7 @@ class MEDIA_EXPORT RendererImpl final : public Renderer {
   void SetCdm(CdmContext* cdm_context, CdmAttachedCB cdm_attached_cb) final;
   void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) final;
   void SetPreservesPitch(bool preserves_pitch) final;
+  void SetAutoplayInitiated(bool autoplay_initiated) final;
   void Flush(base::OnceClosure flush_cb) final;
   void StartPlayingFrom(base::TimeDelta time) final;
   void SetPlaybackRate(double playback_rate) final;
@@ -246,10 +247,11 @@ class MEDIA_EXPORT RendererImpl final : public Renderer {
   bool clockless_video_playback_enabled_for_testing_;
 
   // Used to defer underflow for video when audio is present.
-  base::CancelableClosure deferred_video_underflow_cb_;
+  base::CancelableOnceClosure deferred_video_underflow_cb_;
 
-  // Used to defer underflow for audio when restarting audio playback.
-  base::CancelableClosure deferred_audio_restart_underflow_cb_;
+  // We cannot use `!deferred_video_underflow_cb_.IsCancelled()` as that changes
+  // when the callback is run, even if not explicitly cancelled.
+  bool has_deferred_buffering_state_change_ = false;
 
   // The amount of time to wait before declaring underflow if the video renderer
   // runs out of data but the audio renderer still has enough.

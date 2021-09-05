@@ -115,8 +115,8 @@ constexpr char kAbortErrorMessage[] =
 
 constexpr char kGetFeaturePolicyMissingMessage[] =
     "webauth: NotAllowedError: The 'publickey-credentials-get' feature is "
-    "not enabled in this document. Feature Policy may be used to delegate Web "
-    "Authentication capabilities to cross-origin child frames.";
+    "not enabled in this document. Permissions Policy may be used to delegate "
+    "Web Authentication capabilities to cross-origin child frames.";
 
 constexpr char kCrossOriginAncestorMessage[] =
     "webauth: NotAllowedError: The following credential operations can only "
@@ -289,7 +289,7 @@ class ClosureExecutorBeforeNavigationCommit
   bool WillProcessDidCommitNavigation(
       RenderFrameHost* render_frame_host,
       NavigationRequest* navigation_request,
-      ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
+      mojom::DidCommitProvisionalLoadParamsPtr* params,
       mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
       override {
     if (closure_)
@@ -994,7 +994,17 @@ IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
 // signal's aborted flag set after sending request, we get an AbortError.
 IN_PROC_BROWSER_TEST_F(WebAuthJavascriptClientBrowserTest,
                        CreatePublicKeyCredentialWithAbortSetAfterCreate) {
-  InjectVirtualFidoDeviceFactory();
+  // This test sends the abort signal after making the WebAuthn call. However,
+  // the WebAuthn call could complete before the abort signal is sent, leading
+  // to a flakey test. Thus the |simulate_press_callback| is installed and
+  // always returns false, to ensure that the VirtualFidoDevice stalls the
+  // WebAuthn call and the abort signal will happen in time.
+  device::test::VirtualFidoDeviceFactory* virtual_device_factory =
+      InjectVirtualFidoDeviceFactory();
+  virtual_device_factory->mutable_state()->simulate_press_callback =
+      base::BindRepeating(
+          [](device::VirtualFidoDevice*) -> bool { return false; });
+
   CreateParameters parameters;
   parameters.signal = "authAbortSignal";
   std::string result;

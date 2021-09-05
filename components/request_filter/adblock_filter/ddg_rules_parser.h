@@ -4,7 +4,7 @@
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_DDG_RULES_PARSER_H_
 
 #include "base/values.h"
-#include "components/request_filter/adblock_filter/adblock_filter_rule.h"
+#include "components/request_filter/adblock_filter/adblock_request_filter_rule.h"
 
 namespace adblock_filter {
 struct ParseResult;
@@ -23,9 +23,10 @@ class DuckDuckGoRulesParser {
                  const std::string& domain,
                  bool default_ignore,
                  const base::Value* excluded_origins);
-  base::Optional<std::bitset<FilterRule::kTypeCount>> GetTypes(
+  base::Optional<std::bitset<RequestFilterRule::kTypeCount>> GetTypes(
       const base::Value* rule_properties);
-  base::Optional<std::vector<std::string>> GetDomains(const base::Value* rule_properties);
+  base::Optional<std::vector<std::string>> GetDomains(
+      const base::Value* rule_properties);
   ParseResult* parse_result_;
 
   DISALLOW_COPY_AND_ASSIGN(DuckDuckGoRulesParser);

@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/resources/media/grit/media_internals_resources.h"
 #include "content/browser/resources/media/grit/media_internals_resources_map.h"
 #include "content/grit/content_resources.h"
@@ -38,7 +39,7 @@
 #include "ui/resources/grit/webui_generated_resources_map.h"
 #include "ui/resources/grit/webui_resources_map.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/grit/chromeos_resources.h"
 #include "chromeos/grit/chromeos_resources_map.h"
 #endif
@@ -65,9 +66,9 @@ const std::map<std::string, std::string> CreatePathPrefixAliasesMap() {
     // more context: crbug.com/1020284.
     {"@out_folder@/android_clang_arm/gen/ui/webui/resources/", ""},
 #endif  // defined(OS_ANDROID)
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     {"@out_folder@/gen/ui/chromeos/", "chromeos/"},
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   };
 
 #if !defined(OS_ANDROID)
@@ -80,6 +81,7 @@ const std::map<int, std::string> CreateContentResourceIdToAliasMap() {
   return std::map<int, std::string>{
       {IDR_ORIGIN_MOJO_HTML, "mojo/url/mojom/origin.mojom.html"},
       {IDR_ORIGIN_MOJO_JS, "mojo/url/mojom/origin.mojom-lite.js"},
+      {IDR_ORIGIN_MOJO_WEBUI_JS, "mojo/url/mojom/origin.mojom-webui.js"},
       {IDR_UNGUESSABLE_TOKEN_MOJO_HTML,
        "mojo/mojo/public/mojom/base/unguessable_token.mojom.html"},
       {IDR_UNGUESSABLE_TOKEN_MOJO_JS,
@@ -87,8 +89,8 @@ const std::map<int, std::string> CreateContentResourceIdToAliasMap() {
       {IDR_URL_MOJO_HTML, "mojo/url/mojom/url.mojom.html"},
       {IDR_URL_MOJO_JS, "mojo/url/mojom/url.mojom-lite.js"},
       {IDR_URL_MOJOM_WEBUI_JS, "mojo/url/mojom/url.mojom-webui.js"},
-      {IDR_VULKAN_INFO_MOJO_JS, "gpu/ipc/common/vulkan_info.mojom-lite.js"},
-      {IDR_VULKAN_TYPES_MOJO_JS, "gpu/ipc/common/vulkan_types.mojom-lite.js"},
+      {IDR_VULKAN_INFO_MOJO_JS, "gpu/ipc/common/vulkan_info.mojom-webui.js"},
+      {IDR_VULKAN_TYPES_MOJO_JS, "gpu/ipc/common/vulkan_types.mojom-webui.js"},
   };
 }
 
@@ -100,10 +102,12 @@ const std::map<int, std::string> CreateSkiaResourceIdToAliasMap() {
        "mojo/skia/public/mojom/image_info.mojom-lite.js"},
       {IDR_SKIA_SKCOLOR_MOJOM_LITE_JS,
        "mojo/skia/public/mojom/skcolor.mojom-lite.js"},
+      {IDR_SKIA_SKCOLOR_MOJOM_WEBUI_JS,
+       "mojo/skia/public/mojom/skcolor.mojom-webui.js"},
   };
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const std::map<int, std::string> CreateChromeosMojoResourceIdToAliasMap() {
   return std::map<int, std::string>{
       {IDR_CELLULAR_SETUP_MOJOM_HTML,
@@ -112,6 +116,12 @@ const std::map<int, std::string> CreateChromeosMojoResourceIdToAliasMap() {
       {IDR_CELLULAR_SETUP_MOJOM_LITE_JS,
        "mojo/chromeos/services/cellular_setup/public/mojom/"
        "cellular_setup.mojom-lite.js"},
+      {IDR_ESIM_MANAGER_MOJOM_HTML,
+       "mojo/chromeos/services/cellular_setup/public/mojom/"
+       "esim_manager.mojom.html"},
+      {IDR_ESIM_MANAGER_MOJOM_LITE_JS,
+       "mojo/chromeos/services/cellular_setup/public/mojom/"
+       "esim_manager.mojom-lite.js"},
       {IDR_MULTIDEVICE_DEVICE_SYNC_MOJOM_HTML,
        "mojo/chromeos/services/device_sync/public/mojom/"
        "device_sync.mojom.html"},
@@ -162,7 +172,7 @@ const std::map<int, std::string> CreateChromeosMojoResourceIdToAliasMap() {
        "network_diagnostics.mojom-lite.js"},
   };
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 void AddResource(const std::string& path,
                  int resource_id,
@@ -233,10 +243,10 @@ const ResourcesMap* CreateResourcesMap() {
       result);
   AddAliasedResourcesToMap(CreateSkiaResourceIdToAliasMap(), kSkiaResources,
                            kSkiaResourcesSize, result);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   AddAliasedResourcesToMap(CreateChromeosMojoResourceIdToAliasMap(),
                            kChromeosResources, kChromeosResourcesSize, result);
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
   return result;
 }
 

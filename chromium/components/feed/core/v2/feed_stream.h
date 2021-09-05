@@ -20,6 +20,7 @@
 #include "components/feed/core/proto/v2/wire/response.pb.h"
 #include "components/feed/core/v2/enums.h"
 #include "components/feed/core/v2/notice_card_tracker.h"
+#include "components/feed/core/v2/persistent_key_value_store_impl.h"
 #include "components/feed/core/v2/protocol_translator.h"
 #include "components/feed/core/v2/public/feed_stream_api.h"
 #include "components/feed/core/v2/request_throttler.h"
@@ -31,11 +32,6 @@
 #include "components/offline_pages/task/task_queue.h"
 
 class PrefService;
-
-namespace base {
-class Clock;
-class TickClock;
-}  // namespace base
 
 namespace offline_pages {
 class OfflinePageModel;
@@ -49,6 +45,7 @@ class ImageFetcher;
 class MetricsReporter;
 class OfflinePageSpy;
 class RefreshTaskScheduler;
+class PersistentKeyValueStoreImpl;
 class StreamModel;
 class SurfaceUpdater;
 struct StreamModelUpdateRequest;
@@ -99,8 +96,7 @@ class FeedStream : public FeedStreamApi,
     const std::string& GetSessionIdToken() const;
     base::Time GetSessionIdExpiryTime() const;
     void SetSessionId(std::string token, base::Time expiry_time);
-    void MaybeUpdateSessionId(base::Optional<std::string> token,
-                              const base::Clock* clock);
+    void MaybeUpdateSessionId(base::Optional<std::string> token);
 
     LocalActionId GetNextActionId();
 
@@ -116,10 +112,9 @@ class FeedStream : public FeedStreamApi,
              FeedNetwork* feed_network,
              ImageFetcher* image_fetcher,
              FeedStore* feed_store,
+             PersistentKeyValueStoreImpl* persistent_key_value_store,
              offline_pages::PrefetchService* prefetch_service,
              offline_pages::OfflinePageModel* offline_page_model,
-             const base::Clock* clock,
-             const base::TickClock* tick_clock,
              const ChromeInfo& chrome_info);
   ~FeedStream() override;
 
@@ -143,6 +138,7 @@ class FeedStream : public FeedStreamApi,
       const GURL& url,
       base::OnceCallback<void(NetworkResponse)> callback) override;
   void CancelImageFetch(ImageFetchId id) override;
+  PersistentKeyValueStoreImpl* GetPersistentKeyValueStore() override;
   void LoadMore(SurfaceId surface_id,
                 base::OnceCallback<void(bool)> callback) override;
   void ExecuteOperations(
@@ -238,6 +234,9 @@ class FeedStream : public FeedStreamApi,
   // Returns |LoadStreamStatus::kNoStatus| if loading may be attempted.
   LoadStreamStatus ShouldAttemptLoad(bool model_loading = false);
 
+  // Whether the last scheduled refresh was missed.
+  bool MissedLastRefresh();
+
   // Determines if a FeedQuery request can be made. If successful,
   // returns |LoadStreamStatus::kNoStatus| and acquires throttler quota.
   // Otherwise returns the reason. If |consume_quota| is false, no quota is
@@ -265,8 +264,6 @@ class FeedStream : public FeedStreamApi,
   // Returns the model if it is loaded, or null otherwise.
   StreamModel* GetModel() { return model_.get(); }
 
-  const base::Clock* GetClock() const { return clock_; }
-  const base::TickClock* GetTickClock() const { return tick_clock_; }
   RequestMetadata GetRequestMetadata(bool is_for_next_page) const;
 
   const WireResponseTranslator* GetWireResponseTranslator() const {
@@ -337,8 +334,7 @@ class FeedStream : public FeedStreamApi,
   FeedNetwork* feed_network_;
   ImageFetcher* image_fetcher_;
   FeedStore* store_;
-  const base::Clock* clock_;
-  const base::TickClock* tick_clock_;
+  PersistentKeyValueStoreImpl* persistent_key_value_store_;
   const WireResponseTranslator* wire_response_translator_;
 
   ChromeInfo chrome_info_;

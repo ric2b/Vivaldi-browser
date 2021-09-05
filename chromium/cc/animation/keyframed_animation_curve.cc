@@ -35,6 +35,27 @@ void InsertKeyframe(std::unique_ptr<KeyframeType> keyframe,
   keyframes->push_back(std::move(keyframe));
 }
 
+struct TimeValues {
+  base::TimeDelta start_time;
+  base::TimeDelta duration;
+  double progress;
+};
+
+template <typename KeyframeType>
+TimeValues GetTimeValues(const KeyframeType& start_frame,
+                         const KeyframeType& end_frame,
+                         double scaled_duration,
+                         base::TimeDelta time) {
+  TimeValues values;
+  values.start_time = start_frame.Time() * scaled_duration;
+  values.duration = (end_frame.Time() * scaled_duration) - values.start_time;
+  const base::TimeDelta elapsed = time - values.start_time;
+  values.progress = (elapsed.is_inf() || values.duration.is_zero())
+                        ? 1.0
+                        : (elapsed / values.duration);
+  return values;
+}
+
 template <typename KeyframeType>
 base::TimeDelta TransformedAnimationTime(
     const std::vector<std::unique_ptr<KeyframeType>>& keyframes,
@@ -42,14 +63,10 @@ base::TimeDelta TransformedAnimationTime(
     double scaled_duration,
     base::TimeDelta time) {
   if (timing_function) {
-    base::TimeDelta start_time = keyframes.front()->Time() * scaled_duration;
-    base::TimeDelta duration =
-        (keyframes.back()->Time() - keyframes.front()->Time()) *
-        scaled_duration;
-    const double progress =
-        duration.is_zero() ? 1.0 : ((time - start_time) / duration);
-
-    time = (duration * timing_function->GetValue(progress)) + start_time;
+    const auto values = GetTimeValues(*keyframes.front(), *keyframes.back(),
+                                      scaled_duration, time);
+    time = (values.duration * timing_function->GetValue(values.progress)) +
+           values.start_time;
   }
 
   return time;
@@ -75,12 +92,9 @@ double TransformedKeyframeProgress(
     double scaled_duration,
     base::TimeDelta time,
     size_t i) {
-  const base::TimeDelta start_time = keyframes[i]->Time() * scaled_duration;
-  const base::TimeDelta duration =
-      keyframes[i + 1]->Time() * scaled_duration - start_time;
   const double progress =
-      duration.is_zero() ? 1.0 : ((time - start_time) / duration);
-
+      GetTimeValues(*keyframes[i], *keyframes[i + 1], scaled_duration, time)
+          .progress;
   return keyframes[i]->timing_function()
              ? keyframes[i]->timing_function()->GetValue(progress)
              : progress;
@@ -389,47 +403,14 @@ bool KeyframedTransformAnimationCurve::PreservesAxisAlignment() const {
   return true;
 }
 
-bool KeyframedTransformAnimationCurve::IsTranslation() const {
-  for (const auto& keyframe : keyframes_) {
-    if (!keyframe->Value().IsTranslation() && !keyframe->Value().IsIdentity())
-      return false;
-  }
-  return true;
-}
-
-bool KeyframedTransformAnimationCurve::AnimationStartScale(
-    bool forward_direction,
-    float* start_scale) const {
-  DCHECK_GE(keyframes_.size(), 2ul);
-  *start_scale = 0.f;
-  size_t start_location = 0;
-  if (!forward_direction) {
-    start_location = keyframes_.size() - 1;
-  }
-
-  return keyframes_[start_location]->Value().ScaleComponent(start_scale);
-}
-
-bool KeyframedTransformAnimationCurve::MaximumTargetScale(
-    bool forward_direction,
-    float* max_scale) const {
+bool KeyframedTransformAnimationCurve::MaximumScale(float* max_scale) const {
   DCHECK_GE(keyframes_.size(), 2ul);
   *max_scale = 0.f;
-
-  // If |forward_direction| is true, then skip the first frame, otherwise
-  // skip the last frame, since that is the original position in the animation.
-  size_t start = 1;
-  size_t end = keyframes_.size();
-  if (!forward_direction) {
-    --start;
-    --end;
-  }
-
-  for (size_t i = start; i < end; ++i) {
-    float target_scale_for_segment = 0.f;
-    if (!keyframes_[i]->Value().ScaleComponent(&target_scale_for_segment))
+  for (auto& keyframe : keyframes_) {
+    float keyframe_scale = 0.f;
+    if (!keyframe->Value().ScaleComponent(&keyframe_scale))
       return false;
-    *max_scale = fmax(*max_scale, target_scale_for_segment);
+    *max_scale = fmax(*max_scale, keyframe_scale);
   }
   return true;
 }

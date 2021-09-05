@@ -113,8 +113,8 @@ class EnrollmentLocalPolicyServerBase : public OobeBaseTest {
   AutoEnrollmentCheckScreen* auto_enrollment_screen() {
     EXPECT_NE(WizardController::default_controller(), nullptr);
     AutoEnrollmentCheckScreen* auto_enrollment_screen =
-        AutoEnrollmentCheckScreen::Get(
-            WizardController::default_controller()->screen_manager());
+        WizardController::default_controller()
+            ->GetScreen<AutoEnrollmentCheckScreen>();
     EXPECT_NE(auto_enrollment_screen, nullptr);
     return auto_enrollment_screen;
   }
@@ -608,6 +608,10 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, DeviceDisabled) {
 
 // Attestation enrollment.
 IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, Attestation) {
+  // Even though the server would allow device attributes update, Chrome OS will
+  // not attempt that for attestation enrollment.
+  policy_server_.SetUpdateDeviceAttributesPermission(true);
+
   AllowlistSimpleChallengeSigningKey();
   policy_server_.SetFakeAttestationFlow();
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(

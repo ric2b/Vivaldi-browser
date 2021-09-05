@@ -52,11 +52,16 @@ NearbyShareDelegateImpl::~NearbyShareDelegateImpl() {
 }
 
 bool NearbyShareDelegateImpl::IsPodButtonVisible() {
-  return nearby_share_service_ != nullptr;
+  return nearby_share_service_ != nullptr &&
+         !nearby_share_service_->GetSettings()->IsDisabledByPolicy();
 }
 
 bool NearbyShareDelegateImpl::IsHighVisibilityOn() {
   return nearby_share_service_ && nearby_share_service_->IsInHighVisibility();
+}
+
+bool NearbyShareDelegateImpl::IsEnableHighVisibilityRequestActive() const {
+  return is_enable_high_visibility_request_active_;
 }
 
 base::TimeTicks NearbyShareDelegateImpl::HighVisibilityShutoffTime() const {
@@ -67,11 +72,17 @@ void NearbyShareDelegateImpl::EnableHighVisibility() {
   if (!nearby_share_service_)
     return;
 
+  // Automatically enable the feature if onboarding is already completed.
+  if (nearby_share_service_->GetSettings()->IsOnboardingComplete())
+    nearby_share_service_->GetSettings()->SetEnabled(true);
+
   settings_opener_->ShowSettingsPage(kStartReceivingQueryParam);
 
   if (!nearby_share_service_->GetSettings()->GetEnabled()) {
     onboarding_wait_timer_.Reset();
   }
+
+  is_enable_high_visibility_request_active_ = true;
 }
 
 void NearbyShareDelegateImpl::DisableHighVisibility() {
@@ -126,7 +137,13 @@ void NearbyShareDelegateImpl::OnEnabledChanged(bool enabled) {
   }
 }
 
+void NearbyShareDelegateImpl::OnHighVisibilityChangeRequested() {
+  is_enable_high_visibility_request_active_ = true;
+}
+
 void NearbyShareDelegateImpl::OnHighVisibilityChanged(bool high_visibility_on) {
+  is_enable_high_visibility_request_active_ = false;
+
   if (high_visibility_on) {
     shutoff_time_ = base::TimeTicks::Now() + kShutoffTimeout;
     shutoff_timer_.Reset();
@@ -155,6 +172,12 @@ void NearbyShareDelegateImpl::SettingsOpener::ShowSettingsPage(
     // Append a timestamp to make the url unique per-call. Otherwise, settings
     // will not respond to successive calls if the url does not change.
     query_string += "?" + sub_page + "&time=" + GetTimestampString();
+
+    if (sub_page == kStartReceivingQueryParam) {
+      // Attach high visibility shutoff timeout for display in webui.
+      query_string +=
+          "&timeout=" + base::NumberToString(kShutoffTimeout.InSeconds());
+    }
   }
 
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(

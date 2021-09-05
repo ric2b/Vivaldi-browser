@@ -176,13 +176,15 @@ void SyncEngineBackend::OnProtocolEvent(const ProtocolEvent& event) {
   }
 }
 
-void SyncEngineBackend::DoOnInvalidatorStateChange(InvalidatorState state) {
+void SyncEngineBackend::DoOnInvalidatorStateChange(
+    invalidation::InvalidatorState state) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  sync_manager_->SetInvalidatorEnabled(state == INVALIDATIONS_ENABLED);
+  sync_manager_->SetInvalidatorEnabled(state ==
+                                       invalidation::INVALIDATIONS_ENABLED);
 }
 
 bool SyncEngineBackend::ShouldIgnoreRedundantInvalidation(
-    const Invalidation& invalidation,
+    const invalidation::Invalidation& invalidation,
     ModelType type) {
   bool fcm_invalidation = base::FeatureList::IsEnabled(
       invalidation::switches::kFCMInvalidationsForSyncDontCheckVersion);
@@ -196,30 +198,27 @@ bool SyncEngineBackend::ShouldIgnoreRedundantInvalidation(
              << invalidation.version() << ", last seen version was "
              << last_invalidation->second;
     redundant_invalidation = true;
-    UMA_HISTOGRAM_ENUMERATION("Sync.RedundantInvalidationPerModelType", type,
-                              static_cast<int>(syncer::ModelType::NUM_ENTRIES));
-  } else {
-    UMA_HISTOGRAM_ENUMERATION("Sync.NonRedundantInvalidationPerModelType", type,
-                              static_cast<int>(syncer::ModelType::NUM_ENTRIES));
+    UMA_HISTOGRAM_ENUMERATION("Sync.RedundantInvalidationPerModelType2",
+                              ModelTypeHistogramValue(type));
   }
 
   return !fcm_invalidation && redundant_invalidation;
 }
 
 void SyncEngineBackend::DoOnIncomingInvalidation(
-    const TopicInvalidationMap& invalidation_map) {
+    const invalidation::TopicInvalidationMap& invalidation_map) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  for (const Topic& topic : invalidation_map.GetTopics()) {
+  for (const invalidation::Topic& topic : invalidation_map.GetTopics()) {
     ModelType type;
     if (!NotificationTypeToRealModelType(topic, &type)) {
       DLOG(WARNING) << "Notification has invalid topic: " << topic;
     } else {
       UMA_HISTOGRAM_ENUMERATION("Sync.InvalidationPerModelType",
                                 ModelTypeHistogramValue(type));
-      SingleObjectInvalidationSet invalidation_set =
+      invalidation::SingleObjectInvalidationSet invalidation_set =
           invalidation_map.ForTopic(topic);
-      for (Invalidation invalidation : invalidation_set) {
+      for (invalidation::Invalidation invalidation : invalidation_set) {
         if (ShouldIgnoreRedundantInvalidation(invalidation, type)) {
           continue;
         }
@@ -414,6 +413,9 @@ void SyncEngineBackend::DoPurgeDisabledTypes(const ModelTypeSet& to_purge) {
     // for Nigori we need to do it here.
     // TODO(crbug.com/922900): try to find better way to implement this logic,
     // it's likely happen only due to BackendMigrator.
+    // TODO(crbug.com/1142771): Evaluate whether this logic is necessary at all.
+    // There's no "purging" logic for any other data type, so likely it's not
+    // necessary for NIGORI either.
     sync_manager_->GetModelTypeConnector()->DisconnectDataType(NIGORI);
     nigori_controller_->Stop(ShutdownReason::DISABLE_SYNC, base::DoNothing());
     LoadAndConnectNigoriController();
@@ -480,10 +482,9 @@ void SyncEngineBackend::DisableProtocolEventForwarding() {
 }
 
 void SyncEngineBackend::DoOnCookieJarChanged(bool account_mismatch,
-                                             bool empty_jar,
                                              base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  sync_manager_->OnCookieJarChanged(account_mismatch, empty_jar);
+  sync_manager_->OnCookieJarChanged(account_mismatch);
   if (!callback.is_null()) {
     host_.Call(FROM_HERE, &SyncEngineImpl::OnCookieJarChangedDoneOnFrontendLoop,
                std::move(callback));
@@ -526,12 +527,16 @@ void SyncEngineBackend::DoOnInvalidationReceived(const std::string& payload) {
   }
 }
 
-void SyncEngineBackend::DoOnActiveDevicesChanged(size_t active_devices) {
+void SyncEngineBackend::DoOnActiveDevicesChanged(
+    size_t active_devices,
+    std::vector<std::string> fcm_registration_tokens) {
   // If |active_devices| is 0, then current client doesn't know if there are any
   // other devices. It's safer to consider that there are some other active
   // devices.
   const bool single_client = active_devices == 1;
   sync_manager_->UpdateSingleClientStatus(single_client);
+  sync_manager_->UpdateActiveDeviceFCMRegistrationTokens(
+      std::move(fcm_registration_tokens));
 }
 
 void SyncEngineBackend::GetNigoriNodeForDebugging(AllNodesCallback callback) {

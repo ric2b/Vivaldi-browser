@@ -128,53 +128,6 @@ MouseEvent* MouseEvent::Create(const AtomicString& event_type,
       menu_source_type);
 }
 
-MouseEvent* MouseEvent::Create(const AtomicString& event_type,
-                               AbstractView* view,
-                               const Event* underlying_event,
-                               SimulatedClickCreationScope creation_scope) {
-  WebInputEvent::Modifiers modifiers = WebInputEvent::kNoModifiers;
-  if (const UIEventWithKeyState* key_state_event =
-          FindEventWithKeyState(underlying_event)) {
-    modifiers = key_state_event->GetModifiers();
-  }
-
-  SyntheticEventType synthetic_type = kPositionless;
-  MouseEventInit* initializer = MouseEventInit::Create();
-  if (const auto* mouse_event = DynamicTo<MouseEvent>(underlying_event)) {
-    synthetic_type = kRealOrIndistinguishable;
-    initializer->setScreenX(mouse_event->screenX());
-    initializer->setScreenY(mouse_event->screenY());
-    initializer->setSourceCapabilities(
-        view ? view->GetInputDeviceCapabilities()->FiresTouchEvents(false)
-             : nullptr);
-  }
-
-  initializer->setBubbles(true);
-  initializer->setCancelable(true);
-  initializer->setView(view);
-  initializer->setComposed(true);
-  UIEventWithKeyState::SetFromWebInputEventModifiers(initializer, modifiers);
-  initializer->setButtons(
-      MouseEvent::WebInputEventModifiersToButtons(modifiers));
-
-  base::TimeTicks timestamp = underlying_event
-                                  ? underlying_event->PlatformTimeStamp()
-                                  : base::TimeTicks::Now();
-  MouseEvent* created_event = MakeGarbageCollected<MouseEvent>(
-      event_type, initializer, timestamp, synthetic_type);
-
-  created_event->SetTrusted(creation_scope ==
-                            SimulatedClickCreationScope::kFromUserAgent);
-  created_event->SetUnderlyingEvent(underlying_event);
-  if (synthetic_type == kRealOrIndistinguishable) {
-    auto* mouse_event = To<MouseEvent>(created_event->UnderlyingEvent());
-    created_event->InitCoordinates(mouse_event->clientX(),
-                                   mouse_event->clientY());
-  }
-
-  return created_event;
-}
-
 MouseEvent::MouseEvent()
     : position_type_(PositionType::kPosition),
       button_(0),
@@ -257,8 +210,6 @@ void MouseEvent::SetCoordinatesFromWebPointerProperties(
     initializer->setMovementY(web_pointer_properties.movement_y);
   }
 }
-
-MouseEvent::~MouseEvent() = default;
 
 uint16_t MouseEvent::WebInputEventModifiersToButtons(unsigned modifiers) {
   uint16_t buttons = 0;

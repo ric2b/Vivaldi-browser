@@ -395,6 +395,8 @@ api::autotest_private::AppReadiness GetAppReadiness(
     case apps::mojom::Readiness::kUninstalledByUser:
       return api::autotest_private::AppReadiness::
           APP_READINESS_UNINSTALLEDBYUSER;
+    case apps::mojom::Readiness::kRemoved:
+      return api::autotest_private::AppReadiness::APP_READINESS_REMOVED;
     case apps::mojom::Readiness::kUnknown:
       return api::autotest_private::AppReadiness::APP_READINESS_NONE;
   }
@@ -1520,10 +1522,9 @@ AutotestPrivateGetArcStartTimeFunction::Run() {
   if (!arc_session_manager)
     return RespondNow(Error("Could not find ARC session manager"));
 
-  double start_time =
-      (arc_session_manager->arc_start_time() - base::TimeTicks())
-          .InMillisecondsF();
-  return RespondNow(OneArgument(base::Value(start_time)));
+  const double start_ticks =
+      (arc_session_manager->start_time() - base::TimeTicks()).InMillisecondsF();
+  return RespondNow(OneArgument(base::Value(start_ticks)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1542,8 +1543,26 @@ ExtensionFunction::ResponseAction AutotestPrivateGetArcStateFunction::Run() {
   if (!arc::IsArcAllowedForProfile(profile))
     return RespondNow(Error("ARC is not available for the current user"));
 
+  arc::ArcSessionManager* const arc_session_manager =
+      arc::ArcSessionManager::Get();
+  if (!arc_session_manager)
+    return RespondNow(Error("Could not find ARC session manager"));
+
+  const base::Time now_time = base::Time::Now();
+  const base::TimeTicks now_ticks = base::TimeTicks::Now();
+  const base::TimeTicks pre_start_time = arc_session_manager->pre_start_time();
+  const base::TimeTicks start_time = arc_session_manager->start_time();
+
   arc_state.provisioned = arc::IsArcProvisioned(profile);
   arc_state.tos_needed = arc::IsArcTermsOfServiceNegotiationNeeded(profile);
+  arc_state.pre_start_time =
+      pre_start_time.is_null()
+          ? 0
+          : (now_time - (now_ticks - pre_start_time)).ToJsTime();
+  arc_state.start_time = start_time.is_null()
+                             ? 0
+                             : (now_time - (now_ticks - start_time)).ToJsTime();
+
   return RespondNow(
       OneArgument(base::Value::FromUniquePtrValue(arc_state.ToValue())));
 }
@@ -1971,7 +1990,7 @@ AutotestPrivateSetCrostiniEnabledFunction::Run() {
   DVLOG(1) << "AutotestPrivateSetCrostiniEnabledFunction " << params->enabled;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (!crostini::CrostiniFeatures::Get()->IsUIAllowed(profile))
+  if (!crostini::CrostiniFeatures::Get()->IsAllowedNow(profile))
     return RespondNow(Error(kCrostiniNotAvailableForCurrentUserError));
 
   // Set the preference to indicate Crostini is enabled/disabled.
@@ -1997,7 +2016,7 @@ AutotestPrivateRunCrostiniInstallerFunction::Run() {
   DVLOG(1) << "AutotestPrivateInstallCrostiniFunction";
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (!crostini::CrostiniFeatures::Get()->IsUIAllowed(profile))
+  if (!crostini::CrostiniFeatures::Get()->IsAllowedNow(profile))
     return RespondNow(Error(kCrostiniNotAvailableForCurrentUserError));
 
   // Run GUI installer which will install crostini vm / container and
@@ -2038,7 +2057,7 @@ AutotestPrivateRunCrostiniUninstallerFunction::Run() {
   DVLOG(1) << "AutotestPrivateRunCrostiniUninstallerFunction";
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (!crostini::CrostiniFeatures::Get()->IsUIAllowed(profile))
+  if (!crostini::CrostiniFeatures::Get()->IsAllowedNow(profile))
     return RespondNow(Error(kCrostiniNotAvailableForCurrentUserError));
 
   // Run GUI uninstaller which will remove crostini vm / container. We then
@@ -2074,7 +2093,8 @@ ExtensionFunction::ResponseAction AutotestPrivateExportCrostiniFunction::Run() {
   DVLOG(1) << "AutotestPrivateExportCrostiniFunction " << params->path;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (!crostini::CrostiniFeatures::Get()->IsUIAllowed(profile)) {
+  if (!crostini::CrostiniFeatures::Get()->IsAllowedNow(profile) ||
+      !crostini::CrostiniFeatures::Get()->IsExportImportUIAllowed(profile)) {
     return RespondNow(Error(kCrostiniNotAvailableForCurrentUserError));
   }
 
@@ -2115,7 +2135,8 @@ ExtensionFunction::ResponseAction AutotestPrivateImportCrostiniFunction::Run() {
   DVLOG(1) << "AutotestPrivateImportCrostiniFunction " << params->path;
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (!crostini::CrostiniFeatures::Get()->IsUIAllowed(profile))
+  if (!crostini::CrostiniFeatures::Get()->IsAllowedNow(profile) ||
+      !crostini::CrostiniFeatures::Get()->IsExportImportUIAllowed(profile))
     return RespondNow(Error(kCrostiniNotAvailableForCurrentUserError));
 
   base::FilePath path(params->path);
@@ -2215,12 +2236,13 @@ AutotestPrivateTakeScreenshotFunction::
 ExtensionFunction::ResponseAction AutotestPrivateTakeScreenshotFunction::Run() {
   DVLOG(1) << "AutotestPrivateTakeScreenshotFunction";
   auto grabber = std::make_unique<ui::ScreenshotGrabber>();
+  auto* const grabber_ptr = grabber.get();
   // TODO(mash): Fix for mash, http://crbug.com/557397
   aura::Window* primary_root = ash::Shell::GetPrimaryRootWindow();
   // Pass the ScreenshotGrabber to the callback so that it stays alive for the
   // duration of the operation, it'll then get deallocated when the callback
   // completes.
-  grabber->TakeScreenshot(
+  grabber_ptr->TakeScreenshot(
       primary_root, primary_root->bounds(),
       base::BindOnce(&AutotestPrivateTakeScreenshotFunction::ScreenshotTaken,
                      this, std::move(grabber)));
@@ -2261,7 +2283,8 @@ AutotestPrivateTakeScreenshotForDisplayFunction::Run() {
     const int64_t display_id =
         display::Screen::GetScreen()->GetDisplayNearestWindow(window).id();
     if (display_id == target_display_id) {
-      grabber->TakeScreenshot(
+      auto* const grabber_ptr = grabber.get();
+      grabber_ptr->TakeScreenshot(
           window, window->bounds(),
           base::BindOnce(
               &AutotestPrivateTakeScreenshotForDisplayFunction::ScreenshotTaken,
@@ -3034,6 +3057,7 @@ AutotestPrivateGetAllInstalledAppsFunction::Run() {
     app.app_id = update.AppId();
     app.name = update.Name();
     app.short_name = update.ShortName();
+    app.publisher_id = update.PublisherId();
     app.additional_search_terms = update.AdditionalSearchTerms();
     app.type = GetAppType(update.AppType());
     app.install_source = GetAppInstallSource(update.InstallSource());
@@ -3815,9 +3839,9 @@ ExtensionFunction::ResponseAction AutotestPrivateCloseAppWindowFunction::Run() {
 
 // Used to notify when when a certain URL contains a WPA.
 class AutotestPrivateInstallPWAForCurrentURLFunction::PWABannerObserver
-    : public banners::AppBannerManager::Observer {
+    : public webapps::AppBannerManager::Observer {
  public:
-  PWABannerObserver(banners::AppBannerManager* manager,
+  PWABannerObserver(webapps::AppBannerManager* manager,
                     base::OnceCallback<void()> callback)
       : callback_(std::move(callback)), app_banner_manager_(manager) {
     DCHECK(manager);
@@ -3857,12 +3881,12 @@ class AutotestPrivateInstallPWAForCurrentURLFunction::PWABannerObserver
   }
 
  private:
-  using Installable = banners::AppBannerManager::InstallableWebAppCheckResult;
+  using Installable = webapps::AppBannerManager::InstallableWebAppCheckResult;
 
-  ScopedObserver<banners::AppBannerManager, banners::AppBannerManager::Observer>
+  ScopedObserver<webapps::AppBannerManager, webapps::AppBannerManager::Observer>
       observer_{this};
   base::OnceCallback<void()> callback_;
-  banners::AppBannerManager* app_banner_manager_;
+  webapps::AppBannerManager* app_banner_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(PWABannerObserver);
 };
@@ -3913,8 +3937,8 @@ AutotestPrivateInstallPWAForCurrentURLFunction::Run() {
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
 
-  banners::AppBannerManager* app_banner_manager =
-      banners::AppBannerManagerDesktop::FromWebContents(web_contents);
+  webapps::AppBannerManager* app_banner_manager =
+      webapps::AppBannerManagerDesktop::FromWebContents(web_contents);
   if (!app_banner_manager) {
     return RespondNow(Error("Failed to create AppBannerManager"));
   }
@@ -4364,7 +4388,7 @@ void AutotestPrivateSetMetricsEnabledFunction::OnStatsReportingStateChanged() {
   } else {
     Respond(Error("Failed to set metrics consent"));
   }
-  stats_reporting_observer_subscription_.reset();
+  stats_reporting_observer_subscription_ = {};
 }
 
 ///////////////////////////////////////////////////////////////////////////////

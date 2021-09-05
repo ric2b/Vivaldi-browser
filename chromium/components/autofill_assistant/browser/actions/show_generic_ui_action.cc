@@ -5,11 +5,14 @@
 #include "components/autofill_assistant/browser/actions/show_generic_ui_action.h"
 
 #include <utility>
-#include "base/optional.h"
 
+#include "base/containers/flat_map.h"
+#include "base/optional.h"
 #include "components/autofill_assistant/browser/actions/action_delegate.h"
 #include "components/autofill_assistant/browser/client_status.h"
+#include "components/autofill_assistant/browser/user_data_util.h"
 #include "components/autofill_assistant/browser/user_model.h"
+#include "components/autofill_assistant/browser/web/element.h"
 #include "content/public/browser/web_contents.h"
 
 namespace autofill_assistant {
@@ -238,7 +241,8 @@ void ShowGenericUiAction::RegisterChecks(
 void ShowGenericUiAction::OnPreconditionResult(
     size_t precondition_index,
     const ClientStatus& status,
-    const std::vector<std::string>& ignored_payloads) {
+    const std::vector<std::string>& ignored_payloads,
+    const base::flat_map<std::string, DomObjectFrameStack>& ignored_elements) {
   if (should_end_action_) {
     return;
   }
@@ -322,8 +326,7 @@ void ShowGenericUiAction::OnPersonalDataChanged() {
         std::vector<std::unique_ptr<autofill::AutofillProfile>>>();
     for (const auto* profile :
          delegate_->GetPersonalDataManager()->GetProfilesToSuggest()) {
-      profiles->emplace_back(
-          std::make_unique<autofill::AutofillProfile>(*profile));
+      profiles->emplace_back(MakeUniqueFromProfile(*profile));
     }
     WriteProfilesToUserModel(std::move(profiles),
                              proto_.show_generic_ui().request_profiles(),

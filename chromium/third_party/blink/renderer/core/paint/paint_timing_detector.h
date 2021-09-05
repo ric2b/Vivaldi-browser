@@ -119,15 +119,15 @@ class CORE_EXPORT PaintTimingDetector
   PaintTimingDetector(LocalFrameView*);
 
   static void NotifyBackgroundImagePaint(
-      const Node*,
-      const Image*,
-      const StyleFetchedImage*,
+      const Node&,
+      const Image&,
+      const StyleFetchedImage&,
       const PropertyTreeStateOrAlias& current_paint_chunk_properties,
       const IntRect& image_border);
   static void NotifyImagePaint(
       const LayoutObject&,
       const IntSize& intrinsic_size,
-      const ImageResourceContent* cached_image,
+      const ImageResourceContent& cached_image,
       const PropertyTreeStateOrAlias& current_paint_chunk_properties,
       const IntRect& image_border);
   inline static void NotifyTextPaint(const IntRect& text_visual_rect);
@@ -182,6 +182,11 @@ class CORE_EXPORT PaintTimingDetector
   uint64_t LargestImagePaintSize() const { return largest_image_paint_size_; }
   base::TimeTicks LargestTextPaint() const { return largest_text_paint_time_; }
   uint64_t LargestTextPaintSize() const { return largest_text_paint_size_; }
+
+  base::TimeTicks LargestContentfulPaint() const {
+    return largest_contentful_paint_time_;
+  }
+
   // Experimental counterparts of the above methods. Currently these values are
   // computed by looking at the largest content seen so far, but excluding
   // content that is removed.
@@ -216,6 +221,7 @@ class CORE_EXPORT PaintTimingDetector
   void OnInputOrScroll();
   bool HasLargestImagePaintChanged(base::TimeTicks, uint64_t size) const;
   bool HasLargestTextPaintChanged(base::TimeTicks, uint64_t size) const;
+  void UpdateLargestContentfulPaintTime();
   Member<LocalFrameView> frame_view_;
   // This member lives forever because it is also used for Text Element Timing.
   Member<TextPaintTimingDetector> text_paint_timing_detector_;
@@ -240,6 +246,7 @@ class CORE_EXPORT PaintTimingDetector
   uint64_t largest_image_paint_size_ = 0;
   base::TimeTicks largest_text_paint_time_;
   uint64_t largest_text_paint_size_ = 0;
+  base::TimeTicks largest_contentful_paint_time_;
 
   base::TimeTicks experimental_largest_image_paint_time_;
   uint64_t experimental_largest_image_paint_size_ = 0;

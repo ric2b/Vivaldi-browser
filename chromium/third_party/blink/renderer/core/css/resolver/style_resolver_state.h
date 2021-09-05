@@ -77,7 +77,6 @@ class CORE_EXPORT StyleResolverState {
   Document& GetDocument() const { return *document_; }
   // These are all just pass-through methods to ElementResolveContext.
   Element& GetElement() const { return element_context_.GetElement(); }
-  TreeScope& GetTreeScope() const;
   const ContainerNode* ParentNode() const {
     return element_context_.ParentNode();
   }
@@ -88,9 +87,6 @@ class CORE_EXPORT StyleResolverState {
   }
   EInsideLink ElementLinkState() const {
     return element_context_.ElementLinkState();
-  }
-  bool DistributedToV0InsertionPoint() const {
-    return element_context_.DistributedToV0InsertionPoint();
   }
 
   const ElementResolveContext& ElementContext() const {

@@ -53,6 +53,8 @@ parser.add_argument("--goma", action="store_true");
 parser.add_argument("--no-hermetic", action="store_true");
 parser.add_argument("--args-gn")
 parser.add_argument("--filter-project")
+parser.add_argument("--extra-debug", action="append", default=[])
+parser.add_argument("--extra-release", action="append", default=[])
 parser.add_argument("args", nargs=argparse.REMAINDER);
 
 args = parser.parse_args()
@@ -275,10 +277,11 @@ if args.refresh or not args.args:
 
   profiles = [
       # args MUST be unquoted. are passed directly to the command
-      ("out/Release", ['--args='+ include_arg("Release") +'is_debug=false'+platform_target+' ' + gn_defines]),
-    ]
+      ("out/"+project, ['--args='+ include_arg(project) +'is_debug=false'+platform_target+' ' + gn_defines])
+    for project in ["Release"] + args.extra_release]
   if not is_builder and not args.official:
-    profiles.append(("out/Debug", ['--args='+ include_arg("Debug") +'is_debug=true'+platform_target+' ' + gn_defines]))
+    for project in ["Debug"] + args.extra_debug:
+      profiles.append(("out/"+project, ['--args='+ include_arg(project) +'is_debug=true'+platform_target+' ' + gn_defines]))
   if is_windows and is_builder:
     profiles.append(("out/Release_x64",
                     ['--args='+ include_arg("Release_x64") +'is_debug=false target_cpu="x64"'+gn_defines]))

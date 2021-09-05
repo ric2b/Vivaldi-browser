@@ -125,11 +125,15 @@ WorkletGlobalScope::WorkletGlobalScope(
 
   OriginTrialContext::AddTokens(this,
                                 creation_params->origin_trial_tokens.get());
+
+  // WorkletGlobalScopes are not currently provided with UKM source IDs.
+  DCHECK_EQ(creation_params->ukm_source_id, ukm::kInvalidSourceId);
 }
 
 WorkletGlobalScope::~WorkletGlobalScope() = default;
 
-BrowserInterfaceBrokerProxy& WorkletGlobalScope::GetBrowserInterfaceBroker() {
+const BrowserInterfaceBrokerProxy&
+WorkletGlobalScope::GetBrowserInterfaceBroker() const {
   NOTIMPLEMENTED();
   return GetEmptyBrowserInterfaceBroker();
 }

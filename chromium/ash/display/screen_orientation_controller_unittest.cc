@@ -79,8 +79,8 @@ void SetInternalDisplayRotation(display::Display::Rotation rotation) {
 }
 
 void TriggerLidUpdate(const gfx::Vector3dF& lid) {
-  scoped_refptr<AccelerometerUpdate> update(new AccelerometerUpdate());
-  update->Set(ACCELEROMETER_SOURCE_SCREEN, lid.x(), lid.y(), lid.z());
+  AccelerometerUpdate update;
+  update.Set(ACCELEROMETER_SOURCE_SCREEN, lid.x(), lid.y(), lid.z());
   Shell::Get()->screen_orientation_controller()->OnAccelerometerUpdated(update);
 }
 
@@ -997,6 +997,40 @@ TEST_F(ScreenOrientationControllerTest,
       screen_orientation_controller->GetCurrentAppRequestedOrientationLock());
   EXPECT_EQ(display::Display::ROTATE_270, GetCurrentInternalDisplayRotation());
   EXPECT_EQ(OrientationLockType::kAny, UserLockedOrientation());
+}
+
+class ForceInPhysicalTabletStateTest : public ScreenOrientationControllerTest {
+ public:
+  ForceInPhysicalTabletStateTest() = default;
+  ForceInPhysicalTabletStateTest(const ForceInPhysicalTabletStateTest&) =
+      delete;
+  ForceInPhysicalTabletStateTest& operator=(
+      const ForceInPhysicalTabletStateTest&) = delete;
+  ~ForceInPhysicalTabletStateTest() override = default;
+
+  // ScreenOrientationControllerTest:
+  void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kForceInTabletPhysicalState);
+    ScreenOrientationControllerTest::SetUp();
+  }
+};
+
+// Tests that screen rotation is supported while the device is forced to stay
+// in physical tablet state.
+TEST_F(ForceInPhysicalTabletStateTest, ScreenRotation) {
+  TabletModeControllerTestApi tablet_mode_controller_test_api;
+  ASSERT_TRUE(tablet_mode_controller_test_api.IsInPhysicalTabletState());
+
+  // Test rotating in all directions are supported.
+  TriggerLidUpdate(gfx::Vector3dF(kMeanGravityFloat, 0.0f, 0.0f));
+  EXPECT_EQ(display::Display::ROTATE_90, GetCurrentInternalDisplayRotation());
+  TriggerLidUpdate(gfx::Vector3dF(0.0f, -kMeanGravityFloat, 0.0f));
+  EXPECT_EQ(display::Display::ROTATE_180, GetCurrentInternalDisplayRotation());
+  TriggerLidUpdate(gfx::Vector3dF(-kMeanGravityFloat, 0.0f, 0.0f));
+  EXPECT_EQ(display::Display::ROTATE_270, GetCurrentInternalDisplayRotation());
+  TriggerLidUpdate(gfx::Vector3dF(0.0f, kMeanGravityFloat, 0.0f));
+  EXPECT_EQ(display::Display::ROTATE_0, GetCurrentInternalDisplayRotation());
 }
 
 }  // namespace ash

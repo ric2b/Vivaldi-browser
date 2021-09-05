@@ -7,14 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/strings/stringprintf.h"
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/hid/hid_chooser_context.h"
 #include "chrome/browser/hid/hid_chooser_context_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/usb/usb_blocklist.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
+#include "services/device/public/cpp/hid/hid_blocklist.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace {
@@ -74,6 +72,12 @@ base::string16 HidChooserController::GetNoOptionsText() const {
 
 base::string16 HidChooserController::GetOkButtonLabel() const {
   return l10n_util::GetStringUTF16(IDS_USB_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT);
+}
+
+std::pair<base::string16, base::string16>
+HidChooserController::GetThrobberLabelAndTooltip() const {
+  return {l10n_util::GetStringUTF16(IDS_HID_CHOOSER_LOADING_LABEL),
+          l10n_util::GetStringUTF16(IDS_HID_CHOOSER_LOADING_LABEL_TOOLTIP)};
 }
 
 size_t HidChooserController::NumOptions() const {
@@ -193,8 +197,8 @@ void HidChooserController::OnGotDevices(
 
 bool HidChooserController::DisplayDevice(
     const device::mojom::HidDeviceInfo& device) const {
-  // Do not pass the device to the chooser if it is on the USB blocklist.
-  if (UsbBlocklist::Get().IsExcluded({device.vendor_id, device.product_id, 0}))
+  // Do not pass the device to the chooser if it is excluded by the blocklist.
+  if (device::HidBlocklist::IsDeviceExcluded(device))
     return false;
 
   // Do not pass the device to the chooser if it has a top-level collection with

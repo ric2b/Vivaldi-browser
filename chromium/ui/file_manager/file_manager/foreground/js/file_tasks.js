@@ -2,11 +2,43 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {Menu} from 'chrome://resources/js/cr/ui/menu.m.js';
+// #import {MultiMenuButton} from './ui/multi_menu_button.m.js';
+// #import {VolumeInfo} from '../../../externs/volume_info.m.js';
+// #import {ProgressCenter} from '../../../externs/background/progress_center.m.js';
+// #import {Crostini} from '../../../externs/background/crostini.m.js';
+// #import {NamingController} from './naming_controller.m.js';
+// #import {TaskHistory} from './task_history.m.js';
+// #import {FileManagerUI} from './ui/file_manager_ui.m.js';
+// #import {DirectoryModel} from './directory_model.m.js';
+// #import {MetadataModel} from './metadata/metadata_model.m.js';
+// #import {VolumeManager} from '../../../externs/volume_manager.m.js';
+// #import {FilesMenuItem} from './ui/files_menu.m.js';
+// #import {decorate} from 'chrome://resources/js/cr/ui.m.js';
+// #import {FilesPasswordDialog} from '../elements/files_password_dialog.m.js';
+// #import {ProgressCenterItem, ProgressItemType, ProgressItemState} from '../../common/js/progress_center_common.m.js';
+// #import {webStoreUtils} from './web_store_utils.m.js';
+// #import {FileTransferController} from './file_transfer_controller.m.js';
+// #import {FilesConfirmDialog} from './ui/files_confirm_dialog.m.js';
+// #import {VolumeManagerCommon} from '../../../base/js/volume_manager_types.m.js';
+// #import {FileType} from '../../common/js/file_type.m.js';
+// #import {SuggestAppsDialog} from './ui/suggest_apps_dialog.m.js';
+// #import {constants} from './constants.m.js';
+// #import {util, strf, str} from '../../common/js/util.m.js';
+// #import {AsyncUtil} from '../../common/js/async_util.m.js'
+// #import {metrics} from '../../common/js/metrics.m.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// #import {assert} from 'chrome://resources/js/assert.m.js';
+// #import {DefaultTaskDialog} from './ui/default_task_dialog.m.js';
+// #import {ComboButton} from './ui/combobutton.m.js';
+// clang-format on
+
 /**
  * Represents a collection of available tasks to execute for a specific list
  * of entries.
  */
-class FileTasks {
+/* #export */ class FileTasks {
   /**
    * @param {!VolumeManager} volumeManager
    * @param {!MetadataModel} metadataModel
@@ -482,6 +514,60 @@ class FileTasks {
   }
 
   /**
+   * @param {!Entry} entry
+   * @param {!VolumeManager} volumeManager
+   * @return {boolean} True if the entry is from MyFiles.
+   */
+  static isMyFilesEntry(entry, volumeManager) {
+    const location = volumeManager.getLocationInfo(entry);
+    return !!location &&
+        location.rootType === VolumeManagerCommon.RootType.DOWNLOADS;
+  }
+
+  /**
+   * @param {!Array<!Entry>} entries Selected entries to be moved or copied.
+   * @param {!VolumeManager} volumeManager
+   * @param {!FileManagerUI} ui FileManager UI to show dialog.
+   * @param {string} title Dialog title.
+   * @param {?FileTransferController} fileTransferController
+   * @param {!DirectoryModel} directoryModel
+   */
+  static showPluginVmMoveDialog(
+      entries, volumeManager, ui, title, fileTransferController,
+      directoryModel) {
+    if (entries.length == 0) {
+      return;
+    }
+    const isMyFiles = FileTasks.isMyFilesEntry(entries[0], volumeManager);
+    const [messageId, buttonId, toMove] = isMyFiles ?
+        [
+          'UNABLE_TO_OPEN_WITH_PLUGIN_VM_DIRECTORY_NOT_SHARED_MESSAGE',
+          'CONFIRM_MOVE_BUTTON_LABEL',
+          true,
+        ] :
+        [
+          'UNABLE_TO_OPEN_WITH_PLUGIN_VM_EXTERNAL_DRIVE_MESSAGE',
+          'CONFIRM_COPY_BUTTON_LABEL',
+          false,
+        ];
+    const dialog = new FilesConfirmDialog(ui.element);
+    dialog.setOkLabel(strf(buttonId));
+    dialog.show(strf(messageId, title), async () => {
+      if (!fileTransferController) {
+        console.error('FileTransferController not set');
+        return;
+      }
+
+      const pvmDir = await FileTasks.getPvmSharedDir_(volumeManager);
+
+      fileTransferController.executePaste(new FileTransferController.PastePlan(
+          entries.map(e => e.toURL()), [], pvmDir,
+          assert(volumeManager.getLocationInfo(pvmDir)), toMove));
+      directoryModel.changeDirectoryEntry(pvmDir);
+    });
+  }
+
+  /**
    * Executes default task.
    *
    * @param {function(boolean, Array<!Entry>)=} opt_callback Called when the
@@ -666,38 +752,10 @@ class FileTasks {
             }
           });
           break;
-        case taskResult.FAILED_PLUGIN_VM_TASK_DIRECTORY_NOT_SHARED:
-        case taskResult.FAILED_PLUGIN_VM_TASK_EXTERNAL_DRIVE:
-          const [messageId, buttonId, toMove] =
-              result == taskResult.FAILED_PLUGIN_VM_TASK_DIRECTORY_NOT_SHARED ?
-              [
-                'UNABLE_TO_OPEN_WITH_PLUGIN_VM_DIRECTORY_NOT_SHARED_MESSAGE',
-                'CONFIRM_MOVE_BUTTON_LABEL',
-                true,
-              ] :
-              [
-                'UNABLE_TO_OPEN_WITH_PLUGIN_VM_EXTERNAL_DRIVE_MESSAGE',
-                'CONFIRM_COPY_BUTTON_LABEL',
-                false,
-              ];
-          const dialog = new FilesConfirmDialog(this.ui_.element);
-          dialog.setOkLabel(strf(buttonId));
-          dialog.show(
-              strf(messageId, task.title), async () => {
-                if (!this.fileTransferController_) {
-                  console.error('FileTransferController not set');
-                  return;
-                }
-
-                const pvmDir = await this.getPvmSharedDir_();
-
-                this.fileTransferController_.executePaste(
-                    new FileTransferController.PastePlan(
-                        this.entries_.map(e => e.toURL()), pvmDir,
-                        assert(this.volumeManager_.getLocationInfo(pvmDir)),
-                        toMove));
-                this.directoryModel_.changeDirectoryEntry(pvmDir);
-              });
+        case taskResult.FAILED_PLUGIN_VM_DIRECTORY_NOT_SHARED:
+          FileTasks.showPluginVmMoveDialog(
+              this.entries_, this.volumeManager_, this.ui_, task.title,
+              this.fileTransferController_, this.directoryModel_);
           break;
       }
     };
@@ -1280,9 +1338,12 @@ class FileTasks {
     return null;
   }
 
-  async getPvmSharedDir_() {
+  /**
+   * @param {!VolumeManager} volumeManager
+   */
+  static async getPvmSharedDir_(volumeManager) {
     return new Promise((resolve, reject) => {
-      this.volumeManager_
+      volumeManager
           .getCurrentProfileVolumeInfo(VolumeManagerCommon.VolumeType.DOWNLOADS)
           .fileSystem.root.getDirectory(
               'PvmDefault', {create: false},

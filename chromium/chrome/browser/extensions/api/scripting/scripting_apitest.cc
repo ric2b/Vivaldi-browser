@@ -80,8 +80,7 @@ IN_PROC_BROWSER_TEST_F(ScriptingAPITest, SubFramesTests) {
       embedded_test_server()->GetURL("d.com", "/iframe_cross_site.html"));
 
   // From there, the test continues in the JS.
-  ASSERT_TRUE(RunExtensionTestIgnoreManifestWarnings("scripting/sub_frames"))
-      << message_;
+  ASSERT_TRUE(RunExtensionTest("scripting/sub_frames")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(ScriptingAPITest, CSSInjection) {
@@ -92,8 +91,7 @@ IN_PROC_BROWSER_TEST_F(ScriptingAPITest, CSSInjection) {
   OpenURLInNewTab(embedded_test_server()->GetURL("subframes.example",
                                                  "/iframe_cross_site.html"));
 
-  ASSERT_TRUE(RunExtensionTestIgnoreManifestWarnings("scripting/css_injection"))
-      << message_;
+  ASSERT_TRUE(RunExtensionTest("scripting/css_injection")) << message_;
 }
 
 }  // namespace extensions

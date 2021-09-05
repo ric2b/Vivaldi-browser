@@ -25,8 +25,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-struct PrintHostMsg_RequestPrintPreview_Params;
-
 namespace base {
 class DictionaryValue;
 class FilePath;
@@ -88,6 +86,8 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
 
   const gfx::Size& page_size() const { return page_size_; }
 
+  PrintPreviewHandler* handler() const { return handler_; }
+
   // Returns true if |page_number| is the last page in |pages_to_render_|.
   // |page_number| is a 0-based number.
   bool LastPageComposited(uint32_t page_number) const;
@@ -124,14 +124,13 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
                             int* page_index);
 
   // Set initial settings for PrintPreviewUI.
-  static void SetInitialParams(
-      content::WebContents* print_preview_dialog,
-      const PrintHostMsg_RequestPrintPreview_Params& params);
+  static void SetInitialParams(content::WebContents* print_preview_dialog,
+                               const mojom::RequestPrintPreviewParams& params);
 
   // Determines whether to cancel a print preview request based on the request
-  // and UI ids in |ids|.
+  // id.
   // Can be called from any thread.
-  static bool ShouldCancelRequest(const mojom::PreviewIds& ids);
+  static bool ShouldCancelRequest(int preview_ui_id, int request_id);
 
   // Returns an id to uniquely identify this PrintPreviewUI.
   base::Optional<int32_t> GetIDForPrintPreviewUI() const;

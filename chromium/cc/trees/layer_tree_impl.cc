@@ -16,12 +16,12 @@
 #include <utility>
 
 #include "base/containers/adapters.h"
+#include "base/containers/contains.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -964,9 +964,8 @@ void LayerTreeImpl::UpdateTransformAnimation(ElementId element_id,
                                                                   list_type);
       if (node->has_potential_animation != has_potential_animation) {
         node->has_potential_animation = has_potential_animation;
-        mutator_host()->GetAnimationScales(element_id, list_type,
-                                           &node->maximum_animation_scale,
-                                           &node->starting_animation_scale);
+        node->maximum_animation_scale =
+            mutator_host()->MaximumScale(element_id, list_type);
         transform_tree.set_needs_update(true);
         set_needs_update_draw_properties();
       }
@@ -1194,6 +1193,7 @@ void LayerTreeImpl::SetDeviceViewportRect(
   if (device_viewport_rect == device_viewport_rect_)
     return;
   device_viewport_rect_ = device_viewport_rect;
+  device_viewport_rect_changed_ = true;
 
   set_needs_update_draw_properties();
   if (!IsActiveTree())
@@ -1449,6 +1449,8 @@ bool LayerTreeImpl::UpdateDrawProperties(
   if (update_image_animation_controller && image_animation_controller()) {
     image_animation_controller()->UpdateStateFromDrivers();
   }
+
+  device_viewport_rect_changed_ = false;
 
   DCHECK(!needs_update_draw_properties_)
       << "CalcDrawProperties should not set_needs_update_draw_properties()";

@@ -9,6 +9,7 @@
 #include "base/strings/string_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/messaging/native_messaging_launch_from_native.h"
@@ -24,7 +25,6 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/process_manager.h"
-#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/test/result_catcher.h"
 
 namespace extensions {
@@ -51,14 +51,6 @@ IN_PROC_BROWSER_TEST_F(NativeMessagingApiTest, UserLevelNativeMessaging) {
 class NativeMessagingLazyApiTest
     : public NativeMessagingApiTest,
       public testing::WithParamInterface<ContextType> {
- public:
-  NativeMessagingLazyApiTest() {
-    // Service Workers are currently only available on certain channels, so set
-    // the channel for those tests.
-    if (GetParam() == ContextType::kServiceWorker)
-      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
-  }
-
  protected:
   bool RunLazyTest(const std::string& extension_name) {
     if (GetParam() == ContextType::kEventPage) {
@@ -67,18 +59,14 @@ class NativeMessagingLazyApiTest
     return RunExtensionTestWithFlags(
         extension_name, kFlagRunAsServiceWorkerBasedExtension, kFlagNone);
   }
-
-  std::unique_ptr<ScopedWorkerBasedExtensionsChannel> current_channel_;
 };
 
 INSTANTIATE_TEST_SUITE_P(EventPage,
                          NativeMessagingLazyApiTest,
                          ::testing::Values(ContextType::kEventPage));
-// Service Worker versions of these tests are flaky.
-// See http://crbug.com/1111536 and http://crbug.com/1111337.
-// INSTANTIATE_TEST_SUITE_P(ServiceWorker,
-//                          NativeMessagingLazyApiTest,
-//                         ::testing::Values(ContextType::kServiceWorker));
+INSTANTIATE_TEST_SUITE_P(ServiceWorker,
+                         NativeMessagingLazyApiTest,
+                         ::testing::Values(ContextType::kServiceWorker));
 
 IN_PROC_BROWSER_TEST_P(NativeMessagingLazyApiTest, NativeMessagingBasic) {
   ASSERT_NO_FATAL_FAILURE(test_host_.RegisterTestHost(false));
@@ -90,7 +78,7 @@ IN_PROC_BROWSER_TEST_P(NativeMessagingLazyApiTest, UserLevelNativeMessaging) {
   ASSERT_TRUE(RunLazyTest("native_messaging_lazy")) << message_;
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 
 class TestProcessManagerObserver : public ProcessManagerObserver {
  public:
@@ -444,7 +432,7 @@ IN_PROC_BROWSER_TEST_F(NativeMessagingLaunchBackgroundModeApiTest,
   ASSERT_NO_FATAL_FAILURE(TestKeepAliveStateObserver().WaitForNoKeepAlive());
 }
 
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace
 }  // namespace extensions

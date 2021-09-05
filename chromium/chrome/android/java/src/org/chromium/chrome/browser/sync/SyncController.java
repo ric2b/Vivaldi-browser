@@ -12,12 +12,9 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.uid.UniqueIdentificationGenerator;
 import org.chromium.chrome.browser.uid.UniqueIdentificationGeneratorFactory;
-import org.chromium.components.sync.ModelType;
-import org.chromium.components.sync.PassphraseType;
 import org.chromium.components.sync.StopSource;
 
 import org.chromium.chrome.browser.ChromeApplication;
@@ -39,8 +36,8 @@ import org.chromium.chrome.browser.ChromeApplication;
  * are careful to not change the Android Chrome sync setting so we know whether to turn sync back
  * on when it is re-enabled.
  */
-public class SyncController implements ProfileSyncService.SyncStateChangedListener,
-                                       AndroidSyncSettings.AndroidSyncSettingsObserver {
+public class SyncController
+        implements ProfileSyncService.SyncStateChangedListener, AndroidSyncSettings.Delegate {
     private static final String TAG = "SyncController";
 
     /**
@@ -61,7 +58,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     private final SyncNotificationController mSyncNotificationController;
 
     private SyncController() {
-        AndroidSyncSettings.get().registerObserver(this);
+        AndroidSyncSettings.get().setDelegate(this);
         mProfileSyncService = ProfileSyncService.get();
         mProfileSyncService.addSyncStateChangedListener(this);
 
@@ -106,10 +103,9 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
         mProfileSyncService.setSyncAllowedByPlatform(
                 AndroidSyncSettings.get().doesMasterSyncSettingAllowChromeSync());
 
-        boolean isSyncEnabled = AndroidSyncSettings.get().isSyncEnabled();
-        if (isSyncEnabled == mProfileSyncService.isSyncRequested()) return;
-        if (isSyncEnabled) {
-            mProfileSyncService.requestStart();
+        if (isSyncEnabledInAndroidSyncSettings() == mProfileSyncService.isSyncRequested()) return;
+        if (isSyncEnabledInAndroidSyncSettings()) {
+            mProfileSyncService.setSyncRequested(true);
             return;
         }
 
@@ -130,7 +126,7 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
                         "Sync.StopSource", source, StopSource.STOP_SOURCE_LIMIT);
             }
 
-            mProfileSyncService.requestStop();
+            mProfileSyncService.setSyncRequested(false);
         }
     }
 
@@ -144,11 +140,11 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     public void syncStateChanged() {
         ThreadUtils.assertOnUiThread();
         if (mProfileSyncService.isSyncRequested()) {
-            if (ChromeApplication.isVivaldi() || !AndroidSyncSettings.get().isSyncEnabled()) {
+            if (ChromeApplication.isVivaldi() || !isSyncEnabledInAndroidSyncSettings()) {
                 AndroidSyncSettings.get().enableChromeSync();
             }
         } else {
-            if (ChromeApplication.isVivaldi() || AndroidSyncSettings.get().isSyncEnabled()) {
+            if (ChromeApplication.isVivaldi() || isSyncEnabledInAndroidSyncSettings()) {
                 // Both Android's master and Chrome sync setting are enabled, so we want to disable
                 // the Chrome sync setting to match isSyncRequested. We have to be careful not to
                 // disable it when isSyncRequested becomes false due to master sync being disabled
@@ -160,30 +156,11 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
     }
 
     /**
-     * From {@link AndroidSyncSettings.AndroidSyncSettingsObserver}.
+     * From {@link AndroidSyncSettings.Delegate}.
      */
     @Override
     public void androidSyncSettingsChanged() {
         updateSyncStateFromAndroid();
-    }
-
-    /**
-     * @return Whether sync is enabled to sync urls or open tabs with a non custom passphrase.
-     */
-    public boolean isSyncingUrlsWithKeystorePassphrase() {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
-            return mProfileSyncService.isEngineInitialized()
-                    && mProfileSyncService.getActiveDataTypes().contains(ModelType.TYPED_URLS)
-                    && (mProfileSyncService.getPassphraseType()
-                                    == PassphraseType.KEYSTORE_PASSPHRASE
-                            || mProfileSyncService.getPassphraseType()
-                                    == PassphraseType.TRUSTED_VAULT_PASSPHRASE);
-        }
-        return mProfileSyncService.isEngineInitialized()
-                && mProfileSyncService.getPreferredDataTypes().contains(ModelType.TYPED_URLS)
-                && (mProfileSyncService.getPassphraseType() == PassphraseType.KEYSTORE_PASSPHRASE
-                        || mProfileSyncService.getPassphraseType()
-                                == PassphraseType.TRUSTED_VAULT_PASSPHRASE);
     }
 
     /**
@@ -206,5 +183,14 @@ public class SyncController implements ProfileSyncService.SyncStateChangedListen
             return;
         }
         mProfileSyncService.setSessionsId(SESSION_TAG_PREFIX + uniqueTag);
+    }
+
+    /**
+     * Checks both the master sync for the device, and Chrome sync setting for the given account.
+     * If no user is currently signed in it returns false.
+     */
+    private boolean isSyncEnabledInAndroidSyncSettings() {
+        return AndroidSyncSettings.get().doesMasterSyncSettingAllowChromeSync()
+                && AndroidSyncSettings.get().isChromeSyncEnabled();
     }
 }

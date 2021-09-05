@@ -46,24 +46,6 @@
 
 namespace content {
 
-void InitNavigateParams(FrameHostMsg_DidCommitProvisionalLoad_Params* params,
-                        int nav_entry_id,
-                        bool did_create_new_entry,
-                        const GURL& url,
-                        ui::PageTransition transition) {
-  params->nav_entry_id = nav_entry_id;
-  params->url = url;
-  params->origin = url::Origin::Create(url);
-  params->referrer = Referrer();
-  params->transition = transition;
-  params->redirects = std::vector<GURL>();
-  params->should_update_history = false;
-  params->did_create_new_entry = did_create_new_entry;
-  params->gesture = NavigationGestureUser;
-  params->method = "GET";
-  params->page_state = blink::PageState::CreateFromURL(url);
-}
-
 TestRenderWidgetHostView::TestRenderWidgetHostView(RenderWidgetHost* rwh)
     : RenderWidgetHostViewBase(rwh), is_showing_(false), is_occluded_(false) {
 #if defined(OS_ANDROID)
@@ -284,36 +266,31 @@ bool TestRenderViewHost::CreateRenderView(
     int proxy_route_id,
     bool window_was_created_with_opener) {
   DCHECK(!IsRenderViewLive());
-  GetWidget()->set_renderer_initialized(true);
-  DCHECK(IsRenderViewLive());
-  opener_frame_token_ = opener_frame_token;
+
   RenderFrameHostImpl* main_frame =
       static_cast<RenderFrameHostImpl*>(GetMainFrame());
   if (main_frame && is_active()) {
-    mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
-        stub_interface_provider_remote;
-    main_frame->BindInterfaceProviderReceiver(
-        stub_interface_provider_remote.InitWithNewPipeAndPassReceiver());
+    // Pretend that we started a renderer process and created the renderer Frame
+    // with its Widget. We bind all the mojom interfaces, but they all just talk
+    // into the void.
+    RenderWidgetHostImpl* main_frame_widget = main_frame->GetRenderWidgetHost();
+    main_frame_widget->BindWidgetInterfaces(
+        mojo::PendingAssociatedRemote<blink::mojom::WidgetHost>()
+            .InitWithNewEndpointAndPassReceiver(),
+        TestRenderWidgetHost::CreateStubWidgetRemote());
+    main_frame_widget->BindFrameWidgetInterfaces(
+        mojo::PendingAssociatedRemote<blink::mojom::FrameWidgetHost>()
+            .InitWithNewEndpointAndPassReceiver(),
+        TestRenderWidgetHost::CreateStubFrameWidgetRemote());
 
-    mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
-    mojo::AssociatedRemote<blink::mojom::Widget> blink_widget;
-    auto blink_widget_receiver =
-        blink_widget.BindNewEndpointAndPassDedicatedReceiver();
-    GetWidget()->BindWidgetInterfaces(
-        blink_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
-        blink_widget.Unbind());
-
-    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
-    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
-    auto frame_widget_receiver =
-        frame_widget.BindNewEndpointAndPassDedicatedReceiver();
-    GetWidget()->BindFrameWidgetInterfaces(
-        frame_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
-        frame_widget.Unbind());
-
-    main_frame->SetRenderFrameCreated(true);
+    // This also initializes the RenderWidgetHost attached to the frame.
+    main_frame->RenderFrameCreated();
+  } else {
+    GetWidget()->SetRendererWidgetCreatedForInactiveRenderView();
   }
 
+  DCHECK(IsRenderViewLive());
+  opener_frame_token_ = opener_frame_token;
   return true;
 }
 

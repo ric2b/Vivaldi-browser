@@ -309,7 +309,7 @@ class TaskEnvironment::MockTimeDomain : public sequence_manager::TimeDomain,
         // Thread B : Complete enqueue of task U.
         // Thread A : FastForwardToNextTaskOrCap() => must stay at 300ms and run
         //            U, not go back to 120ms.
-        // Hence we need std::max() to protect again this because construction
+        // Hence we need std::max() to protect against this because construction
         // and enqueuing isn't atomic in time (LazyNow support in
         // base/task/thread_pool could help).
         now_ticks_ = std::max(now_ticks_, *next_task_time);
@@ -724,9 +724,7 @@ void TaskEnvironment::RemoveDestructionObserver(DestructionObserver* observer) {
 }
 
 TaskEnvironment::TestTaskTracker::TestTaskTracker()
-    : internal::ThreadPoolImpl::TaskTrackerImpl(std::string()),
-      can_run_tasks_cv_(&lock_),
-      task_completed_cv_(&lock_) {
+    : can_run_tasks_cv_(&lock_), task_completed_cv_(&lock_) {
   // Consider threads blocked on these as idle (avoids instantiating
   // ScopedBlockingCalls and confusing some //base internals tests).
   can_run_tasks_cv_.declare_only_used_while_idle();

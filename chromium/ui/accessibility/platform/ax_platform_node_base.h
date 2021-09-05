@@ -62,7 +62,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   // These are simple wrappers to our delegate.
   const AXNodeData& GetData() const;
-  gfx::NativeViewAccessible GetFocus();
+  gfx::NativeViewAccessible GetFocus() const;
   gfx::NativeViewAccessible GetParent() const;
   int GetChildCount() const;
   gfx::NativeViewAccessible ChildAtIndex(int index) const;
@@ -225,8 +225,11 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   // Returns true if either a descendant has selection (sel_focus_object_id) or
   // if this node is a simple text element and has text selection attributes.
-  // Optionally accepts an unignored selection to avoid redundant computation.
-  bool HasCaret(const AXTree::Selection* unignored_selection = nullptr);
+  // Optionally accepts a selection, which can be useful if checking the
+  // unignored selection is required. If not provided, uses the selection from
+  // the tree data, which is safe and fast but does not take ignored nodes into
+  // account.
+  bool HasCaret(const AXTree::Selection* selection = nullptr);
 
   // See AXPlatformNodeDelegate::IsChildOfLeaf().
   bool IsChildOfLeaf() const;
@@ -236,6 +239,9 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   // See AXPlatformNodeDelegate::IsInvisibleOrIgnored().
   bool IsInvisibleOrIgnored() const;
+
+  // Returns true if this node is currently focused.
+  bool IsFocused() const;
 
   // Returns true if this node can be scrolled either in the horizontal or the
   // vertical direction.
@@ -363,7 +369,16 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   //
   AXPlatformNodeDelegate* delegate_ = nullptr;
 
-  bool IsDocument() const;
+  // Uses the delegate to calculate this node's PosInSet.
+  base::Optional<int> GetPosInSet() const;
+
+  // Uses the delegate to calculate this node's SetSize.
+  base::Optional<int> GetSetSize() const;
+
+  // Returns true if this object is at the root of what most accessibility APIs
+  // consider to be a document, such as the root of a webpage, an iframe, or a
+  // PDF.
+  bool IsPlatformDocument() const;
 
  protected:
   bool IsSelectionItemSupported() const;
@@ -489,9 +504,6 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
                                           size_t* start,
                                           size_t* old_len,
                                           size_t* new_len);
-
-  base::Optional<int> GetPosInSet() const;
-  base::Optional<int> GetSetSize() const;
 
   std::string GetInvalidValue() const;
 

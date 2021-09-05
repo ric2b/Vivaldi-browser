@@ -69,13 +69,15 @@ class InputEngine : public mojom::InputChannel {
   void FinishComposition() override;
   void DeleteSurroundingText(uint32_t num_bytes_before_cursor,
                              uint32_t num_bytes_after_cursor) override;
+  void HandleAutocorrect(mojom::AutocorrectSpanPtr autocorrect_span) override;
 
   // TODO(https://crbug.com/837156): Implement a state for the interface.
 
- private:
+ protected:
   // Returns whether the given ime_spec is supported by rulebased engine.
   bool IsImeSupportedByRulebased(const std::string& ime_spec);
 
+ private:
   mojo::ReceiverSet<mojom::InputChannel, std::unique_ptr<InputEngineContext>>
       channel_receivers_;
 

@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -88,7 +89,7 @@ void UnifiedManagedDeviceView::Update() {
   std::string enterprise_domain_manager = model->enterprise_domain_manager();
 
   const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconColorSecondary);
+      AshColorProvider::ContentLayerType::kIconColorPrimary);
   if (session->ShouldDisplayManagedUI() || model->active_directory_managed() ||
       !enterprise_domain_manager.empty()) {
     // Show enterpised managed UI.
@@ -96,14 +97,16 @@ void UnifiedManagedDeviceView::Update() {
 
     base::string16 managed_string =
         enterprise_domain_manager.empty()
-            ? l10n_util::GetStringUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED)
+            ? l10n_util::GetStringFUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED,
+                                         ui::GetChromeOSDeviceName())
             : l10n_util::GetStringFUTF16(
                   IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
+                  ui::GetChromeOSDeviceName(),
                   base::UTF8ToUTF16(enterprise_domain_manager));
     label_->SetText(managed_string);
     SetAccessibleName(managed_string);
     SetVisible(true);
-  } else if (session->IsUserSupervised()) {
+  } else if (session->IsUserChildOrDeprecatedSupervised()) {
     // Show supervised user UI (locally supervised or Family Link).
     icon_->SetImage(gfx::CreateVectorIcon(GetSupervisedUserIcon(), icon_color));
     label_->SetText(GetSupervisedUserMessage());

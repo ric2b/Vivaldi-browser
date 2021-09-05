@@ -16,6 +16,7 @@
 #include "base/run_loop.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -62,7 +63,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
@@ -177,16 +178,16 @@ class TestBrowserCloseManager : public BrowserCloseManager {
 
   void ConfirmCloseWithPendingDownloads(
       int download_count,
-      const base::Callback<void(bool)>& callback) override {
+      base::OnceCallback<void(bool)> callback) override {
     EXPECT_NE(NO_USER_CHOICE, user_choice_);
     switch (user_choice_) {
       case NO_USER_CHOICE:
       case USER_CHOICE_USER_CANCELS_CLOSE: {
-        callback.Run(false);
+        std::move(callback).Run(false);
         break;
       }
       case USER_CHOICE_USER_ALLOWS_CLOSE: {
-        callback.Run(true);
+        std::move(callback).Run(true);
         break;
       }
     }
@@ -282,7 +283,7 @@ class BrowserCloseManagerBrowserTest : public InProcessBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     command_line->AppendSwitch(
         chromeos::switches::kIgnoreUserProfileMappingForTests);
 #endif
@@ -397,11 +398,16 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest, PRE_TestSessionRestore) {
 
 // Test that the tab closed after the aborted shutdown attempt is not re-opened
 // when restoring the session.
-// Flaky on Windows trybots, see https://crbug.com/737860.
 // Flaky on chromium.chromeos, chromium.linux, and chromium.mac bots. See
-// https://crbug.com/1145235.
+// https://crbug.com/1145235. It was flaky on Windows, but  crrev.com/c/2559156,
+// which added retries to ReplaceFile, should fix the Windows flakiness.
+#if defined(OS_WIN)
+#define MAYBE_TestSessionRestore TestSessionRestore
+#else
+#define MAYBE_TestSessionRestore DISABLED_TestSessionRestore
+#endif
 IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
-                       DISABLED_TestSessionRestore) {
+                       MAYBE_TestSessionRestore) {
   // The testing framework launches Chrome with about:blank as args.
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
   EXPECT_EQ(GURL(chrome::kChromeUIVersionURL),
@@ -527,7 +533,7 @@ IN_PROC_BROWSER_TEST_F(BrowserCloseManagerBrowserTest,
 // Regression for crbug.com/365052 caused some of tabs to be closed even if
 // user chose to cancel browser close.
 // Flaky on ChromeOS ASan. https://crbug.com/805457
-#if defined(OS_CHROMEOS) && defined(ADDRESS_SANITIZER)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && defined(ADDRESS_SANITIZER)
 #define MAYBE_TestUnloadMultipleSlowTabs DISABLED_TestUnloadMultipleSlowTabs
 #else
 #define MAYBE_TestUnloadMultipleSlowTabs TestUnloadMultipleSlowTabs

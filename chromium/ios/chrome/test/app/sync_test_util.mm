@@ -128,8 +128,10 @@ void TriggerSyncCycle(syncer::ModelType type) {
 }
 
 void ClearSyncServerData() {
-  DCHECK(gSyncFakeServer);
-  gSyncFakeServer->ClearServerData();
+  // Allow the caller to preventively clear server data.
+  if (gSyncFakeServer) {
+    gSyncFakeServer->ClearServerData();
+  }
 }
 
 int GetNumberOfSyncEntities(syncer::ModelType type) {
@@ -201,6 +203,23 @@ std::string GetSyncCacheGuid() {
   const syncer::LocalDeviceInfoProvider* info_provider =
       service->GetLocalDeviceInfoProvider();
   return info_provider->GetLocalDeviceInfo()->guid();
+}
+
+bool VerifySyncInvalidationFieldsPopulated() {
+  DCHECK(IsFakeSyncServerSetUp());
+  const std::string cache_guid = GetSyncCacheGuid();
+  std::vector<sync_pb::SyncEntity> entities =
+      gSyncFakeServer->GetSyncEntitiesByModelType(syncer::DEVICE_INFO);
+  for (const sync_pb::SyncEntity& entity : entities) {
+    if (entity.specifics().device_info().cache_guid() == cache_guid) {
+      const sync_pb::InvalidationSpecificFields& invalidation_fields =
+          entity.specifics().device_info().invalidation_fields();
+      return !invalidation_fields.interested_data_type_ids().empty() &&
+             invalidation_fields.has_instance_id_token();
+    }
+  }
+  // The local DeviceInfo hasn't been committed yet.
+  return false;
 }
 
 void AddUserDemographicsToSyncServer(

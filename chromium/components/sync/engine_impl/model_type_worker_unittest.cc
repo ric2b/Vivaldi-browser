@@ -11,12 +11,15 @@
 
 #include "base/bind.h"
 #include "base/guid.h"
+#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/model_type_processor.h"
+#include "components/sync/engine/sync_engine_switches.h"
 #include "components/sync/engine_impl/cancelation_signal.h"
 #include "components/sync/engine_impl/commit_contribution.h"
 #include "components/sync/engine_impl/cycle/entity_change_metric_recording.h"
@@ -1333,6 +1336,11 @@ TEST_F(ModelTypeWorkerTest, TimeUntilEncryptionKeyFoundMetric) {
   TriggerUpdateFromServer(10, kTag1, kValue1);
   gu_responses_while_should_have_been_known++;
 
+  // The fact that the data type is now blocked should have been recorded.
+  histogram_tester.ExpectUniqueSample(
+      "Sync.ModelTypeBlockedDueToUndecryptableUpdate",
+      ModelTypeHistogramValue(worker()->GetModelType()), 1);
+
   // Send empty GetUpdatesResponse. Again, the cryptographer isn't in a pending
   // state, so increase |gu_responses_while_should_have_been_known|.
   worker()->ProcessGetUpdatesResponse(
@@ -1351,7 +1359,7 @@ TEST_F(ModelTypeWorkerTest, TimeUntilEncryptionKeyFoundMetric) {
   // Double check the histogram hasn't been recorded so far.
   const std::string histogram_name =
       std::string("Sync.ModelTypeTimeUntilEncryptionKeyFound.") +
-      ModelTypeToString(worker()->GetModelType());
+      ModelTypeToHistogramSuffix(worker()->GetModelType());
   EXPECT_TRUE(histogram_tester.GetAllSamples(histogram_name).empty());
 
   // Make the key available. The correct number of GetUpdatesResponse should
@@ -1359,6 +1367,48 @@ TEST_F(ModelTypeWorkerTest, TimeUntilEncryptionKeyFoundMetric) {
   DecryptPendingKey();
   histogram_tester.ExpectUniqueSample(
       histogram_name, gu_responses_while_should_have_been_known, 1);
+}
+
+TEST_F(ModelTypeWorkerTest, IgnoreUpdatesEncryptedWithKeysMissingForTooLong) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      switches::kIgnoreSyncEncryptionKeysLongMissing);
+
+  NormalInitialize();
+  worker()->SetMinGuResponsesToIgnoreKeyForTest(2);
+
+  // Send an update encrypted with a key that shall remain unknown.
+  SetUpdateEncryptionFilter(1);
+  TriggerUpdateFromServer(10, kTag1, kValue1);
+
+  // The undecryptable update has been around for only 1 GetUpdatesResponse, so
+  // the worker is still blocked.
+  EXPECT_TRUE(worker()->BlockForEncryption());
+
+  // Send empty GetUpdatesResponse, reaching the threshold of 2.
+  worker()->ProcessGetUpdatesResponse(
+      server()->GetProgress(), server()->GetContext(), {}, status_controller());
+
+  // The undecryptable update should have been dropped and the worker is no
+  // longer blocked.
+  EXPECT_FALSE(worker()->BlockForEncryption());
+
+  // Should have recorded that 1 entity was dropped.
+  histogram_tester.ExpectUniqueSample(
+      base::StrCat({"Sync.ModelTypeUndecryptablePendingUpdatesDropped.",
+                    ModelTypeToHistogramSuffix(worker()->GetModelType())}),
+      1, 1);
+
+  // From now on, incoming updates encrypted with the missing key don't block
+  // the worker.
+  TriggerUpdateFromServer(10, kTag2, kValue2);
+  EXPECT_FALSE(worker()->BlockForEncryption());
+
+  // Should have recorded that 1 incoming update was ignored.
+  histogram_tester.ExpectUniqueSample(
+      "Sync.ModelTypeUpdateDrop.DecryptionPendingForTooLong",
+      worker()->GetModelType(), 1);
 }
 
 // Test that processor has been disconnected from Sync when worker got

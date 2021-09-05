@@ -47,7 +47,7 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
-#include "chrome/browser/ui/webui/settings_utils.h"
+#include "chrome/browser/ui/webui/settings/settings_utils.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -60,6 +60,7 @@
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/language/core/browser/pref_names.h"
+#include "components/locale/locale_kit.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/media_router/browser/media_router_dialog_controller.h"
 #include "components/media_router/browser/media_router_metrics.h"
@@ -905,12 +906,8 @@ ExtensionFunction::ResponseAction UtilitiesGetSystemDateFormatFunction::Run() {
 ExtensionFunction::ResponseAction UtilitiesGetSystemCountryFunction::Run() {
   namespace Results = vivaldi::utilities::GetSystemCountry::Results;
 
-  std::string value;
-  std::unique_ptr<base::Environment> env(base::Environment::Create());
-  if (!env->GetVar("VIVALDI_COUNTRY", &value) || value.empty()) {
-    value = ReadCountry();
-  }
-  return RespondNow(ArgumentList(Results::Create(value)));
+  std::string country = locale_kit::GetUserCountry();
+  return RespondNow(ArgumentList(Results::Create(country)));
 }
 
 ExtensionFunction::ResponseAction UtilitiesSetLanguageFunction::Run() {

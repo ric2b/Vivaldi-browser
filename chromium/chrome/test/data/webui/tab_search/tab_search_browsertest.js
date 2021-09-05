@@ -15,13 +15,6 @@ class TabSearchBrowserTest extends PolymerTest {
     throw 'this is abstract and should be overriden by subclasses';
   }
 
-  get extraLibraries() {
-    return [
-      '//third_party/mocha/mocha.js',
-      '//chrome/test/data/webui/mocha_adapter.js',
-    ];
-  }
-
   /** @override */
   get featureList() {
     return {

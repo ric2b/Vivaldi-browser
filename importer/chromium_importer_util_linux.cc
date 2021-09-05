@@ -25,6 +25,14 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
     case importer::TYPE_OPERA_OPIUM:
       profile_path = home_path.Append(".config").Append("opera");
       break;
+    case importer::TYPE_BRAVE:
+      profile_path = home_path.Append(".config").Append("BraveSoftware")
+          .Append("Brave-Browser");
+      break;
+    case importer::TYPE_EDGE_CHROMIUM:
+      profile_path = home_path.Append(".config").Append("Microsoft")
+          .Append("Edge");
+      break;
 
     default:
       profile_path = home_path.Append("not-supported");

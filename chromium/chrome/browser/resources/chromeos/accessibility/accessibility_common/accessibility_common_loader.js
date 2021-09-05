@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {Autoclick} from './autoclick/autoclick.js';
+import {Magnifier} from './magnifier/magnifier.js';
+
 /**
  * Class to manage loading resources depending on which Accessibility features
  * are enabled.
  */
-class AccessibilityCommon {
+export class AccessibilityCommon {
   constructor() {
     /** @private {Autoclick} */
     this.autoclick_ = null;
@@ -41,14 +44,14 @@ class AccessibilityCommon {
         this.onAutoclickUpdated_.bind(this));
 
     chrome.accessibilityFeatures.screenMagnifier.get(
-        {}, this.onMagnifierUpdated_.bind(this));
+        {}, this.onMagnifierUpdated_.bind(this, Magnifier.Type.FULL_SCREEN));
     chrome.accessibilityFeatures.screenMagnifier.onChange.addListener(
-        this.onMagnifierUpdated_.bind(this));
+        this.onMagnifierUpdated_.bind(this, Magnifier.Type.FULL_SCREEN));
 
     chrome.accessibilityFeatures.dockedMagnifier.get(
-        {}, this.onMagnifierUpdated_.bind(this));
+        {}, this.onMagnifierUpdated_.bind(this, Magnifier.Type.DOCKED));
     chrome.accessibilityFeatures.dockedMagnifier.onChange.addListener(
-        this.onMagnifierUpdated_.bind(this));
+        this.onMagnifierUpdated_.bind(this, Magnifier.Type.DOCKED));
   }
 
   /**
@@ -69,13 +72,15 @@ class AccessibilityCommon {
   }
 
   /**
+   * @param {!Magnifier.Type} type
    * @param {*} details
    * @private
    */
-  onMagnifierUpdated_(details) {
+  onMagnifierUpdated_(type, details) {
     if (details.value && !this.magnifier_) {
-      this.magnifier_ = new Magnifier();
-    } else if (!details.value && this.magnifier_) {
+      this.magnifier_ = new Magnifier(type);
+    } else if (
+        !details.value && this.magnifier_ && this.magnifier_.type === type) {
       this.magnifier_.onMagnifierDisabled();
       this.magnifier_ = null;
     }
@@ -84,4 +89,4 @@ class AccessibilityCommon {
 
 InstanceChecker.closeExtraInstances();
 // Initialize the AccessibilityCommon extension.
-var accessibilityCommon = new AccessibilityCommon();
+window.accessibilityCommon = new AccessibilityCommon();

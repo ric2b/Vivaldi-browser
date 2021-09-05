@@ -72,7 +72,7 @@ class WebLocalFrameImpl;
 class WebPointerEvent;
 
 class InspectorOverlayAgent;
-class GridHighlightTool;
+class PersistentTool;
 
 using OverlayFrontend = protocol::Overlay::Metainfo::FrontendClass;
 
@@ -80,7 +80,7 @@ using OverlayFrontend = protocol::Overlay::Metainfo::FrontendClass;
 class OverlayNames {
  public:
   static const char* OVERLAY_HIGHLIGHT;
-  static const char* OVERLAY_HIGHLIGHT_GRID;
+  static const char* OVERLAY_PERSISTENT;
   static const char* OVERLAY_SOURCE_ORDER;
   static const char* OVERLAY_DISTANCES;
   static const char* OVERLAY_VIEWPORT_SIZE;
@@ -148,7 +148,8 @@ class CORE_EXPORT InspectorOverlayAgent final
   static std::unique_ptr<InspectorFlexContainerHighlightConfig>
   ToFlexContainerHighlightConfig(
       protocol::Overlay::FlexContainerHighlightConfig*);
-  static std::unique_ptr<LineStyle> ToLineStyle(protocol::Overlay::LineStyle*);
+  static base::Optional<LineStyle> ToLineStyle(protocol::Overlay::LineStyle*);
+  static base::Optional<BoxStyle> ToBoxStyle(protocol::Overlay::BoxStyle*);
   static std::unique_ptr<InspectorHighlightConfig> ToHighlightConfig(
       protocol::Overlay::HighlightConfig*);
   InspectorOverlayAgent(WebLocalFrameImpl*,
@@ -220,6 +221,10 @@ class CORE_EXPORT InspectorOverlayAgent final
       std::unique_ptr<
           protocol::Array<protocol::Overlay::GridNodeHighlightConfig>>
           grid_node_highlight_configs) override;
+  protocol::Response setShowFlexOverlays(
+      std::unique_ptr<
+          protocol::Array<protocol::Overlay::FlexNodeHighlightConfig>>
+          flex_node_highlight_configs) override;
 
   // InspectorBaseAgent overrides.
   void Restore() override;
@@ -228,6 +233,8 @@ class CORE_EXPORT InspectorOverlayAgent final
   void Inspect(Node*);
   void EnsureAXContext(Node*);
   void DispatchBufferedTouchEvents();
+  void PageScrollStarted();
+  void PageScrollEnded();
   WebInputEventResult HandleInputEvent(const WebInputEvent&);
   WebInputEventResult HandleInputEventInOverlay(const WebInputEvent&);
   void PageLayoutInvalidated(bool resized);
@@ -291,13 +298,14 @@ class CORE_EXPORT InspectorOverlayAgent final
   Member<InspectorDOMAgent> dom_agent_;
   std::unique_ptr<FrameOverlay> frame_overlay_;
   Member<InspectTool> inspect_tool_;
-  Member<GridHighlightTool> persistent_tool_;
+  Member<PersistentTool> persistent_tool_;
   Member<Hinge> hinge_;
   // The agent needs to keep AXContext because it enables caching of
   // a11y attributes shown in the inspector overlay.
   HeapHashMap<WeakMember<Document>, std::unique_ptr<AXContext>>
       document_to_ax_context_;
   bool swallow_next_mouse_up_;
+  bool is_page_scrolling_ = false;
   DOMNodeId backend_node_id_to_inspect_;
   InspectorAgentState::Boolean enabled_;
   InspectorAgentState::Boolean show_ad_highlights_;

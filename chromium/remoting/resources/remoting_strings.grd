@@ -314,10 +314,10 @@
           Chrome Remote Desktop
         </message>
         <message name="IDS_COMPANY_NAME" desc="The company name specified in the version information of each Chrome Remote Desktop Host executable.">
-          Google Inc.
+          Google LLC
         </message>
         <message name="IDS_COPYRIGHT" desc="The copyright message specified in the version information of each Chrome Remote Desktop Host executable. It should be updated every year.">
-          Copyright 2013 Google Inc. All Rights Reserved.
+          Copyright 2021 Google LLC. All Rights Reserved.
         </message>
         <message name="IDS_DISPLAY_SERVICE_NAME" desc="The name of the Windows service installed by Chrome Remote Desktop.">
           Chrome Remote Desktop Service
@@ -327,6 +327,9 @@
         </message>
         <message name="IDS_MAC_UNINSTALLER_BUNDLE_NAME" desc="The bundle name specified in the property list of Chrome Remote Desktop Host Uninstaller bundle on MacOS. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
           Chrome Remote Desktop Host Uninstaller
+        </message>
+        <message name="IDS_MAC_MICROPHONE_USAGE" desc="The description explaining how the Chrome Remote Desktop host requests for microphone access.">
+          Microphone access is required to capture audio and stream it to the Chrome Remote Desktop client.
         </message>
       </if>  <!-- _google_chrome -->
 
@@ -356,7 +359,7 @@
           The Chromium Authors
         </message>
         <message name="IDS_COPYRIGHT" desc="The copyright message specified in the version information of each Chromoting Host executable. It should be updated every year.">
-          Copyright 2013 The Chromium Authors. All Rights Reserved.
+          Copyright 2021 The Chromium Authors. All Rights Reserved.
         </message>
         <message name="IDS_DISPLAY_SERVICE_NAME" desc="The name of the Windows service installed by Chromoting.">
           Chromoting Service
@@ -366,6 +369,9 @@
         </message>
         <message name="IDS_MAC_UNINSTALLER_BUNDLE_NAME" desc="The bundle name specified in the property list of Chromoting Host Uninstaller bundle on MacOS.">
           Chromoting Host Uninstaller
+        </message>
+        <message name="IDS_MAC_MICROPHONE_USAGE" desc="The description explaining how the Chrome Remote Desktop host uses microphone.">
+          Microphone access is required to capture audio and stream it to the Chrome Remote Desktop client.
         </message>
       </if>  <!-- not _google_chrome -->
 
@@ -803,6 +809,9 @@
       </message>
       <message name="IDS_HOST_STOPPED" desc="The message reported to the EventLog by Chromoting Host every time it is stopped.">
         Host stopped.
+      </message>
+      <message name="IDS_HOST_LOG_EVENT" desc="The message reported to the EventLog by Chromoting Host every time it logs a message. Since we are just logging debugging messages directly, no localizable text is required in this string.">
+        <ph name="ORIGINAL_LOG_MESSAGE">%1</ph>
       </message>
       <message desc="This text is used on a button or context-menu or similar control. When chosen or pressed, it deletes a selected item from a list." meaning="Delete an item from a list." name="IDS_DELETE_LIST_ITEM" formatter_data="android_java">
         Delete

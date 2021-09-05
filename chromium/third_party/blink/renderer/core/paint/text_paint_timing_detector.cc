@@ -101,11 +101,12 @@ void TextPaintTimingDetector::OnPaintFinished() {
         .UpdateLargestContentfulPaintCandidate();
   }
   if (records_manager_.NeedMeausuringPaintTime()) {
-    if (!awaiting_swap_promise_) {
+    if (!awaiting_presentation_promise_) {
       // |WrapCrossThreadWeakPersistent| guarantees that when |this| is killed,
       // the callback function will not be invoked.
-      RegisterNotifySwapTime(WTF::Bind(&TextPaintTimingDetector::ReportSwapTime,
-                                       WrapCrossThreadWeakPersistent(this)));
+      RegisterNotifyPresentationTime(
+          WTF::Bind(&TextPaintTimingDetector::ReportPresentationTime,
+                    WrapCrossThreadWeakPersistent(this)));
     }
   }
 }
@@ -121,13 +122,14 @@ void TextPaintTimingDetector::LayoutObjectWillBeDestroyed(
   }
 }
 
-void TextPaintTimingDetector::RegisterNotifySwapTime(
+void TextPaintTimingDetector::RegisterNotifyPresentationTime(
     PaintTimingCallbackManager::LocalThreadCallback callback) {
   callback_manager_->RegisterCallback(std::move(callback));
-  awaiting_swap_promise_ = true;
+  awaiting_presentation_promise_ = true;
 }
 
-void TextPaintTimingDetector::ReportSwapTime(base::TimeTicks timestamp) {
+void TextPaintTimingDetector::ReportPresentationTime(
+    base::TimeTicks timestamp) {
   if (!records_manager_.HasTextElementTiming()) {
     Document* document = frame_view_->GetFrame().GetDocument();
     if (document) {
@@ -141,7 +143,7 @@ void TextPaintTimingDetector::ReportSwapTime(base::TimeTicks timestamp) {
   records_manager_.AssignPaintTimeToQueuedRecords(timestamp);
   if (IsRecordingLargestTextPaint())
     UpdateCandidate();
-  awaiting_swap_promise_ = false;
+  awaiting_presentation_promise_ = false;
 }
 
 bool TextPaintTimingDetector::ShouldWalkObject(
@@ -255,7 +257,7 @@ void TextRecordsManager::RemoveVisibleRecord(const LayoutObject& object) {
 }
 
 void TextRecordsManager::CleanUpLargestTextPaint() {
-  ltp_manager_.reset();
+  ltp_manager_.Clear();
 }
 
 void TextRecordsManager::RemoveInvisibleRecord(const LayoutObject& object) {
@@ -368,9 +370,10 @@ base::WeakPtr<TextRecord> LargestTextPaintManager::FindLargestPaintCandidate() {
 
 TextRecordsManager::TextRecordsManager(
     LocalFrameView* frame_view,
-    PaintTimingDetector* paint_timing_detector) {
-  ltp_manager_.emplace(frame_view, paint_timing_detector);
-}
+    PaintTimingDetector* paint_timing_detector)
+    : ltp_manager_(MakeGarbageCollected<LargestTextPaintManager>(
+          frame_view,
+          paint_timing_detector)) {}
 
 void TextRecordsManager::Trace(Visitor* visitor) const {
   visitor->Trace(text_element_timing_);

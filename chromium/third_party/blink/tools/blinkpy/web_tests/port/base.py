@@ -46,6 +46,7 @@ from blinkpy.common import find_files
 from blinkpy.common import read_checksum_from_png
 from blinkpy.common import path_finder
 from blinkpy.common.memoized import memoized
+from blinkpy.common.system.executive import ScriptError
 from blinkpy.common.system.path import abspath_to_uri
 from blinkpy.w3c.wpt_manifest import WPTManifest, MANIFEST_NAME
 from blinkpy.web_tests.layout_package.bot_test_expectations import BotTestExpectationsFactory
@@ -531,7 +532,11 @@ class Port(object):
     def do_audio_results_differ(self, expected_audio, actual_audio):
         return expected_audio != actual_audio
 
-    def diff_image(self, expected_contents, actual_contents):
+    def diff_image(self,
+                   expected_contents,
+                   actual_contents,
+                   max_channel_diff=None,
+                   max_pixels_diff=None):
         """Compares two images and returns an (image diff, error string) pair.
 
         If an error occurs (like image_diff isn't found, or crashes), we log an
@@ -567,19 +572,32 @@ class Port(object):
         # GPU.
         if self.get_option('fuzzy_diff'):
             command.append('--fuzzy-diff')
+        # The max_channel_diff and max_pixels_diff arguments are used by WPT
+        # tests for fuzzy reftests. See
+        # https://web-platform-tests.org/writing-tests/reftests.html#fuzzy-matching
+        if max_channel_diff is not None:
+            command.append('--fuzzy-max-channel-diff={}'.format('-'.join(
+                map(str, max_channel_diff))))
+        if max_pixels_diff is not None:
+            command.append('--fuzzy-max-pixels-diff={}'.format('-'.join(
+                map(str, max_pixels_diff))))
 
         result = None
         err_str = None
         try:
-            exit_code = self._executive.run_command(
-                command, return_exit_code=True)
-            if exit_code == 0:
-                # The images are the same.
-                result = None
-            elif exit_code == 1:
+            output = self._executive.run_command(command)
+            # Log the output, to enable user debugging of a diff hidden by fuzzy
+            # expectations. This is useful when tightening fuzzy bounds.
+            if output:
+                _log.debug(output)
+        except ScriptError as error:
+            if error.exit_code == 1:
                 result = self._filesystem.read_binary_file(diff_filename)
+                # Log the output, to enable user debugging of the diff.
+                if error.output:
+                    _log.debug(error.output)
             else:
-                err_str = 'Image diff returned an exit code of %s. See http://crbug.com/278596' % exit_code
+                err_str = 'Image diff returned an exit code of %s. See http://crbug.com/278596' % error.exit_code
         except OSError as error:
             err_str = 'error running image diff: %s' % error
         finally:
@@ -963,33 +981,65 @@ class Port(object):
             WPTManifest.ensure_manifest(self, path)
         return WPTManifest(self.host, manifest_path)
 
-    def is_wpt_crash_test(self, test_file):
+    def is_wpt_crash_test(self, test_name):
         """Returns whether a WPT test is a crashtest.
 
         See https://web-platform-tests.org/writing-tests/crashtest.html.
         """
-        match = self.WPT_REGEX.match(test_file)
+        match = self.WPT_REGEX.match(test_name)
         if not match:
             return False
         wpt_path = match.group(1)
         path_in_wpt = match.group(2)
         return self.wpt_manifest(wpt_path).is_crash_test(path_in_wpt)
 
-    def is_slow_wpt_test(self, test_file):
+    def is_slow_wpt_test(self, test_name):
         # When DCHECK is enabled, idlharness tests run 5-6x slower due to the
         # amount of JavaScript they use (most web_tests run very little JS).
         # This causes flaky timeouts for a lot of them, as a 0.5-1s test becomes
         # close to the default 6s timeout.
-        if (self.is_wpt_idlharness_test(test_file)
+        if (self.is_wpt_idlharness_test(test_name)
                 and self._build_has_dcheck_always_on()):
             return True
 
-        match = self.WPT_REGEX.match(test_file)
+        match = self.WPT_REGEX.match(test_name)
         if not match:
             return False
         wpt_path = match.group(1)
         path_in_wpt = match.group(2)
         return self.wpt_manifest(wpt_path).is_slow_test(path_in_wpt)
+
+    def get_wpt_fuzzy_metadata(self, test_name):
+        """Returns the fuzzy metadata for the given WPT test.
+
+        The metadata is a pair of lists, (maxDifference, totalPixels), where
+        each list is a [min, max] range, inclusive. If the test is not a WPT
+        test or has no fuzzy metadata, returns (None, None).
+
+        See https://web-platform-tests.org/writing-tests/reftests.html#fuzzy-matching
+        """
+        match = self.WPT_REGEX.match(test_name)
+        if not match:
+            return None, None
+        wpt_path = match.group(1)
+        path_in_wpt = match.group(2)
+        return self.wpt_manifest(wpt_path).extract_fuzzy_metadata(path_in_wpt)
+
+    def get_file_path_for_wpt_test(self, test_name):
+        """Returns the real file path for the given WPT test.
+
+        Or None if the test is not a WPT.
+        """
+        match = self.WPT_REGEX.match(test_name)
+        if not match:
+            return None
+        wpt_path = match.group(1)
+        path_in_wpt = match.group(2)
+        file_path_in_wpt = self.wpt_manifest(wpt_path).file_path_for_test_url(
+            path_in_wpt)
+        if not file_path_in_wpt:
+            return None
+        return self._filesystem.join(wpt_path, file_path_in_wpt)
 
     def test_key(self, test_name):
         """Turns a test name into a pair of sublists: the natural sort key of the
@@ -1186,6 +1236,18 @@ class Port(object):
 
     def architecture(self):
         return self._architecture
+
+    def python3_command(self):
+        """Returns the correct command to use to run python3.
+
+        This exists because Windows has inconsistent behavior between the bots
+        and local developer machines, such that determining which python3 name
+        to use is non-trivial. See https://crbug.com/155616.
+
+        Once blinkpy runs under python3, this can be removed in favour of
+        callers using sys.executable.
+        """
+        return 'python3'
 
     def get_option(self, name, default_value=None):
         return getattr(self._options, name, default_value)

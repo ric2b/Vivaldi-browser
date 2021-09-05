@@ -7,15 +7,20 @@ package org.chromium.chrome.browser.webapps.addtohomescreen;
 import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
-import android.text.TextUtils;
 
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.banners.AppBannerManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.webapps.AddToHomescreenProperties;
+import org.chromium.chrome.browser.webapps.AddToHomescreenViewDelegate;
+import org.chromium.chrome.browser.webapps.PwaBottomSheetController;
+import org.chromium.chrome.browser.webapps.PwaBottomSheetControllerProvider;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -29,12 +34,14 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
  * The {@link #showForAppMenu} method is used to show the add-to-homescreen UI when the user
  * chooses the "Add to Home screen" option from the app menu.
  */
+@JNINamespace("webapps")
 public class AddToHomescreenCoordinator {
     @VisibleForTesting
     Context mActivityContext;
     @VisibleForTesting
     ModalDialogManager mModalDialogManager;
     private WindowAndroid mWindowAndroid;
+    // May be null during tests.
     private Tab mTab;
 
     @VisibleForTesting
@@ -53,6 +60,15 @@ public class AddToHomescreenCoordinator {
     public static boolean showForAppMenu(Tab tab, Context activityContext,
             WindowAndroid windowAndroid, ModalDialogManager modalDialogManager,
             WebContents webContents, Bundle menuItemData) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PWA_INSTALL_USE_BOTTOMSHEET)) {
+            PwaBottomSheetController controller =
+                    PwaBottomSheetControllerProvider.from(windowAndroid);
+            if (controller != null) {
+                controller.requestOrExpandBottomSheetInstaller(webContents);
+                return true;
+            }
+        }
+
         @StringRes
         int titleId = menuItemData.getInt(AppBannerManager.MENU_TITLE_KEY);
         return new AddToHomescreenCoordinator(
@@ -63,7 +79,7 @@ public class AddToHomescreenCoordinator {
     @VisibleForTesting
     boolean showForAppMenu(WebContents webContents, @StringRes int titleId) {
         // Don't start if there is no visible URL to add.
-        if (webContents == null || TextUtils.isEmpty(webContents.getVisibleUrlString())) {
+        if (webContents == null || webContents.getVisibleUrl().isEmpty()) {
             return false;
         }
 
@@ -104,7 +120,8 @@ public class AddToHomescreenCoordinator {
         AddToHomescreenMediator addToHomescreenMediator =
                 new AddToHomescreenMediator(model, mWindowAndroid);
         PropertyModelChangeProcessor.create(model,
-                initView(AppBannerManager.getHomescreenLanguageOption(mTab),
+                initView(AppBannerManager.getHomescreenLanguageOption(
+                                 mTab == null ? null : mTab.getWebContents()),
                         addToHomescreenMediator),
                 AddToHomescreenViewBinder::bind);
         return addToHomescreenMediator;

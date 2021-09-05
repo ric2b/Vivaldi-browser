@@ -74,8 +74,6 @@
       const gfx::Size& natural_size) override;
   void ExitPictureInPicture() override;
 
-  const std::string& sourceSpec() { return src_.spec(); }
-
   blink::SecurityStyle GetSecurityStyle(
       content::WebContents* web_contents,
       content::SecurityStyleExplanations* security_style_explanations) override;

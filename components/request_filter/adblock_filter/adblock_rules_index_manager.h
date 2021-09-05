@@ -64,6 +64,8 @@ class RulesIndexManager : public RuleService::Observer {
 
   RulesIndex* rules_index() const { return rules_index_.get(); }
 
+  RuleGroup group() const { return group_; }
+
  private:
   void OnRulesSourceUpdated(const RuleSource& rule_source) override;
   void OnRuleSourceDeleted(uint32_t source_id, RuleGroup group) override;

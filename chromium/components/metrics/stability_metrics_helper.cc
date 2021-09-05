@@ -27,7 +27,7 @@
 #include <windows.h>  // Needed for STATUS_* codes
 #endif
 
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "components/metrics/system_memory_stats_recorder.h"
 #endif
 
@@ -147,8 +147,7 @@ void StabilityMetricsHelper::ProvideStabilityMetrics(
 }
 
 void StabilityMetricsHelper::ClearSavedStabilityMetrics() {
-  // Clear all the prefs used in this class in UMA reports (which doesn't
-  // include |kUninstallMetricsPageLoadCount| as it's not sent up by UMA).
+  // Clear all the prefs used in this class in UMA reports.
   local_state_->SetInteger(prefs::kStabilityChildProcessCrashCount, 0);
   local_state_->SetInteger(prefs::kStabilityExtensionRendererCrashCount, 0);
   local_state_->SetInteger(prefs::kStabilityExtensionRendererFailedLaunchCount,
@@ -177,8 +176,6 @@ void StabilityMetricsHelper::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kStabilityRendererFailedLaunchCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityRendererHangCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityRendererLaunchCount, 0);
-
-  registry->RegisterInt64Pref(prefs::kUninstallMetricsPageLoadCount, 0);
 }
 
 void StabilityMetricsHelper::IncreaseRendererCrashCount() {
@@ -211,7 +208,6 @@ void StabilityMetricsHelper::BrowserChildProcessCrashed() {
 
 void StabilityMetricsHelper::LogLoadStarted() {
   IncrementPrefValue(prefs::kStabilityPageLoadCount);
-  IncrementLongPrefsValue(prefs::kUninstallMetricsPageLoadCount);
   RecordStabilityEvent(StabilityEventType::kPageLoad);
 }
 
@@ -254,7 +250,7 @@ void StabilityMetricsHelper::LogRendererCrash(bool was_extension_process,
       // TODO(wfh): Check if this should be a Kill or a Crash on Android.
       break;
 #endif
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
       RecordChildKills(histogram_type);
       base::UmaHistogramExactLinear("BrowserRenderProcessHost.ChildKills.OOM",

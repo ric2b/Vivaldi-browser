@@ -20,6 +20,7 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_constants.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
+#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -51,6 +52,9 @@ struct AutofillFieldDisplayInfo {
 };
 
 static const AutofillFieldDisplayInfo kFieldsToDisplay[] = {
+    {autofill::NAME_HONORIFIC_PREFIX, IDS_IOS_AUTOFILL_HONORIFIC_PREFIX,
+     UIReturnKeyNext, UIKeyboardTypeDefault,
+     UITextAutocapitalizationTypeSentences},
     {autofill::NAME_FULL, IDS_IOS_AUTOFILL_FULLNAME, UIReturnKeyNext,
      UIKeyboardTypeDefault, UITextAutocapitalizationTypeSentences},
     {autofill::COMPANY_NAME, IDS_IOS_AUTOFILL_COMPANY_NAME, UIReturnKeyNext,
@@ -95,10 +99,7 @@ static const AutofillFieldDisplayInfo kFieldsToDisplay[] = {
             personalDataManager:(autofill::PersonalDataManager*)dataManager {
   DCHECK(dataManager);
 
-  UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
-                               ? UITableViewStylePlain
-                               : UITableViewStyleGrouped;
-  self = [super initWithStyle:style];
+  self = [super initWithStyle:ChromeTableViewStyle()];
   if (self) {
     _personalDataManager = dataManager;
     _autofillProfile = profile;
@@ -188,6 +189,13 @@ static const AutofillFieldDisplayInfo kFieldsToDisplay[] = {
   [model addSectionWithIdentifier:SectionIdentifierFields];
   for (size_t i = 0; i < base::size(kFieldsToDisplay); ++i) {
     const AutofillFieldDisplayInfo& field = kFieldsToDisplay[i];
+
+    if (field.autofillType == autofill::NAME_HONORIFIC_PREFIX &&
+        !base::FeatureList::IsEnabled(
+            autofill::features::
+                kAutofillEnableUIForHonorificPrefixesInSettings)) {
+      continue;
+    }
 
     AutofillEditItem* item =
         [[AutofillEditItem alloc] initWithType:ItemTypeField];

@@ -2,11 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {MenuManager} from './menu_manager.js';
+import {Navigator} from './navigator.js';
+import {SAChildNode, SARootNode} from './nodes/switch_access_node.js';
+import {SwitchAccess} from './switch_access.js';
+import {SAConstants, SwitchAccessMenuAction} from './switch_access_constants.js';
+
 /**
  * Class to handle performing actions with Switch Access, including determining
  * which actions are available in the given context.
  */
-class ActionManager {
+export class ActionManager {
   /** @private */
   constructor() {
     /**
@@ -18,6 +24,12 @@ class ActionManager {
 
     /** @private {!Array<!SAConstants.MenuType>} */
     this.menuStack_ = [];
+
+    /** @private {constants.Point} */
+    this.pointScanPoint_ = {x: 0, y: 0};
+
+    /** @private {function(constants.Point)} */
+    this.pointScanListener_ = this.handleOnPointScanSet_.bind(this);
   }
 
   static get instance() {
@@ -57,7 +69,7 @@ class ActionManager {
    * opens the action menu. Otherwise performs the node's default action.
    */
   static onSelect() {
-    const node = NavigationManager.currentNode;
+    const node = Navigator.instance.currentNode;
     if (node.actions.length <= 1 || !node.location) {
       node.doDefaultAction();
       return;
@@ -77,7 +89,9 @@ class ActionManager {
   static performAction(action) {
     const manager = ActionManager.instance;
     manager.handleGlobalActions_(action) ||
+        manager.handlePointScanActions_(action) ||
         manager.performActionOnCurrentNode_(action);
+    ActionManager.exitCurrentMenu();
   }
 
 
@@ -141,6 +155,11 @@ class ActionManager {
           SwitchAccessMenuAction.MOVE_FORWARD_ONE_CHAR_OF_TEXT,
           SwitchAccessMenuAction.END_TEXT_SELECTION
         ];
+      case SAConstants.MenuType.POINT_SCAN_MENU:
+        return [
+          SwitchAccessMenuAction.LEFT_CLICK,
+          SwitchAccessMenuAction.RIGHT_CLICK,
+        ];
       default:
         return [];
     }
@@ -178,6 +197,9 @@ class ActionManager {
     actions.filter((a) => possibleActions.includes(a));
     if (this.currentMenuType_ === SAConstants.MenuType.MAIN_MENU) {
       actions = this.addGlobalActions_(actions);
+    } else if (this.currentMenuType_ === SAConstants.MenuType.POINT_SCAN_MENU) {
+      actions = this.actionsForType_(SAConstants.MenuType.POINT_SCAN_MENU);
+      actions = this.addGlobalActions_(actions);
     }
     return actions;
   }
@@ -196,10 +218,37 @@ class ActionManager {
             'manageAccessibility/switchAccess');
         return true;
       case SwitchAccessMenuAction.POINT_SCAN:
-        chrome.accessibilityPrivate.activatePointScan();
-        chrome.accessibilityPrivate.onPointScanSet.addListener(
-            this.pointScanClick_.bind(this));
         ActionManager.exitCurrentMenu();
+        chrome.accessibilityPrivate.setPointScanState(chrome.accessibilityPrivate.PointScanState.START);
+        chrome.accessibilityPrivate.onPointScanSet.addListener(
+            this.pointScanListener_);
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * If the action is a point scan action, perform the action and return true.
+   * Otherwise return false.
+   * @param {!SwitchAccessMenuAction} action
+   * @return {boolean}
+   * @private
+   */
+  handlePointScanActions_(action) {
+    switch (action) {
+      case SwitchAccessMenuAction.LEFT_CLICK:
+        EventGenerator.sendMouseClick(
+            this.pointScanPoint_.x, this.pointScanPoint_.y);
+        chrome.accessibilityPrivate.setPointScanState(chrome.accessibilityPrivate.PointScanState.STOP);
+        return true;
+      case SwitchAccessMenuAction.RIGHT_CLICK:
+        EventGenerator.sendMouseClick(
+            this.pointScanPoint_.x, this.pointScanPoint_.y, {
+              mouseButton:
+                  chrome.accessibilityPrivate.SyntheticMouseEventButton.RIGHT
+            });
+        chrome.accessibilityPrivate.setPointScanState(chrome.accessibilityPrivate.PointScanState.STOP);
         return true;
       default:
         return false;
@@ -231,12 +280,12 @@ class ActionManager {
     // having the menu on the group stack interferes with some actions. We do
     // not close the menu bubble until we receive the ActionResponse CLOSE_MENU.
     // If we receive a different response, we re-enter the menu.
-    NavigationManager.exitIfInGroup(MenuManager.menuAutomationNode);
+    Navigator.instance.exitIfInGroup(MenuManager.menuAutomationNode);
     const response = this.actionNode_.performAction(action);
     if (response === SAConstants.ActionResponse.CLOSE_MENU) {
       MenuManager.close();
     } else {
-      NavigationManager.jumpToSwitchAccessMenu();
+      Navigator.instance.jumpToSwitchAccessMenu();
     }
 
     switch (response) {
@@ -252,13 +301,16 @@ class ActionManager {
   }
 
   /**
-   * Performs mouse left click action on the selected point scanning point
-   * coordinates
-   * @param {number} x
-   * @param {number} y
+   * Shows the point scan menu and sets the point scan position
+   * coordinates.
+   * @param {!constants.Point} point
    * @private
    */
-  pointScanClick_(x, y) {
-    EventGenerator.sendMouseClick(x, y);
+  handleOnPointScanSet_(point) {
+    this.pointScanPoint_ = point;
+    this.menuStack_.push(SAConstants.MenuType.POINT_SCAN_MENU);
+    this.openCurrentMenu_();
+    chrome.accessibilityPrivate.onPointScanSet.removeListener(
+        this.pointScanListener_);
   }
 }

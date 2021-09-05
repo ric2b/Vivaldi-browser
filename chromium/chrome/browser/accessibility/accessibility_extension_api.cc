@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
@@ -28,7 +29,6 @@
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/browser_accessibility_state.h"
-#include "content/public/browser/system_connector.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/error_utils.h"
@@ -39,7 +39,7 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/accessibility_controller_enums.h"
 #include "ash/public/cpp/accessibility_focus_ring_info.h"
@@ -83,7 +83,7 @@ AccessibilityPrivateOpenSettingsSubpageFunction::Run() {
   const std::unique_ptr<Params> params(Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // TODO(chrome-a11y-core): we can't open a settings page when you're on the
   // signin profile, but maybe we should notify the user and explain why?
   Profile* profile = chromeos::AccessibilityManager::Get()->profile();
@@ -95,13 +95,13 @@ AccessibilityPrivateOpenSettingsSubpageFunction::Run() {
 #else
   // This function should only be available on ChromeOS.
   EXTENSION_FUNCTION_VALIDATE(false);
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
 AccessibilityPrivateSetFocusRingsFunction::Run() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<accessibility_private::SetFocusRings::Params> params(
       accessibility_private::SetFocusRings::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -149,6 +149,23 @@ AccessibilityPrivateSetFocusRingsFunction::Run() {
         NOTREACHED();
     }
 
+    if (focus_ring_info.stacking_order) {
+      switch (focus_ring_info.stacking_order) {
+        case accessibility_private::
+            FOCUS_RING_STACKING_ORDER_ABOVEACCESSIBILITYBUBBLES:
+          focus_ring->stacking_order =
+              ash::FocusRingStackingOrder::ABOVE_ACCESSIBILITY_BUBBLES;
+          break;
+        case accessibility_private::
+            FOCUS_RING_STACKING_ORDER_BELOWACCESSIBILITYBUBBLES:
+          focus_ring->stacking_order =
+              ash::FocusRingStackingOrder::BELOW_ACCESSIBILITY_BUBBLES;
+          break;
+        default:
+          NOTREACHED();
+      }
+    }
+
     if (focus_ring_info.background_color &&
         !extensions::image_util::ParseHexColorString(
             *(focus_ring_info.background_color),
@@ -172,12 +189,12 @@ AccessibilityPrivateSetFocusRingsFunction::Run() {
   return RespondNow(NoArguments());
 #else
   return RespondNow(Error(kErrorNotSupported));
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 ExtensionFunction::ResponseAction
 AccessibilityPrivateSetHighlightsFunction::Run() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<accessibility_private::SetHighlights::Params> params(
       accessibility_private::SetHighlights::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -195,7 +212,7 @@ AccessibilityPrivateSetHighlightsFunction::Run() {
   chromeos::AccessibilityManager::Get()->SetHighlights(rects, color);
 
   return RespondNow(NoArguments());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return RespondNow(Error(kErrorNotSupported));
 }
@@ -205,7 +222,7 @@ AccessibilityPrivateSetKeyboardListenerFunction::Run() {
   ChromeExtensionFunctionDetails details(this);
   CHECK(extension());
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   bool enabled;
   bool capture;
   EXTENSION_FUNCTION_VALIDATE(args_->GetBoolean(0, &enabled));
@@ -224,14 +241,14 @@ AccessibilityPrivateSetKeyboardListenerFunction::Run() {
   ash::EventRewriterController::Get()->CaptureAllKeysForSpokenFeedback(
       enabled && capture);
   return RespondNow(NoArguments());
-#endif  // defined OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return RespondNow(Error(kErrorNotSupported));
 }
 
 ExtensionFunction::ResponseAction
 AccessibilityPrivateDarkenScreenFunction::Run() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   bool darken = false;
   EXTENSION_FUNCTION_VALIDATE(args_->GetBoolean(0, &darken));
   chromeos::AccessibilityManager::Get()->SetDarkenScreen(darken);
@@ -241,7 +258,7 @@ AccessibilityPrivateDarkenScreenFunction::Run() {
 #endif
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 ExtensionFunction::ResponseAction
 AccessibilityPrivateSetNativeChromeVoxArcSupportForCurrentAppFunction::Run() {
   std::unique_ptr<
@@ -299,10 +316,10 @@ AccessibilityPrivateSendSyntheticKeyEventFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
-AccessibilityPrivateEnableChromeVoxMouseEventsFunction::Run() {
+AccessibilityPrivateEnableMouseEventsFunction::Run() {
   bool enabled = false;
   EXTENSION_FUNCTION_VALIDATE(args_->GetBoolean(0, &enabled));
-  ash::EventRewriterController::Get()->SetSendMouseEventsToDelegate(enabled);
+  ash::EventRewriterController::Get()->SetSendMouseEvents(enabled);
   return RespondNow(NoArguments());
 }
 
@@ -341,6 +358,9 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
   int flags = 0;
   if (type != ui::ET_MOUSE_MOVED) {
     switch (mouse_data->mouse_button) {
+      case accessibility_private::SYNTHETIC_MOUSE_EVENT_BUTTON_LEFT:
+        flags |= ui::EF_LEFT_MOUSE_BUTTON;
+        break;
       case accessibility_private::SYNTHETIC_MOUSE_EVENT_BUTTON_MIDDLE:
         flags |= ui::EF_MIDDLE_MOUSE_BUTTON;
         break;
@@ -522,8 +542,23 @@ AccessibilityPrivateUpdateSwitchAccessBubbleFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
-AccessibilityPrivateActivatePointScanFunction::Run() {
-  ash::AccessibilityController::Get()->ActivatePointScan();
+AccessibilityPrivateSetPointScanStateFunction::Run() {
+  std::unique_ptr<accessibility_private::SetPointScanState::Params> params =
+      accessibility_private::SetPointScanState::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  accessibility_private::PointScanState params_state = params->state;
+
+  switch (params_state) {
+    case accessibility_private::PointScanState::POINT_SCAN_STATE_START:
+      ash::AccessibilityController::Get()->StartPointScan();
+      break;
+    case accessibility_private::PointScanState::POINT_SCAN_STATE_STOP:
+      ash::AccessibilityController::Get()->StopPointScan();
+      break;
+    case accessibility_private::PointScanState::POINT_SCAN_STATE_NONE:
+      break;
+  }
+
   return RespondNow(NoArguments());
 }
 
@@ -608,14 +643,14 @@ AccessibilityPrivateUpdateSelectToSpeakPanelFunction::Run() {
     return RespondNow(NoArguments());
   }
 
-  if (!params->anchor || !params->is_paused)
+  if (!params->anchor || !params->is_paused || !params->speed)
     return RespondNow(Error("Required parameters missing to show panel."));
 
   const gfx::Rect anchor =
       gfx::Rect(params->anchor->left, params->anchor->top,
                 params->anchor->width, params->anchor->height);
   ash::AccessibilityController::Get()->ShowSelectToSpeakPanel(
-      anchor, *params->is_paused);
+      anchor, *params->is_paused, *params->speed);
 
   return RespondNow(NoArguments());
 }

@@ -55,7 +55,8 @@ class PresenterImageGL : public OutputPresenter::Image {
 
   void BeginPresent() final;
   void EndPresent() final;
-  int present_count() const final;
+  int GetPresentCount() const final;
+  void OnContextLost() final;
 
   gl::GLImage* GetGLImage(std::unique_ptr<gfx::GpuFence>* fence);
 
@@ -94,11 +95,13 @@ bool PresenterImageGL::Initialize(
   overlay_representation_ = representation_factory->ProduceOverlay(mailbox);
 
   // If the backing doesn't support overlay, then fallback to GL.
-  if (!overlay_representation_)
+  if (!overlay_representation_) {
+    LOG(ERROR) << "ProduceOverlay() failed";
     gl_representation_ = representation_factory->ProduceGLTexture(mailbox);
+  }
 
   if (!overlay_representation_ && !gl_representation_) {
-    DLOG(ERROR) << "ProduceOverlay() and ProduceGLTexture() failed.";
+    LOG(ERROR) << "ProduceOverlay() and ProduceGLTexture() failed.";
     return false;
   }
 
@@ -136,8 +139,15 @@ void PresenterImageGL::EndPresent() {
   scoped_gl_read_access_.reset();
 }
 
-int PresenterImageGL::present_count() const {
+int PresenterImageGL::GetPresentCount() const {
   return present_count_;
+}
+
+void PresenterImageGL::OnContextLost() {
+  if (overlay_representation_)
+    overlay_representation_->OnContextLost();
+  if (gl_representation_)
+    gl_representation_->OnContextLost();
 }
 
 gl::GLImage* PresenterImageGL::GetGLImage(

@@ -64,8 +64,9 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/containers/flat_map.h"
+#include "base/types/pass_key.h"
 #include "base/util/type_safety/id_type.h"
-#include "base/util/type_safety/pass_key.h"
 
 namespace performance_manager {
 namespace voting {
@@ -105,8 +106,6 @@ class Vote final {
 
 template <typename VoteImpl>
 using VoterId = util::IdTypeU32<VoteImpl>;
-template <typename VoteImpl>
-constexpr VoterId<VoteImpl> kInvalidVoterId;
 
 // A raw vote becomes an AcceptedVote once a VoteConsumer receives and stores
 // it, associating it with a VoterId.
@@ -118,7 +117,7 @@ class AcceptedVote;
 template <class VoteImpl>
 class VoteReceipt final {
  public:
-  using PassKey = util::PassKey<VoteReceipt<VoteImpl>>;
+  using PassKey = base::PassKey<VoteReceipt<VoteImpl>>;
 
   VoteReceipt();
   VoteReceipt(const VoteReceipt& rhs) = delete;
@@ -157,11 +156,11 @@ class VoteReceipt final {
   // functions are only meant to be used by AcceptedVote.
 
   // Allows an AcceptedVote to create an entangled receipt.
-  VoteReceipt(util::PassKey<AcceptedVote<VoteImpl>>,
+  VoteReceipt(base::PassKey<AcceptedVote<VoteImpl>>,
               AcceptedVote<VoteImpl>* vote);
 
   // Allows an AcceptedVote to update its backpointer.
-  void MoveVote(util::PassKey<AcceptedVote<VoteImpl>>,
+  void MoveVote(base::PassKey<AcceptedVote<VoteImpl>>,
                 AcceptedVote<VoteImpl>* old_vote,
                 AcceptedVote<VoteImpl>* new_vote);
 
@@ -191,7 +190,7 @@ template <class VoteImpl>
 class AcceptedVote final {
  public:
   using ContextType = typename VoteImpl::ContextType;
-  using PassKey = util::PassKey<AcceptedVote<VoteImpl>>;
+  using PassKey = base::PassKey<AcceptedVote<VoteImpl>>;
 
   AcceptedVote();
   AcceptedVote(VoteConsumer<VoteImpl>* consumer,
@@ -226,21 +225,21 @@ class AcceptedVote final {
   // functions are only meant to be used by VoteReceipt.
 
   // Allows a VoteReceipt to associate itself with this vote.
-  void SetReceipt(util::PassKey<VoteReceipt<VoteImpl>>,
+  void SetReceipt(base::PassKey<VoteReceipt<VoteImpl>>,
                   VoteReceipt<VoteImpl>* receipt);
 
   // Allows a VoteReceipt to update its backpointer.
-  void MoveReceipt(util::PassKey<VoteReceipt<VoteImpl>>,
+  void MoveReceipt(base::PassKey<VoteReceipt<VoteImpl>>,
                    VoteReceipt<VoteImpl>* old_receipt,
                    VoteReceipt<VoteImpl>* new_receipt);
 
   // Allows a VoteReceipt to change this vote.
-  void ChangeVote(util::PassKey<VoteReceipt<VoteImpl>>,
+  void ChangeVote(base::PassKey<VoteReceipt<VoteImpl>>,
                   typename VoteImpl::VoteType vote,
                   const char* reason);
 
   // Allows a VoteReceipt to invalidate this vote.
-  void InvalidateVote(util::PassKey<VoteReceipt<VoteImpl>>,
+  void InvalidateVote(base::PassKey<VoteReceipt<VoteImpl>>,
                       VoteReceipt<VoteImpl>* receipt);
 
  private:
@@ -251,7 +250,7 @@ class AcceptedVote final {
 
   // The ID of the voter that submitted the vote. This is defined by the
   // VoteConsumer.
-  VoterId<VoteImpl> voter_id_ = kInvalidVoterId<VoteImpl>;
+  VoterId<VoteImpl> voter_id_;
 
   const ContextType* context_ = nullptr;
 
@@ -275,7 +274,7 @@ template <class VoteImpl>
 class VotingChannel final {
  public:
   using ContextType = typename VoteImpl::ContextType;
-  using PassKey = util::PassKey<VotingChannel<VoteImpl>>;
+  using PassKey = base::PassKey<VotingChannel<VoteImpl>>;
 
   VotingChannel();
   VotingChannel(const VotingChannel& rhs) = delete;
@@ -302,7 +301,7 @@ class VotingChannel final {
   }
 
   // VotingChannelFactory is the sole producer of VotingChannels.
-  VotingChannel(util::PassKey<VotingChannelFactory<VoteImpl>>,
+  VotingChannel(base::PassKey<VotingChannelFactory<VoteImpl>>,
                 VotingChannelFactory<VoteImpl>* factory,
                 VoterId<VoteImpl> voter_id);
 
@@ -312,7 +311,7 @@ class VotingChannel final {
   // Used to reach back into the factory to decrement the outstanding
   // VotingChannel count, and for routing votes to the consumer.
   VotingChannelFactory<VoteImpl>* factory_ = nullptr;
-  VoterId<VoteImpl> voter_id_ = kInvalidVoterId<VoteImpl>;
+  VoterId<VoteImpl> voter_id_;
 };
 
 // A helper for creating VotingChannels that binds a unique VoterId (and
@@ -339,9 +338,9 @@ class VotingChannelFactory final {
 
   // Used by ~VotingChannel to notify the factory that a channel has been
   // torn down.
-  void OnVotingChannelDestroyed(util::PassKey<VotingChannel<VoteImpl>>);
+  void OnVotingChannelDestroyed(base::PassKey<VotingChannel<VoteImpl>>);
 
-  VoteConsumer<VoteImpl>* GetConsumer(util::PassKey<VotingChannel<VoteImpl>>) {
+  VoteConsumer<VoteImpl>* GetConsumer(base::PassKey<VotingChannel<VoteImpl>>) {
     return consumer_;
   }
 
@@ -368,7 +367,7 @@ class VoteConsumer {
 
   // Used by a VotingChannel to submit votes to this consumer.
   virtual VoteReceipt<VoteImpl> SubmitVote(
-      util::PassKey<VotingChannel<VoteImpl>>,
+      base::PassKey<VotingChannel<VoteImpl>>,
       VoterId<VoteImpl> voter_id,
       const ContextType* context,
       const VoteImpl& vote) = 0;
@@ -376,7 +375,7 @@ class VoteConsumer {
   // Used by an AcceptedVote to notify a consumer that a previously issued vote
   // has been changed. The consumer should update |old_vote| in-place using the
   // data from |new_vote|.
-  virtual void ChangeVote(util::PassKey<AcceptedVote<VoteImpl>>,
+  virtual void ChangeVote(base::PassKey<AcceptedVote<VoteImpl>>,
                           AcceptedVote<VoteImpl>* old_vote,
                           const VoteImpl& new_vote) = 0;
 
@@ -384,7 +383,7 @@ class VoteConsumer {
   // receipt has been destroyed, and the vote is now invalidated. This is kept
   // protected as it is part of a private contract between an AcceptedVote and a
   // VoteConsumer.
-  virtual void VoteInvalidated(util::PassKey<AcceptedVote<VoteImpl>>,
+  virtual void VoteInvalidated(base::PassKey<AcceptedVote<VoteImpl>>,
                                AcceptedVote<VoteImpl>* vote) = 0;
 };
 
@@ -420,7 +419,7 @@ template <class VoteImpl>
 class VoteConsumerDefaultImpl : public VoteConsumer<VoteImpl> {
  public:
   using ContextType = typename VoteImpl::ContextType;
-  using PassKey = util::PassKey<VoteConsumerDefaultImpl>;
+  using PassKey = base::PassKey<VoteConsumerDefaultImpl>;
 
   explicit VoteConsumerDefaultImpl(VoteObserver<VoteImpl>* vote_observer);
   ~VoteConsumerDefaultImpl() override;
@@ -433,14 +432,14 @@ class VoteConsumerDefaultImpl : public VoteConsumer<VoteImpl> {
   }
 
   // VoteConsumer:
-  VoteReceipt<VoteImpl> SubmitVote(util::PassKey<VotingChannel<VoteImpl>>,
+  VoteReceipt<VoteImpl> SubmitVote(base::PassKey<VotingChannel<VoteImpl>>,
                                    VoterId<VoteImpl> voter_id,
                                    const ContextType* context,
                                    const VoteImpl& vote) override;
-  void ChangeVote(util::PassKey<AcceptedVote<VoteImpl>>,
+  void ChangeVote(base::PassKey<AcceptedVote<VoteImpl>>,
                   AcceptedVote<VoteImpl>* old_vote,
                   const VoteImpl& new_vote) override;
-  void VoteInvalidated(util::PassKey<AcceptedVote<VoteImpl>>,
+  void VoteInvalidated(base::PassKey<AcceptedVote<VoteImpl>>,
                        AcceptedVote<VoteImpl>* vote) override;
 
  private:
@@ -448,7 +447,54 @@ class VoteConsumerDefaultImpl : public VoteConsumer<VoteImpl> {
 
   VotingChannelFactory<VoteImpl> voting_channel_factory_;
 
-  std::map<const ContextType*, AcceptedVote<VoteImpl>> accepted_votes_;
+  base::flat_map<VoterId<VoteImpl>,
+                 base::flat_map<const ContextType*, AcceptedVote<VoteImpl>>>
+      accepted_votes_by_voter_id_;
+};
+
+// A wrapper for a VotingChannel that takes care of handling the VoteReceipts.
+// This is a temporary class that exists while existing users of VotingChannel
+// are being migrated. Its functionality will be folded into VotingChannel
+// in the future.
+template <class VoteImpl>
+class VotingChannelWrapper {
+ public:
+  using ContextType = typename VoteImpl::ContextType;
+
+  VotingChannelWrapper();
+  ~VotingChannelWrapper();
+
+  VotingChannelWrapper(VotingChannelWrapper&&);
+  VotingChannelWrapper& operator=(VotingChannelWrapper&&);
+
+  // Sets the underlying VotingChannel. Can only be invoked once, and it must be
+  // done before any calls to the functions to submit/change/invalidate votes.
+  void SetVotingChannel(VotingChannel<VoteImpl> voting_channel);
+
+  // Submits a vote through the underlying voting channel. Can only be called
+  // after SetVotingChannel() was invoked.
+  void SubmitVote(const ContextType* context, const VoteImpl& vote);
+
+  // Modifies an existing vote. Can only be called after SetVotingChannel() was
+  // invoked.
+  void ChangeVote(const ContextType* context, const VoteImpl& new_vote);
+
+  // Invalidates an existing vote. Can only be called after SetVotingChannel()
+  // was invoked.
+  void InvalidateVote(const ContextType* context);
+
+  // Returns true if the underlying VotingChannel is valid.
+  bool IsValid() const;
+
+  // Checks whether or not there's a vote associated with |context|.
+  bool HasVoteForContext(const ContextType* context);
+
+  VoterId<VoteImpl> voter_id() const { return voting_channel_.voter_id(); }
+
+ private:
+  VotingChannel<VoteImpl> voting_channel_;
+
+  base::flat_map<const ContextType*, VoteReceipt<VoteImpl>> vote_receipts_;
 };
 
 /////////////////////////////////////////////////////////////////////
@@ -562,7 +608,7 @@ void VoteReceipt<VoteImpl>::Reset() {
 }
 
 template <class VoteImpl>
-void VoteReceipt<VoteImpl>::MoveVote(util::PassKey<AcceptedVote<VoteImpl>>,
+void VoteReceipt<VoteImpl>::MoveVote(base::PassKey<AcceptedVote<VoteImpl>>,
                                      AcceptedVote<VoteImpl>* old_vote,
                                      AcceptedVote<VoteImpl>* new_vote) {
   DCHECK(old_vote);
@@ -576,7 +622,7 @@ void VoteReceipt<VoteImpl>::MoveVote(util::PassKey<AcceptedVote<VoteImpl>>,
 }
 
 template <class VoteImpl>
-VoteReceipt<VoteImpl>::VoteReceipt(util::PassKey<AcceptedVote<VoteImpl>>,
+VoteReceipt<VoteImpl>::VoteReceipt(base::PassKey<AcceptedVote<VoteImpl>>,
                                    AcceptedVote<VoteImpl>* vote)
     : vote_(vote) {
   // The vote should be valid and not be associated with any receipt.
@@ -617,7 +663,7 @@ AcceptedVote<VoteImpl>::AcceptedVote(VoteConsumer<VoteImpl>* consumer,
       vote_(vote),
       invalidated_(false) {
   DCHECK(consumer_);
-  DCHECK_NE(voter_id_, kInvalidVoterId<VoteImpl>);
+  DCHECK(voter_id_);
   DCHECK(context_);
   DCHECK(vote_.IsValid());
 }
@@ -655,8 +701,7 @@ bool AcceptedVote<VoteImpl>::HasReceipt(
 
 template <class VoteImpl>
 bool AcceptedVote<VoteImpl>::IsValid() const {
-  return consumer_ && voter_id_ != kInvalidVoterId<VoteImpl> &&
-         vote_.IsValid() && !invalidated_;
+  return consumer_ && voter_id_ && vote_.IsValid() && !invalidated_;
 }
 
 template <class VoteImpl>
@@ -671,7 +716,7 @@ void AcceptedVote<VoteImpl>::UpdateVote(const VoteImpl& vote) {
 }
 
 template <class VoteImpl>
-void AcceptedVote<VoteImpl>::SetReceipt(util::PassKey<VoteReceipt<VoteImpl>>,
+void AcceptedVote<VoteImpl>::SetReceipt(base::PassKey<VoteReceipt<VoteImpl>>,
                                         VoteReceipt<VoteImpl>* receipt) {
   // A receipt can only be set on a vote once in its lifetime.
   DCHECK(!receipt_);
@@ -684,7 +729,7 @@ void AcceptedVote<VoteImpl>::SetReceipt(util::PassKey<VoteReceipt<VoteImpl>>,
 }
 
 template <class VoteImpl>
-void AcceptedVote<VoteImpl>::MoveReceipt(util::PassKey<VoteReceipt<VoteImpl>>,
+void AcceptedVote<VoteImpl>::MoveReceipt(base::PassKey<VoteReceipt<VoteImpl>>,
                                          VoteReceipt<VoteImpl>* old_receipt,
                                          VoteReceipt<VoteImpl>* new_receipt) {
   DCHECK(old_receipt);
@@ -698,7 +743,7 @@ void AcceptedVote<VoteImpl>::MoveReceipt(util::PassKey<VoteReceipt<VoteImpl>>,
 }
 
 template <class VoteImpl>
-void AcceptedVote<VoteImpl>::ChangeVote(util::PassKey<VoteReceipt<VoteImpl>>,
+void AcceptedVote<VoteImpl>::ChangeVote(base::PassKey<VoteReceipt<VoteImpl>>,
                                         typename VoteImpl::VoteType vote,
                                         const char* reason) {
   DCHECK(!invalidated_);
@@ -711,7 +756,7 @@ void AcceptedVote<VoteImpl>::ChangeVote(util::PassKey<VoteReceipt<VoteImpl>>,
 
 template <class VoteImpl>
 void AcceptedVote<VoteImpl>::InvalidateVote(
-    util::PassKey<VoteReceipt<VoteImpl>>,
+    base::PassKey<VoteReceipt<VoteImpl>>,
     VoteReceipt<VoteImpl>* receipt) {
   DCHECK(receipt);
   DCHECK_EQ(receipt_, receipt);
@@ -731,7 +776,7 @@ void AcceptedVote<VoteImpl>::Take(AcceptedVote<VoteImpl>&& rhs) {
   DCHECK(!receipt_);
 
   consumer_ = std::exchange(rhs.consumer_, nullptr);
-  voter_id_ = std::exchange(rhs.voter_id_, kInvalidVoterId<VoteImpl>);
+  voter_id_ = std::exchange(rhs.voter_id_, VoterId<VoteImpl>());
   context_ = std::exchange(rhs.context_, nullptr);
   vote_ = std::exchange(rhs.vote_, VoteImpl());
   receipt_ = std::exchange(rhs.receipt_, nullptr);
@@ -776,22 +821,22 @@ VoteReceipt<VoteImpl> VotingChannel<VoteImpl>::SubmitVote(
 
 template <class VoteImpl>
 bool VotingChannel<VoteImpl>::IsValid() const {
-  return factory_ && voter_id_ != kInvalidVoterId<VoteImpl>;
+  return factory_ && voter_id_;
 }
 
 template <class VoteImpl>
 void VotingChannel<VoteImpl>::Reset() {
   if (!factory_)
     return;
-  DCHECK_NE(kInvalidVoterId<VoteImpl>, voter_id_);
+  DCHECK(voter_id_);
   factory_->OnVotingChannelDestroyed(PassKey());
   factory_ = nullptr;
-  voter_id_ = kInvalidVoterId<VoteImpl>;
+  voter_id_ = VoterId<VoteImpl>();
 }
 
 template <class VoteImpl>
 VotingChannel<VoteImpl>::VotingChannel(
-    util::PassKey<VotingChannelFactory<VoteImpl>>,
+    base::PassKey<VotingChannelFactory<VoteImpl>>,
     VotingChannelFactory<VoteImpl>* factory,
     VoterId<VoteImpl> voter_id)
     : factory_(factory), voter_id_(voter_id) {}
@@ -800,7 +845,7 @@ template <class VoteImpl>
 void VotingChannel<VoteImpl>::Take(VotingChannel<VoteImpl>&& rhs) {
   Reset();
   factory_ = std::exchange(rhs.factory_, nullptr);
-  voter_id_ = std::exchange(rhs.voter_id_, kInvalidVoterId<VoteImpl>);
+  voter_id_ = std::exchange(rhs.voter_id_, VoterId<VoteImpl>());
 }
 
 /////////////////////////////////////////////////////////////////////
@@ -824,15 +869,19 @@ VotingChannel<VoteImpl> VotingChannelFactory<VoteImpl>::BuildVotingChannel() {
   ++voting_channels_outstanding_;
   // TODO(sebmarchand): Use VoterId<VoteImpl>::Generator instead of
   // FromUnsafeValue.
+  // Note: The pre-increment operator is used so that the value of the first
+  // voter ID is 1. This is required because 0 is the value for an invalid
+  // VoterId.
   VoterId<VoteImpl> new_voter_id =
       VoterId<VoteImpl>::FromUnsafeValue(++voting_channels_issued_);
+  DCHECK(!new_voter_id.is_null());
   return VotingChannel<VoteImpl>(
-      util::PassKey<VotingChannelFactory<VoteImpl>>(), this, new_voter_id);
+      base::PassKey<VotingChannelFactory<VoteImpl>>(), this, new_voter_id);
 }
 
 template <class VoteImpl>
 void VotingChannelFactory<VoteImpl>::OnVotingChannelDestroyed(
-    util::PassKey<VotingChannel<VoteImpl>>) {
+    base::PassKey<VotingChannel<VoteImpl>>) {
   DCHECK_LT(0u, voting_channels_outstanding_);
   --voting_channels_outstanding_;
 }
@@ -868,16 +917,18 @@ VoteConsumerDefaultImpl<VoteImpl>::BuildVotingChannel() {
 
 template <class VoteImpl>
 VoteReceipt<VoteImpl> VoteConsumerDefaultImpl<VoteImpl>::SubmitVote(
-    util::PassKey<VotingChannel<VoteImpl>>,
+    base::PassKey<VotingChannel<VoteImpl>>,
     VoterId<VoteImpl> voter_id,
     const ContextType* context,
     const VoteImpl& vote) {
+  auto& accepted_votes = accepted_votes_by_voter_id_[voter_id];
+
   AcceptedVote<VoteImpl> accepted_vote(this, voter_id, context, vote);
 
   VoteReceipt<VoteImpl> vote_receipt = accepted_vote.IssueReceipt();
 
   bool inserted =
-      accepted_votes_.emplace(context, std::move(accepted_vote)).second;
+      accepted_votes.emplace(context, std::move(accepted_vote)).second;
   DCHECK(inserted);
 
   vote_observer_->OnVoteSubmitted(voter_id, context, vote);
@@ -887,11 +938,15 @@ VoteReceipt<VoteImpl> VoteConsumerDefaultImpl<VoteImpl>::SubmitVote(
 
 template <class VoteImpl>
 void VoteConsumerDefaultImpl<VoteImpl>::ChangeVote(
-    util::PassKey<AcceptedVote<VoteImpl>>,
+    base::PassKey<AcceptedVote<VoteImpl>>,
     AcceptedVote<VoteImpl>* old_vote,
     const VoteImpl& new_vote) {
-  auto it = accepted_votes_.find(old_vote->context());
-  DCHECK(it != accepted_votes_.end());
+  VoterId<VoteImpl> voter_id = old_vote->voter_id();
+  auto& accepted_votes = accepted_votes_by_voter_id_[voter_id];
+
+  auto it = accepted_votes.find(old_vote->context());
+  DCHECK(it != accepted_votes.end());
+
   auto* accepted_vote = &it->second;
   DCHECK_EQ(accepted_vote, old_vote);
 
@@ -903,17 +958,89 @@ void VoteConsumerDefaultImpl<VoteImpl>::ChangeVote(
 
 template <class VoteImpl>
 void VoteConsumerDefaultImpl<VoteImpl>::VoteInvalidated(
-    util::PassKey<AcceptedVote<VoteImpl>>,
+    base::PassKey<AcceptedVote<VoteImpl>>,
     AcceptedVote<VoteImpl>* vote) {
-  auto it = accepted_votes_.find(vote->context());
-  DCHECK(it != accepted_votes_.end());
+  VoterId<VoteImpl> voter_id = vote->voter_id();
+  auto& accepted_votes = accepted_votes_by_voter_id_[voter_id];
+
+  auto it = accepted_votes.find(vote->context());
+  DCHECK(it != accepted_votes.end());
+
   auto* accepted_vote = &it->second;
   DCHECK_EQ(accepted_vote, vote);
 
   vote_observer_->OnVoteInvalidated(accepted_vote->voter_id(),
                                     accepted_vote->context());
 
-  accepted_votes_.erase(it);
+  accepted_votes.erase(it);
+
+  if (accepted_votes.empty()) {
+    size_t removed = accepted_votes_by_voter_id_.erase(voter_id);
+    DCHECK_EQ(removed, 1u);
+  }
+}
+
+/////////////////////////////////////////////////////////////////////
+// VotingChannelWrapper
+
+template <class VoteImpl>
+VotingChannelWrapper<VoteImpl>::VotingChannelWrapper() = default;
+
+template <class VoteImpl>
+VotingChannelWrapper<VoteImpl>::~VotingChannelWrapper() = default;
+
+template <class VoteImpl>
+VotingChannelWrapper<VoteImpl>::VotingChannelWrapper(VotingChannelWrapper&&) =
+    default;
+
+template <class VoteImpl>
+VotingChannelWrapper<VoteImpl>& VotingChannelWrapper<VoteImpl>::operator=(
+    VotingChannelWrapper<VoteImpl>&&) = default;
+
+template <class VoteImpl>
+void VotingChannelWrapper<VoteImpl>::SetVotingChannel(
+    VotingChannel<VoteImpl> voting_channel) {
+  DCHECK(voting_channel.IsValid());
+  DCHECK(!voting_channel_.IsValid());
+  voting_channel_ = std::move(voting_channel);
+}
+
+template <class VoteImpl>
+void VotingChannelWrapper<VoteImpl>::SubmitVote(const ContextType* context,
+                                                const VoteImpl& vote) {
+  DCHECK(voting_channel_.IsValid());
+
+  VoteReceipt<VoteImpl> vote_receipt =
+      voting_channel_.SubmitVote(context, vote);
+  bool inserted =
+      vote_receipts_.emplace(context, std::move(vote_receipt)).second;
+  DCHECK(inserted);
+}
+
+template <class VoteImpl>
+void VotingChannelWrapper<VoteImpl>::ChangeVote(const ContextType* context,
+                                                const VoteImpl& new_vote) {
+  auto it = vote_receipts_.find(context);
+  DCHECK(it != vote_receipts_.end());
+  it->second.ChangeVote(new_vote.value(), new_vote.reason());
+}
+
+template <class VoteImpl>
+void VotingChannelWrapper<VoteImpl>::InvalidateVote(
+    const ContextType* context) {
+  size_t removed = vote_receipts_.erase(context);
+  DCHECK_EQ(removed, 1u);
+}
+
+template <class VoteImpl>
+bool VotingChannelWrapper<VoteImpl>::IsValid() const {
+  return voting_channel_.IsValid();
+}
+
+template <class VoteImpl>
+bool VotingChannelWrapper<VoteImpl>::HasVoteForContext(
+    const ContextType* context) {
+  return base::Contains(vote_receipts_, context);
 }
 
 }  // namespace voting

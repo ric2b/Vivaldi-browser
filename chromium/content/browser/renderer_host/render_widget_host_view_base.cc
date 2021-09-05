@@ -9,6 +9,7 @@
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "components/viz/common/features.h"
+#include "components/viz/common/surfaces/subtree_capture_id.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
@@ -275,7 +276,7 @@ std::unique_ptr<viz::ClientFrameSinkVideoCapturer>
 RenderWidgetHostViewBase::CreateVideoCapturer() {
   std::unique_ptr<viz::ClientFrameSinkVideoCapturer> video_capturer =
       GetHostFrameSinkManager()->CreateVideoCapturer();
-  video_capturer->ChangeTarget(GetFrameSinkId());
+  video_capturer->ChangeTarget(GetFrameSinkId(), viz::SubtreeCaptureId());
   return video_capturer;
 }
 
@@ -425,14 +426,6 @@ void RenderWidgetHostViewBase::SetWidgetType(WidgetType widget_type) {
 
 WidgetType RenderWidgetHostViewBase::GetWidgetType() {
   return widget_type_;
-}
-
-BrowserAccessibilityManager*
-RenderWidgetHostViewBase::CreateBrowserAccessibilityManager(
-    BrowserAccessibilityDelegate* delegate,
-    bool for_root_frame) {
-  NOTREACHED();
-  return nullptr;
 }
 
 gfx::AcceleratedWidget
@@ -748,6 +741,11 @@ void RenderWidgetHostViewBase::SynchronizeVisualProperties() {
 void RenderWidgetHostViewBase::DidNavigate() {
   if (host())
     host()->SynchronizeVisualProperties();
+}
+
+WebContentsAccessibility*
+RenderWidgetHostViewBase::GetWebContentsAccessibility() {
+  return nullptr;
 }
 
 // TODO(wjmaclean): Would it simplify this function if we re-implemented it

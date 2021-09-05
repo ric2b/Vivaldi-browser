@@ -81,7 +81,7 @@ void VivaldiWebSource::ExtractRequestTypeAndData(const GURL& url,
     if (type[0] == '/') {
       type = type.erase(0, 1);
     }
-    data = url.query();
+    data = url.spec();
   } else {
     type = url.GetContent();
   }

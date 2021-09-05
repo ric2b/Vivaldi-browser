@@ -2,16 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import './data_point.js';
 import './diagnostics_card.js';
 import './diagnostics_shared_css.js';
 import './percent_bar_chart.js';
+import './routine_section.js';
 import './strings.m.js';
 
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {BatteryChargeStatus, BatteryHealth, BatteryInfo, SystemDataProviderInterface} from './diagnostics_types.js'
+import {BatteryChargeStatus, BatteryHealth, BatteryInfo, RoutineType, SystemDataProviderInterface} from './diagnostics_types.js'
 import {getSystemDataProvider} from './mojo_interface_provider.js';
 import {mojoString16ToString} from './mojo_utils.js';
 
@@ -61,10 +65,24 @@ Polymer({
       type: Object,
     },
 
+    /** @private {!Array<!RoutineType>} */
+    routines_: {
+      type: Array,
+      computed:
+          'getCurrentPowerRoutines_(batteryChargeStatus_.powerAdapterStatus)',
+    },
+
     /** @protected {string} */
     powerTimeString_: {
       type: String,
       computed: 'decodeString16_(batteryChargeStatus_.powerTime)',
+    },
+
+    /** @type {boolean} */
+    isTestRunning: {
+      type: Boolean,
+      value: false,
+      notify: true,
     },
   },
 
@@ -84,16 +102,17 @@ Polymer({
 
   /** @private */
   fetchBatteryInfo_() {
-    this.systemDataProvider_.getBatteryInfo().then(
-        this.onBatteryInfoReceived_.bind(this));
+    this.systemDataProvider_.getBatteryInfo().then((result) => {
+      this.onBatteryInfoReceived_(result.batteryInfo);
+    });
   },
 
   /**
-   * @param {!{batteryInfo: !BatteryInfo}} result
+   * @param {!BatteryInfo} batteryInfo
    * @private
    */
-  onBatteryInfoReceived_(result) {
-    this.batteryInfo_ = result.batteryInfo;
+  onBatteryInfoReceived_(batteryInfo) {
+    this.batteryInfo_ = batteryInfo;
   },
 
   /** @private */
@@ -133,6 +152,19 @@ Polymer({
   },
 
   /**
+   * Get an array of currently relevant routines based on power adaptor status
+   * @param {!chromeos.diagnostics.mojom.ExternalPowerSource} powerAdapterStatus
+   * @return {!Array<!RoutineType>}
+   * @private
+   */
+  getCurrentPowerRoutines_(powerAdapterStatus) {
+    return powerAdapterStatus ===
+            chromeos.diagnostics.mojom.ExternalPowerSource.kDisconnected ?
+        [chromeos.diagnostics.mojom.RoutineType.kBatteryDischarge] :
+        [chromeos.diagnostics.mojom.RoutineType.kBatteryCharge];
+  },
+
+  /**
    * Converts utf16 to a readable string.
    * @param {!mojoBase.mojom.String16} str16
    * @return {string}
@@ -150,4 +182,32 @@ Polymer({
     this.batteryHealth_ = batteryHealth;
   },
 
+  /** @protected */
+  getDesignedFullCharge_() {
+    return loadTimeData.getStringF(
+        'batteryChipText', this.batteryHealth_.chargeFullDesignMilliampHours);
+  },
+
+  /** @protected */
+  getBatteryHealth_() {
+    const MAX_PERCENTAGE = 100;
+    const batteryWearPercentage =
+        Math.min(this.batteryHealth_.batteryWearPercentage, MAX_PERCENTAGE);
+    return loadTimeData.getStringF('batteryHealthText', batteryWearPercentage);
+  },
+
+  /** @protected */
+  getCurrentNow_() {
+    return loadTimeData.getStringF(
+        'currentNowText', this.batteryChargeStatus_.currentNowMilliamps);
+  },
+
+  /** @protected */
+  getRunTestsButtonText_() {
+    return loadTimeData.getString(
+        this.batteryChargeStatus_.powerAdapterStatus ===
+                chromeos.diagnostics.mojom.ExternalPowerSource.kDisconnected ?
+            'runBatteryDischargeTestText' :
+            'runBatteryChargeTestText')
+  }
 });

@@ -50,15 +50,11 @@ declare_overrides() {
     skip_archive_compression = is_component_build
   }
 
-  if (is_mac) { # && !is_component_build) {
-     use_system_xcode = true
-    # We need to force SDK 10.14 for Official Mac builds
-    # since we cannot update current builders to have SDK 10.15
-    # due to unsupported hardware prevening an OSX upgrade
-    # mac_sdk_official_version = "10.14"
-    if (target_cpu == "arm64") {
-      mac_use_sdk = "11.0"
-    }
+  if (is_mac) {
+    use_system_xcode = true
+    #if (target_cpu == "arm64") {
+    #  mac_use_sdk = "11.0"
+    #}
   }
 
   # Needed until we discover what is causing the unused argument during clcache

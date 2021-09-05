@@ -14,7 +14,7 @@
 #include "base/threading/thread.h"
 #include "base/values.h"
 #include "chrome/browser/defaults.h"
-#include "chrome/browser/enterprise/connectors/connectors_manager.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
@@ -57,7 +57,7 @@ content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIDownloadsHost);
   webui::SetupWebUIDataSource(
-      source, base::make_span(kDownloadsResources, kDownloadsResourcesSize), "",
+      source, base::make_span(kDownloadsResources, kDownloadsResourcesSize),
       IDR_DOWNLOADS_DOWNLOADS_HTML);
 
   bool requests_ap_verdicts =
@@ -153,7 +153,8 @@ content::WebUIDataSource* CreateDownloadsUIHTMLSource(Profile* profile) {
 
   source->AddBoolean(
       "allowOpenNow",
-      !enterprise_connectors::ConnectorsManager::GetInstance()
+      !enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
+           profile)
            ->DelayUntilVerdict(
                enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED));
 

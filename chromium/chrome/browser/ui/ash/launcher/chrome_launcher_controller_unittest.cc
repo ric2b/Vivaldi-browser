@@ -169,6 +169,17 @@ constexpr char kCrxAppPrefix[] = "_crx_";
 // pin model with default apps that can affect some tests.
 constexpr char kDummyAppId[] = "dummyappid_dummyappid_dummyappid";
 
+std::vector<arc::mojom::AppInfoPtr> GetArcSettingsAppInfo() {
+  std::vector<arc::mojom::AppInfoPtr> apps;
+  arc::mojom::AppInfoPtr app(arc::mojom::AppInfo::New());
+  app->name = "settings";
+  app->package_name = "com.android.settings";
+  app->activity = "com.android.settings.Settings";
+  app->sticky = true;
+  apps.push_back(std::move(app));
+  return apps;
+}
+
 // Test implementation of AppIconLoader.
 class TestAppIconLoaderImpl : public AppIconLoader {
  public:
@@ -278,6 +289,32 @@ bool IsWindowOnDesktopOfUser(aura::Window* window,
                              const AccountId& account_id) {
   return MultiUserWindowManagerHelper::GetInstance()->IsWindowOnDesktopOfUser(
       window, account_id);
+}
+
+void UpdateAppRegistryCache(Profile* profile,
+                            const std::string& app_id,
+                            bool block,
+                            bool pause) {
+  std::vector<apps::mojom::AppPtr> apps;
+  apps::mojom::AppPtr app = apps::mojom::App::New();
+  app->app_type = apps::mojom::AppType::kExtension;
+  app->app_id = app_id;
+
+  if (block)
+    app->readiness = apps::mojom::Readiness::kDisabledByPolicy;
+  else
+    app->readiness = apps::mojom::Readiness::kReady;
+
+  if (pause)
+    app->paused = apps::mojom::OptionalBool::kTrue;
+  else
+    app->paused = apps::mojom::OptionalBool::kFalse;
+
+  apps.push_back(std::move(app));
+
+  apps::AppServiceProxyFactory::GetForProfile(profile)
+      ->AppRegistryCache()
+      .OnApps(std::move(apps));
 }
 
 }  // namespace
@@ -801,6 +838,8 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
             result += "Play Store";
           } else if (app == crostini::kCrostiniTerminalSystemAppId) {
             result += "Terminal";
+          } else if (app == arc::kSettingsAppId) {
+            result += "Android Settings";
           } else {
             bool arc_app_found = false;
             for (const auto& arc_app : arc_test_.fake_apps()) {
@@ -1050,8 +1089,29 @@ class ChromeLauncherControllerLacrosTest : public ChromeLauncherControllerTest {
       const ChromeLauncherControllerLacrosTest&) = delete;
   ~ChromeLauncherControllerLacrosTest() override = default;
 
+  // testing::Test:
+  void SetUp() override {
+    // Checking to see if Lacros is allowed requires a user.
+    auto user_manager = std::make_unique<chromeos::FakeChromeUserManager>();
+    auto* fake_user_manager = user_manager.get();
+    scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
+        std::move(user_manager));
+
+    // Login a user. The "email" must match the TestingProfile's
+    // GetProfileUserName() so that profile() will be the primary profile.
+    const AccountId account_id = AccountId::FromUserEmail("testing_profile");
+    fake_user_manager->AddUser(account_id);
+    fake_user_manager->LoginUser(account_id);
+
+    // Creates profile().
+    ChromeLauncherControllerTest::SetUp();
+
+    ASSERT_TRUE(chromeos::ProfileHelper::Get()->IsPrimaryProfile(profile()));
+  }
+
  private:
   base::test::ScopedFeatureList feature_list_;
+  std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 };
 
 class ChromeLauncherControllerExtendedShelfTest
@@ -1375,20 +1435,6 @@ TEST_F(ChromeLauncherControllerSplitSettingsSyncTest, DefaultApps) {
 }
 
 TEST_F(ChromeLauncherControllerLacrosTest, LacrosPinnedByDefault) {
-  // Checking to see if Lacros is allowed requires a user.
-  auto user_manager = std::make_unique<chromeos::FakeChromeUserManager>();
-  auto* fake_user_manager = user_manager.get();
-  user_manager::ScopedUserManager scoped_user_manager(std::move(user_manager));
-  AccountId account_id = AccountId::FromUserEmail("user@example.com");
-  user_manager::User* user = fake_user_manager->AddUser(account_id);
-  fake_user_manager->LoginUser(account_id);
-
-  TestingProfile::Builder profile_builder;
-  profile_builder.SetProfileName(account_id.GetUserEmail());
-  std::unique_ptr<TestingProfile> testing_profile = profile_builder.Build();
-  chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(
-      user, testing_profile.get());
-
   InitLauncherController();
   EXPECT_EQ("Chrome, Lacros", GetPinnedAppStatus());
 }
@@ -1490,6 +1536,24 @@ TEST_F(ChromeLauncherControllerExtendedShelfTest, NoUpgradeFromNonDefault) {
   AddExtension(extension1_.get());
 
   EXPECT_EQ("Chrome, Files, Gmail, Doc, Play Store", GetPinnedAppStatus());
+}
+
+TEST_F(ChromeLauncherControllerWithArcTest,
+       ArcAppsHiddenFromLaunchCanBePinned) {
+  InitLauncherController();
+
+  // Register Android Settings.
+  arc::mojom::AppHost* app_host = arc_test_.arc_app_list_prefs();
+  app_host->OnAppListRefreshed(GetArcSettingsAppInfo());
+  app_service_test().WaitForAppService();
+
+  // Pin Android settings.
+  launcher_controller_->PinAppWithID(arc::kSettingsAppId);
+  EXPECT_EQ("Chrome, Android Settings", GetPinnedAppStatus());
+
+  // The pin should remain after syncing prefs. Play Store should now appear.
+  StartPrefSyncService(syncer::SyncDataList());
+  EXPECT_EQ("Chrome, Play Store, Android Settings", GetPinnedAppStatus());
 }
 
 TEST_F(ChromeLauncherControllerWithArcTest, ArcAppPinCrossPlatformWorkflow) {
@@ -5046,6 +5110,67 @@ TEST_F(ChromeLauncherControllerWebAppTest, WebAppPinRunUnpinClose) {
   EXPECT_EQ(1, model_->item_count());
   EXPECT_FALSE(launcher_controller_->IsAppPinned(app_id));
   EXPECT_EQ(nullptr, launcher_controller_->GetItem(ash::ShelfID(app_id)));
+}
+
+// Test the app status when the paused app is blocked, un-blocked, and un-paused
+TEST_F(ChromeLauncherControllerTest, VerifyAppStatusForPausedApp) {
+  AddExtension(extension1_.get());
+
+  // Set the app as paused
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         true /* pause */);
+
+  InitLauncherController();
+
+  launcher_controller_->PinAppWithID(extension1_->id());
+  EXPECT_EQ(2, model_->item_count());
+  EXPECT_EQ(ash::AppStatus::kPaused, model_->items()[1].app_status);
+
+  // Set the app as blocked
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         true /* pause */);
+  EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
+
+  // Set the app as ready, but still paused;
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         true /* pause */);
+  EXPECT_EQ(ash::AppStatus::kPaused, model_->items()[1].app_status);
+
+  // Set the app as ready, and not paused;
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         false /* pause */);
+  EXPECT_EQ(ash::AppStatus::kReady, model_->items()[1].app_status);
+}
+
+// Test the app status when the blocked app is paused, un-blocked, and
+// un-blocked
+TEST_F(ChromeLauncherControllerTest, VerifyAppStatusForBlockedApp) {
+  AddExtension(extension1_.get());
+
+  // Set the app as blocked
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         false /* pause */);
+
+  InitLauncherController();
+
+  launcher_controller_->PinAppWithID(extension1_->id());
+  EXPECT_EQ(2, model_->item_count());
+  EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
+
+  // Set the app as paused
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         true /* pause */);
+  EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
+
+  // Set the app as blocked, but un-paused;
+  UpdateAppRegistryCache(profile(), extension1_->id(), true /* block */,
+                         false /* pause */);
+  EXPECT_EQ(ash::AppStatus::kBlocked, model_->items()[1].app_status);
+
+  // Set the app as ready, and not paused;
+  UpdateAppRegistryCache(profile(), extension1_->id(), false /* block */,
+                         false /* pause */);
+  EXPECT_EQ(ash::AppStatus::kReady, model_->items()[1].app_status);
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

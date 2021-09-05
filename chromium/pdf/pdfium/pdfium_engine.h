@@ -46,6 +46,7 @@ class MouseInputEvent;
 class PDFiumDocument;
 class PDFiumPermissions;
 class TouchInputEvent;
+struct AccessibilityTextRunInfo;
 
 namespace draw_utils {
 class ShadowMatrix;
@@ -101,6 +102,8 @@ class PDFiumEngine : public PDFEngine,
   void ZoomUpdated(double new_zoom_level) override;
   void RotateClockwise() override;
   void RotateCounterclockwise() override;
+  bool IsReadOnly() const override;
+  void SetReadOnly(bool enable) override;
   void SetTwoUpView(bool enable) override;
   void DisplayAnnotations(bool display) override;
   gfx::Size ApplyDocumentLayout(
@@ -135,7 +138,7 @@ class PDFiumEngine : public PDFEngine,
   int GetCharCount(int page_index) override;
   gfx::RectF GetCharBounds(int page_index, int char_index) override;
   uint32_t GetCharUnicode(int page_index, int char_index) override;
-  base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo> GetTextRunInfo(
+  base::Optional<AccessibilityTextRunInfo> GetTextRunInfo(
       int page_index,
       int start_char_index) override;
   std::vector<AccessibilityLinkInfo> GetLinkInfo(int page_index) override;
@@ -298,6 +301,9 @@ class PDFiumEngine : public PDFEngine,
   void LoadPages();
 
   void LoadForm();
+
+  // Checks whether the document is optimized by linearization.
+  bool IsLinearized();
 
   // Calculates which pages should be displayed right now.
   void CalculateVisiblePages();
@@ -605,9 +611,9 @@ class PDFiumEngine : public PDFEngine,
   // document is loaded.
   void LoadDocumentMetadata();
 
-  // Retrieves the unparsed value of |field| in the document information
-  // dictionary.
-  std::string GetMetadataByField(FPDF_BYTESTRING field) const;
+  // Retrieves the value of |field| in the document information dictionary.
+  // Trims whitespace characters from the retrieved value.
+  std::string GetTrimmedMetadataByField(FPDF_BYTESTRING field) const;
 
   // Retrieves the version of the PDF (e.g. 1.4 or 2.0) as an enum.
   PdfVersion GetDocumentVersion() const;
@@ -826,6 +832,10 @@ class PDFiumEngine : public PDFEngine,
   gfx::Point range_selection_base_;
 
   bool edit_mode_ = false;
+
+  // When true, interactive portions of the content, such as forms and links,
+  // are restricted.
+  bool read_only_ = false;
 
   PDFiumPrint print_;
 

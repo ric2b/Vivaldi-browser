@@ -153,6 +153,7 @@ static_library("web_test_browser") {
   deps = [
     ":web_test_common",
     "//base",
+    "//build:chromeos_buildflags",
     "//cc/base",
     "//cc/paint",
     "//components/download/content/factory",
@@ -163,6 +164,7 @@ static_library("web_test_browser") {
     "//content/public/browser",  # For component builds.
     "//content/shell:content_shell_lib",
     "//content/test:blink_test_browser_support",
+    "//content/test:mojo_bindings_web_test_mojom",
     "//content/test:mojo_web_test_bindings",
     "//content/test:test_support",
     "//device/bluetooth:fake_bluetooth",
@@ -214,6 +216,12 @@ static_library("web_test_renderer") {
   if (is_component_build) {
     check_includes = false
   }
+
+  # We allow a circular include from blink's web_test implementation. This
+  # is an incremental step to moving the renderer web_test implementation
+  # into blink.
+  allow_circular_includes_from =
+      [ "//third_party/blink/renderer/core/web_test" ]
 
   sources = [
     "renderer/accessibility_controller.cc",
@@ -268,8 +276,6 @@ static_library("web_test_renderer") {
     "renderer/web_test_spell_checker.h",
     "renderer/web_view_test_proxy.cc",
     "renderer/web_view_test_proxy.h",
-    "renderer/web_widget_test_proxy.cc",
-    "renderer/web_widget_test_proxy.h",
   ]
   deps = [
     ":web_test_common",
@@ -298,7 +304,9 @@ static_library("web_test_renderer") {
     "//skia:test_fonts",
     "//third_party/blink/public:blink_headers",
     "//third_party/blink/public:test_headers",
+    "//third_party/blink/renderer/core/web_test",
     "//ui/accessibility:ax_base",
+    "//ui/base/dragdrop/mojom",
     "//ui/base/ime:ime_types",
     "//ui/display",
     "//ui/events:dom_keycode_converter",

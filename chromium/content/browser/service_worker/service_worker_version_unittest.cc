@@ -482,6 +482,35 @@ TEST_F(ServiceWorkerVersionTest, SetDevToolsAttached) {
   EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
 }
 
+TEST_F(ServiceWorkerVersionTest, RequestTerminationWithDevToolsAttached) {
+  auto* service_worker =
+      helper_->AddNewPendingServiceWorker<FakeServiceWorker>(helper_.get());
+
+  version_->SetDevToolsAttached(true);
+
+  base::Optional<blink::ServiceWorkerStatusCode> status;
+  base::RunLoop run_loop;
+  version_->StartWorker(
+      ServiceWorkerMetrics::EventType::UNKNOWN,
+      ReceiveServiceWorkerStatus(&status, run_loop.QuitClosure()));
+  run_loop.Run();
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, status.value());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
+
+  // Idle delay is not set at this point. The renderer process uses the default
+  // value.
+  EXPECT_FALSE(service_worker->idle_delay().has_value());
+
+  // If OnRequestTermination() is called when DevTools is attached, then the
+  // worker's idle timeout is set to the default value forcefully because the
+  // worker needs to be running until DevTools is detached even if there's no
+  // inflight event.
+  version_->OnRequestTermination();
+  service_worker->FlushForTesting();
+  EXPECT_EQ(blink::mojom::kServiceWorkerDefaultIdleDelayInSeconds,
+            service_worker->idle_delay()->InSeconds());
+}
+
 // Test that update isn't triggered for a non-stale worker.
 TEST_F(ServiceWorkerVersionTest, StaleUpdate_FreshWorker) {
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1453,7 +1482,7 @@ TEST_F(ServiceWorkerVersionTest, WriteMetadata_RemoteStorageDisconnection) {
       version_->script_url(), base::as_bytes(base::make_span(kMetadata)),
       completion.callback());
 
-  helper_->context()->registry()->SimulateStorageRestartForTesting();
+  helper_->SimulateStorageRestartForTesting();
 
   ASSERT_EQ(completion.WaitForResult(), net::ERR_FAILED);
 }
@@ -1462,8 +1491,9 @@ TEST_F(ServiceWorkerVersionTest, WriteMetadata_RemoteStorageDisconnection) {
 TEST_F(ServiceWorkerVersionTest, WriteMetadata_StorageDisabled) {
   const std::string kMetadata("Test metadata");
 
-  helper_->context()->registry()->GetRemoteStorageControl()->Disable();
-  helper_->context()->registry()->GetRemoteStorageControl().FlushForTesting();
+  base::RunLoop loop;
+  helper_->context()->registry()->DisableStorageForTesting(loop.QuitClosure());
+  loop.Run();
 
   net::TestCompletionCallback completion;
   version_->script_cache_map()->WriteMetadata(

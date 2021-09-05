@@ -34,11 +34,11 @@ export function pageSizeSelectTest() {
   });
 
   test('initializePageSizeSelect', () => {
-    // Before options are added, the dropdown should be disabled and empty.
+    // Before options are added, the dropdown should be enabled and empty.
     const select =
         /** @type {!HTMLSelectElement} */ (pageSizeSelect.$$('select'));
     assertTrue(!!select);
-    assertTrue(select.disabled);
+    assertFalse(select.disabled);
     assertEquals(0, select.length);
 
     const firstPageSize = PageSize.A4;
@@ -46,9 +46,8 @@ export function pageSizeSelectTest() {
     pageSizeSelect.pageSizes = [firstPageSize, secondPageSize];
     flush();
 
-    // Verify that adding more than one page size results in the dropdown
-    // becoming enabled with the correct options.
-    assertFalse(select.disabled);
+    // Verify that adding page sizes results in the dropdown displaying the
+    // correct options.
     assertEquals(2, select.length);
     assertEquals(
         getPageSizeString(firstPageSize), select.options[0].textContent.trim());
@@ -64,27 +63,6 @@ export function pageSizeSelectTest() {
           assertEquals(
               secondPageSize.toString(), pageSizeSelect.selectedPageSize);
         });
-  });
-
-  test('pageSizeSelectDisabled', () => {
-    const select = pageSizeSelect.$$('select');
-    assertTrue(!!select);
-
-    let pageSizeArr = [PageSize.Letter];
-    pageSizeSelect.pageSizes = pageSizeArr;
-    flush();
-
-    // Verify the dropdown is disabled when there's only one option.
-    assertEquals(1, select.length);
-    assertTrue(select.disabled);
-
-    pageSizeArr = pageSizeArr.concat([PageSize.A4]);
-    pageSizeSelect.pageSizes = pageSizeArr;
-    flush();
-
-    // Verify the dropdown is enabled when there's more than one option.
-    assertEquals(2, select.length);
-    assertFalse(select.disabled);
   });
 
   test('pageSizesSortedCorrectly', () => {
@@ -110,5 +88,29 @@ export function pageSizeSelectTest() {
     // Verify the first page size in the sorted page sizes array is selected by
     // default when Letter is not an available option.
     assertEquals(PageSize.A4.toString(), pageSizeSelect.selectedPageSize);
+  });
+
+  // Verify the correct default option is selected when a scanner is selected
+  // and the options change.
+  test('selectDefaultWhenOptionsChange', () => {
+    const select =
+        /** @type {!HTMLSelectElement} */ (pageSizeSelect.$$('select'));
+    pageSizeSelect.pageSizes = [PageSize.Letter, PageSize.Max, PageSize.A4];
+    flush();
+    return changeSelect(select, /* value */ null, /* selectedIndex */ 0)
+        .then(() => {
+          assertEquals(PageSize.A4.toString(), pageSizeSelect.selectedPageSize);
+          assertEquals(
+              PageSize.A4.toString(),
+              select.options[select.selectedIndex].value);
+
+          pageSizeSelect.pageSizes = [PageSize.Letter, PageSize.Max];
+          flush();
+          assertEquals(
+              PageSize.Letter.toString(), pageSizeSelect.selectedPageSize);
+          assertEquals(
+              PageSize.Letter.toString(),
+              select.options[select.selectedIndex].value);
+        });
   });
 }

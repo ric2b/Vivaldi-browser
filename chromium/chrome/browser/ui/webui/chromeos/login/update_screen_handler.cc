@@ -27,8 +27,8 @@ UpdateScreenHandler::UpdateScreenHandler(JSCallsContainer* js_calls_container)
   AccessibilityManager* accessibility_manager = AccessibilityManager::Get();
   CHECK(accessibility_manager);
   accessibility_subscription_ = accessibility_manager->RegisterCallback(
-      base::Bind(&UpdateScreenHandler::OnAccessibilityStatusChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&UpdateScreenHandler::OnAccessibilityStatusChanged,
+                          base::Unretained(this)));
 }
 
 UpdateScreenHandler::~UpdateScreenHandler() {
@@ -59,7 +59,7 @@ void UpdateScreenHandler::Unbind() {
 void UpdateScreenHandler::OnAccessibilityStatusChanged(
     const AccessibilityStatusEventDetails& details) {
   if (details.notification_type == ACCESSIBILITY_MANAGER_SHUTDOWN) {
-    accessibility_subscription_.reset();
+    accessibility_subscription_ = {};
     return;
   }
 

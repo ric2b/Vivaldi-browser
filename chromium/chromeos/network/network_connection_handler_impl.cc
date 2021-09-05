@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "chromeos/dbus/shill/shill_manager_client.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
+#include "chromeos/login/login_state/login_state.h"
 #include "chromeos/network/client_cert_resolver.h"
 #include "chromeos/network/client_cert_util.h"
 #include "chromeos/network/device_state.h"
@@ -35,6 +36,12 @@
 namespace chromeos {
 
 namespace {
+
+// If connection to a network that may require a client certificate is requested
+// when client certificates are not loaded yet, wait this long until
+// certificates have been loaded.
+constexpr base::TimeDelta kMaxCertLoadTimeSeconds =
+    base::TimeDelta::FromSeconds(15);
 
 bool IsAuthenticationError(const std::string& error) {
   return (error == shill::kErrorBadWEPKey ||
@@ -145,6 +152,12 @@ bool IsVpnProhibited() {
   return base::Contains(prohibited_technologies, shill::kTypeVPN);
 }
 
+// TODO(b/161092818): Add wireguard type when it is supported in shill.
+bool IsBuiltInVpnType(const std::string& vpn_type) {
+  return vpn_type == shill::kProviderL2tpIpsec ||
+         vpn_type == shill::kProviderOpenVpn;
+}
+
 }  // namespace
 
 NetworkConnectionHandlerImpl::ConnectRequest::ConnectRequest(
@@ -169,7 +182,6 @@ NetworkConnectionHandlerImpl::NetworkConnectionHandlerImpl()
     : network_cert_loader_(nullptr),
       network_state_handler_(nullptr),
       configuration_handler_(nullptr),
-      logged_in_(false),
       certificates_loaded_(false) {}
 
 NetworkConnectionHandlerImpl::~NetworkConnectionHandlerImpl() {
@@ -177,17 +189,12 @@ NetworkConnectionHandlerImpl::~NetworkConnectionHandlerImpl() {
     network_state_handler_->RemoveObserver(this, FROM_HERE);
   if (network_cert_loader_)
     network_cert_loader_->RemoveObserver(this);
-  if (LoginState::IsInitialized())
-    LoginState::Get()->RemoveObserver(this);
 }
 
 void NetworkConnectionHandlerImpl::Init(
     NetworkStateHandler* network_state_handler,
     NetworkConfigurationHandler* network_configuration_handler,
     ManagedNetworkConfigurationHandler* managed_network_configuration_handler) {
-  if (LoginState::IsInitialized())
-    LoginState::Get()->AddObserver(this);
-
   if (NetworkCertLoader::IsInitialized()) {
     network_cert_loader_ = NetworkCertLoader::Get();
     network_cert_loader_->AddObserver(this);
@@ -210,18 +217,6 @@ void NetworkConnectionHandlerImpl::Init(
 
   // After this point, the NetworkConnectionHandlerImpl is fully initialized
   // (all handler references set, observers registered, ...).
-
-  if (LoginState::IsInitialized())
-    LoggedInStateChanged();
-}
-
-void NetworkConnectionHandlerImpl::LoggedInStateChanged() {
-  LoginState* login_state = LoginState::Get();
-  if (logged_in_ || !login_state->IsUserLoggedIn())
-    return;
-
-  logged_in_ = true;
-  logged_in_time_ = base::TimeTicks::Now();
 }
 
 void NetworkConnectionHandlerImpl::OnCertificatesLoaded() {
@@ -308,7 +303,7 @@ void NetworkConnectionHandlerImpl::ConnectToNetwork(
     }
 
     if (NetworkTypePattern::VPN().MatchesType(network->type()) &&
-        IsVpnProhibited()) {
+        IsBuiltInVpnType(network->GetVpnProviderType()) && IsVpnProhibited()) {
       InvokeConnectErrorCallback(service_path, std::move(error_callback),
                                  kErrorBlockedByPolicy);
       return;
@@ -561,13 +556,13 @@ void NetworkConnectionHandlerImpl::VerifyConfiguredAndConnect(
     NET_LOG(DEBUG) << "Client cert type for: " << NetworkPathId(service_path)
                    << ": " << client_cert_type;
 
-    // User must be logged in to connect to a network requiring a certificate.
-    if (!logged_in_ || !network_cert_loader_) {
-      NET_LOG(ERROR) << "User not logged in for: "
-                     << NetworkPathId(service_path);
+    if (!network_cert_loader_ ||
+        !network_cert_loader_->can_have_client_certificates()) {
+      // There can be no certificates in this device state.
       ErrorCallbackForPendingRequest(service_path, kErrorCertificateRequired);
       return;
     }
+
     // If certificates have not been loaded yet, queue the connect request.
     if (!certificates_loaded_) {
       NET_LOG(EVENT) << "Certificates not loaded for: "
@@ -650,16 +645,6 @@ void NetworkConnectionHandlerImpl::QueueConnectRequest(
     return;
   }
 
-  const int kMaxCertLoadTimeSeconds = 15;
-  base::TimeDelta dtime = base::TimeTicks::Now() - logged_in_time_;
-  if (dtime > base::TimeDelta::FromSeconds(kMaxCertLoadTimeSeconds)) {
-    NET_LOG(ERROR) << "Certificate load timeout: "
-                   << NetworkPathId(service_path);
-    InvokeConnectErrorCallback(service_path, std::move(request->error_callback),
-                               kErrorCertLoadTimeout);
-    return;
-  }
-
   NET_LOG(EVENT) << "Connect Request Queued: " << NetworkPathId(service_path);
   queued_connect_.reset(new ConnectRequest(request->mode, service_path,
                                            request->profile_path,
@@ -674,7 +659,7 @@ void NetworkConnectionHandlerImpl::QueueConnectRequest(
       FROM_HERE,
       base::BindOnce(&NetworkConnectionHandlerImpl::CheckCertificatesLoaded,
                      AsWeakPtr()),
-      base::TimeDelta::FromSeconds(kMaxCertLoadTimeSeconds) - dtime);
+      kMaxCertLoadTimeSeconds);
 }
 
 // Called after a delay to check whether certificates loaded. If they did not
@@ -692,14 +677,15 @@ void NetworkConnectionHandlerImpl::CheckCertificatesLoaded() {
 
   // Notify the user that the connect failed, clear the queued network, and
   // clear the connect_requested flag for the NetworkState.
+  std::string queued_connect_service_path = queued_connect_->service_path;
   NET_LOG(ERROR) << "Certificate load timeout: "
-                 << NetworkPathId(queued_connect_->service_path);
+                 << NetworkPathId(queued_connect_service_path);
   InvokeConnectErrorCallback(queued_connect_->service_path,
                              std::move(queued_connect_->error_callback),
                              kErrorCertLoadTimeout);
   queued_connect_.reset();
   network_state_handler_->SetNetworkConnectRequested(
-      queued_connect_->service_path, false);
+      queued_connect_service_path, false);
 }
 
 void NetworkConnectionHandlerImpl::ConnectToQueuedNetwork() {
@@ -801,6 +787,7 @@ void NetworkConnectionHandlerImpl::HandleShillConnectFailure(
   } else if (dbus_error_name == shill::kErrorResultInProgress) {
     error = kErrorConnecting;
   } else {
+    network_state_handler_->SetShillConnectError(service_path, dbus_error_name);
     error = kErrorConnectFailed;
   }
   NET_LOG(ERROR) << "Connect Failure: " << NetworkPathId(service_path)

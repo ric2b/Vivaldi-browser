@@ -99,7 +99,7 @@ void ChromeNativeAppWindowViewsAuraAsh::InitializeWindow(
     ash::WindowBackdrop::Get(window)->SetBackdropType(
         ash::WindowBackdrop::BackdropType::kSemiOpaque);
   }
-  observed_window_.Add(window);
+  window_observation_.Observe(window);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -248,8 +248,8 @@ void ChromeNativeAppWindowViewsAuraAsh::ShowContextMenuForViewImpl(
     menu_runner_ = std::make_unique<views::MenuRunner>(
         menu_model_.get(),
         views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU,
-        base::Bind(&ChromeNativeAppWindowViewsAuraAsh::OnMenuClosed,
-                   base::Unretained(this)));
+        base::BindRepeating(&ChromeNativeAppWindowViewsAuraAsh::OnMenuClosed,
+                            base::Unretained(this)));
     menu_runner_->RunMenuAt(source->GetWidget(), nullptr,
                             gfx::Rect(p, gfx::Size(0, 0)),
                             views::MenuAnchorPosition::kTopLeft, source_type);
@@ -266,7 +266,7 @@ ChromeNativeAppWindowViewsAuraAsh::CreateNonClientFrameView(
   if (IsFrameless())
     return CreateNonStandardAppFrame();
 
-  observed_window_state_.Add(ash::WindowState::Get(GetNativeWindow()));
+  window_state_observation_.Observe(ash::WindowState::Get(GetNativeWindow()));
 
   auto custom_frame_view = std::make_unique<ash::NonClientFrameViewAsh>(widget);
 
@@ -507,9 +507,9 @@ void ChromeNativeAppWindowViewsAuraAsh::OnWindowPropertyChanged(
 
 void ChromeNativeAppWindowViewsAuraAsh::OnWindowDestroying(
     aura::Window* window) {
-  if (observed_window_state_.IsObservingSources())
-    observed_window_state_.Remove(ash::WindowState::Get(window));
-  observed_window_.Remove(window);
+  window_state_observation_.Reset();
+  DCHECK(window_observation_.IsObservingSource(window));
+  window_observation_.Reset();
 }
 
 void ChromeNativeAppWindowViewsAuraAsh::OnTabletModeToggled(bool enabled) {

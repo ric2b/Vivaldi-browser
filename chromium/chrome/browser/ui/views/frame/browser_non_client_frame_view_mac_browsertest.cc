@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -56,7 +55,7 @@ class TextChangeWaiter {
 
   bool observed_change_ = false;
   base::RunLoop run_loop_;
-  views::PropertyChangedSubscription subscription_;
+  base::CallbackListSubscription subscription_;
 };
 
 }  // anonymous namespace

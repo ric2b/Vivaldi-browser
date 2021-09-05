@@ -43,6 +43,8 @@ _CONFIG = [
             'base::FilePath',
             'base::GetUniqueIdForProcess',
             "base::i18n::TextDirection",
+            "base::i18n::ToChar16Ptr",
+            "base::i18n::ToUCharPtr",
             'base::Location',
             'base::MakeRefCounted',
             'base::Optional',
@@ -84,7 +86,7 @@ _CONFIG = [
             'base::size',
             'base::span',
             'logging::GetVlogLevel',
-            'util::PassKey',
+            'base::PassKey',
 
             # //base/observer_list.h.
             'base::ObserverList',
@@ -107,8 +109,6 @@ _CONFIG = [
             'base::CancelableOnceClosure',
             'base::CancelableRepeatingCallback',
             'base::CancelableRepeatingClosure',
-            'base::CancelableCallback',
-            'base::CancelableClosure',
 
             # //base/mac/scoped_nsobject.h
             'base::scoped_nsobject',
@@ -272,6 +272,7 @@ _CONFIG = [
             'gfx::Vector2dF',
 
             # Chromium geometry operations.
+            'cc::MathUtil',
             'gfx::ToFlooredPoint',
 
             # Range type.
@@ -330,6 +331,8 @@ _CONFIG = [
             'cc::kManipulationInfoPrecisionTouchPad',
             'cc::kManipulationInfoTouch',
             'cc::kManipulationInfoWheel',
+            'cc::kManipulationInfoScrollbar',
+            'cc::kManipulationInfoNone',
             'cc::kPixelsPerLineStep',
             'cc::kMinFractionToStepWhenPaging',
             'cc::kPercentDeltaForDirectionalScroll',
@@ -354,8 +357,11 @@ _CONFIG = [
             'gfx::ScrollOffset',
             'ui::ScrollGranularity',
 
-            # base/util/type_safety/strong_alias.h
-            'util::StrongAlias',
+            # Document transitions
+            'cc::DocumentTransitionRequest',
+
+            # base/types/strong_alias.h
+            'base::StrongAlias',
 
             # Standalone utility libraries that only depend on //base
             'skia::.+',
@@ -383,7 +389,7 @@ _CONFIG = [
             'layout_invalidation_reason::.+',
             'media_constraints_impl::.+',
             'media_element_parser_helpers::.+',
-            'native_file_system_error::.+',
+            'file_system_access_error::.+',
             'network_utils::.+',
             'origin_trials::.+',
             'paint_filter_builder::.+',
@@ -488,6 +494,7 @@ _CONFIG = [
             # Accessibility helper functions - mostly used in Blink for
             # serialization.
             'ui::IsDialog',
+            'ui::IsHeading',
             'ui::IsContainerWithSelectableChildren',
             'ui::IsTableLike',
             'ui::IsTableRow',
@@ -657,11 +664,19 @@ _CONFIG = [
     },
     {
         'paths':
-        ['third_party/blink/renderer/core/frame/web_frame_widget_base.cc'],
+        ['third_party/blink/renderer/core/frame/web_frame_widget_impl.cc'],
         'allowed': [
+            'cc::CompositorCommitData',
             'cc::InputHandlerScrollResult',
             'cc::SwapPromise',
             'viz::CompositorFrameMetadata',
+        ],
+    },
+    {
+        'paths':
+        ['third_party/blink/renderer/core/frame/web_frame_widget_impl.h'],
+        'allowed': [
+            'cc::CompositorCommitData',
         ],
     },
     {
@@ -835,10 +850,9 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/webcodecs/',
+            'third_party/blink/renderer/modules/mediasource/',
         ],
         'allowed': [
-            'gpu::kNullSurfaceHandle',
             'media::.+',
         ]
     },
@@ -990,6 +1004,12 @@ _CONFIG = [
             'third_party/blink/renderer/modules/webcodecs/',
         ],
         'allowed': [
+            'gpu::kNullSurfaceHandle',
+            'gpu::SHARED_IMAGE_.+',
+            'gpu::raster::RasterInterface',
+            'gpu::Mailbox',
+            'gpu::MailboxHolder',
+            "viz::RasterContextProvider",
             'media::.+',
             'libyuv::.+',
         ]
@@ -1074,6 +1094,26 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/modules/url_pattern/',
+        ],
+        'allowed': [
+            # Required by liburlpattern API in order to pass string data
+            # efficiently.
+            "absl::string_view",
+
+            # Needed to work with std::string values returned from
+            # liburlpattern API.
+            "base::IsStringASCII",
+
+            # //third_party/liburlpattern
+            'liburlpattern::.+',
+
+            # The liburlpattern API requires using std::vector.
+            'std::vector',
+        ],
+    },
+    {
+        'paths': [
             'third_party/blink/renderer/modules/webaudio/',
         ],
         'allowed': ['audio_utilities::.+'],
@@ -1090,8 +1130,9 @@ _CONFIG = [
             'third_party/blink/renderer/core/layout/layout_theme_mac.mm',
             'third_party/blink/renderer/core/paint/object_painter_base.cc',
             'third_party/blink/renderer/core/paint/theme_painter.cc',
+            'third_party/blink/renderer/core/paint/theme_painter_default.cc',
         ],
-        'allowed': ['ui::NativeTheme.*'],
+        'allowed': ['ui::NativeTheme.*', 'ui::color_utils.*'],
     },
     {
         'paths': [
@@ -1350,8 +1391,8 @@ def check(path, contents):
     basename, ext = os.path.splitext(path)
     # Only check code. Ignore tests and fuzzers.
     if (ext not in ('.cc', '.cpp', '.h', '.mm') or path.find('/testing/') >= 0
-            or path.find('/tests/') >= 0 or basename.endswith('_test')
-            or basename.endswith('_test_helpers')
+            or path.find('/core/web_test/') >= 0 or path.find('/tests/') >= 0
+            or basename.endswith('_test') or basename.endswith('_test_helpers')
             or basename.endswith('_unittest') or basename.endswith('_fuzzer')):
         return results
     entries = _find_matching_entries(path)

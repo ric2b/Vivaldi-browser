@@ -34,6 +34,10 @@ class MockTranslateMetricsLoggerContainer
     mock_translate_metrics_logger_->RecordMetrics(is_final);
   }
 
+  void SetUkmSourceId(ukm::SourceId ukm_source_id) override {
+    mock_translate_metrics_logger_->SetUkmSourceId(ukm_source_id);
+  }
+
   void LogRankerMetrics(translate::RankerDecision ranker_decision,
                         uint32_t ranker_version) override {
     mock_translate_metrics_logger_->LogRankerMetrics(ranker_decision,
@@ -58,8 +62,11 @@ class MockTranslateMetricsLoggerContainer
     mock_translate_metrics_logger_->LogTranslationStarted();
   }
 
-  void LogTranslationFinished(bool was_sucessful) override {
-    mock_translate_metrics_logger_->LogTranslationFinished(was_sucessful);
+  void LogTranslationFinished(
+      bool was_successful,
+      translate::TranslateErrors::Type error_type) override {
+    mock_translate_metrics_logger_->LogTranslationFinished(was_successful,
+                                                           error_type);
   }
 
   void LogReversion() override {
@@ -72,6 +79,24 @@ class MockTranslateMetricsLoggerContainer
 
   void LogOmniboxIconChange(bool is_omnibox_icon_shown) override {
     mock_translate_metrics_logger_->LogOmniboxIconChange(is_omnibox_icon_shown);
+  }
+
+  void LogInitialSourceLanguage(const std::string& source_language_code,
+                                bool is_in_users_content_languages) override {
+    mock_translate_metrics_logger_->LogInitialSourceLanguage(
+        source_language_code, is_in_users_content_languages);
+  }
+
+  void LogSourceLanguage(const std::string& source_language_code) override {
+    mock_translate_metrics_logger_->LogSourceLanguage(source_language_code);
+  }
+
+  void LogTargetLanguage(const std::string& target_language_code) override {
+    mock_translate_metrics_logger_->LogTargetLanguage(target_language_code);
+  }
+
+  void LogUIInteraction(translate::UIInteraction ui_interaction) override {
+    mock_translate_metrics_logger_->LogUIInteraction(ui_interaction);
   }
 
  private:

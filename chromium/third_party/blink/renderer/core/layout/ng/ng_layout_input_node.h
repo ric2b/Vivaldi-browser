@@ -23,7 +23,6 @@ class Document;
 class LayoutObject;
 class LayoutBox;
 class NGConstraintSpace;
-class NGPaintFragment;
 struct MinMaxSizes;
 struct PhysicalSize;
 
@@ -277,14 +276,17 @@ class CORE_EXPORT NGLayoutInputNode {
     return box_->ChildLayoutBlockedByDisplayLock();
   }
 
-  // Returns the first NGPaintFragment for this node. When block fragmentation
-  // occurs, there will be multiple NGPaintFragment for a node.
-  const NGPaintFragment* PaintFragment() const;
-
   CustomLayoutChild* GetCustomLayoutChild() const {
     // TODO(ikilpatrick): Support NGInlineNode.
     DCHECK(IsBlock());
     return box_->GetCustomLayoutChild();
+  }
+
+  // Return whether we can directly traverse fragments generated from this node
+  // (for painting, hit-testing and other layout read operations). If false is
+  // returned, we need to traverse the layout object tree instead.
+  bool CanTraversePhysicalFragments() const {
+    return box_->CanTraversePhysicalFragments();
   }
 
   String ToString() const;

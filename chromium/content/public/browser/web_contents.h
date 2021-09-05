@@ -377,11 +377,15 @@ class WebContents : public PageNavigator,
   virtual RenderWidgetHostView* GetTopLevelRenderWidgetHostView() = 0;
 
   // Request a one-time snapshot of the accessibility tree without changing
-  // the accessibility mode. |ax_mode| is the accessibility mode to use.
+  // the accessibility mode. See RenderFrame::AXTreeSnapshotter for
+  // definitions of |ax_mode|, |max_nodes|, and |timeout|.
   using AXTreeSnapshotCallback =
       base::OnceCallback<void(const ui::AXTreeUpdate&)>;
   virtual void RequestAXTreeSnapshot(AXTreeSnapshotCallback callback,
-                                     ui::AXMode ax_mode) = 0;
+                                     ui::AXMode ax_mode,
+                                     bool exclude_offscreen,
+                                     size_t max_nodes,
+                                     base::TimeDelta timeout) = 0;
 
   // Causes the current page to be closed, including running its onunload event
   // handler.
@@ -407,6 +411,9 @@ class WebContents : public PageNavigator,
   // renderer initiated, then is-overriding-user-agent is set to true for the
   // NavigationEntry. See SetRendererInitiatedUserAgentOverrideOption() for
   // details on how renderer initiated navigations are configured.
+  //
+  // If nonempty, |ua_override|'s value must not contain '\0', '\r', or '\n' (in
+  // other words, it must be a valid HTTP header value).
   virtual void SetUserAgentOverride(const blink::UserAgentOverride& ua_override,
                                     bool override_in_new_tabs) = 0;
 
@@ -521,22 +528,48 @@ class WebContents : public PageNavigator,
 
   // Internal state ------------------------------------------------------------
 
-  // Indicates whether the WebContents is being captured (e.g., for screenshots
-  // or mirroring).  Increment calls must be balanced with an equivalent number
-  // of decrement calls.  |capture_size| specifies the capturer's video
-  // resolution, but can be empty to mean "unspecified."  The first screen
-  // capturer that provides a non-empty |capture_size| will override the value
-  // returned by GetPreferredSize() until all captures have ended. |stay_hidden|
-  // determines whether to treat the underlying page as user-visible or not.
+  // Indicates whether the WebContents is being captured (e.g., for screenshots,
+  // or mirroring video and/or audio). Each IncrementCapturerCount() call must
+  // be balanced with a corresponding DecrementCapturerCount() call.
+  //
+  // Both internal-to-content and embedders must increment the capturer count
+  // while capturing to ensure "hidden rendering" optimizations are disabled.
+  // For example, renderers will be configured to produce compositor frames
+  // regardless of their "backgrounded" or on-screen occlusion state.
+  //
+  // Embedders can detect whether a WebContents is being captured (see
+  // IsBeingCaptured() below) and use this, for example, to provide an
+  // alternative user interface. So, developers should be careful to understand
+  // the side-effects from using or changing these APIs, both upstream and
+  // downstream of this API layer.
+  //
+  // |capture_size| is only used in the case of mirroring (i.e., screen capture
+  // video); otherwise, an empty gfx::Size should be provided. This specifies
+  // the capturer's target video resolution, but can be empty to mean
+  // "unspecified." This becomes a temporary override to GetPreferredSize(),
+  // allowing embedders to size the WebContents on-screen views for optimal
+  // capture quality.
+  //
+  // |stay_hidden| affects the page visibility state of the renderers (i.e., a
+  // web page can be made aware of whether it is actually user-visible). If
+  // true, the show/hide state of the WebContents will be passed to the
+  // renderers, like normal. If false, the renderers will always be told they
+  // are user-visible while being captured.
   virtual void IncrementCapturerCount(const gfx::Size& capture_size,
                                       bool stay_hidden) = 0;
   virtual void DecrementCapturerCount(bool stay_hidden) = 0;
+
+  // Returns true if audio/screenshot/video is being captured by the embedder,
+  // as indicated by calls to IncrementCapturerCount().
   virtual bool IsBeingCaptured() = 0;
-  // Returns true if there is any active capturer that called
-  // IncrementCaptureCount() with |stay_hidden|==false.
+
+  // Returns true if audio/screenshot/video is being captured by the embedder
+  // and renderers are being told they are always user-visible, as indicated by
+  // calls to IncrementCapturerCount().
   virtual bool IsBeingVisiblyCaptured() = 0;
 
   // Indicates/Sets whether all audio output from this WebContents is muted.
+  // This does not affect audio capture, just local/system output.
   virtual bool IsAudioMuted() = 0;
   virtual void SetAudioMuted(bool mute) = 0;
 
@@ -559,9 +592,9 @@ class WebContents : public PageNavigator,
   // device.
   virtual bool IsConnectedToHidDevice() = 0;
 
-  // Indicates whether any frame in the WebContents has native file system
+  // Indicates whether any frame in the WebContents has File System Access
   // handles.
-  virtual bool HasNativeFileSystemHandles() = 0;
+  virtual bool HasFileSystemAccessHandles() = 0;
 
   // Indicates whether a video is in Picture-in-Picture for |this|.
   virtual bool HasPictureInPictureVideo() = 0;

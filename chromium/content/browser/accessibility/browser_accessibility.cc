@@ -25,12 +25,13 @@
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
+#include "ui/base/buildflags.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
 
-#if !defined(PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL)
+#if !BUILDFLAG(HAS_PLATFORM_ACCESSIBILITY_SUPPORT)
 // static
 BrowserAccessibility* BrowserAccessibility::Create() {
   return new BrowserAccessibility();
@@ -63,10 +64,12 @@ const BrowserAccessibility* GetTextContainerForPlainTextField(
   // ---- Generic container  (optional, only occurs in some controls)
   // ------ Static text   <-- (optional, does not exist if field is empty)
   // -------- Inline text box children (can be multiple)
+  // ------ Line Break (optional,  a placeholder break element if the text data
+  //                    ends with '\n' or '\r')
   // This method will return the lowest generic container.
   const BrowserAccessibility* child = text_field.InternalGetFirstChild();
   DCHECK_EQ(child->GetRole(), ax::mojom::Role::kGenericContainer);
-  DCHECK_LE(child->InternalChildCount(), 1u);
+  DCHECK_LE(child->InternalChildCount(), 2u);
   if (child->InternalChildCount() == 1) {
     const BrowserAccessibility* grand_child = child->InternalGetFirstChild();
     if (grand_child->GetRole() == ax::mojom::Role::kGenericContainer) {
@@ -194,8 +197,8 @@ bool BrowserAccessibility::IsDescendantOf(
   return false;
 }
 
-bool BrowserAccessibility::IsDocument() const {
-  return ui::IsDocument(GetRole());
+bool BrowserAccessibility::IsPlatformDocument() const {
+  return ui::IsPlatformDocument(GetRole());
 }
 
 bool BrowserAccessibility::IsIgnored() const {
@@ -973,10 +976,8 @@ bool BrowserAccessibility::HasAction(ax::mojom::Action action_enum) const {
 }
 
 bool BrowserAccessibility::IsWebAreaForPresentationalIframe() const {
-  if (GetRole() != ax::mojom::Role::kWebArea &&
-      GetRole() != ax::mojom::Role::kRootWebArea) {
+  if (!IsPlatformDocument())
     return false;
-  }
 
   BrowserAccessibility* parent = PlatformGetParent();
   if (!parent)
@@ -1185,33 +1186,34 @@ bool BrowserAccessibility::IsWebContent() const {
 bool BrowserAccessibility::HasVisibleCaretOrSelection() const {
   ui::AXTree::Selection unignored_selection =
       manager()->ax_tree()->GetUnignoredSelection();
-  int32_t focus_id = unignored_selection.focus_object_id;
-  BrowserAccessibility* focus_object = manager()->GetFromID(focus_id);
-  if (!focus_object)
+  ui::AXNode::AXID focus_id = unignored_selection.focus_object_id;
+  const BrowserAccessibility* focus_object = manager()->GetFromID(focus_id);
+  // Since "AXTree::GetUnignoredSelection" always ensures that the focus of the
+  // selection is an unignored object, i.e. it is visible to platform APIs, we
+  // need to ensure that we check against the lowest unignored ancestor of this
+  // object if this object is ignored.
+  if (!focus_object ||
+      !focus_object->IsDescendantOf(PlatformGetClosestPlatformObject())) {
     return false;
-
-  // Text inputs can have sub-objects that are not exposed, and can cause issues
-  // in determining whether a caret is present. Avoid this situation by
-  // comparing against the closest platform object, which will be in the tree.
-  BrowserAccessibility* platform_object = PlatformGetClosestPlatformObject();
-  DCHECK(platform_object);
-
-  // Selection or caret will be visible in a focused editable area, or if caret
-  // browsing is enabled.
-  // Caret browsing should be looking at leaf text nodes so it might not return
-  // expected results in this method. See https://crbug.com/1052091.
-  if (platform_object->HasState(ax::mojom::State::kEditable) ||
-      BrowserAccessibilityStateImpl::GetInstance()->IsCaretBrowsingEnabled()) {
-    return IsPlainTextField() ? focus_object == platform_object
-                              : focus_object->IsDescendantOf(platform_object);
   }
 
+  // A selection or the caret will be visible in a focused text field (including
+  // content editables).
+  const BrowserAccessibility* text_field = focus_object->GetTextFieldAncestor();
+  if (text_field)
+    return true;
+
+  // The caret should be visible if Caret Browsing is enabled.
+  //
+  // TODO(crbug.com/1052091): Caret Browsing should be looking at leaf text
+  // nodes so it might not return expected results in this method.
+  if (BrowserAccessibilityStateImpl::GetInstance()->IsCaretBrowsingEnabled())
+    return true;
+
   // The selection will be visible in non-editable content only if it is not
-  // collapsed into a caret.
-  return (focus_id != unignored_selection.anchor_object_id ||
-          unignored_selection.focus_offset !=
-              unignored_selection.anchor_offset) &&
-         focus_object->IsDescendantOf(platform_object);
+  // collapsed.
+  return focus_id != unignored_selection.anchor_object_id ||
+         unignored_selection.focus_offset != unignored_selection.anchor_offset;
 }
 
 std::set<ui::AXPlatformNode*> BrowserAccessibility::GetNodesForNodeIdSet(
@@ -1511,6 +1513,17 @@ bool BrowserAccessibility::IsLeaf() const {
   return PlatformGetRootOfChildTree() ? false : node()->IsLeaf();
 }
 
+bool BrowserAccessibility::IsFocused() const {
+  return manager()->GetFocus() == this;
+}
+
+bool BrowserAccessibility::IsInvisibleOrIgnored() const {
+  if (IsFocused())
+    return false;
+
+  return node()->IsInvisibleOrIgnored();
+}
+
 bool BrowserAccessibility::IsToplevelBrowserWindow() {
   return false;
 }
@@ -1610,7 +1623,7 @@ gfx::NativeViewAccessible BrowserAccessibility::HitTestSync(
   return accessible->GetNativeViewAccessible();
 }
 
-gfx::NativeViewAccessible BrowserAccessibility::GetFocus() {
+gfx::NativeViewAccessible BrowserAccessibility::GetFocus() const {
   BrowserAccessibility* focused = manager()->GetFocus();
   if (!focused)
     return nullptr;
@@ -1809,11 +1822,25 @@ bool BrowserAccessibility::AccessibilityPerformAction(
       manager_->SetScrollOffset(*this, data.target_point);
       return true;
     case ax::mojom::Action::kSetSelection: {
-      // "data.anchor_offset" and "data.focus_ofset" might need to be adjusted
-      // if the anchor or the focus nodes include ignored children.
       ui::AXActionData selection = data;
+
+      // Prioritize target_tree_id if it was provided, as it is possible on
+      // some platforms (such as IAccessible2) to initiate a selection in a
+      // different tree than the current node resides in, as long as the nodes
+      // being selected share an AXTree with each other.
+      BrowserAccessibilityManager* selection_manager = nullptr;
+      if (selection.target_tree_id != ui::AXTreeIDUnknown()) {
+        selection_manager =
+            BrowserAccessibilityManager::FromID(selection.target_tree_id);
+      } else {
+        selection_manager = manager_;
+      }
+      DCHECK(selection_manager);
+
+      // "data.anchor_offset" and "data.focus_offset" might need to be adjusted
+      // if the anchor or the focus nodes include ignored children.
       const BrowserAccessibility* anchor_object =
-          manager()->GetFromID(selection.anchor_node_id);
+          selection_manager->GetFromID(selection.anchor_node_id);
       DCHECK(anchor_object);
       if (!anchor_object->PlatformIsLeaf()) {
         DCHECK_GE(selection.anchor_offset, 0);
@@ -1832,8 +1859,12 @@ bool BrowserAccessibility::AccessibilityPerformAction(
       }
 
       const BrowserAccessibility* focus_object =
-          manager()->GetFromID(selection.focus_node_id);
+          selection_manager->GetFromID(selection.focus_node_id);
       DCHECK(focus_object);
+
+      // Blink only supports selections between two nodes in the same tree.
+      DCHECK_EQ(anchor_object->GetTreeData().tree_id,
+                focus_object->GetTreeData().tree_id);
       if (!focus_object->PlatformIsLeaf()) {
         DCHECK_GE(selection.focus_offset, 0);
         const BrowserAccessibility* focus_child =
@@ -1848,7 +1879,7 @@ bool BrowserAccessibility::AccessibilityPerformAction(
         }
       }
 
-      manager_->SetSelection(selection);
+      selection_manager->SetSelection(selection);
       return true;
     }
     case ax::mojom::Action::kSetValue:

@@ -10,7 +10,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import android.app.Activity;
-import android.support.test.rule.ActivityTestRule;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -26,6 +25,8 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.test.BaseActivityTestRule;
+import org.chromium.chrome.browser.video_tutorials.FeatureType;
 import org.chromium.chrome.browser.video_tutorials.LanguageInfoProvider;
 import org.chromium.chrome.browser.video_tutorials.R;
 import org.chromium.chrome.browser.video_tutorials.VideoTutorialService;
@@ -40,8 +41,8 @@ import org.chromium.ui.test.util.DummyUiActivity;
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class LanguagePickerTest {
     @Rule
-    public ActivityTestRule<DummyUiActivity> mActivityTestRule =
-            new ActivityTestRule<>(DummyUiActivity.class);
+    public BaseActivityTestRule<DummyUiActivity> mActivityTestRule =
+            new BaseActivityTestRule<>(DummyUiActivity.class);
 
     private Activity mActivity;
     private View mContentView;
@@ -58,6 +59,7 @@ public class LanguagePickerTest {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
+        mActivityTestRule.launchActivity(null);
         mActivity = mActivityTestRule.getActivity();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             FrameLayout parentView = new FrameLayout(mActivity);
@@ -70,7 +72,8 @@ public class LanguagePickerTest {
                     .thenReturn(TestVideoTutorialService.HINDI);
             mCoordinator = new LanguagePickerCoordinator(
                     mContentView, mVideoTutorialService, mLanguageProvider);
-            mCoordinator.showLanguagePicker(mWatchCallback, mCloseCallback);
+            mCoordinator.showLanguagePicker(
+                    FeatureType.CHROME_INTRO, mWatchCallback, mCloseCallback);
         });
     }
 

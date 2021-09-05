@@ -19,10 +19,10 @@ class GURL;
 namespace adblock_filter {
 
 namespace flat {
-struct FilterRule;  // The FlatBuffers version of UrlRule.
+struct RequestFilterRule;  // The FlatBuffers version of UrlRule.
 }
 
-// The structure used to match the pattern of a FilterRule against URLs.
+// The structure used to match the pattern of a RequestFilterRule against URLs.
 class RulePatternMatcher {
  public:
   // A wrapper over a GURL to reduce redundant computation.
@@ -51,7 +51,7 @@ class RulePatternMatcher {
   };
 
   // The passed in |rule| must outlive the created instance.
-  explicit RulePatternMatcher(const flat::FilterRule& rule);
+  explicit RulePatternMatcher(const flat::RequestFilterRule& rule);
 
   ~RulePatternMatcher();
 
@@ -65,7 +65,7 @@ class RulePatternMatcher {
   bool MatchesUrl(const UrlInfo& url) const;
 
  private:
-  const flat::FilterRule& rule_;
+  const flat::RequestFilterRule& rule_;
   base::StringPiece pattern_;
   DISALLOW_COPY_AND_ASSIGN(RulePatternMatcher);
 };

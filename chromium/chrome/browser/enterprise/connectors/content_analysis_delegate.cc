@@ -27,7 +27,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/common.h"
-#include "chrome/browser/enterprise/connectors/connectors_manager.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/enterprise/connectors/content_analysis_dialog.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/file_util_service.h"
@@ -264,23 +264,16 @@ bool ContentAnalysisDelegate::IsEnabled(
     GURL url,
     Data* data,
     enterprise_connectors::AnalysisConnector connector) {
-  // If this is an incognitio profile, don't perform scans.
-  if (profile->IsOffTheRecord())
-    return false;
-
-  // If there's no valid DM token, the upload will fail.
-  if (!policy::GetDMToken(profile).is_valid())
-    return false;
-
+  auto* service =
+      enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
+          profile);
   // If the corresponding Connector policy isn't set, don't perform scans.
-  if (!enterprise_connectors::ConnectorsManager::GetInstance()
-           ->IsConnectorEnabled(connector))
+  if (!service || !service->IsConnectorEnabled(connector))
     return false;
 
   // Check that |url| matches the appropriate URL patterns by getting settings.
   // No settings means no matches were found.
-  auto settings = enterprise_connectors::ConnectorsManager::GetInstance()
-                      ->GetAnalysisSettings(url, connector);
+  auto settings = service->GetAnalysisSettings(url, connector);
   if (!settings.has_value()) {
     return false;
   }
@@ -539,7 +532,7 @@ void ContentAnalysisDelegate::PrepareRequest(
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
 
-  request->set_device_token(policy::GetDMToken(profile).value());
+  request->set_device_token(data_.settings.dm_token);
   request->set_analysis_connector(connector);
   request->set_email(safe_browsing::GetProfileEmail(profile));
   request->set_url(data_.url.spec());

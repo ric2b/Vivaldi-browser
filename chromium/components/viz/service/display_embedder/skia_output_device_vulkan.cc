@@ -34,7 +34,7 @@ std::unique_ptr<SkiaOutputDeviceVulkan> SkiaOutputDeviceVulkan::Create(
     gpu::MemoryTracker* memory_tracker,
     DidSwapBufferCompleteCallback did_swap_buffer_complete_callback) {
   auto output_device = std::make_unique<SkiaOutputDeviceVulkan>(
-      util::PassKey<SkiaOutputDeviceVulkan>(), context_provider, surface_handle,
+      base::PassKey<SkiaOutputDeviceVulkan>(), context_provider, surface_handle,
       memory_tracker, did_swap_buffer_complete_callback);
   if (UNLIKELY(!output_device->Initialize()))
     return nullptr;
@@ -42,7 +42,7 @@ std::unique_ptr<SkiaOutputDeviceVulkan> SkiaOutputDeviceVulkan::Create(
 }
 
 SkiaOutputDeviceVulkan::SkiaOutputDeviceVulkan(
-    util::PassKey<SkiaOutputDeviceVulkan>,
+    base::PassKey<SkiaOutputDeviceVulkan>,
     VulkanContextProvider* context_provider,
     gpu::SurfaceHandle surface_handle,
     gpu::MemoryTracker* memory_tracker,
@@ -170,23 +170,9 @@ SkSurface* SkiaOutputDeviceVulkan::BeginPaint(
 
   scoped_write_.emplace(vulkan_surface_->swap_chain());
   if (UNLIKELY(!scoped_write_->success())) {
+    // Return nullptr, and then the caller will make context lost.
     scoped_write_.reset();
-    if (UNLIKELY(vulkan_surface_->swap_chain()->state() !=
-                 VK_ERROR_SURFACE_LOST_KHR))
-      return nullptr;
-    auto result = RecreateSwapChain(vulkan_surface_->image_size(), color_space_,
-                                    vulkan_surface_->transform());
-    // If vulkan surface is lost, we will try to recreate swap chain.
-    if (UNLIKELY(!result)) {
-      LOG(DFATAL) << "Failed to recreate vulkan swap chain.";
-      return nullptr;
-    }
-
-    scoped_write_.emplace(vulkan_surface_->swap_chain());
-    if (UNLIKELY(!scoped_write_->success())) {
-      scoped_write_.reset();
-      return nullptr;
-    }
+    return nullptr;
   }
 
   auto& sk_surface =
@@ -304,7 +290,6 @@ bool SkiaOutputDeviceVulkan::Initialize() {
   capabilities_.preserve_buffer_content = true;
   capabilities_.output_surface_origin = gfx::SurfaceOrigin::kTopLeft;
   capabilities_.supports_post_sub_buffer = true;
-  capabilities_.supports_target_damage = true;
   capabilities_.orientation_mode = OutputSurface::OrientationMode::kHardware;
 #if defined(OS_ANDROID)
   // With vulkan, if the chrome is launched in landscape mode, the chrome is

@@ -37,7 +37,6 @@
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
 #include "third_party/skia/include/effects/SkDashPathEffect.h"
 #include "third_party/skia/include/effects/SkLayerDrawLooper.h"
-#include "third_party/skia/include/effects/SkOffsetImageFilter.h"
 #include "third_party/skia/src/core/SkRemoteGlyphCache.h"
 
 using testing::_;
@@ -727,6 +726,31 @@ class PaintOpBufferOffsetsTest : public ::testing::Test {
   PaintOpBuffer buffer_;
 };
 
+TEST_F(PaintOpBufferOffsetsTest, EmptyClipRectShouldRejectAnOp) {
+  SkCanvas device(0, 0);
+  SkCanvas* canvas = &device;
+  canvas->translate(-254, 0);
+  SkIRect bounds = canvas->getDeviceClipBounds();
+  EXPECT_TRUE(bounds.isEmpty());
+  SkMatrix ctm = canvas->getTotalMatrix();
+  EXPECT_EQ(ctm[2], -254);
+
+  scoped_refptr<TestPaintWorkletInput> input =
+      base::MakeRefCounted<TestPaintWorkletInput>(gfx::SizeF(32.0f, 32.0f));
+  PaintImage image = CreatePaintWorkletPaintImage(input);
+  SkRect src = SkRect::MakeLTRB(0, 0, 100, 100);
+  SkRect dst = SkRect::MakeLTRB(168, -23, 268, 77);
+  push_op<DrawImageRectOp>(image, src, dst, nullptr,
+                           SkCanvas::kStrict_SrcRectConstraint);
+  std::vector<size_t> offsets = Select({0});
+  for (PaintOpBuffer::PlaybackFoldingIterator iter(&buffer_, &offsets); iter;
+       ++iter) {
+    const PaintOp* op = *iter;
+    EXPECT_EQ(op->GetType(), PaintOpType::DrawImageRect);
+    EXPECT_TRUE(PaintOp::QuickRejectDraw(op, canvas));
+  }
+}
+
 TEST_F(PaintOpBufferOffsetsTest, ContiguousIndices) {
   testing::StrictMock<MockCanvas> canvas;
 
@@ -1103,6 +1127,21 @@ std::vector<SkMatrix> test_matrices = {
     }(),
 };
 
+std::vector<SkM44> test_matrix44s = {
+    SkM44(),
+    SkM44::Scale(3.91f, 4.31f, 1.0f),
+    SkM44::Translate(-5.2f, 8.7f, 0.0f),
+    [] {
+      SkScalar buffer[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+      return SkM44::RowMajor(buffer);
+    }(),
+    [] {
+      SkScalar buffer[] = {1, 2,  3,  4,  5,  6,  7,  8,
+                           9, 10, 11, 12, 13, 14, 15, 16};
+      return SkM44::RowMajor(buffer);
+    }(),
+};
+
 std::vector<SkPath> test_paths = {
     [] {
       SkPath path;
@@ -1432,6 +1471,12 @@ void PushConcatOps(PaintOpBuffer* buffer) {
   ValidateOps<ConcatOp>(buffer);
 }
 
+void PushConcat44Ops(PaintOpBuffer* buffer) {
+  for (auto& test_matrix44 : test_matrix44s)
+    buffer->push<Concat44Op>(test_matrix44);
+  ValidateOps<ConcatOp>(buffer);
+}
+
 void PushCustomDataOps(PaintOpBuffer* buffer) {
   for (size_t i = 0; i < test_ids.size(); ++i)
     buffer->push<CustomDataOp>(test_ids[i]);
@@ -1663,6 +1708,12 @@ void PushSetMatrixOps(PaintOpBuffer* buffer) {
   ValidateOps<SetMatrixOp>(buffer);
 }
 
+void PushSetMatrix44Ops(PaintOpBuffer* buffer) {
+  for (auto& test_matrix44 : test_matrix44s)
+    buffer->push<SetMatrix44Op>(test_matrix44);
+  ValidateOps<SetMatrix44Op>(buffer);
+}
+
 void PushTranslateOps(PaintOpBuffer* buffer) {
   for (size_t i = 0; i < test_floats.size() - 1; i += 2)
     buffer->push<TranslateOp>(test_floats[i], test_floats[i + 1]);
@@ -1697,6 +1748,9 @@ class PaintOpSerializationTest : public ::testing::TestWithParam<uint8_t> {
         break;
       case PaintOpType::Concat:
         PushConcatOps(&buffer_);
+        break;
+      case PaintOpType::Concat44:
+        PushConcat44Ops(&buffer_);
         break;
       case PaintOpType::CustomData:
         PushCustomDataOps(&buffer_);
@@ -1764,6 +1818,9 @@ class PaintOpSerializationTest : public ::testing::TestWithParam<uint8_t> {
         break;
       case PaintOpType::SetMatrix:
         PushSetMatrixOps(&buffer_);
+        break;
+      case PaintOpType::SetMatrix44:
+        PushSetMatrix44Ops(&buffer_);
         break;
       case PaintOpType::Translate:
         PushTranslateOps(&buffer_);
@@ -2478,7 +2535,10 @@ TEST(PaintOpBufferTest, ValidateSkClip) {
   buffer.push<ClipRectOp>(test_rects[0], bad_clip, true);
   buffer.push<ClipRRectOp>(test_rrects[0], bad_clip, false);
 
-  SkClipOp bad_clip_max = static_cast<SkClipOp>(~static_cast<uint32_t>(0));
+  // SkClipOp is serialized to uint8_t (see WriteEnum). Values outside uint8_t
+  // would crash the serialization, so this is the max value that passes checked
+  // cast but will still fail validation during deserialization.
+  SkClipOp bad_clip_max = static_cast<SkClipOp>(static_cast<uint8_t>(~0));
   buffer.push<ClipRectOp>(test_rects[1], bad_clip_max, false);
 
   TestOptionsProvider options_provider;
@@ -2540,15 +2600,15 @@ TEST(PaintOpBufferTest, ValidateSkBlendMode) {
       SkBlendMode::kSaturation,
       SkBlendMode::kColor,
       SkBlendMode::kLuminosity,
-      static_cast<SkBlendMode>(static_cast<uint32_t>(SkBlendMode::kLastMode) +
+      static_cast<SkBlendMode>(static_cast<uint8_t>(SkBlendMode::kLastMode) +
                                1),
-      static_cast<SkBlendMode>(static_cast<uint32_t>(~0)),
+      static_cast<SkBlendMode>(static_cast<uint8_t>(~0)),
   };
 
   SkBlendMode bad_modes_for_flags[] = {
-      static_cast<SkBlendMode>(static_cast<uint32_t>(SkBlendMode::kLastMode) +
+      static_cast<SkBlendMode>(static_cast<uint8_t>(SkBlendMode::kLastMode) +
                                1),
-      static_cast<SkBlendMode>(static_cast<uint32_t>(~0)),
+      static_cast<SkBlendMode>(static_cast<uint8_t>(~0)),
   };
 
   for (size_t i = 0; i < base::size(bad_modes_for_draw_color); ++i) {
@@ -2979,7 +3039,7 @@ TEST(PaintOpBufferTest, RasterPaintWorkletImageRectTranslated) {
   EXPECT_CALL(canvas, willSave()).InSequence(s);
   EXPECT_CALL(canvas, OnSaveLayer()).InSequence(s);
   EXPECT_CALL(canvas, OnSaveLayer()).InSequence(s);
-  EXPECT_CALL(canvas, didConcat(SkMatrix::Translate(5.0f, 7.0f)));
+  EXPECT_CALL(canvas, didConcat44(SkM44::Translate(5.0f, 7.0f)));
   EXPECT_CALL(canvas, willSave()).InSequence(s);
   EXPECT_CALL(canvas, didScale(1.0f / scale_adjustment[0].width(),
                                1.0f / scale_adjustment[0].height()));
@@ -3024,7 +3084,7 @@ TEST(PaintOpBufferTest, RasterPaintWorkletImageRectScaled) {
   EXPECT_CALL(canvas, willSave()).InSequence(s);
   EXPECT_CALL(canvas, OnSaveLayer()).InSequence(s);
   EXPECT_CALL(canvas, OnSaveLayer()).InSequence(s);
-  EXPECT_CALL(canvas, didConcat(SkMatrix::Scale(2.f, 1.5f)));
+  EXPECT_CALL(canvas, didConcat44(SkM44::Scale(2.f, 1.5f)));
   EXPECT_CALL(canvas, willSave()).InSequence(s);
   EXPECT_CALL(canvas, didScale(1.0f / scale_adjustment[0].width(),
                                1.0f / scale_adjustment[0].height()));
@@ -3259,19 +3319,18 @@ TEST_P(PaintFilterSerializationTest, Basic) {
   std::vector<sk_sp<PaintFilter>> filters = {
       sk_sp<PaintFilter>{new ColorFilterPaintFilter(
           SkColorFilters::LinearToSRGBGamma(), nullptr)},
-      sk_sp<PaintFilter>{new BlurPaintFilter(
-          0.5f, 0.3f, SkBlurImageFilter::kRepeat_TileMode, nullptr)},
+      sk_sp<PaintFilter>{
+          new BlurPaintFilter(0.5f, 0.3f, SkTileMode::kRepeat, nullptr)},
       sk_sp<PaintFilter>{new DropShadowPaintFilter(
           5.f, 10.f, 0.1f, 0.3f, SK_ColorBLUE,
-          SkDropShadowImageFilter::kDrawShadowOnly_ShadowMode, nullptr)},
+          DropShadowPaintFilter::ShadowMode::kDrawShadowOnly, nullptr)},
       sk_sp<PaintFilter>{new MagnifierPaintFilter(SkRect::MakeXYWH(5, 6, 7, 8),
                                                   10.5f, nullptr)},
       sk_sp<PaintFilter>{new AlphaThresholdPaintFilter(
           SkRegion(SkIRect::MakeXYWH(0, 0, 100, 200)), 10.f, 20.f, nullptr)},
       sk_sp<PaintFilter>{new MatrixConvolutionPaintFilter(
           SkISize::Make(3, 3), scalars, 30.f, 123.f, SkIPoint::Make(0, 0),
-          SkMatrixConvolutionImageFilter::kClampToBlack_TileMode, true,
-          nullptr)},
+          SkTileMode::kDecal, true, nullptr)},
       sk_sp<PaintFilter>{new MorphologyPaintFilter(
           MorphologyPaintFilter::MorphType::kErode, 15.5f, 30.2f, nullptr)},
       sk_sp<PaintFilter>{new OffsetPaintFilter(-1.f, -2.f, nullptr)},
@@ -3300,12 +3359,10 @@ TEST_P(PaintFilterSerializationTest, Basic) {
   filters.emplace_back(new ComposePaintFilter(filters[0], filters[1]));
   filters.emplace_back(
       new XfermodePaintFilter(SkBlendMode::kDst, filters[2], filters[3]));
-  filters.emplace_back(new ArithmeticPaintFilter(
-      1.1f, 2.2f, 3.3f, 4.4f, false, filters[4], filters[5], nullptr));
+  filters.emplace_back(new ArithmeticPaintFilter(1.1f, 2.2f, 3.3f, 4.4f, false,
+                                                 filters[4], filters[5]));
   filters.emplace_back(new DisplacementMapEffectPaintFilter(
-      SkDisplacementMapEffect::kR_ChannelSelectorType,
-      SkDisplacementMapEffect::kG_ChannelSelectorType, 10, filters[6],
-      filters[7]));
+      SkColorChannel::kR, SkColorChannel::kG, 10, filters[6], filters[7]));
   filters.emplace_back(new MergePaintFilter(filters.data(), filters.size()));
   filters.emplace_back(new RecordPaintFilter(
       sk_sp<PaintRecord>{new PaintRecord}, SkRect::MakeXYWH(10, 15, 20, 25)));
@@ -3521,7 +3578,7 @@ TEST(PaintOpBufferTest, CustomData) {
     buffer.push<CustomDataOp>(9999u);
     testing::StrictMock<MockCanvas> canvas;
     EXPECT_CALL(canvas, onCustomCallback(&canvas, 9999)).Times(1);
-    buffer.Playback(&canvas, PlaybackParams(nullptr, SkMatrix::I(),
+    buffer.Playback(&canvas, PlaybackParams(nullptr, SkM44(),
                                             base::BindRepeating(
                                                 &MockCanvas::onCustomCallback,
                                                 base::Unretained(&canvas))));

@@ -32,6 +32,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/u2f_notification.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
 #include "chromeos/login/auth/authenticator.h"
 #include "chromeos/login/auth/user_context.h"
 #include "components/arc/net/always_on_vpn_manager.h"
@@ -244,11 +245,13 @@ class UserSessionManager
   bool RespectLocalePreference(
       Profile* profile,
       const user_manager::User* user,
-      const locale_util::SwitchLanguageCallback& callback) const;
+      locale_util::SwitchLanguageCallback callback) const;
 
   // Switch to the locale that `profile` wishes to use and invoke `callback`.
   void RespectLocalePreferenceWrapper(Profile* profile,
-                                      const base::Closure& callback);
+                                      base::OnceClosure callback);
+
+  void LaunchBrowser(Profile* profile);
 
   // Restarts Chrome if needed. This happens when user session has custom
   // flags/switches enabled. Another case when owner has setup custom flags,
@@ -419,13 +422,6 @@ class UserSessionManager
   // the authentication profile.
   void CompleteProfileCreateAfterAuthTransfer(Profile* profile);
 
-  // Asynchronously prepares TPM devices and calls FinalizePrepareProfile on UI
-  // thread.
-  void PrepareTpmDeviceAndFinalizeProfile(Profile* profile);
-
-  // Called on UI thread once Cryptohome operation completes.
-  void OnCryptohomeOperationCompleted(Profile* profile, bool result);
-
   // Finalized profile preparation.
   void FinalizePrepareProfile(Profile* profile);
 
@@ -491,7 +487,7 @@ class UserSessionManager
                                bool locale_pref_checked);
 
   static void RunCallbackOnLocaleLoaded(
-      const base::Closure& callback,
+      base::OnceClosure callback,
       InputEventsBlocker* input_events_blocker,
       const locale_util::LanguageSwitchResult& result);
 
@@ -521,6 +517,8 @@ class UserSessionManager
       const base::RepeatingClosure& attempt_restart_closure);
 
   void NotifyEasyUnlockKeyOpsFinished();
+
+  bool IsFullRestoreEnabled(Profile* profile);
 
   UserSessionManagerDelegate* delegate_;
 

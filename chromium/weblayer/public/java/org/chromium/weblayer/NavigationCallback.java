@@ -111,7 +111,9 @@ public abstract class NavigationCallback {
 
     /**
      * This is fired after each navigation has completed to indicate that the first paint after a
-     * non-empty layout has finished. This is *not* called for same-document navigations.
+     * non-empty layout has finished. This is *not* called for same-document navigations or when the
+     * page is loaded from the back-forward cache; see {@link
+     * Navigation#isServedFromBackForwardCache}.
      */
     public void onFirstContentfulPaint() {}
 
@@ -145,7 +147,6 @@ public abstract class NavigationCallback {
      * Called after each navigation to indicate that the old page is no longer
      * being rendered. Note this is not ordered with respect to onFirstContentfulPaint.
      * @param newNavigationUri Uri of the new navigation.
-     * @since 85
      */
     public void onOldPageNoLongerRendered(@NonNull Uri newNavigationUri) {}
 }

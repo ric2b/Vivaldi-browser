@@ -6,7 +6,14 @@ package org.chromium.components.browser_ui.site_settings;
 
 import android.annotation.SuppressLint;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
 import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 
@@ -249,6 +256,59 @@ public class ContentSettingsResources {
                 resources, R.color.primary_text_disabled_material_light);
         icon.setColorFilter(disabledColor, PorterDuff.Mode.SRC_IN);
         return icon;
+    }
+
+    /**
+     * @return A {@link Drawable} that is the blocked version of the square icon passed in.
+     *         Achieved by adding a diagonal strike through the icon.
+     */
+    public static Drawable getBlockedSquareIcon(Resources resources, Drawable icon) {
+        if (icon == null) return null;
+        // Save color filter in order to re-apply later
+        ColorFilter filter = icon.getColorFilter();
+
+        // Create bitmap from drawable
+        Bitmap iconBitmap = Bitmap.createBitmap(
+                icon.getIntrinsicWidth(), icon.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(iconBitmap);
+        int side = canvas.getWidth();
+        assert side == canvas.getHeight();
+        icon.setBounds(0, 0, side, side);
+        icon.draw(canvas);
+
+        // Thickness of the strikethrough line in pixels, relative to the icon size.
+        float thickness = 0.08f * side;
+        // Determines the axis bounds for where the line should start and finish.
+        float padding = side * 0.15f;
+        // The scaling ratio to get the axis bias. sin(45 degrees).
+        float ratio = 0.7071f;
+        // Calculated axis shift for the line in order to only be on one side of the transparent
+        // line.
+        float bias = (thickness / 2) * ratio;
+
+        // Draw diagonal transparent line
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+        paint.setColor(Color.TRANSPARENT);
+        paint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.SRC_OUT));
+        // Scale by 1.5 then shift up by half of bias in order to ensure no weird gap between lines
+        // due to rounding.
+        float halfBias = 0.5f * bias;
+        paint.setStrokeWidth(1.5f * thickness);
+        canvas.drawLine(padding + halfBias, padding - halfBias, side - padding + halfBias,
+                side - padding - halfBias, paint);
+
+        // Draw a strikethrough directly below.
+        paint.setColor(Color.BLACK);
+        paint.setXfermode(null);
+        paint.setStrokeWidth(thickness);
+        canvas.drawLine(padding - bias, padding + bias, side - padding - bias,
+                side - padding + bias, paint);
+
+        Drawable blocked = new BitmapDrawable(resources, iconBitmap);
+        // Re-apply color filter
+        blocked.setColorFilter(filter);
+        return blocked;
     }
 
     /**

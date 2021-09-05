@@ -9,12 +9,12 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
@@ -396,6 +396,7 @@ PrefetchProxyTabHelper::MaybeUpdatePrefetchStatusWithNSPContext(
     case PrefetchProxyPrefetchStatus::kSubresourceThrottled:
     case PrefetchProxyPrefetchStatus::kPrefetchPositionIneligible:
     case PrefetchProxyPrefetchStatus::kPrefetchIneligibleRetryAfter:
+    case PrefetchProxyPrefetchStatus::kPrefetchProxyNotAvailable:
       return status;
     // These statuses we are going to update to, and this is the only place that
     // they are set so they are not expected to be passed in.
@@ -1201,6 +1202,14 @@ void PrefetchProxyTabHelper::CheckEligibilityOfURL(
     return;
   }
 
+  if (!prefetch_proxy_service->proxy_configurator()
+           ->IsPrefetchProxyAvailable()) {
+    std::move(result_callback)
+        .Run(url, false,
+             PrefetchProxyPrefetchStatus::kPrefetchProxyNotAvailable);
+    return;
+  }
+
   if (!prefetch_proxy_service->origin_decider()
            ->IsOriginOutsideRetryAfterWindow(url)) {
     std::move(result_callback)
@@ -1412,6 +1421,9 @@ void PrefetchProxyTabHelper::CreateIsolatedURLLoaderFactory() {
       profile_->GetPrefs()->GetString(language::prefs::kAcceptLanguages));
   context_params->initial_custom_proxy_config =
       prefetch_proxy_service->proxy_configurator()->CreateCustomProxyConfig();
+  context_params->custom_proxy_connection_observer_remote =
+      prefetch_proxy_service->proxy_configurator()
+          ->NewProxyConnectionObserverRemote();
   context_params->cert_verifier_params = content::GetCertVerifierParams(
       network::mojom::CertVerifierCreationParams::New());
   context_params->cors_exempt_header_list = {

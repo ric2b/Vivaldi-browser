@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
 
+#include "cc/base/math_util.h"
 #include "components/paint_preview/common/paint_preview_tracker.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-blink.h"
@@ -21,6 +22,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/foreign_layer_display_item.h"
+#include "third_party/blink/renderer/platform/widget/frame_widget.h"
 
 #if BUILDFLAG(ENABLE_PRINTING)
 // nogncheck because dependency on //printing is conditional upon
@@ -80,7 +82,8 @@ void RemoteFrameView::AttachToLayout() {
   UpdateFrameVisibility(true);
   UpdateRenderThrottlingStatus(
       IsHiddenForThrottling(),
-      ParentFrameView()->CanThrottleRenderingForPropagation());
+      ParentFrameView()->CanThrottleRenderingForPropagation(),
+      IsDisplayLocked());
   needs_frame_rect_propagation_ = true;
   ParentFrameView()->SetNeedsUpdateGeometries();
 }
@@ -103,7 +106,7 @@ void RemoteFrameView::SetViewportIntersection(
   new_state.compositor_visible_rect = gfx::Rect(compositing_rect_);
   if (!last_intersection_state_.Equals(new_state)) {
     last_intersection_state_ = new_state;
-    remote_frame_->Client()->SynchronizeVisualProperties();
+    GetFrame().SynchronizeVisualProperties();
     remote_frame_->GetRemoteFrameHostRemote().UpdateViewportIntersection(
         new_state.Clone());
   } else if (needs_frame_rect_propagation_) {
@@ -178,6 +181,56 @@ void RemoteFrameView::UpdateCompositingRect() {
     needs_frame_rect_propagation_ = true;
 }
 
+void RemoteFrameView::UpdateCompositingScaleFactor() {
+  float previous_scale_factor = compositing_scale_factor_;
+
+  LocalFrameView* local_root_view = ParentLocalRootFrameView();
+  LayoutEmbeddedContent* owner_layout_object =
+      remote_frame_->OwnerLayoutObject();
+  if (!local_root_view || !owner_layout_object)
+    return;
+
+  TransformState local_root_transform_state(
+      TransformState::kApplyTransformDirection);
+  local_root_transform_state.Move(
+      owner_layout_object->PhysicalContentBoxOffset());
+  owner_layout_object->MapLocalToAncestor(nullptr, local_root_transform_state,
+                                          kTraverseDocumentBoundaries);
+
+  float frame_to_local_root_scale_factor = 1.0f;
+  gfx::Transform local_root_transform = TransformationMatrix::ToTransform(
+      local_root_transform_state.AccumulatedTransform());
+  if (local_root_transform.HasPerspective()) {
+    frame_to_local_root_scale_factor =
+        cc::MathUtil::ComputeApproximateMaxScale(local_root_transform);
+  } else {
+    gfx::Vector2dF scale_components =
+        cc::MathUtil::ComputeTransform2dScaleComponents(
+            local_root_transform,
+            /*fallback_scale=*/1.0f);
+    frame_to_local_root_scale_factor =
+        std::max(scale_components.x(), scale_components.y());
+  }
+
+  // The compositing scale factor is calculated by multiplying the scale factor
+  // from the local root to main frame with the scale factor between child frame
+  // and local root.
+  FrameWidget* widget = local_root_view->GetFrame().GetWidgetForLocalRoot();
+  compositing_scale_factor_ =
+      widget->GetCompositingScaleFactor() * frame_to_local_root_scale_factor;
+
+  // Force compositing scale factor to be at least a reasonable minimum value to
+  // prevent dependent values such as scroll deltas in the compositor going to
+  // zero.  It's possible for the calculated scale factor to go to zero since
+  // it depends on intermediate CSS transforms which could have zero scale.
+  constexpr float kMinCompositingScaleFactor = 0.25f;
+  compositing_scale_factor_ =
+      std::max(compositing_scale_factor_, kMinCompositingScaleFactor);
+
+  if (compositing_scale_factor_ != previous_scale_factor)
+    remote_frame_->SynchronizeVisualProperties();
+}
+
 void RemoteFrameView::Dispose() {
   HTMLFrameOwnerElement* owner_element = remote_frame_->DeprecatedLocalOwner();
   // ownerElement can be null during frame swaps, because the
@@ -217,7 +270,7 @@ void RemoteFrameView::PropagateFrameRects() {
   }
   // NOTE(andre@vivaldi.com) : Only set size if this is visible. See VB-51618
   if (IsSelfVisible()) {
-    remote_frame_->Client()->FrameRectsChanged(frame_rect, screen_space_rect);
+  remote_frame_->FrameRectsChanged(frame_rect, screen_space_rect);
   }
 }
 
@@ -228,18 +281,20 @@ void RemoteFrameView::Paint(GraphicsContext& context,
   if (!rect.Intersects(FrameRect()))
     return;
 
-  if (context.IsPrintingOrPaintingPreview()) {
-    DrawingRecorder recorder(context, *GetFrame().OwnerLayoutObject(),
+  const auto& owner_layout_object = *GetFrame().OwnerLayoutObject();
+  if (owner_layout_object.GetDocument().IsPrintingOrPaintingPreview()) {
+    DrawingRecorder recorder(context, owner_layout_object,
                              DisplayItem::kDocumentBackground);
     context.Save();
     context.Translate(paint_offset.Width(), paint_offset.Height());
     DCHECK(context.Canvas());
 
     uint32_t content_id = 0;
-    if (context.Printing()) {
+    if (owner_layout_object.GetDocument().Printing()) {
       // Inform the remote frame to print.
       content_id = Print(FrameRect(), context.Canvas());
-    } else if (context.IsPaintingPreview()) {
+    } else {
+      DCHECK(owner_layout_object.GetDocument().IsPaintingPreview());
       // Inform the remote frame to capture a paint preview.
       content_id = CapturePaintPreview(FrameRect(), context.Canvas());
     }
@@ -252,7 +307,7 @@ void RemoteFrameView::Paint(GraphicsContext& context,
       GetFrame().GetCcLayer()) {
     auto offset = RoundedIntPoint(
         GetLayoutEmbeddedContent()->ReplacedContentRect().offset);
-    RecordForeignLayer(context, *GetFrame().OwnerLayoutObject(),
+    RecordForeignLayer(context, owner_layout_object,
                        DisplayItem::kForeignLayerRemoteFrame,
                        GetFrame().GetCcLayer(), offset);
   }
@@ -288,8 +343,10 @@ void RemoteFrameView::ParentVisibleChanged() {
 
 void RemoteFrameView::VisibilityForThrottlingChanged() {
   TRACE_EVENT0("blink", "RemoteFrameView::VisibilityForThrottlingChanged");
+  // TODO(szager,vmpstr): Send IsSubtreeThrottled() and IsDisplayLocked() as
+  // separate bits.
   remote_frame_->GetRemoteFrameHostRemote().UpdateRenderThrottlingStatus(
-      IsHiddenForThrottling(), IsSubtreeThrottled());
+      IsHiddenForThrottling(), IsSubtreeThrottled(), IsDisplayLocked());
 }
 
 void RemoteFrameView::VisibilityChanged(
@@ -298,7 +355,7 @@ void RemoteFrameView::VisibilityChanged(
 }
 
 bool RemoteFrameView::CanThrottleRendering() const {
-  return IsSubtreeThrottled() || IsHiddenForThrottling();
+  return IsHiddenForThrottling() || IsSubtreeThrottled() || IsDisplayLocked();
 }
 
 void RemoteFrameView::SetIntrinsicSizeInfo(

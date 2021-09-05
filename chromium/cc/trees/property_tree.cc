@@ -729,20 +729,24 @@ void EffectTree::UpdateIsDrawn(EffectNode* node, EffectNode* parent_node) {
   // Exceptions:
   // 1) Nodes that contribute to copy requests, whether hidden or not, must be
   //    drawn.
-  // 2) Nodes that have a backdrop filter.
-  // 3) Nodes with animating screen space opacity on main thread or pending tree
+  // 2) Nodes that have a valid SubtreeCaptureId, must be drawn so that they can
+  //    be captured by the FrameSinkVideoCapturer.
+  // 3) Nodes that have a backdrop filter.
+  // 4) Nodes with animating screen space opacity on main thread or pending tree
   //    are drawn if their parent is drawn irrespective of their opacity.
-  if (node->has_copy_request || node->cache_render_surface)
+  if (node->has_copy_request || node->cache_render_surface ||
+      node->subtree_capture_id.is_valid()) {
     node->is_drawn = true;
-  else if (EffectiveOpacity(node) == 0.f &&
-           (!node->has_potential_opacity_animation ||
-            property_trees()->is_active) &&
-           node->backdrop_filters.IsEmpty())
+  } else if (EffectiveOpacity(node) == 0.f &&
+             (!node->has_potential_opacity_animation ||
+              property_trees()->is_active) &&
+             node->backdrop_filters.IsEmpty()) {
     node->is_drawn = false;
-  else if (parent_node)
+  } else if (parent_node) {
     node->is_drawn = parent_node->is_drawn;
-  else
+  } else {
     node->is_drawn = true;
+  }
 }
 
 void EffectTree::UpdateEffectChanged(EffectNode* node,
@@ -789,7 +793,8 @@ void EffectTree::UpdateHasMaskingChild(EffectNode* node,
 
 void EffectTree::UpdateOnlyDrawsVisibleContent(EffectNode* node,
                                                EffectNode* parent_node) {
-  node->only_draws_visible_content = !node->has_copy_request;
+  node->only_draws_visible_content =
+      !node->has_copy_request && !node->subtree_capture_id.is_valid();
   if (parent_node)
     node->only_draws_visible_content &= parent_node->only_draws_visible_content;
   if (!node->backdrop_filters.IsEmpty()) {
@@ -1949,13 +1954,11 @@ bool PropertyTrees::ElementIsAnimatingChanged(
   return updated_transform;
 }
 
-void PropertyTrees::AnimationScalesChanged(ElementId element_id,
-                                           float maximum_scale,
-                                           float starting_scale) {
+void PropertyTrees::MaximumAnimationScaleChanged(ElementId element_id,
+                                                 float maximum_scale) {
   if (TransformNode* transform_node =
           transform_tree.FindNodeFromElementId(element_id)) {
     transform_node->maximum_animation_scale = maximum_scale;
-    transform_node->starting_animation_scale = starting_scale;
     UpdateTransformTreeUpdateNumber();
   }
 }
@@ -2038,105 +2041,90 @@ std::string PropertyTrees::ToString() const {
   return value.ToFormattedJSON();
 }
 
-CombinedAnimationScale PropertyTrees::GetAnimationScales(
-    int transform_node_id,
-    LayerTreeImpl* layer_tree_impl) {
-  AnimationScaleData* animation_scales =
-      &cached_data_.animation_scales[transform_node_id];
-  if (animation_scales->update_number !=
-      cached_data_.transform_tree_update_number) {
-    TransformNode* node = transform_tree.Node(transform_node_id);
-    TransformNode* parent_node = transform_tree.parent(node);
-    bool ancestor_is_animating_scale = false;
-    float ancestor_maximum_target_scale = kNotScaled;
-    float ancestor_starting_animation_scale = kNotScaled;
-    if (parent_node) {
-      CombinedAnimationScale combined_animation_scale =
-          GetAnimationScales(parent_node->id, layer_tree_impl);
-      ancestor_maximum_target_scale =
-          combined_animation_scale.maximum_animation_scale;
-      ancestor_starting_animation_scale =
-          combined_animation_scale.starting_animation_scale;
-      ancestor_is_animating_scale =
-          cached_data_.animation_scales[parent_node->id]
-              .to_screen_has_scale_animation;
-    }
-
-    bool node_is_animating_scale =
-        node->maximum_animation_scale != kNotScaled &&
-        node->starting_animation_scale != kNotScaled;
-
-    animation_scales->to_screen_has_scale_animation =
-        node_is_animating_scale || ancestor_is_animating_scale;
-
-    // Once we've failed to compute a maximum animated scale at an ancestor, we
-    // continue to fail.
-    bool failed_at_ancestor = ancestor_is_animating_scale &&
-                              ancestor_maximum_target_scale == kNotScaled;
-
-    // Computing maximum animated scale in the presence of non-scale/translation
-    // transforms isn't supported.
-    bool failed_for_non_scale_or_translation =
-        !node->to_parent.IsScaleOrTranslation();
-
-    // We don't attempt to accumulate animation scale from multiple nodes with
-    // scale animations, because of the risk of significant overestimation. For
-    // example, one node might be increasing scale from 1 to 10 at the same time
-    // as another node is decreasing scale from 10 to 1. Naively combining these
-    // scales would produce a scale of 100.
-    bool failed_for_multiple_scale_animations =
-        ancestor_is_animating_scale && node_is_animating_scale;
-
-    if (failed_at_ancestor || failed_for_non_scale_or_translation ||
-        failed_for_multiple_scale_animations) {
-      // This ensures that descendants know we've failed to compute a maximum
-      // animated scale.
-      animation_scales->to_screen_has_scale_animation = true;
-      animation_scales->combined_maximum_animation_target_scale = kNotScaled;
-      animation_scales->combined_starting_animation_scale = kNotScaled;
-    } else if (!animation_scales->to_screen_has_scale_animation) {
-      animation_scales->combined_maximum_animation_target_scale = kNotScaled;
-      animation_scales->combined_starting_animation_scale = kNotScaled;
-    } else if (!node_is_animating_scale) {
-      // An ancestor is animating scale.
-      gfx::Vector2dF local_scales =
-          MathUtil::ComputeTransform2dScaleComponents(node->local, kNotScaled);
-      float max_local_scale = std::max(local_scales.x(), local_scales.y());
-      animation_scales->combined_maximum_animation_target_scale =
-          max_local_scale * ancestor_maximum_target_scale;
-      animation_scales->combined_starting_animation_scale =
-          max_local_scale * ancestor_starting_animation_scale;
-    } else {
-      gfx::Vector2dF ancestor_scales =
-          parent_node
-              ? MathUtil::ComputeTransform2dScaleComponents(
-                    transform_tree.ToScreen(parent_node->id), kNotScaled)
-              : gfx::Vector2dF(1.f, 1.f);
-
-      float max_ancestor_scale =
-          std::max(ancestor_scales.x(), ancestor_scales.y());
-      animation_scales->combined_maximum_animation_target_scale =
-          max_ancestor_scale * node->maximum_animation_scale;
-      animation_scales->combined_starting_animation_scale =
-          max_ancestor_scale * node->starting_animation_scale;
-    }
-    animation_scales->update_number = cached_data_.transform_tree_update_number;
-  }
-  return CombinedAnimationScale(
-      animation_scales->combined_maximum_animation_target_scale,
-      animation_scales->combined_starting_animation_scale);
+float PropertyTrees::MaximumAnimationToScreenScale(int transform_id) {
+  return GetAnimationScaleData(transform_id).maximum_to_screen_scale;
 }
 
-void PropertyTrees::SetAnimationScalesForTesting(
+bool PropertyTrees::AnimationAffectedByInvalidScale(int transform_id) {
+  return GetAnimationScaleData(transform_id).affected_by_invalid_scale;
+}
+
+const AnimationScaleData& PropertyTrees::GetAnimationScaleData(
+    int transform_id) {
+  auto& animation_scale = cached_data_.animation_scales[transform_id];
+  if (animation_scale.update_number ==
+      cached_data_.transform_tree_update_number) {
+    return animation_scale;
+  }
+
+  animation_scale.update_number = cached_data_.transform_tree_update_number;
+
+  TransformNode* node = transform_tree.Node(transform_id);
+  TransformNode* parent_node = transform_tree.parent(node);
+  const auto* parent_animation_scale =
+      parent_node ? &GetAnimationScaleData(parent_node->id) : nullptr;
+
+  bool ancestor_affected_by_animation_scale =
+      parent_node && parent_animation_scale->affected_by_animation_scale;
+  bool node_affected_by_animation_scale =
+      node->has_potential_animation && node->maximum_animation_scale != 1.0f;
+
+  animation_scale.affected_by_animation_scale =
+      node_affected_by_animation_scale || ancestor_affected_by_animation_scale;
+  animation_scale.affected_by_invalid_scale =
+      (parent_node && parent_animation_scale->affected_by_invalid_scale) ||
+      // Computing maximum animated scale in the presence of
+      // non-scale/translation transforms isn't supported.
+      !node->to_parent.IsScaleOrTranslation() ||
+      (node->has_potential_animation &&
+       node->maximum_animation_scale == kInvalidScale);
+
+  // We don't attempt to accumulate animation scale from multiple nodes with
+  // scale animations, because of the risk of significant overestimation. For
+  // example, one node might be increasing scale from 1 to 10 at the same time
+  // as another node is decreasing scale from 10 to 1. Naively combining these
+  // scales would produce a scale of 100.
+  bool failed_for_multiple_scale_animations =
+      ancestor_affected_by_animation_scale && node_affected_by_animation_scale;
+
+  float local_maximum_scale = 1.0f;
+  if (animation_scale.affected_by_invalid_scale ||
+      failed_for_multiple_scale_animations) {
+    // Will use the parent's maximum_to_screen_scale.
+  } else if (!node->to_screen_is_potentially_animated) {
+    // No transform animations. Calculate the current to_screen scale.
+    gfx::Vector2dF to_screen_scales =
+        MathUtil::ComputeTransform2dScaleComponents(
+            transform_tree.ToScreen(transform_id), kInvalidScale);
+    animation_scale.maximum_to_screen_scale =
+        std::max(to_screen_scales.x(), to_screen_scales.y());
+    return animation_scale;
+  } else if (!node->has_potential_animation) {
+    gfx::Vector2dF local_scales =
+        MathUtil::ComputeTransform2dScaleComponents(node->local, 1.0f);
+    local_maximum_scale = std::max(local_scales.x(), local_scales.y());
+  } else {
+    DCHECK_NE(node->maximum_animation_scale, kInvalidScale);
+    local_maximum_scale = node->maximum_animation_scale;
+  }
+
+  animation_scale.maximum_to_screen_scale = local_maximum_scale;
+  if (parent_node) {
+    animation_scale.maximum_to_screen_scale *=
+        parent_animation_scale->maximum_to_screen_scale;
+  }
+
+  return animation_scale;
+}
+
+void PropertyTrees::SetMaximumAnimationToScreenScaleForTesting(
     int transform_id,
-    float maximum_animation_scale,
-    float starting_animation_scale) {
-  cached_data_.animation_scales[transform_id]
-      .combined_maximum_animation_target_scale = maximum_animation_scale;
-  cached_data_.animation_scales[transform_id]
-      .combined_starting_animation_scale = starting_animation_scale;
-  cached_data_.animation_scales[transform_id].update_number =
-      cached_data_.transform_tree_update_number;
+    float maximum_scale,
+    bool affected_by_invalid_scale) {
+  auto& animation_scale = cached_data_.animation_scales[transform_id];
+  animation_scale.maximum_to_screen_scale = maximum_scale;
+  animation_scale.affected_by_invalid_scale = affected_by_invalid_scale;
+  animation_scale.update_number = cached_data_.transform_tree_update_number;
 }
 
 bool PropertyTrees::GetToTarget(int transform_id,

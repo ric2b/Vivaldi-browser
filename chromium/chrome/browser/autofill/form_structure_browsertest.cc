@@ -175,7 +175,11 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        // TODO(crbug.com/896689): Remove once launched.
        autofill::features::kAutofillNameSectionsWithRendererIds,
        // TODO(crbug.com/1076175) Remove once launched.
-       autofill::features::kAutofillUseNewSectioningMethod},
+       autofill::features::kAutofillUseNewSectioningMethod,
+       // Remove once launched
+       autofill::features::kAutofillEnableAugmentedPhoneCountryCode,
+       // TODO(crbug.com/1157405) Remove once launched.
+       autofill::features::kAutofillEnableDependentLocalityParsing},
       // Disabled
       {autofill::features::kAutofillRestrictUnownedFieldsToFormlessCheckout});
 }
@@ -192,11 +196,6 @@ void FormStructureBrowserTest::SetUpCommandLine(
 
 void FormStructureBrowserTest::SetUpOnMainThread() {
   InProcessBrowserTest::SetUpOnMainThread();
-
-  // Load the MatchingPattern definitions.
-  base::RunLoop run_loop;
-  field_type_parsing::PopulateFromResourceBundle(run_loop.QuitClosure());
-  run_loop.Run();
 
   embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
       &FormStructureBrowserTest::HandleRequest, base::Unretained(this)));

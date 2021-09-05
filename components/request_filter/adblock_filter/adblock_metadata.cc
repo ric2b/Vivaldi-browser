@@ -29,11 +29,25 @@ RuleSourceBase::RuleSourceBase(const base::FilePath& source_file,
       id(base::PersistentHash(source_file.AsUTF8Unsafe())) {}
 RuleSourceBase::~RuleSourceBase() = default;
 RuleSourceBase::RuleSourceBase(const RuleSourceBase&) = default;
+RuleSourceBase& RuleSourceBase::operator=(const RuleSourceBase&) = default;
 
+KnownRuleSource::KnownRuleSource(const GURL& source_url, RuleGroup group)
+    : RuleSourceBase(source_url, group) {}
+KnownRuleSource::KnownRuleSource(const base::FilePath& source_file,
+                                 RuleGroup group)
+    : RuleSourceBase(source_file, group) {}
+KnownRuleSource::~KnownRuleSource() = default;
+KnownRuleSource::KnownRuleSource(const KnownRuleSource&) = default;
+KnownRuleSource& KnownRuleSource::operator=(const KnownRuleSource&) = default;
+
+RuleSource::RuleSource(const KnownRuleSource& known_source)
+    : RuleSourceBase(known_source) {}
 RuleSource::RuleSource(const GURL& source_url, RuleGroup group)
     : RuleSourceBase(source_url, group) {}
 RuleSource::RuleSource(const base::FilePath& source_file, RuleGroup group)
     : RuleSourceBase(source_file, group) {}
 RuleSource::~RuleSource() = default;
 RuleSource::RuleSource(const RuleSource&) = default;
+RuleSource& RuleSource::operator=(const RuleSource&) = default;
+
 }  // namespace adblock_filter

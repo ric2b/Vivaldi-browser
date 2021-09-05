@@ -9,15 +9,24 @@
 #include "ash/public/cpp/holding_space/holding_space_image.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/rounded_image_view.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_constants.h"
+#include "components/vector_icons/vector_icons.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace ash {
+
+// Appearance.
+constexpr gfx::Insets kPinButtonMargins(4);
+constexpr gfx::Size kPinButtonSize(24, 24);
+constexpr gfx::Size kPlayIconSize(32, 32);
 
 HoldingSpaceItemScreenCaptureView::HoldingSpaceItemScreenCaptureView(
     HoldingSpaceItemViewDelegate* delegate,
@@ -36,13 +45,15 @@ HoldingSpaceItemScreenCaptureView::HoldingSpaceItemScreenCaptureView(
 
   UpdateImage();
 
+  if (item->type() == HoldingSpaceItem::Type::kScreenRecording)
+    AddPlayIcon();
+
   views::View* pin_button_container =
       AddChildView(std::make_unique<views::View>());
 
   auto* layout =
       pin_button_container->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal,
-          kHoldingSpaceScreenCapturePadding));
+          views::BoxLayout::Orientation::kHorizontal, kPinButtonMargins));
   layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kEnd);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStart);
@@ -52,17 +63,61 @@ HoldingSpaceItemScreenCaptureView::HoldingSpaceItemScreenCaptureView(
   // Create contrasting background for the pin icon.
   pin->SetBackground(views::CreateRoundedRectBackground(
       HoldingSpaceColorProvider::Get()->GetBackgroundColor(),
-      kHoldingSpaceScreenCapturePinButtonSize.width() / 2));
-  pin->SetPreferredSize(kHoldingSpaceScreenCapturePinButtonSize);
+      kPinButtonSize.width() / 2));
+  pin->SetPreferredSize(kPinButtonSize);
 }
 
 HoldingSpaceItemScreenCaptureView::~HoldingSpaceItemScreenCaptureView() =
     default;
 
+views::View* HoldingSpaceItemScreenCaptureView::GetTooltipHandlerForPoint(
+    const gfx::Point& point) {
+  // Tooltip events should be handled top level, not by descendents.
+  return HitTestPoint(point) ? this : nullptr;
+}
+
+base::string16 HoldingSpaceItemScreenCaptureView::GetTooltipText(
+    const gfx::Point& point) const {
+  return item()->text();
+}
+
+void HoldingSpaceItemScreenCaptureView::OnHoldingSpaceItemUpdated(
+    const HoldingSpaceItem* item) {
+  HoldingSpaceItemView::OnHoldingSpaceItemUpdated(item);
+  if (this->item() == item)
+    TooltipTextChanged();
+}
+
 void HoldingSpaceItemScreenCaptureView::UpdateImage() {
-  image_->SetImage(item()->image().image_skia(),
-                   kHoldingSpaceScreenCaptureSize);
+  image_->SetImage(
+      item()->image().GetImageSkia(kHoldingSpaceScreenCaptureSize));
   SchedulePaint();
+}
+
+void HoldingSpaceItemScreenCaptureView::AddPlayIcon() {
+  auto* play_icon_container = AddChildView(std::make_unique<views::View>());
+  play_icon_container->SetFocusBehavior(views::View::FocusBehavior::NEVER);
+
+  auto* layout =
+      play_icon_container->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal));
+  layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+
+  auto* play_icon =
+      play_icon_container->AddChildView(std::make_unique<views::ImageView>());
+  play_icon->SetID(kHoldingSpaceScreenCapturePlayIconId);
+  play_icon->SetImage(gfx::CreateVectorIcon(
+      vector_icons::kPlayArrowIcon, kHoldingSpaceIconSize,
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kButtonIconColor)));
+  play_icon->SetPreferredSize(kPlayIconSize);
+
+  // Create contrasting background for the play icon.
+  play_icon->SetBackground(views::CreateRoundedRectBackground(
+      HoldingSpaceColorProvider::Get()->GetBackgroundColor(),
+      kPlayIconSize.width() / 2));
 }
 
 BEGIN_METADATA(HoldingSpaceItemScreenCaptureView, HoldingSpaceItemView)

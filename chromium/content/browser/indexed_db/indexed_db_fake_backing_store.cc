@@ -39,7 +39,6 @@ IndexedDBFakeBackingStore::IndexedDBFakeBackingStore()
                                 base::FilePath()),
                             BlobFilesCleanedCallback(),
                             ReportOutstandingBlobsCallback(),
-                            base::SequencedTaskRunnerHandle::Get(),
                             base::SequencedTaskRunnerHandle::Get()) {}
 IndexedDBFakeBackingStore::IndexedDBFakeBackingStore(
     BlobFilesCleanedCallback blob_files_cleaned,
@@ -57,9 +56,8 @@ IndexedDBFakeBackingStore::IndexedDBFakeBackingStore(
                                 base::FilePath()),
                             std::move(blob_files_cleaned),
                             std::move(report_outstanding_blobs),
-                            task_runner,
                             task_runner) {}
-IndexedDBFakeBackingStore::~IndexedDBFakeBackingStore() {}
+IndexedDBFakeBackingStore::~IndexedDBFakeBackingStore() = default;
 
 leveldb::Status IndexedDBFakeBackingStore::DeleteDatabase(
     const base::string16& name,
@@ -193,7 +191,9 @@ void IndexedDBFakeBackingStore::FakeTransaction::Begin(
     std::vector<ScopeLock> locks) {}
 leveldb::Status IndexedDBFakeBackingStore::FakeTransaction::CommitPhaseOne(
     BlobWriteCallback callback) {
-  return std::move(callback).Run(BlobWriteResult::kRunPhaseTwoAndReturnResult);
+  return std::move(callback).Run(
+      BlobWriteResult::kRunPhaseTwoAndReturnResult,
+      storage::mojom::WriteBlobToFileResult::kSuccess);
 }
 leveldb::Status IndexedDBFakeBackingStore::FakeTransaction::CommitPhaseTwo() {
   return result_;

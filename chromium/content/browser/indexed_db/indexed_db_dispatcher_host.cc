@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
+#include "base/task_runner.h"
 #include "build/build_config.h"
 #include "components/services/storage/filesystem_proxy_factory.h"
 #include "content/browser/indexed_db/cursor_impl.h"
@@ -195,8 +196,10 @@ class IndexedDBDataItemReader : public storage::mojom::BlobDataItemReader {
 };
 
 IndexedDBDispatcherHost::IndexedDBDispatcherHost(
-    IndexedDBContextImpl* indexed_db_context)
+    IndexedDBContextImpl* indexed_db_context,
+    scoped_refptr<base::TaskRunner> io_task_runner)
     : indexed_db_context_(indexed_db_context),
+      io_task_runner_(std::move(io_task_runner)),
       file_task_runner_(base::ThreadPool::CreateTaskRunner(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE})) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
@@ -258,7 +261,7 @@ IndexedDBDispatcherHost::mojo_blob_storage_context() {
   return indexed_db_context_->blob_storage_context();
 }
 
-storage::mojom::NativeFileSystemContext*
+storage::mojom::FileSystemAccessContext*
 IndexedDBDispatcherHost::native_file_system_context() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return indexed_db_context_->native_file_system_context();
@@ -275,20 +278,6 @@ void IndexedDBDispatcherHost::GetDatabaseInfo(
                              std::move(pending_callbacks), IDBTaskRunner()));
   base::FilePath indexed_db_path = indexed_db_context_->data_path();
   indexed_db_context_->GetIDBFactory()->GetDatabaseInfo(
-      std::move(callbacks), origin, indexed_db_path);
-}
-
-void IndexedDBDispatcherHost::GetDatabaseNames(
-    mojo::PendingAssociatedRemote<blink::mojom::IDBCallbacks>
-        pending_callbacks) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  const auto& origin = receivers_.current_context();
-  scoped_refptr<IndexedDBCallbacks> callbacks(
-      new IndexedDBCallbacks(this->AsWeakPtr(), origin,
-                             std::move(pending_callbacks), IDBTaskRunner()));
-  base::FilePath indexed_db_path = indexed_db_context_->data_path();
-  indexed_db_context_->GetIDBFactory()->GetDatabaseNames(
       std::move(callbacks), origin, indexed_db_path);
 }
 
@@ -392,8 +381,7 @@ void IndexedDBDispatcherHost::BindFileReader(
 
   auto reader = std::make_unique<IndexedDBDataItemReader>(
       this, path, expected_modification_time, std::move(release_callback),
-      file_task_runner_, indexed_db_context_->IOTaskRunner(),
-      std::move(receiver));
+      file_task_runner_, io_task_runner_, std::move(receiver));
   file_reader_map_.insert({path, std::move(reader)});
 }
 
@@ -456,9 +444,9 @@ void IndexedDBDispatcherHost::CreateAllExternalObjects(
         break;
       }
       case IndexedDBExternalObject::ObjectType::kNativeFileSystemHandle: {
-        DCHECK(mojo_object->is_native_file_system_token());
+        DCHECK(mojo_object->is_file_system_access_token());
 
-        mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken>
+        mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken>
             mojo_token;
 
         if (blob_info.is_native_file_system_remote_valid()) {
@@ -470,7 +458,7 @@ void IndexedDBDispatcherHost::CreateAllExternalObjects(
               origin, blob_info.native_file_system_token(),
               mojo_token.InitWithNewPipeAndPassReceiver());
         }
-        mojo_object->get_native_file_system_token() = std::move(mojo_token);
+        mojo_object->get_file_system_access_token() = std::move(mojo_token);
         break;
       }
     }

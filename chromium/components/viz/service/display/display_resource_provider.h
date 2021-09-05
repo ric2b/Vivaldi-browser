@@ -265,7 +265,8 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     // set to nullptr (to avoid LOG spam).
     ExternalUseClient::ImageContext* LockResource(
         ResourceId resource_id,
-        bool is_video_plane = false,
+        bool maybe_concurrent_reads,
+        bool is_video_plane,
         const gfx::ColorSpace& color_space = gfx::ColorSpace());
 
     // Unlock all locked resources with a |sync_token|.  The |sync_token| should
@@ -324,7 +325,7 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
   }
 
   // Creates accounting for a child. Returns a child ID.
-  int CreateChild(const ReturnCallback& return_callback);
+  int CreateChild(ReturnCallback return_callback);
 
   // Destroys accounting for the child, deleting all accounted resources.
   void DestroyChild(int child);
@@ -397,7 +398,8 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
 
   struct Child {
     Child();
-    Child(const Child& other);
+    Child(Child&& other);
+    Child& operator=(Child&& other);
     ~Child();
 
     std::unordered_map<ResourceId, ResourceId> child_to_parent_map;
@@ -502,7 +504,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
   using ChildMap = std::unordered_map<int, Child>;
   using ResourceMap = std::unordered_map<ResourceId, ChildResource>;
 
-  ChildResource* InsertResource(ResourceId id, ChildResource resource);
   ChildResource* GetResource(ResourceId id);
 
   // TODO(ericrk): TryGetResource is part of a temporary workaround for cases
@@ -513,7 +514,7 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
   void PopulateSkBitmapWithResource(SkBitmap* sk_bitmap,
                                     const ChildResource* resource);
 
-  void DeleteResourceInternal(ResourceMap::iterator it, DeleteStyle style);
+  void DeleteResourceInternal(ResourceMap::iterator it);
 
   void WaitSyncTokenInternal(ChildResource* resource);
 
@@ -530,7 +531,7 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
   GLenum BindForSampling(ResourceId resource_id, GLenum unit, GLenum filter);
   bool ReadLockFenceHasPassed(const ChildResource* resource);
 #if defined(OS_ANDROID)
-  void DeletePromotionHint(ResourceMap::iterator it, DeleteStyle style);
+  void DeletePromotionHint(ResourceMap::iterator it);
 #endif
 
   void DeleteAndReturnUnusedResourcesToChild(

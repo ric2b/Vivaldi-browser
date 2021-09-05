@@ -70,6 +70,7 @@ flat::ResourceType ResourceTypeFromRequest(
     case network::mojom::RequestDestination::kAudioWorklet:
     case network::mojom::RequestDestination::kManifest:
     case network::mojom::RequestDestination::kPaintWorklet:
+    case network::mojom::RequestDestination::kWebBundle:
       return flat::ResourceType_OTHER;
     case network::mojom::RequestDestination::kEmpty:
       if (request.request.keepalive)
@@ -114,16 +115,14 @@ bool IsOriginWanted(content::BrowserContext* browser_context,
 }  // namespace
 
 AdBlockRequestFilter::AdBlockRequestFilter(
-    RuleGroup group,
     base::WeakPtr<RulesIndexManager> rules_index_manager,
     base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter,
     base::WeakPtr<Resources> resources)
     : vivaldi::RequestFilter(vivaldi::RequestFilter::kAdBlock,
-                             RuleGroupToPriority(group)),
+                             RuleGroupToPriority(rules_index_manager->group())),
       rules_index_manager_(std::move(rules_index_manager)),
       blocked_urls_reporter_(std::move(blocked_urls_reporter)),
-      resources_(std::move(resources)),
-      group_(group) {}
+      resources_(std::move(resources)) {}
 
 AdBlockRequestFilter::~AdBlockRequestFilter() = default;
 
@@ -158,7 +157,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
       destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url) ||
-      !IsOriginWanted(browser_context, group_, document_origin)) {
+      !IsOriginWanted(browser_context, rules_index_manager_->group(),
+                      document_origin)) {
     std::move(callback).Run(false, false, GURL());
     return true;
   }
@@ -170,7 +170,8 @@ bool AdBlockRequestFilter::OnBeforeRequest(
 
   RulesIndex::ActivationsFound activations =
       rules_index_manager_->rules_index()->GetActivationsForFrame(
-          base::Bind(&IsOriginWanted, browser_context, group_),
+          base::Bind(&IsOriginWanted, browser_context,
+                     rules_index_manager_->group()),
           (is_frame && frame) ? frame->GetParent() : frame);
 
   if (is_frame && frame) {
@@ -195,23 +196,23 @@ bool AdBlockRequestFilter::OnBeforeRequest(
   }
 
   const flat::ResourceType reource_type = ResourceTypeFromRequest(*request);
-  const flat::FilterRule* filter_rule =
+  const flat::RequestFilterRule* rule =
       rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
           request->request.url, document_origin, reource_type, is_third_party,
           (activations.in_allow_rules & flat::ActivationType_GENERIC_BLOCK));
 
-  if (!filter_rule || filter_rule->options() & flat::OptionFlag_IS_ALLOW_RULE) {
+  if (!rule || rule->options() & flat::OptionFlag_IS_ALLOW_RULE) {
     std::move(callback).Run(false, false, GURL());
     return true;
   }
 
   if (blocked_urls_reporter_ && frame)
-    blocked_urls_reporter_->OnUrlBlocked(group_, request->request.url, frame);
+    blocked_urls_reporter_->OnUrlBlocked(rules_index_manager_->group(),
+                                         request->request.url, frame);
 
-  if (filter_rule->redirect() && filter_rule->redirect()->size() &&
-      resources_) {
+  if (rule->redirect() && rule->redirect()->size() && resources_) {
     base::Optional<std::string> resource(
-        resources_->Get(filter_rule->redirect()->c_str(), reource_type));
+        resources_->Get(rule->redirect()->c_str(), reource_type));
     if (resource) {
       std::move(callback).Run(false, false, GURL(resource.value()));
       return true;
@@ -251,7 +252,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
       destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url) ||
-      !IsOriginWanted(browser_context, group_, document_origin)) {
+      !IsOriginWanted(browser_context, rules_index_manager_->group(),
+                      document_origin)) {
     std::move(callback).Run(false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
@@ -268,7 +270,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
 
   RulesIndex::ActivationsFound activations =
       rules_index_manager_->rules_index()->GetActivationsForFrame(
-          base::Bind(&IsOriginWanted, browser_context, group_),
+          base::Bind(&IsOriginWanted, browser_context,
+                     rules_index_manager_->group()),
           (is_frame && frame) ? frame->GetParent() : frame);
 
   if (is_frame && frame) {
@@ -285,12 +288,12 @@ bool AdBlockRequestFilter::OnHeadersReceived(
     return true;
   }
 
-  std::vector<const flat::FilterRule*> filter_rules =
+  std::vector<const flat::RequestFilterRule*> rules =
       rules_index_manager_->rules_index()->FindMatchingHeadersReceivedRules(
           request->request.url, document_origin, is_third_party,
           (activations.in_allow_rules & flat::ActivationType_GENERIC_BLOCK));
 
-  if (filter_rules.size() == 1 && IsFullCSPAllowRule(*filter_rules[0])) {
+  if (rules.size() == 1 && IsFullCSPAllowRule(*rules[0])) {
     std::move(callback).Run(false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
@@ -299,7 +302,7 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   std::set<std::string> added_headers;
   std::vector<std::string> un_added_headers;
 
-  for (auto* rule : filter_rules) {
+  for (auto* rule : rules) {
     if ((rule->options() & flat::OptionFlag_IS_ALLOW_RULE) == 0) {
       added_headers.insert(rule->csp()->str());
     } else {

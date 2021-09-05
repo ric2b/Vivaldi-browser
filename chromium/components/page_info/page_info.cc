@@ -43,9 +43,10 @@
 #if defined(OS_ANDROID)
 #include "components/resources/android/theme_resources.h"
 #endif
+#include "build/chromeos_buildflags.h"
 #include "components/safe_browsing/buildflags.h"
-#include "components/safe_browsing/content/password_protection/metrics_util.h"
 #include "components/safe_browsing/content/password_protection/password_protection_service.h"
+#include "components/safe_browsing/core/password_protection/metrics_util.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -70,8 +71,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
-#include "app/vivaldi_apptools.h"
-
 using base::ASCIIToUTF16;
 using base::UTF16ToUTF8;
 using base::UTF8ToUTF16;
@@ -93,7 +92,6 @@ ContentSettingsType kPermissionType[] = {
     ContentSettingsType::NOTIFICATIONS,
     ContentSettingsType::JAVASCRIPT,
 #if !defined(OS_ANDROID)
-    ContentSettingsType::PLUGINS,
     ContentSettingsType::IMAGES,
 #endif
     ContentSettingsType::POPUPS,
@@ -102,7 +100,7 @@ ContentSettingsType kPermissionType[] = {
     ContentSettingsType::BACKGROUND_SYNC,
     ContentSettingsType::SOUND,
     ContentSettingsType::AUTOMATIC_DOWNLOADS,
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
     ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
 #endif
     ContentSettingsType::MIDI_SYSEX,
@@ -161,19 +159,14 @@ bool ShouldShowPermission(const PageInfo::PermissionInfo& info,
   if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD)
     return false;
 #else
-  // Flash is deprecated and should never be shown.
-  if (info.type == ContentSettingsType::PLUGINS) {
-    return false;
-  }
-
   // NFC is Android-only at the moment.
   if (info.type == ContentSettingsType::NFC)
     return false;
 
-  // Display the File System write permission if the File System API is
-  // currently being used.
+  // Display the File System Access write permission if the File System Access
+  // API is currently being used.
   if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD &&
-      web_contents->HasNativeFileSystemHandles()) {
+      web_contents->HasFileSystemAccessHandles()) {
     return true;
   }
 
@@ -692,7 +685,7 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
                                ~net::CERT_STATUS_LEGACY_TLS))) {
     // HTTPS with no or minor errors.
     if (security_level == security_state::SECURE_WITH_POLICY_INSTALLED_CERT) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       site_identity_status_ = SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT;
 #else
       DCHECK(false) << "Policy certificates exist only on ChromeOS";
@@ -964,12 +957,6 @@ void PageInfo::PresentSitePermissions() {
                permissions::PermissionStatusSource::MULTIPLE_DISMISSALS ||
            permission_result.source ==
                permissions::PermissionStatusSource::MULTIPLE_IGNORES)) {
-        permission_info.setting = permission_result.content_setting;
-      } else if (vivaldi::IsVivaldiRunning() &&
-                 permission_info.type == ContentSettingsType::PLUGINS) {
-        // NOTE(andre@vivaldi.com) : Vivaldi can set the Flash setting globally
-        // via chrome.contentSettings.plugins. So always update to the current.
-        // This is "temporary" as Flash is going away in 2020 :-)
         permission_info.setting = permission_result.content_setting;
       }
     }

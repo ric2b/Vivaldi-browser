@@ -30,6 +30,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/services/storage/public/mojom/cache_storage_control.mojom.h"
 #include "content/browser/cache_storage/cache_storage.h"
 #include "content/browser/cache_storage/cache_storage_cache.h"
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
@@ -47,6 +48,7 @@
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/web_package/signed_exchange_consts.h"
+#include "content/common/content_constants_internal.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/console_message.h"
@@ -77,7 +79,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "storage/browser/blob/blob_handle.h"
@@ -351,16 +352,15 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
         shell()->web_contents()->GetBrowserContext());
     wrapper_ = static_cast<ServiceWorkerContextWrapper*>(
         partition->GetServiceWorkerContext());
-
-    RunOnCoreThread(
-        base::BindOnce(&self::SetUpOnCoreThread, base::Unretained(this)));
   }
 
   void TearDownOnMainThread() override {
-    base::RunLoop loop;
-    RunOnCoreThread(base::BindOnce(&self::TearDownOnCoreThread,
-                                   base::Unretained(this), loop.QuitClosure()));
-    loop.Run();
+    // Flush remote storage control so that all pending callbacks are executed.
+    wrapper()
+        ->context()
+        ->registry()
+        ->GetRemoteStorageControl()
+        .FlushForTesting();
     content::RunAllTasksUntilIdle();
     wrapper_ = nullptr;
   }
@@ -377,18 +377,6 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
     NavigateToURLBlockUntilNavigationsComplete(
         shell(), embedded_test_server()->GetURL("/service_worker/empty.html"),
         1);
-  }
-
-  virtual void SetUpOnCoreThread() {}
-
-  virtual void TearDownOnCoreThread(base::OnceClosure callback) {
-    // Flush remote storage control so that all pending callbacks are executed.
-    wrapper()
-        ->context()
-        ->registry()
-        ->GetRemoteStorageControl()
-        .FlushForTesting();
-    std::move(callback).Run();
   }
 
   ServiceWorkerContextWrapper* wrapper() { return wrapper_.get(); }
@@ -987,9 +975,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
                        DispatchFetchEventToStoppedWorkerSynchronously) {
   // Setup the server so that the test doesn't crash when tearing down.
   StartServerAndNavigateToSetup();
-  // This test is meaningful only when ServiceWorkerOnUI is enabled.
-  if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled())
-    return;
 
   WorkerRunningStatusObserver observer(public_context());
   EXPECT_TRUE(NavigateToURL(shell(),
@@ -1060,9 +1045,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
                        DispatchFetchEventToBrokenWorker) {
   // Setup the server so that the test doesn't crash when tearing down.
   StartServerAndNavigateToSetup();
-  // This test is meaningful only when ServiceWorkerOnUI is enabled.
-  if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled())
-    return;
 
   WorkerRunningStatusObserver observer(public_context());
   EXPECT_TRUE(NavigateToURL(shell(),
@@ -2171,7 +2153,8 @@ class CacheStorageSideDataSizeChecker
   void OpenCacheOnCoreThread(int* result, base::OnceClosure continuation) {
     CacheStorageHandle cache_storage =
         cache_storage_context_->CacheManager()->OpenCacheStorage(
-            url::Origin::Create(origin_), CacheStorageOwner::kCacheAPI);
+            url::Origin::Create(origin_),
+            storage::mojom::CacheStorageOwner::kCacheAPI);
     cache_storage.value()->OpenCache(
         cache_name_, /* trace_id = */ 0,
         base::BindOnce(&self::OnCacheStorageOpenCallback, this, result,
@@ -2742,16 +2725,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerURLLoaderThrottleTest,
   ASSERT_TRUE(dict);
 
   // Default headers are present.
-  const char* frame_accept_c_str = network::kFrameAcceptHeaderValue;
-#if BUILDFLAG(ENABLE_AV1_DECODER)
-  if (base::FeatureList::IsEnabled(blink::features::kAVIF)) {
-    frame_accept_c_str =
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/avif,image/webp,image/apng,*/*;q=0.8";
-  }
-#endif
   EXPECT_TRUE(CheckHeader(*dict, "accept",
-                          std::string(frame_accept_c_str) +
+                          std::string(kFrameAcceptHeaderValue) +
                               std::string(kAcceptHeaderSignedExchangeSuffix)));
 
   // Injected headers are present.

@@ -51,6 +51,10 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
 // store the item while the interaction is prevented.
 @property(nonatomic, strong) UIBarButtonItem* savedBarButtonItem;
 
+// Back button on navigation panel. This is used to store back button while it
+// is replaced with Cancel during editing.
+@property(nonatomic, strong) UIBarButtonItem* backButtonItem;
+
 // Veil preventing interactions with the TableView.
 @property(nonatomic, strong) UIView* veil;
 
@@ -79,6 +83,13 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
   } else {
     self.navigationItem.rightBarButtonItem = [self doneButtonIfNeeded];
   }
+
+  // Update Cancel/Back button.
+  if (self.showCancelDuringEditing) {
+    self.navigationItem.leftBarButtonItem =
+        self.tableView.editing ? [self createEditModeCancelButton]
+                               : self.backButtonItem;
+  }
 }
 
 - (void)reloadData {
@@ -104,24 +115,20 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
 #pragma mark - UIViewController
 
 - (void)viewDidLoad {
+  if (!base::FeatureList::IsEnabled(kSettingsRefresh)) {
+    self.styler.tableViewBackgroundColor =
+        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+  }
   UIBarButtonItem* flexibleSpace = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
                            target:nil
                            action:nil];
   [self setToolbarItems:@[ flexibleSpace, self.deleteButton, flexibleSpace ]
                animated:YES];
-  if (base::FeatureList::IsEnabled(kSettingsRefresh)) {
-    self.styler.tableViewBackgroundColor = UIColor.cr_systemBackgroundColor;
-  } else {
-    self.styler.tableViewBackgroundColor =
-        UIColor.cr_systemGroupedBackgroundColor;
-  }
+
   [super viewDidLoad];
-  if (base::FeatureList::IsEnabled(kSettingsRefresh)) {
-    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-  }
   self.styler.cellBackgroundColor =
-      UIColor.cr_secondarySystemGroupedBackgroundColor;
+      [UIColor colorNamed:kGroupedSecondaryBackgroundColor];
   self.styler.cellTitleColor = UIColor.cr_labelColor;
   self.tableView.estimatedSectionHeaderHeight = kEstimatedHeaderFooterHeight;
   self.tableView.estimatedRowHeight = kSettingsCellDefaultHeight;
@@ -131,6 +138,8 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
 
   self.navigationItem.largeTitleDisplayMode =
       UINavigationItemLargeTitleDisplayModeNever;
+
+  self.backButtonItem = self.navigationItem.leftBarButtonItem;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -198,18 +207,6 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
   return kDefaultHeaderFooterHeight;
 }
 
-#pragma mark - UITableViewDataSource
-
-- (UITableViewCell*)tableView:(UITableView*)tableView
-        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
-  if (base::FeatureList::IsEnabled(kSettingsRefresh)) {
-    TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
-    item.useCustomSeparator = YES;
-  }
-
-  return [super tableView:tableView cellForRowAtIndexPath:indexPath];
-}
-
 #pragma mark - TableViewLinkHeaderFooterItemDelegate
 
 - (void)view:(TableViewLinkHeaderFooterView*)view didTapLinkURL:(GURL)URL {
@@ -257,6 +254,21 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
              action:@selector(editButtonPressed)];
 }
 
+- (UIBarButtonItem*)createEditModeCancelButton {
+  // Create a custom Cancel bar button item.
+  return [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                           target:self
+                           action:@selector(cancelEditing)];
+}
+
+// Quits editing mode and reloads data to the state before editing.
+- (void)cancelEditing {
+  [self setEditing:!self.tableView.editing animated:YES];
+  [self updateUIForEditState];
+  [self reloadData];
+}
+
 #pragma mark - Subclassing
 
 - (BOOL)shouldHideToolbar {
@@ -268,6 +280,10 @@ const CGFloat kActivityIndicatorDimensionIPhone = 56;
 }
 
 - (BOOL)editButtonEnabled {
+  return NO;
+}
+
+- (BOOL)showCancelDuringEditing {
   return NO;
 }
 

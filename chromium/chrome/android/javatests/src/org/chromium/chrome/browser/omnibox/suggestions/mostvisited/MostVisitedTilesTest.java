@@ -23,6 +23,7 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -30,9 +31,6 @@ import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
-import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteResult;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion.NavsuggestTile;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionBuilderForTest;
 import org.chromium.chrome.browser.omnibox.suggestions.carousel.BaseCarouselSuggestionView;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -43,6 +41,9 @@ import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils.TestAutocompleteController;
 import org.chromium.chrome.test.util.WaitForFocusHelper;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.omnibox.AutocompleteMatch.NavsuggestTile;
+import org.chromium.components.omnibox.AutocompleteMatchBuilder;
+import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.content_public.browser.test.util.KeyUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -134,7 +135,7 @@ public class MostVisitedTilesTest {
                 "Test Server", new GURL(mTestServer.getURL("/chrome/test/data/android/test.html")));
 
         AutocompleteResult autocompleteResult = new AutocompleteResult(null, null);
-        OmniboxSuggestionBuilderForTest builder = new OmniboxSuggestionBuilderForTest();
+        AutocompleteMatchBuilder builder = new AutocompleteMatchBuilder();
 
         // First suggestion is the current content of the Omnibox.
         builder.setType(OmniboxSuggestionType.NAVSUGGEST);
@@ -206,6 +207,7 @@ public class MostVisitedTilesTest {
     @Test
     @MediumTest
     @EnableFeatures("OmniboxMostVisitedTiles")
+    @DisabledTest(message = "Test flaky: https://crbug.com/1152246")
     public void keyboardNavigation_highlightingNextTileUpdatesUrlBarText()
             throws InterruptedException {
         // Skip past the 'what-you-typed' suggestion.

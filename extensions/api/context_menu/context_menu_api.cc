@@ -8,17 +8,33 @@
 
 #include "extensions/api/context_menu/context_menu_api.h"
 
+#include "browser/menus/vivaldi_render_view_context_menu.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
+#include "extensions/schema/context_menu.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
-#include "browser/vivaldi_browser_finder.h"
 
 namespace extensions {
 
 namespace context_menu = vivaldi::context_menu;
 
-ContextMenuShowFunction::ContextMenuShowFunction() {}
-ContextMenuShowFunction::~ContextMenuShowFunction() {}
+// static
+void ContextMenuAPI::RequestMenu(content::BrowserContext* browser_context,
+                        int window_id,
+                        int document_id,
+                        const vivaldi::context_menu::DocumentParams& request) {
+  ::vivaldi::BroadcastEvent(
+    context_menu::OnDocumentMenu::kEventName,
+    context_menu::OnDocumentMenu::Create(window_id, document_id, request),
+    browser_context);
+}
+
+namespace context_menu = vivaldi::context_menu;
+
+ContextMenuShowFunction::ContextMenuShowFunction() = default;
+ContextMenuShowFunction::~ContextMenuShowFunction() = default;
 
 ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   auto params = context_menu::Show::Params::Create(*args_);
@@ -27,6 +43,25 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   content::WebContents* web_contents = GetSenderWebContents();
   if (!web_contents)
     return RespondNow(Error("Missing WebContents"));
+
+  ::vivaldi::VivaldiRenderViewContextMenu* rv_context_menu = nullptr;
+  if (params->properties.document_id >= 0) {
+    // We are handling a document menu that has been requested from C++ by
+    // VivaldiRenderViewContextMenu::InitMenu(). This is an async operation so
+    // we use the document_id to match the active pending menu. If the owner of
+    // this menu has removed it, or replaced it with a new (new id), we can not
+    // use it.
+    rv_context_menu = ::vivaldi::VivaldiRenderViewContextMenu::GetActive(
+        params->properties.document_id);
+    if (rv_context_menu) {
+      // TODO (espen). Send these coordinates with the initial request to JS
+      // once we have better options support in context-menus.js.
+      params->properties.rect.x = rv_context_menu->params().x;
+      params->properties.rect.y = rv_context_menu->params().y;
+    } else {
+      return RespondNow(Error("Missing document controller"));
+    }
+  }
 
   // We need a web contents that can be used to determine menu position.
   // The sender web contents will with reusable react code be the same
@@ -46,10 +81,12 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
               "and call preventDefault() to block the standard menu"));
   }
 
-  controller_.reset(new ::vivaldi::ContextMenuController(this,
-                                                         web_contents,
-                                                         window_web_contents,
-                                                         std::move(params)));
+  controller_.reset(new ::vivaldi::ContextMenuController(
+      this,
+      web_contents,
+      window_web_contents,
+      rv_context_menu,
+      std::move(params)));
   controller_->Show();
 
   AddRef();
@@ -57,8 +94,8 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   return RespondLater();
 }
 
-void ContextMenuShowFunction::OnAction(int command, int event_state) {
-  MenubarMenuAPI::SendAction(browser_context(), command, event_state);
+void ContextMenuShowFunction::OnAction(int command_id, int event_state) {
+  MenubarMenuAPI::SendAction(browser_context(), command_id, event_state);
 }
 
 void ContextMenuShowFunction::OnHover(const std::string& url) {

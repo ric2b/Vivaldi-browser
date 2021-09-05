@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_ANDROID_H_
 #define CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_ANDROID_H_
 
+#include <map>
 #include <memory>
 #include <string>
 
@@ -14,14 +15,14 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/android/webapps/add_to_homescreen_installer.h"
 #include "chrome/browser/banners/app_banner_manager.h"
-#include "chrome/browser/installable/installable_ambient_badge_infobar_delegate.h"
+#include "components/webapps/browser/android/installable/installable_ambient_badge_infobar_delegate.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
 
 struct AddToHomescreenParams;
 
-namespace banners {
+namespace webapps {
 
 // Extends the AppBannerManager to support native Android apps. This class owns
 // a Java-side AppBannerManager which interfaces with the Java runtime to fetch
@@ -82,11 +83,19 @@ class AppBannerManagerAndroid
   void AddToHomescreenFromBadge() override;
   void BadgeDismissed() override;
 
+  // Installs the current app.
+  void Install();
+
+  // Returns the appropriate app name based on whether we have a native/web app.
+  base::string16 GetAppName() const override;
+
+  // Simple accessors:
+  const std::map<GURL, SkBitmap>& screenshots() { return screenshots_; }
+
  protected:
   // AppBannerManager overrides.
   std::string GetAppIdentifier() override;
   std::string GetBannerType() override;
-  bool IsWebAppConsideredInstalled() override;
   void PerformInstallableChecks() override;
   InstallableParams ParamsToPerformInstallableWebAppCheck() override;
   void PerformInstallableWebAppCheck() override;
@@ -101,6 +110,7 @@ class AppBannerManagerAndroid
       const base::string16& platform) const override;
   bool IsRelatedNonWebAppInstalled(
       const blink::Manifest::RelatedApplication& related_app) const override;
+  bool IsWebAppConsideredInstalled() const override;
 
  private:
   friend class content::WebContentsUserData<AppBannerManagerAndroid>;
@@ -115,12 +125,12 @@ class AppBannerManagerAndroid
   bool ShouldPerformInstallableNativeAppCheck();
   void PerformInstallableNativeAppCheck();
 
-  // Returns NO_ERROR_DETECTED if |platform|, |url|, and |id| are consistent and
-  // can be used to query the Play Store for a native app. Otherwise returns the
-  // error which prevents querying from taking place. The query may not
-  // necessarily succeed (e.g. |id| doesn't map to anything), but if this method
-  // returns NO_ERROR_DETECTED, only a native app banner may be shown, and the
-  // web app banner flow will not be run.
+  // Returns NO_ERROR_DETECTED if |platform|, |url|, and |id| are
+  // consistent and can be used to query the Play Store for a native app.
+  // Otherwise returns the error which prevents querying from taking place. The
+  // query may not necessarily succeed (e.g. |id| doesn't map to anything), but
+  // if this method returns NO_ERROR_DETECTED, only a native app banner
+  // may be shown, and the web app banner flow will not be run.
   InstallableStatusCode QueryNativeApp(const base::string16& platform,
                                        const GURL& url,
                                        const std::string& id);
@@ -129,9 +139,6 @@ class AppBannerManagerAndroid
   // banners use an icon provided from the Play Store rather than the web
   // manifest.
   void OnNativeAppIconFetched(const SkBitmap& bitmap);
-
-  // Returns the appropriate app name based on whether we have a native/web app.
-  base::string16 GetAppName() const override;
 
   // Shows the in-product help if possible and returns true when a request to
   // show it was made, but false if conditions (e.g. engagement score) for
@@ -145,6 +152,10 @@ class AppBannerManagerAndroid
   void RecordEventForAppBanner(AddToHomescreenInstaller::Event event,
                                const AddToHomescreenParams& a2hs_params);
 
+  // Creates the AddToHomescreenParams for a given install source.
+  std::unique_ptr<AddToHomescreenParams> CreateAddToHomescreenParams(
+      webapps::WebappInstallSource install_source);
+
   // The Java-side AppBannerManager.
   base::android::ScopedJavaGlobalRef<jobject> java_banner_manager_;
 
@@ -157,6 +168,9 @@ class AppBannerManagerAndroid
   // Title to display in the banner for native app.
   base::string16 native_app_title_;
 
+  // The screenshots to show in the install UI.
+  std::map<GURL, SkBitmap> screenshots_;
+
   base::WeakPtrFactory<AppBannerManagerAndroid> weak_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
@@ -164,6 +178,6 @@ class AppBannerManagerAndroid
   DISALLOW_COPY_AND_ASSIGN(AppBannerManagerAndroid);
 };
 
-}  // namespace banners
+}  // namespace webapps
 
 #endif  // CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_ANDROID_H_

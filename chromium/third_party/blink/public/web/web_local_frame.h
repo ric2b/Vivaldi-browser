@@ -12,7 +12,9 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/types/pass_key.h"
 #include "base/unguessable_token.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/css/page_size_type.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
@@ -28,6 +30,7 @@
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-shared.h"
+#include "third_party/blink/public/mojom/page/widget.mojom-shared.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-shared.h"
 #include "third_party/blink/public/mojom/selection_menu/selection_menu_behavior.mojom-shared.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
@@ -39,6 +42,7 @@
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
+#include "third_party/blink/public/web/web_history_item.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/public/web/web_optimization_guide_hints.h"
 #include "ui/accessibility/ax_tree_id.h"
@@ -62,6 +66,7 @@ class WebAgentGroupScheduler;
 
 class FrameScheduler;
 class InterfaceRegistry;
+class PageState;
 class WebAssociatedURLLoader;
 class WebAutofillClient;
 class WebContentCaptureClient;
@@ -69,6 +74,7 @@ class WebContentSettingsClient;
 class WebDocument;
 class WebLocalFrameClient;
 class WebFrameWidget;
+class WebHistoryItem;
 class WebInputMethodController;
 class WebPerformance;
 class WebPlugin;
@@ -116,9 +122,7 @@ class WebLocalFrame : public WebFrame {
       std::unique_ptr<blink::WebPolicyContainer> policy_container,
       WebFrame* opener = nullptr,
       const WebString& name = WebString(),
-      network::mojom::WebSandboxFlags = network::mojom::WebSandboxFlags::kNone,
-      const FeaturePolicyFeatureState& opener_feature_state =
-          FeaturePolicyFeatureState());
+      network::mojom::WebSandboxFlags = network::mojom::WebSandboxFlags::kNone);
 
   // Used to create a provisional local frame. Currently, it's possible for a
   // provisional navigation not to commit (i.e. it might turn into a download),
@@ -216,6 +220,22 @@ class WebLocalFrame : public WebFrame {
   // local root.
   virtual WebFrameWidget* FrameWidget() const = 0;
 
+  // Creates and returns an associated FrameWidget for this frame. The frame
+  // must be a LocalRoot. The WebLocalFrame maintins ownership of the
+  // WebFrameWidget that was created.
+  BLINK_EXPORT WebFrameWidget* InitializeFrameWidget(
+      CrossVariantMojoAssociatedRemote<mojom::FrameWidgetHostInterfaceBase>
+          frame_widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::FrameWidgetInterfaceBase>
+          frame_widget,
+      CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
+          widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      const viz::FrameSinkId& frame_sink_id,
+      bool is_for_nested_main_frame = false,
+      bool hidden = false,
+      bool never_composited = false);
+
   // Returns the frame identified by the given name.  This method supports
   // pseudo-names like _self, _top, and _blank and otherwise performs the same
   // kind of lookup what |window.open(..., name)| would in Javascript.
@@ -242,9 +262,6 @@ class WebLocalFrame : public WebFrame {
   // Start reloading the current document.
   // Note: StartReload() will be deprecated, use StartNavigation() instead.
   virtual void StartReload(WebFrameLoadType) = 0;
-
-  // Start navigation to the given URL.
-  virtual void StartNavigation(const WebURLRequest&) = 0;
 
   // View-source rendering mode.  Set this before loading an URL to cause
   // it to be rendered in view-source mode.
@@ -790,6 +807,13 @@ class WebLocalFrame : public WebFrame {
   // This should only be used for extensions and the webview tag.
   virtual void SetAllowsCrossBrowsingInstanceFrameLookup() = 0;
 
+  virtual void SetTargetToCurrentHistoryItem(const WebString& target) = 0;
+  virtual void UpdateCurrentHistoryItem() = 0;
+  virtual PageState CurrentHistoryItemToPageState() = 0;
+  virtual const WebHistoryItem& GetCurrentHistoryItem() const = 0;
+  // Reset TextFinder state and loads about:blank.
+  virtual void ResetForTesting() = 0;
+
   // Cosmetic filtering--------------------------------------------------------
   virtual void SetCosmeticFilterClient(WebCosmeticFilterClient* client) = 0;
   virtual WebCosmeticFilterClient* GetCosmeticFilterClient() = 0;
@@ -809,6 +833,20 @@ class WebLocalFrame : public WebFrame {
   virtual void AddMessageToConsoleImpl(const WebConsoleMessage&,
                                        bool discard_duplicates) = 0;
   virtual void AddInspectorIssueImpl(blink::mojom::InspectorIssueCode code) = 0;
+
+  virtual void CreateFrameWidgetInternal(
+      base::PassKey<WebLocalFrame> pass_key,
+      CrossVariantMojoAssociatedRemote<mojom::FrameWidgetHostInterfaceBase>
+          frame_widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::FrameWidgetInterfaceBase>
+          frame_widget,
+      CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
+          widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      const viz::FrameSinkId& frame_sink_id,
+      bool is_for_nested_main_frame = false,
+      bool hidden = false,
+      bool never_composited = false) = 0;
 };
 
 }  // namespace blink

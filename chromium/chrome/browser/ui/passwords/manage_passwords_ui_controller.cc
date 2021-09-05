@@ -128,7 +128,7 @@ void ManagePasswordsUIController::OnPasswordSubmitted(
   if (bubble_status_ == BubbleStatus::SHOWN &&
       GetState() == password_manager::ui::PENDING_PASSWORD_STATE)
     return;
-  bool show_bubble = !form_manager->IsBlacklisted();
+  bool show_bubble = !form_manager->IsBlocklisted();
   DestroyAccountChooser();
   save_fallback_timer_.Stop();
   passwords_data_.OnPendingPassword(std::move(form_manager));
@@ -530,7 +530,7 @@ void ManagePasswordsUIController::SavePassword(const base::string16& username,
       passwords_data_.client()->GetAccountPasswordStore(),
       Profile::FromBrowserContext(web_contents()->GetBrowserContext())
           ->GetPrefs(),
-      base::Bind(
+      base::BindOnce(
           &ManagePasswordsUIController::OnTriggerPostSaveCompromisedBubble,
           weak_ptr_factory_.GetWeakPtr()));
 

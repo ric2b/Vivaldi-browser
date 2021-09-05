@@ -4,7 +4,7 @@
 
 import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos || is_lacros,
+assert(is_chromeos_ash || is_chromeos_lacros,
        "Non-Chrome-OS or Lacros builds must not depend on //chromeos")
 
 # C++ headers and sources that can be used by both ash and lacros builds.
@@ -31,5 +31,9 @@ component("base") {
     "//ui/base",
     "//ui/display",
     "//ui/gfx/geometry",
+
+    # TODO(https://crbug.com/1113900): Remove this dependency when resize-shadow
+    # is integrated to lacros.
+    "//build:chromeos_buildflags",
   ]
 }

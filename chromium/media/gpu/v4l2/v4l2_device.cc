@@ -958,8 +958,7 @@ base::Optional<struct v4l2_format> V4L2Queue::SetFormat(uint32_t fourcc,
   struct v4l2_format format = BuildV4L2Format(type_, fourcc, size, buffer_size);
   if (device_->Ioctl(VIDIOC_S_FMT, &format) != 0 ||
       format.fmt.pix_mp.pixelformat != fourcc) {
-    VPQLOGF(2) << "Failed to set format (format_fourcc=0x" << std::hex << fourcc
-               << ")";
+    VPQLOGF(2) << "Failed to set format fourcc: " << FourccToString(fourcc);
     return base::nullopt;
   }
 
@@ -973,8 +972,7 @@ base::Optional<struct v4l2_format> V4L2Queue::TryFormat(uint32_t fourcc,
   struct v4l2_format format = BuildV4L2Format(type_, fourcc, size, buffer_size);
   if (device_->Ioctl(VIDIOC_TRY_FMT, &format) != 0 ||
       format.fmt.pix_mp.pixelformat != fourcc) {
-    VPQLOGF(2) << "Tried format not supported (format_fourcc=0x" << std::hex
-               << fourcc << ")";
+    VPQLOGF(2) << "Failed to try format fourcc: " << FourccToString(fourcc);
     return base::nullopt;
   }
 
@@ -2172,7 +2170,9 @@ base::Optional<struct v4l2_event> V4L2Device::DequeueEvent() {
   memset(&event, 0, sizeof(event));
 
   if (Ioctl(VIDIOC_DQEVENT, &event) != 0) {
-    VPLOGF(3) << "Failed to dequeue event";
+    // The ioctl will fail if there are no pending events. This is part of the
+    // normal flow, so keep this log level low.
+    VPLOGF(4) << "Failed to dequeue event";
     return base::nullopt;
   }
 

@@ -318,7 +318,8 @@ SharedWorkerHost::CreateNetworkFactoryParamsForSubresources() {
           net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
                                      origin, origin,
                                      net::SiteForCookies::FromOrigin(origin)),
-          /*coep_reporter=*/mojo::NullRemote());
+          /*coep_reporter=*/mojo::NullRemote(),
+          /*debug_tag=*/"SharedWorkerHost::CreateNetworkFactoryForSubresource");
   return factory_params;
 }
 
@@ -371,11 +372,10 @@ void SharedWorkerHost::CreateQuicTransportConnector(
     mojo::PendingReceiver<blink::mojom::QuicTransportConnector> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const url::Origin origin = url::Origin::Create(instance().url());
-  mojo::MakeSelfOwnedReceiver(
-      std::make_unique<QuicTransportConnectorImpl>(
-          GetProcessHost()->GetID(), /*frame=*/nullptr, origin,
-          net::NetworkIsolationKey(origin, origin)),
-      std::move(receiver));
+  mojo::MakeSelfOwnedReceiver(std::make_unique<QuicTransportConnectorImpl>(
+                                  GetProcessHost()->GetID(), /*frame=*/nullptr,
+                                  origin, GetNetworkIsolationKey()),
+                              std::move(receiver));
 }
 
 void SharedWorkerHost::BindCacheStorage(
@@ -466,6 +466,14 @@ SharedWorkerHost::GetRenderFrameIDsForWorker() {
 
 base::WeakPtr<SharedWorkerHost> SharedWorkerHost::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
+}
+
+net::NetworkIsolationKey SharedWorkerHost::GetNetworkIsolationKey() const {
+  const url::Origin origin = url::Origin::Create(instance().url());
+  // TODO(https://crbug.com/1147281): This is the NetworkIsolationKey of a
+  // top-level browsing context, which shouldn't be use for SharedWorkers used
+  // in iframes.
+  return net::NetworkIsolationKey::ToDoUseTopFrameOriginAsWell(origin);
 }
 
 void SharedWorkerHost::ReportNoBinderForInterface(const std::string& error) {

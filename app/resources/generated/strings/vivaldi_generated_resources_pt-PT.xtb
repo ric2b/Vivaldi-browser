@@ -62,7 +62,7 @@
 <translation id="2050339315714019657">Vertical</translation>
 <translation id="2076269580855484719">Ocultar este plug-in</translation>
 <translation id="2087822576218954668">Imprimir: <ph name="PRINT_NAME" /></translation>
-<translation id="2114326799768592691">Atualizar &amp;frame</translation>
+<translation id="2114326799768592691">Recarregar &amp;frame</translation>
 <translation id="2142328300403846845">Abrir ligação como</translation>
 <translation id="2148892889047469596">Transmitir separador</translation>
 <translation id="2150139952286079145">Pesquisar destinos</translation>
@@ -274,7 +274,7 @@
 <translation id="5509693895992845810">Guardar &amp;Como...</translation>
 <translation id="5521078259930077036">É esta a página inicial de que estava à espera?</translation>
 <translation id="5542132724887566711">Perfil</translation>
-<translation id="5556459405103347317">Atualizar</translation>
+<translation id="5556459405103347317">Recarregar</translation>
 <translation id="5575473780076478375">Extensão da navegação anónima: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5614553682702429503">Guardar a palavra-passe?</translation>
 <translation id="5623842676595125836">Registo</translation>
@@ -314,7 +314,7 @@
 <translation id="6169666352732958425">Não é possível transmitir o ambiente de trabalho.</translation>
 <translation id="6196854373336333322">A extensão "<ph name="EXTENSION_NAME" />" apoderou-se das suas definições de proxy, o que significa que pode alterar, interromper ou intercetar qualquer coisa que esteja a fazer online. Se não tem a certeza do motivo pelo qual aconteceu esta alteração, é provável que não a queira.</translation>
 <translation id="6206311232642889873">Cop&amp;iar Imagem</translation>
-<translation id="6239558157302047471">Atualizar &amp;frame</translation>
+<translation id="6239558157302047471">Recarregar &amp;frame</translation>
 <translation id="6247802389331535091">Sistema: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Pesquisar definições</translation>
 <translation id="6251870443722440887">Identificadores de GDI</translation>

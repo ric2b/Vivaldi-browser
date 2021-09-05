@@ -71,10 +71,6 @@ class WebUITestWebUIControllerFactory : public WebUIControllerFactory {
                       const GURL& url) override {
     return HasWebUIScheme(url);
   }
-  bool UseWebUIBindingsForURL(BrowserContext* browser_context,
-                              const GURL& url) override {
-    return HasWebUIScheme(url);
-  }
 };
 
 class TestWebUIDataSource : public URLDataSource {
@@ -426,7 +422,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, SyncCookieGetOnCrash) {
   // If the renderer is hung the test will hang.
 }
 
-int64_t GetPreloadedFirstPartySetCountFromNetworkService() {
+int64_t GetFirstPartySetCountFromNetworkService() {
   DCHECK(!content::IsInProcessNetworkService());
 
   mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
@@ -437,8 +433,7 @@ int64_t GetPreloadedFirstPartySetCountFromNetworkService() {
   mojo::ScopedAllowSyncCallForTesting allow_sync_call;
 
   int64_t count = 0;
-  EXPECT_TRUE(
-      network_service_test->GetPreloadedFirstPartySetEntriesCount(&count));
+  EXPECT_TRUE(network_service_test->GetFirstPartySetEntriesCount(&count));
 
   return count;
 }
@@ -459,11 +454,43 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceWithFirstPartySetBrowserTest,
   if (IsInProcessNetworkService())
     return;
 
-  EXPECT_EQ(GetPreloadedFirstPartySetCountFromNetworkService(), 2);
+  EXPECT_EQ(GetFirstPartySetCountFromNetworkService(), 3);
 
   SimulateNetworkServiceCrash();
 
-  EXPECT_EQ(GetPreloadedFirstPartySetCountFromNetworkService(), 2);
+  EXPECT_EQ(GetFirstPartySetCountFromNetworkService(), 3);
+}
+
+class NetworkServiceWithoutFirstPartySetBrowserTest
+    : public NetworkServiceBrowserTest {
+ public:
+  NetworkServiceWithoutFirstPartySetBrowserTest() {
+    scoped_feature_list_.InitAndDisableFeature(net::features::kFirstPartySets);
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Supplying this switch should not enable the feature, since the feature
+    // was explicitly disabled.
+    NetworkServiceBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(
+        network::switches::kUseFirstPartySet,
+        "https://example.com,https://member1.com,https://member2.com");
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(NetworkServiceWithoutFirstPartySetBrowserTest,
+                       GetsEnableFirstPartySetsSwitch) {
+  if (IsInProcessNetworkService())
+    return;
+
+  EXPECT_EQ(GetFirstPartySetCountFromNetworkService(), 0);
+
+  SimulateNetworkServiceCrash();
+
+  EXPECT_EQ(GetFirstPartySetCountFromNetworkService(), 0);
 }
 
 // Tests that CORS is performed by the network service when |factory_override|

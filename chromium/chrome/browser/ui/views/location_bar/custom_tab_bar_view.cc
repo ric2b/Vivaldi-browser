@@ -8,6 +8,7 @@
 
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -41,12 +42,13 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/style/typography_provider.h"
 #include "ui/views/view_class_properties.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #else
 #include "chrome/browser/themes/theme_properties.h"
@@ -189,9 +191,6 @@ class CustomTabBarTitleOriginView : public views::View {
   views::Label* location_label_ = nullptr;
 };
 
-// static
-const char CustomTabBarView::kViewClassName[] = "CustomTabBarView";
-
 CustomTabBarView::CustomTabBarView(BrowserView* browser_view,
                                    LocationBarView::Delegate* delegate)
     : delegate_(delegate), browser_(browser_view->browser()) {
@@ -214,7 +213,7 @@ CustomTabBarView::CustomTabBarView(BrowserView* browser_view,
       AddChildView(std::make_unique<LocationIconView>(font_list, this, this));
 
   auto title_origin_view = std::make_unique<CustomTabBarTitleOriginView>(
-      background_color_, ShouldShowTitle());
+      background_color_, GetShowTitle());
   title_origin_view->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToMinimum,
@@ -225,7 +224,7 @@ CustomTabBarView::CustomTabBarView(BrowserView* browser_view,
   // mode. Find a better place to set it.
   gfx::Insets interior_margin =
       GetLayoutInsets(LayoutInset::TOOLBAR_INTERIOR_MARGIN);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (browser_->is_type_custom_tab()) {
     web_app_menu_button_ = AddChildView(std::make_unique<WebAppMenuButton>(
         browser_view, l10n_util::GetStringUTF16(
@@ -253,10 +252,6 @@ CustomTabBarView::~CustomTabBarView() {}
 gfx::Rect CustomTabBarView::GetAnchorBoundsInScreen() const {
   return gfx::UnionRects(location_icon_view_->GetAnchorBoundsInScreen(),
                          title_origin_view_->GetAnchorBoundsInScreen());
-}
-
-const char* CustomTabBarView::GetClassName() const {
-  return kViewClassName;
 }
 
 void CustomTabBarView::SetVisible(bool visible) {
@@ -448,7 +443,7 @@ bool CustomTabBarView::IsShowingOriginForTesting() const {
 // drawing the separator the current frame color should be queried directly and
 // not assume knowledge of what the color might be.
 SkColor CustomTabBarView::GetDefaultFrameColor() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Ash system frames differ from ChromeOS browser frames.
   return chromeos::kDefaultFrameColor;
 #else
@@ -535,6 +530,12 @@ base::Optional<SkColor> CustomTabBarView::GetThemeColor() const {
                                 : base::nullopt;
 }
 
-bool CustomTabBarView::ShouldShowTitle() const {
+bool CustomTabBarView::GetShowTitle() const {
   return app_controller() != nullptr;
 }
+
+BEGIN_METADATA(CustomTabBarView, views::AccessiblePaneView)
+ADD_READONLY_PROPERTY_METADATA(SkColor, DefaultFrameColor)
+ADD_READONLY_PROPERTY_METADATA(base::Optional<SkColor>, ThemeColor)
+ADD_READONLY_PROPERTY_METADATA(bool, ShowTitle)
+END_METADATA

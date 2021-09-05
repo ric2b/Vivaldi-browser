@@ -64,7 +64,6 @@ namespace blink {
 class ContentSecurityPolicyResponseHeaders;
 class ConsoleMessage;
 class CSPDirectiveList;
-class CSPSource;
 class DOMWrapperWorld;
 class Element;
 class ExecutionContext;
@@ -81,6 +80,7 @@ typedef HeapVector<Member<ConsoleMessage>> ConsoleMessageVector;
 typedef std::pair<String, network::mojom::ContentSecurityPolicyType>
     CSPHeaderAndType;
 using RedirectStatus = ResourceRequest::RedirectStatus;
+using network::mojom::blink::CSPDirectiveName;
 
 //  A delegate interface to implement violation reporting, support for some
 //  directives and other miscellaneous functionality.
@@ -165,40 +165,6 @@ class CORE_EXPORT ContentSecurityPolicy final
     kStyleAttribute
   };
 
-  enum class DirectiveType {
-    kBaseURI,
-    kBlockAllMixedContent,
-    kChildSrc,
-    kConnectSrc,
-    kDefaultSrc,
-    kFontSrc,
-    kFormAction,
-    kFrameAncestors,
-    kFrameSrc,
-    kImgSrc,
-    kManifestSrc,
-    kMediaSrc,
-    kNavigateTo,
-    kObjectSrc,
-    kPluginTypes,
-    kPrefetchSrc,
-    kReportTo,
-    kReportURI,
-    kRequireTrustedTypesFor,
-    kSandbox,
-    kScriptSrc,
-    kScriptSrcAttr,
-    kScriptSrcElem,
-    kStyleSrc,
-    kStyleSrcAttr,
-    kStyleSrcElem,
-    kTreatAsPublicAddress,
-    kTrustedTypes,
-    kUndefined,
-    kUpgradeInsecureRequests,
-    kWorkerSrc,
-  };
-
   // CheckHeaderType can be passed to Allow*FromSource methods to control which
   // types of CSP headers are checked.
   enum class CheckHeaderType {
@@ -211,6 +177,13 @@ class CORE_EXPORT ContentSecurityPolicy final
     // Check Content-Security-Policy-Report-Only headers only and ignore
     // Content-Security-Policy headers.
     kCheckReportOnly
+  };
+
+  // Helper type for the method AllowTrustedTypePolicy.
+  enum AllowTrustedTypePolicyDetails {
+    kAllowed,
+    kDisallowedName,
+    kDisallowedDuplicateName
   };
 
   static const size_t kMaxSampleLength = 40;
@@ -289,8 +262,10 @@ class CORE_EXPORT ContentSecurityPolicy final
       CheckHeaderType = CheckHeaderType::kCheckAll) const;
   bool AllowWorkerContextFromSource(const KURL&) const;
 
-  bool AllowTrustedTypePolicy(const String& policy_name,
-                              bool is_duplicate) const;
+  bool AllowTrustedTypePolicy(
+      const String& policy_name,
+      bool is_duplicate,
+      AllowTrustedTypePolicyDetails& violation_details) const;
 
   // Passing 'String()' into the |nonce| arguments in the following methods
   // represents an unnonced resource load.
@@ -367,6 +342,7 @@ class CORE_EXPORT ContentSecurityPolicy final
                                   const String& value,
                                   const char);
   void ReportInvalidPluginTypes(const String&);
+  void ReportInvalidRequireTrustedTypesFor(const String&);
   void ReportInvalidSandboxFlags(const String&);
   void ReportInvalidSourceExpression(const String& directive_name,
                                      const String& source);
@@ -387,7 +363,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   // If |sourceLocation| is not set, the source location will be the context's
   // current location.
   void ReportViolation(const String& directive_text,
-                       const DirectiveType& effective_type,
+                       CSPDirectiveName effective_type,
                        const String& console_message,
                        const KURL& blocked_url,
                        const Vector<String>& report_endpoints,
@@ -434,7 +410,9 @@ class CORE_EXPORT ContentSecurityPolicy final
 
   bool ShouldSendCSPHeader(ResourceType) const;
 
-  CSPSource* GetSelfSource() const { return self_source_; }
+  network::mojom::blink::CSPSource* GetSelfSource() const {
+    return self_source_.get();
+  }
 
   // Whether the main world's CSP should be bypassed based on the current
   // javascript world we are in.
@@ -455,25 +433,10 @@ class CORE_EXPORT ContentSecurityPolicy final
 
   static bool IsNonceableElement(const Element*);
 
-  // This method checks whether the request should be allowed for an
-  // experimental EmbeddingCSP feature
-  // Please, see https://w3c.github.io/webappsec-csp/embedded/#origin-allowed.
-  static bool ShouldEnforceEmbeddersPolicy(const ResourceResponse&,
-                                           const SecurityOrigin*);
-
-  static const char* GetDirectiveName(const DirectiveType&);
-  static DirectiveType GetDirectiveType(const String& name);
-
-  // This method checks if if this policy subsumes a given policy.
-  // Note the correct result is guaranteed if this policy contains only one
-  // CSPDirectiveList. More information here:
-  // https://w3c.github.io/webappsec-csp/embedded/#subsume-policy
-  bool Subsumes(const ContentSecurityPolicy&) const;
+  static const char* GetDirectiveName(CSPDirectiveName type);
+  static CSPDirectiveName GetDirectiveType(const String& name);
 
   bool HasHeaderDeliveredPolicy() const { return header_delivered_; }
-
-  static bool IsValidCSPAttr(const String& attr,
-                             const String& context_required_csp);
 
   // Returns the 'wasm-eval' source is supported.
   bool SupportsWasmEval() const { return supports_wasm_eval_; }
@@ -496,21 +459,16 @@ class CORE_EXPORT ContentSecurityPolicy final
 
   bool HasPolicyFromSource(network::mojom::ContentSecurityPolicySource) const;
 
-  static bool IsScriptDirective(
-      ContentSecurityPolicy::DirectiveType directive_type) {
-    return (
-        directive_type == ContentSecurityPolicy::DirectiveType::kScriptSrc ||
-        directive_type ==
-            ContentSecurityPolicy::DirectiveType::kScriptSrcAttr ||
-        directive_type == ContentSecurityPolicy::DirectiveType::kScriptSrcElem);
+  static bool IsScriptDirective(CSPDirectiveName directive_type) {
+    return (directive_type == CSPDirectiveName::ScriptSrc ||
+            directive_type == CSPDirectiveName::ScriptSrcAttr ||
+            directive_type == CSPDirectiveName::ScriptSrcElem);
   }
 
-  static bool IsStyleDirective(
-      ContentSecurityPolicy::DirectiveType directive_type) {
-    return (
-        directive_type == ContentSecurityPolicy::DirectiveType::kStyleSrc ||
-        directive_type == ContentSecurityPolicy::DirectiveType::kStyleSrcAttr ||
-        directive_type == ContentSecurityPolicy::DirectiveType::kStyleSrcElem);
+  static bool IsStyleDirective(CSPDirectiveName directive_type) {
+    return (directive_type == CSPDirectiveName::StyleSrc ||
+            directive_type == CSPDirectiveName::StyleSrcAttr ||
+            directive_type == CSPDirectiveName::StyleSrcElem);
   }
 
   void Count(WebFeature feature) const;
@@ -545,7 +503,7 @@ class CORE_EXPORT ContentSecurityPolicy final
                            const Vector<String>& report_endpoints,
                            bool use_reporting_api);
 
-  bool AllowFromSource(ContentSecurityPolicy::DirectiveType,
+  bool AllowFromSource(CSPDirectiveName,
                        const KURL&,
                        const KURL& url_before_redirects,
                        RedirectStatus,
@@ -555,15 +513,17 @@ class CORE_EXPORT ContentSecurityPolicy final
                        const IntegrityMetadataSet& = IntegrityMetadataSet(),
                        ParserDisposition = kParserInserted) const;
 
-  static void FillInCSPHashValues(const String& source,
-                                  uint8_t hash_algorithms_used,
-                                  Vector<CSPHashValue>* csp_hash_values);
+  static void FillInCSPHashValues(
+      const String& source,
+      uint8_t hash_algorithms_used,
+      Vector<network::mojom::blink::CSPHashSourcePtr>& csp_hash_values);
 
   // checks a vector of csp hashes against policy, probably a good idea
   // to use in tandem with FillInCSPHashValues.
-  static bool CheckHashAgainstPolicy(Vector<CSPHashValue>&,
-                                     const Member<CSPDirectiveList>&,
-                                     InlineType);
+  static bool CheckHashAgainstPolicy(
+      Vector<network::mojom::blink::CSPHashSourcePtr>&,
+      const Member<CSPDirectiveList>&,
+      InlineType);
 
   bool ShouldBypassContentSecurityPolicy(
       const KURL&,
@@ -601,7 +561,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   String disable_eval_error_message_;
   mojom::blink::InsecureRequestPolicy insecure_request_policy_;
 
-  Member<CSPSource> self_source_;
+  network::mojom::blink::CSPSourcePtr self_source_;
   String self_protocol_;
 
   bool supports_wasm_eval_ = false;

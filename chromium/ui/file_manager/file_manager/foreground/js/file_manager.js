@@ -23,7 +23,7 @@ class FileManager extends cr.EventTarget {
      */
     this.volumeManager_;
 
-    /** @private {?importer.HistoryLoader} */
+    /** @private {?importerHistoryInterfaces.HistoryLoader} */
     this.historyLoader_ = null;
 
     /** @private {?Crostini} */
@@ -35,26 +35,28 @@ class FileManager extends cr.EventTarget {
     /**
      * ImportHistory. Non-null only once history observer is added in
      * {@code addHistoryObserver}.
-     * @private {?importer.ImportHistory}
+     * @private {?importerHistoryInterfaces.ImportHistory}
      */
     this.importHistory_ = null;
 
     /**
-     * Bound observer for use with {@code importer.ImportHistory.Observer}.
-     * The instance is bound once here as {@code ImportHistory.removeObserver}
-     * uses object equivilency to remove observers.
+     * Bound observer for use with {@code
+     * importerHistoryInterfaces.ImportHistory.Observer}. The instance is bound
+     * once here as {@code ImportHistory.removeObserver} uses object equivilency
+     * to remove observers.
      *
-     * @private @const {function(!importer.ImportHistory.ChangedEvent)}
+     * @private
+     *     @const {function(!importerHistoryInterfaces.ImportHistory.ChangedEvent)}
      */
     this.onHistoryChangedBound_ = this.onHistoryChanged_.bind(this);
 
-    /** @private {?importer.MediaScanner} */
+    /** @private {?mediaScannerInterfaces.MediaScanner} */
     this.mediaScanner_ = null;
 
     /** @private {?importer.ImportController} */
     this.importController_ = null;
 
-    /** @private {?importer.ImportRunner} */
+    /** @private {?mediaImportInterfaces.ImportRunner} */
     this.mediaImportHandler_ = null;
 
     /** @private {?MetadataModel} */
@@ -471,7 +473,7 @@ class FileManager extends cr.EventTarget {
   }
 
   /**
-   * @return {importer.HistoryLoader}
+   * @return {importerHistoryInterfaces.HistoryLoader}
    */
   get historyLoader() {
     return this.historyLoader_;
@@ -485,7 +487,7 @@ class FileManager extends cr.EventTarget {
   }
 
   /**
-   * @return {importer.ImportRunner}
+   * @return {mediaImportInterfaces.ImportRunner}
    */
   get mediaImportHandler() {
     return this.mediaImportHandler_;
@@ -503,7 +505,7 @@ class FileManager extends cr.EventTarget {
    * @param {Object=} appState App state.
    */
   launchFileManager(appState) {
-    this.backgroundPage_.launcher.launchFileManager(appState);
+    this.fileBrowserBackground_.launchFileManager(appState);
   }
 
   /**
@@ -787,16 +789,16 @@ class FileManager extends cr.EventTarget {
     metrics.recordInterval('Load.InitDocuments');
 
     metrics.startInterval('Load.InitUI');
-    if (util.isFilesNg()) {
-      this.document_.documentElement.classList.add('files-ng');
-      this.dialogDom_.classList.add('files-ng');
-    } else {
-      this.document_.documentElement.classList.remove('files-ng');
-      this.dialogDom_.classList.remove('files-ng');
-    }
+    this.document_.documentElement.classList.add('files-ng');
+    this.dialogDom_.classList.add('files-ng');
 
     this.dialogDom_.classList.toggle(
         'camera-folder-enabled', util.isFilesCameraFolderEnabled());
+
+    chrome.fileManagerPrivate.isTabletModeEnabled(
+        this.onTabletModeChanged_.bind(this));
+    chrome.fileManagerPrivate.onTabletModeChanged.addListener(
+        this.onTabletModeChanged_.bind(this));
 
     this.initEssentialUI_();
     this.initAdditionalUI_();
@@ -847,12 +849,17 @@ class FileManager extends cr.EventTarget {
   async startInitBackgroundPage_() {
     metrics.startInterval('Load.InitBackgroundPage');
 
-    /** @type {!Window} */
-    const backgroundPage =
-        await new Promise(resolve => chrome.runtime.getBackgroundPage(resolve));
-    assert(backgroundPage);
-    this.backgroundPage_ =
-        /** @type {!BackgroundWindow} */ (backgroundPage);
+    /** @type {!BackgroundWindow} */
+    this.backgroundPage_ = await new Promise(resolve => {
+      if (window.isSWA) {
+        const backgroundWindowSWA = window.BackgroundWindowSWA || null;
+        resolve(new backgroundWindowSWA());
+      } else {
+        chrome.runtime.getBackgroundPage(resolve);
+      }
+    });
+
+    assert(this.backgroundPage_);
     this.fileBrowserBackground_ =
         /** @type {!FileBrowserBackgroundFull} */ (
             this.backgroundPage_.background);
@@ -860,7 +867,7 @@ class FileManager extends cr.EventTarget {
     await new Promise(resolve => this.fileBrowserBackground_.ready(resolve));
     loadTimeData.data = this.fileBrowserBackground_.stringData;
     if (util.runningInBrowser()) {
-      this.backgroundPage_.registerDialog(window);
+      this.fileBrowserBackground_.registerDialog(window);
     }
     this.fileOperationManager_ =
         this.fileBrowserBackground_.fileOperationManager;
@@ -868,6 +875,7 @@ class FileManager extends cr.EventTarget {
     this.mediaScanner_ = this.fileBrowserBackground_.mediaScanner;
     this.historyLoader_ = this.fileBrowserBackground_.historyLoader;
     this.crostini_ = this.fileBrowserBackground_.crostini;
+
     metrics.recordInterval('Load.InitBackgroundPage');
   }
 
@@ -890,7 +898,8 @@ class FileManager extends cr.EventTarget {
     // Note that the Drive enabling preference change is listened by
     // DriveIntegrationService, so here we don't need to take care about it.
     this.volumeManager_ = new FilteredVolumeManager(
-        allowedPaths, writableOnly, this.backgroundPage_);
+        allowedPaths, writableOnly,
+        this.fileBrowserBackground_.getVolumeManager());
   }
 
   /**
@@ -1007,7 +1016,7 @@ class FileManager extends cr.EventTarget {
     // we want to update grid/list view when it changes.
     this.historyLoader_.addHistoryLoadedListener(
         /**
-         * @param {!importer.ImportHistory} history
+         * @param {!importerHistoryInterfaces.ImportHistory} history
          * @this {FileManager}
          */
         history => {
@@ -1019,7 +1028,7 @@ class FileManager extends cr.EventTarget {
   /**
    * Handles events when import history changed.
    *
-   * @param {!importer.ImportHistory.ChangedEvent} event
+   * @param {!importerHistoryInterfaces.ImportHistory.ChangedEvent} event
    * @private
    */
   onHistoryChanged_(event) {
@@ -1219,6 +1228,19 @@ class FileManager extends cr.EventTarget {
       case chrome.fileManagerPrivate.CrostiniEventType.DISABLE:
         this.crostini_.setEnabled(event.vmName, false);
         return this.crostiniController_.redraw();
+
+      // Event is sent when a user drops an unshared file on Plugin VM.
+      // We show the move dialog so the user can move the file or share the
+      // directory.
+      case chrome.fileManagerPrivate.CrostiniEventType
+          .DROP_FAILED_PLUGIN_VM_DIRECTORY_NOT_SHARED:
+        if (this.ui_.dragInProcess) {
+          FileTasks.showPluginVmMoveDialog(
+              this.selectionHandler.selection.entries, this.volumeManager_,
+              assert(this.ui_), 'Windows', this.fileTransferController_,
+              assert(this.directoryModel_));
+        }
+        break;
     }
   }
 
@@ -1571,5 +1593,14 @@ class FileManager extends cr.EventTarget {
           }
           this.directoryTree.redraw(false);
         });
+  }
+
+  /**
+   * Updates the DOM to reflect the specified tablet mode `enabled` state.
+   * @param {boolean} enabled
+   * @private
+   */
+  onTabletModeChanged_(enabled) {
+    this.dialogDom_.classList.toggle('tablet-mode-enabled', enabled);
   }
 }

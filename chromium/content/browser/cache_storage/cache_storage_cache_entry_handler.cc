@@ -174,7 +174,7 @@ class EntryReaderImpl : public storage::mojom::BlobDataItemReader {
 }  // namespace
 
 CacheStorageCacheEntryHandler::DiskCacheBlobEntry::DiskCacheBlobEntry(
-    util::PassKey<CacheStorageCacheEntryHandler> key,
+    base::PassKey<CacheStorageCacheEntryHandler> key,
     base::WeakPtr<CacheStorageCacheEntryHandler> entry_handler,
     CacheStorageCacheHandle cache_handle,
     disk_cache::ScopedEntryPtr disk_cache_entry)
@@ -326,7 +326,7 @@ CacheStorageCacheEntryHandler::CreateDiskCacheBlobEntry(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto blob_entry =
       base::MakeRefCounted<CacheStorageCacheEntryHandler::DiskCacheBlobEntry>(
-          util::PassKey<CacheStorageCacheEntryHandler>(), GetWeakPtr(),
+          base::PassKey<CacheStorageCacheEntryHandler>(), GetWeakPtr(),
           std::move(cache_handle), std::move(disk_cache_entry));
   DCHECK_EQ(blob_entries_.count(blob_entry.get()), 0u);
   blob_entries_.insert(blob_entry.get());
@@ -354,13 +354,13 @@ void CacheStorageCacheEntryHandler::EraseDiskCacheBlobEntry(
 // static
 std::unique_ptr<CacheStorageCacheEntryHandler>
 CacheStorageCacheEntryHandler::CreateCacheEntryHandler(
-    CacheStorageOwner owner,
+    storage::mojom::CacheStorageOwner owner,
     scoped_refptr<BlobStorageContextWrapper> blob_storage_context) {
   switch (owner) {
-    case CacheStorageOwner::kCacheAPI:
+    case storage::mojom::CacheStorageOwner::kCacheAPI:
       return std::make_unique<CacheStorageCacheEntryHandlerImpl>(
           std::move(blob_storage_context));
-    case CacheStorageOwner::kBackgroundFetch:
+    case storage::mojom::CacheStorageOwner::kBackgroundFetch:
       return std::make_unique<background_fetch::CacheEntryHandlerImpl>(
           std::move(blob_storage_context));
   }

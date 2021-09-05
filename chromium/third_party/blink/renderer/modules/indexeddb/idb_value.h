@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_transfer_token.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_transfer_token.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink-forward.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_key.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_key_path.h"
@@ -41,7 +41,7 @@ class MODULES_EXPORT IDBValue final {
   IDBValue(
       scoped_refptr<SharedBuffer>,
       Vector<WebBlobInfo>,
-      Vector<mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken>> =
+      Vector<mojo::PendingRemote<mojom::blink::FileSystemAccessTransferToken>> =
           {});
   ~IDBValue();
 
@@ -54,9 +54,9 @@ class MODULES_EXPORT IDBValue final {
   const IDBKey* PrimaryKey() const { return primary_key_.get(); }
   const IDBKeyPath& KeyPath() const { return key_path_; }
 
-  Vector<mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken>>&
-  NativeFileSystemTokens() {
-    return native_file_system_tokens_;
+  Vector<mojo::PendingRemote<mojom::blink::FileSystemAccessTransferToken>>&
+  FileSystemAccessTokens() {
+    return file_system_access_tokens_;
   }
 
   // Injects a primary key into a value coming from the backend.
@@ -103,8 +103,8 @@ class MODULES_EXPORT IDBValue final {
 
   Vector<WebBlobInfo> blob_info_;
 
-  Vector<mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken>>
-      native_file_system_tokens_;
+  Vector<mojo::PendingRemote<mojom::blink::FileSystemAccessTransferToken>>
+      file_system_access_tokens_;
 
   std::unique_ptr<IDBKey> primary_key_;
   IDBKeyPath key_path_;

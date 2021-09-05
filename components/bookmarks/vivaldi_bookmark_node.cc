@@ -26,7 +26,7 @@ std::unique_ptr<BookmarkPermanentNode> BookmarkPermanentNode::CreateTrashFolder(
     bool visible_when_empty) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new BookmarkPermanentNode(
-      id, TRASH, kVivaldiTrashNodeGuid,
+      id, TRASH, base::GUID::ParseLowercase(kVivaldiTrashNodeGuid),
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME),
       visible_when_empty));
 }

@@ -13,6 +13,8 @@ import static org.hamcrest.Matchers.is;
 
 import static org.chromium.chrome.browser.preferences.ChromePreferenceKeys.ASSISTANT_VOICE_SEARCH_ENABLED;
 
+import android.support.test.runner.lifecycle.Stage;
+
 import androidx.test.filters.MediumTest;
 
 import org.junit.After;
@@ -26,17 +28,20 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
+import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetTestSupport;
 import org.chromium.content_public.browser.test.util.ClickUtils;
@@ -45,6 +50,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 /** Tests for AssistantVoiceSearchConsentDialog */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@EnableFeatures(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH)
 // TODO(wylieb): Batch these tests.
 public class AssistantVoiceSearchConsentUiTest {
     @Rule
@@ -84,6 +90,15 @@ public class AssistantVoiceSearchConsentUiTest {
             mAssistantVoiceSearchConsentUi.show(mCallback);
             mBottomSheetTestSupport.endAllAnimations();
         });
+    }
+
+    @Test
+    @MediumTest
+    public void testNoBottomSheetControllerAvailable() {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        AssistantVoiceSearchConsentUi.show(cta.getWindowAndroid(), mSharedPreferencesManager,
+                new SettingsLauncherImpl(), null, mCallback);
+        Mockito.verify(mCallback, Mockito.timeout(1000)).onResult(false);
     }
 
     @Test
@@ -128,20 +143,22 @@ public class AssistantVoiceSearchConsentUiTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "Failing on beta in M88 only, crbug.com/1152516")
     public void testDialogInteractivity_LearnMoreButton() {
         showConsentUi();
 
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            ClickUtils.clickButton(mAssistantVoiceSearchConsentUi.getContentView().findViewById(
-                    R.id.avs_consent_ui_learn_more));
-            mBottomSheetTestSupport.endAllAnimations();
-        });
+        SettingsActivity activity = ApplicationTestUtils.waitForActivityWithClass(
+                SettingsActivity.class, Stage.RESUMED, () -> {
+                    ClickUtils.clickButton(
+                            mAssistantVoiceSearchConsentUi.getContentView().findViewById(
+                                    R.id.avs_consent_ui_learn_more));
+                    mBottomSheetTestSupport.endAllAnimations();
+                });
 
         onView(withText(mActivityTestRule.getActivity().getResources().getString(
                        R.string.avs_setting_category_title)))
                 .check(matches(isDisplayed()));
         Mockito.verify(mCallback, Mockito.times(0)).onResult(/* meaningless value */ true);
+        activity.finish();
     }
 
     @Test

@@ -9,8 +9,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "pdf/pdf_features.h"
 #include "pdf/pdfium/pdfium_engine.h"
 #include "pdf/ppapi_migration/input_event_conversions.h"
 #include "third_party/pdfium/public/fpdf_annot.h"
@@ -27,6 +29,15 @@ std::string WideStringToString(FPDF_WIDESTRING wide_string) {
 }
 
 }  // namespace
+
+// static
+PDFiumFormFiller::ScriptOption PDFiumFormFiller::DefaultScriptOption() {
+#if defined(PDF_ENABLE_XFA)
+  if (base::FeatureList::IsEnabled(features::kPdfXfaSupport))
+    return PDFiumFormFiller::ScriptOption::kJavaScriptAndXFA;
+#endif  // defined(PDF_ENABLE_XFA)
+  return PDFiumFormFiller::ScriptOption::kJavaScript;
+}
 
 PDFiumFormFiller::PDFiumFormFiller(PDFiumEngine* engine,
                                    ScriptOption script_option)

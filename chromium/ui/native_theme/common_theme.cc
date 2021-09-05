@@ -8,6 +8,7 @@
 #include "base/notreached.h"
 #include "base/optional.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
@@ -451,7 +452,7 @@ SkColor GetDefaultColor(NativeTheme::ColorId color_id,
       return SkColorSetA(SK_ColorWHITE, gfx::kDisabledControlAlpha);
     case NativeTheme::kColorId_NotificationInkDropBase:
       return gfx::kGoogleBlue600;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case NativeTheme::kColorId_NotificationButtonBackground:
       return SkColorSetA(SK_ColorWHITE, 0.9 * 0xff);
 #endif
@@ -673,7 +674,7 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
 
   // High contrast overrides the normal colors for certain ColorIds to be much
   // darker or lighter.
-  if (base_theme->UsesHighContrastColors()) {
+  if (base_theme->UserHasContrastPreference()) {
     base::Optional<SkColor> color =
         GetHighContrastColor(color_id, color_scheme);
     if (color.has_value())

@@ -20,6 +20,7 @@
 #include "ui/views/controls/menu/menu_scroll_view_container.h"
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/round_rect_painter.h"
+#include "ui/views/views_delegate.h"
 #include "ui/views/widget/native_widget_private.h"
 #include "ui/views/widget/widget.h"
 
@@ -128,9 +129,7 @@ void MenuHost::InitMenuHost(Widget* parent,
   // If MenuHost has no parent widget, it needs to be marked
   // Activatable, so that calling Show in ShowMenuHost will
   // get keyboard focus.
-  const bool take_focus =
-      menu_controller && menu_controller->should_take_keyboard_focus();
-  if (parent == nullptr || take_focus)
+  if (parent == nullptr)
     params.activatable = Widget::InitParams::ACTIVATABLE_YES;
 #if defined(OS_WIN)
   // On Windows use the software compositor to ensure that we don't block
@@ -163,13 +162,10 @@ void MenuHost::ShowMenuHost(bool do_capture) {
   // Doing a capture may make us get capture lost. Ignore it while we're in the
   // process of showing.
   base::AutoReset<bool> reseter(&ignore_capture_lost_, true);
-  MenuController* menu_controller =
-      submenu_->GetMenuItem()->GetMenuController();
-  if (menu_controller && menu_controller->should_take_keyboard_focus())
-    Show();
-  else
-    ShowInactive();
+  ShowInactive();
   if (do_capture) {
+    MenuController* menu_controller =
+        submenu_->GetMenuItem()->GetMenuController();
     if (menu_controller && menu_controller->send_gesture_events_to_owner()) {
       // TransferGesture when owner needs gesture events so that the incoming
       // touch events after MenuHost is created are properly translated into
@@ -228,6 +224,10 @@ internal::RootView* MenuHost::CreateRootView() {
 void MenuHost::OnMouseCaptureLost() {
   if (destroying_ || ignore_capture_lost_)
     return;
+
+  if (!ViewsDelegate::GetInstance()->ShouldCloseMenuIfMouseCaptureLost())
+    return;
+
   MenuController* menu_controller =
       submenu_->GetMenuItem()->GetMenuController();
   if (menu_controller && !menu_controller->drag_in_progress())

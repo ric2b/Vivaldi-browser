@@ -31,6 +31,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -240,7 +241,7 @@ class PersonalDataManagerTestBase {
             features::kAutofillEnableAccountWalletStorage)
             ? scoped_refptr<AutofillWebDataService>(account_database_service_)
             : nullptr,
-        prefs_.get(), identity_test_env_.identity_manager(),
+        prefs_.get(), prefs_.get(), identity_test_env_.identity_manager(),
         TestAutofillProfileValidator::GetInstance(),
         /*history_service=*/nullptr, is_incognito);
 
@@ -370,7 +371,8 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
   }
 
   void EnableAutofillProfileCleanup() {
-    personal_data_->is_autofill_profile_cleanup_pending_ = true;
+    personal_data_->personal_data_manager_cleaner_for_testing()
+        ->set_is_autofill_profile_cleanup_pending(true);
   }
 
   void SetUpReferenceProfile(const AutofillProfile& profile) {
@@ -449,7 +451,9 @@ class PersonalDataManagerHelper : public PersonalDataManagerTestBase {
 
 // Cards are automatically remasked on Linux since full server cards are not
 // supported.
-#if !defined(OS_LINUX) || defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if !(defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
     personal_data_->ResetFullServerCard(
         personal_data_->GetCreditCards()[0]->guid());
 #endif
@@ -580,7 +584,7 @@ class PersonalDataManagerMigrationTest : public PersonalDataManagerHelper,
  public:
   PersonalDataManagerMigrationTest()
       : PersonalDataManagerHelper(
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
             { ::switches::kAccountIdMigration }
 #endif
         ) {
@@ -603,7 +607,8 @@ class PersonalDataManagerMockTest : public PersonalDataManagerTestBase,
     personal_data_->pref_service_->SetInteger(
         prefs::kAutofillLastVersionValidated,
         atoi(version_info::GetVersionNumber().c_str()));
-    personal_data_->is_autofill_profile_cleanup_pending_ = true;
+    personal_data_->personal_data_manager_cleaner_for_testing()
+        ->set_is_autofill_profile_cleanup_pending(true);
   }
 
   void TearDown() override {
@@ -885,6 +890,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
                       base::WideToUTF16(L"861088828000"));
   profile1.SetInfo(AutofillType(ADDRESS_HOME_COUNTRY),
                    base::WideToUTF16(L"India"), "en-US");
+  profile1.FinalizeAfterImport();
   profiles.push_back(profile1);
 
   AutofillProfile profile2;
@@ -894,11 +900,13 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
                                         L"\u8def1915\u53f7"));
   profile2.SetRawInfo(NAME_LAST, base::WideToUTF16(L"aguantó"));
   profile2.SetRawInfo(ADDRESS_HOME_ZIP, base::WideToUTF16(L"HOME 94043"));
+  profile2.FinalizeAfterImport();
   profiles.push_back(profile2);
 
   AutofillProfile profile3;
   profile3.SetRawInfo(EMAIL_ADDRESS, base::WideToUTF16(L"sue@example.com"));
   profile3.SetRawInfo(COMPANY_NAME, base::WideToUTF16(L"Company X"));
+  profile3.FinalizeAfterImport();
   profiles.push_back(profile3);
 
   AutofillProfile profile4;
@@ -917,6 +925,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
                         L"\u0905\u092a\u094b\u0932\u094b "
                         L"\u091f\u093e\u092f\u0930\u094d\u0938 "
                         L"\u0906\u0926\u093f"));
+  profile4.FinalizeAfterImport();
   profiles.push_back(profile4);
 
   AutofillProfile profile5;
@@ -928,6 +937,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
                       base::WideToUTF16(L"111111111111110000GOOGLE"));
   profile5.SetRawInfo(EMAIL_ADDRESS, base::WideToUTF16(L"page@000000.com"));
   profile5.SetRawInfo(COMPANY_NAME, base::WideToUTF16(L"Google"));
+  profile5.FinalizeAfterImport();
   profiles.push_back(profile5);
 
   AutofillProfile profile6;
@@ -944,6 +954,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
                         L"\u064a \u0639\u0645\u0631 "
                         L"\u0627\u0644\u0628\u0634\u064a\u0631"));
   profile6.SetRawInfo(ADDRESS_HOME_ZIP, base::WideToUTF16(L"HOME 94043"));
+  profile6.FinalizeAfterImport();
   profiles.push_back(profile6);
 
   AutofillProfile profile7;
@@ -960,6 +971,7 @@ TEST_F(PersonalDataManagerTest, AddProfile_CrazyCharacters) {
                       base::WideToUTF16(L"15466784565"));
   profile7.SetInfo(AutofillType(ADDRESS_HOME_COUNTRY),
                    base::WideToUTF16(L"United States"), "en-US");
+  profile7.FinalizeAfterImport();
   profiles.push_back(profile7);
 
   personal_data_->SetProfiles(&profiles);
@@ -1403,7 +1415,7 @@ TEST_F(PersonalDataManagerTest, KeepExistingLocalDataOnSignIn) {
       /*disabled_features=*/{});
 
 // ClearPrimaryAccount is not supported on CrOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   // Sign out.
   identity_test_env_.ClearPrimaryAccount();
   EXPECT_EQ(AutofillSyncSigninState::kSignedOut,
@@ -3524,8 +3536,7 @@ TEST_F(PersonalDataManagerTest,
   server_cards.push_back(credit_card1);
   server_cards.push_back(credit_card2);
   SetServerCards(server_cards);
-  personal_data_->UpdateServerCardMetadata(credit_card1);
-  personal_data_->UpdateServerCardMetadata(credit_card2);
+  personal_data_->UpdateServerCardsMetadata({credit_card1, credit_card2});
 
   // Add an expired local card last used 180 days ago.
   CreditCard credit_card3("1141084B-72D7-4B73-90CF-3D6AC154673B",
@@ -3917,18 +3928,21 @@ TEST_F(PersonalDataManagerTest, RecordUseOf) {
   TestAutofillClock test_clock;
   test_clock.SetNow(kArbitraryTime);
 
+  auto Check = [](const AutofillDataModel& data_model, size_t use_count,
+                  base::Time use_date, base::Time modification_date) {
+    EXPECT_EQ(use_count, data_model.use_count());
+    EXPECT_EQ(use_date, data_model.use_date());
+    EXPECT_EQ(modification_date, data_model.modification_date());
+  };
+
   AutofillProfile profile(test::GetFullProfile());
-  EXPECT_EQ(1U, profile.use_count());
-  EXPECT_EQ(kArbitraryTime, profile.use_date());
-  EXPECT_EQ(kArbitraryTime, profile.modification_date());
+  Check(profile, 1u, kArbitraryTime, kArbitraryTime);
   AddProfileToPersonalDataManager(profile);
 
   CreditCard credit_card(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetCreditCardInfo(&credit_card, "John Dillinger",
                           "4234567890123456" /* Visa */, "01", "2999", "1");
-  EXPECT_EQ(1U, credit_card.use_count());
-  EXPECT_EQ(kArbitraryTime, credit_card.use_date());
-  EXPECT_EQ(kArbitraryTime, credit_card.modification_date());
+  Check(credit_card, 1u, kArbitraryTime, kArbitraryTime);
   personal_data_->AddCreditCard(credit_card);
 
   // Make sure everything is set up correctly.
@@ -3943,40 +3957,43 @@ TEST_F(PersonalDataManagerTest, RecordUseOf) {
       personal_data_->GetProfileByGUID(profile.guid());
   ASSERT_TRUE(added_profile);
   EXPECT_EQ(*added_profile, profile);
-  EXPECT_EQ(1U, added_profile->use_count());
-  EXPECT_EQ(kArbitraryTime, added_profile->use_date());
-  EXPECT_EQ(kArbitraryTime, added_profile->modification_date());
-
-  base::RunLoop run_loop;
-  EXPECT_CALL(personal_data_observer_, OnPersonalDataFinishedProfileTasks())
-      .WillOnce(QuitMessageLoop(&run_loop));
-  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(1);
-
-  personal_data_->RecordUseOf(profile);
-
-  run_loop.Run();
+  Check(*added_profile, 1u, kArbitraryTime, kArbitraryTime);
 
   CreditCard* added_card =
       personal_data_->GetCreditCardByGUID(credit_card.guid());
   ASSERT_TRUE(added_card);
   EXPECT_EQ(*added_card, credit_card);
-  EXPECT_EQ(1U, added_card->use_count());
-  EXPECT_EQ(kArbitraryTime, added_card->use_date());
-  EXPECT_EQ(kArbitraryTime, added_card->modification_date());
-  personal_data_->RecordUseOf(credit_card);
+  Check(*added_card, 1u, kArbitraryTime, kArbitraryTime);
 
-  // Verify usage stats are updated.
+  // Use |profile|, then verify usage stats.
+  base::RunLoop profile_run_loop;
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataFinishedProfileTasks())
+      .WillOnce(QuitMessageLoop(&profile_run_loop));
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(1);
+  personal_data_->RecordUseOf(&profile);
+  profile_run_loop.Run();
+
   added_profile = personal_data_->GetProfileByGUID(profile.guid());
-  ASSERT_TRUE(added_profile);
-  EXPECT_EQ(2U, added_profile->use_count());
-  EXPECT_EQ(kSomeLaterTime, added_profile->use_date());
-  EXPECT_EQ(kArbitraryTime, added_profile->modification_date());
-
   added_card = personal_data_->GetCreditCardByGUID(credit_card.guid());
+  ASSERT_TRUE(added_profile);
   ASSERT_TRUE(added_card);
-  EXPECT_EQ(2U, added_card->use_count());
-  EXPECT_EQ(kSomeLaterTime, added_card->use_date());
-  EXPECT_EQ(kArbitraryTime, added_card->modification_date());
+  Check(*added_profile, 2u, kSomeLaterTime, kArbitraryTime);
+  Check(*added_card, 1u, kArbitraryTime, kArbitraryTime);
+
+  // Use |credit_card|, then verify usage stats.
+  base::RunLoop credit_card_run_loop;
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataFinishedProfileTasks())
+      .WillOnce(QuitMessageLoop(&credit_card_run_loop));
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged()).Times(1);
+  personal_data_->RecordUseOf(&credit_card);
+  credit_card_run_loop.Run();
+
+  added_profile = personal_data_->GetProfileByGUID(profile.guid());
+  added_card = personal_data_->GetCreditCardByGUID(credit_card.guid());
+  ASSERT_TRUE(added_profile);
+  ASSERT_TRUE(added_card);
+  Check(*added_profile, 2u, kSomeLaterTime, kArbitraryTime);
+  Check(*added_card, 2u, kSomeLaterTime, kArbitraryTime);
 }
 
 TEST_F(PersonalDataManagerTest, ClearAllServerData) {
@@ -4597,7 +4614,8 @@ TEST_F(PersonalDataManagerTest, DedupeProfiles_ProfilesToDelete) {
   base::HistogramTester histogram_tester;
   std::unordered_map<std::string, std::string> guids_merge_map;
   std::unordered_set<std::string> profiles_to_delete;
-  personal_data_->DedupeProfiles(&existing_profiles, &profiles_to_delete,
+  personal_data_->personal_data_manager_cleaner_for_testing()
+      ->DedupeProfilesForTesting(&existing_profiles, &profiles_to_delete,
                                  &guids_merge_map);
   // 5 profiles were considered for dedupe.
   histogram_tester.ExpectUniqueSample(
@@ -4682,7 +4700,8 @@ TEST_F(PersonalDataManagerTest, DedupeProfiles_GuidsMergeMap) {
   std::unordered_map<std::string, std::string> guids_merge_map;
   std::unordered_set<std::string> profiles_to_delete;
 
-  personal_data_->DedupeProfiles(&existing_profiles, &profiles_to_delete,
+  personal_data_->personal_data_manager_cleaner_for_testing()
+      ->DedupeProfilesForTesting(&existing_profiles, &profiles_to_delete,
                                  &guids_merge_map);
 
   // The two profile merges should be recorded in the map.
@@ -4739,7 +4758,8 @@ TEST_F(PersonalDataManagerTest, UpdateCardsBillingAddressReference) {
   personal_data_->server_credit_cards_.push_back(
       std::unique_ptr<CreditCard>(credit_card4));
 
-  personal_data_->UpdateCardsBillingAddressReference(guids_merge_map);
+  personal_data_->personal_data_manager_cleaner_for_testing()
+      ->UpdateCardsBillingAddressReferenceForTesting(guids_merge_map);
 
   // The first card's billing address should now be E.
   EXPECT_EQ("E", credit_card1->billing_address_id());
@@ -4860,7 +4880,8 @@ TEST_F(PersonalDataManagerTest,
   // calls to AddProfile.
   EnableAutofillProfileCleanup();
 
-  EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
 
   // Get the profiles and cards sorted by frecency to have a deterministic
@@ -4932,7 +4953,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MergedProfileValues) {
 
   base::HistogramTester histogram_tester;
 
-  EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
 
   std::vector<AutofillProfile*> profiles = personal_data_->GetProfiles();
@@ -5020,7 +5042,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileFirst) {
 
   base::HistogramTester histogram_tester;
 
-  EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
 
   std::vector<AutofillProfile*> profiles = personal_data_->GetProfiles();
@@ -5084,7 +5107,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_VerifiedProfileLast) {
 
   base::HistogramTester histogram_tester;
 
-  EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
 
   std::vector<AutofillProfile*> profiles = personal_data_->GetProfiles();
@@ -5147,7 +5171,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleVerifiedProfiles) {
 
   base::HistogramTester histogram_tester;
 
-  EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
 
   // Get the profiles, sorted by frecency to have a deterministic order.
@@ -5265,7 +5290,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleDedupes) {
   // |Homer1| should get merged into |Homer2| which should then be merged into
   // |Homer3|. |Marge2| should be discarded in favor of |Marge1| which is
   // verified. |Homer4| and |Barney| should not be deduped at all.
-  EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
 
   // Get the profiles, sorted by frecency to have a deterministic order.
@@ -5341,7 +5367,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_FeatureDisabled) {
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
 
   // The deduping routine should not be run.
-  EXPECT_FALSE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
+                   ->ApplyDedupingRoutineForTesting());
 
   // Both profiles should still be present.
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
@@ -5350,7 +5377,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_FeatureDisabled) {
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_NopIfZeroProfiles) {
   EXPECT_TRUE(personal_data_->GetProfiles().empty());
   EnableAutofillProfileCleanup();
-  EXPECT_FALSE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
+                   ->ApplyDedupingRoutineForTesting());
 }
 
 TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_NopIfOneProfile) {
@@ -5367,7 +5395,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_NopIfOneProfile) {
   // Enable the profile cleanup now. Otherwise it would be triggered by the
   // calls to AddProfile.
   EnableAutofillProfileCleanup();
-  EXPECT_FALSE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
+                   ->ApplyDedupingRoutineForTesting());
 }
 
 // Tests that ApplyDedupingRoutine is not run a second time on the same major
@@ -5395,7 +5424,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
   EnableAutofillProfileCleanup();
 
   // The deduping routine should be run a first time.
-  EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->ApplyDedupingRoutineForTesting());
   WaitForOnPersonalDataChanged();
 
   std::vector<AutofillProfile*> profiles = personal_data_->GetProfiles();
@@ -5418,7 +5448,8 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
   EnableAutofillProfileCleanup();
 
   // The deduping routine should not be run.
-  EXPECT_FALSE(personal_data_->ApplyDedupingRoutine());
+  EXPECT_FALSE(personal_data_->personal_data_manager_cleaner_for_testing()
+                   ->ApplyDedupingRoutineForTesting());
 
   // The two duplicate profiles should still be present.
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
@@ -5493,7 +5524,8 @@ TEST_F(PersonalDataManagerTest,
   EXPECT_EQ(2U, personal_data_->GetCreditCards().size());
 
   // DeleteDisusedAddresses should return true.
-  EXPECT_TRUE(personal_data_->DeleteDisusedAddresses());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->DeleteDisusedAddressesForTesting());
   WaitForOnPersonalDataChanged();
 
   EXPECT_EQ(3U, personal_data_->GetProfiles().size());
@@ -5571,8 +5603,7 @@ TEST_F(PersonalDataManagerTest,
   server_cards.push_back(credit_card5);
   server_cards.push_back(credit_card6);
   SetServerCards(server_cards);
-  personal_data_->UpdateServerCardMetadata(credit_card5);
-  personal_data_->UpdateServerCardMetadata(credit_card6);
+  personal_data_->UpdateServerCardsMetadata({credit_card5, credit_card6});
 
   WaitForOnPersonalDataChanged();
   EXPECT_EQ(6U, personal_data_->GetCreditCards().size());
@@ -5581,7 +5612,8 @@ TEST_F(PersonalDataManagerTest,
   base::HistogramTester histogram_tester;
 
   // DeleteDisusedCreditCards should return true to indicate it was run.
-  EXPECT_TRUE(personal_data_->DeleteDisusedCreditCards());
+  EXPECT_TRUE(personal_data_->personal_data_manager_cleaner_for_testing()
+                  ->DeleteDisusedCreditCardsForTesting());
 
   // Wait for the data to be refreshed.
   WaitForOnPersonalDataChanged();
@@ -6621,7 +6653,9 @@ TEST_F(PersonalDataManagerTest, CreateDataForTest) {
 
 // These tests are not applicable on Linux since it does not support full server
 // cards.
-#if !defined(OS_LINUX) || defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if !(defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 // Test that calling OnSyncServiceInitialized with a null sync service remasks
 // full server cards.
 TEST_F(PersonalDataManagerTest, OnSyncServiceInitialized_NoSyncService) {
@@ -6670,7 +6704,7 @@ TEST_F(PersonalDataManagerTest, OnSyncServiceInitialized_NotActiveSyncService) {
   // OnSyncServiceInitialized.
   personal_data_->OnSyncShutdown(&sync_service);
 }
-#endif  // !defined(OS_LINUX) || defined(OS_CHROMEOS)
+#endif  // !(defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 
 #if !defined(OS_ANDROID)
 TEST_F(PersonalDataManagerTest, ExcludeServerSideCards) {
@@ -6752,8 +6786,8 @@ TEST_F(PersonalDataManagerTest, ServerCardsShowInTransportMode_NeedOptIn) {
   EXPECT_EQ(1U, personal_data_->GetLocalCreditCards().size());
   EXPECT_EQ(2U, personal_data_->GetServerCreditCards().size());
 }
-#endif  // defined(OS_WIN) || defined(OS_MAC) ||
-        // defined(OS_LINUX) || defined(OS_CHROMEOS)
+#endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS)
 
 // Tests that all the non settings origins of autofill profiles are cleared but
 // that the settings origins are untouched.
@@ -6800,7 +6834,8 @@ TEST_F(PersonalDataManagerTest, ClearProfileNonSettingsOrigins) {
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
       .Times(2);  // The setting of profiles 0 and 2 will be cleared.
 
-  personal_data_->ClearProfileNonSettingsOrigins();
+  personal_data_->personal_data_manager_cleaner_for_testing()
+      ->ClearProfileNonSettingsOriginsForTesting();
   run_loop.Run();
 
   ASSERT_EQ(4U, personal_data_->GetProfiles().size());
@@ -6850,7 +6885,8 @@ TEST_F(PersonalDataManagerTest, ClearCreditCardNonSettingsOrigins) {
   WaitForOnPersonalDataChanged();
   ASSERT_EQ(4U, personal_data_->GetCreditCards().size());
 
-  personal_data_->ClearCreditCardNonSettingsOrigins();
+  personal_data_->personal_data_manager_cleaner_for_testing()
+      ->ClearCreditCardNonSettingsOriginsForTesting();
 
   WaitForOnPersonalDataChanged();
   ASSERT_EQ(4U, personal_data_->GetCreditCards().size());
@@ -7005,7 +7041,7 @@ TEST_F(PersonalDataManagerTest, UseCorrectStorageForDifferentCards) {
 
   // Set server card metadata.
   server_card.set_use_count(15);
-  personal_data_->UpdateServerCardMetadata(server_card);
+  personal_data_->UpdateServerCardsMetadata({server_card});
 
   WaitForOnPersonalDataChanged();
 
@@ -7477,7 +7513,7 @@ TEST_F(PersonalDataManagerMigrationTest,
 }
 #endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !defined(OS_IOS) && !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
   // The method should return false if one of these is not respected:
   //   * The sync_service is not null
@@ -7590,7 +7626,8 @@ TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
     histogram_tester.ExpectTotalCount(kHistogramName, 0);
   }
 }
-#else   // !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
+#else   // !defined(OS_ANDROID) && !defined(OS_IOS) &&
+        // !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
   // The method should return false if one of these is not respected:
   //   * The sync_service is not null
@@ -7664,7 +7701,8 @@ TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
   personal_data_->SetSyncServiceForTest(nullptr);
   EXPECT_FALSE(personal_data_->ShouldShowCardsFromAccountOption());
 }
-#endif  // !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS) &&
+        // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(PersonalDataManagerTest, GetSyncSigninState) {
   // Make a non-primary account available with both a refresh token and cookie
@@ -7713,7 +7751,7 @@ TEST_F(PersonalDataManagerTest, GetSyncSigninState) {
   }
 
 // ClearPrimaryAccount is not supported on CrOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   // Check that the sync state is |SignedOut| when the account info is empty.
   {
     identity_test_env_.ClearPrimaryAccount();
@@ -7728,7 +7766,7 @@ TEST_F(PersonalDataManagerTest, GetSyncSigninState) {
   sync_service_.SetAuthenticatedAccountInfo(primary_account_info);
   sync_service_.SetIsAuthenticatedAccountPrimary(true);
 // MakePrimaryAccountAvailable is not supported on CrOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   identity_test_env_.MakePrimaryAccountAvailable(primary_account_info.email);
 #endif
 
@@ -7771,7 +7809,7 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
 
   // Account wallet storage only makes sense together with support for
   // unconsented primary accounts, i.e. on Win/Mac/Linux.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   {
     base::test::ScopedFeatureList scoped_features;
     scoped_features.InitAndEnableFeature(
@@ -7830,7 +7868,7 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
     EXPECT_FALSE(prefs::IsUserOptedInWalletSyncTransport(
         prefs_.get(), active_info.account_id));
   }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   ///////////////////////////////////////////////////////////
   // kSignedInAndSyncFeature

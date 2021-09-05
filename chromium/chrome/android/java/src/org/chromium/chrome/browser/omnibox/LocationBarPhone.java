@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.omnibox;
 
-import android.animation.Animator;
-import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Rect;
@@ -13,13 +11,8 @@ import android.util.AttributeSet;
 import android.view.TouchDelegate;
 import android.view.View;
 import android.widget.FrameLayout;
-
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.ui.interpolators.BakedBezierInterpolator;
-
-import java.util.List;
 
 /**
  * A location bar implementation specific for smaller/phone screens.
@@ -181,16 +174,16 @@ class LocationBarPhone extends LocationBarLayout {
     }
 
     @Override
-    public void updateVisualsForState() {
-        super.updateVisualsForState();
+    public void onPrimaryColorChanged() {
+        super.onPrimaryColorChanged();
         boolean isIncognito = mLocationBarDataProvider.isIncognito();
         setShowIconsWhenUrlFocused(SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito));
         updateStatusVisibility();
     }
 
     @Override
-    public void onTabLoadingNTP(NewTabPage ntp) {
-        super.onTabLoadingNTP(ntp);
+    protected void onNtpStartedLoading() {
+        super.onNtpStartedLoading();
         updateStatusVisibility();
     }
 
@@ -209,38 +202,11 @@ class LocationBarPhone extends LocationBarLayout {
     }
 
     /**
-     * @return Width of child views before the first view that would be visible when location bar is
-     *         focused. The first visible, focused view should be either url bar or status icon.
+     * Returns the first child view that would be visible when location bar is focused. The first
+     * visible, focused view should be either url bar or status icon.
      */
-    public int getOffsetOfFirstVisibleFocusedView() {
-        int visibleWidth = 0;
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
-            if (child == mFirstVisibleFocusedView) break;
-            if (child.getVisibility() == GONE) continue;
-            visibleWidth += child.getMeasuredWidth();
-        }
-        return visibleWidth;
-    }
-
-    /**
-     * Populates fade animators of status icon for location bar focus change animation.
-     * @param animators The target list to add animators to.
-     * @param startDelayMs Start delay of fade animation in milliseconds.
-     * @param durationMs Duration of fade animation in milliseconds.
-     * @param targetAlpha Target alpha value.
-     */
-    public void populateFadeAnimations(
-            List<Animator> animators, long startDelayMs, long durationMs, float targetAlpha) {
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
-            if (child == mFirstVisibleFocusedView) break;
-            Animator animator = ObjectAnimator.ofFloat(child, ALPHA, targetAlpha);
-            animator.setStartDelay(startDelayMs);
-            animator.setDuration(durationMs);
-            animator.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
-            animators.add(animator);
-        }
+    /* package */ View getFirstVisibleFocusedView() {
+        return mFirstVisibleFocusedView;
     }
 
     /**
@@ -252,95 +218,6 @@ class LocationBarPhone extends LocationBarLayout {
      */
     public FrameLayout.LayoutParams getFrameLayoutParams() {
         return (FrameLayout.LayoutParams) getLayoutParams();
-    }
-
-    /**
-     * Calculates the offset required for the focused LocationBar to appear as it's still unfocused
-     * so it can animate to a focused state.
-     *
-     * @param hasFocus True if the LocationBar has focus, this will be true between the focus
-     *                 animation starting and the unfocus animation starting.
-     * @return The offset for the location bar when showing the dse icon.
-     */
-    public int getLocationBarOffsetForFocusAnimation(boolean hasFocus) {
-        if (mStatusCoordinator == null) return 0;
-
-        // No offset is required if the experiment is disabled.
-        if (!SearchEngineLogoUtils.shouldShowSearchEngineLogo(
-                    mLocationBarDataProvider.isIncognito())) {
-            return 0;
-        }
-
-        // On non-NTP pages, there will always be an icon when unfocused.
-        if (!mLocationBarDataProvider.getNewTabPageDelegate().isCurrentlyVisible()) return 0;
-
-        // This offset is only required when the focus animation is running.
-        if (!hasFocus) return 0;
-
-        // We're on the NTP with the fakebox showing.
-        // The value returned changes based on if the layout is LTR OR RTL.
-        // For LTR, the value is negative because we are making space on the left-hand side.
-        // For RTL, the value is positive because we are pushing the icon further to the
-        // right-hand side.
-        int offset = mStatusCoordinator.getStatusIconWidth() - getAdditionalOffsetForNTP();
-        return getLayoutDirection() == LAYOUT_DIRECTION_RTL ? offset : -offset;
-    }
-
-    /**
-     * Function used to position the url bar inside the location bar during omnibox animation.
-     *
-     * @param urlExpansionPercent The current expansion percent, 1 is fully focused and 0 is
-     *                            completely unfocused.
-     *  @param hasFocus True if the LocationBar has focus, this will be true between the focus
-     *                 animation starting and the unfocus animation starting.
-     *  @return The X translation for the URL bar, used in the toolbar animation.
-     */
-    public float getUrlBarTranslationXForToolbarAnimation(
-            float urlExpansionPercent, boolean hasFocus) {
-        // This will be called before status view is ready.
-        if (mStatusCoordinator == null) return 0;
-
-        // No offset is required if the experiment is disabled.
-        if (!SearchEngineLogoUtils.shouldShowSearchEngineLogo(
-                    mLocationBarDataProvider.isIncognito())) {
-            return 0;
-        }
-
-        boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        // The calculation here is:  the difference in padding between the focused vs unfocused
-        // states and also accounts for the translation that the status icon will do. In the end,
-        // this translation will be the distance that the url bar needs to travel to arrive at the
-        // desired padding when focused.
-        float translation =
-                urlExpansionPercent * mStatusCoordinator.getEndPaddingPixelSizeOnFocusDelta();
-
-        if (!hasFocus && mStatusCoordinator.isSearchEngineStatusIconVisible()
-                && SearchEngineLogoUtils.currentlyOnNTP(mLocationBarDataProvider)) {
-            // When:
-            // 1. unfocusing the LocationBar on the NTP.
-            // 2. scrolling the fakebox to the LocationBar on the NTP.
-            // The status icon and the URL bar text overlap in the animation.
-            //
-            // This branch calculates the negative distance the URL bar needs to travel to
-            // completely overlap the status icon and end up in a state that matches the fakebox.
-            float overStatusIconTranslation = translation
-                    - (1f - urlExpansionPercent)
-                            * (mStatusCoordinator.getStatusIconWidth()
-                                    - getAdditionalOffsetForNTP());
-            // The value returned changes based on if the layout is LTR or RTL.
-            // For LTR, the value is negative because the status icon is left of the url bar on the
-            // x/y plane.
-            // For RTL, the value is positive because the status icon is right of the url bar on the
-            // x/y plane.
-            return isRtl ? -overStatusIconTranslation : overStatusIconTranslation;
-        }
-
-        return isRtl ? -translation : translation;
-    }
-
-    private int getAdditionalOffsetForNTP() {
-        return getResources().getDimensionPixelSize(R.dimen.sei_search_box_lateral_padding)
-                - getResources().getDimensionPixelSize(R.dimen.sei_location_bar_lateral_padding);
     }
 
     /** Update the status visibility according to the current state held in LocationBar. */

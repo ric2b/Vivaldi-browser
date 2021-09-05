@@ -56,12 +56,10 @@ scoped_refptr<TestPasswordStore> CreateAndUseTestPasswordStore(
 // Returns compromised credential structure.
 CompromisedCredentials MakeCompromised(base::StringPiece signon_realm,
                                        base::StringPiece username) {
-  return {
-      std::string(signon_realm),
-      base::ASCIIToUTF16(username),
-      base::Time::Now(),
-      CompromiseType::kLeaked,
-  };
+  return CompromisedCredentials(std::string(signon_realm),
+                                base::ASCIIToUTF16(username), base::Time::Now(),
+                                CompromiseType::kLeaked,
+                                password_manager::IsMuted(false));
 }
 }  // namespace
 

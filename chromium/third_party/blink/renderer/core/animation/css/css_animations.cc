@@ -434,11 +434,11 @@ AnimationTimeDelta IterationElapsedTime(const AnimationEffect& effect,
 
 CSSScrollTimeline* CreateCSSScrollTimeline(
     Element* element,
-    const CSSScrollTimeline::Options& options) {
+    CSSScrollTimeline::Options&& options) {
   if (!options.IsValid())
     return nullptr;
-  auto* scroll_timeline =
-      MakeGarbageCollected<CSSScrollTimeline>(&element->GetDocument(), options);
+  auto* scroll_timeline = MakeGarbageCollected<CSSScrollTimeline>(
+      &element->GetDocument(), std::move(options));
   // It's is not allowed for a style resolve to create timelines that
   // needs timing updates (i.e. AnimationTimeline::NeedsAnimationTimingUpdate()
   // must return false). Servicing animations after creation preserves this
@@ -486,7 +486,7 @@ AnimationTimeline* ComputeTimeline(Element* element,
       if (timeline->Matches(options))
         return existing_timeline;
     }
-    if (auto* timeline = CreateCSSScrollTimeline(element, options))
+    if (auto* timeline = CreateCSSScrollTimeline(element, std::move(options)))
       return timeline;
   }
   return nullptr;
@@ -1239,9 +1239,9 @@ void CSSAnimations::CalculateTransitionUpdateForProperty(
 
   if (property.GetCSSProperty().IsCompositableProperty()) {
     CompositorKeyframeValue* from = CompositorKeyframeValueFactory::Create(
-        property, *state.before_change_style);
-    CompositorKeyframeValue* to =
-        CompositorKeyframeValueFactory::Create(property, state.style);
+        property, *state.before_change_style, start_keyframe->Offset().value());
+    CompositorKeyframeValue* to = CompositorKeyframeValueFactory::Create(
+        property, state.style, end_keyframe->Offset().value());
     start_keyframe->SetCompositorValue(from);
     end_keyframe->SetCompositorValue(to);
   }
@@ -1288,7 +1288,7 @@ void CSSAnimations::CalculateTransitionUpdateForStandardProperty(
   }
 
   CSSPropertyID resolved_id =
-      resolveCSSPropertyID(transition_property.unresolved_property);
+      ResolveCSSPropertyID(transition_property.unresolved_property);
   bool animate_all = resolved_id == CSSPropertyID::kAll;
   const StylePropertyShorthand& property_list =
       animate_all ? PropertiesForTransitionAll()
@@ -1299,7 +1299,7 @@ void CSSAnimations::CalculateTransitionUpdateForStandardProperty(
     CSSPropertyID longhand_id =
         property_list.length() ? property_list.properties()[i]->PropertyID()
                                : resolved_id;
-    DCHECK_GE(longhand_id, firstCSSProperty);
+    DCHECK_GE(longhand_id, kFirstCSSProperty);
     const CSSProperty& property =
         CSSProperty::Get(longhand_id)
             .ResolveDirectionAwareProperty(style.Direction(),

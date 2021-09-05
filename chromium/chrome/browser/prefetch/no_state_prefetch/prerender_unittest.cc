@@ -46,6 +46,7 @@
 #include "components/no_state_prefetch/common/prerender_util.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
@@ -67,19 +68,6 @@ namespace prerender {
 class UnitTestPrerenderManager;
 
 namespace {
-
-class DummyPrerenderProcessorClient
-    : public blink::mojom::PrerenderProcessorClient {
- public:
-  DummyPrerenderProcessorClient() = default;
-  ~DummyPrerenderProcessorClient() override = default;
-
-  // blink::mojom::PrerenderProcessorClient implementation
-  void OnPrerenderStart() override {}
-  void OnPrerenderStopLoading() override {}
-  void OnPrerenderDomContentLoaded() override {}
-  void OnPrerenderStop() override {}
-};
 
 class DummyPrerenderContents : public PrerenderContents {
  public:
@@ -115,10 +103,6 @@ class TestNetworkBytesChangedObserver
   TestNetworkBytesChangedObserver() : network_bytes_changed_(false) {}
 
   // prerender::PrerenderHandle::Observer
-  void OnPrerenderStart(PrerenderHandle* prerender_handle) override {}
-  void OnPrerenderStopLoading(PrerenderHandle* prerender_handle) override {}
-  void OnPrerenderDomContentLoaded(PrerenderHandle* prerender_handle) override {
-  }
   void OnPrerenderStop(PrerenderHandle* prerender_handle) override {}
   void OnPrerenderNetworkBytesChanged(
       PrerenderHandle* prerender_handle) override {
@@ -392,16 +376,11 @@ class PrerenderTest : public testing::Test {
         initiator_url, network::mojom::ReferrerPolicy::kDefault);
     attributes->view_size = kDefaultViewSize;
 
-    mojo::PendingRemote<blink::mojom::PrerenderProcessorClient>
-        processor_client;
-    clients_.Add(std::make_unique<DummyPrerenderProcessorClient>(),
-                 processor_client.InitWithNewPipeAndPassReceiver());
-
     // This could delete an existing prerender as a side-effect.
     base::Optional<int> prerender_id =
         prerender_link_manager()->OnStartPrerender(
             render_process_id, render_view_id, std::move(attributes),
-            url::Origin::Create(initiator_url), std::move(processor_client));
+            url::Origin::Create(initiator_url));
 
     // Check if the new prerender request was added and running.
     return prerender_id && LastPrerenderIsRunning();
@@ -460,8 +439,6 @@ class PrerenderTest : public testing::Test {
         chrome_browser_net::NETWORK_PREDICTION_ALWAYS);
   }
 
-  void DisconnectAllPrerenderProcessorClients() { clients_.Clear(); }
-
   const base::HistogramTester& histogram_tester() { return histogram_tester_; }
 
  private:
@@ -473,7 +450,6 @@ class PrerenderTest : public testing::Test {
   std::unique_ptr<UnitTestPrerenderManager> prerender_manager_;
   std::unique_ptr<PrerenderLinkManager> prerender_link_manager_;
   base::HistogramTester histogram_tester_;
-  mojo::UniqueReceiverSet<blink::mojom::PrerenderProcessorClient> clients_;
 };
 
 TEST_F(PrerenderTest, RespectsThirdPartyCookiesPref) {
@@ -1517,31 +1493,6 @@ TEST_F(PrerenderTest, DISABLED_LinkManagerCancelThenAddAgain) {
   EXPECT_FALSE(prerender_manager()->FindEntry(url));
 }
 
-TEST_F(PrerenderTest, LinkManagerRendererDisconnect) {
-  prerender_manager()->SetTickClockForTesting(tick_clock());
-  EXPECT_TRUE(IsEmptyPrerenderLinkManager());
-  GURL url("http://www.myexample.com");
-  DummyPrerenderContents* prerender_contents =
-      prerender_manager()->CreateNextPrerenderContents(url,
-                                                       FINAL_STATUS_TIMED_OUT);
-
-  EXPECT_TRUE(AddSimplePrerender(url));
-  EXPECT_TRUE(prerender_contents->prerendering_has_started());
-  EXPECT_FALSE(prerender_contents->prerendering_has_been_cancelled());
-  ASSERT_EQ(prerender_contents, prerender_manager()->FindEntry(url));
-
-  // Disconnect all clients. Spin the run loop to give the link manager
-  // opportunity to detect disconnection.
-  DisconnectAllPrerenderProcessorClients();
-  base::RunLoop().RunUntilIdle();
-
-  tick_clock()->Advance(prerender_manager()->config().abandon_time_to_live +
-                        TimeDelta::FromSeconds(1));
-
-  EXPECT_FALSE(prerender_manager()->FindEntry(url));
-  EXPECT_TRUE(IsEmptyPrerenderLinkManager());
-}
-
 // Creates two prerenders, one of which should be blocked by the
 // max_link_concurrency; abandons both of them and waits to make sure both
 // are cleared from the PrerenderLinkManager.
@@ -1661,18 +1612,12 @@ TEST_F(PrerenderTest, LinkManagerExpireRevealingLaunch) {
 }
 
 TEST_F(PrerenderTest, PrerenderContentsIsValidHttpMethod) {
-  EXPECT_TRUE(
-      IsValidHttpMethod(prerender::mojom::PrerenderMode::kPrefetchOnly, "GET"));
-  EXPECT_TRUE(IsValidHttpMethod(prerender::mojom::PrerenderMode::kPrefetchOnly,
-                                "HEAD"));
-  EXPECT_FALSE(IsValidHttpMethod(prerender::mojom::PrerenderMode::kPrefetchOnly,
-                                 "OPTIONS"));
-  EXPECT_FALSE(IsValidHttpMethod(prerender::mojom::PrerenderMode::kPrefetchOnly,
-                                 "POST"));
-  EXPECT_FALSE(IsValidHttpMethod(prerender::mojom::PrerenderMode::kPrefetchOnly,
-                                 "TRACE"));
-  EXPECT_FALSE(IsValidHttpMethod(prerender::mojom::PrerenderMode::kPrefetchOnly,
-                                 "WHATEVER"));
+  EXPECT_TRUE(IsValidHttpMethod("GET"));
+  EXPECT_TRUE(IsValidHttpMethod("HEAD"));
+  EXPECT_FALSE(IsValidHttpMethod("OPTIONS"));
+  EXPECT_FALSE(IsValidHttpMethod("POST"));
+  EXPECT_FALSE(IsValidHttpMethod("TRACE"));
+  EXPECT_FALSE(IsValidHttpMethod("WHATEVER"));
 }
 
 TEST_F(PrerenderTest, PrerenderContentsIncrementsByteCount) {
@@ -1691,6 +1636,16 @@ TEST_F(PrerenderTest, PrerenderContentsIncrementsByteCount) {
   prerender_contents->AddNetworkBytes(12);
   EXPECT_TRUE(observer.network_bytes_changed());
   EXPECT_EQ(12, prerender_contents->network_bytes());
+}
+
+TEST_F(PrerenderTest, NoPrerenderInSingleProcess) {
+  GURL url("http://www.google.com/");
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  ASSERT_TRUE(command_line != nullptr);
+  command_line->AppendSwitch(switches::kSingleProcess);
+  EXPECT_FALSE(AddSimplePrerender(url));
+  histogram_tester().ExpectUniqueSample("Prerender.FinalStatus",
+                                        FINAL_STATUS_SINGLE_PROCESS, 1);
 }
 
 }  // namespace prerender

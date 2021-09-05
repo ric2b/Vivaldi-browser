@@ -16,4 +16,6 @@ napper@chromium.org
 sclittle@chromium.org
 toyoshim@chromium.org
 
-# COMPONENT: UI>Browser>Language>Translate
+# Specialized reviewers
+# UMA and UKM translate metrics
+curranmax@chromium.org

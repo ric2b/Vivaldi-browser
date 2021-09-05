@@ -26,7 +26,7 @@ class InstallationState;
 class InitialPreferences;
 
 // Encapsulates the state of the current installation operation. This class
-// interprets the command-line arguments and master preferences and determines
+// interprets the command-line arguments and initial preferences and determines
 // the operations to be performed.
 class InstallerState {
  public:
@@ -68,21 +68,22 @@ class InstallerState {
   // flag is set is to be operated on.
   bool is_msi() const { return msi_; }
 
-  // True if this installer is started with the "--vivaldi" option
-  bool is_vivaldi() const { return is_vivaldi_; }
-
   // True if this installer is started with the "--vivaldi-update" option
   bool is_vivaldi_update() const { return is_vivaldi_update_; }
 
   // True if this installer is started with the "--vivaldi-standalone" option
-  bool is_standalone() const { return is_standalone_; }
+  bool is_vivaldi_standalone() const { return is_vivaldi_standalone_; }
 
   // True if this installer is started with the
   // "--vivaldi-register-standalone" option
-  bool register_standalone() const { return register_standalone_; }
+  bool is_vivaldi_register_standalone() const {
+    return is_vivaldi_register_standalone_;
+  }
+
+  bool is_vivaldi_silent_update() const { return is_vivaldi_silent_update_; }
 
   // True if the --verbose-logging command-line flag is set or if the
-  // verbose_logging master preferences option is true.
+  // verbose_logging initial preferences option is true.
   bool verbose_logging() const { return verbose_logging_; }
 
   HKEY root_key() const { return root_key_; }
@@ -143,14 +144,17 @@ class InstallerState {
   bool verbose_logging_;
 
   // Vivaldi specific.
-  bool is_vivaldi_ = false;
   bool is_vivaldi_update_ = false;
-  bool is_standalone_ = false;
-  bool register_standalone_ = false;
+  bool is_vivaldi_standalone_ = false;
+  bool is_vivaldi_register_standalone_ = false;
+  bool is_vivaldi_silent_update_ = false;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InstallerState);
 };
+
+// Marker for Vivaldi-specific changes.
+constexpr bool kVivaldi = true;
 
 }  // namespace installer
 

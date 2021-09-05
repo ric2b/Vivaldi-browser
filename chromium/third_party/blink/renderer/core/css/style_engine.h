@@ -62,6 +62,8 @@
 
 namespace blink {
 
+class CounterStyle;
+class CounterStyleMap;
 class CSSFontSelector;
 class CSSStyleSheet;
 class FontSelector;
@@ -154,7 +156,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       const HeapVector<Member<CSSStyleSheet>>& new_sheets);
   void AddedCustomElementDefaultStyles(
       const HeapVector<Member<CSSStyleSheet>>& default_styles);
-  void MediaQueriesChangedInScope(TreeScope&);
   void WatchedSelectorsChanged();
   void InitialStyleChanged();
   void ColorSchemeChanged();
@@ -165,7 +166,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void InitialViewportChanged();
   void ViewportRulesChanged();
   void HtmlImportAddedOrRemoved();
-  void V0ShadowAddedOnV1Document();
 
   void InjectSheet(const StyleSheetKey&, StyleSheetContents*,
                    WebDocument::CSSOrigin =
@@ -229,10 +229,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void ShadowRootInsertedToDocument(ShadowRoot&);
   void ShadowRootRemovedFromDocument(ShadowRoot*);
-  void AddTreeBoundaryCrossingScope(const TreeScope&);
-  const TreeOrderedList& TreeBoundaryCrossingScopes() const {
-    return tree_boundary_crossing_scopes_;
-  }
   void ResetAuthorStyle(TreeScope&);
 
   StyleResolver& GetStyleResolver() const {
@@ -297,6 +293,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void EnsureUAStyleForXrOverlay();
   void EnsureUAStyleForElement(const Element&);
   void EnsureUAStyleForPseudoElement(PseudoId);
+  void EnsureUAStyleForForcedColors();
 
   void PlatformColorsChanged();
 
@@ -383,6 +380,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       const AtomicString& animation_name);
   StyleRuleScrollTimeline* FindScrollTimelineRule(const AtomicString& name);
 
+  CounterStyleMap* GetUserCounterStyleMap() { return user_counter_style_map_; }
+  const CounterStyle& FindCounterStyleAcrossScopes(const AtomicString&,
+                                                   const TreeScope*) const;
+
   DocumentStyleEnvironmentVariables& EnsureEnvironmentVariables();
 
   scoped_refptr<StyleInitialData> MaybeCreateAndGetInitialData();
@@ -399,10 +400,16 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void UpdateViewport();
   void UpdateViewportStyle();
   void UpdateStyleAndLayoutTree();
-  void RecalcStyle();
+  // To be called from layout when container queries change for the container.
+  void UpdateStyleAndLayoutTreeForContainer(Element& container);
+  void RecalcStyle() { RecalcStyle({}, StyleRecalcContext()); }
+
   void ClearEnsuredDescendantStyles(Element& element);
   void RebuildLayoutTree();
   bool InRebuildLayoutTree() const { return in_layout_tree_rebuild_; }
+  bool InContainerQueryStyleRecalc() const {
+    return in_container_query_style_recalc_;
+  }
 
   void SetColorSchemeFromMeta(const CSSValue* color_scheme);
   const CSSValue* GetMetaColorSchemeValue() const { return meta_color_scheme_; }
@@ -413,8 +420,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void UpdateColorSchemeBackground(bool color_scheme_changed = false);
   Color ForcedBackgroundColor() const { return forced_background_color_; }
   Color ColorAdjustBackgroundColor() const;
-
-  TreeScopeStyleSheetCollection* StyleSheetCollectionFor(TreeScope&);
 
   void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override { return "StyleEngine"; }
@@ -432,6 +437,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   }
 
   TreeScopeStyleSheetCollection& EnsureStyleSheetCollectionFor(TreeScope&);
+  TreeScopeStyleSheetCollection* StyleSheetCollectionFor(TreeScope&);
   bool ShouldUpdateDocumentStyleSheetCollection() const;
   bool ShouldUpdateShadowTreeStyleSheetCollection() const;
 
@@ -507,7 +513,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void UpdateStyleSheetList(TreeScope&);
 
   // Returns true if any @font-face rules are added or removed.
-  bool ClearFontFaceCacheAndAddUserFonts();
+  bool ClearFontFaceCacheAndAddUserFonts(
+      const ActiveStyleSheetVector& user_sheets);
 
   void ClearKeyframeRules() { keyframes_rule_map_.clear(); }
   void ClearPropertyRules();
@@ -523,6 +530,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void AddPropertyRules(const RuleSet&);
   void AddScrollTimelineRules(const RuleSet&);
 
+  CounterStyleMap& EnsureUserCounterStyleMap();
+
   void UpdateColorScheme();
   bool SupportsDarkColorScheme();
   void UpdateForcedBackgroundColor();
@@ -531,6 +540,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void ViewportDefiningElementDidChange();
   void PropagateWritingModeAndDirectionToHTMLRoot();
+
+  void RecalcStyle(StyleRecalcChange, const StyleRecalcContext&);
 
   Member<Document> document_;
 
@@ -577,12 +588,12 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   bool user_style_dirty_{false};
   UnorderedTreeScopeSet dirty_tree_scopes_;
   UnorderedTreeScopeSet active_tree_scopes_;
-  TreeOrderedList tree_boundary_crossing_scopes_;
 
   String preferred_stylesheet_set_name_;
 
   bool uses_rem_units_{false};
   bool in_layout_tree_rebuild_{false};
+  bool in_container_query_style_recalc_{false};
   bool in_dom_removal_{false};
   bool viewport_style_dirty_{false};
   bool fonts_need_update_{false};
@@ -633,6 +644,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   using KeyframesRuleMap =
       HeapHashMap<AtomicString, Member<StyleRuleKeyframes>>;
   KeyframesRuleMap keyframes_rule_map_;
+
+  Member<CounterStyleMap> user_counter_style_map_;
 
   HeapHashMap<AtomicString, Member<StyleRuleScrollTimeline>>
       scroll_timeline_map_;

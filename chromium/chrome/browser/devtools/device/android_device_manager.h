@@ -28,19 +28,17 @@ class StreamSocket;
 
 class AndroidDeviceManager {
  public:
-  using CommandCallback =
-      base::Callback<void(int, const std::string&)>;
+  using CommandCallback = base::OnceCallback<void(int, const std::string&)>;
   using SocketCallback =
-      base::Callback<void(int result, std::unique_ptr<net::StreamSocket>)>;
+      base::OnceCallback<void(int result, std::unique_ptr<net::StreamSocket>)>;
   // |body_head| should contain the body (WebSocket frame data) part that has
   // been read during processing the header (WebSocket handshake).
   using HttpUpgradeCallback =
-      base::Callback<void(int result,
-                          const std::string& extensions,
-                          const std::string& body_head,
-                          std::unique_ptr<net::StreamSocket>)>;
-  using SerialsCallback =
-      base::Callback<void(const std::vector<std::string>&)>;
+      base::OnceCallback<void(int result,
+                              const std::string& extensions,
+                              const std::string& body_head,
+                              std::unique_ptr<net::StreamSocket>)>;
+  using SerialsCallback = base::OnceCallback<void(std::vector<std::string>)>;
 
   struct BrowserInfo {
     BrowserInfo();
@@ -117,17 +115,16 @@ class AndroidDeviceManager {
    public:
     void QueryDeviceInfo(const DeviceInfoCallback& callback);
 
-    void OpenSocket(const std::string& socket_name,
-                    const SocketCallback& callback);
+    void OpenSocket(const std::string& socket_name, SocketCallback callback);
 
     void SendJsonRequest(const std::string& socket_name,
                          const std::string& request,
-                         const CommandCallback& callback);
+                         CommandCallback callback);
 
     void HttpUpgrade(const std::string& socket_name,
                      const std::string& path,
                      const std::string& extensions,
-                     const HttpUpgradeCallback& callback);
+                     HttpUpgradeCallback callback);
     AndroidWebSocket* CreateWebSocket(
         const std::string& socket_name,
         const std::string& path,
@@ -165,25 +162,25 @@ class AndroidDeviceManager {
     typedef AndroidDeviceManager::SocketCallback SocketCallback;
     typedef AndroidDeviceManager::CommandCallback CommandCallback;
 
-    virtual void QueryDevices(const SerialsCallback& callback) = 0;
+    virtual void QueryDevices(SerialsCallback callback) = 0;
 
     virtual void QueryDeviceInfo(const std::string& serial,
                                  const DeviceInfoCallback& callback) = 0;
 
     virtual void OpenSocket(const std::string& serial,
                             const std::string& socket_name,
-                            const SocketCallback& callback) = 0;
+                            SocketCallback callback) = 0;
 
-    virtual void SendJsonRequest(const std::string& serial,
-                                 const std::string& socket_name,
-                                 const std::string& request,
-                                 const CommandCallback& callback);
+    void SendJsonRequest(const std::string& serial,
+                         const std::string& socket_name,
+                         const std::string& request,
+                         CommandCallback callback);
 
     virtual void HttpUpgrade(const std::string& serial,
                              const std::string& socket_name,
                              const std::string& path,
                              const std::string& extensions,
-                             const HttpUpgradeCallback& callback);
+                             HttpUpgradeCallback callback);
 
     virtual void ReleaseDevice(const std::string& serial);
 
@@ -210,9 +207,9 @@ class AndroidDeviceManager {
   static std::string GetBrowserName(const std::string& socket,
                                     const std::string& package);
   using RunCommandCallback =
-      base::Callback<void(const std::string&, const CommandCallback&)>;
+      base::OnceCallback<void(const std::string&, CommandCallback)>;
 
-  static void QueryDeviceInfo(const RunCommandCallback& command_callback,
+  static void QueryDeviceInfo(RunCommandCallback command_callback,
                               const DeviceInfoCallback& callback);
 
   struct DeviceDescriptor {

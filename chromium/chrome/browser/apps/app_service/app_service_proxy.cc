@@ -8,11 +8,12 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -30,13 +31,13 @@
 #include "ui/display/types/display_constants.h"
 #include "url/url_constants.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/apps/app_service/lacros_apps.h"
 #include "chrome/browser/apps/app_service/uninstall_dialog.h"
 #include "chrome/browser/chromeos/child_accounts/time_limits/app_time_limit_interface.h"
+#include "chrome/browser/chromeos/crosapi/browser_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/supervised_user/grit/supervised_user_unscaled_resources.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user.h"
 #include "extensions/common/constants.h"
 #endif
@@ -109,7 +110,7 @@ AppServiceProxy::AppServiceProxy(Profile* profile)
 }
 
 AppServiceProxy::~AppServiceProxy() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   AppRegistryCacheWrapper::Get().RemoveAppRegistryCache(&cache_);
 #endif
 }
@@ -136,7 +137,7 @@ void AppServiceProxy::Initialize() {
     return;
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   const user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile_);
   if (user) {
@@ -160,7 +161,7 @@ void AppServiceProxy::Initialize() {
     receivers_.Add(this, subscriber.InitWithNewPipeAndPassReceiver());
     app_service_->RegisterSubscriber(std::move(subscriber), nullptr);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     // The AppServiceProxy is also a publisher, of a variety of app types. That
     // responsibility isn't intrinsically part of the AppServiceProxy, but doing
     // that here, for each such app type, is as good a place as any.
@@ -175,26 +176,22 @@ void AppServiceProxy::Initialize() {
     }
     crostini_apps_ = std::make_unique<CrostiniApps>(app_service_, profile_);
     extension_apps_ = std::make_unique<ExtensionAppsChromeOs>(
-        app_service_, profile_, apps::mojom::AppType::kExtension,
-        &instance_registry_);
+        app_service_, profile_, &instance_registry_);
     if (!g_omit_plugin_vm_apps_for_testing_) {
       plugin_vm_apps_ = std::make_unique<PluginVmApps>(app_service_, profile_);
     }
-    if (chromeos::features::IsLacrosSupportEnabled()) {
-      // LacrosApps uses LacrosManager, which is a singleton. Don't create an
-      // instance of LacrosApps for the lock screen app profile, as we want to
-      // maintain a single instance of LacrosApps.
-      // TODO(jamescook): Multiprofile support. Consider switching to observers.
-      if (!chromeos::ProfileHelper::IsLockScreenAppProfile(profile_)) {
-        lacros_apps_ = std::make_unique<LacrosApps>(app_service_);
-      }
+    // Lacros does not support multi-signin, so only create for the primary
+    // profile. This also avoids creating an instance for the lock screen app
+    // profile and ensures there is only one instance of LacrosApps.
+    if (crosapi::browser_util::IsLacrosEnabled() &&
+        chromeos::ProfileHelper::IsPrimaryProfile(profile_)) {
+      lacros_apps_ = std::make_unique<LacrosApps>(app_service_);
     }
     web_apps_ = std::make_unique<WebAppsChromeOs>(app_service_, profile_,
                                                   &instance_registry_);
 #else
     web_apps_ = std::make_unique<WebApps>(app_service_, profile_);
-    extension_apps_ = std::make_unique<ExtensionApps>(
-        app_service_, profile_, apps::mojom::AppType::kExtension);
+    extension_apps_ = std::make_unique<ExtensionApps>(app_service_, profile_);
 #endif
 
     // Asynchronously add app icon source, so we don't do too much work in the
@@ -215,7 +212,7 @@ apps::AppRegistryCache& AppServiceProxy::AppRegistryCache() {
   return cache_;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 apps::InstanceRegistry& AppServiceProxy::InstanceRegistry() {
   return instance_registry_;
 }
@@ -254,7 +251,7 @@ void AppServiceProxy::Launch(const std::string& app_id,
   if (app_service_.is_connected()) {
     cache_.ForOneApp(app_id, [this, event_flags, launch_source,
                               display_id](const apps::AppUpdate& update) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       if (MaybeShowLaunchPreventionDialog(update)) {
         return;
       }
@@ -281,7 +278,7 @@ void AppServiceProxy::LaunchAppWithFiles(
   if (app_service_.is_connected()) {
     cache_.ForOneApp(app_id, [this, container, event_flags, launch_source,
                               &file_paths](const apps::AppUpdate& update) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       if (MaybeShowLaunchPreventionDialog(update)) {
         return;
       }
@@ -319,7 +316,7 @@ void AppServiceProxy::LaunchAppWithIntent(
   if (app_service_.is_connected()) {
     cache_.ForOneApp(app_id, [this, event_flags, &intent, launch_source,
                               display_id](const apps::AppUpdate& update) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       if (MaybeShowLaunchPreventionDialog(update)) {
         return;
       }
@@ -360,7 +357,7 @@ void AppServiceProxy::SetPermission(const std::string& app_id,
 
 void AppServiceProxy::Uninstall(const std::string& app_id,
                                 gfx::NativeWindow parent_window) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   UninstallImpl(app_id, parent_window, base::DoNothing());
 #else
   // On non-ChromeOS, publishers run the remove dialog.
@@ -380,7 +377,7 @@ void AppServiceProxy::UninstallSilently(
   }
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void AppServiceProxy::PauseApps(
     const std::map<std::string, PauseData>& pause_data) {
   if (!app_service_.is_connected()) {
@@ -430,7 +427,7 @@ void AppServiceProxy::UnpauseApps(const std::set<std::string>& app_ids) {
     app_service_->UnpauseApps(app_type, app_id);
   }
 }
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void AppServiceProxy::StopApp(const std::string& app_id) {
   if (!app_service_.is_connected()) {
@@ -477,7 +474,7 @@ void AppServiceProxy::OpenNativeSettings(const std::string& app_id) {
 
 void AppServiceProxy::FlushMojoCallsForTesting() {
   app_service_impl_->FlushMojoCallsForTesting();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (built_in_chrome_os_apps_)
     built_in_chrome_os_apps_->FlushMojoCallsForTesting();
   crostini_apps_->FlushMojoCallsForTesting();
@@ -505,7 +502,7 @@ apps::IconLoader* AppServiceProxy::OverrideInnerIconLoaderForTesting(
   return old;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void AppServiceProxy::ReInitializeCrostiniForTesting(Profile* profile) {
   if (app_service_.is_connected()) {
     crostini_apps_->ReInitializeForTesting(app_service_, profile);
@@ -589,7 +586,7 @@ std::vector<IntentLaunchInfo> AppServiceProxy::GetAppsForFiles(
 }
 
 void AppServiceProxy::SetArcIsRegistered() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (arc_is_registered_) {
     return;
   }
@@ -635,7 +632,7 @@ void AppServiceProxy::AddAppIconSource(Profile* profile) {
 }
 
 void AppServiceProxy::Shutdown() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   uninstall_dialogs_.clear();
 
   if (app_service_.is_connected()) {
@@ -674,7 +671,7 @@ void AppServiceProxy::InitializePreferredApps(
   preferred_apps_.Init(preferred_apps);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void AppServiceProxy::UninstallImpl(const std::string& app_id,
                                     gfx::NativeWindow parent_window,
                                     base::OnceClosure callback) {
@@ -850,17 +847,17 @@ void AppServiceProxy::OnPauseDialogClosed(apps::mojom::AppType app_type,
     app_service_->PauseApp(app_type, app_id);
   }
 }
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void AppServiceProxy::OnAppUpdate(const apps::AppUpdate& update) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if ((update.PausedChanged() &&
        update.Paused() == apps::mojom::OptionalBool::kTrue) ||
       (update.ReadinessChanged() &&
        update.Readiness() == apps::mojom::Readiness::kUninstalledByUser)) {
     pending_pause_requests_.MaybeRemoveApp(update.AppId());
   }
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (!update.ReadinessChanged() ||
       update.Readiness() != apps::mojom::Readiness::kUninstalledByUser) {

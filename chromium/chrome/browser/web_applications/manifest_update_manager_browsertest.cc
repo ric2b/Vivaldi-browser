@@ -16,7 +16,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -40,6 +39,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/url_loader_interceptor.h"
@@ -181,10 +181,7 @@ class UpdateCheckResultAwaiter {
 
 class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
  public:
-  ManifestUpdateManagerBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kDesktopPWAsLocalUpdating);
-  }
+  ManifestUpdateManagerBrowserTest() {}
   ManifestUpdateManagerBrowserTest(const ManifestUpdateManagerBrowserTest&) =
       delete;
   ManifestUpdateManagerBrowserTest& operator=(
@@ -268,7 +265,8 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
     base::RunLoop run_loop;
     GetProvider().install_manager().InstallWebAppFromManifestWithFallback(
         browser()->tab_strip_model()->GetActiveWebContents(),
-        /*force_shortcut_app=*/false, WebappInstallSource::OMNIBOX_INSTALL_ICON,
+        /*force_shortcut_app=*/false,
+        webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON,
         base::BindOnce(TestAcceptDialogCallback),
         base::BindLambdaForTesting(
             [&](const AppId& new_app_id, InstallResultCode code) {
@@ -293,9 +291,10 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
     GetProvider().pending_app_manager().Install(
         std::move(install_options),
         base::BindLambdaForTesting(
-            [&](const GURL& installed_app_url, InstallResultCode code) {
+            [&](const GURL& installed_app_url,
+                PendingAppManager::InstallResult result) {
               EXPECT_EQ(installed_app_url, app_url);
-              EXPECT_EQ(code, InstallResultCode::kSuccessNewInstall);
+              EXPECT_EQ(result.code, InstallResultCode::kSuccessNewInstall);
               run_loop.Quit();
             }));
     run_loop.Run();
@@ -326,8 +325,6 @@ class ManifestUpdateManagerBrowserTest : public InProcessBrowserTest {
   net::EmbeddedTestServer http_server_;
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
   base::Optional<base::RunLoop> shortcut_run_loop_;
   base::Optional<SkColor> updated_shortcut_top_left_color_;
   ScopedOsHooksSuppress os_hooks_suppress_;
@@ -404,7 +401,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   GURL url = GetAppURL();
   UpdateCheckResultAwaiter awaiter(browser(), url);
   ui_test_utils::NavigateToURL(browser(), url);
-  GetProvider().install_finalizer().UninstallWebAppFromSyncByUser(
+  GetProvider().install_finalizer().UninstallExternalAppByUser(
       app_id, base::DoNothing());
   EXPECT_EQ(std::move(awaiter).AwaitNextResult(),
             ManifestUpdateResult::kAppUninstalled);
@@ -496,9 +493,9 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
 
   OverrideManifest(kManifestTemplate, {"b.html", kInstallableIconList});
   EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
-            ManifestUpdateResult::kAppUpToDate);
+            ManifestUpdateResult::kAppIdMismatch);
   histogram_tester_.ExpectBucketCount(kUpdateHistogramName,
-                                      ManifestUpdateResult::kAppUpToDate, 1);
+                                      ManifestUpdateResult::kAppIdMismatch, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
@@ -623,7 +620,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   AppId app_id = InstallWebApp();
   EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorBLUE);
 
-  // Check that OnWebAppInstalled and OnWebAppUninstalled are not called
+  // Check that OnWebAppInstalled and OnWebAppWillBeUninstalled are not called
   // if in-place web app update happens.
   WebAppInstallObserver install_observer(&GetProvider().registrar());
   install_observer.SetWebAppInstalledDelegate(
@@ -710,7 +707,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   OverrideManifest(kManifestTemplate, {"blue", kInstallableIconList});
   AppId app_id = InstallPolicyApp();
   EXPECT_FALSE(
-      GetProvider().install_finalizer().CanUserUninstallFromSync(app_id));
+      GetProvider().install_finalizer().CanUserUninstallExternalApp(app_id));
 
   OverrideManifest(kManifestTemplate, {"red", kInstallableIconList});
   EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),
@@ -722,7 +719,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
   // Policy installed apps should continue to be not uninstallable by the user
   // after updating.
   EXPECT_FALSE(
-      GetProvider().install_finalizer().CanUserUninstallFromSync(app_id));
+      GetProvider().install_finalizer().CanUserUninstallExternalApp(app_id));
 }
 
 IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,

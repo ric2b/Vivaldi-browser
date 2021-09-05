@@ -41,7 +41,6 @@ std::unique_ptr<WebNavigationParams> WebNavigationParams::CreateFromInfo(
   result->navigation_timings.input_start = info.input_start;
   result->initiator_origin_trial_features =
       info.initiator_origin_trial_features;
-  result->ip_address_space = info.initiator_address_space;
   result->frame_policy = info.frame_policy;
   result->had_transient_activation = info.url_request.HasUserGesture();
   return result;
@@ -102,6 +101,7 @@ void WebNavigationParams::FillStaticResponse(WebNavigationParams* params,
   params->response = WebURLResponse(params->url);
   params->response.SetMimeType(mime_type);
   params->response.SetTextEncodingName(text_encoding);
+  params->response.SetHttpStatusCode(params->http_status_code);
   FillBodyLoader(params, data);
 }
 

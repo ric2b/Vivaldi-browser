@@ -903,6 +903,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessInternalsHitTestBrowserTest,
   rwhv_root->OnScrollEvent(&scroll_event);
   ack_observer.Wait();
 
+  // Wait until renderer's main thread is synced.
+  observer.Wait();
+
   // Verify the div scrolled.
   double div_scroll_top = div_scroll_top_start;
   EXPECT_TRUE(ExecuteScriptAndExtractDouble(
@@ -2038,6 +2041,9 @@ class SitePerProcessEmulatedTouchBrowserTest
     // Verify the root receives the GesturePinchBegin or GestureScrollBegin,
     // depending on |test_type|.
     root_gesture_event_observer.Wait();
+
+    // Wait for all remaining input events to be processed by root_rwhv
+    RunUntilInputProcessed(root_rwhv->GetRenderWidgetHost());
 
     // Shut down.
     touch_emulator->Disable();
@@ -3576,9 +3582,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
   // Send MouseUp to location over parent frame, which should still go to
   // the child frame, but the parent frame should receive a MouseMove with
   // the kRelativeMotionEvent modifier set.
-  blink::WebMouseEvent mouse_event;
-  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
-  mouse_event.SetModifiers(blink::WebInputEvent::kNoModifiers);
+  blink::WebMouseEvent mouse_event(
+      blink::WebInputEvent::Type::kMouseUp, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   SetWebEventPositions(&mouse_event, gfx::Point(2, 2), root_view);
   RouteMouseEventAndWaitUntilDispatch(router, root_view, child_view,
                                       &mouse_event);

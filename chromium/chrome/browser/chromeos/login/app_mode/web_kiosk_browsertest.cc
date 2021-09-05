@@ -7,7 +7,6 @@
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_test_api.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/app_mode/kiosk_launch_controller.h"
 #include "chrome/browser/chromeos/login/test/device_state_mixin.h"
@@ -19,15 +18,17 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/ownership/fake_owner_settings_service.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client_test_helper.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
 #include "chrome/browser/web_applications/components/web_application_info.h"
 #include "components/account_id/account_id.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/browser_test.h"
-#include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/test/event_generator.h"
 
@@ -75,19 +76,17 @@ class WebKioskTest : public OobeBaseTest {
   const AccountId& account_id() { return account_id_; }
 
   void PrepareAppLaunch() {
-    // Wait for the Kiosk App configuration to reload.
-    content::WindowedNotificationObserver apps_loaded_signal(
-        chrome::NOTIFICATION_KIOSK_APPS_LOADED,
-        content::NotificationService::AllSources());
     std::vector<policy::DeviceLocalAccount> device_local_accounts = {
         policy::DeviceLocalAccount(
             policy::WebKioskAppBasicInfo(kAppInstallUrl, "", ""),
             kAppInstallUrl)};
 
     settings_ = std::make_unique<ScopedDeviceSettings>();
+    int ui_update_count = ash::LoginScreenTestApi::GetUiUpdateCount();
     policy::SetDeviceLocalAccounts(settings_->owner_settings_service(),
                                    device_local_accounts);
-    apps_loaded_signal.Wait();
+    // Wait for the Kiosk App configuration to reload.
+    ash::LoginScreenTestApi::WaitForUiUpdate(ui_update_count);
   }
 
   void MakeAppAlreadyInstalled() {
@@ -281,6 +280,22 @@ IN_PROC_BROWSER_TEST_F(WebKioskTest, KeyboardConfigPolicy) {
   KioskSessionInitializedWaiter().Wait();
 
   ExpectKeyboardConfig();
+}
+
+IN_PROC_BROWSER_TEST_F(WebKioskTest, OpenA11ySettings) {
+  SetOnline(true);
+  PrepareAppLaunch();
+  LaunchApp();
+  KioskSessionInitializedWaiter().Wait();
+
+  auto* settings_manager = chrome::SettingsWindowManager::GetInstance();
+  Profile* profile = ProfileManager::GetPrimaryUserProfile();
+
+  settings_manager->ShowOSSettings(
+      profile, chromeos::settings::mojom::kManageAccessibilitySubpagePath);
+
+  Browser* settings_browser = settings_manager->FindBrowserForProfile(profile);
+  ASSERT_TRUE(settings_browser);
 }
 
 }  // namespace chromeos

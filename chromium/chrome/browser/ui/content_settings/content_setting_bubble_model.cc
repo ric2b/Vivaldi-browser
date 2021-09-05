@@ -71,6 +71,7 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/cpp/device_features.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -225,7 +226,6 @@ void ContentSettingSimpleBubbleModel::SetTitle() {
       {ContentSettingsType::COOKIES, IDS_BLOCKED_COOKIES_TITLE},
       {ContentSettingsType::IMAGES, IDS_BLOCKED_IMAGES_TITLE},
       {ContentSettingsType::JAVASCRIPT, IDS_BLOCKED_JAVASCRIPT_TITLE},
-      {ContentSettingsType::PLUGINS, IDS_BLOCKED_PLUGINS_TITLE},
       {ContentSettingsType::MIXEDSCRIPT,
        IDS_BLOCKED_DISPLAYING_INSECURE_CONTENT_TITLE},
       {ContentSettingsType::PPAPI_BROKER, IDS_BLOCKED_PPAPI_BROKER_TITLE},
@@ -312,11 +312,6 @@ void ContentSettingSimpleBubbleModel::SetManageText() {
 void ContentSettingSimpleBubbleModel::OnManageButtonClicked() {
   if (delegate())
     delegate()->ShowContentSettingsPage(content_type());
-
-  if (content_type() == ContentSettingsType::PLUGINS) {
-    content_settings::RecordPluginsAction(
-        content_settings::PLUGINS_ACTION_CLICKED_MANAGE_PLUGIN_BLOCKING);
-  }
 
   if (content_type() == ContentSettingsType::POPUPS) {
     content_settings::RecordPopupsAction(
@@ -515,81 +510,6 @@ void ContentSettingRPHBubbleModel::PerformActionForSelectedItem() {
     IgnoreProtocolHandler();
   else
     NOTREACHED();
-}
-
-class ContentSettingPluginBubbleModel : public ContentSettingSimpleBubbleModel {
- public:
-  ContentSettingPluginBubbleModel(Delegate* delegate,
-                                  WebContents* web_contents);
-
- private:
-  void OnLearnMoreClicked() override;
-  void OnCustomLinkClicked() override;
-
-  void RunPluginsOnPage();
-
-  DISALLOW_COPY_AND_ASSIGN(ContentSettingPluginBubbleModel);
-};
-
-ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
-    Delegate* delegate,
-    WebContents* web_contents)
-    : ContentSettingSimpleBubbleModel(delegate,
-                                      web_contents,
-                                      ContentSettingsType::PLUGINS) {
-  const GURL& url = web_contents->GetURL();
-  bool managed_by_user =
-      GetSettingManagedByUser(url, content_type(), GetProfile(), nullptr);
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(GetProfile());
-  ContentSetting setting = PluginUtils::GetFlashPluginContentSetting(
-      map, url::Origin::Create(url), url, nullptr);
-
-  // If the setting is not managed by the user, hide the "Manage" button.
-  if (!managed_by_user)
-    set_manage_text_style(ContentSettingBubbleModel::ManageTextStyle::kNone);
-
-  // The user can only load Flash dynamically if not on the BLOCK setting.
-  if (setting != CONTENT_SETTING_BLOCK) {
-    set_custom_link(l10n_util::GetStringUTF16(IDS_BLOCKED_PLUGINS_LOAD_ALL));
-    // Disable the "Run all plugins this time" link if the user already clicked
-    // on the link and ran all plugins.
-    set_custom_link_enabled(
-        PageSpecificContentSettings::GetForFrame(web_contents->GetMainFrame())
-            ->load_plugins_link_enabled());
-  }
-
-  set_show_learn_more(true);
-
-  content_settings::RecordPluginsAction(
-      content_settings::PLUGINS_ACTION_DISPLAYED_BUBBLE);
-}
-
-void ContentSettingPluginBubbleModel::OnLearnMoreClicked() {
-  if (delegate())
-    delegate()->ShowLearnMorePage(ContentSettingsType::PLUGINS);
-
-  content_settings::RecordPluginsAction(
-      content_settings::PLUGINS_ACTION_CLICKED_LEARN_MORE);
-}
-
-void ContentSettingPluginBubbleModel::OnCustomLinkClicked() {
-  base::RecordAction(UserMetricsAction("ClickToPlay_LoadAll_Bubble"));
-  content_settings::RecordPluginsAction(
-      content_settings::PLUGINS_ACTION_CLICKED_RUN_ALL_PLUGINS_THIS_TIME);
-
-  RunPluginsOnPage();
-}
-
-void ContentSettingPluginBubbleModel::RunPluginsOnPage() {
-#if BUILDFLAG(ENABLE_PLUGINS)
-  // TODO(bauerb): We should send the identifiers of blocked plugins here.
-  ChromePluginServiceFilter::GetInstance()->AuthorizeAllPlugins(
-      web_contents(), true, std::string());
-#endif
-  set_custom_link_enabled(false);
-  PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame())
-      ->set_load_plugins_link_enabled(false);
 }
 
 // ContentSettingSingleRadioGroup ----------------------------------------------
@@ -1041,7 +961,7 @@ void ContentSettingMediaStreamBubbleModel::SetRadioGroup() {
   int radio_block_label_id = 0;
   if (state_ & (PageSpecificContentSettings::MICROPHONE_BLOCKED |
                 PageSpecificContentSettings::CAMERA_BLOCKED)) {
-    if (blink::network_utils::IsOriginSecure(url)) {
+    if (network::IsUrlPotentiallyTrustworthy(url)) {
       radio_item_setting_[0] = CONTENT_SETTING_ALLOW;
       radio_allow_label_id = IDS_BLOCKED_MEDIASTREAM_CAMERA_ALLOW;
       if (MicrophoneAccessed())
@@ -1591,9 +1511,10 @@ ContentSettingNotificationsBubbleModel::ContentSettingNotificationsBubbleModel(
   // the correct PermissionRequestManager state. Fix that.
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents);
-  if (!manager->ShouldCurrentRequestUseQuietUI())
+  auto quiet_ui_reason = manager->ReasonForUsingQuietUi();
+  if (!quiet_ui_reason)
     return;
-  switch (manager->ReasonForUsingQuietUi()) {
+  switch (*quiet_ui_reason) {
     case QuietUiReason::kEnabledInPrefs:
     case QuietUiReason::kPredictedVeryUnlikelyGrant:
       set_message(l10n_util::GetStringUTF16(
@@ -1656,8 +1577,9 @@ void ContentSettingNotificationsBubbleModel::OnDoneButtonClicked() {
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents());
 
-  DCHECK(manager->ShouldCurrentRequestUseQuietUI());
-  switch (manager->ReasonForUsingQuietUi()) {
+  auto quiet_ui_reason = manager->ReasonForUsingQuietUi();
+  DCHECK(quiet_ui_reason);
+  switch (*quiet_ui_reason) {
     case QuietUiReason::kEnabledInPrefs:
     case QuietUiReason::kTriggeredByCrowdDeny:
     case QuietUiReason::kPredictedVeryUnlikelyGrant:
@@ -1678,7 +1600,10 @@ void ContentSettingNotificationsBubbleModel::OnCancelButtonClicked() {
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(web_contents());
 
-  switch (manager->ReasonForUsingQuietUi()) {
+  auto quiet_ui_reason = manager->ReasonForUsingQuietUi();
+  if (!quiet_ui_reason)
+    return;
+  switch (*quiet_ui_reason) {
     case QuietUiReason::kEnabledInPrefs:
     case QuietUiReason::kTriggeredByCrowdDeny:
     case QuietUiReason::kPredictedVeryUnlikelyGrant:
@@ -1716,10 +1641,6 @@ ContentSettingBubbleModel::CreateContentSettingBubbleModel(
                                                             web_contents);
   }
 
-  if (content_type == ContentSettingsType::PLUGINS) {
-    return std::make_unique<ContentSettingPluginBubbleModel>(delegate,
-                                                             web_contents);
-  }
   if (content_type == ContentSettingsType::MIXEDSCRIPT) {
     return std::make_unique<ContentSettingMixedScriptBubbleModel>(delegate,
                                                                   web_contents);

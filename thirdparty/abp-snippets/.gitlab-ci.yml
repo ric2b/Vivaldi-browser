@@ -1,0 +1,77 @@
+# This file is part of Adblock Plus <https://adblockplus.org/>,
+# Copyright (C) 2006-present eyeo GmbH
+#
+# Adblock Plus is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3 as
+# published by the Free Software Foundation.
+#
+# Adblock Plus is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Adblock Plus.  If not, see <http://www.gnu.org/licenses/>.
+#
+# This file specifies how GitLab should run the tests, linting and other checks
+# automatically when merge requests are opened. By default, this will all run
+# on GitLab provided "shared runners", without further work. However, the tests
+# will run more quickly on a "specific runner" if you'd like to set that up.
+#
+# If you'd like to provision your own specific runners for your fork of the
+# repository, you can use these Ansible roles:
+#
+# https://gitlab.com/eyeo/devops/ansible-role-adblockplus-builder
+# https://gitlab.com/eyeo/devops/ansible-role-gitlab-runner
+
+
+---
+
+stages:
+  - default
+  - pages
+
+image: "registry.gitlab.com/eyeo/docker/adblockplus-ci:node10"
+
+variables:
+  npm_config_audit: "false"
+
+.default_template:
+  stage: default
+  before_script:
+    - npm install
+  retry:
+    max: 2
+    when: stuck_or_timeout_failure
+
+tests:
+  extends: .default_template
+  script:
+    - npm test
+  cache:
+    key: global-cache
+    paths:
+      - chromium-snapshots/download-cache/
+      - firefox-snapshots/download-cache/
+
+docs:
+  extends: .default_template
+  script:
+    - npm run docs
+  artifacts:
+    paths:
+      - docs/
+    expire_in: 3 mos
+
+audit:
+  extends: .default_template
+  script:
+    - npm audit
+  allow_failure: true
+
+.pages:
+  stage: pages
+  dependencies:
+    - docs
+
+include: ".gitlab-pages.yml"

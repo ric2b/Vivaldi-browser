@@ -26,6 +26,10 @@
 #include "ui/gfx/range/range.h"
 #include "url/gurl.h"
 
+#if defined(OS_ANDROID)
+#include "base/android/scoped_java_ref.h"
+#endif
+
 class AutocompleteProvider;
 class OmniboxPedal;
 class SuggestionAnswer;
@@ -185,11 +189,25 @@ struct AutocompleteMatch {
 
   AutocompleteMatch& operator=(const AutocompleteMatch& match);
 
+#if defined(OS_ANDROID)
+  // Returns a corresponding Java object, creating it if necessary.
+  // NOTE: Android specific methods are defined in autocomplete_match_android.cc
+  base::android::ScopedJavaLocalRef<jobject> GetOrCreateJavaObject(
+      JNIEnv* env) const;
+
+  // Returns a corresponding Java Class object.
+  static jclass GetClazz(JNIEnv* env);
+#endif
+
 #if (!defined(OS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !defined(OS_IOS)
   // Gets the vector icon identifier for the icon to be shown for this match. If
   // |is_bookmark| is true, returns a bookmark icon rather than what the type
   // would normally determine.  Note that in addition to |type|, the icon chosen
   // may depend on match contents (e.g. Drive |document_type| or |pedal|).
+  // The reason |is_bookmark| is passed as a parameter and is not baked into the
+  // AutocompleteMatch is likely that 1) this info is not used elsewhere in the
+  // Autocomplete machinery except before displaying the match and 2) obtaining
+  // this info is trivially done by calling BookmarkModel::IsBookmarked().
   const gfx::VectorIcon& GetVectorIcon(bool is_bookmark) const;
 #endif
 
@@ -526,6 +544,16 @@ struct AutocompleteMatch {
   // The inline autocompletion to display after the user's input in the
   // omnibox, if this match becomes the default match.  It may be empty.
   base::string16 inline_autocompletion;
+  // Whether rich autocompletion triggered; i.e. this suggestion *is or could
+  // have been* rich autocompleted. This is usually redundant and checking
+  // whether either of |prefix_autocompletion| or |split_autocompletion| are
+  // non-empty should be used instead to determine if this suggestion *is* rich
+  // autocompelted. But for counterfactual variations, the latter 2 aren't
+  // copied when deduping matches to avoid showing rich autocompletion and so
+  // can't be used to trigger logging.
+  // TODO(manukh): remove |rich_autocompletion_triggered| when counterfactual
+  // experiments end.
+  bool rich_autocompletion_triggered = false;
   // The inline autocompletion to display before the user's input in the
   // omnibox, if this match becomes the default match. Always empty if
   // non-prefix autocompletion is disabled.
@@ -700,6 +728,20 @@ struct AutocompleteMatch {
       const base::string16& text,
       const ACMatchClassifications& classifications,
       const std::string& provider_name = "");
+
+ private:
+#if defined(OS_ANDROID)
+  // Corresponding Java object.
+  // This element should not be copied with the rest of the AutocompleteMatch
+  // object to ensure consistent 1:1 relationship between the objects.
+  // This object should never be accessed directly. To acquire a reference to
+  // java object, call the GetOrCreateJavaObject().
+  // Note that this object is lazily constructed to avoid creating Java matches
+  // for throw away AutocompleteMatch objects, eg. during Classify() or
+  // QualifyPartialUrlQuery() calls.
+  // See AutocompleteControllerAndroid for more details.
+  mutable base::android::ScopedJavaGlobalRef<jobject> java_match_;
+#endif
 };
 
 typedef AutocompleteMatch::ACMatchClassification ACMatchClassification;

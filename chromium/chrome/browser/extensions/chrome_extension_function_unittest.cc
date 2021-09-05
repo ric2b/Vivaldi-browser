@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "extensions/browser/extension_function.h"
@@ -35,7 +36,7 @@ class ValidationFunction : public ExtensionFunction {
  public:
   explicit ValidationFunction(bool should_succeed)
       : should_succeed_(should_succeed), did_respond_(false) {
-    set_response_callback(base::Bind(
+    set_response_callback(base::BindRepeating(
         (should_succeed ? &SuccessCallback : &FailCallback), &did_respond_));
   }
 
@@ -55,7 +56,7 @@ class ValidationFunction : public ExtensionFunction {
 
 using ChromeExtensionFunctionUnitTest = ExtensionServiceTestBase;
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_SimpleFunctionTest DISABLED_SimpleFunctionTest
 #else
 #define MAYBE_SimpleFunctionTest SimpleFunctionTest

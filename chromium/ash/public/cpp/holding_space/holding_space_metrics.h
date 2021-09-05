@@ -20,24 +20,26 @@ class HoldingSpaceItem;
 namespace holding_space_metrics {
 
 // Enumeration of actions that can be taken on the holding space pod in the
-// shelf. Note that these values are persisted to histograms so existing values
-// should remain unchanged and new values should be added to the end.
+// shelf. These values are persisted to logs. Entries should not be renumbered
+// and numeric values should never be reused.
 enum class PodAction {
   // kClick (Deprecated) = 0,
-  kShow = 1,
-  kClose = 2,
+  kShowBubble = 1,
+  kCloseBubble = 2,
   kShowContextMenu = 3,
   kShowPreviews = 4,
   kHidePreviews = 5,
-  kMaxValue = kHidePreviews,
+  kShowPod = 6,
+  kHidePod = 7,
+  kMaxValue = kHidePod,
 };
 
 // Records the specified `action` taken on the holding space pod in the shelf.
 ASH_PUBLIC_EXPORT void RecordPodAction(PodAction action);
 
 // Enumeration of actions that can be taken on the holding space downloads
-// button. Note that these values are persisted to histograms so existing
-// values should remain unchanged and new values should be added to the end.
+// button. These values are persisted to logs. Entries should not be renumbered
+// and numeric values should never be reused.
 enum class DownloadsAction {
   kClick = 0,
   kMaxValue = kClick,
@@ -46,9 +48,20 @@ enum class DownloadsAction {
 // Records the specified `action` taken on the holding space downloads header.
 ASH_PUBLIC_EXPORT void RecordDownloadsAction(DownloadsAction action);
 
-// Enumeration of actions that can be taken on holding space items. Note that
-// these values are persisted to histograms so existing values should remain
-// unchanged and new values should be added to the end.
+// Enumeration of actions that can be taken on the holding space Files app chip.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class FilesAppChipAction {
+  kClick = 0,
+  kMaxValue = kClick,
+};
+
+// Records the specified `action` taken on the holding space Files app chip.
+ASH_PUBLIC_EXPORT void RecordFilesAppChipAction(FilesAppChipAction action);
+
+// Enumeration of actions that can be taken on holding space items. These values
+// are persisted to logs. Entries should not be renumbered and numeric values
+// should never be reused.
 enum class ItemAction {
   kCopy = 0,
   kDrag = 1,
@@ -80,6 +93,16 @@ ASH_PUBLIC_EXPORT void RecordTimeFromFirstAvailabilityToFirstEntry(
 // Records time from first entry to the first pin into holding space.
 ASH_PUBLIC_EXPORT void RecordTimeFromFirstEntryToFirstPin(
     base::TimeDelta time_delta);
+
+// Records the `smoothness` of the holding space bubble resize animation. Note
+// that `smoothness` is expected to be between 0 and 100 (inclusively) with
+// 100 representing ideal smoothness of >= 60 frames per second.
+ASH_PUBLIC_EXPORT void RecordBubbleResizeAnimationSmoothness(int smoothness);
+
+// Records the `smoothness` of the holding space pod resize animation. Note that
+// `smoothness` is expected to be between 0 and 100 (inclusively) with 100
+// representing ideal smoothness of >= 60 frames per second.
+ASH_PUBLIC_EXPORT void RecordPodResizeAnimationSmoothness(int smoothness);
 
 }  // namespace holding_space_metrics
 }  // namespace ash

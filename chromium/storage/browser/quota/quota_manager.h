@@ -18,6 +18,7 @@
 
 #include "base/callback.h"
 #include "base/component_export.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -26,7 +27,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/sequence_checker.h"
-#include "base/stl_util.h"
 #include "base/timer/timer.h"
 #include "storage/browser/quota/quota_callbacks.h"
 #include "storage/browser/quota/quota_client.h"
@@ -130,6 +130,12 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
                               bool is_override_enabled,
                               blink::mojom::UsageBreakdownPtr usage_breakdown)>;
 
+  // Function pointer type used to store the function which returns
+  // information about the volume containing the given FilePath.
+  // The value returned is std::tuple<total_space, available_space>.
+  using GetVolumeInfoFn =
+      std::tuple<int64_t, int64_t> (*)(const base::FilePath&);
+
   static constexpr int64_t kGBytes = 1024 * 1024 * 1024;
   static constexpr int64_t kNoLimit = INT64_MAX;
   static constexpr int64_t kMBytes = 1024 * 1024;
@@ -138,8 +144,11 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   QuotaManager(bool is_incognito,
                const base::FilePath& profile_path,
                scoped_refptr<base::SingleThreadTaskRunner> io_thread,
+               base::RepeatingClosure quota_change_callback,
                scoped_refptr<SpecialStoragePolicy> special_storage_policy,
                const GetQuotaSettingsFunc& get_settings_function);
+  QuotaManager(const QuotaManager&) = delete;
+  QuotaManager& operator=(const QuotaManager&) = delete;
 
   const QuotaSettings& settings() const { return settings_; }
   void SetQuotaSettings(const QuotaSettings& settings);
@@ -280,6 +289,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   void WithdrawOverridesForHandle(int handle_id);
 
   // Cap size for per-host persistent quota determined by the histogram.
+  // Cap size for per-host persistent quota determined by the histogram.
   // This is a bit lax value because the histogram says nothing about per-host
   // persistent storage usage and we determined by global persistent storage
   // usage that is less than 10GB for almost all users.
@@ -305,8 +315,14 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
 
   void DisableDatabaseForTesting() { db_disabled_ = true; }
 
+  void SetGetVolumeInfoFnForTesting(GetVolumeInfoFn fn) {
+    get_volume_info_fn_ = fn;
+  }
+
  protected:
   ~QuotaManager() override;
+  void SetQuotaChangeCallbackForTesting(
+      base::RepeatingClosure storage_pressure_event_callback);
 
  private:
   friend class base::DeleteHelper<QuotaManager>;
@@ -347,12 +363,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   using OriginInfoTableEntries = std::vector<OriginInfoTableEntry>;
 
   using QuotaSettingsCallback = base::OnceCallback<void(const QuotaSettings&)>;
-
-  // Function pointer type used to store the function which returns
-  // information about the volume containing the given FilePath.
-  // The value returned is std::tuple<total_space, available_space>.
-  using GetVolumeInfoFn =
-      std::tuple<int64_t, int64_t> (*)(const base::FilePath&);
 
   using DumpQuotaTableCallback =
       base::OnceCallback<void(const QuotaTableEntries&)>;
@@ -511,6 +521,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   GetQuotaSettingsFunc get_settings_function_;
   scoped_refptr<base::TaskRunner> get_settings_task_runner_;
   base::RepeatingCallback<void(url::Origin)> storage_pressure_callback_;
+  base::RepeatingClosure quota_change_callback_;
   QuotaSettings settings_;
   base::TimeTicks settings_timestamp_;
   std::tuple<base::TimeTicks, int64_t, int64_t>
@@ -572,8 +583,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManager
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<QuotaManager> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(QuotaManager);
 };
 
 }  // namespace storage

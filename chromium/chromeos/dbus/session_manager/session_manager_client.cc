@@ -95,10 +95,8 @@ void LogPolicyResponseUma(login_manager::PolicyAccountType account_type,
       UMA_HISTOGRAM_ENUMERATION("Enterprise.RetrievePolicyResponse.User",
                                 response, RetrievePolicyResponseType::COUNT);
       break;
-    case login_manager::ACCOUNT_TYPE_SESSIONLESS_USER:
-      UMA_HISTOGRAM_ENUMERATION(
-          "Enterprise.RetrievePolicyResponse.UserDuringLogin", response,
-          RetrievePolicyResponseType::COUNT);
+    default:
+      NOTREACHED();
       break;
   }
 }
@@ -449,15 +447,6 @@ class SessionManagerClientImpl : public SessionManagerClient {
     return BlockingRetrievePolicy(descriptor, policy_out);
   }
 
-  void RetrievePolicyForUserWithoutSession(
-      const cryptohome::AccountIdentifier& cryptohome_id,
-      RetrievePolicyCallback callback) override {
-    login_manager::PolicyDescriptor descriptor =
-        MakeChromePolicyDescriptor(login_manager::ACCOUNT_TYPE_SESSIONLESS_USER,
-                                   cryptohome_id.account_id());
-    CallRetrievePolicy(descriptor, std::move(callback));
-  }
-
   void RetrieveDeviceLocalAccountPolicy(
       const std::string& account_name,
       RetrievePolicyCallback callback) override {
@@ -523,6 +512,20 @@ class SessionManagerClientImpl : public SessionManagerClient {
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(cryptohome_id.account_id());
     writer.AppendArrayOfStrings(flags);
+    session_manager_proxy_->CallMethod(&method_call,
+                                       dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+                                       base::DoNothing());
+  }
+
+  void SetFeatureFlagsForUser(
+      const cryptohome::AccountIdentifier& cryptohome_id,
+      const std::vector<std::string>& feature_flags) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerSetFeatureFlagsForUser);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(cryptohome_id.account_id());
+    writer.AppendArrayOfStrings(feature_flags);
     session_manager_proxy_->CallMethod(&method_call,
                                        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
                                        base::DoNothing());

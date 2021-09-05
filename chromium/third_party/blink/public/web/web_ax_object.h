@@ -62,16 +62,6 @@ class WebURL;
 struct WebRect;
 struct WebSize;
 
-class BLINK_EXPORT WebAXSparseAttributeClient {
- public:
-  WebAXSparseAttributeClient() = default;
-  virtual ~WebAXSparseAttributeClient() = default;
-
-  virtual void AddObjectAttribute(WebAXObjectAttribute, const WebAXObject&) = 0;
-  virtual void AddObjectVectorAttribute(WebAXObjectVectorAttribute,
-                                        const WebVector<WebAXObject>&) = 0;
-};
-
 // A container for passing around a reference to AXObject.
 class WebAXObject {
  public:
@@ -91,9 +81,7 @@ class WebAXObject {
   BLINK_EXPORT bool operator>(const WebAXObject& other) const;
   BLINK_EXPORT bool operator>=(const WebAXObject& other) const;
   BLINK_EXPORT static WebAXObject FromWebNode(const WebNode&);
-  BLINK_EXPORT static WebAXObject FromWebDocument(
-      const WebDocument&,
-      bool update_layout_if_necessary = true);
+  BLINK_EXPORT static WebAXObject FromWebDocument(const WebDocument&);
   BLINK_EXPORT static WebAXObject FromWebDocumentByID(const WebDocument&, int);
   BLINK_EXPORT static WebAXObject FromWebDocumentFocused(
       const WebDocument&,
@@ -101,6 +89,11 @@ class WebAXObject {
   BLINK_EXPORT static bool MaybeUpdateLayoutAndCheckValidity(
       const WebDocument&);
   BLINK_EXPORT static void UpdateLayout(const WebDocument&);
+  // A Freeze() occurs during a serialization run.
+  // Used here as a hint for DCHECKS to enforce the following behavior:
+  // objects in the ax hierarchy should not be destroyed during serialization.
+  BLINK_EXPORT static void Freeze(const WebDocument&);
+  BLINK_EXPORT static void Thaw(const WebDocument&);
 
   BLINK_EXPORT void Reset();
   BLINK_EXPORT void Assign(const WebAXObject&);
@@ -131,12 +124,6 @@ class WebAXObject {
 
   BLINK_EXPORT WebAXObject ChildAt(unsigned) const;
   BLINK_EXPORT WebAXObject ParentObject() const;
-
-  // Retrieve accessibility attributes that apply to only a small
-  // fraction of WebAXObjects by passing an implementation of
-  // WebAXSparseAttributeClient, which will be called with only the attributes
-  // that apply to this object.
-  BLINK_EXPORT void GetSparseAXAttributes(WebAXSparseAttributeClient&) const;
 
   // Serialize the properties of this node into |node_data|.
   //
@@ -243,10 +230,6 @@ class WebAXObject {
                               int& focus_offset,
                               ax::mojom::TextAffinity& focus_affinity) const;
 
-  // 1-based position in set & Size of set.
-  BLINK_EXPORT int PosInSet() const;
-  BLINK_EXPORT int SetSize() const;
-
   // Live regions.
   BLINK_EXPORT bool IsInLiveRegion() const;
   BLINK_EXPORT bool LiveRegionAtomic() const;
@@ -348,7 +331,6 @@ class WebAXObject {
   // Programmatically scrollable.
   BLINK_EXPORT bool IsScrollableContainer() const;
   // Also scrollable by user.
-  BLINK_EXPORT bool IsUserScrollable() const;
   BLINK_EXPORT gfx::Point GetScrollOffset() const;
   BLINK_EXPORT gfx::Point MinimumScrollOffset() const;
   BLINK_EXPORT gfx::Point MaximumScrollOffset() const;

@@ -17,6 +17,8 @@
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "ui/aura/window.h"
 #include "ui/views/background.h"
+#include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -25,9 +27,6 @@ namespace ash {
 namespace {
 
 using chromeos::assistant::features::IsAmbientAssistantEnabled;
-
-// Appearance.
-constexpr int kAssistantPreferredHeightDip = 128;
 
 }  // namespace
 
@@ -39,32 +38,12 @@ AmbientContainerView::AmbientContainerView(AmbientViewDelegate* delegate)
 
 AmbientContainerView::~AmbientContainerView() = default;
 
-const char* AmbientContainerView::GetClassName() const {
-  return "AmbientContainerView";
-}
-
-gfx::Size AmbientContainerView::CalculatePreferredSize() const {
-  // TODO(b/139953389): Handle multiple displays.
-  return GetWidget()->GetNativeWindow()->GetRootWindow()->bounds().size();
-}
-
-void AmbientContainerView::Layout() {
-  // Layout child views first to have proper bounds set for children.
-  LayoutPhotoView();
-
-  // The assistant view may not exist if |kAmbientAssistant| feature is
-  // disabled.
-  if (ambient_assistant_container_view_)
-    LayoutAssistantView();
-
-  View::Layout();
-}
-
 void AmbientContainerView::Init() {
   // TODO(b/139954108): Choose a better dark mode theme color.
   SetBackground(views::CreateSolidBackground(SK_ColorBLACK));
   // Updates focus behavior to receive key press events.
   SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
   photo_view_ = AddChildView(std::make_unique<PhotoView>(delegate_));
 
@@ -75,16 +54,7 @@ void AmbientContainerView::Init() {
   }
 }
 
-void AmbientContainerView::LayoutPhotoView() {
-  // |photo_view_| should have the same size as the widget.
-  photo_view_->SetBoundsRect(GetLocalBounds());
-}
-
-void AmbientContainerView::LayoutAssistantView() {
-  int preferred_width = GetPreferredSize().width();
-  int preferred_height = kAssistantPreferredHeightDip;
-  ambient_assistant_container_view_->SetBoundsRect(
-      gfx::Rect(0, 0, preferred_width, preferred_height));
-}
+BEGIN_METADATA(AmbientContainerView, views::View)
+END_METADATA
 
 }  // namespace ash

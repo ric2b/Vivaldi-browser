@@ -24,8 +24,8 @@
 #include "net/base/load_flags.h"
 #include "net/base/mock_network_change_notifier.h"
 #include "net/base/network_isolation_key.h"
+#include "net/base/schemeful_site.h"
 #include "net/cert/ct_policy_enforcer.h"
-#include "net/cert/do_nothing_ct_verifier.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/dns/host_resolver_source.h"
 #include "net/dns/mock_host_resolver.h"
@@ -72,6 +72,7 @@
 #include "net/third_party/quiche/src/quic/test_tools/mock_clock.h"
 #include "net/third_party/quiche/src/quic/test_tools/mock_random.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_config_peer.h"
+#include "net/third_party/quiche/src/quic/test_tools/quic_session_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_test_utils.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_test_utils.h"
@@ -237,7 +238,6 @@ class QuicStreamFactoryTestBase : public WithTaskEnvironment {
                       false),
         http_server_properties_(std::make_unique<HttpServerProperties>()),
         cert_verifier_(std::make_unique<MockCertVerifier>()),
-        cert_transparency_verifier_(std::make_unique<DoNothingCTVerifier>()),
         scoped_mock_network_change_notifier_(nullptr),
         factory_(nullptr),
         host_port_pair_(kDefaultServerHostName, kDefaultServerPort),
@@ -263,7 +263,7 @@ class QuicStreamFactoryTestBase : public WithTaskEnvironment {
         net_log_.net_log(), host_resolver_.get(), ssl_config_service_.get(),
         socket_factory_.get(), http_server_properties_.get(),
         cert_verifier_.get(), &ct_policy_enforcer_, &transport_security_state_,
-        cert_transparency_verifier_.get(), /*sct_auditing_delegate=*/nullptr,
+        /*sct_auditing_delegate=*/nullptr,
         /*SocketPerformanceWatcherFactory*/ nullptr,
         &crypto_client_stream_factory_, &context_);
   }
@@ -564,10 +564,10 @@ class QuicStreamFactoryTestBase : public WithTaskEnvironment {
   // NetworkIsolationKeys, but the same server. If false, stores data for two
   // different servers, using the same NetworkIsolationKey.
   void VerifyInitialization(bool vary_network_isolation_key) {
-    const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-    const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
+    const SchemefulSite kSite1(GURL("https://foo.test/"));
+    const SchemefulSite kSite2(GURL("https://bar.test/"));
 
-    NetworkIsolationKey network_isolation_key1(kOrigin1, kOrigin1);
+    NetworkIsolationKey network_isolation_key1(kSite1, kSite1);
     quic::QuicServerId quic_server_id1(
         kDefaultServerHostName, kDefaultServerPort, PRIVACY_MODE_DISABLED);
 
@@ -575,7 +575,7 @@ class QuicStreamFactoryTestBase : public WithTaskEnvironment {
     quic::QuicServerId quic_server_id2;
 
     if (vary_network_isolation_key) {
-      network_isolation_key2 = NetworkIsolationKey(kOrigin2, kOrigin2);
+      network_isolation_key2 = NetworkIsolationKey(kSite2, kSite2);
       quic_server_id2 = quic_server_id1;
     } else {
       network_isolation_key2 = network_isolation_key1;
@@ -913,7 +913,6 @@ class QuicStreamFactoryTestBase : public WithTaskEnvironment {
   std::unique_ptr<HttpServerProperties> http_server_properties_;
   std::unique_ptr<CertVerifier> cert_verifier_;
   TransportSecurityState transport_security_state_;
-  std::unique_ptr<CTVerifier> cert_transparency_verifier_;
   DefaultCTPolicyEnforcer ct_policy_enforcer_;
   std::unique_ptr<ScopedMockNetworkChangeNotifier>
       scoped_mock_network_change_notifier_;
@@ -1265,10 +1264,10 @@ TEST_P(QuicStreamFactoryTest, CachedInitialRtt) {
 // Test that QUIC sessions use the cached RTT from HttpServerProperties for the
 // correct NetworkIsolationKey.
 TEST_P(QuicStreamFactoryTest, CachedInitialRttWithNetworkIsolationKey) {
-  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
-  const NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+  const SchemefulSite kSite1(GURL("https://foo.test/"));
+  const SchemefulSite kSite2(GURL("https://bar.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
+  const NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
 
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
@@ -1497,10 +1496,10 @@ TEST_P(QuicStreamFactoryTest, GoAwayForConnectionMigrationWithPortOnly) {
 // Makes sure that setting and clearing ServerNetworkStats respects the
 // NetworkIsolationKey.
 TEST_P(QuicStreamFactoryTest, ServerNetworkStatsWithNetworkIsolationKey) {
-  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
-  const NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+  const SchemefulSite kSite1(GURL("https://foo.test/"));
+  const SchemefulSite kSite2(GURL("https://bar.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
+  const NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
 
   const NetworkIsolationKey kNetworkIsolationKeys[] = {
       kNetworkIsolationKey1, kNetworkIsolationKey2, NetworkIsolationKey()};
@@ -3782,7 +3781,7 @@ void QuicStreamFactoryTestBase::TestMigrationOnNetworkDisconnected(
                                     callback_.callback()));
 
   if (async_write_before)
-    session->SendPing();
+    session->connection()->SendPing();
 
   // Set up second socket data provider that is used after migration.
   // The response to the earlier request is read on this new socket.
@@ -4305,7 +4304,7 @@ void QuicStreamFactoryTestBase::TestMigrationOnPathDegrading(
                                     callback_.callback()));
 
   if (async_write_before)
-    session->SendPing();
+    session->connection()->SendPing();
 
   EXPECT_EQ(0u, QuicStreamFactoryPeer::GetNumDegradingSessions(factory_.get()));
   // Cause the connection to report path degrading to the session.
@@ -4668,6 +4667,14 @@ void QuicStreamFactoryTestBase::TestSimplePortMigrationOnPathDegrading() {
   HttpRequestHeaders request_headers;
   EXPECT_EQ(OK, stream->SendRequest(request_headers, &response,
                                     callback_.callback()));
+  // Disable connection migration on the request streams.
+  // This should have no effect for port migration.
+  QuicChromiumClientStream* chrome_stream =
+      static_cast<QuicChromiumClientStream*>(
+          quic::test::QuicSessionPeer::GetStream(
+              session, GetNthClientInitiatedBidirectionalStreamId(0)));
+  EXPECT_TRUE(chrome_stream);
+  chrome_stream->DisableConnectionMigrationToCellularNetwork();
 
   EXPECT_EQ(0u, QuicStreamFactoryPeer::GetNumDegradingSessions(factory_.get()));
 
@@ -4724,9 +4731,14 @@ void QuicStreamFactoryTestBase::TestSimplePortMigrationOnPathDegrading() {
 
   EXPECT_EQ(0u, task_runner->GetPendingTaskCount());
 
-  // Verify that the session is still alive.
+  // Verify that the session is still alive, and the request stream is still
+  // alive.
   EXPECT_TRUE(QuicStreamFactoryPeer::IsLiveSession(factory_.get(), session));
   EXPECT_TRUE(HasActiveSession(host_port_pair_));
+  chrome_stream = static_cast<QuicChromiumClientStream*>(
+      quic::test::QuicSessionPeer::GetStream(
+          session, GetNthClientInitiatedBidirectionalStreamId(0)));
+  EXPECT_TRUE(chrome_stream);
 
   stream.reset();
   EXPECT_TRUE(quic_data1.AllReadDataConsumed());
@@ -7786,7 +7798,7 @@ void QuicStreamFactoryTestBase::TestMigrationOnMultipleWriteErrors(
   crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details);
 
   // Set up the socket data used by the original network, which encounters a
-  // write erorr.
+  // write error.
   MockQuicData socket_data1(version_);
   socket_data1.AddRead(SYNCHRONOUS, ERR_IO_PENDING);
   int packet_num = 1;
@@ -10870,17 +10882,20 @@ TEST_P(QuicStreamFactoryTest, CryptoConfigCache) {
   const char kUserAgentId[] = "spoon";
 
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      features::kPartitionConnectionsByNetworkIsolationKey);
+  feature_list.InitWithFeatures(
+      // enabled_features
+      {features::kPartitionConnectionsByNetworkIsolationKey},
+      // disabled_features
+      {features::kPartitionHttpServerPropertiesByNetworkIsolationKey});
 
-  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
+  const SchemefulSite kSite1(GURL("https://foo.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
 
-  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+  const SchemefulSite kSite2(GURL("https://bar.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
 
-  const url::Origin kOrigin3 = url::Origin::Create(GURL("https://baz.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey3(kOrigin3, kOrigin3);
+  const SchemefulSite kSite3(GURL("https://baz.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey3(kSite3, kSite3);
 
   Initialize();
 
@@ -10928,14 +10943,14 @@ TEST_P(QuicStreamFactoryTest, CryptoConfigCacheWithNetworkIsolationKey) {
       // disabled_features
       {});
 
-  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
+  const SchemefulSite kSite1(GURL("https://foo.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
 
-  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+  const SchemefulSite kSite2(GURL("https://bar.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
 
-  const url::Origin kOrigin3 = url::Origin::Create(GURL("https://baz.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey3(kOrigin3, kOrigin3);
+  const SchemefulSite kSite3(GURL("https://baz.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey3(kSite3, kSite3);
 
   Initialize();
 
@@ -11022,9 +11037,8 @@ TEST_P(QuicStreamFactoryTest, CryptoConfigCacheMRUWithNetworkIsolationKey) {
       crypto_config_handles;
   std::vector<NetworkIsolationKey> network_isolation_keys;
   for (int i = 0; i < kNumSessionsToMake; ++i) {
-    url::Origin origin =
-        url::Origin::Create(GURL(base::StringPrintf("https://foo%i.test/", i)));
-    network_isolation_keys.push_back(NetworkIsolationKey(origin, origin));
+    SchemefulSite site(GURL(base::StringPrintf("https://foo%i.test/", i)));
+    network_isolation_keys.push_back(NetworkIsolationKey(site, site));
 
     std::unique_ptr<QuicCryptoClientConfigHandle> crypto_config_handle =
         QuicStreamFactoryPeer::GetCryptoConfig(factory_.get(),
@@ -11092,9 +11106,8 @@ TEST_P(QuicStreamFactoryTest,
 
   std::vector<NetworkIsolationKey> network_isolation_keys;
   for (int i = 0; i < kNumSessionsToMake; ++i) {
-    url::Origin origin =
-        url::Origin::Create(GURL(base::StringPrintf("https://foo%i.test/", i)));
-    network_isolation_keys.push_back(NetworkIsolationKey(origin, origin));
+    SchemefulSite site(GURL(base::StringPrintf("https://foo%i.test/", i)));
+    network_isolation_keys.push_back(NetworkIsolationKey(site, site));
   }
 
   const quic::QuicServerId kQuicServerId(
@@ -12145,9 +12158,9 @@ TEST_P(QuicStreamFactoryTest, HostResolverRequestReprioritizedOnSetPriority) {
 // Verifies that the host resolver uses the disable secure DNS setting and
 // NetworkIsolationKey passed to QuicStreamRequest::Request().
 TEST_P(QuicStreamFactoryTest, HostResolverUsesParams) {
-  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://foo.test/"));
-  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://bar.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey(kOrigin1, kOrigin1);
+  const SchemefulSite kSite1(GURL("https://foo.test/"));
+  const SchemefulSite kSite2(GURL("https://bar.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey(kSite1, kSite1);
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       // enabled_features

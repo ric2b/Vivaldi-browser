@@ -9,6 +9,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/sessions/core/session_id.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "ui/events/event_constants.h"
@@ -164,16 +166,6 @@ apps::AppLaunchParams CreateAppLaunchParamsForIntent(
   if (intent->url.has_value()) {
     params.source = apps::mojom::AppLaunchSource::kSourceIntentUrl;
     params.override_url = intent->url.value();
-    LOG(ERROR) << "url is:" << params.override_url.spec();
-    std::string port;
-    if (intent->url->has_port()) {
-      port = ":" + intent->url->port();
-    }
-    params.override_url =
-        GURL(intent->url->scheme() + url::kStandardSchemeSeparator +
-             intent->url->host() + port + intent->url->path());
-    LOG(ERROR) << "url is:" << params.override_url.spec();
-    DCHECK(params.override_url.is_valid());
   }
 
   params.intent = std::move(intent);
@@ -232,6 +224,21 @@ int GetEventFlags(apps::mojom::LaunchContainer container,
       NOTREACHED();
       return ui::EF_NONE;
   }
+}
+
+int GetSessionIdForRestoreFromWebContents(
+    apps::mojom::LaunchContainer container,
+    const content::WebContents* web_contents) {
+  if (!web_contents) {
+    return SessionID::InvalidValue().id();
+  }
+
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (!browser) {
+    return SessionID::InvalidValue().id();
+  }
+
+  return browser->session_id().id();
 }
 
 }  // namespace apps

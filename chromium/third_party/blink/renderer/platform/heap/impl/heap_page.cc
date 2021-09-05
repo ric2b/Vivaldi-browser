@@ -673,13 +673,12 @@ void NormalPageArena::AllocatePage() {
       // Take the first possible page ensuring that this thread actually
       // gets a page and add the rest to the page pool.
       if (!page_memory) {
-        bool result = memory->Commit();
-        // If you hit the CHECK, it will mean that you're hitting the limit
-        // of the number of mmapped regions the OS can support
+        // If you hit the CHECK in the call to Commit(), it means that you're
+        // hitting the limit of the number of mmapped regions the OS can support
         // (e.g., /proc/sys/vm/max_map_count in Linux) or on that Windows you
         // have exceeded the max commit charge across all processes for the
         // system.
-        CHECK(result);
+        memory->Commit();
         page_memory = memory;
       } else {
         GetThreadState()->Heap().GetFreePagePool()->Add(ArenaIndex(), memory);
@@ -1215,7 +1214,7 @@ FreeListEntry* FreeList::Allocate(size_t allocation_size) {
 #if DCHECK_IS_ON() || defined(LEAK_SANITIZER) || defined(ADDRESS_SANITIZER) || \
     defined(MEMORY_SANITIZER)
 NO_SANITIZE_MEMORY
-void NOINLINE FreeList::GetAllowedAndForbiddenCounts(Address address,
+NOINLINE void FreeList::GetAllowedAndForbiddenCounts(Address address,
                                                      size_t size,
                                                      size_t& allowed_count,
                                                      size_t& forbidden_count) {
@@ -1231,7 +1230,7 @@ void NOINLINE FreeList::GetAllowedAndForbiddenCounts(Address address,
 
 NO_SANITIZE_ADDRESS
 NO_SANITIZE_MEMORY
-void NOINLINE FreeList::ZapFreedMemory(Address address, size_t size) {
+NOINLINE void FreeList::ZapFreedMemory(Address address, size_t size) {
   for (size_t i = 0; i < size; i++) {
     // See the comment in addToFreeList().
     if (address[i] != kReuseAllowedZapValue)
@@ -1239,7 +1238,7 @@ void NOINLINE FreeList::ZapFreedMemory(Address address, size_t size) {
   }
 }
 
-void NOINLINE FreeList::CheckFreedMemoryIsZapped(Address address, size_t size) {
+NOINLINE void FreeList::CheckFreedMemoryIsZapped(Address address, size_t size) {
   for (size_t i = 0; i < size; i++) {
     DCHECK(address[i] == kReuseAllowedZapValue ||
            address[i] == kReuseForbiddenZapValue);

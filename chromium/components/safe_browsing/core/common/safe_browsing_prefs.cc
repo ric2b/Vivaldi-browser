@@ -73,6 +73,8 @@ const char kSafeBrowsingEnabled[] = "safebrowsing.enabled";
 const char kSafeBrowsingEnhanced[] = "safebrowsing.enhanced";
 const char kSafeBrowsingEnterpriseRealTimeUrlCheckMode[] =
     "safebrowsing.enterprise_real_time_url_check_mode";
+const char kSafeBrowsingEnterpriseRealTimeUrlCheckScope[] =
+    "safebrowsing.enterprise_real_time_url_check_scope";
 const char kSafeBrowsingExtendedReportingOptInAllowed[] =
     "safebrowsing.extended_reporting_opt_in_allowed";
 const char kSafeBrowsingIncidentsSent[] = "safebrowsing.incidents_sent";
@@ -173,6 +175,8 @@ bool IsSafeBrowsingPolicyManaged(const PrefService& prefs) {
 }
 
 bool IsEnhancedProtectionMessageInInterstitialsEnabled() {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
   return base::FeatureList::IsEnabled(
       kEnhancedProtectionMessageInInterstitials);
 }
@@ -219,6 +223,8 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckMode,
       REAL_TIME_CHECK_DISABLED);
+  registry->RegisterIntegerPref(
+      prefs::kSafeBrowsingEnterpriseRealTimeUrlCheckScope, 0);
   registry->RegisterInt64Pref(prefs::kSafeBrowsingMetricsLastLogTime, 0);
 }
 

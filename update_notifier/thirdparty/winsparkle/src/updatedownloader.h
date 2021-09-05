@@ -27,6 +27,7 @@
 
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
 
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 
 #include <inttypes.h>
@@ -76,21 +77,17 @@ class DownloadUpdateDelegate {
 // Structure with data to start the installer. In its destructor it deletes the
 // downloaded data unless an installer successfully started.
 struct InstallerLaunchData {
-  InstallerLaunchData();
-  InstallerLaunchData(Error error);
+  InstallerLaunchData(bool delta,
+                      const std::string& version,
+                      base::CommandLine command_line);
   ~InstallerLaunchData();
   InstallerLaunchData(const InstallerLaunchData&) = delete;
   InstallerLaunchData& operator=(const InstallerLaunchData&) = delete;
 
-  std::string version;
   bool delta = false;
-  std::wstring download_dir;
-  std::wstring exe_file;
-  std::wstring command_line;
-
-  // Directory to use as the working directory for the installer. Leave empty to
-  // use the working directory for the current process.
-  std::wstring working_directory;
+  std::string version;
+  base::FilePath download_dir;
+  base::CommandLine cmdline;
 };
 
 // Download the update.
@@ -105,9 +102,11 @@ void RunInstaller(std::unique_ptr<InstallerLaunchData> launch_data,
 // Perform any necessary cleanup after previous updates.
 //
 // Should be called on launch to get rid of leftover junk from previous
-// updates, such as the installer files. Call it as soon as possible,
-// before using other WinSparkle functionality.
-void CleanDownloadLeftovers(std::wstring tmpdir = std::wstring());
+// updates, such as the installer files. Call it before the first call to
+// DownloadUpdate().
+void CleanDownloadLeftovers();
+
+std::wstring GetPathHash(const base::FilePath& path);
 
 }  // namespace winsparkle
 

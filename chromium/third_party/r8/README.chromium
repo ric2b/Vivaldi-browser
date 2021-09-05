@@ -20,8 +20,10 @@ R8 is a proguard-like optimizer that also has the ability to dex.
 
 Local Modifications:
 * Refer to commit descriptions within "patches" directory.
+  * Plus: https://r8-review.googlesource.com/c/r8/+/56708
 * Added "playground" directory for quick "how does this optimize" tests.
-* Removed references to ConcurrentHashMap in desugar_jdk_libs.json.
+* Removed references to ConcurrentHashMap and TimeZone#getTimeZone in desugar_jdk_libs.json.
+* Cherry-pick fix for M89: 6d54693bc5725b8d1ce362368b1b1ad87f92e74a
 
 Update Instructions:
 # Download R8:
@@ -62,4 +64,14 @@ java -cp third_party/r8/lib/r8.jar com.android.tools.r8.BackportedMethodList --m
 
 Update instructions for desugar_jdk_libs.json:
 * Find desugar.json as described above and copy to desugar_jdk_libs.json.
-* Remove all mentions of ConcurrentHashMap (and remove any trailing commas if necessary).
+* Remove all mentions of ConcurrentHashMap and TimeZone#getTimeZone and remove trailing commas.
+
+How to file bugs against R8:
+* Copy & paste the failing ninja command (starts with proguard.py), and add --dump-inputs.
+* File bug at go/r8bug
+* Things to include (use discretion if some are not relevant):
+  * src revision bug reproduces at
+  * Repro steps (gn gen & autoninja commands)
+    * Prefer enable_chrome_android_internal=false
+  * The r8inputs.zip from --dump-inputs
+  * Any relevant dexdump analysis

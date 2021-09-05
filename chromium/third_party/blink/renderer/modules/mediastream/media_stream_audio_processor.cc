@@ -613,6 +613,12 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
       agc2_properties->max_output_noise_level_dbfs =
           base::GetFieldTrialParamByFeatureAsInt(
               features::kWebRtcHybridAgc, "max_output_noise_level_dbfs", -50);
+      agc2_properties->sse2_allowed = base::GetFieldTrialParamByFeatureAsBool(
+          features::kWebRtcHybridAgc, "sse2_allowed", true);
+      agc2_properties->avx2_allowed = base::GetFieldTrialParamByFeatureAsBool(
+          features::kWebRtcHybridAgc, "avx2_allowed", true);
+      agc2_properties->neon_allowed = base::GetFieldTrialParamByFeatureAsBool(
+          features::kWebRtcHybridAgc, "neon_allowed", true);
     }
     blink::ConfigAutomaticGainControl(
         properties.goog_auto_gain_control,
@@ -700,6 +706,10 @@ void MediaStreamAudioProcessor::InitializeCaptureFifo(
   output_format_ = media::AudioParameters(
       media::AudioParameters::AUDIO_PCM_LOW_LATENCY, output_channel_layout,
       output_sample_rate, output_frames);
+  if (output_channel_layout == media::CHANNEL_LAYOUT_DISCRETE) {
+    // Explicitly set number of channels for discrete channel layouts.
+    output_format_.set_channels_for_discrete(input_format.channels());
+  }
 
   capture_fifo_.reset(
       new MediaStreamAudioFifo(input_format.channels(), fifo_output_channels,

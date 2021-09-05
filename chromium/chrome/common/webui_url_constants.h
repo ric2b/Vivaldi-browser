@@ -13,6 +13,7 @@
 
 #include "base/strings/string_piece_forward.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "content/public/common/url_constants.h"
 #include "media/media_buildflags.h"
@@ -101,7 +102,6 @@ extern const char kChromeUIInternalsQueryTilesPath[];
 extern const char kChromeUIInternalsWebAppPath[];
 extern const char kChromeUIInterstitialHost[];
 extern const char kChromeUIInterstitialURL[];
-extern const char kChromeUIInterventionsInternalsHost[];
 extern const char kChromeUIInvalidationsHost[];
 extern const char kChromeUIKillHost[];
 extern const char kChromeUILocalStateHost[];
@@ -203,7 +203,7 @@ extern const char kChromeUIReadLaterHost[];
 extern const char kChromeUIReadLaterURL[];
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // NOTE: If you add a URL/host please check if it should be added to
 // IsSystemWebUIHost().
 extern const char kChromeUIAccountManagerErrorHost[];
@@ -239,8 +239,9 @@ extern const char kChromeUICrostiniUpgraderHost[];
 extern const char kChromeUICrostiniUpgraderUrl[];
 extern const char kChromeUICryptohomeHost[];
 extern const char kChromeUIDeviceEmulatorHost[];
-extern const char kChromeUIFirstRunHost[];
-extern const char kChromeUIFirstRunURL[];
+extern const char kChromeUIDiagnosticsAppURL[];
+extern const char kChromeUIEmojiPickerURL[];
+extern const char kChromeUIEmojiPickerHost[];
 extern const char kChromeUIIntenetConfigDialogURL[];
 extern const char kChromeUIIntenetDetailDialogURL[];
 extern const char kChromeUIInternetConfigDialogHost[];
@@ -266,6 +267,7 @@ extern const char kChromeUIPasswordChangeHost[];
 extern const char kChromeUIPasswordChangeUrl[];
 extern const char kChromeUIPrintManagementUrl[];
 extern const char kChromeUIPowerHost[];
+extern const char kChromeUIScanningAppURL[];
 extern const char kChromeUIScreenlockIconHost[];
 extern const char kChromeUIScreenlockIconURL[];
 extern const char kChromeUISetTimeHost[];
@@ -279,6 +281,7 @@ extern const char kChromeUISmbShareHost[];
 extern const char kChromeUISmbShareURL[];
 extern const char kChromeUISysInternalsHost[];
 extern const char kChromeUIUntrustedCroshURL[];
+extern const char kChromeUIUntrustedTerminalHost[];
 extern const char kChromeUIUntrustedTerminalURL[];
 extern const char kChromeUIUrgentPasswordExpiryNotificationHost[];
 extern const char kChromeUIUrgentPasswordExpiryNotificationUrl[];
@@ -290,11 +293,11 @@ extern const char kChromeUIUserImageURL[];
 // systems would be considered part of the OS or window manager.
 bool IsSystemWebUIHost(base::StringPiece host);
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
-extern const char kChromeUIWebUIJsExceptionHost[];
-extern const char kChromeUIWebUIJsExceptionURL[];
+extern const char kChromeUIWebUIJsErrorHost[];
+extern const char kChromeUIWebUIJsErrorURL[];
 #endif
 
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
@@ -308,7 +311,7 @@ extern const char kChromeUIHatsURL[];
 #if !defined(OS_ANDROID)
 extern const char kChromeUINearbyShareHost[];
 extern const char kChromeUINearbyShareURL[];
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_POSIX) && !defined(OS_MAC) && !defined(OS_ANDROID)
 extern const char kChromeUILinuxProxyConfigHost[];
@@ -319,8 +322,10 @@ extern const char kChromeUILinuxProxyConfigHost[];
 extern const char kChromeUISandboxHost[];
 #endif
 
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
 #if defined(OS_WIN) || defined(OS_MAC) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 extern const char kChromeUIBrowserSwitchHost[];
 extern const char kChromeUIBrowserSwitchURL[];
 extern const char kChromeUIProfileCustomizationHost[];

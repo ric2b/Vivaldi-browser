@@ -19,11 +19,11 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
@@ -222,8 +222,11 @@ void UsbDeviceHandleWin::Close() {
   // Aborting requests may run or destroy callbacks holding the last reference
   // to this object so hold a reference for the rest of this method.
   scoped_refptr<UsbDeviceHandleWin> self(this);
+
+  // Avoid using an iterator here because Abort() will remove the entry from
+  // |requests_|.
   while (!requests_.empty())
-    requests_.begin()->second->Abort();
+    requests_.front()->Abort();
 
   device_ = nullptr;
 }
@@ -995,15 +998,19 @@ UsbDeviceHandleWin::Request* UsbDeviceHandleWin::MakeRequest(
   auto request = std::make_unique<Request>(
       handle, interface ? interface->info->interface_number : -1);
   Request* request_ptr = request.get();
-  requests_[request_ptr] = std::move(request);
+  requests_.push_back(std::move(request));
   return request_ptr;
 }
 
 std::unique_ptr<UsbDeviceHandleWin::Request> UsbDeviceHandleWin::UnlinkRequest(
     UsbDeviceHandleWin::Request* request_ptr) {
-  auto it = requests_.find(request_ptr);
+  auto it = std::find_if(
+      requests_.begin(), requests_.end(),
+      [request_ptr](const std::unique_ptr<Request>& request) -> bool {
+        return request.get() == request_ptr;
+      });
   DCHECK(it != requests_.end());
-  std::unique_ptr<Request> request = std::move(it->second);
+  std::unique_ptr<Request> request = std::move(*it);
   requests_.erase(it);
   return request;
 }
@@ -1085,7 +1092,13 @@ void UsbDeviceHandleWin::TransferComplete(
 
     buffer = nullptr;
     bytes_transferred = 0;
-    status = UsbTransferStatus::TRANSFER_ERROR;
+    switch (win32_result) {
+      case ERROR_REQUEST_ABORTED:
+        status = UsbTransferStatus::CANCELLED;
+        break;
+      default:
+        status = UsbTransferStatus::TRANSFER_ERROR;
+    }
   }
 
   DCHECK_NE(request->interface_number(), -1);

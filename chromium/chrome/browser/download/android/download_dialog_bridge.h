@@ -73,8 +73,7 @@ class DownloadDialogBridge {
   virtual bool DownloadWithExternalDownloadManager(gfx::NativeWindow native_window,
                           DownloadLocationDialogType dialog_type,
                           const base::FilePath& suggested_path,
-                          download::DownloadItem* download,
-                          DialogCallback dialog_callback);
+                          download::DownloadItem* download);
 };
 
 #endif  // CHROME_BROWSER_DOWNLOAD_ANDROID_DOWNLOAD_DIALOG_BRIDGE_H_

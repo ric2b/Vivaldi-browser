@@ -12,6 +12,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "chrome/browser/policy/messaging_layer/encryption/encryption_module.h"
 #include "chrome/browser/policy/messaging_layer/storage/storage.h"
+#include "chrome/browser/policy/messaging_layer/storage/storage_configuration.h"
 #include "chrome/browser/policy/messaging_layer/util/status.h"
 #include "chrome/browser/policy/messaging_layer/util/statusor.h"
 #include "components/policy/proto/record.pb.h"
@@ -23,7 +24,7 @@ class StorageModule : public base::RefCountedThreadSafe<StorageModule> {
  public:
   // Factory method creates |StorageModule| object.
   static void Create(
-      const Storage::Options& options,
+      const StorageOptions& options,
       Storage::StartUploadCb start_upload_cb,
       scoped_refptr<EncryptionModule> encryption_module,
       base::OnceCallback<void(StatusOr<scoped_refptr<StorageModule>>)>
@@ -42,6 +43,17 @@ class StorageModule : public base::RefCountedThreadSafe<StorageModule> {
   // Once a record has been successfully uploaded, the sequencing information
   // can be passed back to the StorageModule here for record deletion.
   virtual void ReportSuccess(SequencingInformation sequencing_information);
+
+  // If the server attached signed encryption key to the response, it needs to
+  // be paased here.
+  virtual void UpdateEncryptionKey(SignedEncryptionInfo signed_encryption_key);
+
+  // Returns `false` if encryption key has not been found in the Storage during
+  // initialization and not received from the server yet, and `true` otherwise.
+  // The result is lazy: the method may return `false` for some time even after
+  // the key has already been set - this is harmless, since resetting or even
+  // changing the key is OK at any time.
+  virtual bool has_encryption_key() const;
 
  protected:
   // Constructor can only be called by |Create| factory method.

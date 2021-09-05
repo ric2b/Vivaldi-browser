@@ -59,7 +59,15 @@
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item_list.h"
 
+#include "installer/util/marker_file_work_item.h"
 #include "installer/util/vivaldi_install_util.h"
+
+#if !defined(OFFICIAL_BUILD)
+// Path to use for all following setup.exe invocations.
+namespace installer {
+base::FilePath* vivaldi_debug_subprocesses_exe = nullptr;
+}
+#endif
 
 using base::ASCIIToUTF16;
 using base::win::RegKey;
@@ -250,12 +258,16 @@ void AddChromeWorkItems(const InstallParams& install_params,
 
   install_list->AddDeleteTreeWorkItem(new_chrome_exe, temp_path);
 
-  // For Vivaldi, always copy file to destination. We terminate all processes
-  // before updating so no need to check if file in use.
+  WorkItem::CopyOverWriteOption vivaldi_exe_write_option =
+      WorkItem::NEW_NAME_IF_IN_USE;
+  if (kVivaldi && !installer_state.is_vivaldi_silent_update()) {
+    // If this is not a live update, assume that all Vivaldi processes should be
+    // terminated at this point.
+    vivaldi_exe_write_option = WorkItem::ALWAYS;
+  }
   install_list->AddCopyTreeWorkItem(src_path.Append(installer::kChromeExe),
                                     target_path.Append(installer::kChromeExe),
-                                    temp_path,
-                                    installer_state.is_vivaldi() ? WorkItem::ALWAYS :WorkItem::NEW_NAME_IF_IN_USE,
+                                    temp_path, vivaldi_exe_write_option,
                                     new_chrome_exe);
 
   // Install kVisualElementsManifest if it is present in |src_path|. No need to
@@ -275,7 +287,7 @@ void AddChromeWorkItems(const InstallParams& install_params,
         target_path.Append(installer::kVisualElementsManifest), temp_path);
   }
 
-  if (installer_state.is_vivaldi()) {
+  if (kVivaldi) {
     base::FilePath update_notifier(
         target_path.Append(vivaldi::constants::kVivaldiUpdateNotifierExe));
     base::FilePath old_update_notifier(
@@ -294,8 +306,14 @@ void AddChromeWorkItems(const InstallParams& install_params,
     // Install the new update_notifier.exe
     install_list->AddCopyTreeWorkItem(
         src_path.Append(vivaldi::constants::kVivaldiUpdateNotifierExe),
-        update_notifier, temp_path,
-        WorkItem::CopyOverWriteOption::ALWAYS);
+        update_notifier, temp_path, WorkItem::CopyOverWriteOption::ALWAYS);
+
+    if (installer_state.is_vivaldi_standalone()) {
+      base::FilePath standalone_marker =
+          target_path.Append(vivaldi::constants::kStandaloneMarkerFile);
+      install_list->AddWorkItem(new vivaldi::MarkerFileWorkItem(
+          std::move(standalone_marker), "// Vivaldi Standalone\n"));
+    }
   }
 
   // In the past, we copied rather than moved for system level installs so that
@@ -711,6 +729,11 @@ bool AppendPostInstallTasks(const InstallParams& install_params,
 
     // Form the mode-specific rename command.
     base::CommandLine product_rename_cmd(installer_path);
+#if !defined(OFFICIAL_BUILD)
+    if (vivaldi_debug_subprocesses_exe) {
+      product_rename_cmd.SetProgram(*vivaldi_debug_subprocesses_exe);
+    }
+#endif
     product_rename_cmd.AppendSwitch(switches::kRenameChromeExe);
     if (installer_state.system_install())
       product_rename_cmd.AppendSwitch(switches::kSystemLevel);
@@ -865,8 +888,9 @@ void AddInstallWorkItems(const InstallParams& install_params,
   // Copy installer in install directory
   AddInstallerCopyTasks(install_params, install_list);
 
-  if (!installer_state.is_standalone()) { // do not create registry entries for standalone install
-
+  // Do not create registry entries for Vivaldi standalone install
+  if (!installer_state.is_vivaldi_standalone()) {
+    // clang-format off
   AddUninstallShortcutWorkItems(install_params, install_list);
 
   AddVersionKeyWorkItems(install_params, install_list);
@@ -874,7 +898,7 @@ void AddInstallWorkItems(const InstallParams& install_params,
   AddCleanupDeprecatedPerUserRegistrationsWorkItems(install_list);
 
   AddActiveSetupWorkItems(installer_state, new_version, install_list);
-
+    // clang-format on
   }
 
   AddOsUpgradeWorkItems(installer_state, setup_path, new_version, install_list);
@@ -1042,8 +1066,6 @@ void AppendUninstallCommandLineFlags(const InstallerState& installer_state,
     uninstall_cmd->AppendSwitch(installer::switches::kSystemLevel);
   if (installer_state.verbose_logging())
     uninstall_cmd->AppendSwitch(installer::switches::kVerboseLogging);
-  if (installer_state.is_vivaldi())
-    uninstall_cmd->AppendSwitch(vivaldi::constants::kVivaldi);
 }
 
 void AddOsUpgradeWorkItems(const InstallerState& installer_state,

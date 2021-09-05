@@ -13,18 +13,17 @@
 #include "ui/views/window/dialog_delegate.h"
 
 class Browser;
-class Profile;
 
 // A tab-modal dialog to allow a user signing in with a managed account
 // to create a new Chrome profile.
 class ProfileSigninConfirmationDialogViews : public views::DialogDelegateView {
  public:
   // Create and show the dialog, which owns itself.
-  static void ShowDialog(
+  static void Show(
       Browser* browser,
-      Profile* profile,
       const std::string& username,
-      std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate);
+      std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate,
+      bool prompt_for_new_profile);
 
   ProfileSigninConfirmationDialogViews(
       Browser* browser,
@@ -34,12 +33,6 @@ class ProfileSigninConfirmationDialogViews : public views::DialogDelegateView {
   ~ProfileSigninConfirmationDialogViews() override;
 
  private:
-  static void Show(
-      Browser* browser,
-      const std::string& username,
-      std::unique_ptr<ui::ProfileSigninConfirmationDelegate> delegate,
-      bool prompt_for_new_profile);
-
   // views::DialogDelegateView:
   ui::ModalType GetModalType() const override;
   void ViewHierarchyChanged(
@@ -49,6 +42,13 @@ class ProfileSigninConfirmationDialogViews : public views::DialogDelegateView {
 
   // Called when the "learn more" link is clicked.
   void LearnMoreClicked(const ui::Event& event);
+
+  // Builds the default view for the dialog.
+  void BuildDefaultView();
+
+  // Build the view with the "work profile" wording enabled by
+  // |features::SyncConfirmationUpdatedText|.
+  void BuildWorkProfileView();
 
   // Weak ptr to parent view.
   Browser* const browser_;
@@ -61,6 +61,8 @@ class ProfileSigninConfirmationDialogViews : public views::DialogDelegateView {
 
   // Whether the user should be prompted to create a new profile.
   const bool prompt_for_new_profile_;
+
+  const bool use_work_profile_wording_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSigninConfirmationDialogViews);
 };

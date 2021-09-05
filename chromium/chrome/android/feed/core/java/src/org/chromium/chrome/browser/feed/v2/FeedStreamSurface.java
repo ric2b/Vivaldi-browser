@@ -39,7 +39,7 @@ import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.RequestCoordinatorBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.suggestions.NavigationRecorder;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -70,6 +70,7 @@ import org.chromium.content_public.common.Referrer;
 import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -96,10 +97,13 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     static final String FEEDBACK_CONTEXT = "mobile_browser";
     @VisibleForTesting
     static final String XSURFACE_CARD_URL = "Card URL";
+    // For testing some functionality in the public APK.
+    @VisibleForTesting
+    public static boolean sRequestContentWithoutRendererForTesting;
 
     private final long mNativeFeedStreamSurface;
     private final FeedListContentManager mContentManager;
-    private final SurfaceScope mSurfaceScope;
+    private final SurfaceScope mSurfaceScope;  
     @VisibleForTesting
     RecyclerView mRootView;
     private final HybridListRenderer mHybridListRenderer;
@@ -311,11 +315,11 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         }
 
         @Override
-        public void onPageLoadFinished(Tab tab, String url) {
+        public void onPageLoadFinished(Tab tab, GURL url) {
             // TODO(jianli): onPageLoadFinished is called on successful load, and if a user manually
             // stops the page load. We should only capture successful page loads.
             FeedStreamSurfaceJni.get().reportPageLoaded(
-                    mNativeFeedStreamSurface, FeedStreamSurface.this, url, mInNewTab);
+                    mNativeFeedStreamSurface, FeedStreamSurface.this, mInNewTab);
             tab.removeObserver(this);
         }
 
@@ -924,7 +928,11 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         assert (mContentManager.getItemCount() == mHeaderCount);
 
         mOpened = true;
-        FeedStreamSurfaceJni.get().surfaceOpened(mNativeFeedStreamSurface, FeedStreamSurface.this);
+        // Don't ask native to load content if there's no way to render it.
+        if (mSurfaceScope != null || sRequestContentWithoutRendererForTesting) {
+            FeedStreamSurfaceJni.get().surfaceOpened(
+                    mNativeFeedStreamSurface, FeedStreamSurface.this);
+        }
         mHybridListRenderer.onSurfaceOpened();
     }
 
@@ -948,8 +956,10 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
         mScrollReporter.onUnbind();
         mSliceViewTracker.clear();
-
-        FeedStreamSurfaceJni.get().surfaceClosed(mNativeFeedStreamSurface, FeedStreamSurface.this);
+        if (mSurfaceScope != null || sRequestContentWithoutRendererForTesting) {
+            FeedStreamSurfaceJni.get().surfaceClosed(
+                    mNativeFeedStreamSurface, FeedStreamSurface.this);
+        }
         mOpened = false;
     }
 
@@ -1093,8 +1103,8 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         void reportSliceViewed(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, String sliceId);
         void reportNavigationStarted(long nativeFeedStreamSurface, FeedStreamSurface caller);
-        void reportPageLoaded(long nativeFeedStreamSurface, FeedStreamSurface caller, String url,
-                boolean inNewTab);
+        void reportPageLoaded(
+                long nativeFeedStreamSurface, FeedStreamSurface caller, boolean inNewTab);
         void reportOpenAction(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, String sliceId);
         void reportOpenInNewTabAction(

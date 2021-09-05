@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/active_tab_permission_granter.h"
 #include "chrome/browser/extensions/api/page_capture/page_capture_api.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
@@ -24,15 +25,14 @@
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
-#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/common/url_pattern_set.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/dns/mock_host_resolver.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/login/login_state/login_state.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace extensions {
 
@@ -78,14 +78,7 @@ class PageCaptureSaveAsMHTMLDelegate
 class ExtensionPageCaptureApiTest
     : public ExtensionApiTest,
       public testing::WithParamInterface<ContextType> {
- public:
-  ExtensionPageCaptureApiTest() {
-    // Service Workers are currently only available on certain channels, so set
-    // the channel for those tests.
-    if (GetParam() == ContextType::kServiceWorker)
-      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
-  }
-
+ protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionApiTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(switches::kJavaScriptFlags, "--expose-gc");
@@ -122,9 +115,6 @@ class ExtensionPageCaptureApiTest
     if (GetParam() != ContextType::kServiceWorker)
       delegate->WaitForFinalRelease();
   }
-
- private:
-  std::unique_ptr<ScopedWorkerBasedExtensionsChannel> current_channel_;
 };
 
 INSTANTIATE_TEST_SUITE_P(PersistentBackground,
@@ -134,8 +124,9 @@ INSTANTIATE_TEST_SUITE_P(ServiceWorker,
                          ExtensionPageCaptureApiTest,
                          ::testing::Values(ContextType::kServiceWorker));
 
+// Flaky on all platforms: https://crbug.com/1156323
 IN_PROC_BROWSER_TEST_P(ExtensionPageCaptureApiTest,
-                       SaveAsMHTMLWithoutFileAccess) {
+                       DISABLED_SaveAsMHTMLWithoutFileAccess) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   PageCaptureSaveAsMHTMLDelegate delegate;
   ASSERT_TRUE(RunTestWithFlagsAndArg("page_capture",
@@ -151,7 +142,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionPageCaptureApiTest, SaveAsMHTMLWithFileAccess) {
   WaitForFileCleanup(&delegate);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_P(ExtensionPageCaptureApiTest,
                        PublicSessionRequestAllowed) {
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -173,6 +164,6 @@ IN_PROC_BROWSER_TEST_P(ExtensionPageCaptureApiTest,
   ASSERT_TRUE(RunTestWithArg("page_capture", "REQUEST_DENIED")) << message_;
   EXPECT_EQ(0, delegate.temp_file_count());
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace extensions

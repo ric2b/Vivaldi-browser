@@ -50,6 +50,8 @@ ImportLockDialogView::ImportLockDialogView(
     base::OnceCallback<void(bool)> callback,
     base::string16 importer_locktext)
     : callback_(std::move(callback)) {
+  SetTitle(IDS_IMPORTER_LOCK_TITLE);
+
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
                  l10n_util::GetStringUTF16(IDS_IMPORTER_LOCK_OK));
 
@@ -64,6 +66,10 @@ ImportLockDialogView::ImportLockDialogView(
   SetCancelCallback(
       base::BindOnce(done_callback, base::Unretained(this), false));
 
+  SetShowCloseButton(false);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
+
   SetLayoutManager(std::make_unique<views::FillLayout>());
   views::Label* description_label =
       new views::Label(importer_locktext);
@@ -76,19 +82,4 @@ ImportLockDialogView::ImportLockDialogView(
   chrome::RecordDialogCreation(chrome::DialogIdentifier::IMPORT_LOCK);
 }
 
-ImportLockDialogView::~ImportLockDialogView() {
-}
-
-gfx::Size ImportLockDialogView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH);
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
-base::string16 ImportLockDialogView::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_IMPORTER_LOCK_TITLE);
-}
-
-bool ImportLockDialogView::ShouldShowCloseButton() const {
-  return false;
-}
+ImportLockDialogView::~ImportLockDialogView() = default;

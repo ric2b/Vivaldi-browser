@@ -17,7 +17,6 @@
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/installable/installable_logging.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -25,6 +24,8 @@
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
+
+namespace webapps {
 
 namespace {
 
@@ -262,25 +263,25 @@ void AppBannerSettingsHelper::ClearHistoryForURLs(
 void AppBannerSettingsHelper::RecordBannerInstallEvent(
     content::WebContents* web_contents,
     const std::string& package_name_or_start_url) {
-  banners::TrackInstallEvent(banners::INSTALL_EVENT_WEB_APP_INSTALLED);
+  TrackInstallEvent(INSTALL_EVENT_WEB_APP_INSTALLED);
 
   AppBannerSettingsHelper::RecordBannerEvent(
       web_contents, web_contents->GetLastCommittedURL(),
       package_name_or_start_url,
       AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
-      banners::AppBannerManager::GetCurrentTime());
+      AppBannerManager::GetCurrentTime());
 }
 
 void AppBannerSettingsHelper::RecordBannerDismissEvent(
     content::WebContents* web_contents,
     const std::string& package_name_or_start_url) {
-  banners::TrackDismissEvent(banners::DISMISS_EVENT_CLOSE_BUTTON);
+  TrackDismissEvent(DISMISS_EVENT_CLOSE_BUTTON);
 
   AppBannerSettingsHelper::RecordBannerEvent(
       web_contents, web_contents->GetLastCommittedURL(),
       package_name_or_start_url,
       AppBannerSettingsHelper::APP_BANNER_EVENT_DID_BLOCK,
-      banners::AppBannerManager::GetCurrentTime());
+      AppBannerManager::GetCurrentTime());
 }
 
 void AppBannerSettingsHelper::RecordBannerEvent(
@@ -394,7 +395,7 @@ void AppBannerSettingsHelper::RecordMinutesFromFirstVisitToShow(
   if (could_show_time && !could_show_time->is_null())
     minutes = (time - *could_show_time).InMinutes();
 
-  banners::TrackMinutesFromFirstVisitToBannerShown(minutes);
+  TrackMinutesFromFirstVisitToBannerShown(minutes);
 }
 
 bool AppBannerSettingsHelper::WasLaunchedRecently(Profile* profile,
@@ -469,7 +470,7 @@ bool AppBannerSettingsHelper::CanShowInstallTextAnimation(
   if (!next_prompt)
     return true;
 
-  return banners::AppBannerManager::GetCurrentTime() >= next_prompt->Time();
+  return AppBannerManager::GetCurrentTime() >= next_prompt->Time();
 }
 
 void AppBannerSettingsHelper::RecordInstallTextAnimationShown(
@@ -483,9 +484,8 @@ void AppBannerSettingsHelper::RecordInstallTextAnimationShown(
       base::TimeDelta::FromDays(90);
   constexpr double kExponentialBackoffFactor = 2;
 
-  NextInstallTextAnimation next_prompt = {
-      banners::AppBannerManager::GetCurrentTime(),
-      kInitialAnimationSuppressionPeriod};
+  NextInstallTextAnimation next_prompt = {AppBannerManager::GetCurrentTime(),
+                                          kInitialAnimationSuppressionPeriod};
 
   base::Optional<NextInstallTextAnimation> last_prompt =
       NextInstallTextAnimation::Get(web_contents, scope);
@@ -511,3 +511,5 @@ AppBannerSettingsHelper::ScopedTriggerSettings::~ScopedTriggerSettings() {
   gDaysAfterDismissedToShow = old_dismiss_;
   gDaysAfterIgnoredToShow = old_ignore_;
 }
+
+}  // namespace webapps

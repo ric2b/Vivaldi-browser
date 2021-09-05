@@ -520,8 +520,10 @@ class ContentScriptPolicyStartupTest : public ExtensionApiTest {
   void SetUpInProcessBrowserTestFixture() override {
     ExtensionApiTest::SetUpInProcessBrowserTestFixture();
 
-    EXPECT_CALL(policy_provider_, IsInitializationComplete(testing::_))
-        .WillRepeatedly(testing::Return(true));
+    ON_CALL(policy_provider_, IsInitializationComplete(testing::_))
+        .WillByDefault(testing::Return(true));
+    ON_CALL(policy_provider_, IsFirstPolicyLoadComplete(testing::_))
+        .WillByDefault(testing::Return(true));
 
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(
         &policy_provider_);
@@ -539,7 +541,7 @@ class ContentScriptPolicyStartupTest : public ExtensionApiTest {
   }
 
  private:
-  policy::MockConfigurationPolicyProvider policy_provider_;
+  testing::NiceMock<policy::MockConfigurationPolicyProvider> policy_provider_;
 };
 
 // Regression test for: https://crbug.com/954215.
@@ -1079,7 +1081,7 @@ IN_PROC_BROWSER_TEST_F(ContentScriptApiTest, ContentScriptUrls) {
         [](const content::WebContentsConsoleObserver::Message& message) {
           return message.message == base::ASCIIToUTF16("TestMessage");
         };
-    observer.SetFilter(base::Bind(filter));
+    observer.SetFilter(base::BindRepeating(filter));
     ui_test_utils::NavigateToURL(
         browser(), embedded_test_server()->GetURL(host, "/simple.html"));
     ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();

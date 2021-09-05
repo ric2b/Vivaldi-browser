@@ -11,6 +11,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/metrics/tab_count_metrics.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -50,7 +51,7 @@
 #include "ui/base/win/shell.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/metrics_util.h"
 #include "base/optional.h"
 #endif
@@ -59,7 +60,7 @@ namespace {
 // Maximum number of lines that a title label occupies.
 constexpr int kHoverCardTitleMaxLines = 2;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // UMA histograms that record animation smoothness for fade-in and fade-out
 // animations of tab hover card.
 constexpr char kHoverCardFadeInSmoothnessHistogramName[] =
@@ -209,7 +210,7 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
     widget_->Show();
     fade_animation_ = std::make_unique<gfx::LinearAnimation>(this);
     fade_animation_->SetDuration(kFadeInDuration);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     throughput_tracker_.emplace(
         widget_->GetCompositor()->RequestNewThroughputTracker());
     throughput_tracker_->Start(ash::metrics_util::ForSmoothness(
@@ -226,7 +227,7 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
     fade_animation_ = std::make_unique<gfx::LinearAnimation>(this);
     set_animation_state(FadeAnimationState::FADE_OUT);
     fade_animation_->SetDuration(kFadeOutDuration);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     throughput_tracker_.emplace(
         widget_->GetCompositor()->RequestNewThroughputTracker());
     throughput_tracker_->Start(ash::metrics_util::ForSmoothness(
@@ -240,7 +241,7 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
       return;
 
     fade_animation_->Stop();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     throughput_tracker_->Cancel();
 #endif
     set_animation_state(FadeAnimationState::IDLE);
@@ -268,14 +269,14 @@ class TabHoverCardBubbleView::WidgetFadeAnimationDelegate
 
   void AnimationEnded(const gfx::Animation* animation) override {
     AnimationProgressed(animation);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     throughput_tracker_->Stop();
 #endif
     set_animation_state(FadeAnimationState::IDLE);
   }
 
   views::Widget* const widget_;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   base::Optional<ui::ThroughputTracker> throughput_tracker_;
 #endif
   std::unique_ptr<gfx::LinearAnimation> fade_animation_;
@@ -395,12 +396,11 @@ class TabHoverCardBubbleView::FadeLabel : public views::Label {
 // Maintains a set of thumbnails to watch, ensuring the capture count on the
 // associated WebContents stays nonzero until a valid thumbnail has been
 // captured.
-class TabHoverCardBubbleView::ThumbnailObserver
-    : public ThumbnailImage::Observer {
+class TabHoverCardBubbleView::ThumbnailObserver {
  public:
   explicit ThumbnailObserver(TabHoverCardBubbleView* hover_card)
       : hover_card_(hover_card) {}
-  ~ThumbnailObserver() override = default;
+  ~ThumbnailObserver() = default;
 
   // Begin watching the specified thumbnail image for updates. Ideally, should
   // trigger the associated WebContents to load (if not loaded already) and
@@ -410,13 +410,17 @@ class TabHoverCardBubbleView::ThumbnailObserver
     if (current_image_ == thumbnail_image)
       return;
 
-    scoped_observer_.RemoveAll();
+    subscription_.reset();
     current_image_ = std::move(thumbnail_image);
+    if (!current_image_)
+      return;
 
-    if (current_image_) {
-      scoped_observer_.Add(current_image_.get());
-      current_image_->RequestThumbnailImage();
-    }
+    subscription_ = current_image_->Subscribe();
+    subscription_->SetSizeHint(TabStyle::GetPreviewImageSize());
+    subscription_->SetUncompressedImageCallback(base::BindRepeating(
+        &ThumbnailObserver::ThumbnailImageCallback, base::Unretained(this)));
+
+    current_image_->RequestThumbnailImage();
   }
 
   // Returns the current (most recent) thumbnail being watched.
@@ -424,18 +428,13 @@ class TabHoverCardBubbleView::ThumbnailObserver
     return current_image_;
   }
 
-  base::Optional<gfx::Size> GetThumbnailSizeHint() const override {
-    return TabStyle::GetPreviewImageSize();
-  }
-
-  void OnThumbnailImageAvailable(gfx::ImageSkia preview_image) override {
+  void ThumbnailImageCallback(gfx::ImageSkia preview_image) {
     hover_card_->OnThumbnailImageAvailable(std::move(preview_image));
   }
 
   scoped_refptr<ThumbnailImage> current_image_;
+  std::unique_ptr<ThumbnailImage::Subscription> subscription_;
   TabHoverCardBubbleView* const hover_card_;
-  ScopedObserver<ThumbnailImage, ThumbnailImage::Observer> scoped_observer_{
-      this};
 };
 
 TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
@@ -547,7 +546,7 @@ TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
       std::make_unique<WidgetSlideAnimationDelegate>(this);
   fade_animation_delegate_ =
       std::make_unique<WidgetFadeAnimationDelegate>(GetWidget());
-  thumbnail_observer_ = std::make_unique<ThumbnailObserver>(this);
+  thumbnail_observation_ = std::make_unique<ThumbnailObserver>(this);
 
   constexpr int kFootnoteVerticalMargin = 8;
   GetBubbleFrameView()->set_footnote_margins(
@@ -615,7 +614,9 @@ void TabHoverCardBubbleView::UpdateAndShow(Tab* tab) {
   if (GetWidget()->IsVisible())
     ++hover_cards_seen_count_;
 
-  if (GetWidget()->IsVisible() && !disable_animations_for_testing_) {
+  const bool animations_enabled = gfx::Animation::ShouldRenderRichAnimation();
+  if (GetWidget()->IsVisible() && !disable_animations_for_testing_ &&
+      animations_enabled) {
     slide_animation_delegate_->AnimateToAnchorView(tab);
   } else {
     if (!anchor_view_set)
@@ -627,7 +628,8 @@ void TabHoverCardBubbleView::UpdateAndShow(Tab* tab) {
   }
 
   if (!GetWidget()->IsVisible()) {
-    if (disable_animations_for_testing_ || show_immediately) {
+    if (disable_animations_for_testing_ || show_immediately ||
+        !animations_enabled) {
       GetWidget()->SetOpacity(1.0f);
       GetWidget()->Show();
     } else {
@@ -648,10 +650,11 @@ void TabHoverCardBubbleView::FadeOutToHide() {
   delayed_show_timer_.Stop();
   if (!GetWidget()->IsVisible())
     return;
-  thumbnail_observer_->Observe(nullptr);
+  thumbnail_observation_->Observe(nullptr);
   slide_animation_delegate_->StopAnimation();
   last_visible_timestamp_ = base::TimeTicks::Now();
-  if (disable_animations_for_testing_) {
+  if (disable_animations_for_testing_ ||
+      !gfx::Animation::ShouldRenderRichAnimation()) {
     GetWidget()->Hide();
   } else {
     fade_animation_delegate_->FadeOut();
@@ -804,12 +807,12 @@ void TabHoverCardBubbleView::UpdateCardContent(const Tab* tab) {
       auto thumbnail = tab->data().thumbnail;
       if (!thumbnail) {
         ClearPreviewImage();
-      } else if (thumbnail != thumbnail_observer_->current_image()) {
+      } else if (thumbnail != thumbnail_observation_->current_image()) {
         waiting_for_decompress_ = true;
-        thumbnail_observer_->Observe(thumbnail);
+        thumbnail_observation_->Observe(thumbnail);
       }
     } else {
-      thumbnail_observer_->Observe(nullptr);
+      thumbnail_observation_->Observe(nullptr);
     }
   }
 }

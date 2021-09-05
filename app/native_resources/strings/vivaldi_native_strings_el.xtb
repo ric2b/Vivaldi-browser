@@ -4,13 +4,16 @@
 <translation id="1033008476608128425">Τοπίο 3</translation>
 <translation id="1118377629180821201">Τοπίο 12</translation>
 <translation id="1158503667684816647">Να μην εμφανίζεται ξανά η επιβεβαίωση</translation>
+<translation id="1222195720020481779">Εκκίνηση του προγράμματος εγκατάστασης...</translation>
 <translation id="1276145862619442150">Ταχείες Κλήσεις</translation>
 <translation id="1281950884873973195">Ζώο 6</translation>
 <translation id="1411638389238344450">Αποστολή Συνδέσμου μέσω Ηλεκτρονικού Ταχυδρομείου</translation>
 <translation id="1454726940098520109">Να μην εμφανιστεί ξανά η επιβεβαίωση</translation>
 <translation id="1462666970065907900">Θέλετε πραγματικά να κλείσετε αυτό το παράθυρο;</translation>
+<translation id="1526344461589023948">Παρουσιάστηκε σφάλμα κατά την προσπάθεια αποθήκευσης μιας ληφθείσας ενημέρωσης. Βεβαιωθείτε ότι ο υπολογιστής διαθέτει αρκετό χώρο στο δίσκο και δοκιμάστε ξανά αργότερα.</translation>
 <translation id="1657174850639146440">Τέρας 9</translation>
 <translation id="1676595396635191120">Νέο Ιδιωτικό Παράθυρο</translation>
+<translation id="1702758681952953055">Εάν το σφάλμα παραμένει, αναφέρετέ το και συμπεριλάβετε τις ακόλουθες λεπτομέρειες:</translation>
 <translation id="1728549374069268714">Επικόλληση και μετάβαση</translation>
 <translation id="1756026472674246267">Άνοιγμα Συνδέσμου σε Νέα Καρτέλα</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -19,10 +22,17 @@
 <translation id="1921101374471252440">Ε&amp;πανάληψη φόρτωσης Εικόνας</translation>
 <translation id="1924750141060565109">Τοπίο 15</translation>
 <translation id="19598411548897379">Γενικό</translation>
+<translation id="1985669426322966465">Αναβάθμιση Λογισμικού</translation>
 <translation id="2079036669923635404">Κάντε κλικ εδώ για να ενημερώσετε το Vivaldi στην έκδοση <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Παρουσιάστηκε σφάλμα κατά τη λήψη αρχείων ενημέρωσης. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και δοκιμάστε ξανά αργότερα.</translation>
+<translation id="2339641773402824483">Ελεγχος για ενημερώσεις...</translation>
 <translation id="2441056087170876076">Τέρας 2</translation>
 <translation id="2444387452209867610">Εισαγωγή Σημείωσης</translation>
 <translation id="2486841023299517366">Ζώο 4</translation>
+<translation id="2612127540243995147">Έτοιμο για εγκατάσταση. Το Vivaldi θα είναι κλειστό και θα ξαναρχίσει.</translation>
+<translation id="2613387515621326337">Εμφάνιση ιστότοπου ενημέρωσης</translation>
+<translation id="2647368062414805334">Δυστυχώς, οι ρυθμίσεις σας στο Edge δεν είναι διαθέσιμες κατά την εκτέλεση του. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα του Edge. Έπειτα, κάντε κλικ στο Συνέχεια.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Ζώο 3</translation>
 <translation id="2873951654529031587">Κάδος απορριμμάτων</translation>
 <translation id="292258461174562431">Τέρας 4</translation>
@@ -33,9 +43,12 @@
 <translation id="3084011186245865060">Τοπίο 6</translation>
 <translation id="3127383884976966729">Ζώο 7</translation>
 <translation id="3156398087075132709">Νέος Σελιδοδείκτης</translation>
+<translation id="3255747772218936245">Εγκατάσταση ενημέρωσης</translation>
 <translation id="3259769196742189631">Επικύρωση</translation>
 <translation id="3302905971452834934">Τέρας 1</translation>
 <translation id="3334610655141903168">(χωρίς τίτλο)</translation>
+<translation id="3372505110412186107">Το Vivaldi <ph name="VERSION" /> είναι προς το παρόν η πιο πρόσφατη διαθέσιμη έκδοση.</translation>
+<translation id="3383198080133834965">Είστε ενημερωμένοι!</translation>
 <translation id="3402602684546832928">Επιλέξτε Αρχείο σελιδοδεικτών Opera</translation>
 <translation id="3451317331714872347">Τοπίο 8</translation>
 <translation id="3457498675806041407">Επιβεβαίωση Εξόδου</translation>
@@ -45,13 +58,17 @@
 <translation id="3542768452570884558">Άνοιγμα Συνδέσμου σε Νέο Παράθυρο</translation>
 <translation id="3588820906588687999">Άνοιγμα Εικόνας σε Νέα Καρτέλα</translation>
 <translation id="3601066750251199488">Τέρας 3</translation>
+<translation id="3680031241659195730">Μια νέα έκδοση του Vivaldi είναι διαθέσιμη!</translation>
+<translation id="3708982624815781692">Η λήψη ακυρώθηκε.</translation>
 <translation id="3732157130969736834">Προσθήκη Συνδέσμου στους Σελιδοδείκτες</translation>
 <translation id="3732388226447288666">Ζώο 2</translation>
 <translation id="3732439195215136813">Ζώο 5</translation>
+<translation id="3795800845758778870">Δυστυχώς, οι ρυθμίσεις σας στο Brave δεν είναι διαθέσιμες κατά την εκτέλεση του. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα του Brave. Έπειτα, κάντε κλικ στο Συνέχεια.</translation>
 <translation id="3832132597516774400">Τοπίο 5</translation>
 <translation id="3914946330804881301">Εισαγωγή από Opera</translation>
 <translation id="3921292902397893431">Τέρας 8</translation>
 <translation id="3943857333388298514">Επικόλληση</translation>
+<translation id="4005270918754737597">Παράλειψη αυτής της έκδοσης</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Να μην εμφανιστεί ξανά</translation>
 <translation id="4074744496918018786">Άνοιγμα Εικόνας σε Ιδιωτικό Παράθυρο</translation>
@@ -68,6 +85,7 @@
 <translation id="4677434526832593569">Ζώο 8</translation>
 <translation id="474217410105706308">Σίγαση Καρτέλας</translation>
 <translation id="4881695831933465202">Άνοιγμα</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> από <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Ταχεία Κλήση που έχει εισαχθεί</translation>
 <translation id="5092656712000637858">Προσθήκη Σελίδας σε Πίνακα Ιστού</translation>
 <translation id="5177818338935286353">Τέρας 7</translation>
@@ -81,11 +99,14 @@
 <translation id="5594602170491763400">Τέρας 5</translation>
 <translation id="5615637589913244581">Opera έκδοση 15+ (Beta)</translation>
 <translation id="5648110075441906505">Άνοιγμα Εικόνας σε Νέο Παράθυρο</translation>
+<translation id="5656371807944747581">Σφάλμα Ενημέρωσης!</translation>
 <translation id="5716238312826274098">Απενεργοποίηση ειδοποιήσεων</translation>
+<translation id="5732584064771442623">Το Vivaldi <ph name="NEW_VERSION" /> είναι τώρα διαθέσιμο (έχετε την έκδοση <ph name="OLD_VERSION" />). Θέλετε να το κατεβάσετε τώρα;</translation>
 <translation id="5770433027661640693">Τοπίο 10</translation>
 <translation id="5857090052475505287">Νέος Φάκελος</translation>
 <translation id="588258955323874662">Πλήρης οθόνη</translation>
 <translation id="5916080360077521750">Δυστυχώς, οι ρυθμίσεις του Chrome δεν είναι διαθέσιμες ενώ εκτελείται το πρόγραμμα περιήγησης. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα του Chrome. Στη συνέχεια, κάντε κλικ στο κουμπί Συνέχεια.</translation>
+<translation id="6040143037577758943">Κλείσιμο</translation>
 <translation id="6229528619562190452">Κάντε κλικ εδώ για να ενημερώσετε τον Vivaldi.</translation>
 <translation id="6234173136417926046">Χρήση Εικόνας ως Φόντο της Αρχικής Σελίδας</translation>
 <translation id="630690498669249215">Αρχείο Σελιδοδεικτών Opera</translation>
@@ -96,15 +117,23 @@
 <translation id="6538338088414940408">Άνοιγμα συνδέσμου σε νέα καρτέλα στο παρασκήνιο</translation>
 <translation id="6551219277044048123">Προσθήκη ως Μηχανή Αναζήτησης...</translation>
 <translation id="6630781781151951863">Τοπίο 18</translation>
+<translation id="6635049669875534328">Σημειώσεις έκδοσης:</translation>
+<translation id="6693585104974197539">Επιλέξτε φάκελο προφίλ του Edge για εισαγωγή</translation>
+<translation id="6726279523566323394">Επιλέξτε φάκελο προφίλ του Brave για εισαγωγή</translation>
 <translation id="6804831687363620480">Δυστυχώς, οι ρυθμίσεις σας Opera 15+ δεν είναι διαθέσιμες ενώ εκτελείται το πρόγραμμα περιήγησης. Για να εισαγάγετε αυτές τις ρυθμίσεις στο Vivaldi, αποθηκεύστε την εργασία σας και κλείστε όλα τα παράθυρα Opera 15+. Στη συνέχεια, κάντε κλικ στο κουμπί Συνέχεια.</translation>
+<translation id="6892812721183419409">Άνοιγμα Συνδέσμου ως <ph name="USER" /></translation>
 <translation id="6896758677409633944">Αντιγραφή</translation>
 <translation id="7086554968911045110">Τοπίο 7</translation>
 <translation id="7111492742514999492">Τοπίο 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Το Vivaldi δημιουργήθηκε χάρη στο έργο ανοικτού κώδικα <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> και άλλων <ph name="BEGIN_LINK_OSS" />ανοικτού κώδικα λογισμικών<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Αποτυχία εκκίνησης του προγράμματος εγκατάστασης ενημέρωσης. Βεβαιωθείτε ότι ο υπολογιστής διαθέτει αρκετή μνήμη ή χώρο στο δίσκο και δοκιμάστε ξανά αργότερα.</translation>
+<translation id="7658239707568436148">Άκυρο</translation>
 <translation id="7715497554424665066">&amp;Παράβλεψη Ενημέρωσης</translation>
 <translation id="7724603315864178912">Αποκοπή</translation>
+<translation id="7727481996062361502">Επαλήθευση ενημέρωσης...</translation>
 <translation id="7793738202466490491">Προσθήκη ως Συμβάν Ημερολογίου</translation>
+<translation id="7848222781052558334">Αποτυχία επαλήθευσης της ψηφιακής υπογραφής των ληφθέντων αρχείων.</translation>
 <translation id="7865983598101744945">Επιβεβαίωση εξόδου</translation>
 <translation id="7957213167373139414">Το Ημερολόγιό Μου</translation>
 <translation id="8027581147000338959">Άνοιγμα σε Νέο Παράθυρο</translation>
@@ -113,9 +142,13 @@
 <translation id="8261506727792406068">Διαγραφή</translation>
 <translation id="8331671104904436324">Άνοιγμα σε Καρτέλα στο Παρασκήνιο</translation>
 <translation id="8373293945112511707">Τοπίο 1</translation>
+<translation id="8388552048012645975">Λήψη ενημέρωσης...</translation>
 <translation id="8427094907586191051">Τοπίο 17</translation>
+<translation id="8439034818057146672">Μια νέα έκδοση του Vivaldi είναι έτοιμη για εγκατάσταση.</translation>
 <translation id="8446668873108041390">Η εκτέλεση JavaScript μέσω AppleScript είναι απενεργοποιημένη. Στην περιοχή Ρυθμίσεις&gt; Απόρρητο&gt; Apple Events, υπάρχει μια ρύθμιση που επιτρέπει την JavaScript από τα Apple Events.</translation>
 <translation id="8539196077526389150">Τοπίο 13</translation>
+<translation id="8562339533180097902">Κλείστε το Vivaldi και εγκαταστήστε τώρα</translation>
+<translation id="8567452685425968223">Εξαγωγή ενημέρωσης...</translation>
 <translation id="8624587806981488221">Επαναφόρτωση εικόνας</translation>
 <translation id="864444594187862076">Opera έκδοση 15+ (Developer)</translation>
 <translation id="8651348004684669199">Προσθήκη της Ενεργής Καρτέλας</translation>
@@ -123,12 +156,15 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Τοπίο 14</translation>
 <translation id="8773635261052182196">Δεν θα δείτε πλέον αυτές τις ειδοποιήσεις. Μπορείτε να τα ενεργοποιήσετε ξανά από τις ρυθμίσεις του vivaldi.</translation>
+<translation id="8813277370772331957">Θύμισέ μου αργότερα</translation>
 <translation id="8894900864683381599">Προσθήκη Συνδέσμου σε Πίνακα Ιστού</translation>
 <translation id="8912720443398351457">Θέλετε πραγματικά να κλείσετε τον Vivaldi;</translation>
 <translation id="8947109330183116400">Επιλέξτε αρχείο σελιδοδεικτών HTML</translation>
 <translation id="9017566390391482291">Επιλέξτε το φάκελο προφίλ Vivaldi για εισαγωγή</translation>
 <translation id="9065203028668620118">Επεξεργασία</translation>
+<translation id="912022491595344261">Άνοιγμα εικόνας ως <ph name="USER" /></translation>
 <translation id="9157539936604258187">Άνοιγμα Συνδέσμου</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Τοπίο 16</translation>
 </translationbundle>

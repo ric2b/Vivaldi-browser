@@ -556,7 +556,7 @@ content::WebContents* VivaldiSessionService::RestoreTab(
   content::WebContents* web_contents = chrome::AddRestoredTab(
       browser, tab.navigations, tab_index, selected_index, tab.extension_app_id,
       group, false,  // select
-      tab.pinned, true, base::TimeTicks(), session_storage_namespace.get(),
+      tab.pinned, base::TimeTicks(), session_storage_namespace.get(),
       tab.user_agent_override, true /* from_session_restore */,
       tab.page_action_overrides, tab.ext_data);
   // Regression check: check that the tab didn't start loading right away. The

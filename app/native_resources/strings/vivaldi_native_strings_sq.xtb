@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Peizazhi 3</translation>
 <translation id="1118377629180821201">Peizazhi 12</translation>
 <translation id="1158503667684816647">Nuk e kërkoj më konfirmimin</translation>
+<translation id="1222195720020481779">Nis instalimin...</translation>
 <translation id="1276145862619442150">Tastet e shpejta</translation>
 <translation id="1281950884873973195">Kafsha 6</translation>
 <translation id="1411638389238344450">Dërgoj lidhjen me imejl</translation>
@@ -21,11 +22,15 @@
 <translation id="1921101374471252440">&amp;Freskoj imazhin</translation>
 <translation id="1924750141060565109">Peizazhi 15</translation>
 <translation id="19598411548897379">Universal</translation>
+<translation id="1985669426322966465">Përditësimi i programit</translation>
 <translation id="2079036669923635404">Klikoni që ta përditësoni Vivaldin në versionin <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Problem me shkarkimin e skedarëve të përditësimit. Lutemi të kontrolloni linjën e internetit dhe provojeni prapë.</translation>
+<translation id="2339641773402824483">Kontrollon përditësimet...</translation>
 <translation id="2441056087170876076">Monstra 2</translation>
 <translation id="2444387452209867610">Vë shënimin</translation>
 <translation id="2486841023299517366">Kafsha 4</translation>
+<translation id="2612127540243995147">Gatim për instalim. Vivaldi do të mbyllet dhe hapet automatikisht.</translation>
+<translation id="2613387515621326337">Tregoj faqen e përditësimit</translation>
 <translation id="2848085334714181751">Kafsha 3</translation>
 <translation id="2873951654529031587">Koshi</translation>
 <translation id="292258461174562431">Monstra 4</translation>
@@ -36,9 +41,12 @@
 <translation id="3084011186245865060">Peizazhi 6</translation>
 <translation id="3127383884976966729">Kafsha 7</translation>
 <translation id="3156398087075132709">Faqe interesante të re</translation>
+<translation id="3255747772218936245">Instaloj përditësimin</translation>
 <translation id="3259769196742189631">Vlerësoj faqen</translation>
 <translation id="3302905971452834934">Monstra 1</translation>
 <translation id="3334610655141903168">(pa titull)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> është versioni i fundit.</translation>
+<translation id="3383198080133834965">Keni versionin e ri!</translation>
 <translation id="3402602684546832928">Përzgjidhni skedarin e faqeve interesante nga Opera</translation>
 <translation id="3451317331714872347">Peizazhi 8</translation>
 <translation id="3457498675806041407">Konfirmoni daljen</translation>
@@ -48,6 +56,7 @@
 <translation id="3542768452570884558">Hap lidhjen në dritare të re</translation>
 <translation id="3588820906588687999">Hap imazhin në skedë të re</translation>
 <translation id="3601066750251199488">Monstra 3</translation>
+<translation id="3680031241659195730">Ka dalë versioni i ri i Vivaldit!</translation>
 <translation id="3708982624815781692">Shkarkimi u anulua.</translation>
 <translation id="3732157130969736834">Shtoj lidhjen te faqet interesante</translation>
 <translation id="3732388226447288666">Kafsha 2</translation>
@@ -56,6 +65,7 @@
 <translation id="3914946330804881301">Të importuara nga Opera</translation>
 <translation id="3921292902397893431">Monstra 8</translation>
 <translation id="3943857333388298514">Ngjit</translation>
+<translation id="4005270918754737597">Kaloj këtë versionin</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Nuk e tregoj më</translation>
 <translation id="4074744496918018786">Hap imazhin në dritare private</translation>
@@ -72,6 +82,7 @@
 <translation id="4677434526832593569">Kafsha 8</translation>
 <translation id="474217410105706308">Heq zërin e skedës</translation>
 <translation id="4881695831933465202">Hap</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> nga <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Taste të shpejta të importuara</translation>
 <translation id="5092656712000637858">Shtoj faqen te paneli anësor</translation>
 <translation id="5177818338935286353">Monstra 7</translation>
@@ -87,6 +98,7 @@
 <translation id="5648110075441906505">Hap imazhin në dritare të re</translation>
 <translation id="5656371807944747581">Problem me përditësimin!</translation>
 <translation id="5716238312826274098">Çaktivizimi i njoftimeve</translation>
+<translation id="5732584064771442623">Ka dalë versioni <ph name="NEW_VERSION" /> i Vivaldit (tani keni <ph name="OLD_VERSION" />). Do e shkarkoni?</translation>
 <translation id="5770433027661640693">Peizazhi 10</translation>
 <translation id="5857090052475505287">Dosje të re</translation>
 <translation id="588258955323874662">Zmadhoj ekranin</translation>
@@ -102,15 +114,19 @@
 <translation id="6538338088414940408">Hap lidhjen në skedën në sfond</translation>
 <translation id="6551219277044048123">Shtoj si mot&amp;or kërkimi...</translation>
 <translation id="6630781781151951863">Peizazhi 18</translation>
+<translation id="6635049669875534328">Të rejat e programit:</translation>
 <translation id="6804831687363620480">Fatkeqësisht, nuk mund të importohen parametrat e Opera 15+ kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Opera 15+. Pastaj klikoni Vazhdoj.</translation>
+<translation id="6892812721183419409">Hap lidhjen si <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopjoj</translation>
 <translation id="7086554968911045110">Peizazhi 7</translation>
 <translation id="7111492742514999492">Peizazhi 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi mundësohet nga projekti <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> dhe të tjera <ph name="BEGIN_LINK_OSS" />programe me kod kompjuterik të hapur<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">E pamundur të hapej instaluesi. Lutemi të kontrolloni memorien apo hapësirën e nevojshme në kompjuter dhe provojeni prapë.</translation>
+<translation id="7658239707568436148">Anuloj</translation>
 <translation id="7715497554424665066">&amp;Shmang përditësimin</translation>
 <translation id="7724603315864178912">Pres</translation>
+<translation id="7727481996062361502">Verifikon përditësimin...</translation>
 <translation id="7793738202466490491">Shtoj te aktivitetet kalendarike</translation>
 <translation id="7848222781052558334">E pamundur të verifikohej firma digjitale e skedarëve të shkarkuar.</translation>
 <translation id="7865983598101744945">Konfirmoni daljen</translation>
@@ -121,9 +137,13 @@
 <translation id="8261506727792406068">Fshij</translation>
 <translation id="8331671104904436324">Hap në skedën në sfond</translation>
 <translation id="8373293945112511707">Peizazhi 1</translation>
+<translation id="8388552048012645975">Shkarkon përditësimin...</translation>
 <translation id="8427094907586191051">Peizazhi 17</translation>
+<translation id="8439034818057146672">Versioni i ri i Vivaldit është gati për instalim.</translation>
 <translation id="8446668873108041390">Është çaktivizuar ekzekutimi i JavaScript-it nëpërmjet AppleScript-it. Parametri për ta riaktivizuar ndodhet te Parametrat &gt; Sfera private &gt; Aktivitetet e Apple.</translation>
 <translation id="8539196077526389150">Peizazhi 13</translation>
+<translation id="8562339533180097902">Mbyll Vivaldin dhe e instaloj tani</translation>
+<translation id="8567452685425968223">Shpaketon përditësimin...</translation>
 <translation id="8624587806981488221">&amp;Freskoj imazhin</translation>
 <translation id="864444594187862076">Opera versioni 15+ (Developer)</translation>
 <translation id="8651348004684669199">Shtoj skedën aktive</translation>
@@ -131,11 +151,13 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Peizazhi 14</translation>
 <translation id="8773635261052182196">Nuk do të shfaqen më njoftimet. Mund të aktivizohen sërish te parametrat e Vivaldit.</translation>
+<translation id="8813277370772331957">Më kujto pastaj</translation>
 <translation id="8894900864683381599">Shtoj lidhjen te paneli anësor</translation>
 <translation id="8912720443398351457">Vërtet doni të dilni nga Vivaldi?</translation>
 <translation id="8947109330183116400">Përzgjidhni skedarin HTML të faqeve interesante</translation>
 <translation id="9017566390391482291">Përzgjidhni dosjen e profilit të Vivaldit për ta importuar</translation>
 <translation id="9065203028668620118">Përpunoj</translation>
+<translation id="912022491595344261">Hap imazhin si <ph name="USER" /></translation>
 <translation id="9157539936604258187">Hap lidhjen</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Peizazhi 16</translation>

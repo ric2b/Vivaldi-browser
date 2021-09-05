@@ -36,7 +36,6 @@
 #include "third_party/blink/renderer/core/layout/layout_video.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/replaced_painter.h"
@@ -133,7 +132,7 @@ void LayoutReplaced::Paint(const PaintInfo& paint_info) const {
 bool LayoutReplaced::HasReplacedLogicalHeight() const {
   NOT_DESTROYED();
   if (StyleRef().LogicalHeight().IsAuto())
-    return false;
+    return StretchBlockSizeIfAuto();
 
   if (RuntimeEnabledFeatures::TableCellNewPercentsEnabled() &&
       StyleRef().LogicalHeight().IsFixed())
@@ -766,7 +765,7 @@ LayoutUnit LayoutReplaced::ComputeConstrainedLogicalWidth(
 LayoutUnit LayoutReplaced::ComputeReplacedLogicalWidth(
     ShouldComputePreferred should_compute_preferred) const {
   NOT_DESTROYED();
-  if (!StyleRef().LogicalWidth().IsAuto()) {
+  if (!StyleRef().LogicalWidth().IsAuto() || StretchInlineSizeIfAuto()) {
     return ComputeReplacedLogicalWidthRespectingMinMaxWidth(
         ComputeReplacedLogicalWidthUsing(kMainOrPreferredSize,
                                          StyleRef().LogicalWidth()),
@@ -782,7 +781,8 @@ LayoutUnit LayoutReplaced::ComputeReplacedLogicalWidth(
       ConstrainIntrinsicSizeToMinMax(intrinsic_sizing_info);
 
   if (StyleRef().LogicalWidth().IsAuto()) {
-    bool computed_height_is_auto = StyleRef().LogicalHeight().IsAuto();
+    bool computed_height_is_auto =
+        StyleRef().LogicalHeight().IsAuto() && !StretchBlockSizeIfAuto();
 
     // If 'height' and 'width' both have computed values of 'auto' and the
     // element also has an intrinsic width, then that intrinsic width is the
@@ -972,9 +972,9 @@ static std::pair<LayoutUnit, LayoutUnit> SelectionTopAndBottom(
     const ComputedStyle& line_style = line_box.Current().Style();
     const auto writing_direction = line_style.GetWritingDirection();
     const WritingModeConverter converter(writing_direction,
-                                         line_box.BoxFragment().Size());
+                                         line_box.ContainerFragment().Size());
     const LogicalRect logical_rect =
-        converter.ToLogical(line_box.Current().RectInContainerBlock());
+        converter.ToLogical(line_box.Current().RectInContainerFragment());
     return {logical_rect.offset.block_offset, logical_rect.BlockEndOffset()};
   }
 
@@ -989,6 +989,7 @@ static std::pair<LayoutUnit, LayoutUnit> SelectionTopAndBottom(
 PositionWithAffinity LayoutReplaced::PositionForPoint(
     const PhysicalOffset& point) const {
   NOT_DESTROYED();
+
   LayoutUnit top;
   LayoutUnit bottom;
   std::tie(top, bottom) = SelectionTopAndBottom(*this);
@@ -1003,20 +1004,18 @@ PositionWithAffinity LayoutReplaced::PositionForPoint(
                                            : flipped_point_in_container.Y();
 
   if (block_direction_position < top)
-    return CreatePositionWithAffinity(
-        CaretMinOffset());  // coordinates are above
+    return PositionBeforeThis();  // coordinates are above
 
   if (block_direction_position >= bottom)
-    return CreatePositionWithAffinity(
-        CaretMaxOffset());  // coordinates are below
+    return PositionBeforeThis();  // coordinates are below
 
   if (GetNode()) {
     const bool is_at_left_side =
         line_direction_position <= LogicalLeft() + (LogicalWidth() / 2);
     const bool is_at_start = is_at_left_side == IsLtr(ResolvedDirection());
-    // TODO(crbug.com/827923): Stop creating positions using int offsets on
-    // non-text nodes.
-    return CreatePositionWithAffinity(is_at_start ? 0 : 1);
+    if (is_at_start)
+      return PositionBeforeThis();
+    return PositionAfterThis();
   }
 
   return LayoutBox::PositionForPoint(point);
@@ -1034,7 +1033,7 @@ PhysicalRect LayoutReplaced::LocalSelectionVisualRect() const {
     NGInlineCursor cursor;
     cursor.MoveTo(*this);
     for (; cursor; cursor.MoveToNextForSameLayoutObject())
-      rect.Unite(ComputeLocalSelectionRectForReplaced(cursor));
+      rect.Unite(cursor.CurrentLocalSelectionRectForReplaced());
     return rect;
   }
 

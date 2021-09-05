@@ -3,7 +3,7 @@
 <translationbundle lang="ja-KS">
 <translation id="1127811143501539442">{DAYS,plural, =1{1 日前}other{# 日前}}</translation>
 <translation id="1156623771253174079">{SECONDS,plural, =1{1 分前}other{# 分前}}</translation>
-<translation id="1368832886055348810">左側の余白</translation>
+<translation id="1368832886055348810">左から右</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 分 }other{# 分 }}</translation>
 <translation id="1752946267035950200">{MINUTES,plural, =1{1 分}other{# 分}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>

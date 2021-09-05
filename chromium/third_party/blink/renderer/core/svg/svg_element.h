@@ -124,7 +124,18 @@ class CORE_EXPORT SVGElement : public Element {
   // For SVGTests
   virtual bool IsValid() const { return true; }
 
-  virtual void SvgAttributeChanged(const QualifiedName&);
+  struct SvgAttributeChangedParams {
+    STACK_ALLOCATED();
+
+   public:
+    SvgAttributeChangedParams(const QualifiedName& qname,
+                              AttributeModificationReason reason)
+        : name(qname), reason(reason) {}
+
+    const QualifiedName& name;
+    const AttributeModificationReason reason;
+  };
+  virtual void SvgAttributeChanged(const SvgAttributeChangedParams&);
 
   SVGAnimatedPropertyBase* PropertyFromAttribute(
       const QualifiedName& attribute_name) const;
@@ -152,7 +163,8 @@ class CORE_EXPORT SVGElement : public Element {
   void CollectStyleForAnimatedPresentationAttributes(
       MutableCSSPropertyValueSet*);
 
-  scoped_refptr<ComputedStyle> CustomStyleForLayoutObject() final;
+  scoped_refptr<ComputedStyle> CustomStyleForLayoutObject(
+      const StyleRecalcContext&) final;
   bool LayoutObjectIsNeeded(const ComputedStyle&) const override;
 
 #if DCHECK_IS_ON()

@@ -52,6 +52,7 @@
       "cros_host_sysroot": "//build/linux/debian_sid_amd64-sysroot",
       "cros_v8_snapshot_sysroot": "//build/linux/debian_sid_amd64-sysroot",
       "enable_linux_installer": false,
+      "is_cfi": true,
       "is_chrome_branded": true,
       "is_chromeos_device": true,
       "is_official_build": true,
@@ -59,6 +60,7 @@
       "ozone_platform_wayland": true,
       "ozone_platform_x11": false,
       "rtc_use_pipewire": false,
+      "symbol_level": 1,
       "target_os": "linux",
       "use_custom_libcxx": false,
       "use_custom_libcxx_for_host": true,
@@ -71,11 +73,21 @@
       "use_pangocairo": false,
       "use_pulseaudio": false,
       "use_system_libsync": false,
+      "use_thin_lto": true,
       "use_v8_context_snapshot": false,
       "use_vaapi": false
     }
   },
   "linux-builder-perf": {
+    "gn_args": {
+      "is_chrome_branded": true,
+      "is_official_build": true,
+      "symbol_level": 1,
+      "use_gnome_keyring": false,
+      "use_goma": true
+    }
+  },
+  "linux-builder-perf-rel": {
     "gn_args": {
       "is_chrome_branded": true,
       "is_official_build": true,

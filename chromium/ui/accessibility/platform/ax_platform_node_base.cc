@@ -119,7 +119,7 @@ const AXNodeData& AXPlatformNodeBase::GetData() const {
   return *empty_data;
 }
 
-gfx::NativeViewAccessible AXPlatformNodeBase::GetFocus() {
+gfx::NativeViewAccessible AXPlatformNodeBase::GetFocus() const {
   if (delegate_)
     return delegate_->GetFocus();
   return nullptr;
@@ -160,6 +160,14 @@ base::Optional<int> AXPlatformNodeBase::GetIndexInParent() {
   AXPlatformNodeBase* parent = FromNativeViewAccessible(GetParent());
   if (!parent)
     return base::nullopt;
+
+  // If this is the webview, it is not in the child in the list of its parent's
+  // child.
+  // TODO(jkim): Check if we could remove this after making WebView ignored.
+  if (delegate_ &&
+      delegate_->GetNativeViewAccessible() != GetNativeViewAccessible()) {
+    return base::nullopt;
+  }
 
   int child_count = parent->GetChildCount();
   if (child_count == 0) {
@@ -591,8 +599,8 @@ bool AXPlatformNodeBase::SetHypertextSelection(int start_offset,
   return delegate_->SetHypertextSelection(start_offset, end_offset);
 }
 
-bool AXPlatformNodeBase::IsDocument() const {
-  return ui::IsDocument(GetData().role);
+bool AXPlatformNodeBase::IsPlatformDocument() const {
+  return ui::IsPlatformDocument(GetData().role);
 }
 
 bool AXPlatformNodeBase::IsSelectionItemSupported() const {
@@ -881,11 +889,7 @@ base::Optional<float> AXPlatformNodeBase::GetFontSizeInPoints() const {
   return base::nullopt;
 }
 
-bool AXPlatformNodeBase::HasCaret(
-    const AXTree::Selection* unignored_selection) {
-  if (IsInvisibleOrIgnored())
-    return false;
-
+bool AXPlatformNodeBase::HasCaret(const AXTree::Selection* selection) {
   if (IsPlainTextField() &&
       HasIntAttribute(ax::mojom::IntAttribute::kTextSelStart) &&
       HasIntAttribute(ax::mojom::IntAttribute::kTextSelEnd)) {
@@ -894,10 +898,10 @@ bool AXPlatformNodeBase::HasCaret(
 
   // The caret is always at the focus of the selection.
   int32_t focus_id;
-  if (unignored_selection)
-    focus_id = unignored_selection->focus_object_id;
+  if (selection)
+    focus_id = selection->focus_object_id;
   else
-    focus_id = delegate_->GetUnignoredSelection().focus_object_id;
+    focus_id = delegate_->GetTreeData().sel_focus_object_id;
 
   AXPlatformNodeBase* focus_object =
       static_cast<AXPlatformNodeBase*>(delegate_->GetFromNodeID(focus_id));
@@ -917,7 +921,17 @@ bool AXPlatformNodeBase::IsChildOfLeaf() const {
 }
 
 bool AXPlatformNodeBase::IsInvisibleOrIgnored() const {
-  return GetData().IsInvisibleOrIgnored();
+  if (!GetData().IsInvisibleOrIgnored())
+    return false;
+
+  if (GetData().HasState(ax::mojom::State::kFocusable))
+    return !IsFocused();
+
+  return !const_cast<AXPlatformNodeBase*>(this)->HasCaret();
+}
+
+bool AXPlatformNodeBase::IsFocused() const {
+  return delegate_ && FromNativeViewAccessible(delegate_->GetFocus()) == this;
 }
 
 bool AXPlatformNodeBase::IsScrollable() const {
@@ -1078,9 +1092,6 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
         break;
       case ax::mojom::AriaCurrentState::kLocation:
         AddAttributeToList("current", "location", attributes);
-        break;
-      case ax::mojom::AriaCurrentState::kUnclippedLocation:
-        AddAttributeToList("current", "unclippedLocation", attributes);
         break;
       case ax::mojom::AriaCurrentState::kDate:
         AddAttributeToList("current", "date", attributes);

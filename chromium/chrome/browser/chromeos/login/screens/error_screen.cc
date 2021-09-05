@@ -98,9 +98,13 @@ void ErrorScreen::AllowGuestSignin(bool allowed) {
     view_->SetGuestSigninAllowed(allowed);
 }
 
-void ErrorScreen::AllowOfflineLogin(bool allowed) {
+void ErrorScreen::ShowOfflineLoginOption(bool show) {
   if (view_)
-    view_->SetOfflineSigninAllowed(allowed);
+    view_->SetOfflineSigninAllowed(show);
+}
+
+void ErrorScreen::AllowOfflineLogin(bool allowed) {
+  offline_login_allowed_ = allowed;
 }
 
 void ErrorScreen::FixCaptivePortal() {
@@ -172,8 +176,8 @@ void ErrorScreen::SetIsPersistentError(bool is_persistent) {
     view_->SetIsPersistentError(is_persistent);
 }
 
-ErrorScreen::ConnectRequestCallbackSubscription
-ErrorScreen::RegisterConnectRequestCallback(const base::Closure& callback) {
+base::CallbackListSubscription ErrorScreen::RegisterConnectRequestCallback(
+    const base::Closure& callback) {
   return connect_request_callbacks_.Add(callback);
 }
 
@@ -235,10 +239,10 @@ void ErrorScreen::ShowNetworkErrorMessage(NetworkStateInformer::State state,
 
   const bool guest_signin_allowed =
       user_manager::UserManager::Get()->IsGuestSessionAllowed();
-  const bool offline_login_allowed =
-      GetErrorState() != NetworkError::ERROR_STATE_AUTH_EXT_TIMEOUT;
   AllowGuestSignin(guest_signin_allowed);
-  AllowOfflineLogin(offline_login_allowed);
+  ShowOfflineLoginOption(offline_login_allowed_ &&
+                         GetErrorState() !=
+                             NetworkError::ERROR_STATE_AUTH_EXT_TIMEOUT);
 
   // No need to show the screen again if it is already shown.
   if (is_hidden()) {

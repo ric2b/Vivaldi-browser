@@ -200,7 +200,11 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetBrowserTest,
   // adjust this test to deal.
   ASSERT_EQ(1u, merged_entries.size());
 
-  constexpr uint64_t input_digest = UINT64_C(23751416438320384);
+  // (kCanvasReadback | input_digest << kTypeBits) = one of the merged_entries
+  // If the value of the relevant merged entry changes, input_digest needs to
+  // change. The new input_digest can be calculated by:
+  // new_input_digest = new_ukm_entry >> kTypeBits
+  constexpr uint64_t input_digest = UINT64_C(9877979512039296);
   EXPECT_THAT(merged_entries.begin()->second->metrics,
               IsSupersetOf({
                   Key(blink::IdentifiableSurface::FromTypeAndToken(
@@ -226,6 +230,8 @@ IN_PROC_BROWSER_TEST_F(PrivacyBudgetDefaultConfigBrowserTest, Variations) {
   EXPECT_TRUE(settings->IsActive());
   EXPECT_TRUE(settings->IsTypeAllowed(
       blink::IdentifiableSurface::Type::kCanvasReadback));
+  EXPECT_FALSE(
+      settings->IsTypeAllowed(blink::IdentifiableSurface::Type::kMediaQuery));
 }
 
 #endif

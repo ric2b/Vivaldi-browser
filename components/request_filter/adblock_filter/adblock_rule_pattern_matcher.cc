@@ -264,7 +264,7 @@ RulePatternMatcher::UrlInfo::UrlInfo(const GURL& url)
 
 RulePatternMatcher::UrlInfo::~UrlInfo() = default;
 
-RulePatternMatcher::RulePatternMatcher(const flat::FilterRule& rule)
+RulePatternMatcher::RulePatternMatcher(const flat::RequestFilterRule& rule)
     : rule_(rule), pattern_(ToStringPiece(rule_.pattern())) {
   DCHECK(rule_.pattern_type() == flat::PatternType_PLAIN ||
          rule_.pattern_type() == flat::PatternType_WILDCARDED);

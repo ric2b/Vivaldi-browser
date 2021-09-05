@@ -5,11 +5,28 @@
 
 #include <memory>
 
-#include "base/synchronization/waitable_event.h"
 #include "extensions/browser/extension_function.h"
+
 #include "extensions/schema/autoupdate.h"
 
 namespace extensions {
+
+class AutoUpdateAPI {
+ public:
+  static void Init();
+  static void SendDidFindValidUpdate(const std::string& url);
+  static void SendWillDownloadUpdate();
+  static void SendDidDownloadUpdate();
+  static void SendWillInstallUpdateOnQuit();
+  static void SendUpdaterWillRelaunchApplication();
+  static void SendUpdaterDidRelaunchApplication();
+  static void SendDidAbortWithError();
+
+ private:
+#ifdef OS_WIN
+  static void InitUpgradeDetection();
+#endif
+};
 
 class AutoUpdateCheckForUpdatesFunction : public ExtensionFunction {
  public:

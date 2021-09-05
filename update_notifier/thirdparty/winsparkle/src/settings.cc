@@ -25,11 +25,13 @@
 
 #include "update_notifier/thirdparty/winsparkle/src/settings.h"
 
+#include "installer/util/vivaldi_install_constants.h"
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
 
 #include <Windows.h>
 #include "base/check.h"
+#include "base/logging.h"
 #include "base/notreached.h"
 
 namespace winsparkle {
@@ -43,13 +45,11 @@ namespace {
 const wchar_t* GetRegistryName(ConfigKey key) {
   switch (key) {
     case ConfigKey::kDeltaPatchFailed:
-      return L"DeltaPatchFailed";
+      return vivaldi::constants::kVivaldiDeltaPatchFailed;
     case ConfigKey::kLastCheckTime:
       return L"LastCheckTime";
     case ConfigKey::kSkipThisVersion:
       return L"SkipThisVersion";
-    case ConfigKey::kUpdateTempDir:
-      return L"UpdateTempDir";
   }
   NOTREACHED();
   return nullptr;
@@ -72,7 +72,7 @@ void Settings::WriteConfigValue(ConfigKey config_key,
       RegCreateKeyEx(HKEY_CURRENT_USER, GetKeyPath(), 0, NULL,
                      REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &key, NULL);
   if (result != ERROR_SUCCESS) {
-    LogError("Cannot write settings to registry");
+    LOG(ERROR) << "Cannot write settings to registry";
     return;
   }
 
@@ -83,7 +83,7 @@ void Settings::WriteConfigValue(ConfigKey config_key,
   RegCloseKey(key);
 
   if (result != ERROR_SUCCESS) {
-    LogError("Cannot write settings to registry");
+    LOG(ERROR) << "Cannot write settings to registry";
   }
 }
 
@@ -93,7 +93,7 @@ void Settings::DeleteConfigValue(ConfigKey config_key) {
       RegOpenKeyEx(HKEY_CURRENT_USER, GetKeyPath(), 0, KEY_SET_VALUE, &key);
   if (result != ERROR_SUCCESS) {
     if (result != ERROR_FILE_NOT_FOUND) {
-      LogError("Cannot delete settings from registry");
+      LOG(ERROR) << "Cannot delete settings from registry";
     }
     return;
   }
@@ -103,7 +103,7 @@ void Settings::DeleteConfigValue(ConfigKey config_key) {
   RegCloseKey(key);
 
   if (result != ERROR_SUCCESS) {
-    LogError("Cannot delete settings from registry");
+    LOG(ERROR) << "Cannot delete settings from registry";
   }
 }
 

@@ -8,9 +8,9 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
-#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
@@ -280,9 +280,22 @@ void PageTimingMetricsSender::Update(
     return;
   }
 
+  // We want to force sending the metrics immediately when FCP is reached
+  // instead of using a timer. SendLatest() will force sending now since we
+  // already called EnsureSendTimer().
+  bool force_send_metrics =
+      (!last_timing_->paint_timing ||
+       !last_timing_->paint_timing->first_contentful_paint.has_value()) &&
+      timing->paint_timing &&
+      timing->paint_timing->first_contentful_paint.has_value();
+
   last_timing_ = std::move(timing);
   metadata_recorder_.UpdateMetadata(monotonic_timing);
   EnsureSendTimer();
+
+  if (force_send_metrics) {
+    SendLatest();
+  }
 }
 
 void PageTimingMetricsSender::SendLatest() {

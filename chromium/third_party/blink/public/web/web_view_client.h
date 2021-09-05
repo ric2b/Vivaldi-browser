@@ -31,17 +31,18 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_CLIENT_H_
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_CLIENT_H_
 
+#include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-forward.h"
+#include "third_party/blink/public/platform/web_impression.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
-#include "third_party/blink/public/web/web_widget_client.h"
 
 namespace blink {
 
@@ -62,7 +63,7 @@ class WebViewClient {
   // The request parameter is only for the client to check if the request
   // could be fulfilled.  The client should not load the request.
   // The policy parameter indicates how the new view will be displayed in
-  // WebWidgetClient::Show.
+  // LocalMainFrameHost::ShowCreatedWidget.
   virtual WebView* CreateView(
       WebLocalFrame* creator,
       const WebURLRequest& request,
@@ -70,9 +71,9 @@ class WebViewClient {
       const WebString& name,
       WebNavigationPolicy policy,
       network::mojom::WebSandboxFlags,
-      const FeaturePolicyFeatureState&,
       const SessionStorageNamespaceId& session_storage_namespace_id,
-      bool& consumed_user_gesture) {
+      bool& consumed_user_gesture,
+      const base::Optional<WebImpression>&) {
     return nullptr;
   }
 
@@ -120,14 +121,6 @@ class WebViewClient {
   // notification unless the view did not need a layout.
   virtual void DidUpdateMainFrameLayout() {}
 
-  // Return true to swallow the input event if the embedder will start a
-  // disambiguation popup
-  virtual bool DidTapMultipleTargets(const gfx::Size& visual_viewport_offset,
-                                     const WebRect& touch_rect,
-                                     const WebVector<WebRect>& target_rects) {
-    return false;
-  }
-
   // Returns comma separated list of accept languages.
   virtual WebString AcceptLanguages() { return WebString(); }
 
@@ -152,19 +145,6 @@ class WebViewClient {
   // history item.
   virtual int HistoryBackListCount() { return 0; }
   virtual int HistoryForwardListCount() { return 0; }
-
-  // Developer tools -----------------------------------------------------
-
-  // Called to notify the client that the inspector's settings were
-  // changed and should be saved.  See WebView::inspectorSettings.
-  virtual void DidUpdateInspectorSettings() {}
-
-  virtual void DidUpdateInspectorSetting(const WebString& key,
-                                         const WebString& value) {}
-
-  // Gestures -------------------------------------------------------------
-
-  virtual bool CanHandleGestureEvent() { return false; }
 
   // History -------------------------------------------------------------
   virtual void OnSetHistoryOffsetAndLength(int history_offset,

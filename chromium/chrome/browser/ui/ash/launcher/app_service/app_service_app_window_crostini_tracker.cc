@@ -22,6 +22,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/app_service/app_service_app_window_launcher_item_controller.h"
+#include "chrome/browser/ui/ash/launcher/app_window_base.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
@@ -33,7 +34,6 @@
 #include "components/exo/shell_surface_util.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/aura/window.h"
-#include "ui/base/base_window.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/wm/core/window_util.h"
@@ -189,7 +189,7 @@ void AppServiceAppWindowCrostiniTracker::OnAppLaunchRequested(
   // necessary.
   if (!launcher_item_controller)
     return;
-  for (ui::BaseWindow* app_window : launcher_item_controller->windows()) {
+  for (AppWindowBase* app_window : launcher_item_controller->windows()) {
     activation_permissions_.emplace(
         app_window->GetNativeWindow(),
         exo::GrantPermissionToActivate(app_window->GetNativeWindow(),
@@ -199,12 +199,6 @@ void AppServiceAppWindowCrostiniTracker::OnAppLaunchRequested(
 
 std::string AppServiceAppWindowCrostiniTracker::GetShelfAppId(
     aura::Window* window) const {
-  // Only handle the app associated with the primary user.
-  if (!crostini::CrostiniFeatures::Get()->IsUIAllowed(
-          app_service_controller_->owner()->profile())) {
-    return std::string();
-  }
-
   // Transient windows are set up after window init, so remove them here.
   // Crostini shouldn't need to know about ARC app windows.
   if (wm::GetTransientParent(window) ||

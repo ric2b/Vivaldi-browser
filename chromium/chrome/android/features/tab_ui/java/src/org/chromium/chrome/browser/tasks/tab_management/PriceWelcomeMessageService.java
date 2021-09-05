@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
 
@@ -45,19 +47,20 @@ public class PriceWelcomeMessageService extends MessageService {
      */
     public interface PriceWelcomeMessageProvider {
         /**
-         * This method gets the information of the first tab showing price card.
-         *
-         * @return The PriceTabData including the tab ID and the price drop.
-         */
-        PriceTabData getFirstTabShowingPriceCard();
-
-        /**
          * This method gets the tab index from tab ID.
          *
          * @param tabId The tab ID to search for.
          * @return the index within the {@link TabListModel}.
          */
         int getTabIndexFromTabId(int tabId);
+
+        /**
+         * This method updates {@link TabProperties#SHOULD_SHOW_PRICE_DROP_TOOLTIP} of the binding
+         * tab.
+         *
+         * @param index The binding tab index in {@link TabListModel}.
+         */
+        void showPriceDropTooltip(int index);
     }
 
     /**
@@ -65,11 +68,11 @@ public class PriceWelcomeMessageService extends MessageService {
      */
     public interface PriceWelcomeMessageReviewActionProvider {
         /**
-         * This method scrolls to the binding tab of the PriceWelcomeMessage.
+         * This method scrolls to the tab at given index.
          *
-         * @param tabIndex The index of the {@link Tab} that is binding to PriceWelcomeMessage.
+         * @param tabIndex The index of the {@link Tab} which we will scroll to.
          */
-        void scrollToBindingTab(int tabIndex);
+        void scrollToTab(int tabIndex);
     }
 
     /**
@@ -113,6 +116,14 @@ public class PriceWelcomeMessageService extends MessageService {
         }
     }
 
+    private static final int MAX_PRICE_WELCOME_MESSAGE_SHOW_COUNT = 10;
+    // TODO(crbug.com/1148020): Currently every time entering the tab switcher, {@link
+    // ResetHandler.resetWithTabs} will be called twice if {@link
+    // TabUiFeatureUtilities#isTabToGtsAnimationEnabled} returns true, see {@link
+    // TabSwitcherMediator#prepareOverview}.
+    private static final int PREPARE_MESSAGE_TIMES_ENTERING_TAB_SWITCHER =
+            TabUiFeatureUtilities.isTabToGtsAnimationEnabled() ? 2 : 1;
+
     private final PriceWelcomeMessageProvider mPriceWelcomeMessageProvider;
     private final PriceWelcomeMessageReviewActionProvider mPriceWelcomeMessageReviewActionProvider;
 
@@ -126,12 +137,14 @@ public class PriceWelcomeMessageService extends MessageService {
         mPriceWelcomeMessageReviewActionProvider = priceWelcomeMessageReviewActionProvider;
     }
 
-    void preparePriceMessage() {
-        if (PriceTrackingUtilities.isPriceWelcomeMessageCardDisabled()) return;
-        PriceTabData priceTabData = mPriceWelcomeMessageProvider.getFirstTabShowingPriceCard();
-        if (priceTabData == null) {
-            mPriceTabData = null;
-            sendInvalidNotification();
+    void preparePriceMessage(PriceTabData priceTabData) {
+        assert priceTabData != null;
+        PriceTrackingUtilities.increasePriceWelcomeMessageCardShowCount();
+        if (PriceTrackingUtilities.getPriceWelcomeMessageCardShowCount()
+                > MAX_PRICE_WELCOME_MESSAGE_SHOW_COUNT
+                        * PREPARE_MESSAGE_TIMES_ENTERING_TAB_SWITCHER) {
+            invalidateMessage();
+            PriceTrackingUtilities.disablePriceWelcomeMessageCard();
         } else if (!priceTabData.equals(mPriceTabData)) {
             mPriceTabData = priceTabData;
             sendInvalidNotification();
@@ -140,14 +153,35 @@ public class PriceWelcomeMessageService extends MessageService {
         }
     }
 
-    private void review() {
-        assert mPriceTabData != null;
-        mPriceWelcomeMessageReviewActionProvider.scrollToBindingTab(
-                mPriceWelcomeMessageProvider.getTabIndexFromTabId(mPriceTabData.bindingTabId));
-        PriceTrackingUtilities.disablePriceWelcomeMessageCard();
+    int getBindingTabId() {
+        if (mPriceTabData == null) return Tab.INVALID_TAB_ID;
+        return mPriceTabData.bindingTabId;
     }
 
-    private void dismiss() {
+    void invalidateMessage() {
+        mPriceTabData = null;
+        sendInvalidNotification();
+    }
+
+    @VisibleForTesting
+    public void review() {
+        assert mPriceTabData != null;
+        int bindingTabIndex =
+                mPriceWelcomeMessageProvider.getTabIndexFromTabId(mPriceTabData.bindingTabId);
+        mPriceWelcomeMessageReviewActionProvider.scrollToTab(bindingTabIndex);
+        mPriceWelcomeMessageProvider.showPriceDropTooltip(bindingTabIndex);
         PriceTrackingUtilities.disablePriceWelcomeMessageCard();
+        mPriceTabData = null;
+    }
+
+    @VisibleForTesting
+    public void dismiss() {
+        PriceTrackingUtilities.disablePriceWelcomeMessageCard();
+        mPriceTabData = null;
+    }
+
+    @VisibleForTesting
+    PriceTabData getPriceTabDataForTesting() {
+        return mPriceTabData;
     }
 }

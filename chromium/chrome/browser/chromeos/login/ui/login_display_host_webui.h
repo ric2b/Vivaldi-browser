@@ -83,12 +83,17 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
   void OnBrowserCreated() override;
   void ShowGaiaDialog(const AccountId& prefilled_account) override;
   void HideOobeDialog() override;
+  void SetShelfButtonsEnabled(bool enabled) override;
   void UpdateOobeDialogState(ash::OobeDialogState state) override;
   void HandleDisplayCaptivePortal() override;
   void UpdateAddUserButtonStatus() override;
   void RequestSystemInfoUpdate() override;
   void OnCancelPasswordChangedFlow() override;
+  void ShowEnableConsumerKioskScreen() override;
   bool HasUserPods() override;
+  void VerifyOwnerForKiosk(base::OnceClosure) override;
+  void ShowPasswordChangedDialog(const AccountId& account_id,
+                                 bool show_password_error) override;
   void AddObserver(LoginDisplayHost::Observer* observer) override;
   void RemoveObserver(LoginDisplayHost::Observer* observer) override;
 
@@ -193,6 +198,9 @@ class LoginDisplayHostWebUI : public LoginDisplayHostCommon,
 
   // Plays startup sound if needed and audio device is ready.
   void PlayStartupSoundIfPossible();
+
+  // Resets login view and unbinds login display from the signin screen handler.
+  void ResetLoginView();
 
   // Sign in screen controller.
   std::unique_ptr<ExistingUserController> existing_user_controller_;

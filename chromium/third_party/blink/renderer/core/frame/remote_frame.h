@@ -8,6 +8,7 @@
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
+#include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
@@ -80,13 +81,8 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void AddResourceTimingFromChild(
       mojom::blink::ResourceTimingInfoPtr timing) override;
 
-  void SetCcLayer(cc::Layer*,
-                  bool prevent_contents_opaque_changes,
-                  bool is_surface_layer);
+  void SetCcLayer(cc::Layer*, bool is_surface_layer);
   cc::Layer* GetCcLayer() const { return cc_layer_; }
-  bool WebLayerHasFixedContentsOpaque() const {
-    return prevent_contents_opaque_changes_;
-  }
 
   void AdvanceFocus(mojom::blink::FocusType, LocalFrame* source);
 
@@ -111,15 +107,40 @@ class CORE_EXPORT RemoteFrame final : public Frame,
 
   void DidChangeVisibleToHitTesting() override;
 
-  void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
-      const ParsedFeaturePolicy& parsed_header,
-      const FeaturePolicyFeatureState&);
+  void SetReplicatedFeaturePolicyHeader(
+      const ParsedFeaturePolicy& parsed_header);
 
   void SetReplicatedSandboxFlags(network::mojom::blink::WebSandboxFlags);
   void SetInsecureRequestPolicy(mojom::blink::InsecureRequestPolicy);
   void SetInsecureNavigationsSet(const WebVector<unsigned>&);
+  void FrameRectsChanged(const IntRect& local_frame_rect,
+                         const IntRect& screen_space_rect);
+  void InitializeFrameVisualProperties(const FrameVisualProperties& properties);
+  void SynchronizeVisualProperties();
+  void ResendVisualProperties();
+
+  // Called when the local root's screen info changes.
+  void DidChangeScreenInfo(const ScreenInfo& screen_info);
+  // Called when the main frame's zoom level is changed and should be propagated
+  // to the remote's associated view.
+  void ZoomLevelChanged(double zoom_level);
+  // Called when the local root's window segments change.
+  void DidChangeRootWindowSegments(
+      const std::vector<gfx::Rect>& root_widget_window_segments);
+  // Called when the local page scale factor changed.
+  void PageScaleFactorChanged(float page_scale_factor,
+                              bool is_pinch_gesture_active);
+  // Called when the local root's visible viewport changes size.
+  void DidChangeVisibleViewportSize(const gfx::Size& visible_viewport_size);
+  // Called when the local root's capture sequence number has changed.
+  void UpdateCaptureSequenceNumber(uint32_t sequence_number);
+  void EnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
+  void DisableAutoResize();
 
   const String& UniqueName() const { return unique_name_; }
+  const FrameVisualProperties& GetPendingVisualPropertiesForTesting() const {
+    return pending_visual_properties_;
+  }
 
   // blink::mojom::RemoteFrame overrides:
   void WillEnterFullscreen(mojom::blink::FullscreenOptionsPtr) override;
@@ -171,6 +192,7 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   void DidUpdateFramePolicy(const FramePolicy& frame_policy) override;
   void UpdateOpener(const base::Optional<base::UnguessableToken>&
                         opener_frame_token) override;
+  void DetachAndDispose() override;
 
   // Called only when this frame has a local frame owner.
   IntSize GetMainFrameViewportSize() const override;
@@ -196,14 +218,15 @@ class CORE_EXPORT RemoteFrame final : public Frame,
 
  private:
   // Frame protected overrides:
-  void DetachImpl(FrameDetachType) override;
+  bool DetachImpl(FrameDetachType) override;
 
   // Intentionally private to prevent redundant checks when the type is
   // already RemoteFrame.
   bool IsLocalFrame() const override { return false; }
   bool IsRemoteFrame() const override { return true; }
 
-  void DetachChildren();
+  // Returns false if detaching child frames reentrantly detached `this`.
+  bool DetachChildren();
   void ApplyReplicatedFeaturePolicyHeader();
 
   static void BindToReceiver(
@@ -215,8 +238,9 @@ class CORE_EXPORT RemoteFrame final : public Frame,
 
   Member<RemoteFrameView> view_;
   RemoteSecurityContext security_context_;
+  base::Optional<blink::FrameVisualProperties> sent_visual_properties_;
+  blink::FrameVisualProperties pending_visual_properties_;
   cc::Layer* cc_layer_ = nullptr;
-  bool prevent_contents_opaque_changes_ = false;
   bool is_surface_layer_ = false;
   ParsedFeaturePolicy feature_policy_header_;
   String unique_name_;

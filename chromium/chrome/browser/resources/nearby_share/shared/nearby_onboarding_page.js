@@ -27,7 +27,9 @@ Polymer({
 
   listeners: {
     'next': 'onNext_',
+    'view-enter-start': 'onViewEnterStart_',
   },
+
 
   /**
    * @private
@@ -42,6 +44,11 @@ Polymer({
             this.fire('change-page', {page: 'visibility'});
           }
         });
+  },
+
+  /** @private */
+  onViewEnterStart_() {
+    this.$$('#deviceName').focus();
   },
 
   /** @private */

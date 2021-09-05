@@ -6,6 +6,8 @@
  * @fileoverview Polymer element for Enterprise Enrollment screen.
  */
 
+(function() {
+
 /* Code which is embedded inside of the webview. See below for details.
 /** @const */
 var INJECTED_WEBVIEW_SCRIPT = String.raw`
@@ -14,7 +16,14 @@ var INJECTED_WEBVIEW_SCRIPT = String.raw`
                        keyboard.initializeKeyboardFlow(true);
                      })();`;
 
-/** @const */ var ENROLLMENT_STEP = {
+/**
+ * @const
+ * When making changes to any of these parameters, make sure that their use in
+ * chrome/browser/resources/chromeos/login/cr_ui.js is updated as well.
+ * TODO(crbug.com/1111387) - Remove this dependency when fully migrated
+ * to JS modules.
+ * */
+var ENROLLMENT_STEP = {
   SIGNIN: 'signin',
   AD_JOIN: 'ad-join',
   WORKING: 'working',
@@ -26,6 +35,14 @@ var INJECTED_WEBVIEW_SCRIPT = String.raw`
    */
   ATTRIBUTE_PROMPT_ERROR: 'attribute-prompt-error',
   ACTIVE_DIRECTORY_JOIN_ERROR: 'active-directory-join-error',
+};
+
+/**
+ * The same steps as in offline-ad-login-element.
+ */
+const adLoginStep = {
+  UNLOCK: 'unlock',
+  CREDS: 'creds',
 };
 
 Polymer({
@@ -385,6 +402,7 @@ Polymer({
     if (step === ENROLLMENT_STEP.AD_JOIN) {
       this.$.adJoinUI.disabled = false;
       this.$.adJoinUI.loading = false;
+      this.$.adJoinUI.focus();
     }
     this.isCancelDisabled =
         (step === ENROLLMENT_STEP.SIGNIN && !this.isManualEnrollment_) ||
@@ -411,7 +429,11 @@ Polymer({
     this.$.adJoinUI.machineName = machineName;
     this.$.adJoinUI.userName = userName;
     this.$.adJoinUI.errorState = errorState;
-    this.$.adJoinUI.unlockPasswordStep = showUnlockConfig;
+    if (showUnlockConfig) {
+      this.$.adJoinUI.setUIStep(adLoginStep.UNLOCK);
+    } else {
+      this.$.adJoinUI.setUIStep(adLoginStep.CREDS);
+    }
   },
 
   /**
@@ -421,7 +443,8 @@ Polymer({
   setAdJoinConfiguration(options) {
     this.$.adJoinUI.disabled = false;
     this.$.adJoinUI.setJoinConfigurationOptions(options);
-    this.$.adJoinUI.unlockPasswordStep = false;
+    this.$.adJoinUI.setUIStep(adLoginStep.CREDS);
+    this.$.adJoinUI.focus();
   },
 
   /**
@@ -586,3 +609,4 @@ Polymer({
     return authenticatorDialogDisplayed || isSamlSsoVisible;
   },
 });
+})();

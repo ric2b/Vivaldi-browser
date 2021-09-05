@@ -162,12 +162,9 @@ bool DownloadDialogBridge::DownloadWithExternalDownloadManager(
     gfx::NativeWindow native_window,
     DownloadLocationDialogType dialog_type,
     const base::FilePath& suggested_path,
-    download::DownloadItem* download,
-    DialogCallback dialog_callback) {
+    download::DownloadItem* download) {
   if (!native_window)
     return false;
-
-  dialog_callback_ = std::move(dialog_callback);
 
   // This shouldn't happen, but if it does, cancel download.
   if (dialog_type == DownloadLocationDialogType::NO_DIALOG) {

@@ -12,7 +12,7 @@
 #include "third_party/blink/renderer/core/css/cssom/css_paint_worklet_input.h"
 #include "third_party/blink/renderer/core/css/cssom/css_style_value.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/modules/csspaint/css_paint_definition.h"
@@ -220,7 +220,8 @@ void PaintWorkletProxyClient::ApplyAnimatedPropertyOverrides(
         animated_property_values) {
   for (const auto& property_value : animated_property_values) {
     DCHECK(property_value.second.has_value());
-    String property_name(property_value.first.c_str());
+    String property_name(
+        property_value.first.custom_property_name.value().c_str());
     DCHECK(style_map->StyleMapData().Contains(property_name));
     CrossThreadStyleValue* old_value =
         style_map->StyleMapData().at(property_name);

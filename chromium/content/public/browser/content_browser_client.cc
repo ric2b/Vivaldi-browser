@@ -9,7 +9,7 @@
 // declarations instead of including more headers. If that is infeasible, adjust
 // the limit. For more info, see
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
-#pragma clang max_tokens_here 910000
+#pragma clang max_tokens_here 830000
 
 #include <utility>
 
@@ -21,10 +21,12 @@
 #include "base/notreached.h"
 #include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/identity_request_dialog_controller.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/navigation_ui_data.h"
@@ -47,12 +49,12 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
-#include "services/service_manager/public/cpp/manifest.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/mojom/federated_learning/floc.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "url/gurl.h"
@@ -435,8 +437,17 @@ std::string ContentBrowserClient::GetWebBluetoothBlocklist() {
   return std::string();
 }
 
-bool ContentBrowserClient::AllowConversionMeasurement(
+bool ContentBrowserClient::IsConversionMeasurementAllowed(
     content::BrowserContext* browser_context) {
+  return true;
+}
+
+bool ContentBrowserClient::IsConversionMeasurementOperationAllowed(
+    content::BrowserContext* browser_context,
+    ConversionMeasurementOperation operation,
+    const url::Origin* impression_origin,
+    const url::Origin* conversion_origin,
+    const url::Origin* reporting_origin) {
   return true;
 }
 
@@ -564,7 +575,7 @@ ContentBrowserClient::CreateSpeechRecognitionManagerDelegate() {
   return nullptr;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TtsControllerDelegate* ContentBrowserClient::GetTtsControllerDelegate() {
   return nullptr;
 }
@@ -726,29 +737,6 @@ bool ContentBrowserClient::IsRendererCodeIntegrityEnabled() {
 
 #endif  // defined(OS_WIN)
 
-void ContentBrowserClient::RunServiceInstance(
-    const service_manager::Identity& identity,
-    mojo::PendingReceiver<service_manager::mojom::Service>* receiver) {}
-
-bool ContentBrowserClient::ShouldTerminateOnServiceQuit(
-    const service_manager::Identity& id) {
-  return false;
-}
-
-base::Optional<service_manager::Manifest>
-ContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
-  return base::nullopt;
-}
-
-std::vector<service_manager::Manifest>
-ContentBrowserClient::GetExtraServiceManifests() {
-  return std::vector<service_manager::Manifest>();
-}
-
-std::vector<std::string> ContentBrowserClient::GetStartupServices() {
-  return std::vector<std::string>();
-}
-
 std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
 ContentBrowserClient::CreateURLLoaderThrottles(
     const network::ResourceRequest& request,
@@ -821,8 +809,7 @@ bool ContentBrowserClient::WillCreateRestrictedCookieManager(
     network::mojom::RestrictedCookieManagerRole role,
     BrowserContext* browser_context,
     const url::Origin& origin,
-    const net::SiteForCookies& site_for_cookies,
-    const url::Origin& top_frame_origin,
+    const net::IsolationInfo& isolation_info,
     bool is_service_worker,
     int process_id,
     int frame_id,
@@ -837,6 +824,13 @@ ContentBrowserClient::WillCreateURLLoaderRequestInterceptors(
     const scoped_refptr<network::SharedURLLoaderFactory>&
         network_loader_factory) {
   return std::vector<std::unique_ptr<URLLoaderRequestInterceptor>>();
+}
+
+ContentBrowserClient::URLLoaderRequestHandler
+ContentBrowserClient::CreateURLLoaderHandlerForServiceWorkerNavigationPreload(
+    int frame_tree_node_id,
+    const network::ResourceRequest& resource_request) {
+  return ContentBrowserClient::URLLoaderRequestHandler();
 }
 
 void ContentBrowserClient::OnNetworkServiceCreated(
@@ -891,6 +885,10 @@ void ContentBrowserClient::CreateWebUsbService(
     RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<blink::mojom::WebUsbService> receiver) {}
 
+void ContentBrowserClient::CreateDeviceInfoService(
+    RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<blink::mojom::DeviceAPIService> receiver) {}
+
 #if !defined(OS_ANDROID)
 SerialDelegate* ContentBrowserClient::GetSerialDelegate() {
   return nullptr;
@@ -902,6 +900,10 @@ HidDelegate* ContentBrowserClient::GetHidDelegate() {
 }
 
 BluetoothDelegate* ContentBrowserClient::GetBluetoothDelegate() {
+  return nullptr;
+}
+
+FontAccessDelegate* ContentBrowserClient::GetFontAccessDelegate() {
   return nullptr;
 }
 
@@ -1055,16 +1057,16 @@ ContentBrowserClient::GetPluginMimeTypesWithExternalHandlers(
 }
 
 void ContentBrowserClient::AugmentNavigationDownloadPolicy(
-    const WebContents* web_contents,
-    const RenderFrameHost* frame_host,
+    WebContents* web_contents,
+    RenderFrameHost* frame_host,
     bool user_gesture,
     NavigationDownloadPolicy* download_policy) {}
 
-std::string ContentBrowserClient::GetInterestCohortForJsApi(
-    content::BrowserContext* browser_context,
-    const url::Origin& requesting_origin,
-    const net::SiteForCookies& site_for_cookies) {
-  return std::string();
+blink::mojom::InterestCohortPtr ContentBrowserClient::GetInterestCohortForJsApi(
+    WebContents* web_contents,
+    const GURL& url,
+    const base::Optional<url::Origin>& top_frame_origin) {
+  return blink::mojom::InterestCohort::New();
 }
 
 bool ContentBrowserClient::IsBluetoothScanningBlocked(
@@ -1096,13 +1098,18 @@ void ContentBrowserClient::FetchRemoteSms(
     const url::Origin& origin,
     base::OnceCallback<void(base::Optional<std::string>)> callback) {}
 
-void ContentBrowserClient::IsClipboardPasteAllowed(
+bool ContentBrowserClient::IsClipboardPasteAllowed(
+    content::RenderFrameHost* render_frame_host) {
+  return true;
+}
+
+void ContentBrowserClient::IsClipboardPasteContentAllowed(
     content::WebContents* web_contents,
     const GURL& url,
     const ui::ClipboardFormatType& data_type,
     const std::string& data,
-    IsClipboardPasteAllowedCallback callback) {
-  std::move(callback).Run(ClipboardPasteAllowed(true));
+    IsClipboardPasteContentAllowedCallback callback) {
+  std::move(callback).Run(ClipboardPasteContentAllowed(true));
 }
 
 bool ContentBrowserClient::CanEnterFullscreenWithoutUserActivation() {
@@ -1167,6 +1174,11 @@ void ContentBrowserClient::GetHyphenationDictionary(
 
 bool ContentBrowserClient::HasErrorPage(int http_status_code) {
   return false;
+}
+
+std::unique_ptr<IdentityRequestDialogController>
+ContentBrowserClient::CreateIdentityRequestDialogController() {
+  return nullptr;
 }
 
 }  // namespace content

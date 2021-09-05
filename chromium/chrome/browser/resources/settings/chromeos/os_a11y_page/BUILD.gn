@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chrome/browser/resources/settings/chromeos/os_settings.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 
 js_type_check("closure_compile") {
@@ -11,8 +12,10 @@ js_type_check("closure_compile") {
     ":manage_a11y_page_browser_proxy",
     ":os_a11y_page",
     ":os_a11y_page_browser_proxy",
+    ":switch_access_action_assignment_dialog",
     ":switch_access_constants",
     ":switch_access_subpage",
+    ":switch_access_subpage_browser_proxy",
     ":tts_subpage",
     ":tts_subpage_browser_proxy",
     "../../a11y_page:captions_subpage",
@@ -56,12 +59,30 @@ js_library("manage_a11y_page") {
   externs_list = [ "$externs_path/settings_private.js" ]
 }
 
+js_library("switch_access_action_assignment_dialog") {
+  deps = [
+    ":switch_access_constants",
+    "//chrome/browser/resources/settings/prefs:prefs_behavior",
+    "//ui/webui/resources/cr_elements/cr_button:cr_button",
+    "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog",
+    "//ui/webui/resources/js:i18n_behavior",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+}
+
 js_library("switch_access_constants") {
+}
+
+js_library("switch_access_subpage_browser_proxy") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
 }
 
 js_library("switch_access_subpage") {
   deps = [
     ":switch_access_constants",
+    ":switch_access_subpage_browser_proxy",
     "..:deep_linking_behavior",
     "..:os_route",
     "../..:router",
@@ -101,15 +122,19 @@ js_library("externs") {
 js_type_check("closure_compile_module") {
   is_polymer3 = true
   deps = [
-    #    ":externs.m",
+    ":externs.m",
+
     #    ":manage_a11y_page.m",
     ":manage_a11y_page_browser_proxy.m",
 
     #    ":os_a11y_page.m",
     ":os_a11y_page_browser_proxy.m",
+    ":switch_access_action_assignment_dialog.m",
+    ":switch_access_constants.m",
 
     #    ":switch_access_subpage.m",
-    #    ":tts_subpage.m"
+    ":switch_access_subpage_browser_proxy.m",
+    ":tts_subpage.m",
     ":tts_subpage_browser_proxy.m",
   ]
 }
@@ -152,6 +177,29 @@ js_library("os_a11y_page_browser_proxy.m") {
   extra_deps = [ ":modulize" ]
 }
 
+js_library("switch_access_action_assignment_dialog.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/os_a11y_page/switch_access_action_assignment_dialog.m.js" ]
+  deps = [
+    ":switch_access_constants.m",
+    "//chrome/browser/resources/settings/prefs:prefs_behavior.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_button:cr_button.m",
+    "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+  extra_deps = [ ":switch_access_action_assignment_dialog_module" ]
+}
+
+js_library("switch_access_constants.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/os_a11y_page/switch_access_constants.m.js" ]
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  extra_deps = [ ":modulize" ]
+}
+
 js_library("switch_access_subpage.m") {
   sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/os_a11y_page/switch_access_subpage.m.js" ]
   deps = [
@@ -160,10 +208,29 @@ js_library("switch_access_subpage.m") {
   extra_deps = [ ":switch_access_subpage_module" ]
 }
 
+js_library("switch_access_subpage_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/os_a11y_page/switch_access_subpage_browser_proxy.m.js" ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
 js_library("tts_subpage.m") {
   sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/os_a11y_page/tts_subpage.m.js" ]
   deps = [
-    # TODO: Fill those in.
+    ":tts_subpage_browser_proxy.m",
+    "//chrome/browser/resources/settings:router.m",
+    "//chrome/browser/resources/settings/chromeos:deep_linking_behavior.m",
+    "//chrome/browser/resources/settings/chromeos:os_route.m",
+    "//chrome/browser/resources/settings/controls:settings_slider.m",
+    "//chrome/browser/resources/settings/languages_page:languages_browser_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_button:cr_button.m",
+    "//ui/webui/resources/cr_elements/cr_expand_button:cr_expand_button.m",
+    "//ui/webui/resources/cr_elements/cr_input:cr_input.m",
+    "//ui/webui/resources/cr_elements/cr_slider:cr_slider.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
   ]
   extra_deps = [ ":tts_subpage_module" ]
 }
@@ -182,6 +249,7 @@ group("polymer3_elements") {
     ":manage_a11y_page_module",
     ":modulize",
     ":os_a11y_page_module",
+    ":switch_access_action_assignment_dialog_module",
     ":switch_access_subpage_module",
     ":tts_subpage_module",
   ]
@@ -199,6 +267,14 @@ polymer_modulizer("os_a11y_page") {
   html_type = "dom-module"
 }
 
+polymer_modulizer("switch_access_action_assignment_dialog") {
+  js_file = "switch_access_action_assignment_dialog.js"
+  html_file = "switch_access_action_assignment_dialog.html"
+  html_type = "dom-module"
+  auto_imports = os_settings_auto_imports
+  namespace_rewrites = os_settings_namespace_rewrites
+}
+
 polymer_modulizer("switch_access_subpage") {
   js_file = "switch_access_subpage.js"
   html_file = "switch_access_subpage.html"
@@ -209,6 +285,8 @@ polymer_modulizer("tts_subpage") {
   js_file = "tts_subpage.js"
   html_file = "tts_subpage.html"
   html_type = "dom-module"
+  auto_imports = os_settings_auto_imports
+  namespace_rewrites = os_settings_namespace_rewrites
 }
 
 import("//ui/webui/resources/tools/js_modulizer.gni")
@@ -218,6 +296,8 @@ js_modulizer("modulize") {
     "externs.js",
     "manage_a11y_page_browser_proxy.js",
     "os_a11y_page_browser_proxy.js",
+    "switch_access_constants.js",
+    "switch_access_subpage_browser_proxy.js",
     "tts_subpage_browser_proxy.js",
   ]
 }

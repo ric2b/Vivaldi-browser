@@ -24,10 +24,11 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/base_session_service_commands.h"
+#include "components/sessions/core/command_storage_manager.h"
 #include "components/sessions/core/command_storage_manager_delegate.h"
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_constants.h"
-#include "components/sessions/core/snapshotting_command_storage_manager.h"
+#include "components/sessions/core/session_id.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
@@ -375,6 +376,7 @@ class TabRestoreServiceImpl::PersistenceDelegate
   // CommandStorageManagerDelegate:
   bool ShouldUseDelayedSave() override;
   void OnWillSaveCommands() override;
+  void OnErrorWritingSessionCommands() override;
 
   // TabRestoreServiceHelper::Observer:
   void OnClearEntries() override;
@@ -471,7 +473,7 @@ class TabRestoreServiceImpl::PersistenceDelegate
   // The associated client.
   TabRestoreServiceClient* client_;
 
-  std::unique_ptr<SnapshottingCommandStorageManager> command_storage_manager_;
+  std::unique_ptr<CommandStorageManager> command_storage_manager_;
 
   TabRestoreServiceHelper* tab_restore_service_helper_;
 
@@ -501,17 +503,23 @@ class TabRestoreServiceImpl::PersistenceDelegate
 TabRestoreServiceImpl::PersistenceDelegate::PersistenceDelegate(
     TabRestoreServiceClient* client)
     : client_(client),
-      command_storage_manager_(
-          std::make_unique<SnapshottingCommandStorageManager>(
-              SnapshottingCommandStorageManager::TAB_RESTORE,
-              client_->GetPathToSaveTo(),
-              this)),
+      command_storage_manager_(std::make_unique<CommandStorageManager>(
+          CommandStorageManager::kTabRestore,
+          client_->GetPathToSaveTo(),
+          this,
+          /* use_marker */ true)),
       tab_restore_service_helper_(nullptr),
       entries_to_write_(0),
       entries_written_(0),
-      load_state_(NOT_LOADED) {}
+      load_state_(NOT_LOADED) {
+  // A pending_reset must be scheduled for the first write, otherwise the
+  // commands are dropped.
+  // TODO(https://crbug.com/648266): If use_marker is true, pending_reset should
+  // be the default. Make pending_reset the default and remove this.
+  command_storage_manager_->set_pending_reset(true);
+}
 
-TabRestoreServiceImpl::PersistenceDelegate::~PersistenceDelegate() {}
+TabRestoreServiceImpl::PersistenceDelegate::~PersistenceDelegate() = default;
 
 bool TabRestoreServiceImpl::PersistenceDelegate::ShouldUseDelayedSave() {
   return true;
@@ -522,7 +530,8 @@ void TabRestoreServiceImpl::PersistenceDelegate::OnWillSaveCommands() {
   int to_write_count =
       std::min(entries_to_write_, static_cast<int>(entries.size()));
   entries_to_write_ = 0;
-  if (entries_written_ + to_write_count > kEntriesPerReset) {
+  if (entries_written_ + to_write_count > kEntriesPerReset ||
+      command_storage_manager_->pending_reset()) {
     to_write_count = entries.size();
     command_storage_manager_->set_pending_reset(true);
   }
@@ -552,6 +561,12 @@ void TabRestoreServiceImpl::PersistenceDelegate::OnWillSaveCommands() {
   }
   if (command_storage_manager_->pending_reset())
     entries_written_ = 0;
+}
+
+void TabRestoreServiceImpl::PersistenceDelegate::
+    OnErrorWritingSessionCommands() {
+  command_storage_manager_->set_pending_reset(true);
+  command_storage_manager_->StartSaveTimer();
 }
 
 void TabRestoreServiceImpl::PersistenceDelegate::OnClearEntries() {
@@ -1208,7 +1223,6 @@ void TabRestoreServiceImpl::PersistenceDelegate::LoadStateChanged() {
 
   // And add them.
   for (auto& staging_entry : staging_entries_) {
-    staging_entry->from_last_session = true;
     tab_restore_service_helper_->AddEntry(std::move(staging_entry), false,
                                           false);
   }
@@ -1253,8 +1267,10 @@ void TabRestoreServiceImpl::RemoveObserver(
   helper_.RemoveObserver(observer);
 }
 
-void TabRestoreServiceImpl::CreateHistoricalTab(LiveTab* live_tab, int index) {
-  helper_.CreateHistoricalTab(live_tab, index);
+base::Optional<SessionID> TabRestoreServiceImpl::CreateHistoricalTab(
+    LiveTab* live_tab,
+    int index) {
+  return helper_.CreateHistoricalTab(live_tab, index);
 }
 
 void TabRestoreServiceImpl::BrowserClosing(LiveTabContext* context) {

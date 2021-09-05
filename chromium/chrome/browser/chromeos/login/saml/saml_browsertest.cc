@@ -645,7 +645,6 @@ class SamlTest : public OobeBaseTest {
     sign_enterprise_challenge_request.set_username("");
     sign_enterprise_challenge_request.set_key_label(
         attestation::kEnterpriseMachineKey);
-    sign_enterprise_challenge_request.set_domain("google.com");
     sign_enterprise_challenge_request.set_device_id("device_id");
     AttestationClient::Get()
         ->GetTestInterface()
@@ -1302,7 +1301,7 @@ class SAMLPolicyTest : public SamlTest {
  protected:
   policy::DevicePolicyCrosTestHelper test_helper_;
   policy::DevicePolicyBuilder* device_policy_;
-  policy::MockConfigurationPolicyProvider provider_;
+  testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
   net::CookieList cookie_list_;
 
   // Add a fake user so the login screen does not show GAIA auth by default.
@@ -1340,8 +1339,10 @@ void SAMLPolicyTest::SetUpInProcessBrowserTestFixture() {
       &test_helper_, device_affiliation_ids)));
 
   // Initialize user policy.
-  EXPECT_CALL(provider_, IsInitializationComplete(testing::_))
-      .WillRepeatedly(testing::Return(true));
+  ON_CALL(provider_, IsInitializationComplete(testing::_))
+      .WillByDefault(testing::Return(true));
+  ON_CALL(provider_, IsFirstPolicyLoadComplete(testing::_))
+      .WillByDefault(testing::Return(true));
   policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
 }
 
@@ -1402,7 +1403,7 @@ void SAMLPolicyTest::EnableTransferSAMLCookiesPolicy() {
   proto.mutable_saml_settings()->set_transfer_saml_cookies(true);
 
   base::RunLoop run_loop;
-  std::unique_ptr<CrosSettings::ObserverSubscription> observer =
+  base::CallbackListSubscription subscription =
       CrosSettings::Get()->AddSettingsObserver(kAccountsPrefTransferSAMLCookies,
                                                run_loop.QuitClosure());
   device_policy_->SetDefaultSigningKey();
@@ -1419,7 +1420,7 @@ void SAMLPolicyTest::SetLoginBehaviorPolicyToSAMLInterstitial() {
           em::LoginAuthenticationBehaviorProto_LoginBehavior_SAML_INTERSTITIAL);
 
   base::RunLoop run_loop;
-  std::unique_ptr<CrosSettings::ObserverSubscription> observer =
+  base::CallbackListSubscription subscription =
       CrosSettings::Get()->AddSettingsObserver(kLoginAuthenticationBehavior,
                                                run_loop.QuitClosure());
   device_policy_->SetDefaultSigningKey();
@@ -1436,7 +1437,7 @@ void SAMLPolicyTest::SetLoginVideoCaptureAllowedUrls(
     proto.mutable_login_video_capture_allowed_urls()->add_urls(url.spec());
 
   base::RunLoop run_loop;
-  std::unique_ptr<CrosSettings::ObserverSubscription> observer =
+  base::CallbackListSubscription subscription =
       CrosSettings::Get()->AddSettingsObserver(kLoginVideoCaptureAllowedUrls,
                                                run_loop.QuitClosure());
   device_policy_->SetDefaultSigningKey();
@@ -1682,7 +1683,6 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialChangeAccount) {
 
   ShowSAMLInterstitial();
   test::OobeJS().ExpectHiddenPath({"gaia-signin", "signin-frame-dialog"});
-  test::OobeJS().ExpectHiddenPath({"gaia-signin", "offline-gaia"});
   test::OobeJS().ExpectVisiblePath({"gaia-signin", "saml-interstitial"});
 
   // Click the "change account" link on the SAML interstitial page.
@@ -1697,7 +1697,6 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLInterstitialChangeAccount) {
       ->Wait();
   test::OobeJS().ExpectHasNoAttribute(
       "transparent", {"gaia-signin", "signin-frame-container"});
-  test::OobeJS().ExpectHiddenPath({"gaia-signin", "offline-gaia"});
   test::OobeJS().ExpectHiddenPath({"gaia-signin", "saml-interstitial"});
 }
 

@@ -16,15 +16,8 @@ constexpr base::TimeDelta kWebViewRetentionTime =
 
 }  // namespace
 
-WebUIBubbleManagerBase::WebUIBubbleManagerBase(
-    views::View* anchor_view,
-    content::BrowserContext* browser_context,
-    const GURL& webui_url,
-    bool enable_extension_apis)
+WebUIBubbleManagerBase::WebUIBubbleManagerBase(views::View* anchor_view)
     : anchor_view_(anchor_view),
-      browser_context_(browser_context),
-      webui_url_(webui_url),
-      enable_extension_apis_(enable_extension_apis),
       cache_timer_(std::make_unique<base::RetainingOneShotTimer>(
           FROM_HERE,
           kWebViewRetentionTime,
@@ -54,7 +47,7 @@ bool WebUIBubbleManagerBase::ShowBubble() {
   bubble_view_ = WebUIBubbleDialogView::CreateWebUIBubbleDialog(
       std::make_unique<WebUIBubbleDialogView>(anchor_view_,
                                               std::move(cached_web_view_)));
-  observed_bubble_widget_.Add(bubble_view_->GetWidget());
+  bubble_widget_observation_.Observe(bubble_view_->GetWidget());
   close_bubble_helper_ = std::make_unique<CloseBubbleOnTabActivationHelper>(
       bubble_view_.get(), BrowserList::GetInstance()->GetLastActive());
   return true;
@@ -76,9 +69,11 @@ void WebUIBubbleManagerBase::OnWidgetDestroying(views::Widget* widget) {
   DCHECK(bubble_view_);
   DCHECK_EQ(bubble_view_->GetWidget(), widget);
   cached_web_view_ = bubble_view_->RemoveWebView();
-  observed_bubble_widget_.Remove(bubble_view_->GetWidget());
+  DCHECK(bubble_widget_observation_.IsObserving());
+  bubble_widget_observation_.Reset();
   DCHECK(close_bubble_helper_);
   close_bubble_helper_.reset();
+  WebViewHidden();
   cache_timer_->Reset();
   bubble_using_cached_webview_ = false;
 }

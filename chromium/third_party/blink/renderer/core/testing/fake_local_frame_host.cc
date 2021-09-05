@@ -25,7 +25,9 @@ void FakeLocalFrameHost::EnterFullscreen(
 
 void FakeLocalFrameHost::ExitFullscreen() {}
 
-void FakeLocalFrameHost::FullscreenStateChanged(bool is_fullscreen) {}
+void FakeLocalFrameHost::FullscreenStateChanged(
+    bool is_fullscreen,
+    mojom::blink::FullscreenOptionsPtr options) {}
 
 void FakeLocalFrameHost::RegisterProtocolHandler(const WTF::String& scheme,
                                                  const ::blink::KURL& url,
@@ -196,15 +198,14 @@ void FakeLocalFrameHost::DidChangeFramePolicy(
     const base::UnguessableToken& child_frame_token,
     const FramePolicy& frame_policy) {}
 
-void FakeLocalFrameHost::BindPolicyContainer(
-    mojo::PendingAssociatedReceiver<mojom::blink::PolicyContainerHost>
-        receiver) {}
-
 void FakeLocalFrameHost::CapturePaintPreviewOfSubframe(
     const gfx::Rect& clip_rect,
     const base::UnguessableToken& guid) {}
 
 void FakeLocalFrameHost::Detach() {}
+
+void FakeLocalFrameHost::IssueKeepAliveHandle(
+    mojo::PendingReceiver<mojom::blink::KeepAliveHandle> receiver) {}
 
 void FakeLocalFrameHost::BindFrameHostReceiver(
     mojo::ScopedInterfaceEndpointHandle handle) {

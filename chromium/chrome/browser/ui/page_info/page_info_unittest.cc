@@ -17,6 +17,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/mock_infobar_service.h"
@@ -200,8 +201,8 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
     mock_ui_ = std::make_unique<MockPageInfoUI>();
     // Use this rather than gmock's ON_CALL.WillByDefault(Invoke(... because
     // gmock doesn't handle move-only types well.
-    mock_ui_->set_permission_info_callback_ =
-        base::Bind(&PageInfoTest::SetPermissionInfo, base::Unretained(this));
+    mock_ui_->set_permission_info_callback_ = base::BindRepeating(
+        &PageInfoTest::SetPermissionInfo, base::Unretained(this));
   }
 
 
@@ -258,8 +259,8 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
               incognito_web_contents_.get()));
 
       incognito_mock_ui_ = std::make_unique<MockPageInfoUI>();
-      incognito_mock_ui_->set_permission_info_callback_ =
-          base::Bind(&PageInfoTest::SetPermissionInfo, base::Unretained(this));
+      incognito_mock_ui_->set_permission_info_callback_ = base::BindRepeating(
+          &PageInfoTest::SetPermissionInfo, base::Unretained(this));
 
       auto delegate = std::make_unique<ChromePageInfoDelegate>(
           incognito_web_contents_.get());
@@ -449,11 +450,6 @@ TEST_F(PageInfoTest, OnPermissionsChanged) {
   ContentSetting setting = content_settings->GetContentSetting(
       url(), url(), ContentSettingsType::POPUPS);
   EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
-#if BUILDFLAG(ENABLE_PLUGINS)
-  setting = content_settings->GetContentSetting(url(), url(),
-                                                ContentSettingsType::PLUGINS);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
-#endif
   setting = content_settings->GetContentSetting(
       url(), url(), ContentSettingsType::GEOLOCATION);
   EXPECT_EQ(setting, CONTENT_SETTING_ASK);
@@ -472,22 +468,12 @@ TEST_F(PageInfoTest, OnPermissionsChanged) {
 
 // SetPermissionInfo() is called once initially, and then again every time
 // OnSitePermissionChanged() is called.
-#if !BUILDFLAG(ENABLE_PLUGINS)
-  // SetPermissionInfo for plugins didn't get called.
   EXPECT_CALL(*mock_ui(), SetPermissionInfoStub()).Times(6);
-#else
-  EXPECT_CALL(*mock_ui(), SetPermissionInfoStub()).Times(7);
-#endif
 
   // Execute code under tests.
   page_info()->OnSitePermissionChanged(ContentSettingsType::POPUPS,
                                        CONTENT_SETTING_ALLOW,
                                        /*is_one_time=*/false);
-#if BUILDFLAG(ENABLE_PLUGINS)
-  page_info()->OnSitePermissionChanged(ContentSettingsType::PLUGINS,
-                                       CONTENT_SETTING_BLOCK,
-                                       /*is_one_time=*/false);
-#endif
   page_info()->OnSitePermissionChanged(ContentSettingsType::GEOLOCATION,
                                        CONTENT_SETTING_ALLOW,
                                        /*is_one_time=*/false);
@@ -505,11 +491,6 @@ TEST_F(PageInfoTest, OnPermissionsChanged) {
   setting = content_settings->GetContentSetting(url(), url(),
                                                 ContentSettingsType::POPUPS);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
-#if BUILDFLAG(ENABLE_PLUGINS)
-  setting = content_settings->GetContentSetting(url(), url(),
-                                                ContentSettingsType::PLUGINS);
-  EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
-#endif
   setting = content_settings->GetContentSetting(
       url(), url(), ContentSettingsType::GEOLOCATION);
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
@@ -917,7 +898,7 @@ TEST_F(PageInfoTest, HTTPSConnectionError) {
             page_info()->site_identity_status());
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PageInfoTest, HTTPSPolicyCertConnection) {
   security_level_ = security_state::SECURE_WITH_POLICY_INSTALLED_CERT;
   visible_security_state_.url = GURL("https://scheme-is-cryptographic.test");
@@ -1552,9 +1533,8 @@ class UnifiedAutoplaySoundSettingsPageInfoTest
   ~UnifiedAutoplaySoundSettingsPageInfoTest() override = default;
 
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {media::kAutoplayDisableSettings, media::kAutoplayWhitelistSettings},
-        {});
+    scoped_feature_list_.InitWithFeatures({media::kAutoplayDisableSettings},
+                                          {});
     ChromeRenderViewHostTestHarness::SetUp();
   }
 

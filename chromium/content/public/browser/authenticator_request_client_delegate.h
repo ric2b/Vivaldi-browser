@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/common/content_export.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/cable/cable_discovery_data.h"
@@ -33,7 +34,7 @@ class Origin;
 
 namespace content {
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 class RenderFrameHost;
 #endif
 
@@ -190,7 +191,7 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
   GetTouchIdAuthenticatorConfig();
 #endif  // defined(OS_MAC)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Callback that should generate and return a unique request id.
   using ChromeOSGenerateRequestIdCallback = base::RepeatingCallback<uint32_t()>;
 
@@ -201,7 +202,7 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
   // request.
   virtual ChromeOSGenerateRequestIdCallback GetGenerateRequestIdCallback(
       RenderFrameHost* render_frame_host);
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Returns a bool if the result of the isUserVerifyingPlatformAuthenticator
   // API call should be overridden with that value, or base::nullopt otherwise.
@@ -238,13 +239,12 @@ class CONTENT_EXPORT AuthenticatorRequestClientDelegate
   void FidoAuthenticatorRemoved(base::StringPiece device_id) override;
   bool SupportsPIN() const override;
   void CollectPIN(
-      base::Optional<int> attempts,
-      base::OnceCallback<void(std::string)> provide_pin_cb) override;
+      CollectPINOptions options,
+      base::OnceCallback<void(base::string16)> provide_pin_cb) override;
   void StartBioEnrollment(base::OnceClosure next_callback) override;
   void OnSampleCollected(int bio_samples_remaining) override;
   void FinishCollectToken() override;
   void OnRetryUserVerification(int attempts) override;
-  void OnInternalUserVerificationLocked() override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(AuthenticatorRequestClientDelegate);

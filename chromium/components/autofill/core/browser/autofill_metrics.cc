@@ -26,7 +26,7 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/autofill/core/common/form_data.h"
-#include "components/language_usage_metrics/language_usage_metrics.h"
+#include "components/language/core/browser/language_usage_metrics.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
@@ -37,7 +37,7 @@ using mojom::SubmissionSource;
 namespace {
 
 // Exponential bucket spacing for UKM event data.
-const double kAutofillEventDataBucketSpacing = 2.0;
+constexpr double kAutofillEventDataBucketSpacing = 2.0;
 
 // Note: if adding an enum value here, update the corresponding description for
 // AutofillTypeQualityByFieldType in histograms.xml.
@@ -346,7 +346,8 @@ ServerFieldType GetActualFieldType(const ServerFieldTypeSet& possible_types,
   if (collapsed_field_types.size() == 1)
     actual_type = *collapsed_field_types.begin();
 
-  DVLOG(2) << "Inferred Type: " << AutofillType(actual_type).ToString();
+  DVLOG(2) << "Inferred Type: "
+           << AutofillType::ServerFieldTypeToString(actual_type);
   return actual_type;
 }
 
@@ -553,8 +554,9 @@ void LogPredictionQualityMetrics(
   ServerFieldType actual_type =
       GetActualFieldType(possible_types, predicted_type);
 
-  DVLOG(2) << "Predicted: " << AutofillType(predicted_type).ToString() << "; "
-           << "Actual: " << AutofillType(actual_type).ToString();
+  DVLOG(2) << "Predicted: "
+           << AutofillType::ServerFieldTypeToString(predicted_type) << "; "
+           << "Actual: " << AutofillType::ServerFieldTypeToString(actual_type);
 
   DCHECK_LE(predicted_type, UINT16_MAX);
   DCHECK_LE(actual_type, UINT16_MAX);
@@ -2481,7 +2483,7 @@ void AutofillMetrics::LogFieldParsingTranslatedFormLanguageMetric(
     base::StringPiece locale) {
   base::UmaHistogramSparse(
       "Autofill.ParsedFieldTypesUsingTranslatedPageLanguage",
-      language_usage_metrics::LanguageUsageMetrics::ToLanguageCode(locale));
+      language::LanguageUsageMetrics::ToLanguageCode(locale));
 }
 
 // static
@@ -2498,4 +2500,18 @@ void AutofillMetrics::LogWebOTPPhoneCollectionMetricStateUkm(
   builder.Record(recorder);
 }
 
+// static
+void AutofillMetrics::LogNumberOfAutofilledFieldsAtSubmission(
+    size_t number_of_accepted_fields,
+    size_t number_of_corrected_fields) {
+  base::UmaHistogramExactLinear(
+      "Autofill.NumberOfAutofilledFieldsAtSubmission.Total",
+      number_of_accepted_fields + number_of_corrected_fields, 50);
+  base::UmaHistogramExactLinear(
+      "Autofill.NumberOfAutofilledFieldsAtSubmission.Accepted",
+      number_of_accepted_fields, 50);
+  base::UmaHistogramExactLinear(
+      "Autofill.NumberOfAutofilledFieldsAtSubmission.Corrected",
+      number_of_corrected_fields, 50);
+}
 }  // namespace autofill

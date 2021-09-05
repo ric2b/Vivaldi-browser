@@ -63,20 +63,4 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
   return true;
 }
 
-std::string UtilitiesGetSystemCountryFunction::ReadCountry() {
-  // TODO(igor@vivaldi.com): Consider calling GetUserDefaultGeoName() instead.
-  // It is only available in Windows 10 so calling it require looking up the
-  // function at runtime.
-  GEOID geo_id = GetUserGeoID(GEOCLASS_NATION);
-  if (geo_id == GEOID_NOT_AVAILABLE)
-    return std::string();
-  char buffer[3];
-  if (0 == GetGeoInfoA(geo_id, GEO_ISO2, buffer,
-                       sizeof buffer / sizeof buffer[0], 0)) {
-    LOG(ERROR) << "Windows API error " << GetLastError();
-    return std::string();
-  }
-  return std::string(buffer);
-}
-
 }  // namespace extensions

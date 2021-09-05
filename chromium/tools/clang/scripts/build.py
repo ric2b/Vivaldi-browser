@@ -165,8 +165,9 @@ def UrlOpen(url):
 
 def GetLatestLLVMCommit():
   """Get the latest commit hash in the LLVM monorepo."""
-  ref = json.loads(UrlOpen(('https://api.github.com/repos/'
-                            'llvm/llvm-project/git/refs/heads/master')))
+  ref = json.loads(
+      UrlOpen(('https://api.github.com/repos/'
+               'llvm/llvm-project/git/refs/heads/main')))
   assert ref['object']['type'] == 'commit'
   return ref['object']['sha']
 
@@ -316,9 +317,9 @@ def MaybeDownloadHostGcc(args):
   """Download a modern GCC host compiler on Linux."""
   if not sys.platform.startswith('linux') or args.gcc_toolchain:
     return
-  gcc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gcc530trusty')
+  gcc_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gcc-10.2.0-trusty')
   if not os.path.exists(gcc_dir):
-    DownloadAndUnpack(CDS_URL + '/tools/gcc530trusty.tgz', gcc_dir)
+    DownloadAndUnpack(CDS_URL + '/tools/gcc-10.2.0-trusty.tgz', gcc_dir)
   args.gcc_toolchain = gcc_dir
 
 
@@ -570,8 +571,6 @@ def main():
         '-DLIBCXX_INCLUDE_TESTS=OFF',
         '-DLIBCXX_ENABLE_EXPERIMENTAL_LIBRARY=OFF',
     ])
-    # Prefer Python 2. TODO(crbug.com/1076834): Remove this.
-    base_cmake_args.append('-DPython3_EXECUTABLE=/nonexistent')
 
   if args.gcc_toolchain:
     # Force compiler-rt tests to use our gcc toolchain (including libstdc++.so)

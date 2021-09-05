@@ -74,6 +74,7 @@ hidden="true" so that these annotations don't show up in the document.
       <traffic_annotation unique_id="cast_socket"/>
       <traffic_annotation unique_id="dom_distiller"/>
       <traffic_annotation unique_id="download_manager_resume"/>
+      <traffic_annotation unique_id="file_system_connector_to_box"/>
       <traffic_annotation unique_id="parallel_download_job"/>
       <traffic_annotation unique_id="interest_feedv2_send"/>
       <traffic_annotation unique_id="mirroring_get_setup_info"/>
@@ -153,11 +154,13 @@ hidden="true" so that these annotations don't show up in the document.
       <traffic_annotation unique_id="services_http_server_error_response"/>
       <traffic_annotation unique_id="webrtc_peer_connection"/>
       <traffic_annotation unique_id="direct_sockets"/>
-      <traffic_annotation unique_id="floc_id_provider_impl"/>
+      <traffic_annotation unique_id="floc_event_logger"/>
       <traffic_annotation unique_id="gstatic_change_password_override_urls"/>
       <traffic_annotation unique_id="interest_feedv2_image_send"/>
       <traffic_annotation unique_id="sanitized_image_source"/>
       <traffic_annotation unique_id="kaleidoscope_service"/>
+      <traffic_annotation unique_id="webid"/>
+      <traffic_annotation unique_id="managed_configuration_loader"/>
     </sender>
   </group>
   <group name="Admin Features">
@@ -295,7 +298,9 @@ hidden="true" so that these annotations don't show up in the document.
       <traffic_annotation unique_id="data_reduction_proxy_warmup"/>
       <traffic_annotation unique_id="hintsfetcher_gethintsrequest"/>
       <traffic_annotation unique_id="optimization_guide_model"/>
+      <traffic_annotation unique_id="optimization_guide_model_download"/>
       <traffic_annotation unique_id="previews_litepage_prober"/>
+      <traffic_annotation unique_id="litepages_robots_rules"/>
     </sender>
     <sender name="Network">
       <traffic_annotation unique_id="network_time_component"/>

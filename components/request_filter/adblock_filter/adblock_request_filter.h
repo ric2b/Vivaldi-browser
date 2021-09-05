@@ -15,8 +15,7 @@ class Resources;
 
 class AdBlockRequestFilter : public vivaldi::RequestFilter {
  public:
-  AdBlockRequestFilter(RuleGroup group,
-                       base::WeakPtr<RulesIndexManager> rules_index_manager,
+  AdBlockRequestFilter(base::WeakPtr<RulesIndexManager> rules_index_manager,
                        base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter,
                        base::WeakPtr<Resources> resources);
   ~AdBlockRequestFilter() override;
@@ -54,8 +53,6 @@ class AdBlockRequestFilter : public vivaldi::RequestFilter {
   base::WeakPtr<RulesIndexManager> rules_index_manager_;
   base::WeakPtr<BlockedUrlsReporter> blocked_urls_reporter_;
   base::WeakPtr<Resources> resources_;
-
-  RuleGroup group_;
 
   DISALLOW_COPY_AND_ASSIGN(AdBlockRequestFilter);
 };

@@ -54,7 +54,6 @@ class ExtensionAppsChromeOs : public ExtensionAppsBase,
   ExtensionAppsChromeOs(
       const mojo::Remote<apps::mojom::AppService>& app_service,
       Profile* profile,
-      apps::mojom::AppType app_type,
       apps::InstanceRegistry* instance_registry);
   ~ExtensionAppsChromeOs() override;
 
@@ -149,9 +148,12 @@ class ExtensionAppsChromeOs : public ExtensionAppsBase,
   void GetMenuModelForChromeBrowserApp(apps::mojom::MenuType menu_type,
                                        GetMenuModelCallback callback);
 
-  // web_app::AppRegistrarObserver overrides.
-  void OnWebAppDisabledStateChanged(const std::string& app_id,
-                                    bool is_disabled) override;
+  content::WebContents* LaunchImpl(AppLaunchParams&& params) override;
+
+  void UpdateAppDisabledState(
+      const base::ListValue* disabled_system_features_pref,
+      int feature,
+      const std::string& app_id);
 
   apps::InstanceRegistry* instance_registry_;
   ScopedObserver<extensions::AppWindowRegistry,

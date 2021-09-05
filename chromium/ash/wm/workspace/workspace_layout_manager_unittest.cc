@@ -33,6 +33,7 @@
 #include "ash/shell_observer.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/test_window_builder.h"
 #include "ash/wallpaper/wallpaper_controller_test_api.h"
 #include "ash/window_factory.h"
 #include "ash/wm/always_on_top_controller.h"
@@ -49,6 +50,7 @@
 #include "ash/wm/workspace/workspace_window_resizer.h"
 #include "ash/wm/workspace_controller_test_api.h"
 #include "base/callback_helpers.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "ui/aura/client/aura_constants.h"
@@ -412,8 +414,8 @@ TEST_F(WorkspaceLayoutManagerTest, ChildBoundsResetOnMaximize) {
   window->Show();
   WindowState* window_state = WindowState::Get(window.get());
   window_state->Activate();
-  std::unique_ptr<aura::Window> child_window(
-      CreateChildWindow(window.get(), gfx::Rect(5, 6, 7, 8)));
+  std::unique_ptr<aura::Window> child_window =
+      ChildTestWindowBuilder(window.get(), gfx::Rect(5, 6, 7, 8)).Build();
   window_state->Maximize();
   EXPECT_EQ("5,6 7x8", child_window->bounds().ToString());
 }
@@ -1182,7 +1184,7 @@ class WorkspaceLayoutManagerBackdropTest : public AshTestBase {
   DISALLOW_COPY_AND_ASSIGN(WorkspaceLayoutManagerBackdropTest);
 };
 
-constexpr int kNoSoundKey = -1;
+constexpr base::Optional<chromeos::Sound> kNoSoundKey = base::nullopt;
 
 }  // namespace
 
@@ -1544,7 +1546,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
 
   generator->MoveMouseTo(300, 300);
   generator->ClickLeftButton();
-  EXPECT_EQ(chromeos::SOUND_VOLUME_ADJUST, client.GetPlayedEarconAndReset());
+  EXPECT_EQ(chromeos::Sound::kVolumeAdjust, client.GetPlayedEarconAndReset());
 
   generator->MoveMouseRelativeTo(window.get(), 10, 10);
   generator->ClickLeftButton();
@@ -1600,7 +1602,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackForArc) {
   ui::test::EventGenerator* generator = GetEventGenerator();
   generator->MoveMouseTo(300, 300);
   generator->ClickLeftButton();
-  EXPECT_EQ(chromeos::SOUND_VOLUME_ADJUST, client.GetPlayedEarconAndReset());
+  EXPECT_EQ(chromeos::Sound::kVolumeAdjust, client.GetPlayedEarconAndReset());
 
   generator->MoveMouseTo(70, 70);
   generator->ClickLeftButton();

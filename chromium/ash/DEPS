@@ -7,7 +7,6 @@ include_rules = [
   "+components/account_id",
   "+components/discardable_memory/public",
   "+components/discardable_memory/service/discardable_shared_memory_manager.h",
-  "+components/exo",
   "+components/media_message_center",
   "+components/pref_registry",
   "+components/prefs",
@@ -62,6 +61,7 @@ include_rules = [
   "+chromeos/components/proximity_auth/public/mojom",
   "+chromeos/components/quick_answers",
   "+chromeos/components/security_token_pin",
+  "+chromeos/components/sensors",
   "+chromeos/constants",
   # TODO(https://crbug.com/940810): Eliminate this.
   "+chromeos/dbus/initialize_dbus_client.h",
@@ -79,6 +79,7 @@ include_rules = [
   "+chromeos/services/assistant/public" ,
   "+chromeos/services/assistant/test_support",
   "+chromeos/services/multidevice_setup/public",
+  "+chromeos/services/nearby/public",
   "+chromeos/services/network_config/public",
   "+chromeos/services/power/public",
   # TODO(https://crbug.com/644361): Eliminate this.

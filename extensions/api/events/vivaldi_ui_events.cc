@@ -653,7 +653,7 @@ bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
 }
 
 bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
-                                      blink::DragOperation operation,
+                                      ui::mojom::DragOperation operation,
                                       bool cancelled,
                                       int screen_x,
                                       int screen_y) {
@@ -662,7 +662,7 @@ bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
   ::vivaldi::SetTabDragInProgress(false);
 
   bool outside = ::vivaldi::ui_tools::IsOutsideAppWindow(screen_x, screen_y);
-  if (!outside && operation == blink::DragOperation::kDragOperationNone) {
+  if (!outside && operation == ui::mojom::DragOperation::kNone) {
     // None of browser windows accepted the drag and we do not moving tabs out.
     cancelled = true;
   }

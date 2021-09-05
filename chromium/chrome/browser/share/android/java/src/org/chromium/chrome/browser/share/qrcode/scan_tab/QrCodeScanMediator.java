@@ -36,6 +36,21 @@ import org.chromium.ui.widget.Toast;
 import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 
+// Vivaldi
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.text.TextUtils;
+
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
+import org.chromium.base.task.PostTask;
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
+import static org.chromium.content_public.browser.ActionModeCallbackHelper.MAX_SEARCH_QUERY_LENGTH;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /**
  * QrCodeScanMediator is in charge of calculating and setting values for QrCodeScanViewProperties.
  */
@@ -50,6 +65,10 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
 
     private BarcodeDetector mDetector;
     private Toast mToast;
+
+    /** Vivaldi */
+    @Nullable
+    private AlertDialog mAlertDialog;
 
     /**
      * The QrCodeScanMediator constructor.
@@ -95,6 +114,11 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
      * @param isOnForeground Indicates whether this component UI is current on foreground.
      */
     public void setIsOnForeground(boolean isOnForeground) {
+        // Vivaldi - If the scan view is not in foreground, cancel the alert dialog if any.
+        if (!isOnForeground && mAlertDialog != null) {
+            mAlertDialog.cancel();
+            mAlertDialog = null;
+        }
         // If the app is in the foreground, the permissions need to be checked again to ensure
         // the user is seeing the right thing.
         if (isOnForeground) {
@@ -145,13 +169,17 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
         if (mDetector == null) {
             return;
         }
+        // Vivaldi - emulator may throw
+        if (camera == null) return;
+        Camera.Parameters parameters = VivaldiUtils.getCameraParameters(camera);
+        if (parameters == null) return;
 
         ByteBuffer buffer = ByteBuffer.allocate(data.length);
         buffer.put(data);
         Frame frame =
                 new Frame.Builder()
-                        .setImageData(buffer, camera.getParameters().getPreviewSize().width,
-                                camera.getParameters().getPreviewSize().height, ImageFormat.NV21)
+                        .setImageData(buffer, parameters.getPreviewSize().width,
+                                parameters.getPreviewSize().height, ImageFormat.NV21)
                         .build();
         SparseArray<Barcode> barcodes = mDetector.detect(frame);
         if (!mPropertyModel.get(QrCodeScanViewProperties.IS_ON_FOREGROUND)) {
@@ -164,6 +192,9 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
 
         Barcode firstCode = barcodes.valueAt(0);
         if (!URLUtil.isValidUrl(firstCode.rawValue)) {
+            if (ChromeApplication.isVivaldi())
+                promptForScannedNonUrlOptions(firstCode.rawValue, camera);
+            else {
             String toastMessage =
                     mContext.getString(R.string.qr_code_not_a_url_label, firstCode.rawValue);
             if (mToast != null) {
@@ -172,6 +203,7 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
             mToast = Toast.makeText(mContext, toastMessage, Toast.LENGTH_LONG);
             mToast.show();
             RecordUserAction.record("SharingQRCode.ScannedNonURL");
+            }
             camera.setOneShotPreviewCallback(this);
             return;
         }
@@ -206,5 +238,57 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
                 mDetector = detector;
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    /** Vivaldi
+     * Shows a dialog with options for what to do with the scanned non-url code.
+     */
+    private void promptForScannedNonUrlOptions(String scannedCode, Camera camera) {
+        if (mAlertDialog != null) {
+            if (mAlertDialog.isShowing())
+                return;
+
+            mAlertDialog.cancel();
+            mAlertDialog = null;
+        }
+
+        mAlertDialog = new AlertDialog.Builder(mContext, R.style.Theme_Chromium_AlertDialog)
+                .setCancelable(true)
+                .setPositiveButton(R.string.search,
+                            (dialog, which) -> {
+                                camera.stopPreview();
+                                PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        String query =
+                                                SelectionPopupControllerImpl.sanitizeQuery(
+                                                        scannedCode,
+                                                        MAX_SEARCH_QUERY_LENGTH);
+                                        if (!TextUtils.isEmpty(query)) {
+                                            String searchUrl =
+                                                    TemplateUrlServiceFactory.get()
+                                                            .getUrlForSearchQuery(query);
+                                            openUrl(searchUrl);
+                                            mNavigationObserver.onNavigation();
+                                        }
+                                    }
+                                });
+                            })
+                .setNegativeButton(R.string.cancel, null)
+                .setNeutralButton(R.string.copy,
+                        (dialog, which) -> {
+                            ClipData clipData =
+                                    ClipData.newPlainText(null, scannedCode);
+                            ClipboardManager clipboardManager =
+                                    (ClipboardManager) mContext.getSystemService(
+                                            Context.CLIPBOARD_SERVICE);
+                            clipboardManager.setPrimaryClip(clipData);
+                            Toast.makeText(mContext, R.string.copied,
+                                    Toast.LENGTH_SHORT).show();
+                        })
+                .setMessage(scannedCode)
+                .create();
+
+        mAlertDialog.show();
     }
 }

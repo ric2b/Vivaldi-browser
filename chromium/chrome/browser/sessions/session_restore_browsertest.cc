@@ -21,9 +21,9 @@
 #include "base/time/time.h"
 #include "base/util/memory_pressure/fake_memory_pressure_monitor.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/defaults.h"
-#include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -103,7 +103,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
   ~SessionRestoreTest() override = default;
 
  protected:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // TODO(nkostylev): Investigate if we can remove this switch.
     command_line->AppendSwitch(switches::kCreateBrowserOnStartupForTests);
@@ -115,7 +115,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
 
     SessionStartupPref pref(SessionStartupPref::LAST);
     SessionStartupPref::SetStartupPref(browser()->profile(), pref);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     const testing::TestInfo* const test_info =
         testing::UnitTest::GetInstance()->current_test_info();
     if (strcmp(test_info->name(), "NoSessionRestoreNewWindowChromeOS") != 0) {
@@ -236,7 +236,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
     }
   }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   Profile* CreateSecondaryProfile(int profile_num) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -248,7 +248,7 @@ class SessionRestoreTest : public InProcessBrowserTest {
     SessionStartupPref::SetStartupPref(profile, pref);
     return profile;
   }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   GURL url1_;
   GURL url2_;
@@ -374,36 +374,6 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoredTabsShouldHaveWindow) {
   }
 }
 
-// Verify that restoring a minimized window does not create a blank window.
-// Regression test for https://crbug.com/1018885.
-// TODO(1080602): Flaky on Windows and Linux.
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
-#define MAYBE_RestoreMinimizedWindow DISABLED_RestoreMinimizedWindow
-#else
-#define MAYBE_RestoreMinimizedWindow RestoreMinimizedWindow
-#endif
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreMinimizedWindow) {
-  // Minimize the window.
-  browser()->window()->Minimize();
-
-  // Restart and session restore the tabs.
-  Browser* restored = QuitBrowserAndRestore(browser(), 3);
-  EXPECT_EQ(1, restored->tab_strip_model()->count());
-
-#if defined(OS_MAC)
-  // On macOS, minimized windows are neither active nor shown, to avoid causing
-  // space switches during session restore.
-  EXPECT_FALSE(restored->window()->IsActive());
-  EXPECT_FALSE(restored->window()->IsVisible());
-#else
-  // Expect the window to be visible.
-  // Prior to the fix for https://crbug.com/1018885, the window was active but
-  // not visible.
-  EXPECT_TRUE(restored->window()->IsActive());
-  EXPECT_TRUE(restored->window()->IsVisible());
-#endif
-}
-
 // Verify that restored tabs have correct disposition. Only one tab should
 // have "visible" visibility state, the rest should not.
 // (http://crbug.com/155365 http://crbug.com/118269)
@@ -495,7 +465,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoredTabsHaveCorrectInitialSize) {
   }
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Verify that session restore does not occur when a user opens a browser window
 // when no other browser windows are open on ChromeOS.
 // TODO(pkotwicz): Add test which doesn't open incognito browser once
@@ -551,17 +521,13 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MaximizedApps) {
   EXPECT_TRUE(app_browser->window()->IsMaximized());
   EXPECT_TRUE(app_browser->is_type_app());
 }
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Creates a tabbed browser and popup and makes sure we restore both.
-#if defined(OS_MAC)
 // Disabled for mac-arm64 bot stabilization: https://crbug.com/1154345
 // Also disabled for Mac flakiness in general: https://crbug.com/1158715
-#define MAYBE_NormalAndPopup DISABLED_NormalAndPopup
-#else
-#define MAYBE_NormalAndPopup NormalAndPopup
-#endif
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_NormalAndPopup) {
+// Also disabled for cross-platform flakiness in general: https://crbug.com/1166756
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, DISABLED_NormalAndPopup) {
   // Open a popup.
   Browser* popup = CreateBrowserForPopup(browser()->profile());
   ASSERT_EQ(2u, active_browser_list_->size());
@@ -706,7 +672,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_WindowWithOneTab) {
   EXPECT_EQ(0U, service->entries().size());
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 // This test does not apply to ChromeOS as ChromeOS does not do session
 // restore when a new window is open.
 
@@ -1489,10 +1455,11 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, ActiveIndexUpdatedAtInsert) {
   ASSERT_EQ(new_browser->tab_strip_model()->active_index(), 1);
 }
 
-#if !defined(OS_CHROMEOS) && !defined(OS_MAC)
-// This test doesn't apply to the Mac version; see GetCommandLineForRelaunch
+#if !defined(OS_MAC) && !BUILDFLAG(IS_CHROMEOS_LACROS) && \
+    !BUILDFLAG(IS_CHROMEOS_ASH)
+// This test doesn't apply to Mac or Lacros; see GetCommandLineForRelaunch
 // for details. It was disabled for a long time so might never have worked on
-// ChromeOS.
+// Chrome OS Ash.
 
 // Launches an app window, closes tabbed browser, launches and makes sure
 // we restore the tabbed browser url.
@@ -1521,7 +1488,8 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
             new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
 }
 
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_MAC)
+#endif  // !!defined(OS_MAC) && !BUILDFLAG(IS_CHROMEOS_LACROS) &&
+        // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Creates two windows, closes one, restores, make sure only one window open.
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, TwoWindowsCloseOneRestoreOnlyOne) {
@@ -1895,7 +1863,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, TabWithDownloadDoesNotGetRestored) {
   }
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 namespace {
 
 class MultiBrowserObserver : public BrowserListObserver {
@@ -2021,11 +1989,11 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, DISABLED_RestoreAllBrowsers) {
                .possibly_invalid_spec();
   }
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // PRE_CorrectLoadingOrder is flaky on ChromeOS MSAN and Mac.
 // See http://crbug.com/493167.
-#if (defined(OS_CHROMEOS) && defined(MEMORY_SANITIZER)) || defined(OS_MAC)
+#if (BUILDFLAG(IS_CHROMEOS_ASH) && defined(MEMORY_SANITIZER)) || defined(OS_MAC)
 #define MAYBE_PRE_CorrectLoadingOrder DISABLED_PRE_CorrectLoadingOrder
 #define MAYBE_CorrectLoadingOrder DISABLED_CorrectLoadingOrder
 #else

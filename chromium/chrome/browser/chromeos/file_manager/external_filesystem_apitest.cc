@@ -349,6 +349,12 @@ class FileSystemExtensionApiTestBase : public extensions::ExtensionApiTest {
         return false;
       }
 
+      if (flags & FLAGS_LAZY_FILE_HANDLER) {
+        // Ensures the file handler extension's background page closes in a
+        // timely manner to avoid test timeouts.
+        extensions::ProcessManager::SetEventPageIdleTimeForTesting(1);
+      }
+
       BackgroundObserver page_complete;
       const Extension* file_handler =
           LoadExtension(test_data_dir_.AppendASCII(filehandler_path));

@@ -114,6 +114,9 @@ class DummyAgentGroupScheduler : public AgentGroupScheduler {
   scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override {
     return base::ThreadTaskRunnerHandle::Get();
   }
+  scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override {
+    return base::ThreadTaskRunnerHandle::Get();
+  }
 };
 
 class DummyPageScheduler : public PageScheduler {
@@ -136,6 +139,7 @@ class DummyPageScheduler : public PageScheduler {
   void SetPageVisible(bool) override {}
   void SetPageFrozen(bool) override {}
   void SetPageBackForwardCached(bool) override {}
+  void OnFocusChanged(bool focused) override {}
   void SetKeepActive(bool) override {}
   bool IsMainFrameLocal() const override { return true; }
   void SetIsMainFrameLocal(bool) override {}

@@ -7,10 +7,15 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_context.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/account_id/account_id.h"
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 
 namespace {
+constexpr char kUserActionBack[] = "back";
 constexpr char kUserActionCancel[] = "cancel";
+constexpr char kUserActionStartEnrollment[] = "startEnrollment";
 }  // namespace
 
 namespace chromeos {
@@ -20,8 +25,12 @@ std::string GaiaScreen::GetResultString(Result result) {
   switch (result) {
     case Result::BACK:
       return "Back";
-    case Result::CLOSE_DIALOG:
-      return "CloseDialog";
+    case Result::CANCEL:
+      return "Cancel";
+    case Result::ENTERPRISE_ENROLL:
+      return "EnterpriseEnroll";
+    case Result::START_CONSUMER_KIOSK:
+      return "StartConsumerKiosk";
   }
 }
 
@@ -40,12 +49,15 @@ void GaiaScreen::SetView(GaiaView* view) {
     view_->Bind(this);
 }
 
-void GaiaScreen::MaybePreloadAuthExtension() {
-  view_->MaybePreloadAuthExtension();
-}
-
 void GaiaScreen::LoadOnline(const AccountId& account) {
-  view_->SetGaiaPath(GaiaView::GaiaPath::kDefault);
+  auto gaia_path = GaiaView::GaiaPath::kDefault;
+  if (!account.empty() && features::IsGaiaReauthEndpointEnabled()) {
+    auto* user = user_manager::UserManager::Get()->FindUser(account);
+    DCHECK(user);
+    if (user && user->IsChild())
+      gaia_path = GaiaView::GaiaPath::kReauth;
+  }
+  view_->SetGaiaPath(gaia_path);
   view_->LoadGaiaAsync(account);
 }
 
@@ -57,10 +69,6 @@ void GaiaScreen::LoadOnlineForChildSignup() {
 void GaiaScreen::LoadOnlineForChildSignin() {
   view_->SetGaiaPath(GaiaView::GaiaPath::kChildSignin);
   view_->LoadGaiaAsync(EmptyAccountId());
-}
-
-void GaiaScreen::LoadOffline(const AccountId& account) {
-  view_->LoadOfflineGaia(account);
 }
 
 void GaiaScreen::ShowImpl() {
@@ -75,17 +83,27 @@ void GaiaScreen::HideImpl() {
 }
 
 void GaiaScreen::OnUserAction(const std::string& action_id) {
-  if (action_id == kUserActionCancel) {
-    if (context()->is_user_creation_enabled) {
-      exit_callback_.Run(Result::BACK);
-    } else if (LoginDisplayHost::default_host()->HasUserPods()) {
-      exit_callback_.Run(Result::CLOSE_DIALOG);
-    } else {
-      LoadOnline(EmptyAccountId());
-    }
+  if (action_id == kUserActionBack) {
+    exit_callback_.Run(Result::BACK);
+  } else if (action_id == kUserActionCancel) {
+    exit_callback_.Run(Result::CANCEL);
+  } else if (action_id == kUserActionStartEnrollment) {
+    exit_callback_.Run(Result::ENTERPRISE_ENROLL);
   } else {
     BaseScreen::OnUserAction(action_id);
   }
+}
+
+bool GaiaScreen::HandleAccelerator(ash::LoginAcceleratorAction action) {
+  if (action == ash::LoginAcceleratorAction::kStartEnrollment) {
+    exit_callback_.Run(Result::ENTERPRISE_ENROLL);
+    return true;
+  }
+  if (action == ash::LoginAcceleratorAction::kEnableConsumerKiosk) {
+    exit_callback_.Run(Result::START_CONSUMER_KIOSK);
+    return true;
+  }
+  return false;
 }
 
 }  // namespace chromeos

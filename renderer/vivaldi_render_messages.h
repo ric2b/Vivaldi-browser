@@ -23,6 +23,7 @@ IPC_STRUCT_BEGIN(VivaldiViewMsg_RequestThumbnailForFrame_Params)
   IPC_STRUCT_MEMBER(bool, full_page)
   IPC_STRUCT_MEMBER(gfx::Size, target_size)
   IPC_STRUCT_MEMBER(int, callback_id)
+  IPC_STRUCT_MEMBER(int, client_id)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(VivaldiViewMsg_AccessKeyDefinition)
@@ -65,10 +66,11 @@ IPC_MESSAGE_ROUTED1(VivaldiViewMsg_RequestThumbnailForFrame,
 
 // Responds to the request for a thumbnail.
 // Thumbnail data will be empty if a thumbnail could not be produced.
-IPC_MESSAGE_ROUTED3(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
+IPC_MESSAGE_ROUTED4(VivaldiViewHostMsg_RequestThumbnailForFrame_ACK,
                     int /* ID of the callback */,
                     gfx::Size /* the size of the image */,
-                    base::ReadOnlySharedMemoryRegion /* region */)
+                    base::ReadOnlySharedMemoryRegion /* region */,
+                    int /* ID for the client */)
 
 IPC_MESSAGE_ROUTED0(VivaldiFrameHostMsg_ResumeParser)
 

@@ -26,7 +26,9 @@
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_timeouts.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "fuchsia/base/agent_impl.h"
@@ -522,12 +524,10 @@ class CastRunnerIntegrationTest : public testing::Test {
     if (component_controller_) {
       component_controller_.set_error_handler(
           [&controller_loop](zx_status_t status) {
-            EXPECT_EQ(status, ZX_ERR_PEER_CLOSED);
             controller_loop.Quit();
+            EXPECT_EQ(status, ZX_ERR_PEER_CLOSED);
           });
     }
-
-    web_engine_controller_->Kill();
 
     if (component_controller_) {
       controller_loop.Run();
@@ -548,6 +548,11 @@ class CastRunnerIntegrationTest : public testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::SingleThreadTaskEnvironment::MainThreadType::IO};
   net::EmbeddedTestServer test_server_;
+
+  // TODO(1168538): Override the RunLoop timeout set by |task_environment_| to
+  // allow for the very high variability in web.Context launch times.
+  const base::test::ScopedRunLoopTimeout scoped_timeout_{
+      FROM_HERE, TestTimeouts::action_max_timeout()};
 
   fuchsia::sys::ComponentControllerPtr web_engine_controller_;
   fuchsia::sys::ComponentControllerPtr cast_runner_controller_;
@@ -596,27 +601,35 @@ TEST_F(CastRunnerIntegrationTest, BasicRequest) {
 // crashed. Regression test for https://crbug.com/1066826).
 // TODO(https://crbug.com/1066833): Make this a WebRunner test.
 TEST_F(CastRunnerIntegrationTest, CanRecreateContext) {
-  // Execute two iterations of launching the component and verifying that it
-  // reaches the expected URL.
-  for (int i = 0; i < 2; ++i) {
-    SCOPED_TRACE(testing::Message() << "Test iteration " << i);
+  const GURL app_url = test_server_.GetURL(kBlankAppUrl);
+  app_config_manager_.AddApp(kTestAppId, app_url);
 
-    const GURL app_url = test_server_.GetURL(kBlankAppUrl);
-    app_config_manager_.AddApp(kTestAppId, app_url);
+  // Create a Cast component and verify that it has loaded.
+  CreateComponentContextAndStartComponent();
+  CheckAppUrl(app_url);
 
-    CreateComponentContextAndStartComponent();
+  // Disconnect the CastRunner's web.Context, by killing the ContextProvider.
+  base::RunLoop loop;
+  web_engine_controller_->Kill();
+  web_engine_controller_.set_error_handler([&loop](zx_status_t status) {
+    loop.Quit();
+    EXPECT_EQ(status, ZX_ERR_PEER_CLOSED);
+  });
 
-    CheckAppUrl(app_url);
+  // Wait for the component to be torn down.
+  WaitForComponentDestroyed();
 
-    web_engine_controller_->Kill();
+  // Start a new WebEngine instance for the second component.
+  StartAndPublishWebEngine();
 
-    // Wait for the component and the Context to be torn down.
-    WaitForComponentDestroyed();
-
-    // Start a new WebEngine instance for the next iteration.
-    if (i < 1)
-      StartAndPublishWebEngine();
-  }
+  // Create a second Cast component and verify that it has loaded.
+  // There is no guarantee that the CastRunner has detected the old web.Context
+  // disconnecting yet, so attempts to launch Cast components could fail.
+  // WebContentRunner::CreateFrameWithParams() will synchronously verify that
+  // the web.Context is not-yet-closed, to work-around that.
+  app_config_manager_.AddApp(kTestAppId, app_url);
+  CreateComponentContextAndStartComponent();
+  CheckAppUrl(app_url);
 }
 
 TEST_F(CastRunnerIntegrationTest, ApiBindings) {

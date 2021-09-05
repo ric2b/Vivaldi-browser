@@ -128,7 +128,9 @@ class BookmarksPrivateUpdatePartnersFunction : public ExtensionFunction {
   // BookmarksFunction:
   ResponseAction Run() override;
 
-  void OnUpdatePartnersResult(bool ok, bool no_version);
+  void OnUpdatePartnersResult(bool ok,
+                              bool no_version,
+                              const std::string& locale);
 
   DISALLOW_COPY_AND_ASSIGN(BookmarksPrivateUpdatePartnersFunction);
 };

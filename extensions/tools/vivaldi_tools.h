@@ -16,12 +16,12 @@ class Browser;
 namespace content {
 class BrowserContext;
 class WebContents;
-}
+}  // namespace content
 
 namespace base {
 class ListValue;
 class Time;
-}
+}  // namespace base
 
 namespace ui {
 class Accelerator;
@@ -41,6 +41,10 @@ void BroadcastEvent(const std::string& eventname,
                     std::unique_ptr<base::ListValue> args,
                     content::BrowserContext* context);
 
+void BroadcastEventToAllProfiles(
+    const std::string& eventname,
+    std::unique_ptr<base::ListValue> args = nullptr);
+
 // Return number of milliseconds for time
 double MilliSecondsFromTime(const base::Time& time);
 
@@ -48,12 +52,12 @@ double MilliSecondsFromTime(const base::Time& time);
 base::Time GetTime(double ms_from_epoch);
 
 gfx::PointF FromUICoordinates(content::WebContents* web_contents,
-                              const gfx::PointF &p);
+                              const gfx::PointF& p);
 
-void FromUICoordinates(content::WebContents* web_contents,
-                       gfx::RectF* rect);
+void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect);
 
-gfx::PointF ToUICoordinates(content::WebContents* web_contents, const gfx::PointF &p);
+gfx::PointF ToUICoordinates(content::WebContents* web_contents,
+                            const gfx::PointF& p);
 
 base::string16 KeyCodeToName(ui::KeyboardCode key_code);
 

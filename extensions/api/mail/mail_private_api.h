@@ -92,19 +92,19 @@ class MailPrivateReadFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(MailPrivateReadFunction);
 };
 
-class MailPrivateReadBufferFunction : public ExtensionFunction {
-  DECLARE_EXTENSION_FUNCTION("mailPrivate.readBuffer", MAIL_READ_FILE_BUFFER)
+class MailPrivateReadM3MessageFunction : public ExtensionFunction {
+  DECLARE_EXTENSION_FUNCTION("mailPrivate.readM3Message", MAIL_READ_M3_MESSAGE)
  public:
-  MailPrivateReadBufferFunction() = default;
+  MailPrivateReadM3MessageFunction() = default;
 
  protected:
-  ~MailPrivateReadBufferFunction() override = default;
+  ~MailPrivateReadM3MessageFunction() override = default;
   void OnFinished(ReadFileResult result);
   // ExtensionFunction:
   ResponseAction Run() override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadBufferFunction);
+  DISALLOW_COPY_AND_ASSIGN(MailPrivateReadM3MessageFunction);
 };
 
 class MailPrivateReadFileFunction : public ExtensionFunction {

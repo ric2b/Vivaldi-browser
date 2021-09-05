@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Landskap 3</translation>
 <translation id="1118377629180821201">Landskap 12</translation>
 <translation id="1158503667684816647">Syn ikkje stadfestinga igjen</translation>
+<translation id="1222195720020481779">Startar installasjonen …</translation>
 <translation id="1276145862619442150">Snøggval</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
 <translation id="1411638389238344450">Send lenkja som e-post</translation>
@@ -21,11 +22,14 @@
 <translation id="1921101374471252440">Last &amp;bildet på nytt</translation>
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Allmenn</translation>
+<translation id="1985669426322966465">Programoppdatering</translation>
 <translation id="2079036669923635404">Klikk her for å oppdatera Vivaldi til utgåve <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Klarte ikkje å lasta ned oppdateringsfilene. Sjå over internettsambandet ditt og prøv igjen.</translation>
+<translation id="2339641773402824483">Ser etter oppdateringar …</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Sett inn notat</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
+<translation id="2612127540243995147">Klar til å installera. Vivaldi vil verta lukka og starta om att.</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
 <translation id="2873951654529031587">Bossbøtta</translation>
 <translation id="292258461174562431">Monster 4</translation>
@@ -36,9 +40,11 @@
 <translation id="3084011186245865060">Landskap 6</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
 <translation id="3156398087075132709">Nytt bokmerke</translation>
+<translation id="3255747772218936245">Installer oppdateringa</translation>
 <translation id="3259769196742189631">Valider</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(ingen tittel)</translation>
+<translation id="3383198080133834965">Du har den siste utgåva.</translation>
 <translation id="3402602684546832928">Vel Opera-bokmerkefil</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Stadfest lukking</translation>
@@ -56,6 +62,7 @@
 <translation id="3914946330804881301">Importert frå Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Lim inn</translation>
+<translation id="4005270918754737597">Hopp over denne utgåva</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">Vis &amp;ikkje fleire gongar</translation>
 <translation id="4074744496918018786">Opna bildet i privat vindauge</translation>
@@ -72,6 +79,7 @@
 <translation id="4677434526832593569">Dyr 8</translation>
 <translation id="474217410105706308">Slå av lyden for fana</translation>
 <translation id="4881695831933465202">Opna</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> av <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importerte snøggval</translation>
 <translation id="5092656712000637858">Legg sida til nettpanelet</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -85,7 +93,7 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera utgåve 15+ (beta)</translation>
 <translation id="5648110075441906505">Opna bildet i nytt vindauge</translation>
-<translation id="5656371807944747581">Oppdateringsfeil.</translation>
+<translation id="5656371807944747581">Oppdateringsfeil!</translation>
 <translation id="5716238312826274098">Slår av varsel</translation>
 <translation id="5770433027661640693">Landskap 10</translation>
 <translation id="5857090052475505287">Ny mappe</translation>
@@ -102,13 +110,16 @@
 <translation id="6538338088414940408">Opna lenkja i bakgrunnsfane</translation>
 <translation id="6551219277044048123">Legg til som &amp;søkjemotor ...</translation>
 <translation id="6630781781151951863">Landskap 8</translation>
+<translation id="6635049669875534328">Utgjevingsmerknader:</translation>
 <translation id="6804831687363620480">Diverre er ikkje Opera 15+-innstillingane tilgjengelege medan den nettlesaren køyrer. For å importera innstillingane i Vivaldi må du lagra arbeidet ditt og lukka alle Opera 15+-vindauga. Vel Hald fram.</translation>
+<translation id="6892812721183419409">Opna lenkja som <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopier</translation>
 <translation id="7086554968911045110">Landskap 7</translation>
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi er gjort mogleg gjennom openkjeldeprosjektet <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> og andre <ph name="BEGIN_LINK_OSS" />openkjeldeprogram<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Klarte ikkje å starta oppdateringsprogrammet. Sjå til at datamaskina har nok minne eller lagringsplass og prøv igjen.</translation>
+<translation id="7658239707568436148">Avbryt</translation>
 <translation id="7715497554424665066">&amp;Ignorer oppdateringa</translation>
 <translation id="7724603315864178912">Klipp</translation>
 <translation id="7793738202466490491">Legg til som kalenderhending</translation>
@@ -121,9 +132,12 @@
 <translation id="8261506727792406068">Slett</translation>
 <translation id="8331671104904436324">Opna i bakgrunnsfane</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
+<translation id="8388552048012645975">Lastar ned oppdateringa …</translation>
 <translation id="8427094907586191051">Landskap 17</translation>
+<translation id="8439034818057146672">Du kan no installera den nye Vivaldi-utgåva.</translation>
 <translation id="8446668873108041390">Køyring av JavaScript gjennom AppleScript er slått av. Under Innstillingar &gt; Personvern &gt; Apple-hendingar er det ei innstilling for å tillata JavaScript frå Apple-hendingar.</translation>
 <translation id="8539196077526389150">Landskap 13</translation>
+<translation id="8562339533180097902">Lukk Vivaldi og installer no</translation>
 <translation id="8624587806981488221">Last &amp;bildet på nytt</translation>
 <translation id="864444594187862076">Opera utgåve 15+ (utviklar)</translation>
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
@@ -131,11 +145,13 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du vil ikkje lenger sjå desse varsla. Du kan slå dei på att frå Vivaldi- innstillingane.</translation>
+<translation id="8813277370772331957">Varsla meg seinare</translation>
 <translation id="8894900864683381599">Legg lenkja til nettpanelet</translation>
 <translation id="8912720443398351457">Vil du verkeleg avslutta Vivaldi?</translation>
 <translation id="8947109330183116400">Vel HTML-bokmerkefil</translation>
 <translation id="9017566390391482291">Vel Vivaldi-profilmappa som skal importerast</translation>
 <translation id="9065203028668620118">Endra</translation>
+<translation id="912022491595344261">Opna biletet som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Opna lenkja</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Landskap 16</translation>

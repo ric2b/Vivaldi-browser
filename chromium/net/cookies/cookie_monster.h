@@ -190,10 +190,6 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // (i.e. as part of the instance initialization process).
   void SetPersistSessionCookies(bool persist_session_cookies);
 
-  // Determines if the scheme of the URL is a scheme that cookies will be
-  // stored for.
-  bool IsCookieableScheme(const std::string& scheme);
-
   // The default list of schemes the cookie monster can handle.
   static const char* const kDefaultCookieableSchemes[];
   static const int kDefaultCookieableSchemesCount;
@@ -422,9 +418,8 @@ class NET_EXPORT CookieMonster : public CookieStore {
 
   void SetDefaultCookieableSchemes();
 
-  void FindCookiesForRegistryControlledHost(
-      const GURL& url,
-      std::vector<CanonicalCookie*>* cookies);
+  std::vector<CanonicalCookie*> FindCookiesForRegistryControlledHost(
+      const GURL& url);
 
   void FilterCookiesWithOptions(const GURL url,
                                 const CookieOptions options,
@@ -435,10 +430,10 @@ class NET_EXPORT CookieMonster : public CookieStore {
   // Possibly delete an existing cookie equivalent to |cookie_being_set| (same
   // path, domain, and name).
   //
-  // |source_secure| indicates if the source may override existing secure
-  // cookies. If the source is not secure, and there is an existing "equivalent"
-  // cookie that is Secure, that cookie will be preserved, under "Leave Secure
-  // Cookies Alone" (see
+  // |allowed_to_set_secure_cookie| indicates if the source may override
+  // existing secure cookies. If the source is not trustworthy, and there is an
+  // existing "equivalent" cookie that is Secure, that cookie will be preserved,
+  // under "Leave Secure Cookies Alone" (see
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-alone-01).
   // ("equivalent" here is in quotes because the equivalency check for the
   // purposes of preserving existing Secure cookies is slightly more inclusive.)
@@ -459,7 +454,7 @@ class NET_EXPORT CookieMonster : public CookieStore {
   void MaybeDeleteEquivalentCookieAndUpdateStatus(
       const std::string& key,
       const CanonicalCookie& cookie_being_set,
-      bool source_secure,
+      bool allowed_to_set_secure_cookie,
       bool skip_httponly,
       bool already_expired,
       base::Time* creation_date_to_inherit,

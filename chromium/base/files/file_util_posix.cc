@@ -126,32 +126,6 @@ bool AdvanceEnumeratorWithStat(FileEnumerator* traversal,
   return true;
 }
 
-bool CopyFileContents(File* infile, File* outfile) {
-  static constexpr size_t kBufferSize = 32768;
-  std::vector<char> buffer(kBufferSize);
-
-  for (;;) {
-    ssize_t bytes_read = infile->ReadAtCurrentPos(buffer.data(), buffer.size());
-    if (bytes_read < 0)
-      return false;
-    if (bytes_read == 0)
-      return true;
-    // Allow for partial writes
-    ssize_t bytes_written_per_read = 0;
-    do {
-      ssize_t bytes_written_partial = outfile->WriteAtCurrentPos(
-          &buffer[bytes_written_per_read], bytes_read - bytes_written_per_read);
-      if (bytes_written_partial < 0)
-        return false;
-
-      bytes_written_per_read += bytes_written_partial;
-    } while (bytes_written_per_read < bytes_read);
-  }
-
-  NOTREACHED();
-  return false;
-}
-
 bool DoCopyDirectory(const FilePath& from_path,
                      const FilePath& to_path,
                      bool recursive,
@@ -271,7 +245,7 @@ bool DoCopyDirectory(const FilePath& from_path,
     // set of permissions than it does on other POSIX platforms.
 #if defined(OS_APPLE)
     int mode = 0600 | (stat_at_use.st_mode & 0177);
-#elif defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
     int mode = 0644;
 #else
     int mode = 0600;
@@ -283,7 +257,7 @@ bool DoCopyDirectory(const FilePath& from_path,
       return false;
     }
 
-    if (!CopyFileContents(&infile, &outfile)) {
+    if (!CopyFileContents(infile, outfile)) {
       DLOG(ERROR) << "CopyDirectory() couldn't copy file: " << current.value();
       return false;
     }
@@ -623,7 +597,7 @@ bool GetTempDir(FilePath* path) {
 
 #if !defined(OS_APPLE)  // Mac implementation is in file_util_mac.mm.
 FilePath GetHomeDir() {
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (SysInfo::IsRunningOnChromeOS()) {
     // On Chrome OS chrome::DIR_USER_DATA is overridden with a primary user
     // homedir once it becomes available. Return / as the safe option.
@@ -665,7 +639,7 @@ FilePath FormatTemporaryFileName(FilePath::StringPieceType identifier) {
 #if defined(OS_APPLE)
   StringPiece prefix = base::mac::BaseBundleID();
 #elif defined(VIVALDI_BUILD)
-  StringPiece prefix = ".com.vivaldi.Vivaldi.XXXXXX";
+  StringPiece prefix = ".com.vivaldi.Vivaldi";
 #elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
   StringPiece prefix = "com.google.Chrome";
 #else
@@ -1128,7 +1102,7 @@ int GetMaximumPathComponentLength(const FilePath& path) {
 bool GetShmemTempDir(bool executable, FilePath* path) {
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
   bool disable_dev_shm = false;
-#if !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
   disable_dev_shm = CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kDisableDevShmUsage);
 #endif
@@ -1168,7 +1142,7 @@ bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
   if (!outfile.IsValid())
     return false;
 
-  return CopyFileContents(&infile, &outfile);
+  return CopyFileContents(infile, outfile);
 }
 #endif  // !defined(OS_APPLE)
 

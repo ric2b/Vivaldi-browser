@@ -16,13 +16,9 @@ import("//vivaldi/gn/source_updates.gni")
 
 import("//vivaldi/gn/config/signer_features.gni")
 
-declare_args() {
-  enable_ipc_fuzzer = true
-}
-
 if (is_win) {
   update_template_instance(
-      "//chrome/installer/mini_installer:mini_installer") {
+      "//chrome/installer/mini_installer:mini_installer_archive") {
     sign_executables = true
   }
   update_target(

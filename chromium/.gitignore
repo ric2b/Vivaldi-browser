@@ -83,10 +83,6 @@ vs-chromium-project.txt
 /chrome/android/profiles/local.txt
 /chrome/angle_unittests_run.xml
 /chrome/app/vector_icons/google_chrome/
-/chrome/build/chrome.x64.orderfile
-/chrome/build/chrome.x86.orderfile
-/chrome/build/chrome_child.x64.orderfile
-/chrome/build/chrome_child.x86.orderfile
 /chrome/build/pgo_profiles/
 /chrome/gl_tests_run.xml
 /chrome/gles2_conform_test_run.xml
@@ -110,6 +106,7 @@ vs-chromium-project.txt
 /chrome/browser/resources/chromeos/quickoffice
 /chrome/browser/resources/pdf/html_office
 /chrome/browser/resources/media_router/extension/src/
+/chrome/browser/resources/preinstalled_web_apps/internal/
 /chrome/browser/resources/media_router_internal/
 /chrome/browser/resources/settings_internal/
 /chrome/browser/resources/software_rendering_list
@@ -298,8 +295,10 @@ vs-chromium-project.txt
 /tools/metrics/actions/actions.old.xml
 /tools/metrics/histograms/histograms.before.pretty-print.xml
 /tools/metrics/histograms/histograms_xml/*.before.pretty-print.xml
+/tools/metrics/histograms/histograms_xml/*/*.before.pretty-print.xml
 /tools/metrics/histograms/enums.before.pretty-print.xml
 /tools/page_cycler/acid3
+/tools/reclient
 /tools/skia_goldctl/
 /tools/swarming_client
 /tools/tryserver

@@ -14,6 +14,8 @@ class Profile;
 
 namespace borealis {
 
+class BorealisLifetimeObserver;
+
 // An object to track information about the state of the Borealis VM.
 // BorealisContext objects should only be created by the Borealis Context
 // Manager, which is why the constructor is private.
@@ -36,9 +38,6 @@ class BorealisContext {
     container_name_ = std::move(container_name);
   }
 
-  const std::string& root_path() const { return root_path_; }
-  void set_root_path(std::string path) { root_path_ = std::move(path); }
-
   const base::FilePath& disk_path() const { return disk_path_; }
   void set_disk_path(base::FilePath path) { disk_path_ = std::move(path); }
 
@@ -48,11 +47,12 @@ class BorealisContext {
   explicit BorealisContext(Profile* profile);
 
   Profile* const profile_;
-  bool borealis_running_ = false;
   std::string vm_name_;
   std::string container_name_;
-  std::string root_path_;
   base::FilePath disk_path_;
+  // This instance listens for the session to finish and issues an automatic
+  // shutdown when it does.
+  std::unique_ptr<BorealisLifetimeObserver> lifetime_observer_;
 };
 
 }  // namespace borealis

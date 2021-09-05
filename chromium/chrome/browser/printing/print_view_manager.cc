@@ -12,6 +12,7 @@
 #include "base/lazy_instance.h"
 #include "base/no_destructor.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/printing/print_preview_dialog_controller.h"
 #include "chrome/browser/ui/webui/print_preview/print_preview_ui.h"
@@ -28,12 +29,14 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_notification_helper.h"
 #endif
 
 using content::BrowserThread;
+
+namespace printing {
 
 namespace {
 
@@ -57,9 +60,16 @@ void EnableInternalPDFPluginForContents(int render_process_id,
       render_process_id, render_frame_id, info->ToWebPluginInfo());
 }
 
-}  // namespace
+content::WebContents* GetPrintPreviewDialog(
+    content::WebContents* web_contents) {
+  PrintPreviewDialogController* dialog_controller =
+      PrintPreviewDialogController::GetInstance();
+  if (!dialog_controller)
+    return nullptr;
+  return dialog_controller->GetPrintPreviewForContents(web_contents);
+}
 
-namespace printing {
+}  // namespace
 
 struct PrintViewManager::FrameDispatchHelper {
   PrintViewManager* manager;
@@ -190,7 +200,7 @@ bool PrintViewManager::RejectPrintPreviewRequestIfRestricted(
   if (!IsPrintingRestricted())
     return false;
   GetPrintRenderFrame(rfh)->OnPrintPreviewDialogClosed();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   policy::ShowDlpPrintDisabledNotification();
 #endif
   return true;
@@ -227,7 +237,7 @@ bool PrintViewManager::PrintPreview(
     return false;
 
   if (IsPrintingRestricted()) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     policy::ShowDlpPrintDisabledNotification();
 #endif
     return false;
@@ -297,13 +307,13 @@ void PrintViewManager::OnSetupScriptedPrintPreview(
   }
 }
 
-void PrintViewManager::OnShowScriptedPrintPreview(content::RenderFrameHost* rfh,
-                                                  bool source_is_modifiable) {
+void PrintViewManager::ShowScriptedPrintPreview(bool source_is_modifiable) {
   if (print_preview_state_ != SCRIPTED_PREVIEW)
     return;
 
   DCHECK(print_preview_rfh_);
-  if (rfh != print_preview_rfh_)
+  if (print_manager_host_receivers_.GetCurrentTargetFrame() !=
+      print_preview_rfh_)
     return;
 
   PrintPreviewDialogController* dialog_controller =
@@ -319,10 +329,33 @@ void PrintViewManager::OnShowScriptedPrintPreview(content::RenderFrameHost* rfh,
     web_contents()->ExitFullscreen(true);
 
   dialog_controller->PrintPreview(web_contents());
-  PrintHostMsg_RequestPrintPreview_Params params;
+  mojom::RequestPrintPreviewParams params;
   params.is_modifiable = source_is_modifiable;
   PrintPreviewUI::SetInitialParams(
       dialog_controller->GetPrintPreviewForContents(web_contents()), params);
+}
+
+void PrintViewManager::RequestPrintPreview(
+    mojom::RequestPrintPreviewParamsPtr params) {
+  content::RenderFrameHost* render_frame_host =
+      print_manager_host_receivers_.GetCurrentTargetFrame();
+
+  if (RejectPrintPreviewRequestIfRestricted(render_frame_host))
+    return;
+
+  if (params->webnode_only) {
+    PrintPreviewForWebNode(render_frame_host);
+  }
+  PrintPreviewDialogController::PrintPreview(web_contents());
+  PrintPreviewUI::SetInitialParams(GetPrintPreviewDialog(web_contents()),
+                                   *params);
+}
+
+void PrintViewManager::CheckForCancel(int32_t preview_ui_id,
+                                      int32_t request_id,
+                                      CheckForCancelCallback callback) {
+  std::move(callback).Run(
+      PrintPreviewUI::ShouldCancelRequest(preview_ui_id, request_id));
 }
 
 void PrintViewManager::OnScriptedPrintPreviewReply(IPC::Message* reply_msg) {
@@ -339,8 +372,6 @@ bool PrintViewManager::OnMessageReceived(
     IPC_MESSAGE_FORWARD_DELAY_REPLY(
         PrintHostMsg_SetupScriptedPrintPreview, &helper,
         FrameDispatchHelper::OnSetupScriptedPrintPreview)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_ShowScriptedPrintPreview,
-                        OnShowScriptedPrintPreview)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -356,7 +387,7 @@ void PrintViewManager::MaybeUnblockScriptedPreviewRPH() {
 }
 
 bool PrintViewManager::IsPrintingRestricted() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Don't print DLP restricted content on Chrome OS.
   return policy::DlpContentManager::Get()->IsPrintingRestricted(web_contents());
 #else

@@ -117,21 +117,6 @@ TEST_F(ProcessTest, DuplicateCurrent) {
   ASSERT_TRUE(process2.IsValid());
 }
 
-TEST_F(ProcessTest, DeprecatedGetProcessFromHandle) {
-  Process process1(SpawnChild("SimpleChildProcess"));
-  ASSERT_TRUE(process1.IsValid());
-
-  Process process2 = Process::DeprecatedGetProcessFromHandle(process1.Handle());
-  ASSERT_TRUE(process1.IsValid());
-  ASSERT_TRUE(process2.IsValid());
-  EXPECT_EQ(process1.Pid(), process2.Pid());
-  EXPECT_FALSE(process1.is_current());
-  EXPECT_FALSE(process2.is_current());
-
-  process1.Close();
-  ASSERT_TRUE(process2.IsValid());
-}
-
 MULTIPROCESS_TEST_MAIN(SleepyChildProcess) {
   PlatformThread::Sleep(TestTimeouts::action_max_timeout());
   return 0;
@@ -418,7 +403,7 @@ TEST_F(ProcessTest, ChildProcessIsRunning) {
       base::TimeDelta(), nullptr));
 }
 
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // Tests that the function IsProcessBackgroundedCGroup() can parse the contents
 // of the /proc/<pid>/cgroup file successfully.
@@ -432,6 +417,6 @@ TEST_F(ProcessTest, TestIsProcessBackgroundedCGroup) {
   EXPECT_TRUE(IsProcessBackgroundedCGroup(kBackgrounded));
 }
 
-#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
 }  // namespace base

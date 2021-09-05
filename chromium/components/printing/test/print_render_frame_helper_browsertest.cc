@@ -16,6 +16,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/printing/common/print.mojom-test-utils.h"
 #include "components/printing/common/print.mojom.h"
 #include "components/printing/common/print_messages.h"
@@ -67,7 +68,7 @@ const char kBeforeAfterPrintHtml[] =
     "<button id=\"print\" onclick=\"window.print();\">Hello World!</button>"
     "</body>";
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 // A simple webpage with a button to print itself with.
 const char kPrintOnUserAction[] =
     "<body>"
@@ -140,7 +141,7 @@ void CreatePrintSettingsDictionary(base::DictionaryValue* dict) {
   dict->SetBoolean(kSettingShouldPrintSelectionOnly, false);
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 // TODO(https://crbug.com/1008939): Remove DidPreviewPageListener once all IPC
@@ -216,8 +217,14 @@ class FakePrintPreviewUI : public mojom::PrintPreviewUI {
 class TestPrintManagerHost
     : public mojom::PrintManagerHostInterceptorForTesting {
  public:
-  TestPrintManagerHost(content::RenderFrame* frame, MockPrinter* printer)
-      : printer_(printer) {
+  TestPrintManagerHost(content::RenderFrame* frame,
+                       PrintMockRenderThread* thread)
+      : printer_(thread->GetPrinter())
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+        ,
+        thread_(thread)
+#endif
+  {
     Init(frame);
   }
   ~TestPrintManagerHost() override = default;
@@ -230,6 +237,13 @@ class TestPrintManagerHost
     printer_->SetPrintedPagesCount(cookie, number_pages);
   }
   void DidGetDocumentCookie(int32_t cookie) override {}
+  void DidPrintDocument(mojom::DidPrintDocumentParamsPtr params,
+                        DidPrintDocumentCallback callback) override {
+    base::RunLoop().RunUntilIdle();
+    printer_->PrintPage(std::move(params));
+    std::move(callback).Run(true);
+    is_printed_ = true;
+  }
   void GetDefaultPrintSettings(
       GetDefaultPrintSettingsCallback callback) override {
     printing::mojom::PrintParamsPtr params =
@@ -322,9 +336,29 @@ class TestPrintManagerHost
     params->params->should_print_backgrounds = should_print_backgrounds.value();
     std::move(callback).Run(std::move(params), canceled);
   }
-
   void DidShowPrintDialog() override {}
+  void ScriptedPrint(printing::mojom::ScriptedPrintParamsPtr params,
+                     ScriptedPrintCallback callback) override {
+    auto settings = printing::mojom::PrintPagesParams::New();
+    settings->params = printing::mojom::PrintParams::New();
+    if (print_dialog_user_response_) {
+      printer_->ScriptedPrint(params->cookie, params->expected_pages_count,
+                              params->has_selection, settings.get());
+    }
+    std::move(callback).Run(std::move(settings));
+  }
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+  void ShowScriptedPrintPreview(bool source_is_modifiable) override {}
+  void RequestPrintPreview(
+      mojom::RequestPrintPreviewParamsPtr params) override {}
+  void CheckForCancel(int32_t preview_ui_id,
+                      int32_t request_id,
+                      CheckForCancelCallback callback) override {
+    std::move(callback).Run(thread_->ShouldCancelRequest());
+  }
+#endif
 
+  bool IsPrinted() { return is_printed_; }
   void SetExpectedPagesCount(uint32_t number_pages) {
     number_pages_ = number_pages;
   }
@@ -334,6 +368,12 @@ class TestPrintManagerHost
     base::RunLoop run_loop;
     quit_closure_ = run_loop.QuitClosure();
     run_loop.Run();
+  }
+
+  // Call with |response| set to true if the user wants to print.
+  // False if the user decides to cancel.
+  void SetPrintDialogUserResponse(bool response) {
+    print_dialog_user_response_ = response;
   }
 
  private:
@@ -354,8 +394,14 @@ class TestPrintManagerHost
   }
 
   uint32_t number_pages_ = 0;
+  bool is_printed_ = false;
   MockPrinter* printer_;
+#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+  PrintMockRenderThread* thread_;
+#endif
   base::OnceClosure quit_closure_;
+  // True to simulate user clicking print. False to cancel.
+  bool print_dialog_user_response_ = true;
   mojo::AssociatedReceiver<mojom::PrintManagerHost> receiver_{this};
 };
 
@@ -396,8 +442,8 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   }
 
   void BindPrintManagerHost(content::RenderFrame* frame) {
-    auto print_manager = std::make_unique<TestPrintManagerHost>(
-        frame, print_render_thread_->GetPrinter());
+    auto print_manager =
+        std::make_unique<TestPrintManagerHost>(frame, print_render_thread_);
     GetPrintRenderFrameHelperForFrame(frame)->GetPrintManagerHost();
     print_manager->WaitUntilBinding();
     frame_to_print_manager_map_.emplace(frame, std::move(print_manager));
@@ -435,12 +481,11 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   // Verifies whether the pages printed or not.
-  void VerifyPagesPrinted(bool expect_printed) {
-    const IPC::Message* print_msg =
-        render_thread_->sink().GetUniqueMessageMatching(
-            PrintHostMsg_DidPrintDocument::ID);
-    bool did_print = !!print_msg;
-    ASSERT_EQ(expect_printed, did_print);
+  void VerifyPagesPrinted(bool expect_printed,
+                          content::RenderFrame* render_frame = nullptr) {
+    if (!render_frame)
+      render_frame = content::RenderFrame::FromWebFrame(GetMainFrame());
+    ASSERT_EQ(expect_printed, print_manager(render_frame)->IsPrinted());
   }
 
   void OnPrintPages() {
@@ -547,9 +592,10 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   }
 
   PrintMockRenderThread* print_render_thread() { return print_render_thread_; }
-  TestPrintManagerHost* print_manager() {
-    auto it = frame_to_print_manager_map_.find(
-        content::RenderFrame::FromWebFrame(GetMainFrame()));
+  TestPrintManagerHost* print_manager(content::RenderFrame* frame = nullptr) {
+    if (!frame)
+      frame = content::RenderFrame::FromWebFrame(GetMainFrame());
+    auto it = frame_to_print_manager_map_.find(frame);
     return it->second.get();
   }
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -591,7 +637,7 @@ class MAYBE_PrintRenderFrameHelperTest : public PrintRenderFrameHelperTestBase {
 // frequently.
 TEST_F(MAYBE_PrintRenderFrameHelperTest, BlockScriptInitiatedPrinting) {
   // Pretend user will cancel printing.
-  print_render_thread()->set_print_dialog_user_response(false);
+  print_manager()->SetPrintDialogUserResponse(false);
   // Try to print with window.print() a few times.
   PrintWithJavaScript();
   PrintWithJavaScript();
@@ -599,7 +645,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperTest, BlockScriptInitiatedPrinting) {
   VerifyPagesPrinted(false);
 
   // Pretend user will print. (but printing is blocked.)
-  print_render_thread()->set_print_dialog_user_response(true);
+  print_manager()->SetPrintDialogUserResponse(true);
   PrintWithJavaScript();
   VerifyPagesPrinted(false);
 
@@ -615,7 +661,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperTest, BlockScriptInitiatedPrinting) {
 // initiated.
 TEST_F(MAYBE_PrintRenderFrameHelperTest, AllowUserOriginatedPrinting) {
   // Pretend user will cancel printing.
-  print_render_thread()->set_print_dialog_user_response(false);
+  print_manager()->SetPrintDialogUserResponse(false);
   // Try to print with window.print() a few times.
   PrintWithJavaScript();
   PrintWithJavaScript();
@@ -623,7 +669,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperTest, AllowUserOriginatedPrinting) {
   VerifyPagesPrinted(false);
 
   // Pretend user will print. (but printing is blocked.)
-  print_render_thread()->set_print_dialog_user_response(true);
+  print_manager()->SetPrintDialogUserResponse(true);
   PrintWithJavaScript();
   VerifyPagesPrinted(false);
 
@@ -693,9 +739,11 @@ TEST_F(MAYBE_PrintRenderFrameHelperTest, BasicBeforePrintAfterPrintSubFrame) {
       "</body>";
 
   LoadHTML(kCloseOnBeforeHtml);
+  content::RenderFrame* sub_render_frame = content::RenderFrame::FromWebFrame(
+      GetMainFrame()->FindFrameByName("sub")->ToWebLocalFrame());
   OnPrintPagesInFrame("sub");
   EXPECT_EQ(nullptr, GetMainFrame()->FindFrameByName("sub"));
-  VerifyPagesPrinted(false);
+  VerifyPagesPrinted(false, sub_render_frame);
 
   ClearPrintManagerHost();
 
@@ -707,9 +755,11 @@ TEST_F(MAYBE_PrintRenderFrameHelperTest, BasicBeforePrintAfterPrintSubFrame) {
       "</body>";
 
   LoadHTML(kCloseOnAfterHtml);
+  sub_render_frame = content::RenderFrame::FromWebFrame(
+      GetMainFrame()->FindFrameByName("sub")->ToWebLocalFrame());
   OnPrintPagesInFrame("sub");
   EXPECT_EQ(nullptr, GetMainFrame()->FindFrameByName("sub"));
-  VerifyPagesPrinted(true);
+  VerifyPagesPrinted(true, sub_render_frame);
 }
 
 #if defined(OS_APPLE)
@@ -854,7 +904,7 @@ TEST_F(MAYBE_PrintRenderFrameHelperTest, PrintLayoutTest) {
 #endif  // defined(OS_APPLE)
 
 // These print preview tests do not work on Chrome OS yet.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // RenderViewTest-based tests crash on Android
 // http://crbug.com/187500
@@ -1600,6 +1650,6 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest,
 
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace printing

@@ -39,8 +39,8 @@ class DriveIntegrationServiceBrowserTest : public InProcessBrowserTest {
     return &fake_drivefs_helpers_[profile]->fake_drivefs();
   }
 
- private:
-  drive::DriveIntegrationService* CreateDriveIntegrationService(
+ protected:
+  virtual drive::DriveIntegrationService* CreateDriveIntegrationService(
       Profile* profile) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     base::FilePath mount_path = profile->GetPath().Append("drivefs");
@@ -52,6 +52,7 @@ class DriveIntegrationServiceBrowserTest : public InProcessBrowserTest {
     return integration_service;
   }
 
+ private:
   drive::DriveIntegrationServiceFactory::FactoryCallback
       create_drive_integration_service_;
   std::unique_ptr<drive::DriveIntegrationServiceFactory::ScopedFactoryForTest>
@@ -116,6 +117,37 @@ IN_PROC_BROWSER_TEST_F(DriveIntegrationServiceBrowserTest,
             drive::DriveIntegrationServiceFactory::FindForProfile(
                 browser()->profile()));
   EXPECT_FALSE(integration_service->is_enabled());
+}
+
+IN_PROC_BROWSER_TEST_F(DriveIntegrationServiceBrowserTest,
+                       SearchDriveByFileNameTest) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  drive::DriveIntegrationService* drive_service =
+      drive::DriveIntegrationServiceFactory::FindForProfile(
+          browser()->profile());
+
+  base::FilePath mount_path = drive_service->GetMountPointPath();
+  ASSERT_TRUE(base::WriteFile(mount_path.Append("bar"), ""));
+  ASSERT_TRUE(base::WriteFile(mount_path.Append("baz"), ""));
+  auto base_time = base::Time::Now() - base::TimeDelta::FromSeconds(10);
+  auto earlier_time = base_time - base::TimeDelta::FromSeconds(10);
+  ASSERT_TRUE(base::TouchFile(mount_path.Append("bar"), base_time, base_time));
+  ASSERT_TRUE(
+      base::TouchFile(mount_path.Append("baz"), earlier_time, earlier_time));
+
+  base::RunLoop run_loop;
+  auto quit_closure = run_loop.QuitClosure();
+  drive_service->SearchDriveByFileName(
+      "ba", 10, drivefs::mojom::QueryParameters::SortField::kLastViewedByMe,
+      drivefs::mojom::QueryParameters::SortDirection::kAscending,
+      base::BindLambdaForTesting(
+          [=](FileError error, std::vector<base::FilePath> paths) {
+            EXPECT_EQ(2u, paths.size());
+            EXPECT_EQ("baz", paths[0].BaseName().value());
+            EXPECT_EQ("bar", paths[1].BaseName().value());
+            quit_closure.Run();
+          }));
+  run_loop.Run();
 }
 
 class DriveIntegrationServiceWithGaiaDisabledBrowserTest
@@ -215,4 +247,28 @@ IN_PROC_BROWSER_TEST_F(DriveIntegrationServiceBrowserTest,
     run_loop.Run();
   }
 }
+
+class DriveIntegrationServiceWithPrefDisabledBrowserTest
+    : public DriveIntegrationServiceBrowserTest {
+  drive::DriveIntegrationService* CreateDriveIntegrationService(
+      Profile* profile) override {
+    profile->GetPrefs()->SetBoolean(prefs::kDisableDrive, true);
+    return DriveIntegrationServiceBrowserTest::CreateDriveIntegrationService(
+        profile);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(DriveIntegrationServiceWithPrefDisabledBrowserTest,
+                       RenableAndDisableDrive) {
+  auto* profile = browser()->profile();
+  auto* drive_service = DriveIntegrationServiceFactory::FindForProfile(profile);
+  EXPECT_FALSE(drive_service->is_enabled());
+
+  profile->GetPrefs()->SetBoolean(prefs::kDisableDrive, false);
+  EXPECT_TRUE(drive_service->is_enabled());
+
+  profile->GetPrefs()->SetBoolean(prefs::kDisableDrive, true);
+  EXPECT_FALSE(drive_service->is_enabled());
+}
+
 }  // namespace drive

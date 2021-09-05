@@ -5,6 +5,7 @@
 #ifndef PDF_PDF_VIEW_WEB_PLUGIN_H_
 #define PDF_PDF_VIEW_WEB_PLUGIN_H_
 
+#include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "pdf/pdf_view_plugin_base.h"
 #include "pdf/ppapi_migration/url_loader.h"
@@ -94,7 +95,6 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   void DocumentLoadProgress(uint32_t available, uint32_t doc_size) override;
   void FormTextFieldFocusChange(bool in_focus) override;
   bool IsPrintPreview() override;
-  uint32_t GetBackgroundColor() override;
   void IsSelectingChanged(bool is_selecting) override;
   void SelectionChanged(const gfx::Rect& left, const gfx::Rect& right) override;
   void EnteredEditMode() override;
@@ -103,6 +103,13 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   void SetSelectedText(const std::string& selected_text) override;
   void SetLinkUnderCursor(const std::string& link_under_cursor) override;
   bool IsValidLink(const std::string& url) override;
+  std::unique_ptr<Graphics> CreatePaintGraphics(const gfx::Size& size) override;
+  bool BindPaintGraphics(Graphics& graphics) override;
+  void ScheduleTaskOnMainThread(
+      base::TimeDelta delay,
+      ResultCallback callback,
+      int32_t result,
+      const base::Location& from_here = base::Location::Current()) override;
 
   // BlinkUrlLoader::Client:
   bool IsValid() const override;
@@ -120,6 +127,10 @@ class PdfViewWebPlugin final : public PdfViewPluginBase,
   void DidOpen(std::unique_ptr<UrlLoader> loader, int32_t result) override;
   void DidOpenPreview(std::unique_ptr<UrlLoader> loader,
                       int32_t result) override;
+  void DoPaint(const std::vector<gfx::Rect>& paint_rects,
+               std::vector<PaintReadyRect>* ready,
+               std::vector<gfx::Rect>* pending) override;
+  void OnGeometryChanged(double old_zoom, float old_device_scale) override;
 
  private:
   // Call `Destroy()` instead.

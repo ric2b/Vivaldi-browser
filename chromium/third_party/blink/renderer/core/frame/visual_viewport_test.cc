@@ -31,7 +31,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
@@ -100,7 +100,7 @@ class VisualViewportTest : public testing::Test,
       void (*override_settings_func)(WebSettings*) = nullptr) {
     if (!override_settings_func)
       override_settings_func = &ConfigureSettings;
-    helper_.Initialize(nullptr, nullptr, nullptr, override_settings_func);
+    helper_.Initialize(nullptr, nullptr, override_settings_func);
     WebView()->SetDefaultPageScaleLimits(1, 4);
   }
 
@@ -108,7 +108,7 @@ class VisualViewportTest : public testing::Test,
       void (*override_settings_func)(WebSettings*) = nullptr) {
     if (!override_settings_func)
       override_settings_func = &ConfigureAndroidSettings;
-    helper_.Initialize(nullptr, nullptr, nullptr, override_settings_func);
+    helper_.Initialize(nullptr, nullptr, override_settings_func);
     WebView()->SetDefaultPageScaleLimits(0.25f, 5);
   }
 
@@ -239,6 +239,7 @@ INSTANTIATE_PAINT_TEST_SUITE_P(VisualViewportTest);
 // WebView resizes the VisualViewport.
 TEST_P(VisualViewportTest, TestResize) {
   InitializeWithDesktopSettings();
+  WebView()->MainFrameViewWidget()->Resize(gfx::Size(320, 240));
   WebView()->ResizeWithBrowserControls(
       gfx::Size(320, 240), gfx::Size(320, 240),
       WebView()->GetBrowserControls().Params());
@@ -255,6 +256,7 @@ TEST_P(VisualViewportTest, TestResize) {
 
   // Resizing the WebView should change the VisualViewport.
   web_view_size = gfx::Size(640, 480);
+  WebView()->MainFrameViewWidget()->Resize(web_view_size);
   WebView()->ResizeWithBrowserControls(
       web_view_size, web_view_size, WebView()->GetBrowserControls().Params());
   EXPECT_EQ(web_view_size, WebView()->MainFrameViewWidget()->Size());
@@ -2400,6 +2402,48 @@ TEST_P(VisualViewportTest, AutoResizeNoHeightUsesMinimumHeight) {
                                      "</style>"
                                      "<div></div>",
                                      base_url);
+}
+
+// When a provisional frame is committed, it will get swapped in. At that
+// point, the VisualViewport will be reset but the Document is in a detached
+// state with no domWindow(). Ensure we correctly reset the viewport properties
+// but don't crash trying to enqueue resize and scroll events in the document.
+// https://crbug.com/1175916.
+TEST_P(VisualViewportTest, SwapMainFrame) {
+  InitializeWithDesktopSettings();
+
+  WebView()->SetPageScaleFactor(2.0f);
+  WebView()->SetVisualViewportOffset(gfx::PointF(10, 20));
+
+  WebLocalFrame* local_frame =
+      helper_.CreateProvisional(*helper_.LocalMainFrame());
+
+  // Commit the provisional frame so it gets swapped in.
+  RegisterMockedHttpURLLoad("200-by-300.html");
+  frame_test_helpers::LoadFrame(local_frame, base_url_ + "200-by-300.html");
+
+  EXPECT_EQ(WebView()->PageScaleFactor(), 1.0f);
+  EXPECT_EQ(WebView()->VisualViewportOffset().x(), 0.0f);
+  EXPECT_EQ(WebView()->VisualViewportOffset().y(), 0.0f);
+}
+
+// Similar to above but checks the case where a page is loaded such that it
+// will zoom out as a result of loading and layout (i.e. loading a desktop page
+// on Android).
+TEST_P(VisualViewportTest, SwapMainFrameLoadZoomedOut) {
+  InitializeWithAndroidSettings();
+  WebView()->MainFrameViewWidget()->Resize(gfx::Size(100, 150));
+
+  WebLocalFrame* local_frame =
+      helper_.CreateProvisional(*helper_.LocalMainFrame());
+
+  // Commit the provisional frame so it gets swapped in.
+  RegisterMockedHttpURLLoad("200-by-300.html");
+  frame_test_helpers::LoadFrame(local_frame, base_url_ + "200-by-300.html");
+
+  EXPECT_EQ(WebView()->PageScaleFactor(), 0.5f);
+  EXPECT_EQ(WebView()->VisualViewportOffset().x(), 0.0f);
+  EXPECT_EQ(WebView()->VisualViewportOffset().y(), 0.0f);
 }
 
 class VisualViewportSimTest : public SimTest {

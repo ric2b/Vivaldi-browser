@@ -74,12 +74,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
                  float device_scale_factor,
                  const gfx::Size& device_viewport_size,
                  const gfx::DisplayColorSpaces& display_color_spaces,
-                 SurfaceDamageRectList* surface_damage_rect_list);
-
-  // The renderer might expand the damage (e.g: HW overlays were used,
-  // invalidation rects on previous buffers). This function returns a
-  // bounding rect of the area that might need to be recomposited.
-  gfx::Rect GetTargetDamageBoundingRect() const;
+                 SurfaceDamageRectList surface_damage_rect_list);
 
   // Public interface implemented by subclasses.
   struct SwapFrameData {

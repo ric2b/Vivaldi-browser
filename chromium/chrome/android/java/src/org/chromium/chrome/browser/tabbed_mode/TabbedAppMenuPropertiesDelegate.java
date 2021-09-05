@@ -11,7 +11,6 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.app.appmenu.AppMenuIconRowFooter;
 import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
@@ -30,6 +29,8 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import org.chromium.chrome.browser.ChromeApplication;
+
+import org.vivaldi.browser.appmenu.AppMenuIconRowFooter;
 import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
@@ -64,7 +65,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     @Override
     public int getFooterResourceId() {
         // Vivaldi
-        if (!(mIsTablet || VivaldiUtils.isTopToolbarOn()))
+        if (!mIsTablet && !VivaldiUtils.isTopToolbarOn())
             return R.layout.icon_row_menu_footer;
 
         return shouldShowDataSaverMenuItem() ? R.layout.data_reduction_main_menu_item : 0;
@@ -72,8 +73,7 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
 
     @Override
     public void onFooterViewInflated(AppMenuHandler appMenuHandler, View view) {
-        if (view instanceof AppMenuIconRowFooter) {
-            // Vivaldi:
+        if (ChromeApplication.isVivaldi() && view instanceof AppMenuIconRowFooter) {
             // If mBookmarkBridge has not been supplied yet by the callback in the base class,
             // try to get the bridge directly from the supplier.
             if (mBookmarkBridge == null && mVivaldiBookmarkBridgeSupplier != null)

@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "base/base_paths.h"
 #include "base/bind.h"
@@ -42,6 +43,7 @@
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/child_accounts/child_policy_observer.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
+#include "chrome/browser/chromeos/full_restore/full_restore_service.h"
 #include "chrome/browser/chromeos/logging.h"
 #include "chrome/browser/chromeos/login/auth/chrome_cryptohome_authenticator.h"
 #include "chrome/browser/chromeos/login/chrome_restart_request.h"
@@ -60,7 +62,6 @@
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter_factory.h"
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
-#include "chrome/browser/chromeos/login/screens/pin_setup_screen.h"
 #include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_initializer.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager_factory.h"
@@ -99,10 +100,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
-#include "chrome/browser/ui/webui/chromeos/login/discover/discover_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/discover/modules/discover_module_pin_setup.h"
-#include "chrome/browser/ui/webui/chromeos/login/supervision_transition_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
@@ -120,12 +117,15 @@
 #include "chromeos/dbus/cryptohome/tpm_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/login/auth/challenge_response/known_user_pref_utils.h"
 #include "chromeos/login/auth/stub_authenticator_builder.h"
 #include "chromeos/login/session/session_termination_manager.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "chromeos/tpm/prepare_tpm.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/account_id/account_id.h"
 #include "components/account_manager_core/account.h"
@@ -157,6 +157,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/features/feature_session_type.h"
+#include "extensions/common/mojom/feature_session_type.mojom.h"
 #include "rlz/buildflags/buildflags.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
@@ -237,8 +238,8 @@ void InitLocaleAndInputMethodsForNewUser(
     // default input method (e.g. from GaiaScreen), use the hardware input
     // method. Note that the hardware input method can be non-login-able.
     // Refer to the issue chrome-os-partner:48623.
-    if (descriptor && descriptor->GetPreferredKeyboardLayout() ==
-                          preferred_input_method.GetPreferredKeyboardLayout()) {
+    if (descriptor && descriptor->keyboard_layout() ==
+                          preferred_input_method.keyboard_layout()) {
       preferred_input_method = *descriptor;
     }
   }
@@ -388,6 +389,10 @@ policy::MinimumVersionPolicyHandler* GetMinimumVersionPolicyHandler() {
       ->GetMinimumVersionPolicyHandler();
 }
 
+void OnPrepareTpmDeviceFinished() {
+  BootTimesRecorder::Get()->AddLoginTimeMarker("TPMOwn-End", false);
+}
+
 }  // namespace
 
 UserSessionManagerDelegate::~UserSessionManagerDelegate() {}
@@ -522,6 +527,11 @@ void UserSessionManager::CompleteGuestSessionLogin(const GURL& start_url) {
   const base::CommandLine user_flags(base::CommandLine::NO_PROGRAM);
   if (!about_flags::AreSwitchesIdenticalToCurrentCommandLine(
           user_flags, *base::CommandLine::ForCurrentProcess(), NULL)) {
+    SessionManagerClient::Get()->SetFeatureFlagsForUser(
+        cryptohome::CreateAccountIdentifierFromAccountId(
+            user_manager::GuestAccountId()),
+        {});
+
     SessionManagerClient::Get()->SetFlagsForUser(
         cryptohome::CreateAccountIdentifierFromAccountId(
             user_manager::GuestAccountId()),
@@ -673,15 +683,16 @@ void UserSessionManager::InitNonKioskExtensionFeaturesSessionType(
       bool auto_launched = base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kAppAutoLaunched);
       extensions::SetCurrentFeatureSessionType(
-          auto_launched ? extensions::FeatureSessionType::AUTOLAUNCHED_KIOSK
-                        : extensions::FeatureSessionType::KIOSK);
+          auto_launched
+              ? extensions::mojom::FeatureSessionType::kAutolaunchedKiosk
+              : extensions::mojom::FeatureSessionType::kKiosk);
     }
     return;
   }
 
   extensions::SetCurrentFeatureSessionType(
-      user->HasGaiaAccount() ? extensions::FeatureSessionType::REGULAR
-                             : extensions::FeatureSessionType::UNKNOWN);
+      user->HasGaiaAccount() ? extensions::mojom::FeatureSessionType::kRegular
+                             : extensions::mojom::FeatureSessionType::kUnknown);
 }
 
 void UserSessionManager::SetFirstLoginPrefs(
@@ -728,7 +739,7 @@ void UserSessionManager::DoBrowserLaunch(Profile* profile,
 bool UserSessionManager::RespectLocalePreference(
     Profile* profile,
     const user_manager::User* user,
-    const locale_util::SwitchLanguageCallback& callback) const {
+    locale_util::SwitchLanguageCallback callback) const {
   // TODO(alemate): http://crbug.com/288941 : Respect preferred language list in
   // the Google user profile.
   if (g_browser_process == NULL)
@@ -816,8 +827,8 @@ bool UserSessionManager::RespectLocalePreference(
   const bool enable_layouts =
       user_manager::UserManager::Get()->IsLoggedInAsGuest();
   locale_util::SwitchLanguage(pref_locale, enable_layouts,
-                              false /* login_layouts_only */, callback,
-                              profile);
+                              false /* login_layouts_only */,
+                              std::move(callback), profile);
 
   return true;
 }
@@ -828,8 +839,7 @@ bool UserSessionManager::RestartToApplyPerSessionFlagsIfNeed(
   if (!SessionManagerClient::Get()->SupportsBrowserRestart())
     return false;
 
-  if (ProfileHelper::IsSigninProfile(profile) ||
-      ProfileHelper::IsLockScreenAppProfile(profile)) {
+  if (!ProfileHelper::IsRegularProfile(profile)) {
     return false;
   }
 
@@ -1017,7 +1027,7 @@ void UserSessionManager::OnUsersSignInConstraintsChanged() {
   for (auto* user : logged_in_users) {
     if (user->GetType() != user_manager::USER_TYPE_REGULAR &&
         user->GetType() != user_manager::USER_TYPE_GUEST &&
-        user->GetType() != user_manager::USER_TYPE_SUPERVISED &&
+        user->GetType() != user_manager::USER_TYPE_SUPERVISED_DEPRECATED &&
         user->GetType() != user_manager::USER_TYPE_CHILD) {
       continue;
     }
@@ -1054,6 +1064,8 @@ void UserSessionManager::CreateUserSession(const UserContext& user_context,
 void UserSessionManager::PreStartSession() {
   // Switch log file as soon as possible.
   logging::RedirectChromeLogging(*base::CommandLine::ForCurrentProcess());
+
+  UserSessionInitializer::Get()->PreStartSession();
 }
 
 void UserSessionManager::StoreUserContextDataBeforeProfileIsCreated() {
@@ -1256,11 +1268,10 @@ void UserSessionManager::InitProfilePreferences(
                        user_context.GetPublicSessionInputMethod());
 
     if (user_manager->GetPrimaryUser() == user &&
-        !PinSetupScreen::ShouldSkip() &&
         !user_manager->IsUserNonCryptohomeDataEphemeral(user->GetAccountId())) {
-      chromeos::DiscoverManager::Get()
-          ->GetModule<chromeos::DiscoverModulePinSetup>()
-          ->SetPrimaryUserPassword(user_context.GetPasswordKey()->GetSecret());
+      LoginDisplayHost::default_host()
+          ->GetSigninUI()
+          ->SetAuthSessionForOnboarding(user_context);
     }
   }
 
@@ -1522,61 +1533,20 @@ void UserSessionManager::UserProfileInitialized(Profile* profile,
     return;
   }
 
-  if (user_context_.GetAuthFlow() == UserContext::AUTH_FLOW_ACTIVE_DIRECTORY) {
-    // Call FinalizePrepareProfile directly and skip RestoreAuthSessionImpl
-    // because there is no need to merge session for Active Directory users.
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&UserSessionManager::PrepareTpmDeviceAndFinalizeProfile,
-                       AsWeakPtr(), profile));
-    return;
-  }
-
-  PrepareTpmDeviceAndFinalizeProfile(profile);
+  BootTimesRecorder::Get()->AddLoginTimeMarker("TPMOwn-Start", false);
+  PrepareTpm(base::BindOnce(OnPrepareTpmDeviceFinished));
+  FinalizePrepareProfile(profile);
 }
 
 void UserSessionManager::CompleteProfileCreateAfterAuthTransfer(
     Profile* profile) {
   RestoreAuthSessionImpl(profile, has_auth_cookies_);
-  PrepareTpmDeviceAndFinalizeProfile(profile);
-}
-
-void UserSessionManager::PrepareTpmDeviceAndFinalizeProfile(Profile* profile) {
   BootTimesRecorder::Get()->AddLoginTimeMarker("TPMOwn-Start", false);
-
-  if (!tpm_util::TpmIsEnabled() || tpm_util::TpmIsBeingOwned()) {
-    FinalizePrepareProfile(profile);
-    return;
-  }
-
-  // Make sure TPM ownership gets established and the owner password cleared
-  // (if no longer needed) whenever a user logs in. This is so the TPM is in
-  // locked down state after initial setup, which ensures that some decisions
-  // (e.g. NVRAM spaces) are unchangeable until next hardware reset (powerwash,
-  // recovery, etc.).
-  //
-  // Ownership is normally taken when showing the EULA screen, but in case
-  // this gets interrupted TPM ownership might not be established yet. The code
-  // here runs on every login and ensures that the TPM gets into the desired
-  // state eventually.
-  auto callback =
-      base::BindOnce(&UserSessionManager::OnCryptohomeOperationCompleted,
-                     AsWeakPtr(), profile);
-  CryptohomeClient* client = CryptohomeClient::Get();
-  if (tpm_util::TpmIsOwned())
-    client->TpmClearStoredPassword(std::move(callback));
-  else
-    client->TpmCanAttemptOwnership(std::move(callback));
-}
-
-void UserSessionManager::OnCryptohomeOperationCompleted(Profile* profile,
-                                                        bool result) {
-  DCHECK(result);
+  PrepareTpm(base::BindOnce(OnPrepareTpmDeviceFinished));
   FinalizePrepareProfile(profile);
 }
 
 void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
-  BootTimesRecorder::Get()->AddLoginTimeMarker("TPMOwn-End", false);
 
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   if (user_manager->IsLoggedInAsUserWithGaiaAccount()) {
@@ -1743,14 +1713,16 @@ bool UserSessionManager::InitializeUserSession(Profile* profile) {
       // Mark the device as registered., i.e. the second part of OOBE as
       // completed.
       if (!StartupUtils::IsDeviceRegistered())
-        StartupUtils::MarkDeviceRegistered(base::Closure());
+        StartupUtils::MarkDeviceRegistered(base::OnceClosure());
 
-      ActivateWizard(TermsOfServiceScreenView::kScreenId);
+      LoginDisplayHost::default_host()->GetSigninUI()->StartUserOnboarding();
       return false;
     } else if (!user_manager->IsCurrentUserNew() &&
                arc::GetSupervisionTransition(profile) !=
                    arc::ArcSupervisionTransition::NO_TRANSITION) {
-      ActivateWizard(SupervisionTransitionScreenView::kScreenId);
+      LoginDisplayHost::default_host()
+          ->GetSigninUI()
+          ->StartSupervisionTransition();
       return false;
     }
   }
@@ -2117,9 +2089,9 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
 
   if (!locale_pref_checked) {
     RespectLocalePreferenceWrapper(
-        profile,
-        base::Bind(&UserSessionManager::DoBrowserLaunchInternal, AsWeakPtr(),
-                   profile, login_host, true /* locale_pref_checked */));
+        profile, base::BindRepeating(
+                     &UserSessionManager::DoBrowserLaunchInternal, AsWeakPtr(),
+                     profile, login_host, true /* locale_pref_checked */));
     return;
   }
 
@@ -2136,17 +2108,8 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
   VLOG(1) << "Launching browser...";
   TRACE_EVENT0("login", "LaunchBrowser");
 
-  if (should_launch_browser_) {
-    StartupBrowserCreator browser_creator;
-    chrome::startup::IsFirstRun first_run =
-        ::first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
-                                        : chrome::startup::IS_NOT_FIRST_RUN;
-
-    browser_creator.LaunchBrowser(
-        *base::CommandLine::ForCurrentProcess(), profile, base::FilePath(),
-        chrome::startup::IS_PROCESS_STARTUP, first_run,
-        std::make_unique<LaunchModeRecorder>());
-  }
+  if (should_launch_browser_ && !IsFullRestoreEnabled(profile))
+    LaunchBrowser(profile);
 
   if (HatsNotificationController::ShouldShowSurveyToProfile(profile))
     hats_notification_controller_ = new HatsNotificationController(profile);
@@ -2173,34 +2136,56 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
   ShowNotificationsIfNeeded(profile);
 
   if (should_launch_browser_) {
-    MaybeLaunchSettings(profile);
+    if (IsFullRestoreEnabled(profile)) {
+      full_restore::FullRestoreService::GetForProfile(profile)
+          ->LauncherBrowserWhenReady();
+    } else {
+      MaybeLaunchSettings(profile);
+    }
   }
+
   StartAccountManagerMigration(profile);
 }
 
 void UserSessionManager::RespectLocalePreferenceWrapper(
     Profile* profile,
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   if (browser_shutdown::IsTryingToQuit() || chrome::IsAttemptingShutdown())
     return;
 
   const user_manager::User* const user =
       ProfileHelper::Get()->GetUserByProfile(profile);
-  locale_util::SwitchLanguageCallback locale_switched_callback(base::Bind(
-      &UserSessionManager::RunCallbackOnLocaleLoaded, callback,
+  base::RepeatingClosure repeating_callback =
+      base::AdaptCallbackForRepeating(std::move(callback));
+  locale_util::SwitchLanguageCallback locale_switched_callback(base::BindOnce(
+      &UserSessionManager::RunCallbackOnLocaleLoaded, repeating_callback,
       base::Owned(new InputEventsBlocker)));  // Block UI events until
                                               // the ResourceBundle is
                                               // reloaded.
-  if (!RespectLocalePreference(profile, user, locale_switched_callback))
-    callback.Run();
+  if (!RespectLocalePreference(profile, user,
+                               std::move(locale_switched_callback))) {
+    std::move(repeating_callback).Run();
+  }
+}
+
+void UserSessionManager::LaunchBrowser(Profile* profile) {
+  StartupBrowserCreator browser_creator;
+  chrome::startup::IsFirstRun first_run =
+      ::first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
+                                      : chrome::startup::IS_NOT_FIRST_RUN;
+
+  browser_creator.LaunchBrowser(*base::CommandLine::ForCurrentProcess(),
+                                profile, base::FilePath(),
+                                chrome::startup::IS_PROCESS_STARTUP, first_run,
+                                std::make_unique<LaunchModeRecorder>());
 }
 
 // static
 void UserSessionManager::RunCallbackOnLocaleLoaded(
-    const base::Closure& callback,
+    base::OnceClosure callback,
     InputEventsBlocker* /* input_events_blocker */,
     const locale_util::LanguageSwitchResult& /* result */) {
-  callback.Run();
+  std::move(callback).Run();
 }
 
 void UserSessionManager::RemoveProfileForTesting(Profile* profile) {
@@ -2265,6 +2250,14 @@ void UserSessionManager::SetSwitchesForUser(
     const std::vector<std::string>& switches) {
   // TODO(pmarko): Introduce a CHECK that `account_id` is the primary user
   // (https://crbug.com/832857).
+  // Early out so that switches for secondary users are not applied to the whole
+  // session. This could be removed when things like flags UI of secondary users
+  // are fixed properly and TODO above to add CHECK() is done.
+  if (user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId() !=
+      account_id) {
+    return;
+  }
+
   command_line_switches_[switches_type] = switches;
 
   // Apply all command-line switch types in session manager as a flat list.
@@ -2273,6 +2266,13 @@ void UserSessionManager::SetSwitchesForUser(
     all_switches.insert(all_switches.end(), pair.second.begin(),
                         pair.second.end());
   }
+
+  // Clear session_manager's feature flag state so it doesn't pass flags on
+  // restart. This is necessary until in-session feature flags have been
+  // converted to use the new way.
+  // TODO(crbug.com/1073940): Remove after conversion is complete.
+  SessionManagerClient::Get()->SetFeatureFlagsForUser(
+      cryptohome::CreateAccountIdentifierFromAccountId(account_id), {});
 
   SessionManagerClient::Get()->SetFlagsForUser(
       cryptohome::CreateAccountIdentifierFromAccountId(account_id),
@@ -2318,6 +2318,12 @@ void UserSessionManager::WaitForEasyUnlockKeyOpsFinished(
     return;
   }
   easy_unlock_key_ops_finished_callbacks_.push_back(std::move(callback));
+}
+
+bool UserSessionManager::IsFullRestoreEnabled(Profile* profile) {
+  auto* full_restore_service =
+      full_restore::FullRestoreService::GetForProfile(profile);
+  return full_restore_service != nullptr;
 }
 
 }  // namespace chromeos

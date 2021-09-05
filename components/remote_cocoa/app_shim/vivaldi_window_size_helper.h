@@ -5,9 +5,11 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "ui/display/display.h"
+
 namespace vivaldi {
 
-void VerifyWindowSize(NSWindow* window);
+void VerifyWindowSize(NSWindow* window, const display::Display& old_display);
 
 } // vivaldi
 

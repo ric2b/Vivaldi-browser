@@ -27,8 +27,6 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) ExtendedAuthenticatorImpl
     : public ExtendedAuthenticator {
  public:
   static scoped_refptr<ExtendedAuthenticatorImpl> Create(
-      NewAuthStatusConsumer* consumer);
-  static scoped_refptr<ExtendedAuthenticatorImpl> Create(
       AuthStatusConsumer* consumer);
 
   // ExtendedAuthenticator:
@@ -49,10 +47,6 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) ExtendedAuthenticatorImpl
               const cryptohome::KeyDefinition& key,
               bool clobber_if_exists,
               base::OnceClosure success_callback) override;
-  void UpdateKeyAuthorized(const UserContext& context,
-                           const cryptohome::KeyDefinition& key,
-                           const std::string& signature,
-                           base::OnceClosure success_callback) override;
   void RemoveKey(const UserContext& context,
                  const std::string& key_to_remove,
                  base::OnceClosure success_callback) override;
@@ -60,7 +54,6 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) ExtendedAuthenticatorImpl
                             ContextCallback callback) override;
 
  private:
-  explicit ExtendedAuthenticatorImpl(NewAuthStatusConsumer* consumer);
   explicit ExtendedAuthenticatorImpl(AuthStatusConsumer* consumer);
   ~ExtendedAuthenticatorImpl() override;
 
@@ -76,10 +69,6 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) ExtendedAuthenticatorImpl
                 bool clobber_if_exists,
                 base::OnceClosure success_callback,
                 const UserContext& context);
-  void DoUpdateKeyAuthorized(const cryptohome::KeyDefinition& key,
-                             const std::string& signature,
-                             base::OnceClosure success_callback,
-                             const UserContext& context);
   void DoRemoveKey(const std::string& key_to_remove,
                    base::OnceClosure success_callback,
                    const UserContext& context);
@@ -105,8 +94,7 @@ class COMPONENT_EXPORT(CHROMEOS_LOGIN_AUTH) ExtendedAuthenticatorImpl
   std::string system_salt_;
   std::vector<base::OnceClosure> system_salt_callbacks_;
 
-  NewAuthStatusConsumer* consumer_;
-  AuthStatusConsumer* old_consumer_;
+  AuthStatusConsumer* consumer_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtendedAuthenticatorImpl);
 };

@@ -170,8 +170,7 @@ class RequestFilterProxyingWebSocket
   RequestFilterManager::ProxySet* const proxies_;
 
   // Notifies the proxy that the browser context has been shutdown.
-  std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
-      shutdown_notifier_;
+  base::CallbackListSubscription shutdown_notifier_subscription_;
 
   base::WeakPtrFactory<RequestFilterProxyingWebSocket> weak_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(RequestFilterProxyingWebSocket);

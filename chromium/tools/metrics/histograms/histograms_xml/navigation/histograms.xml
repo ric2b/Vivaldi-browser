@@ -38,7 +38,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackForwardCache.AllSites.HistoryNavigationOutcome"
-    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2021-04-18">
+    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2021-06-20">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -52,7 +52,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="BackForwardCache.AllSites.HistoryNavigationOutcome.BlocklistedFeature"
-    enum="WebSchedulerTrackedFeature" expires_after="2021-04-25">
+    enum="WebSchedulerTrackedFeature" expires_after="2021-06-27">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -69,7 +69,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="BackForwardCache.AllSites.HistoryNavigationOutcome.BrowsingInstanceNotSwappedReason"
     enum="BackForwardCacheBrowsingInstanceNotSwappedReason"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -107,7 +107,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="BackForwardCache.AllSites.HistoryNavigationOutcome.NotRestoredReason"
-    enum="BackForwardCacheNotRestoredReason" expires_after="2021-04-11">
+    enum="BackForwardCacheNotRestoredReason" expires_after="2021-06-13">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -123,7 +123,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="BackForwardCache.EvictedAfterDocumentRestoredReason"
     enum="BackForwardCacheEvictedAfterDocumentRestoredReason"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -150,7 +150,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="BackForwardCache.Experimental.UnexpectedIPCMessagePostedToCachedFrame.MethodHash"
-    enum="MojoInterfaceName" expires_after="2021-03-28">
+    enum="MojoInterfaceName" expires_after="2021-05-30">
   <owner>hbolaria@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -168,7 +168,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="BackForwardCache.Experimental.UnexpectedIPCMessagePostedToCachedFrame.TimeUntilIPCReceived"
-    units="ms" expires_after="2021-03-28">
+    units="ms" expires_after="2021-05-30">
   <owner>hbolaria@chromium.org</owner>
   <owner>altimin@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -197,7 +197,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavigationOutcome.BlocklistedFeature"
-    enum="WebSchedulerTrackedFeature" expires_after="2021-04-11">
+    enum="WebSchedulerTrackedFeature" expires_after="2021-06-13">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -215,7 +215,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="BackForwardCache.HistoryNavigationOutcome.BrowsingInstanceNotSwappedReason"
     enum="BackForwardCacheBrowsingInstanceNotSwappedReason"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -232,7 +232,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="BackForwardCache.HistoryNavigationOutcome.DisabledForRenderFrameHostReason"
     enum="BackForwardCacheDisabledForRenderFrameHostReason"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>carlscab@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
@@ -254,7 +254,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavigationOutcome.NotRestoredReason"
-    enum="BackForwardCacheNotRestoredReason" expires_after="2021-04-11">
+    enum="BackForwardCacheNotRestoredReason" expires_after="2021-06-13">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -355,6 +355,22 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
     This is recorded when navigation is committed, only for the domains which
     are in the scope of back-forward cache experiment.
+  </summary>
+</histogram>
+
+<histogram name="BackForwardCache.Restore.DisableEvictionDelay" units="ms"
+    expires_after="2021-10-01">
+  <owner>carlscab@google.com</owner>
+  <owner>bfcache-dev@chromium.org</owner>
+  <summary>
+    Delay introduced by the IPC round trips to disable eviction in all the
+    renderers of a page stored in the back-forward cache. That is, the interval
+    of time between sending an SetPageLifecycleState IPC to each renderer and
+    receiving all the responses.
+
+    Recorded on reception of the last ACK reply. We added this histogram to
+    measure the impact of this extra round trip to the renderer when restoring a
+    page from the back-forward cache.
   </summary>
 </histogram>
 
@@ -603,7 +619,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Navigation.EngagementTime.HTTP" units="ms" expires_after="M89">
+<histogram name="Navigation.EngagementTime.HTTP" units="ms" expires_after="M94">
   <owner>estark@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -613,7 +629,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.EngagementTime.HTTPS" units="ms"
-    expires_after="M89">
+    expires_after="M94">
   <owner>estark@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -645,6 +661,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     this histogram, about:, chrome: and chrome-native: are considered
     chrome-internal; everything else is not.
 
+    The user action Navigation.Home.NotChromeInternal is also logged in the case
+    that false is logged to this histogram.
+
     This histogram is of special interest to the chrome-analysis-team@. Do not
     change its semantics or retire it without talking to them first.
   </summary>
@@ -663,7 +682,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.IsLockedProcess" enum="NavigationIsLockedProcess"
-    expires_after="2021-05-09">
+    expires_after="2021-12-21">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -674,7 +693,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.IsLockedProcess.HTTPOrHTTPS"
-    enum="NavigationIsLockedProcess" expires_after="2020-12-31">
+    enum="NavigationIsLockedProcess" expires_after="2021-12-21">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -702,7 +721,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.IsSameSiteInstance"
-    enum="NavigationIsSameSiteInstance" expires_after="2021-05-09">
+    enum="NavigationIsSameSiteInstance" expires_after="2021-07-11">
   <owner>arthursonzogni@chromium.org</owner>
   <owner>clamy@chromium.org</owner>
   <owner>nasko@chromium.org</owner>
@@ -751,7 +770,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.MainFrame.SiteEngagementLevel"
-    enum="SiteEngagementLevel" expires_after="2021-04-04">
+    enum="SiteEngagementLevel" expires_after="2021-06-06">
   <owner>meacer@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -761,7 +780,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.MainFrameFormSubmission.SiteEngagementLevel"
-    enum="SiteEngagementLevel" expires_after="2020-12-01">
+    enum="SiteEngagementLevel" expires_after="2021-04-04">
   <owner>meacer@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -887,6 +906,41 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Navigation.OriginAgentCluster.Result"
+    enum="OriginAgentClusterEndResult" expires_after="2022-01-26">
+  <owner>alexmos@chromium.org</owner>
+  <owner>creis@chromium.org</owner>
+  <owner>wjmaclean@chromium.org</owner>
+  <summary>
+    For every successful cross-document commit, this logs whether or how
+    OriginAgentCluster was involved. It tracks whether it was requested, as well
+    as whether the isolation was granted, which can be affected by other
+    documents in the same browsing context group.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.PolicyBlocklistNavigationThrottle.PolicyLoadDelay"
+    units="ms" expires_after="2021-11-01">
+  <owner>ydago@chromium.org</owner>
+  <owner>pastarmovj@chromium.org</owner>
+  <summary>
+    The time spent waiting for policies to load before checking a navigation
+    against url blocking policies.
+  </summary>
+</histogram>
+
+<histogram
+    name="Navigation.PolicyBlocklistNavigationThrottle.PolicyLoadTimeout"
+    enum="Boolean" expires_after="2021-11-01">
+  <owner>ydago@chromium.org</owner>
+  <owner>pastarmovj@chromium.org</owner>
+  <summary>
+    Records if the policy load delay before PolicyBlocklistNavigationThrottle
+    checks a navigation against url blocking policies timed out. In case of a
+    timeout, the navigation resumes ignoring potential policy restrictions.
+  </summary>
+</histogram>
+
 <histogram name="Navigation.ReadyToCommitUntilCommit2" units="ms"
     expires_after="M85">
   <owner>clamy@chromium.org</owner>
@@ -899,7 +953,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.RequiresDedicatedProcess"
-    enum="NavigationRequiresDedicatedProcess" expires_after="2021-03-07">
+    enum="NavigationRequiresDedicatedProcess" expires_after="2021-12-21">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -910,7 +964,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.RequiresDedicatedProcess.HTTPOrHTTPS"
-    enum="NavigationRequiresDedicatedProcess" expires_after="2020-12-31">
+    enum="NavigationRequiresDedicatedProcess" expires_after="2021-12-21">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -951,6 +1005,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Navigation.TimeToURLJobStart" units="ms" expires_after="M85">
+  <obsolete>
+    Removed from code in M89 (Nov 2020), after expiring in M85.
+  </obsolete>
   <owner>carlosk@chromium.org</owner>
   <summary>
     Time between the start of a browser-started navigation request and the
@@ -979,6 +1036,19 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     loader contains an SSLInfo, which should only be present for main-frame
     requests with certificate errors. This histogram is recorded for every
     request completion by the navigation URL loader that fetches from network.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.VerifyDidCommitParams"
+    enum="VerifyDidCommitParamsDifference" expires_after="M92">
+  <owner>rakina@chromium.org</owner>
+  <owner>altimin@chromium.org</owner>
+  <summary>
+    Logs inconsistencies between browser- vs renderer-calculated values of
+    DidCommitProvisionalLoadParams which are detected in RenderFrameHostImpl's
+    VerifyThatBrowserAndRendererCalculatedDidCommitParamsMatch(). This is used
+    to trigger traces to be uploaded to analyze what happened in these
+    navigations.
   </summary>
 </histogram>
 
@@ -1036,7 +1106,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="NavigationPredictor.IsPubliclyRoutable" enum="Boolean"
-    expires_after="M90">
+    expires_after="2021-06-20">
   <owner>tbansal@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <summary>
@@ -1057,6 +1127,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram
+    name="NavigationPredictor.SearchEnginePreconnector.IsBrowserAppLikelyInForeground"
+    enum="BooleanForeground" expires_after="M95">
+  <owner>tbansal@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <summary>
+    Reports if the browser app was in foreground when a preconnect attempt was
+    made to the default search engine.
+  </summary>
+</histogram>
+
 <histogram name="NavigationSuggestion.Event" enum="NavigationSuggestionEvent"
     expires_after="M89">
   <obsolete>
@@ -1073,7 +1154,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="NavigationSuggestion.Event2" enum="NavigationSuggestionEvent"
-    expires_after="M91">
+    expires_after="2021-06-20">
   <owner>meacer@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>

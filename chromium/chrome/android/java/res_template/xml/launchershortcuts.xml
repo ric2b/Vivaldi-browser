@@ -6,7 +6,7 @@
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android" >
     <shortcut
         android:shortcutId="qrcode-scan-shortcut"
-        android:icon="@drawable/qr_48dp"
+        android:icon="@drawable/shortcut_qrscan_24dp"
         android:shortcutShortLabel="@string/accessibility_toolbar_btn_qrcode"
         android:shortcutLongLabel="@string/menu_scan_qrcode"
         android:shortcutDisabledMessage="@string/disabled_scan_qrcode_launcher_shortcut_message" >

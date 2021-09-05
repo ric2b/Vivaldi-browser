@@ -37,7 +37,8 @@ class TestNetworkServiceClient : public network::mojom::NetworkServiceClient {
       int32_t routing_id,
       const std::string& devtools_request_id,
       const net::CookieAccessResultList& cookies_with_access_result,
-      std::vector<network::mojom::HttpRawHeaderPairPtr> headers) override;
+      std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
+      network::mojom::ClientSecurityStatePtr client_security_state) override;
   void OnRawResponse(
       int32_t process_id,
       int32_t routing_id,
@@ -45,11 +46,13 @@ class TestNetworkServiceClient : public network::mojom::NetworkServiceClient {
       const net::CookieAndLineAccessResultList& cookies_with_access_result,
       std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
       const base::Optional<std::string>& raw_response_headers) override;
-  void OnCorsPreflightRequest(int32_t process_id,
-                              int32_t routing_id,
-                              const base::UnguessableToken& devtool_request_id,
-                              const network::ResourceRequest& request,
-                              const GURL& initiator_url) override;
+  void OnCorsPreflightRequest(
+      int32_t process_id,
+      int32_t routing_id,
+      const base::UnguessableToken& devtool_request_id,
+      const network::ResourceRequest& request,
+      const GURL& initiator_url,
+      const std::string& initiator_devtools_request_id) override;
   void OnCorsPreflightResponse(
       int32_t process_id,
       int32_t routing_id,
@@ -61,6 +64,11 @@ class TestNetworkServiceClient : public network::mojom::NetworkServiceClient {
       int32_t routing_id,
       const base::UnguessableToken& devtool_request_id,
       const network::URLLoaderCompletionStatus& status) override;
+  void OnTrustTokenOperationDone(
+      int32_t process_id,
+      int32_t routing_id,
+      const std::string& devtool_request_id,
+      network::mojom::TrustTokenOperationResultPtr result) override;
 
  private:
   mojo::Receiver<mojom::NetworkServiceClient> receiver_;

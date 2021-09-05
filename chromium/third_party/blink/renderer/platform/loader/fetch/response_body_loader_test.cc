@@ -10,6 +10,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/loader/fetch/data_pipe_bytes_consumer.h"
 #include "third_party/blink/renderer/platform/loader/testing/bytes_consumer_test_reader.h"
@@ -75,6 +76,10 @@ class ResponseBodyLoaderTest : public testing::Test {
       cancelled_ = true;
     }
     void EvictFromBackForwardCache(mojom::RendererEvictionReason) override {}
+
+    void DidBufferLoadWhileInBackForwardCache(size_t num_bytes) override {}
+
+    bool CanContinueBufferingWhileInBackForwardCache() override { return true; }
 
     void SetLoader(ResponseBodyLoader& loader) { loader_ = loader; }
     void Trace(Visitor* visitor) const override { visitor->Trace(loader_); }
@@ -443,6 +448,8 @@ class ResponseBodyLoaderLoadingTasksUnfreezableTest
       scoped_feature_list_.InitAndEnableFeature(
           features::kLoadingTasksUnfreezable);
     }
+    WebRuntimeFeatures::EnableBackForwardCache(
+        DeferWithBackForwardCacheEnabled());
   }
 
   bool DeferWithBackForwardCacheEnabled() { return GetParam(); }

@@ -14,6 +14,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_avatar_downloader.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -103,6 +104,8 @@ class ProfileAttributesTestObserver
                void(const base::FilePath& profile_path));
   MOCK_METHOD1(OnProfileThemeColorsChanged,
                void(const base::FilePath& profile_path));
+  MOCK_METHOD1(OnProfileHostedDomainChanged,
+               void(const base::FilePath& profile_path));
 };
 }  // namespace
 
@@ -139,6 +142,8 @@ class ProfileAttributesStorageTest : public testing::Test {
     EXPECT_CALL(observer_, OnProfileSigninRequiredChanged(_)).Times(0);
     EXPECT_CALL(observer_, OnProfileSupervisedUserIdChanged(_)).Times(0);
     EXPECT_CALL(observer_, OnProfileIsOmittedChanged(_)).Times(0);
+    EXPECT_CALL(observer_, OnProfileThemeColorsChanged(_)).Times(0);
+    EXPECT_CALL(observer_, OnProfileHostedDomainChanged(_)).Times(0);
   }
 
   void EnableObserver() { storage()->AddObserver(&observer_); }
@@ -297,7 +302,8 @@ TEST_F(ProfileAttributesStorageTest, InitialValues) {
   EXPECT_EQ(std::string("testing_profile_gaia0"), entry->GetGAIAId());
   EXPECT_EQ(base::ASCIIToUTF16("testing_profile_user0"), entry->GetUserName());
   EXPECT_EQ(0U, entry->GetAvatarIconIndex());
-  EXPECT_EQ(std::string(""), entry->GetSupervisedUserId());
+  EXPECT_EQ(std::string(), entry->GetSupervisedUserId());
+  EXPECT_EQ(std::string(), entry->GetHostedDomain());
 }
 
 TEST_F(ProfileAttributesStorageTest, EntryAccessors) {
@@ -310,7 +316,12 @@ TEST_F(ProfileAttributesStorageTest, EntryAccessors) {
   EXPECT_EQ(path, entry->GetPath());
 
   EXPECT_CALL(observer(), OnProfileNameChanged(path, _)).Times(2);
-  TEST_STRING16_ACCESSORS(ProfileAttributesEntry, entry, LocalProfileName);
+  entry->SetLocalProfileName(base::ASCIIToUTF16("first_value"), true);
+  EXPECT_EQ(base::ASCIIToUTF16("first_value"), entry->GetLocalProfileName());
+  EXPECT_TRUE(entry->IsUsingDefaultName());
+  entry->SetLocalProfileName(base::ASCIIToUTF16("second_value"), false);
+  EXPECT_EQ(base::ASCIIToUTF16("second_value"), entry->GetLocalProfileName());
+  EXPECT_FALSE(entry->IsUsingDefaultName());
   VerifyAndResetCallExpectations();
 
   TEST_STRING16_ACCESSORS(ProfileAttributesEntry, entry, ShortcutName);
@@ -328,8 +339,15 @@ TEST_F(ProfileAttributesStorageTest, EntryAccessors) {
   TEST_BOOL_ACCESSORS(ProfileAttributesEntry, entry, IsUsingGAIAPicture);
   VerifyAndResetCallExpectations();
 
+  // IsOmitted() should be set only on ephemeral profiles.
+  entry->SetIsEphemeral(true);
   EXPECT_CALL(observer(), OnProfileIsOmittedChanged(path)).Times(2);
   TEST_BOOL_ACCESSORS(ProfileAttributesEntry, entry, IsOmitted);
+  VerifyAndResetCallExpectations();
+  entry->SetIsEphemeral(false);
+
+  EXPECT_CALL(observer(), OnProfileHostedDomainChanged(path)).Times(2);
+  TEST_STRING_ACCESSORS(ProfileAttributesEntry, entry, HostedDomain);
   VerifyAndResetCallExpectations();
 
   TEST_BOOL_ACCESSORS(ProfileAttributesEntry, entry, IsEphemeral);
@@ -535,7 +553,8 @@ TEST_F(ProfileAttributesStorageTest, ReSortTriggered) {
       GetProfilePath("alpha_path"), &entry));
 
   // Trigger a ProfileInfoCache re-sort.
-  entry->SetLocalProfileName(base::ASCIIToUTF16("zulu_name"));
+  entry->SetLocalProfileName(base::ASCIIToUTF16("zulu_name"),
+                             /*is_default_name=*/false);
   EXPECT_EQ(GetProfilePath("alpha_path"), entry->GetPath());
 }
 
@@ -590,7 +609,8 @@ TEST_F(ProfileAttributesStorageTest, AccessFromElsewhere) {
   ASSERT_TRUE(storage()->GetProfileAttributesWithPath(
       GetProfilePath("testing_profile_path0"), &second_entry));
 
-  first_entry->SetLocalProfileName(base::ASCIIToUTF16("NewName"));
+  first_entry->SetLocalProfileName(base::ASCIIToUTF16("NewName"),
+                                   /*is_default_name=*/false);
   EXPECT_EQ(base::ASCIIToUTF16("NewName"), second_entry->GetName());
   EXPECT_EQ(first_entry, second_entry);
 
@@ -598,7 +618,8 @@ TEST_F(ProfileAttributesStorageTest, AccessFromElsewhere) {
   // should be reflected by the ProfileAttributesStorage.
   EXPECT_EQ(base::ASCIIToUTF16("NewName"), second_entry->GetName());
 
-  second_entry->SetLocalProfileName(base::ASCIIToUTF16("OtherNewName"));
+  second_entry->SetLocalProfileName(base::ASCIIToUTF16("OtherNewName"),
+                                    /*is_default_name=*/false);
   EXPECT_EQ(base::ASCIIToUTF16("OtherNewName"), first_entry->GetName());
 }
 
@@ -690,7 +711,7 @@ TEST_F(ProfileAttributesStorageTest, AvatarIconIndex) {
 #endif
 
 // High res avatar downloading is only supported on desktop.
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ProfileAttributesStorageTest, DownloadHighResAvatarTest) {
   storage()->set_disable_avatar_download_for_testing(false);
 

@@ -10,13 +10,14 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/debug/debugging_buildflags.h"
 #include "base/debug/profiler.h"
 #include "base/macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/stl_util.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -76,14 +77,17 @@
 #include "content/public/browser/gpu_data_manager.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/public/cpp/desks_helper.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/browser_commands_chromeos.h"
 #include "components/session_manager/core/session_manager.h"
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
@@ -145,7 +149,7 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
     local_pref_registrar_.Init(local_state);
     local_pref_registrar_.Add(
         prefs::kAllowFileSelectionDialogs,
-        base::Bind(
+        base::BindRepeating(
             &BrowserCommandController::UpdateCommandsForFileSelectionDialogs,
             base::Unretained(this)));
   }
@@ -153,30 +157,33 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
   profile_pref_registrar_.Init(profile()->GetPrefs());
   profile_pref_registrar_.Add(
       prefs::kDevToolsAvailability,
-      base::Bind(&BrowserCommandController::UpdateCommandsForDevTools,
-                 base::Unretained(this)));
+      base::BindRepeating(&BrowserCommandController::UpdateCommandsForDevTools,
+                          base::Unretained(this)));
   profile_pref_registrar_.Add(
       bookmarks::prefs::kEditBookmarksEnabled,
-      base::Bind(&BrowserCommandController::UpdateCommandsForBookmarkEditing,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &BrowserCommandController::UpdateCommandsForBookmarkEditing,
+          base::Unretained(this)));
   profile_pref_registrar_.Add(
       bookmarks::prefs::kShowBookmarkBar,
-      base::Bind(&BrowserCommandController::UpdateCommandsForBookmarkBar,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &BrowserCommandController::UpdateCommandsForBookmarkBar,
+          base::Unretained(this)));
   profile_pref_registrar_.Add(
       prefs::kIncognitoModeAvailability,
-      base::Bind(
+      base::BindRepeating(
           &BrowserCommandController::UpdateCommandsForIncognitoAvailability,
           base::Unretained(this)));
   profile_pref_registrar_.Add(
       prefs::kPrintingEnabled,
-      base::Bind(&BrowserCommandController::UpdatePrintingState,
-                 base::Unretained(this)));
+      base::BindRepeating(&BrowserCommandController::UpdatePrintingState,
+                          base::Unretained(this)));
 #if !defined(OS_MAC)
   profile_pref_registrar_.Add(
       prefs::kFullscreenAllowed,
-      base::Bind(&BrowserCommandController::UpdateCommandsForFullscreenMode,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &BrowserCommandController::UpdateCommandsForFullscreenMode,
+          base::Unretained(this)));
 #endif
   pref_signin_allowed_.Init(
       prefs::kSigninAllowed, profile()->GetOriginalProfile()->GetPrefs(),
@@ -213,7 +220,7 @@ bool BrowserCommandController::IsReservedCommandOrKey(
   if (browser_->is_type_app() || browser_->is_type_app_popup())
     return false;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // On Chrome OS, the top row of keys are mapped to browser actions like
   // back/forward or refresh. We don't want web pages to be able to change the
   // behavior of these keys.  Ash handles F4 and up; this leaves us needing to
@@ -249,7 +256,9 @@ bool BrowserCommandController::IsReservedCommandOrKey(
 #endif
   }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // If this key was registered by the user as a content editing hotkey, then
   // it is not reserved.
   ui::TextEditKeyBindingsDelegateAuraLinux* delegate =
@@ -282,9 +291,13 @@ void BrowserCommandController::FullscreenStateChanged() {
   UpdateCommandsForFullscreenMode();
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void BrowserCommandController::LockedFullscreenStateChanged() {
   UpdateCommandsForLockedFullscreenMode();
+}
+
+void BrowserCommandController::DesksStateChanged(int num_desks) {
+  UpdateCommandsForDesks(num_desks);
 }
 #endif
 
@@ -470,7 +483,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       PromptToNameWindow(browser_);
       break;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case IDC_VISIT_DESKTOP_OF_LRU_USER_2:
     case IDC_VISIT_DESKTOP_OF_LRU_USER_3:
     case IDC_VISIT_DESKTOP_OF_LRU_USER_4:
@@ -479,7 +492,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
     case IDC_MINIMIZE_WINDOW:
       browser_->window()->Minimize();
       break;
@@ -542,12 +557,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_MIGRATE_LOCAL_CREDIT_CARD_FOR_PAGE:
       MigrateLocalCards(browser_);
-      break;
-    case IDC_SHOW_SAVE_LOCAL_CARD_SIGN_IN_PROMO_IF_APPLICABLE:
-      MaybeShowSaveLocalCardSignInPromo(browser_);
-      break;
-    case IDC_CLOSE_SIGN_IN_PROMO:
-      CloseSaveLocalCardSignInPromo(browser_);
       break;
     case IDC_TRANSLATE_PAGE:
       Translate(browser_);
@@ -663,9 +672,22 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_TASK_MANAGER:
       OpenTaskManager(browser_);
       break;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case IDC_TAKE_SCREENSHOT:
       TakeScreenshot();
+      break;
+    case IDC_MOVE_TO_DESK_1:
+    case IDC_MOVE_TO_DESK_2:
+    case IDC_MOVE_TO_DESK_3:
+    case IDC_MOVE_TO_DESK_4:
+    case IDC_MOVE_TO_DESK_5:
+    case IDC_MOVE_TO_DESK_6:
+    case IDC_MOVE_TO_DESK_7:
+    case IDC_MOVE_TO_DESK_8:
+      SendToDeskAtIndex(browser_, id - IDC_MOVE_TO_DESK_1);
+      break;
+    case IDC_TOGGLE_ASSIGN_TO_ALL_DESKS:
+      ToggleAssignedToAllDesks(browser_);
       break;
 #endif
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -741,7 +763,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_TOGGLE_COMMANDER:
       ToggleCommander(browser_);
       break;
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
     case IDC_SHOW_SIGNIN:
       ShowBrowserSigninOrSettings(
           browser_, signin_metrics::AccessPoint::ACCESS_POINT_MENU);
@@ -939,7 +961,7 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_EXIT, true);
   command_updater_.UpdateCommandEnabled(IDC_DEBUG_FRAME_TOGGLE, true);
   command_updater_.UpdateCommandEnabled(IDC_NAME_WINDOW, true);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   command_updater_.UpdateCommandEnabled(IDC_MINIMIZE_WINDOW, true);
   // The VisitDesktop command is only supported for up to 5 logged in users
   // because that's the max number of user sessions. If that number is increased
@@ -954,8 +976,24 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_VISIT_DESKTOP_OF_LRU_USER_3, true);
   command_updater_.UpdateCommandEnabled(IDC_VISIT_DESKTOP_OF_LRU_USER_4, true);
   command_updater_.UpdateCommandEnabled(IDC_VISIT_DESKTOP_OF_LRU_USER_5, true);
+
+  // Move to desks
+  command_updater_.UpdateCommandEnabled(IDC_MOVE_TO_DESKS_MENU, true);
+  static_assert(IDC_MOVE_TO_DESK_1 == IDC_MOVE_TO_DESK_2 - 1 &&
+                    IDC_MOVE_TO_DESK_2 == IDC_MOVE_TO_DESK_3 - 1 &&
+                    IDC_MOVE_TO_DESK_3 == IDC_MOVE_TO_DESK_4 - 1 &&
+                    IDC_MOVE_TO_DESK_4 == IDC_MOVE_TO_DESK_5 - 1 &&
+                    IDC_MOVE_TO_DESK_5 == IDC_MOVE_TO_DESK_6 - 1 &&
+                    IDC_MOVE_TO_DESK_6 == IDC_MOVE_TO_DESK_7 - 1 &&
+                    IDC_MOVE_TO_DESK_7 == IDC_MOVE_TO_DESK_8 - 1,
+                "IDC_MOVE_TO_DESK_* commands must be in order.");
+  auto* desks_helper = ash::DesksHelper::Get();
+  UpdateCommandsForDesks(desks_helper ? desks_helper->GetNumberOfDesks() : 1);
+  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_ASSIGN_TO_ALL_DESKS, true);
 #endif
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   command_updater_.UpdateCommandEnabled(IDC_MINIMIZE_WINDOW, true);
   command_updater_.UpdateCommandEnabled(IDC_MAXIMIZE_WINDOW, true);
   command_updater_.UpdateCommandEnabled(IDC_RESTORE_WINDOW, true);
@@ -1008,7 +1046,7 @@ void BrowserCommandController::InitCommandState() {
       IDC_CLEAR_BROWSING_DATA,
       (!profile()->IsGuestSession() && !profile()->IsSystemProfile() &&
        !profile()->IsIncognitoProfile()));
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   command_updater_.UpdateCommandEnabled(IDC_TAKE_SCREENSHOT, true);
   // Chrome OS uses the system tray menu to handle multi-profiles. Avatar menu
   // is only required in incognito mode.
@@ -1031,10 +1069,10 @@ void BrowserCommandController::InitCommandState() {
       IDC_HOME, normal_window || browser_->deprecated_is_app());
 
   const bool is_web_app_or_custom_tab =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       browser_->is_type_custom_tab() ||
 #endif
-      web_app::AppBrowserController::IsForWebAppBrowser(browser_);
+      web_app::AppBrowserController::IsWebApp(browser_);
   // Hosted app browser commands.
   command_updater_.UpdateCommandEnabled(IDC_COPY_URL, is_web_app_or_custom_tab);
   command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_CHROME,
@@ -1366,9 +1404,8 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
 }
 
 void BrowserCommandController::UpdateCommandsForHostedAppAvailability() {
-  bool has_toolbar =
-      browser_->is_type_normal() ||
-      web_app::AppBrowserController::IsForWebAppBrowser(browser_);
+  bool has_toolbar = browser_->is_type_normal() ||
+                     web_app::AppBrowserController::IsWebApp(browser_);
   if (window() && window()->ShouldHideUIForFullscreen())
     has_toolbar = false;
   command_updater_.UpdateCommandEnabled(IDC_FOCUS_TOOLBAR, has_toolbar);
@@ -1377,7 +1414,7 @@ void BrowserCommandController::UpdateCommandsForHostedAppAvailability() {
   command_updater_.UpdateCommandEnabled(IDC_SHOW_APP_MENU, has_toolbar);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 namespace {
 
 #if DCHECK_IS_ON()
@@ -1423,6 +1460,15 @@ void BrowserCommandController::UpdateCommandsForLockedFullscreenMode() {
     // DisableAllCommands.
     InitCommandState();
   }
+}
+
+void BrowserCommandController::UpdateCommandsForDesks(int num_desks) {
+  constexpr int kMaxNumberOfDesks = IDC_MOVE_TO_DESK_8 - IDC_MOVE_TO_DESK_1 + 1;
+  for (int i = 0; i < kMaxNumberOfDesks; ++i) {
+    command_updater_.UpdateCommandEnabled(IDC_MOVE_TO_DESK_1 + i,
+                                          i < num_desks);
+  }
+  command_updater_.UpdateCommandEnabled(IDC_MOVE_TO_DESKS_MENU, num_desks > 1);
 }
 #endif
 

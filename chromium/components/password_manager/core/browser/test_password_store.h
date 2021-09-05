@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequenced_task_runner.h"
-#include "components/password_manager/core/browser/compromised_credentials_table.h"
+#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -90,7 +90,7 @@ class TestPasswordStore : public PasswordStore {
       const base::string16& plain_text_password) override;
   bool FillAutofillableLogins(
       std::vector<std::unique_ptr<PasswordForm>>* forms) override;
-  bool FillBlacklistLogins(
+  bool FillBlocklistLogins(
       std::vector<std::unique_ptr<PasswordForm>>* forms) override;
   DatabaseCleanupResult DeleteUndecryptableLogins() override;
   std::vector<InteractionsStats> GetSiteStatsImpl(
@@ -116,14 +116,9 @@ class TestPasswordStore : public PasswordStore {
   void AddSiteStatsImpl(const InteractionsStats& stats) override;
   void RemoveSiteStatsImpl(const GURL& origin_domain) override;
   std::vector<InteractionsStats> GetAllSiteStatsImpl() override;
-  bool AddCompromisedCredentialsImpl(
+  PasswordStoreChangeList AddCompromisedCredentialsImpl(
       const CompromisedCredentials& compromised_credentials) override;
-  bool RemoveCompromisedCredentialsByCompromiseTypeImpl(
-      const std::string& signon_realm,
-      const base::string16& username,
-      const CompromiseType& compromise_type,
-      RemoveCompromisedCredentialsReason reason) override;
-  bool RemoveCompromisedCredentialsImpl(
+  PasswordStoreChangeList RemoveCompromisedCredentialsImpl(
       const std::string& signon_realm,
       const base::string16& username,
       RemoveCompromisedCredentialsReason reason) override;
@@ -131,10 +126,6 @@ class TestPasswordStore : public PasswordStore {
       override;
   std::vector<CompromisedCredentials> GetMatchingCompromisedCredentialsImpl(
       const std::string& signon_realm) override;
-  bool RemoveCompromisedCredentialsByUrlAndTimeImpl(
-      const base::RepeatingCallback<bool(const GURL&)>& url_filter,
-      base::Time remove_begin,
-      base::Time remove_end) override;
   void AddFieldInfoImpl(const FieldInfo& field_info) override;
   std::vector<FieldInfo> GetAllFieldInfoImpl() override;
   void RemoveFieldInfoByTimeImpl(base::Time remove_begin,
@@ -146,6 +137,8 @@ class TestPasswordStore : public PasswordStore {
   bool CommitTransaction() override;
   FormRetrievalResult ReadAllLogins(
       PrimaryKeyToFormMap* key_to_form_map) override;
+  std::vector<CompromisedCredentials> ReadSecurityIssues(
+      FormPrimaryKey parent_key) override;
   PasswordStoreChangeList RemoveLoginByPrimaryKeySync(int primary_key) override;
   PasswordStoreSync::MetadataStore* GetMetadataStore() override;
   bool IsAccountStore() const override;

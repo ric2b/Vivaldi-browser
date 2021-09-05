@@ -299,6 +299,10 @@ def _views_perftests(estimated_runtime=7):
                           flags=['--xvfb'],
                           estimated_runtime=estimated_runtime)
 
+_CHROME_HEALTH_BENCHMARK_CONFIGS_DESKTOP = PerfSuite([
+    _GetBenchmarkConfig('system_health.common_desktop')
+])
+
 
 _LINUX_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
     'blink_perf.display_locking',
@@ -331,7 +335,18 @@ _MAC_LOW_END_EXECUTABLE_CONFIGS = frozenset([
     _load_library_perf_tests(),
     _performance_browser_tests(210),
 ])
-_MAC_ARM_DTK_BENCHMARK_CONFIGS = PerfSuite([
+_MAC_ARM_DTK_BENCHMARK_CONFIGS = PerfSuite(OFFICIAL_BENCHMARK_CONFIGS).Remove([
+    'blink_perf.display_locking',
+    'v8.runtime_stats.top_25',
+])
+_MAC_ARM_DTK_EXECUTABLE_CONFIGS = frozenset([
+    _base_perftests(300),
+    _dawn_perf_tests(330),
+    _media_perftests(),
+    _performance_browser_tests(190),
+    _views_perftests(),
+])
+_MAC_M1_MINI_2020_BENCHMARK_CONFIGS = PerfSuite([
     'loading.desktop',
 ]).Abridge([
     'loading.desktop',
@@ -433,19 +448,30 @@ _ANDROID_PIXEL2_FYI_BENCHMARK_CONFIGS = PerfSuite([
 ])
 _CHROMEOS_KEVIN_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('rendering.desktop')])
+_LACROS_EVE_FYI_BENCHMARK_CONFIGS = PerfSuite(['loading.desktop'
+                                               ]).Abridge(['loading.desktop'])
 _LINUX_PERF_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('power.desktop'),
     _GetBenchmarkConfig('rendering.desktop'),
     _GetBenchmarkConfig('system_health.common_desktop')
 ])
+_FUCHSIA_PERF_FYI_BENCHMARK_CONFIGS = PerfSuite(
+    [_GetBenchmarkConfig('system_health.memory_desktop')])
 
 
 # Linux
 LINUX = PerfPlatform(
     'linux-perf',
-    'Ubuntu-14.04, 8 core, NVIDIA Quadro P400',
+    'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
     _LINUX_BENCHMARK_CONFIGS,
     26,
+    'linux',
+    executables=_LINUX_EXECUTABLE_CONFIGS)
+LINUX_REL = PerfPlatform(
+    'linux-perf-rel',
+    'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
+    _CHROME_HEALTH_BENCHMARK_CONFIGS_DESKTOP,
+    2,
     'linux',
     executables=_LINUX_EXECUTABLE_CONFIGS)
 
@@ -464,18 +490,14 @@ MAC_LOW_END = PerfPlatform(
     26,
     'mac',
     executables=_MAC_LOW_END_EXECUTABLE_CONFIGS)
-MAC_ARM_DTK_X86 = PerfPlatform(
-    'mac-arm_dtk_x86-perf',
-    'Mac ARM DTK (X86 Chrome)',
-    _MAC_ARM_DTK_BENCHMARK_CONFIGS,
-    1,
-    'mac')
-MAC_ARM_DTK_ARM = PerfPlatform(
-    'mac-arm_dtk_arm-perf',
-    'Mac ARM DTK (ARM Chrome)',
-    _MAC_ARM_DTK_BENCHMARK_CONFIGS,
-    1,
-    'mac')
+MAC_ARM_DTK_ARM = PerfPlatform('mac-arm_dtk_arm-perf',
+                               'Mac ARM DTK (ARM Chrome)',
+                               _MAC_ARM_DTK_BENCHMARK_CONFIGS,
+                               8,
+                               'mac',
+                               executables=_MAC_ARM_DTK_EXECUTABLE_CONFIGS)
+MAC_M1_MINI_2020 = PerfPlatform('mac-m1_mini_2020-perf', 'Mac M1 Mini 2020',
+                                _MAC_M1_MINI_2020_BENCHMARK_CONFIGS, 2, 'mac')
 
 # Win
 WIN_10_LOW_END = PerfPlatform(
@@ -491,7 +513,7 @@ WIN_10 = PerfPlatform(
     'Windows Intel HD 630 towers, Core i7-7700 3.6 GHz, 16GB RAM,'
     ' Intel Kaby Lake HD Graphics 630', _WIN_10_BENCHMARK_CONFIGS,
     26, 'win', executables=_WIN_10_EXECUTABLE_CONFIGS)
-WIN_7 = PerfPlatform('Win 7 Perf', 'N/A', _WIN_7_BENCHMARK_CONFIGS, 3, 'win')
+WIN_7 = PerfPlatform('Win 7 Perf', 'N/A', _WIN_7_BENCHMARK_CONFIGS, 2, 'win')
 WIN_7_GPU = PerfPlatform('Win 7 Nvidia GPU Perf', 'N/A',
                          _WIN_7_GPU_BENCHMARK_CONFIGS, 3, 'win')
 
@@ -555,12 +577,24 @@ CHROMEOS_KEVIN_PERF_FYI = PerfPlatform('chromeos-kevin-perf-fyi',
                                        4,
                                        'chromeos',
                                        is_fyi=True)
+LACROS_EVE_PERF_FYI = PerfPlatform('lacros-eve-perf-fyi',
+                                   '',
+                                   _LACROS_EVE_FYI_BENCHMARK_CONFIGS,
+                                   1,
+                                   'chromeos',
+                                   is_fyi=True)
 LINUX_PERF_FYI = PerfPlatform('linux-perf-fyi',
                               '',
                               _LINUX_PERF_FYI_BENCHMARK_CONFIGS,
                               1,
                               'linux',
                               is_fyi=True)
+FUCHSIA_PERF_FYI = PerfPlatform('fuchsia-perf-fyi',
+                                '',
+                                _FUCHSIA_PERF_FYI_BENCHMARK_CONFIGS,
+                                1,
+                                'fuchsia',
+                                is_fyi=True)
 
 ALL_PLATFORMS = {
     p for p in locals().values() if isinstance(p, PerfPlatform)

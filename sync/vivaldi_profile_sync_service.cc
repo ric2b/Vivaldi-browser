@@ -178,8 +178,7 @@ std::string VivaldiProfileSyncService::GetEncryptionBootstrapToken() const {
 void VivaldiProfileSyncService::SetEncryptionBootstrapToken(
     const std::string& token) {
   StopImpl(CLEAR_DATA);
-  GetUserSettings()->SetSyncRequested(true);
   sync_prefs_.SetEncryptionBootstrapToken(token);
-  startup_controller_->TryStart(/*force_immediate=*/true);
+  GetUserSettings()->SetSyncRequested(true);
 }
 }  // namespace vivaldi

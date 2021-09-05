@@ -61,6 +61,7 @@ import androidx.annotation.IdRes;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.view.menu.ActionMenuItemView;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.preference.PreferenceViewHolder;
@@ -89,6 +90,7 @@ import org.chromium.base.IntStringCallback;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryActivity;
@@ -102,14 +104,13 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -224,6 +225,12 @@ public class PasswordSettingsTest {
          */
         public FakePasswordManagerHandler(PasswordListObserver observer) {
             mObserver = observer;
+        }
+
+        @Override
+        @VisibleForTesting
+        public void insertPasswordEntryForTesting(String origin, String username, String password) {
+            mSavedPasswords.add(new SavedPasswordEntry(origin, username, password));
         }
 
         // Pretends that the updated lists are |mSavedPasswords| for the saved passwords and an
@@ -722,36 +729,17 @@ public class PasswordSettingsTest {
     }
 
     /**
-     * Check that the check passwords preference is shown when the corresponding feature is enabled.
+     * Check that the check passwords preference is shown.
      */
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    @EnableFeatures(ChromeFeatureList.PASSWORD_CHECK)
     public void testCheckPasswordsEnabled() {
         startPasswordSettingsFromMainSettings();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
             Assert.assertNotNull(
                     passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS));
-        });
-    }
-
-    /**
-     * Check that the check passwords preference is not shown when the corresponding feature is
-     * disabled.
-     */
-    @Test
-    @SmallTest
-    @Feature({"Preferences"})
-    @DisableFeatures(ChromeFeatureList.PASSWORD_CHECK)
-    public void testCheckPasswordsDisabled() {
-        mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
-        startPasswordSettingsFromMainSettings();
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            PasswordSettings passwordPrefs = mSettingsActivityTestRule.getFragment();
-            Assert.assertNull(passwordPrefs.findPreference(PasswordSettings.PREF_CHECK_PASSWORDS));
         });
     }
 
@@ -1658,6 +1646,7 @@ public class PasswordSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
+    @FlakyTest(message = "crbug.com/1154362")
     @SuppressWarnings("AlwaysShowAction") // We need to ensure the icon is in the action bar.
     public void testSearchIconVisibleInActionBarWithFeature() {
         setPasswordSource(null); // Initialize empty preferences.
@@ -1680,6 +1669,7 @@ public class PasswordSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
+    @DisabledTest(message = "crbug.com/1153707")
     public void testSearchTextInOverflowMenuVisibleWithFeature() {
         setPasswordSource(null); // Initialize empty preferences.mSettingsActivityTestRule
         startPasswordSettingsFromMainSettings();
@@ -2048,7 +2038,6 @@ public class PasswordSettingsTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.PASSWORD_CHECK})
     @DisabledTest(message = "crbug.com/1110965")
     public void testDestroysPasswordCheckIfFirstInSettingsStack() {
         mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
@@ -2061,7 +2050,6 @@ public class PasswordSettingsTest {
     @Test
     @MediumTest
     @Feature({"Preferences"})
-    @EnableFeatures({ChromeFeatureList.PASSWORD_CHECK})
     public void testDoesNotDestroyPasswordCheckIfNotFirstInSettingsStack() {
         mBrowserTestRule.addTestAccountThenSigninAndEnableSync();
         SettingsActivity activity = startPasswordSettingsFromMainSettings();

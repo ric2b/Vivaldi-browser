@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/check.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
@@ -20,8 +21,10 @@
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "net/base/features.h"
+#include "net/base/isolation_info.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
+#include "net/cookies/cookie_access_delegate.h"
 #include "net/http/http_util.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -313,6 +316,16 @@ base::Time ParseCookieExpirationTime(const std::string& time_string) {
     return base::Time();
   }
 
+  // Log metrics for use of abbreviated, 2-digit, year numbers to determine
+  // compat impact of fixing behavior for year 69.
+  // (crbug.com/907610) We currently treat 69 as 1969, whereas the spec says to
+  // treat it as 2069:
+  // https://tools.ietf.org/html/draft-ietf-httpbis-rfc6265bis-07#page-17
+  if (exploded.year >= 0 && exploded.year <= 99) {
+    base::UmaHistogramExactLinear("Cookie.AbbreviatedExpirationYear",
+                                  exploded.year, 100);
+  }
+
   // Normalize the year to expand abbreviated years to the full year.
   if (exploded.year >= 69 && exploded.year <= 99)
     exploded.year += 1900;
@@ -366,6 +379,13 @@ GURL SimulatedCookieSource(const CanonicalCookie& cookie,
                            const std::string& source_scheme) {
   return CookieDomainAndPathToURL(cookie.Domain(), cookie.Path(),
                                   source_scheme);
+}
+
+CookieAccessScheme ProvisionalAccessScheme(const GURL& source_url) {
+  return source_url.SchemeIsCryptographic()
+             ? CookieAccessScheme::kCryptographic
+             : IsLocalhost(source_url) ? CookieAccessScheme::kTrustworthy
+                                       : CookieAccessScheme::kNonCryptographic;
 }
 
 bool IsDomainMatch(const std::string& domain, const std::string& host) {
@@ -574,48 +594,6 @@ CookieOptions::SameSiteCookieContext ComputeSameSiteContextForSubresource(
   return CookieOptions::SameSiteCookieContext::MakeInclusive();
 }
 
-bool IsSameSiteCompatPair(const CanonicalCookie& c1,
-                          const CanonicalCookie& c2,
-                          const CookieOptions& options) {
-  if (options.exclude_httponly() && (c1.IsHttpOnly() || c2.IsHttpOnly()))
-    return false;
-
-  if (c1.IsEquivalent(c2))
-    return false;
-
-  // One of them is SameSite=None and Secure; the other one has unspecified
-  // SameSite.
-  bool same_site_attributes_ok =
-      c1.SameSite() == CookieSameSite::NO_RESTRICTION && c1.IsSecure() &&
-      c2.SameSite() == CookieSameSite::UNSPECIFIED;
-  same_site_attributes_ok =
-      same_site_attributes_ok ||
-      (c2.SameSite() == CookieSameSite::NO_RESTRICTION && c2.IsSecure() &&
-       c1.SameSite() == CookieSameSite::UNSPECIFIED);
-  if (!same_site_attributes_ok)
-    return false;
-
-  if (c1.Domain() != c2.Domain() || c1.Path() != c2.Path() ||
-      c1.Value() != c2.Value()) {
-    return false;
-  }
-
-  DCHECK(c1.Name() != c2.Name());
-  std::string shorter, longer;
-  std::tie(shorter, longer) = (c1.Name().length() < c2.Name().length())
-                                  ? std::tie(c1.Name(), c2.Name())
-                                  : std::tie(c2.Name(), c1.Name());
-  // One of them has a name that is a prefix or suffix of the other and has
-  // length at least 3 characters.
-  if (shorter.length() < kMinCompatPairNameLength)
-    return false;
-  if (base::StartsWith(longer, shorter, base::CompareCase::SENSITIVE) ||
-      base::EndsWith(longer, shorter, base::CompareCase::SENSITIVE)) {
-    return true;
-  }
-  return false;
-}
-
 bool IsSameSiteByDefaultCookiesEnabled() {
   return base::FeatureList::IsEnabled(features::kSameSiteByDefaultCookies);
 }
@@ -628,6 +606,44 @@ bool IsCookiesWithoutSameSiteMustBeSecureEnabled() {
 
 bool IsSchemefulSameSiteEnabled() {
   return base::FeatureList::IsEnabled(features::kSchemefulSameSite);
+}
+
+bool IsFirstPartySetsEnabled() {
+  return base::FeatureList::IsEnabled(features::kFirstPartySets);
+}
+
+// Return SamePartyCookieContextType::kCrossParty when:
+// 1) `isolation_info` is not fully populated.
+// 2) `isolation_info.party_context` is null.
+// 3) `cookie_access_delegate.IsContextSamePartyWithSite` returns false.
+CookieOptions::SamePartyCookieContextType ComputeSamePartyContext(
+    const net::SchemefulSite& request_site,
+    const IsolationInfo& isolation_info,
+    const CookieAccessDelegate* cookie_access_delegate) {
+  if (!isolation_info.IsEmpty() && isolation_info.party_context().has_value() &&
+      cookie_access_delegate &&
+      cookie_access_delegate->IsContextSamePartyWithSite(
+          request_site,
+          isolation_info.network_isolation_key().GetTopFrameSite().value(),
+          isolation_info.party_context().value())) {
+    return CookieOptions::SamePartyCookieContextType::kSameParty;
+  }
+  return CookieOptions::SamePartyCookieContextType::kCrossParty;
+}
+
+CookieSamePartyStatus GetSamePartyStatus(const CanonicalCookie& cookie,
+                                         const CookieOptions& options) {
+  if (!IsFirstPartySetsEnabled() || !cookie.IsSameParty() ||
+      !options.is_in_nontrivial_first_party_set()) {
+    return CookieSamePartyStatus::kNoSamePartyEnforcement;
+  }
+
+  switch (options.same_party_cookie_context_type()) {
+    case CookieOptions::SamePartyCookieContextType::kCrossParty:
+      return CookieSamePartyStatus::kEnforceSamePartyExclude;
+    case CookieOptions::SamePartyCookieContextType::kSameParty:
+      return CookieSamePartyStatus::kEnforceSamePartyInclude;
+  };
 }
 
 base::OnceCallback<void(CookieAccessResult)> AdaptCookieAccessResultToBool(

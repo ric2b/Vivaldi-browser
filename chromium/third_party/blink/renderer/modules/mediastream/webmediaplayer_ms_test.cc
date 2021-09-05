@@ -115,28 +115,12 @@ class FakeWebMediaPlayerDelegate
     is_gone_ = false;
   }
 
-  void DidPlayerMutedStatusChange(int delegate_id, bool muted) override {
-    EXPECT_EQ(delegate_id_, delegate_id);
-  }
-
   void DidPause(int delegate_id, bool reached_end_of_stream) override {
     EXPECT_EQ(delegate_id_, delegate_id);
     EXPECT_FALSE(reached_end_of_stream);
     EXPECT_TRUE(playing_);
     EXPECT_FALSE(is_gone_);
     playing_ = false;
-  }
-
-  void DidPlayerSizeChange(int delegate_id, const gfx::Size& size) override {
-    EXPECT_EQ(delegate_id_, delegate_id);
-  }
-
-  void DidBufferUnderflow(int delegate_id) override {
-    EXPECT_EQ(delegate_id_, delegate_id);
-  }
-
-  void DidSeek(int delegate_id) override {
-    EXPECT_EQ(delegate_id_, delegate_id);
   }
 
   void PlayerGone(int delegate_id) override {
@@ -176,23 +160,8 @@ class FakeWebMediaPlayerDelegate
 
   int delegate_id() { return delegate_id_; }
 
-  void DidPlayerMediaPositionStateChange(
-      int delegate_id,
-      const media_session::MediaPosition& position) override {
-    EXPECT_EQ(delegate_id_, delegate_id);
-  }
-
-  void DidPictureInPictureAvailabilityChange(int delegate_id,
-                                             bool available) override {
-    EXPECT_EQ(delegate_id_, delegate_id);
-  }
-
   void DidAudioOutputSinkChange(int delegate_id,
                                 const std::string& hashed_device_id) override {
-    EXPECT_EQ(delegate_id_, delegate_id);
-  }
-
-  void DidDisableAudioOutputSinkChanges(int delegate_id) override {
     EXPECT_EQ(delegate_id_, delegate_id);
   }
 
@@ -375,9 +344,9 @@ void MockMediaStreamVideoRenderer::QueueFrames(
       // MediaStreamRemoteVideoSource does not explicitly set the rotation
       // for unrotated frames, so that is not done here either.
       if (rotation != media::VIDEO_ROTATION_0)
-        frame->metadata()->rotation = rotation;
+        frame->metadata().rotation = rotation;
 
-      frame->metadata()->reference_time =
+      frame->metadata().reference_time =
           base::TimeTicks::Now() + base::TimeDelta::FromMilliseconds(token);
 
       AddFrame(FrameType::NORMAL_FRAME, frame);
@@ -600,7 +569,6 @@ class WebMediaPlayerMSTest
   void AddTextTrack(WebInbandTextTrack*) override {}
   void RemoveTextTrack(WebInbandTextTrack*) override {}
   void MediaSourceOpened(WebMediaSource*) override {}
-  void RequestSeek(double) override {}
   void RemotePlaybackCompatibilityChanged(const WebURL& url,
                                           bool is_compatible) override {}
   void OnBecamePersistentVideo(bool) override {}
@@ -615,11 +583,17 @@ class WebMediaPlayerMSTest
   void MediaRemotingStarted(
       const WebString& remote_device_friendly_name) override {}
   void MediaRemotingStopped(int error_code) override {}
-  void RequestPlay() override {}
-  void RequestPause() override {}
-  void RequestMuted(bool muted) override {}
-  void RequestEnterPictureInPicture() override {}
-  void RequestExitPictureInPicture() override {}
+  void ResumePlayback() override {}
+  void PausePlayback() override {}
+  void DidPlayerMutedStatusChange(bool muted) override {}
+  void DidPlayerMediaPositionStateChange(double playback_rate,
+                                         base::TimeDelta duration,
+                                         base::TimeDelta position) override {}
+  void DidDisableAudioOutputSinkChanges() override {}
+  void DidPlayerSizeChange(const gfx::Size& size) override {}
+  void DidBufferUnderflow() override {}
+  void DidSeek() override {}
+
   Features GetFeatures() override { return Features(); }
 
   // Implementation of cc::VideoFrameProvider::Client
@@ -726,7 +700,8 @@ MockMediaStreamVideoRenderer* WebMediaPlayerMSTest::LoadAndGetFrameProvider(
   EXPECT_CALL(*this,
               DoReadyStateChanged(WebMediaPlayer::kReadyStateHaveNothing));
   player_->Load(WebMediaPlayer::kLoadTypeURL, WebMediaPlayerSource(),
-                WebMediaPlayer::kCorsModeUnspecified);
+                WebMediaPlayer::kCorsModeUnspecified,
+                /*is_cache_disabled=*/false);
   compositor_ = player_->compositor_.get();
   EXPECT_TRUE(!!compositor_);
   compositor_->SetAlgorithmEnabledForTesting(algorithm_enabled);
@@ -871,7 +846,8 @@ TEST_P(WebMediaPlayerMSTest, NoWaitForFrameForAudio) {
               DoReadyStateChanged(WebMediaPlayer::kReadyStateHaveEnoughData));
 
   player_->Load(WebMediaPlayer::kLoadTypeURL, WebMediaPlayerSource(),
-                WebMediaPlayer::kCorsModeUnspecified);
+                WebMediaPlayer::kCorsModeUnspecified,
+                /*is_cache_disabled=*/false);
 
   message_loop_controller_.RunAndWaitForStatus(
       media::PipelineStatus::PIPELINE_OK);
@@ -1350,11 +1326,6 @@ TEST_P(WebMediaPlayerMSTest, HiddenPlayerTests) {
   // Hidden status should not affect playback.
   delegate_.set_hidden(true);
   player_->Play();
-  EXPECT_FALSE(player_->Paused());
-
-  // A pause delivered via the delegate should not pause the video since these
-  // calls are currently ignored.
-  player_->OnPause();
   EXPECT_FALSE(player_->Paused());
 
   // A hidden player should start still be playing upon shown.

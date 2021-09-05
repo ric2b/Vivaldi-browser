@@ -107,6 +107,7 @@ class BuildConfigGenerator extends DefaultTask {
         // 2. Import artifacts into the local repository
         def dependencyDirectories = []
         def downloadExecutor = Executors.newCachedThreadPool()
+        def downloadTasks = []
         graph.dependencies.values().each { dependency ->
             if (excludeDependency(dependency)) {
                 return
@@ -138,13 +139,13 @@ class BuildConfigGenerator extends DefaultTask {
                             new File("${normalisedRepoPath}/${dependency.licensePath}").text)
                 } else if (!dependency.licenseUrl?.trim()?.isEmpty()) {
                     File destFile = new File("${absoluteDepDir}/LICENSE")
-                    downloadExecutor.submit {
+                    downloadTasks.add(downloadExecutor.submit {
                         downloadFile(dependency.id, dependency.licenseUrl, destFile)
                         if (destFile.text.contains("<html")) {
                             throw new RuntimeException("Found HTML in LICENSE file. Please add an "
                                     + "override to ChromiumDepGraph.groovy for ${dependency.id}.")
                         }
-                    }
+                    })
                 } else {
                     getLogger().warn("Missing license for ${dependency.id}.")
                     getLogger().warn("License Name was: ${dependency.licenseName}")
@@ -152,7 +153,10 @@ class BuildConfigGenerator extends DefaultTask {
             }
         }
         downloadExecutor.shutdown()
-        downloadExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        // Check for exceptions.
+        for (def task : downloadTasks) {
+            task.get()
+        }
 
         // 3. Generate the root level build files
         updateBuildTargetDeclaration(graph, repositoryPath, normalisedRepoPath)
@@ -346,7 +350,10 @@ class BuildConfigGenerator extends DefaultTask {
                 break
             case 'androidx_fragment_fragment':
                 sb.append("""\
-                |  deps += [ "//third_party/android_deps/local_modifications/androidx_fragment_fragment:androidx_fragment_fragment_prebuilt_java" ]
+                |  deps += [
+                |    "//third_party/android_deps/utils:java",
+                |    "//third_party/android_deps/local_modifications/androidx_fragment_fragment:androidx_fragment_fragment_prebuilt_java",
+                |  ]
                 |  # Omit this file since we use our own copy, included above.
                 |  # We can remove this once we migrate to AndroidX master for all libraries.
                 |  jar_excluded_patterns = [
@@ -454,6 +461,14 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('\n')
                 sb.append('  # Need to exclude class and replace it with class library as\n')
                 sb.append('  # com_google_guava_listenablefuture has support_androids=true.\n')
+                sb.append('  deps += [":com_google_guava_listenablefuture_java"]\n')
+                sb.append('  jar_excluded_patterns = ["*/ListenableFuture.class"]\n')
+                break
+            case 'com_google_guava_guava_android':
+                sb.append('\n')
+                sb.append('  # Add a dep to com_google_guava_listenablefuture_java\n')
+                sb.append('  # because androidx_concurrent_futures also depends on it and to avoid\n')
+                sb.append('  # defining ListenableFuture.class twice.\n')
                 sb.append('  deps += [":com_google_guava_listenablefuture_java"]\n')
                 sb.append('  jar_excluded_patterns = ["*/ListenableFuture.class"]\n')
                 break

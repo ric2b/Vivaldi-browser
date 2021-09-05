@@ -14,7 +14,8 @@ by a child template that "extends" this file.
     xmlns:tools="http://schemas.android.com/tools"
     package="{{ manifest_package }}"
     {% set definitions_in_split = definitions_in_split|default(0) == 'true' %}
-    {% if definitions_in_split %}
+    {% set enable_isolated_splits = enable_isolated_splits|default(0) == 'true' %}
+    {% if enable_isolated_splits %}
     android:isolatedSplits="true"
     {% endif %}
     tools:ignore="MissingVersion">
@@ -54,9 +55,7 @@ by a child template that "extends" this file.
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
-    {% if target_sdk_version|int > 27 or target_sdk_version == "Q" %}
-        <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    {% endif %}
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <!-- Not used by Vivaldi
     <uses-permission android:name="android.permission.GET_ACCOUNTS"/>
     -->
@@ -168,7 +167,7 @@ by a child template that "extends" this file.
     <!-- Set android:largeHeap to "true" to allow more than the default
          Java heap limit (32Mb on Nexus S, 48Mb on Xoom). -->
       <application android:name="{% block application_name %}
-          {%- if definitions_in_split -%}
+          {%- if enable_isolated_splits -%}
           org.chromium.chrome.browser.base.SplitChromeApplication
           {%- else -%}
           org.chromium.chrome.browser.ChromeApplication
@@ -192,7 +191,7 @@ by a child template that "extends" this file.
         {% endif %}
         android:networkSecurityConfig="@xml/network_security_config"
         android:allowAudioPlaybackCapture="false"
-        {% if definitions_in_split %}
+        {% if enable_isolated_splits %}
         android:appComponentFactory="org.chromium.chrome.browser.base.SplitCompatAppComponentFactory"
         {% endif %}
         {% block extra_application_attributes %}{% endblock %}>
@@ -449,15 +448,6 @@ by a child template that "extends" this file.
             {{ self.chrome_activity_common() }}
             {{ self.supports_video_persistence() }}
             >
-            {{ self.supports_vr() }}
-            {{ self.extra_web_rendering_activity_definitions() }}
-        </activity>
-        <activity android:name="org.chromium.chrome.browser.customtabs.PaymentHandlerActivity"
-            android:theme="@style/Theme.Chromium.Activity.Translucent"
-            android:exported="false"
-            {{ self.chrome_activity_common() }}
-            {{ self.supports_video_persistence() }}
-        >
             {{ self.supports_vr() }}
             {{ self.extra_web_rendering_activity_definitions() }}
         </activity>
@@ -762,7 +752,7 @@ by a child template that "extends" this file.
         </activity>
         <activity android:name="org.vivaldi.browser.bookmarks.VivaldiBookmarkEditActivity"
             android:theme="@style/NoteEditActivityTheme"
-            android:windowSoftInputMode="stateHidden"
+            android:windowSoftInputMode="adjustPan|stateHidden"
             android:exported="false"
             android:label="@string/edit_bookmark"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
@@ -979,17 +969,8 @@ by a child template that "extends" this file.
         <activity android:name="org.chromium.chrome.browser.webauth.authenticator.CableAuthenticatorActivity"
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
             android:label="@string/cablev2_activity_title"
-            android:exported="false">
-            <!-- This has an intent filter but is not exported. This works
-            because the intent is sent by the Android system, not another
-            application. We want to limit this activity to only be invoked by
-            Chromium or the OS because otherwise applications could fool
-            Chromium into communicating with a fake USB device. -->
-            <intent-filter>
-                 <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
-            </intent-filter>
-            <meta-data android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
-                android:resource="@xml/phone_as_a_security_key_accessory_filter" />
+            android:permission="com.google.android.gms.auth.cryptauth.permission.CABLEV2_SERVER_LINK"
+            android:exported="true">
         </activity>
 
         <receiver
@@ -1003,43 +984,6 @@ by a child template that "extends" this file.
             android:exported="false"
             android:isolatedProcess="true"
             android:process=":decoder_service" />
-
-        <!-- Providers for chrome data. -->
-        <provider android:name="org.chromium.chrome.browser.provider.ChromeBrowserProvider"
-            android:authorities="{{ manifest_package }}.ChromeBrowserProvider;{{ manifest_package }}.browser;{{ manifest_package }}"
-            android:exported="true">
-            <path-permission android:path="/bookmarks/search_suggest_query"
-                    android:readPermission="android.permission.GLOBAL_SEARCH" />
-        </provider>
-
-        <!-- Provider for FileProvider. -->
-        <provider android:name="org.chromium.chrome.browser.util.ChromeFileProvider"
-            android:authorities="{{ manifest_package }}.FileProvider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <provider android:name="org.chromium.chrome.browser.download.DownloadFileProvider"
-            android:authorities="{{ manifest_package }}.DownloadFileProvider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
-        <!-- Sync adapter for browser invalidation. -->
-        <!-- Not used by Vivaldi
-        <service android:name="org.chromium.chrome.browser.invalidation.ChromeBrowserSyncAdapterService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.content.SyncAdapter" />
-            </intent-filter>
-            <meta-data android:name="android.content.SyncAdapter"
-                       android:resource="@xml/syncadapter" />
-        </service>
-        -->
 
         <!-- Broadcast receiver that will be notified of account changes -->
         <receiver android:name="org.chromium.chrome.browser.services.AccountsChangedReceiver"
@@ -1390,6 +1334,32 @@ by a child template that "extends" this file.
           android:name=
           "com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
           android:value="org.chromium.components.media_router.caf.CastOptionsProvider"/>
+
+      <!-- These providers are declared in the base module to give the chrome
+           split preloader more time to work. -->
+      <provider android:name="org.chromium.chrome.browser.util.ChromeFileProvider"
+          android:authorities="{{ manifest_package }}.FileProvider"
+          android:exported="false"
+          android:grantUriPermissions="true">
+          <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+              android:resource="@xml/file_paths" />
+      </provider>
+
+      <provider android:name="org.chromium.chrome.browser.download.DownloadFileProvider"
+          android:authorities="{{ manifest_package }}.DownloadFileProvider"
+          android:exported="false"
+          android:grantUriPermissions="true">
+          <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+              android:resource="@xml/file_paths" />
+      </provider>
+
+      <!-- Provider for chrome data. -->
+      <provider android:name="org.chromium.chrome.browser.provider.ChromeBrowserProvider"
+          android:authorities="{{ manifest_package }}.ChromeBrowserProvider;{{ manifest_package }}.browser;{{ manifest_package }}"
+          android:exported="true">
+          <path-permission android:path="/bookmarks/search_suggest_query"
+                  android:readPermission="android.permission.GLOBAL_SEARCH" />
+      </provider>
 
       {% block base_application_definitions %}
       {% endblock %}

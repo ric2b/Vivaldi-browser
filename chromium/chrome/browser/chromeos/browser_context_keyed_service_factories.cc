@@ -10,6 +10,7 @@
 #include "chrome/browser/chromeos/authpolicy/authpolicy_credentials_manager.h"
 #include "chrome/browser/chromeos/bluetooth/debug_logs_manager_factory.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_scheduler_user_service.h"
+#include "chrome/browser/chromeos/crostini/crostini_engagement_metrics_service.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router_factory.h"
 #include "chrome/browser/chromeos/extensions/input_method_api.h"
 #include "chrome/browser/chromeos/extensions/login_screen/login_state/session_state_changed_event_dispatcher.h"
@@ -17,6 +18,8 @@
 #include "chrome/browser/chromeos/extensions/printing_metrics/print_job_finished_event_dispatcher.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager_factory.h"
 #include "chrome/browser/chromeos/file_system_provider/service_factory.h"
+#include "chrome/browser/chromeos/fileapi/file_change_service_factory.h"
+#include "chrome/browser/chromeos/full_restore/full_restore_service_factory.h"
 #include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/chromeos/kerberos/kerberos_credentials_manager_factory.h"
 #include "chrome/browser/chromeos/launcher_search_provider/launcher_search_provider_service_factory.h"
@@ -28,6 +31,7 @@
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/user_private_token_kpm_service_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_engagement_metrics_service.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_token_forwarder_factory.h"
 #include "chrome/browser/chromeos/policy/user_network_configuration_updater_factory.h"
@@ -56,7 +60,9 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   AuthPolicyCredentialsManagerFactory::GetInstance();
   bluetooth::DebugLogsManagerFactory::GetInstance();
   cert_provisioning::CertProvisioningSchedulerUserServiceFactory::GetInstance();
+  chromeos::full_restore::FullRestoreServiceFactory::GetInstance();
   CroshLoaderFactory::GetInstance();
+  crostini::CrostiniEngagementMetricsService::Factory::GetInstance();
 #if defined(USE_CUPS)
   CupsProxyServiceManagerFactory::GetInstance();
 #endif
@@ -70,6 +76,7 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   extensions::PrintJobFinishedEventDispatcher::GetFactoryInstance();
 #endif
   extensions::SessionStateChangedEventDispatcher::GetFactoryInstance();
+  FileChangeServiceFactory::GetInstance();
   file_manager::EventRouterFactory::GetInstance();
   file_manager::VolumeManagerFactory::GetInstance();
   file_system_provider::ServiceFactory::GetInstance();
@@ -85,6 +92,7 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   platform_keys::UserPrivateTokenKeyPermissionsManagerServiceFactory::
       GetInstance();
   plugin_vm::PluginVmEngagementMetricsService::Factory::GetInstance();
+  policy::DlpRulesManagerFactory::GetInstance();
   policy::PolicyCertServiceFactory::GetInstance();
   policy::UserCloudPolicyTokenForwarderFactory::GetInstance();
   policy::UserNetworkConfigurationUpdaterFactory::GetInstance();

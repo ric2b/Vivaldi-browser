@@ -16,6 +16,11 @@ const base::Feature kExtensionsCheckup{"ExtensionsCheckup",
 const base::Feature kDisableMalwareExtensionsRemotely{
     "DisableMalwareExtensionsRemotely", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Controls whether we disable extensions not allowlisted for Enhanced Safe
+// Browsing users.
+const base::Feature kEnforceSafeBrowsingExtensionAllowlist{
+    "EnforceSafeBrowsingExtensionAllowlist", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Parameters for ExtensionsCheckup feature.
 const char kExtensionsCheckupEntryPointParameter[] = "entry_point";
 const char kExtensionsCheckupBannerMessageParameter[] = "banner_message_type";
@@ -66,13 +71,5 @@ const base::Feature kReturnScopesInGetAuthToken{
 // from.
 const base::Feature kSelectedUserIdInGetAuthToken{
     "SelectedUserIdInGetAuthToken", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Feature used mostly for exposing a field-trial-param-based mechanism for
-// adding remaining strugglers to the CORB/CORS allowlist which has been
-// deprecated in Chrome 87.
-const base::Feature kCorbCorsAllowlist{"CorbCorsAllowlist",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-const char kCorbCorsAllowlistParamName[] =
-    "CorbCorsAllowlistDeprecationParamName";
 
 }  // namespace extensions_features

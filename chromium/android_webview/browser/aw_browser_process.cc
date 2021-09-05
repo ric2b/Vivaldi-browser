@@ -29,6 +29,7 @@ const char kAuthAndroidNegotiateAccountType[] =
     "auth.android_negotiate_account_type";
 
 // Allowlist containing servers for which Integrated Authentication is enabled.
+// This pref should match |prefs::kAuthServerAllowlist|.
 const char kAuthServerAllowlist[] = "auth.server_allowlist";
 
 }  // namespace prefs
@@ -209,6 +210,12 @@ void AwBrowserProcess::OnAuthPrefsChanged() {
 void AwBrowserProcess::TriggerMinidumpUploading() {
   Java_AwBrowserProcess_triggerMinidumpUploading(
       base::android::AttachCurrentThread());
+}
+
+// static
+ApkType AwBrowserProcess::GetApkType() {
+  return static_cast<ApkType>(
+      Java_AwBrowserProcess_getApkType(base::android::AttachCurrentThread()));
 }
 
 static void JNI_AwBrowserProcess_SetProcessNameCrashKey(

@@ -13,6 +13,7 @@
 
 #include "base/callback.h"
 #include "base/containers/span.h"
+#include "base/location.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
@@ -20,6 +21,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "pdf/document_layout.h"
+#include "pdf/ppapi_migration/callback.h"
 #include "ppapi/c/dev/pp_cursor_type_dev.h"
 #include "ppapi/c/dev/ppp_printing_dev.h"
 #include "ppapi/cpp/completion_callback.h"
@@ -57,6 +59,7 @@ namespace chrome_pdf {
 class InputEvent;
 class Thumbnail;
 class UrlLoader;
+struct AccessibilityTextRunInfo;
 struct DocumentAttachmentInfo;
 struct DocumentMetadata;
 
@@ -105,7 +108,10 @@ class PDFEngine {
     unsigned long num_params;
 
     // Parameters for the view. Their meaning depends on the |view| and their
-    // number is defined by |num_params| but is at most |kMaxViewParams|.
+    // number is defined by |num_params| but is at most |kMaxViewParams|. Note:
+    // If a parameter stands for the x/y coordinates, it should be transformed
+    // into the corresponding in-screen coordinates before it's sent to the
+    // viewport.
     float params[kMaxViewParams];
   };
 
@@ -285,6 +291,18 @@ class PDFEngine {
     // viewers.
     // See https://crbug.com/312882 for an example.
     virtual bool IsValidLink(const std::string& url) = 0;
+
+    // Schedules work to be executed on a main thread after a specific delay.
+    // The `result` parameter will be passed as the argument to the `callback`.
+    // `result` is needed sometimes to emulate calls of some callbacks, but it's
+    // not always needed. `delay` should be no longer than `INT32_MAX`
+    // milliseconds for the Pepper plugin implementation to prevent integer
+    // overflow.
+    virtual void ScheduleTaskOnMainThread(
+        base::TimeDelta delay,
+        ResultCallback callback,
+        int32_t result,
+        const base::Location& from_here = base::Location::Current()) = 0;
   };
 
   struct AccessibilityLinkInfo {
@@ -365,6 +383,8 @@ class PDFEngine {
   virtual void ZoomUpdated(double new_zoom_level) = 0;
   virtual void RotateClockwise() = 0;
   virtual void RotateCounterclockwise() = 0;
+  virtual bool IsReadOnly() const = 0;
+  virtual void SetReadOnly(bool enable) = 0;
   virtual void SetTwoUpView(bool enable) = 0;
   virtual void DisplayAnnotations(bool display) = 0;
 
@@ -436,10 +456,11 @@ class PDFEngine {
   virtual uint32_t GetCharUnicode(int page_index, int char_index) = 0;
   // Given a start char index, find the longest continuous run of text that's
   // in a single direction and with the same text style. Return a filled out
-  // pp::PDF::PrivateAccessibilityTextRunInfo on success or base::nullopt on
-  // failure. e.g. When |start_char_index| is out of bounds.
-  virtual base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo>
-  GetTextRunInfo(int page_index, int start_char_index) = 0;
+  // AccessibilityTextRunInfo on success or base::nullopt on failure. e.g. When
+  // |start_char_index| is out of bounds.
+  virtual base::Optional<AccessibilityTextRunInfo> GetTextRunInfo(
+      int page_index,
+      int start_char_index) = 0;
   // For all the links on page |page_index|, get their urls, underlying text
   // ranges and bounding boxes.
   virtual std::vector<AccessibilityLinkInfo> GetLinkInfo(int page_index) = 0;
@@ -541,11 +562,11 @@ class PDFEngineExports {
 
   static PDFEngineExports* Get();
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // See the definition of CreateFlattenedPdf in pdf.cc for details.
   virtual std::vector<uint8_t> CreateFlattenedPdf(
       base::span<const uint8_t> input_buffer) = 0;
-#endif  // BUILDFLAG(IS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_WIN)
   // See the definition of RenderPDFPageToDC in pdf.cc for details.

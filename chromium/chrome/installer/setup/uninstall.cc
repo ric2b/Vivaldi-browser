@@ -814,8 +814,9 @@ InstallStatus UninstallProduct(const ModifyParams& modify_params,
     CloseAllChromeProcesses(installer_state.target_path());
   } else {
     // Kill all lingering Vivaldi processes.
-    if (cmd_line.HasSwitch(vivaldi::constants::kVivaldi))
+    if (kVivaldi) {
       CloseAllChromeProcesses(installer_state.target_path());
+    }
 
     // no --force-uninstall so lets show some UI dialog boxes.
     status = IsChromeActiveOrUserCancelled(installer_state);
@@ -966,24 +967,8 @@ InstallStatus UninstallProduct(const ModifyParams& modify_params,
   // unregistered.
   SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 
-  if (installer_state.is_vivaldi()) {
-    base::string16 event_path(L"Global\\Vivaldi/Update_notifier/Quit/");
-    base::string16 normalized_path =
-        installer_state.target_path().NormalizePathSeparatorsTo(L'/').value();
-    // See
-    // https://web.archive.org/web/20130528052217/http://blogs.msdn.com/b/michkap/archive/2005/10/17/481600.aspx
-    CharUpper(&normalized_path[0]);
-    event_path += normalized_path;
-    base::win::ScopedHandle restart_event(
-        OpenEvent(EVENT_MODIFY_STATE, FALSE, event_path.c_str()));
-    SetEvent(restart_event.Get());
-    // This is hopefully enough time for all running notifiers to be notified.
-    Sleep(1000);
-    ResetEvent(restart_event.Get());
-    // Kill any remaining notifier
-    vivaldi::KillProcesses(vivaldi::GetRunningProcessesForPath(
-        installer_state.target_path().Append(
-          vivaldi::constants::kVivaldiUpdateNotifierExe)));
+  if (kVivaldi) {
+    vivaldi::QuitAllUpdateNotifiers(installer_state.target_path());
   }
 
   // Remove the event log provider registration as we are going to delete

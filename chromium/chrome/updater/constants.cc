@@ -4,6 +4,8 @@
 
 #include "chrome/updater/constants.h"
 
+#include "chrome/updater/updater_branding.h"
+
 namespace updater {
 
 // App ids.
@@ -31,21 +33,13 @@ const char kWakeSwitch[] = "wake";
 const char kTagSwitch[] = "tag";
 
 const char kServerServiceSwitch[] = "service";
-const char kServerControlServiceSwitchValue[] = "control";
+
+const char kServerUpdateServiceInternalSwitchValue[] = "update-internal";
 const char kServerUpdateServiceSwitchValue[] = "update";
 
 #if defined(OS_WIN)
 const char kInstallFromOutDir[] = "install-from-out-dir";
 #endif  // OS_WIN
-
-// TODO(crbug/1108975): brand the URLs below.
-const char kUpdaterJSONDefaultUrl[] =
-    "https://update.googleapis.com/service/update2/json";
-const char kCrashUploadURL[] = "https://clients2.google.com/cr/report";
-const char kCrashStagingUploadURL[] =
-    "https://clients2.google.com/cr/staging_report";
-const char kDeviceManagementServerURL[] =
-    "https://m.google.com/devicemanagement/data/api";
 
 // Path names.
 const char kAppsDir[] = "apps";
@@ -54,6 +48,7 @@ const char kUninstallScript[] = "uninstall.cmd";
 // Developer override key names.
 const char kDevOverrideKeyUrl[] = "url";
 const char kDevOverrideKeyUseCUP[] = "use_cup";
+const char kDevOverrideKeyInitialDelay[] = "initial_delay";
 
 // Policy Management constants.
 const char kProxyModeDirect[] = "direct";
@@ -64,5 +59,10 @@ const char kProxyModeSystem[] = "system";
 
 // Specifies that urls that can be cached by proxies are preferred.
 const char kDownloadPreferenceCacheable[] = "cacheable";
+
+#if defined(OS_MAC)
+// The user defaults suite name.
+const char kUserDefaultsSuiteName[] = MAC_BUNDLE_IDENTIFIER_STRING ".defaults";
+#endif  // defined(OS_MAC)
 
 }  // namespace updater

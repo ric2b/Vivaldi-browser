@@ -233,13 +233,15 @@ void TabLayer::SetProperties(int id,
   ToolbarResource* resource =
       ToolbarResource::From(resource_manager_->GetResource(
           ui::ANDROID_RESOURCE_TYPE_DYNAMIC, toolbar_resource_id));
-  toolbar_layer_->ShouldPositionToolbar(true);
-  // (Note:david@vivaldi.com): When |content_offset| is 0 toolbar is at the
-  // bottom
-  if (content_offset == 0)
-    toolbar_offset = height - resource->size().height();
-  else
-    toolbar_offset -= resource->size().height();
+  if (resource) {
+    toolbar_layer_->ShouldPositionToolbar(true);
+    // (Note:david@vivaldi.com): When |content_offset| is 0 toolbar is at the
+    // bottom
+    if (content_offset == 0)
+      toolbar_offset = height - resource->size().height();
+    else
+      toolbar_offset -= resource->size().height();
+  }
   //** Vivaldi
 
   // TODO(kkimlabs): Tab switcher doesn't show the progress bar.

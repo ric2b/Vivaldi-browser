@@ -15,6 +15,8 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
+#include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -49,6 +51,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_request_headers.h"
@@ -321,10 +324,8 @@ PrerenderManager::GetAllNoStatePrefetchingContentsForTesting() const {
 
   for (const auto& prerender : active_prerenders_) {
     WebContents* contents = prerender->contents()->prerender_contents();
-    if (contents && prerender->contents()->prerender_mode() ==
-                        prerender::mojom::PrerenderMode::kPrefetchOnly) {
+    if (contents)
       result.push_back(contents);
-    }
   }
 
   return result;
@@ -491,6 +492,13 @@ PrerenderManager::AddPrerenderWithPreconnectFallback(
     SessionStorageNamespace* session_storage_namespace) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line && command_line->HasSwitch(switches::kSingleProcess)) {
+    SkipPrerenderContentsAndMaybePreconnect(url_arg, origin,
+                                            FINAL_STATUS_SINGLE_PROCESS);
+    return nullptr;
+  }
+
   // Disallow NSPing link-rel:next URLs.
   // See https://bugs.chromium.org/p/chromium/issues/detail?id=1158209.
   if (origin == ORIGIN_LINK_REL_NEXT) {
@@ -607,8 +615,6 @@ PrerenderManager::AddPrerenderWithPreconnectFallback(
       CreatePrerenderContents(url, referrer, initiator_origin, origin);
   DCHECK(prerender_contents);
   PrerenderContents* prerender_contents_ptr = prerender_contents.get();
-  prerender_contents_ptr->SetPrerenderMode(
-      prerender::mojom::PrerenderMode::kPrefetchOnly);
   active_prerenders_.push_back(
       std::make_unique<PrerenderData>(this, std::move(prerender_contents),
                                       GetExpiryTimeForNewPrerender(origin)));

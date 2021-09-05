@@ -251,8 +251,8 @@ void RunSwitchLanguageTest(const std::string& locale,
                            const bool expect_success) {
   SwitchLanguageTestData data;
   locale_util::SwitchLanguageCallback callback(
-      base::Bind(&OnLocaleSwitched, base::Unretained(&data)));
-  locale_util::SwitchLanguage(locale, true, false, callback,
+      base::BindOnce(&OnLocaleSwitched, base::Unretained(&data)));
+  locale_util::SwitchLanguage(locale, true, false, std::move(callback),
                               ProfileManager::GetActiveUserProfile());
 
   // Token writing moves control to BlockingPool and back.
@@ -484,7 +484,8 @@ class WizardControllerFlowTest : public WizardControllerTest {
     WizardControllerTest::SetUpOnMainThread();
 
     // Make sure that OOBE is run as an "official" build.
-    branded_build_override_ = WizardController::ForceBrandedBuildForTesting();
+    branded_build_override_ =
+        WizardController::ForceBrandedBuildForTesting(true);
 
     WizardController* wizard_controller =
         WizardController::default_controller();
@@ -1070,12 +1071,10 @@ class WizardControllerDeviceStateTest : public WizardControllerFlowTest {
 
   static void WaitForAutoEnrollmentState(policy::AutoEnrollmentState state) {
     base::RunLoop loop;
-    std::unique_ptr<
-        AutoEnrollmentController::ProgressCallbackList::Subscription>
-        progress_subscription(
-            auto_enrollment_controller()->RegisterProgressCallback(
-                base::BindRepeating(&QuitLoopOnAutoEnrollmentProgress, state,
-                                    &loop)));
+    base::CallbackListSubscription progress_subscription =
+        auto_enrollment_controller()->RegisterProgressCallback(
+            base::BindRepeating(&QuitLoopOnAutoEnrollmentProgress, state,
+                                &loop));
     loop.Run();
   }
 
@@ -2725,7 +2724,8 @@ class WizardControllerOobeResumeTest : public WizardControllerTest {
     WizardControllerTest::SetUpOnMainThread();
 
     // Make sure that OOBE is run as an "official" build.
-    branded_build_override_ = WizardController::ForceBrandedBuildForTesting();
+    branded_build_override_ =
+        WizardController::ForceBrandedBuildForTesting(true);
 
     WizardController* wizard_controller =
         WizardController::default_controller();

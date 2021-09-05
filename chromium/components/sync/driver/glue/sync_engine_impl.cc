@@ -18,6 +18,7 @@
 #include "components/invalidation/public/topic_invalidation_map.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/base/invalidation_helper.h"
+#include "components/sync/base/sync_base_switches.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/active_devices_provider.h"
 #include "components/sync/driver/glue/sync_engine_backend.h"
@@ -343,14 +344,15 @@ void SyncEngineImpl::HandleMigrationRequestedOnFrontendLoop(
   host_->OnMigrationNeededForTypes(types);
 }
 
-void SyncEngineImpl::OnInvalidatorStateChange(InvalidatorState state) {
+void SyncEngineImpl::OnInvalidatorStateChange(
+    invalidation::InvalidatorState state) {
   sync_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&SyncEngineBackend::DoOnInvalidatorStateChange,
                                 backend_, state));
 }
 
 void SyncEngineImpl::OnIncomingInvalidation(
-    const TopicInvalidationMap& invalidation_map) {
+    const invalidation::TopicInvalidationMap& invalidation_map) {
   sync_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&SyncEngineBackend::DoOnIncomingInvalidation,
                                 backend_, invalidation_map));
@@ -390,13 +392,12 @@ void SyncEngineImpl::HandleSyncStatusChanged(const SyncStatus& status) {
 }
 
 void SyncEngineImpl::OnCookieJarChanged(bool account_mismatch,
-                                        bool empty_jar,
                                         base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&SyncEngineBackend::DoOnCookieJarChanged, backend_,
-                     account_mismatch, empty_jar, std::move(callback)));
+                     account_mismatch, std::move(callback)));
 }
 
 void SyncEngineImpl::SetInvalidationsForSessionsEnabled(bool enabled) {
@@ -459,11 +460,19 @@ void SyncEngineImpl::SendInterestedTopicsToInvalidator() {
 
 void SyncEngineImpl::OnActiveDevicesChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  std::string local_cache_guid;
+  if (!base::FeatureList::IsEnabled(switches::kSyncE2ELatencyMeasurement)) {
+    // End-to-end latency measurement relies on reflection, so if this is
+    // enabled, don't filter out the local device.
+    local_cache_guid = cached_status_.sync_id;
+  }
   sync_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          &SyncEngineBackend::DoOnActiveDevicesChanged, backend_,
-          active_devices_provider_->CountActiveDevicesIfAvailable()));
+      base::BindOnce(&SyncEngineBackend::DoOnActiveDevicesChanged, backend_,
+                     active_devices_provider_->CountActiveDevicesIfAvailable(),
+                     active_devices_provider_
+                         ->CollectFCMRegistrationTokensForInvalidations(
+                             local_cache_guid)));
 }
 
 }  // namespace syncer

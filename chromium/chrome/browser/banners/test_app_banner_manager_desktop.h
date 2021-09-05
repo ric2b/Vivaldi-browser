@@ -14,7 +14,7 @@ namespace content {
 class WebContents;
 }
 
-namespace banners {
+namespace webapps {
 
 // Provides the ability to await the results of the installability check that
 // happens for every page load.
@@ -76,6 +76,6 @@ class TestAppBannerManagerDesktop : public AppBannerManagerDesktop {
   DISALLOW_COPY_AND_ASSIGN(TestAppBannerManagerDesktop);
 };
 
-}  // namespace banners
+}  // namespace webapps
 
 #endif  // CHROME_BROWSER_BANNERS_TEST_APP_BANNER_MANAGER_DESKTOP_H_

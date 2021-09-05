@@ -12,5 +12,75 @@
     html {
       background-color: var(--cros-bg-color);
     }
+
+    .data-point-margin-end {
+      margin-right: 20px;
+    }
+
+    .data-point-margin-start {
+      margin-left: 20px;
+    }
+
+    .diagnostics-chip {
+      @apply --diagnostics-overview-font;
+      background-color: var(--google-grey-200);
+      border-radius: 16px;
+      color: var(--diagnostics-overview-text-color);
+      height: 20px;
+      padding: 4px 8px 0;
+    }
+
+    .divider {
+      border-left: 1px solid var(--google-grey-200);
+      height: 32px;
+      padding-inline: 16px;
+      position: relative;
+      top: 24%;
+    }
+
+    @media (min-width:600px) {
+      :host {
+        --container-padding: 24px;
+        --content-container-width: 552px;
+        --chart-width: 452px;
+        --data-point-container-padding: 44px;
+        }
+    }
+
+    @media (min-width:768px) {
+      :host {
+        --container-padding: 64px;
+        --content-container-width: 640px;
+        --chart-width: 540px;
+        --data-point-container-padding: 64px;
+        }
+    }
+
+    @media (min-width:960px) {
+      :host {
+        --container-padding: 160px;
+        --content-container-width: 640px;
+        --chart-width: 540px;
+        --data-point-container-padding: 64px;
+      }
+    }
+
+    @media (min-width:1280px) {
+      :host {
+        --container-padding: 160px;
+        --content-container-width: 680px;
+        --chart-width: 580px;
+        --data-point-container-padding: 64px;
+      }
+    }
+
+    @media (min-width:1440px) {
+      :host {
+        --container-padding: 360px;
+        --content-container-width: 720px;
+        --chart-width: 620px;
+        --data-point-container-padding: 64px;
+      }
+    }
   </style>
 </template>

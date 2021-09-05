@@ -22,7 +22,7 @@
 #include "ash/wallpaper/wallpaper_view.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/window_cycle_controller.h"
+#include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -2201,7 +2201,7 @@ TEST_F(WallpaperControllerTest, ClosePreviewWallpaperOnWindowCycleStart) {
   // the user wallpaper info remains unchanged, and enters window cycle.
   ClearWallpaperCount();
   Shell::Get()->window_cycle_controller()->HandleCycleWindow(
-      WindowCycleController::FORWARD);
+      WindowCycleController::WindowCyclingDirection::kForward);
   RunAllTasksUntilIdle();
   EXPECT_EQ(1, GetWallpaperCount());
   EXPECT_NE(kWallpaperColor, GetWallpaperColor());
@@ -2609,7 +2609,7 @@ TEST_F(WallpaperControllerTest, ShowOneShotWallpaper) {
   EXPECT_EQ(kOneShotWallpaperColor, GetWallpaperColor());
   EXPECT_EQ(WallpaperType::ONE_SHOT, controller_->GetWallpaperType());
   EXPECT_FALSE(controller_->IsBlurAllowedForLockState());
-  EXPECT_FALSE(controller_->ShouldApplyColorFilter());
+  EXPECT_FALSE(controller_->ShouldApplyShield());
 
   // Verify that we can reload wallpaer without losing it.
   // This is important for screen rotation.
@@ -2619,7 +2619,7 @@ TEST_F(WallpaperControllerTest, ShowOneShotWallpaper) {
   EXPECT_EQ(kOneShotWallpaperColor, GetWallpaperColor());
   EXPECT_EQ(WallpaperType::ONE_SHOT, controller_->GetWallpaperType());
   EXPECT_FALSE(controller_->IsBlurAllowedForLockState());
-  EXPECT_FALSE(controller_->ShouldApplyColorFilter());
+  EXPECT_FALSE(controller_->ShouldApplyShield());
 
   // Verify the user wallpaper info is unaffected, and the one-shot wallpaper
   // can be replaced by the user wallpaper.

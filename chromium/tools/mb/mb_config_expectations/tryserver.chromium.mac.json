@@ -225,7 +225,6 @@
     "gn_args": {
       "ios_code_signing_identity_description": "Apple Development",
       "ios_enable_code_signing": false,
-      "ios_use_goma_rbe": true,
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 0,
@@ -237,40 +236,13 @@
   },
   "ios-simulator": {
     "gn_args": {
+      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
       "target_cpu": "x64",
       "target_environment": "simulator",
-      "target_os": "ios",
-      "use_goma": true
-    }
-  },
-  "ios-simulator-code-coverage": {
-    "gn_args": {
-      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
-      "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
-      "is_component_build": false,
-      "is_debug": true,
-      "symbol_level": 1,
-      "target_cpu": "x64",
-      "target_os": "ios",
-      "use_clang_coverage": true,
-      "use_goma": true
-    }
-  },
-  "ios-simulator-coverage-exp": {
-    "gn_args": {
-      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
-      "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
-      "is_component_build": false,
-      "is_debug": true,
-      "symbol_level": 1,
-      "target_cpu": "x64",
       "target_os": "ios",
       "use_clang_coverage": true,
       "use_goma": true
@@ -316,6 +288,7 @@
   },
   "ios-simulator-full-configs": {
     "gn_args": {
+      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "enable_run_ios_unittests_with_xctest": true,
       "is_component_build": false,
       "is_debug": true,
@@ -323,20 +296,20 @@
       "target_cpu": "x64",
       "target_environment": "simulator",
       "target_os": "ios",
+      "use_clang_coverage": true,
       "use_goma": true
     }
   },
-  "ios-simulator-full-configs-coverage-exp": {
+  "ios-simulator-inverse-fieldtrials-fyi": {
     "gn_args": {
-      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
+      "invert_fieldtrials": true,
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
       "target_cpu": "x64",
+      "target_environment": "simulator",
       "target_os": "ios",
-      "use_clang_coverage": true,
       "use_goma": true
     }
   },
@@ -356,7 +329,6 @@
   "ios-simulator-noncq": {
     "gn_args": {
       "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
@@ -369,7 +341,6 @@
   "ios13-beta-simulator": {
     "gn_args": {
       "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
@@ -382,7 +353,6 @@
   "ios13-sdk-simulator": {
     "gn_args": {
       "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
@@ -395,7 +365,6 @@
   "ios14-beta-simulator": {
     "gn_args": {
       "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
@@ -408,7 +377,6 @@
   "ios14-sdk-simulator": {
     "gn_args": {
       "enable_run_ios_unittests_with_xctest": true,
-      "ios_use_goma_rbe": true,
       "is_component_build": false,
       "is_debug": true,
       "symbol_level": 1,
@@ -425,6 +393,19 @@
       "is_debug": false,
       "symbol_level": 1,
       "target_cpu": "arm64",
+      "use_goma": true
+    }
+  },
+  "mac-inverse-fieldtrials-fyi-rel": {
+    "gn_args": {
+      "dcheck_always_on": true,
+      "ffmpeg_branding": "Chrome",
+      "invert_fieldtrials": true,
+      "is_component_build": false,
+      "is_debug": false,
+      "mac_deterministic_build": true,
+      "proprietary_codecs": true,
+      "symbol_level": 1,
       "use_goma": true
     }
   },
@@ -451,6 +432,18 @@
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_clang_coverage": true,
+      "use_goma": true
+    }
+  },
+  "mac_chromium_10.11_rel_ng": {
+    "gn_args": {
+      "dcheck_always_on": true,
+      "ffmpeg_branding": "Chrome",
+      "is_component_build": false,
+      "is_debug": false,
+      "mac_deterministic_build": true,
+      "proprietary_codecs": true,
+      "symbol_level": 1,
       "use_goma": true
     }
   },

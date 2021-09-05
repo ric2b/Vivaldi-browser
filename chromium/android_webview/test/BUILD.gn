@@ -24,7 +24,6 @@ python_library("webview_cts_tests") {
   pydeps_file = "//android_webview/tools/run_cts.pydeps"
   deps = [ "//android_webview:system_webview_apk" ]
   data_deps = [
-    "//build/android:logdog_wrapper_py",
     "//build/android:test_runner_py",
     "//testing/buildbot/filters:webview_cts_tests_filters",
   ]
@@ -56,6 +55,7 @@ android_apk("webview_instrumentation_apk") {
     "//android_webview:platform_service_bridge_upstream_implementation_java",
     "//base:base_java",
     "//base:base_java_test_support",
+    "//components/autofill/android/provider/test_support:component_autofill_provider_java_test_support",
     "//components/embedder_support/android:util_java",
     "//components/heap_profiling/multi_process:heap_profiling_java_test_support",
     "//components/policy/android:policy_java_test_support",
@@ -74,7 +74,7 @@ android_apk("webview_instrumentation_apk") {
     "shell/src/org/chromium/android_webview/shell/AwShellApplication.java",
     "shell/src/org/chromium/android_webview/shell/AwShellResourceProvider.java",
     "shell/src/org/chromium/android_webview/shell/AwShellSwitches.java",
-    "shell/src/org/chromium/android_webview/shell/DrawFn.java",
+    "shell/src/org/chromium/android_webview/shell/ContextManager.java",
     "shell/src/org/chromium/android_webview/test/AwJUnit4ClassRunner.java",
     "shell/src/org/chromium/android_webview/test/AwTestContainerView.java",
     "shell/src/org/chromium/android_webview/test/AwTestRunnerActivity.java",
@@ -137,20 +137,39 @@ android_assets("webview_instrumentation_apk_assets") {
   }
 }
 
+generate_jni("draw_fn_impl_jni_headers") {
+  sources =
+      [ "shell/src/org/chromium/android_webview/shell/ContextManager.java" ]
+}
+
 shared_library("libstandalonelibwebviewchromium") {
   testonly = true
-  sources = [ "shell/src/draw_gl/draw_fn.cc" ]
+  sources = [
+    "shell/src/draw_fn/allocator.cc",
+    "shell/src/draw_fn/allocator.h",
+    "shell/src/draw_fn/context_manager.cc",
+    "shell/src/draw_fn/context_manager.h",
+    "shell/src/draw_fn/overlays_manager.cc",
+    "shell/src/draw_fn/overlays_manager.h",
+  ]
   ldflags = [ "-Wl,-shared,-Bsymbolic" ]
   deps = [
+    ":draw_fn_impl_jni_headers",
     ":webview_instrumentation_test_native_jni_impl",
+    "//android_webview/browser/gfx",
     "//android_webview/lib",
     "//android_webview/lib:webview_entry_point",
     "//android_webview/nonembedded",
     "//android_webview/public",
     "//base",
+    "//components/autofill/android/provider/test_support:component_autofill_provider_native_test_support",
     "//components/heap_profiling/multi_process:test_support",
     "//content/public/test/android:content_native_test_support",
+    "//gpu/vulkan",
+    "//gpu/vulkan/init",
+    "//gpu/vulkan/init:skia",
   ]
+  libs = [ "android" ]
   configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
   configs += [ "//build/config/android:hide_all_but_jni" ]
 }
@@ -177,6 +196,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//base:base_java_test_support",
     "//components/autofill/android:autofill_java",
     "//components/autofill/android/provider:java",
+    "//components/autofill/android/provider/test_support:component_autofill_provider_java_test_support",
     "//components/autofill/core/common/mojom:mojo_types_java",
     "//components/background_task_scheduler:background_task_scheduler_task_ids_java",
     "//components/content_capture/android:java",
@@ -209,11 +229,11 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//third_party/android_deps:com_google_code_findbugs_jsr305_java",
     "//third_party/android_deps:com_google_guava_failureaccess_java",
     "//third_party/android_deps:espresso_java",
+    "//third_party/android_deps:guava_android_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/blink/public/mojom:web_feature_mojo_bindings_java",
-    "//third_party/guava:guava_android_java",
     "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
     "//third_party/metrics_proto:metrics_proto_java",
@@ -252,6 +272,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/AwContentsRenderTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsStaticsTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsTest.java",
+    "../javatests/src/org/chromium/android_webview/test/AwDisplayCutoutTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwFormDatabaseTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwImeTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwJavaBridgeTest.java",
@@ -499,6 +520,7 @@ generate_jni("android_webview_unittests_jni") {
 junit_binary("android_webview_junit_tests") {
   sources = [
     "../junit/src/org/chromium/android_webview/robolectric/AwDisplayCutoutControllerTest.java",
+    "../junit/src/org/chromium/android_webview/robolectric/AwDisplayModeControllerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/AwLayoutSizerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/AwScrollOffsetManagerTest.java",
     "../junit/src/org/chromium/android_webview/robolectric/FindAddressTest.java",
@@ -519,6 +541,7 @@ junit_binary("android_webview_junit_tests") {
     "//third_party/android_deps:androidx_test_runner_java",
     "//third_party/android_deps:protobuf_lite_runtime_java",
     "//third_party/android_support_test_runner:runner_java",
+    "//third_party/blink/public/mojom:mojom_platform_java",
   ]
 
   package_name = "org.chromium.android_webview.robolectric"

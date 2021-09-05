@@ -295,9 +295,9 @@ std::unique_ptr<TracedValue> ResourcePrioritySetData(
 
 // This function corresponds with step 2 substep 7 of
 // https://fetch.spec.whatwg.org/#main-fetch.
-void SetReferrer(ResourceRequest& request,
-                 const FetchClientSettingsObject& fetch_client_settings_object,
-                 UseCounter& use_counter) {
+void SetReferrer(
+    ResourceRequest& request,
+    const FetchClientSettingsObject& fetch_client_settings_object) {
   String referrer_to_use = request.ReferrerString();
   network::mojom::ReferrerPolicy referrer_policy_to_use =
       request.GetReferrerPolicy();
@@ -305,41 +305,11 @@ void SetReferrer(ResourceRequest& request,
   if (referrer_to_use == Referrer::ClientReferrerString())
     referrer_to_use = fetch_client_settings_object.GetOutgoingReferrer();
 
-  bool used_referrer_policy_from_context = false;
-  if (referrer_policy_to_use == network::mojom::ReferrerPolicy::kDefault) {
-    used_referrer_policy_from_context = true;
+  if (referrer_policy_to_use == network::mojom::ReferrerPolicy::kDefault)
     referrer_policy_to_use = fetch_client_settings_object.GetReferrerPolicy();
-  }
 
   Referrer generated_referrer = SecurityPolicy::GenerateReferrer(
       referrer_policy_to_use, request.Url(), referrer_to_use);
-
-  // The request's referrer would be different in the absence of <meta
-  // name=referrer> tags with comma-separated-list values exactly when both
-  // 1. the request falls back to its client settings object's policy; and
-  // 2. if we recompute the referrer using the value of the client settings
-  // object's policy, disregarding any policy that came from a meta tag with a
-  // comma-separated value, we obtain a different referrer.
-  if (used_referrer_policy_from_context) {
-    base::Optional<network::mojom::blink::ReferrerPolicy>
-        policy_but_for_meta_tags_with_policy_lists =
-            fetch_client_settings_object
-                .GetReferrerPolicyDisregardingMetaTagsContainingLists();
-
-    bool referrer_would_be_different_absent_meta_tags_with_policy_lists =
-        policy_but_for_meta_tags_with_policy_lists.has_value() &&
-        (generated_referrer.referrer !=
-         SecurityPolicy::GenerateReferrer(
-             *policy_but_for_meta_tags_with_policy_lists, request.Url(),
-             referrer_to_use)
-             .referrer);
-
-    if (referrer_would_be_different_absent_meta_tags_with_policy_lists) {
-      use_counter.CountUse(
-          mojom::WebFeature::
-              kHTMLMetaElementReferrerPolicyMultipleTokensAffectingRequest);
-    }
-  }
 
   request.SetReferrerString(generated_referrer.referrer);
   request.SetReferrerPolicy(generated_referrer.referrer_policy);
@@ -707,7 +677,7 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
   }
 }
 
-Resource* ResourceFetcher::ResourceForStaticData(
+Resource* ResourceFetcher::CreateResourceForStaticData(
     const FetchParameters& params,
     const ResourceFactory& factory) {
   const KURL& url = params.GetResourceRequest().Url();
@@ -801,11 +771,14 @@ void ResourceFetcher::MakePreloadedResourceBlockOnloadIfNeeded(
   }
 }
 
-void ResourceFetcher::UpdateMemoryCacheStats(Resource* resource,
-                                             RevalidationPolicy policy,
-                                             const FetchParameters& params,
-                                             const ResourceFactory& factory,
-                                             bool is_static_data) const {
+void ResourceFetcher::UpdateMemoryCacheStats(
+    Resource* resource,
+    RevalidationPolicy policy,
+    const FetchParameters& params,
+    const ResourceFactory& factory,
+    bool is_static_data,
+    bool in_cached_resources_map,
+    bool same_top_frame_site_resource_cached) const {
   if (is_static_data)
     return;
 
@@ -813,6 +786,16 @@ void ResourceFetcher::UpdateMemoryCacheStats(Resource* resource,
     DEFINE_RESOURCE_HISTOGRAM("Preload.");
   } else {
     DEFINE_RESOURCE_HISTOGRAM("");
+
+    // Log metrics to evaluate effectiveness of the memory cache if it were
+    // scoped to the document.
+    if (in_cached_resources_map)
+      DEFINE_RESOURCE_HISTOGRAM("PerDocument.");
+
+    // Log metrics to evaluate effectiveness of the memory cache if it was
+    // partitioned by the top-frame site.
+    if (same_top_frame_site_resource_cached)
+      DEFINE_RESOURCE_HISTOGRAM("PerTopFrameSite.");
   }
 
   // Aims to count Resource only referenced from MemoryCache (i.e. what would be
@@ -947,8 +930,7 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
                                              http_names::kGET &&
                                          !params.IsStaleRevalidation());
 
-  SetReferrer(resource_request, properties_->GetFetchClientSettingsObject(),
-              GetUseCounter());
+  SetReferrer(resource_request, properties_->GetFetchClientSettingsObject());
 
   resource_request.SetExternalRequestStateFromRequestorAddressSpace(
       properties_->GetFetchClientSettingsObject().GetAddressSpace());
@@ -967,8 +949,9 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
                            reporting_disposition,
                            resource_request.GetRedirectInfo());
 
-  if (Context().CalculateIfAdSubresource(resource_request, resource_type,
-                                         options.initiator_info))
+  if (Context().CalculateIfAdSubresource(resource_request,
+                                         base::nullopt /* alias_url */,
+                                         resource_type, options.initiator_info))
     resource_request.SetIsAdResource();
 
   if (blocked_reason)
@@ -988,7 +971,34 @@ base::Optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
     resource_request.SetAllowStoredCredentials(false);
   }
 
+  if (resource_request.GetWebBundleTokenParams()) {
+    DCHECK_EQ(resource_request.GetRequestDestination(),
+              network::mojom::RequestDestination::kWebBundle);
+  } else {
+    AttachWebBundleTokenIfNeeded(resource_request);
+  }
+
   return base::nullopt;
+}
+
+bool ResourceFetcher::ShouldBeLoadedFromWebBundle(const KURL& url) const {
+  for (auto& bundle : subresource_web_bundles_) {
+    if (bundle->CanHandleRequest(url))
+      return true;
+  }
+  return false;
+}
+
+void ResourceFetcher::AttachWebBundleTokenIfNeeded(
+    ResourceRequest& resource_request) const {
+  for (auto& bundle : subresource_web_bundles_) {
+    if (!bundle->CanHandleRequest(resource_request.Url()))
+      continue;
+    resource_request.SetWebBundleTokenParams(
+        ResourceRequestHead::WebBundleTokenParams(bundle->WebBundleToken(),
+                                                  mojo::NullRemote()));
+    return;
+  }
 }
 
 Resource* ResourceFetcher::RequestResource(FetchParameters& params,
@@ -1054,7 +1064,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   bool is_static_data = is_data_url || archive_;
   bool is_stale_revalidation = params.IsStaleRevalidation();
   if (!is_stale_revalidation && is_static_data) {
-    resource = ResourceForStaticData(params, factory);
+    resource = CreateResourceForStaticData(params, factory);
     if (resource) {
       policy =
           DetermineRevalidationPolicy(resource_type, params, *resource, true);
@@ -1068,6 +1078,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     }
   }
 
+  bool same_top_frame_site_resource_cached = false;
   if (!is_stale_revalidation && !resource) {
     resource = MatchPreload(params, resource_type);
     if (resource) {
@@ -1081,6 +1092,12 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
       if (resource) {
         policy = DetermineRevalidationPolicy(resource_type, params, *resource,
                                              is_static_data);
+        scoped_refptr<const SecurityOrigin> top_frame_origin =
+            resource_request.TopFrameOrigin();
+        if (top_frame_origin) {
+          same_top_frame_site_resource_cached =
+              resource->AppendTopFrameSiteForMetrics(*top_frame_origin);
+        }
       }
     }
   }
@@ -1095,7 +1112,12 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     resource_request.SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
   }
 
-  UpdateMemoryCacheStats(resource, policy, params, factory, is_static_data);
+  bool in_cached_resources_map = cached_resources_map_.Contains(
+      MemoryCache::RemoveFragmentIdentifierIfNeeded(params.Url()));
+
+  UpdateMemoryCacheStats(resource, policy, params, factory, is_static_data,
+                         in_cached_resources_map,
+                         same_top_frame_site_resource_cached);
 
   switch (policy) {
     case RevalidationPolicy::kReload:
@@ -1143,8 +1165,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   DCHECK(EqualIgnoringFragmentIdentifier(resource->Url(), params.Url()));
   if (policy == RevalidationPolicy::kUse &&
       resource->GetStatus() == ResourceStatus::kCached &&
-      !cached_resources_map_.Contains(
-          MemoryCache::RemoveFragmentIdentifierIfNeeded(params.Url()))) {
+      !in_cached_resources_map) {
     // Loaded from MemoryCache.
     DidLoadResourceFromMemoryCache(resource, resource_request, is_static_data);
   }
@@ -1260,19 +1281,6 @@ std::unique_ptr<WebURLLoader> ResourceFetcher::CreateURLLoader(
     const ResourceLoaderOptions& options) {
   DCHECK(!GetProperties().IsDetached());
   DCHECK(loader_factory_);
-  for (auto& bundle : subresource_web_bundles_) {
-    if (!bundle->CanHandleRequest(request.Url()))
-      continue;
-    ResourceLoaderOptions new_options(options);
-    new_options.url_loader_factory = base::MakeRefCounted<base::RefCountedData<
-        mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>>(
-        bundle->GetURLLoaderFactory());
-    // TODO(yoichio): CreateURLLoader take a ResourceRequestHead instead of
-    // ResourceRequest.
-    return loader_factory_->CreateURLLoader(ResourceRequest(request),
-                                            new_options, freezable_task_runner_,
-                                            unfreezable_task_runner_);
-  }
   return loader_factory_->CreateURLLoader(ResourceRequest(request), options,
                                           freezable_task_runner_,
                                           unfreezable_task_runner_);
@@ -1436,6 +1444,9 @@ void ResourceFetcher::PrintPreloadWarning(Resource* resource,
     case Resource::MatchStatus::kRequestHeadersDoNotMatch:
       builder.Append("because the request headers do not match.");
       break;
+    case Resource::MatchStatus::kScriptTypeDoesNotMatch:
+      builder.Append("because the script type does not match.");
+      break;
   }
   console_logger_->AddConsoleMessage(mojom::ConsoleMessageSource::kOther,
                                      mojom::ConsoleMessageLevel::kWarning,
@@ -1588,7 +1599,7 @@ ResourceFetcher::DetermineRevalidationPolicyInternal(
 
   // If resource was populated from archive or data: url, use it.
   // This doesn't necessarily mean that |resource| was just created by using
-  // ResourceForStaticData().
+  // CreateResourceForStaticData().
   if (is_static_data) {
     return {RevalidationPolicy::kUse, "Use the existing static resource."};
   }
@@ -2286,6 +2297,20 @@ void ResourceFetcher::EvictFromBackForwardCache(
     return;
 
   resource_load_observer_->EvictFromBackForwardCache(reason);
+}
+
+void ResourceFetcher::DidBufferLoadWhileInBackForwardCache(size_t num_bytes) {
+  if (!resource_load_observer_)
+    return;
+
+  resource_load_observer_->DidBufferLoadWhileInBackForwardCache(num_bytes);
+}
+
+bool ResourceFetcher::CanContinueBufferingWhileInBackForwardCache() {
+  if (!resource_load_observer_)
+    return true;
+
+  return resource_load_observer_->CanContinueBufferingWhileInBackForwardCache();
 }
 
 void ResourceFetcher::Trace(Visitor* visitor) const {

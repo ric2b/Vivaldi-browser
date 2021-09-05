@@ -48,7 +48,7 @@ NativeFileSystemHandleBase::NativeFileSystemHandleBase(
     BackForwardCache::DisableForRenderFrameHost(context_.frame_id,
                                                 "NativeFileSystem");
     if (web_contents())
-      web_contents()->IncrementNativeFileSystemHandleCount();
+      web_contents()->IncrementFileSystemAccessHandleCount();
   }
 }
 
@@ -56,7 +56,7 @@ NativeFileSystemHandleBase::~NativeFileSystemHandleBase() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (ShouldTrackUsage() && web_contents()) {
-    web_contents()->DecrementNativeFileSystemHandleCount();
+    web_contents()->DecrementFileSystemAccessHandleCount();
   }
 }
 
@@ -89,7 +89,7 @@ void NativeFileSystemHandleBase::DoGetPermissionStatus(
 
 void NativeFileSystemHandleBase::DoRequestPermission(
     bool writable,
-    base::OnceCallback<void(blink::mojom::NativeFileSystemErrorPtr,
+    base::OnceCallback<void(blink::mojom::FileSystemAccessErrorPtr,
                             PermissionStatus)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   PermissionStatus current_status =
@@ -109,7 +109,7 @@ void NativeFileSystemHandleBase::DoRequestPermission(
   if (!writable) {
     handle_state_.read_grant->RequestPermission(
         context().frame_id,
-        NativeFileSystemPermissionGrant::UserActivationState::kRequired,
+        FileSystemAccessPermissionGrant::UserActivationState::kRequired,
         base::BindOnce(&NativeFileSystemHandleBase::DidRequestPermission,
                        AsWeakPtr(), writable, std::move(callback)));
     return;
@@ -124,37 +124,37 @@ void NativeFileSystemHandleBase::DoRequestPermission(
     // anyway.
     handle_state_.read_grant->RequestPermission(
         context().frame_id,
-        NativeFileSystemPermissionGrant::UserActivationState::kRequired,
+        FileSystemAccessPermissionGrant::UserActivationState::kRequired,
         base::DoNothing());
   }
 
   handle_state_.write_grant->RequestPermission(
       context().frame_id,
-      NativeFileSystemPermissionGrant::UserActivationState::kRequired,
+      FileSystemAccessPermissionGrant::UserActivationState::kRequired,
       base::BindOnce(&NativeFileSystemHandleBase::DidRequestPermission,
                      AsWeakPtr(), writable, std::move(callback)));
 }
 
 void NativeFileSystemHandleBase::DidRequestPermission(
     bool writable,
-    base::OnceCallback<void(blink::mojom::NativeFileSystemErrorPtr,
+    base::OnceCallback<void(blink::mojom::FileSystemAccessErrorPtr,
                             PermissionStatus)> callback,
-    NativeFileSystemPermissionGrant::PermissionRequestOutcome outcome) {
+    FileSystemAccessPermissionGrant::PermissionRequestOutcome outcome) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  using Outcome = NativeFileSystemPermissionGrant::PermissionRequestOutcome;
+  using Outcome = FileSystemAccessPermissionGrant::PermissionRequestOutcome;
   switch (outcome) {
     case Outcome::kInvalidFrame:
     case Outcome::kThirdPartyContext:
       std::move(callback).Run(
           native_file_system_error::FromStatus(
-              blink::mojom::NativeFileSystemStatus::kSecurityError,
+              blink::mojom::FileSystemAccessStatus::kSecurityError,
               "Not allowed to request permissions in this context."),
           writable ? GetWritePermissionStatus() : GetReadPermissionStatus());
       return;
     case Outcome::kNoUserActivation:
       std::move(callback).Run(
           native_file_system_error::FromStatus(
-              blink::mojom::NativeFileSystemStatus::kSecurityError,
+              blink::mojom::FileSystemAccessStatus::kSecurityError,
               "User activation is required to request permissions."),
           writable ? GetWritePermissionStatus() : GetReadPermissionStatus());
       return;

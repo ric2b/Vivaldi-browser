@@ -71,6 +71,11 @@ void HoldingSpaceClientImpl::AddScreenshot(const base::FilePath& file_path) {
   GetHoldingSpaceKeyedService(profile_)->AddScreenshot(file_path);
 }
 
+void HoldingSpaceClientImpl::AddScreenRecording(
+    const base::FilePath& file_path) {
+  GetHoldingSpaceKeyedService(profile_)->AddScreenRecording(file_path);
+}
+
 void HoldingSpaceClientImpl::CopyImageToClipboard(const HoldingSpaceItem& item,
                                                   SuccessCallback callback) {
   holding_space_metrics::RecordItemAction(
@@ -177,6 +182,23 @@ void HoldingSpaceClientImpl::OpenItems(
   }
 }
 
+void HoldingSpaceClientImpl::OpenMyFiles(SuccessCallback callback) {
+  auto file_path = file_manager::util::GetMyFilesFolderForProfile(profile_);
+  if (file_path.empty()) {
+    std::move(callback).Run(/*success=*/false);
+    return;
+  }
+  file_manager::util::OpenItem(
+      profile_, file_path, platform_util::OPEN_FOLDER,
+      base::BindOnce(
+          [](SuccessCallback callback,
+             platform_util::OpenOperationResult result) {
+            const bool success = result == platform_util::OPEN_SUCCEEDED;
+            std::move(callback).Run(success);
+          },
+          std::move(callback)));
+}
+
 void HoldingSpaceClientImpl::ShowItemInFolder(const HoldingSpaceItem& item,
                                               SuccessCallback callback) {
   holding_space_metrics::RecordItemAction(
@@ -200,6 +222,8 @@ void HoldingSpaceClientImpl::ShowItemInFolder(const HoldingSpaceItem& item,
 
 void HoldingSpaceClientImpl::PinItems(
     const std::vector<const HoldingSpaceItem*>& items) {
+  std::vector<storage::FileSystemURL> file_system_urls;
+
   HoldingSpaceKeyedService* service = GetHoldingSpaceKeyedService(profile_);
   for (const HoldingSpaceItem* item : items) {
     const storage::FileSystemURL& file_system_url =
@@ -207,12 +231,17 @@ void HoldingSpaceClientImpl::PinItems(
             profile_, file_manager::kFileManagerAppId)
             ->CrackURL(item->file_system_url());
     if (!service->ContainsPinnedFile(file_system_url))
-      service->AddPinnedFile(file_system_url);
+      file_system_urls.push_back(file_system_url);
   }
+
+  if (!file_system_urls.empty())
+    service->AddPinnedFiles(file_system_urls);
 }
 
 void HoldingSpaceClientImpl::UnpinItems(
     const std::vector<const HoldingSpaceItem*>& items) {
+  std::vector<storage::FileSystemURL> file_system_urls;
+
   HoldingSpaceKeyedService* service = GetHoldingSpaceKeyedService(profile_);
   for (const HoldingSpaceItem* item : items) {
     const storage::FileSystemURL& file_system_url =
@@ -220,8 +249,11 @@ void HoldingSpaceClientImpl::UnpinItems(
             profile_, file_manager::kFileManagerAppId)
             ->CrackURL(item->file_system_url());
     if (service->ContainsPinnedFile(file_system_url))
-      service->RemovePinnedFile(file_system_url);
+      file_system_urls.push_back(file_system_url);
   }
+
+  if (!file_system_urls.empty())
+    service->RemovePinnedFiles(file_system_urls);
 }
 
 }  // namespace ash

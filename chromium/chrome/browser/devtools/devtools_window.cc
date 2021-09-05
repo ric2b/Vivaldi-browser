@@ -96,7 +96,8 @@ typedef std::vector<DevToolsWindow*> DevToolsWindows;
 base::LazyInstance<DevToolsWindows>::Leaky g_devtools_window_instances =
     LAZY_INSTANCE_INITIALIZER;
 
-base::LazyInstance<std::vector<base::Callback<void(DevToolsWindow*)>>>::Leaky
+base::LazyInstance<
+    std::vector<base::RepeatingCallback<void(DevToolsWindow*)>>>::Leaky
     g_creation_callbacks = LAZY_INSTANCE_INITIALIZER;
 
 static const char kKeyUpEventName[] = "keyup";
@@ -953,6 +954,10 @@ void DevToolsWindow::Show(const DevToolsToggleAction& action) {
   if (!browser_)
     CreateDevToolsBrowser();
 
+  // Ignore action if browser does not exist and could not be created.
+  if (!browser_)
+    return;
+
   RegisterModalDialogManager(browser_);
 
   if (should_show_window) {
@@ -1107,7 +1112,7 @@ DevToolsWindow::DevToolsWindow(FrontendType frontend_type,
   // so that it shows up in the task manager.
   task_manager::WebContentsTags::CreateForDevToolsContents(main_web_contents_);
 
-  std::vector<base::Callback<void(DevToolsWindow*)>> copy(
+  std::vector<base::RepeatingCallback<void(DevToolsWindow*)>> copy(
       g_creation_callbacks.Get());
   for (const auto& callback : copy)
     callback.Run(this);
@@ -1596,9 +1601,10 @@ void DevToolsWindow::SetEyeDropperActive(bool active) {
   if (!web_contents)
     return;
   if (active) {
-    eye_dropper_.reset(new DevToolsEyeDropper(
-        web_contents, base::Bind(&DevToolsWindow::ColorPickedInEyeDropper,
-                                 base::Unretained(this))));
+    eye_dropper_ = std::make_unique<DevToolsEyeDropper>(
+        web_contents,
+        base::BindRepeating(&DevToolsWindow::ColorPickedInEyeDropper,
+                            base::Unretained(this)));
   } else {
     eye_dropper_.reset();
   }
@@ -1730,6 +1736,10 @@ void DevToolsWindow::CreateDevToolsBrowser() {
     wp_prefs->SetKey(kDevToolsApp, std::move(dev_tools_defaults));
   }
 
+  if (Browser::GetCreationStatusForProfile(profile_) !=
+      Browser::CreationStatus::kOk) {
+    return;
+  }
   browser_ =
       Browser::Create(Browser::CreateParams::CreateForDevTools(profile_));
   browser_->tab_strip_model()->AddWebContents(

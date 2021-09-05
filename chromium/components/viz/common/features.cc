@@ -7,10 +7,12 @@
 #include "base/command_line.h"
 #include "base/system/sys_info.h"
 #include "build/chromecast_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/common/viz_utils.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_switches.h"
+#include "media/media_buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -18,14 +20,20 @@
 
 namespace features {
 
-const base::Feature kForcePreferredIntervalForVideo{
-    "ForcePreferredIntervalForVideo", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnableOverlayPrioritization {
+  "EnableOverlayPrioritization",
+#if BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Use the SkiaRenderer.
 const base::Feature kUseSkiaRenderer {
   "UseSkiaRenderer",
-#if defined(OS_WIN) || \
-    (defined(OS_LINUX) && !(defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)))
+#if defined(OS_WIN) || (defined(OS_LINUX) && !(BUILDFLAG(IS_CHROMEOS_ASH) || \
+                                               BUILDFLAG(IS_CHROMECAST)))
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -40,15 +48,8 @@ const base::Feature kDisableDeJelly{"DisableDeJelly",
 #if defined(OS_ANDROID)
 // When wide color gamut content from the web is encountered, promote our
 // display to wide color gamut if supported.
-  // Vivaldi - Note(nagamani@vivaldi.com) TODO: Remove Vivaldi changes if the feature
-  // is already disabled  by Chromium
-  #if defined(VIVALDI_BUILD)
-    const base::Feature kDynamicColorGamut{"DynamicColorGamut",
+const base::Feature kDynamicColorGamut{"DynamicColorGamut",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
-  #else
-    const base::Feature kDynamicColorGamut{"DynamicColorGamut",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
-  #endif
 #endif
 
 // Uses glClear to composite solid color quads whenever possible.
@@ -76,7 +77,13 @@ const base::Feature kUsePreferredIntervalForVideo{
 // Whether we should use the real buffers corresponding to overlay candidates in
 // order to do a pageflip test rather than allocating test buffers.
 const base::Feature kUseRealBuffersForPageFlipTest{
-    "UseRealBuffersForPageFlipTest", base::FEATURE_DISABLED_BY_DEFAULT};
+  "UseRealBuffersForPageFlipTest",
+#if BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 #if defined(OS_FUCHSIA)
 // Enables SkiaOutputDeviceBufferQueue instead of Vulkan swapchain on Fuchsia.
@@ -88,10 +95,6 @@ const base::Feature kUseSkiaOutputDeviceBufferQueue{
 const base::Feature kWebRtcLogCapturePipeline{
     "WebRtcLogCapturePipeline", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// The number of frames to wait before toggling to a lower frame rate.
-const base::FeatureParam<int> kNumOfFramesToToggleInterval{
-    &kUsePreferredIntervalForVideo, "NumOfFramesToToggleInterval", 6};
-
 #if defined(OS_WIN)
 // Enables swap chains to call SetPresentDuration to request DWM/OS to reduce
 // vsync.
@@ -99,8 +102,19 @@ const base::Feature kUseSetPresentDuration{"UseSetPresentDuration",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // OS_WIN
 
-bool IsForcePreferredIntervalForVideoEnabled() {
-  return base::FeatureList::IsEnabled(kForcePreferredIntervalForVideo);
+#if defined(USE_X11)
+// Uses X11 Present Extensions instead of the Vulkan swapchain for presenting.
+const base::Feature kUseX11Present{"UseX11Present",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+// Used to debug Android WebView Vulkan composite. Composite to an intermediate
+// buffer and draw the intermediate buffer to the secondary command buffer.
+const base::Feature kWebViewVulkanIntermediateBuffer{
+    "WebViewVulkanIntermediateBuffer", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsOverlayPrioritizationEnabled() {
+  return base::FeatureList::IsEnabled(kEnableOverlayPrioritization);
 }
 
 bool IsVizHitTestingDebugEnabled() {
@@ -121,7 +135,7 @@ bool IsUsingSkiaRenderer() {
   if (IsUsingVizForWebView())
     return true;
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // TODO(https://crbug.com/1145180): SkiaRenderer isn't supported on Chrome
   // OS boards that still use the legacy video decoder.
   auto* command_line = base::CommandLine::ForCurrentProcess();
@@ -139,7 +153,7 @@ bool IsDynamicColorGamutEnabled() {
   if (viz::AlwaysUseWideColorGamut())
     return false;
   auto* build_info = base::android::BuildInfo::GetInstance();
-  if (!build_info->is_at_least_q())
+  if (build_info->sdk_int() < base::android::SDK_VERSION_Q)
     return false;
   return base::FeatureList::IsEnabled(kDynamicColorGamut);
 }
@@ -168,12 +182,7 @@ bool IsUsingVizFrameSubmissionForWebView() {
 }
 
 bool IsUsingPreferredIntervalForVideo() {
-  return IsForcePreferredIntervalForVideoEnabled() ||
-         base::FeatureList::IsEnabled(kUsePreferredIntervalForVideo);
-}
-
-int NumOfFramesToToggleInterval() {
-  return kNumOfFramesToToggleInterval.Get();
+  return base::FeatureList::IsEnabled(kUsePreferredIntervalForVideo);
 }
 
 bool ShouldUseRealBuffersForPageFlipTest() {

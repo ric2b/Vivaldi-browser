@@ -21,22 +21,12 @@ html, body {
     width: 100%;
     z-index: 10;
     }
-#dashboard-nav .logo {
-    align-items: center;
-    display: inline-flex;
-    padding: 0 0.5em;
-    width: 1.25em;
-    }
-#dashboard-nav .logo > img {
-    width: 100%;
-    }
 .tabButton {
     border: 0;
     border-bottom: 3px solid var(--bg-1);
     border-top: 3px solid transparent;
     color: var(--dashboard-tab-ink);
     fill: var(--dashboard-tab-ink);
-    letter-spacing: 0.5px;
     padding: 0.5em 1.4em calc(0.5em - 3px);
     text-decoration: none;
     user-select: none;
@@ -82,11 +72,18 @@ iframe {
 body:not(.canUpdateShortcuts) .tabButton[data-pane="shortcuts.html"] {
     display: none;
     }
+body .tabButton[data-pane="no-dashboard.html"] {
+    display: none;
+    }
+body.noDashboard #dashboard-nav {
+    display: none;
+    }
 
 /* high dpi devices */
 :root.hidpi .tabButton {
     font-family: Metropolis, sans-serif;
     font-weight: 600;
+    letter-spacing: 0.5px;
     }
 
 /* hover-able devices */

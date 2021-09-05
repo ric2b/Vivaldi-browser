@@ -32,8 +32,11 @@ source_set("web") {
   ]
 
   deps = [
+    ":base_js",
+    ":common_js",
     ":core",
     ":js_resources",
+    ":message_js",
     ":navigation_resources",
     ":resources",
     ":threads",
@@ -263,11 +266,11 @@ source_set("ios_web_navigation_unittests") {
   ]
 
   sources = [
+    "navigation/crw_error_page_helper_unittest.mm",
     "navigation/crw_navigation_item_holder_unittest.mm",
     "navigation/crw_session_storage_unittest.mm",
     "navigation/crw_text_fragments_handler_unittest.mm",
     "navigation/crw_wk_navigation_states_unittest.mm",
-    "navigation/error_page_helper_unittest.mm",
     "navigation/error_retry_state_machine_unittest.mm",
     "navigation/navigation_context_impl_unittest.mm",
     "navigation/navigation_item_impl_unittest.mm",
@@ -277,7 +280,6 @@ source_set("ios_web_navigation_unittests") {
     "navigation/nscoder_util_unittest.mm",
     "navigation/session_storage_builder_unittest.mm",
     "navigation/wk_back_forward_list_item_holder_unittest.mm",
-    "navigation/wk_based_navigation_manager_impl_unittest.mm",
     "navigation/wk_navigation_action_policy_util_unittest.mm",
     "navigation/wk_navigation_action_util_unittest.mm",
     "navigation/wk_navigation_util_unittest.mm",
@@ -351,6 +353,7 @@ source_set("ios_web_web_state_unittests") {
     "//ios/testing:ocmock_support",
     "//ios/web",
     "//ios/web/common",
+    "//ios/web/common:uikit",
     "//ios/web/common:web_view_creation_util",
     "//ios/web/find_in_page",
     "//ios/web/js_messaging",
@@ -414,7 +417,6 @@ source_set("ios_web_web_state_js_unittests") {
     "//ios/web/find_in_page",
     "//ios/web/js_messaging",
     "//ios/web/public",
-    "//ios/web/public/deprecated",
     "//ios/web/public/js_messaging",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
@@ -433,7 +435,6 @@ source_set("ios_web_web_state_js_unittests") {
   sources = [
     "web_state/js/common_js_unittest.mm",
     "web_state/js/context_menu_js_unittest.mm",
-    "web_state/js/crw_js_injection_manager_unittest.mm",
     "web_state/js/find_in_page_js_unittest.mm",
     "web_state/js/message_js_unittest.mm",
   ]
@@ -451,6 +452,7 @@ source_set("ios_web_web_state_ui_unittests") {
     "//ios/net",
     "//ios/testing:ocmock_support",
     "//ios/web/common",
+    "//ios/web/common:uikit",
     "//ios/web/js_messaging",
     "//ios/web/navigation",
     "//ios/web/navigation:block_universal_links_buildflags",
@@ -458,6 +460,7 @@ source_set("ios_web_web_state_ui_unittests") {
     "//ios/web/public",
     "//ios/web/public/deprecated",
     "//ios/web/public/deprecated:test_doubles",
+    "//ios/web/public/js_messaging",
     "//ios/web/public/session",
     "//ios/web/public/test",
     "//ios/web/security",
@@ -476,11 +479,11 @@ source_set("ios_web_web_state_ui_unittests") {
   ]
 
   sources = [
+    "web_state/ui/crw_html_element_fetch_request_unittest.mm",
     "web_state/ui/crw_web_controller_unittest.mm",
     "web_state/ui/crw_web_view_content_view_unittest.mm",
     "web_state/ui/crw_web_view_proxy_impl_unittest.mm",
     "web_state/ui/crw_web_view_scroll_view_proxy_unittest.mm",
-    "web_state/ui/html_element_fetch_request_unittest.mm",
     "web_state/ui/web_view_js_utils_unittest.mm",
     "web_state/ui/wk_content_rule_list_util_unittest.mm",
     "web_state/ui/wk_web_view_configuration_provider_unittest.mm",
@@ -525,6 +528,7 @@ test("ios_web_inttests") {
     ":web",
     "//base/test:test_support",
     "//ios/net",
+    "//ios/testing:block_swizzler",
     "//ios/testing:embedded_test_server_support",
     "//ios/testing:http_server_bundle_data",
     "//ios/web:resources_grit",
@@ -536,8 +540,6 @@ test("ios_web_inttests") {
     "//ios/web/navigation",
     "//ios/web/navigation:core",
     "//ios/web/navigation:wk_navigation_util",
-    "//ios/web/public/deprecated",
-    "//ios/web/public/deprecated:test_doubles",
     "//ios/web/public/find_in_page",
     "//ios/web/public/js_messaging",
     "//ios/web/public/security",
@@ -552,6 +554,8 @@ test("ios_web_inttests") {
     "//ios/web/test:test_constants",
     "//ios/web/test:test_support",
     "//ios/web/web_state",
+    "//ios/web/web_state:context_menu",
+    "//ios/web/web_state/ui:crw_context_menu_controller",
     "//mojo/core/embedder",
     "//net:test_support",
     "//services/network/public/cpp",
@@ -563,8 +567,8 @@ test("ios_web_inttests") {
     "browser_state_web_view_partition_inttest.mm",
     "cookie_blocking_inttest.mm",
     "find_in_page/find_in_page_manager_inttest.mm",
+    "navigation/crw_error_page_helper_inttest.mm",
     "navigation/crw_wk_navigation_handler_inttest.mm",
-    "navigation/error_page_helper_inttest.mm",
     "navigation/history_state_operations_inttest.mm",
     "navigation/meta_tag_inttest.mm",
     "navigation/window_location_inttest.mm",
@@ -576,6 +580,7 @@ test("ios_web_inttests") {
     "web_state/error_page_inttest.mm",
     "web_state/http_auth_inttest.mm",
     "web_state/keep_render_process_alive_inttest.mm",
+    "web_state/ui/crw_context_menu_element_fetcher_inttest.mm",
     "web_state/web_state_observer_inttest.mm",
     "webui/web_ui_inttest.mm",
     "webui/web_ui_mojo_inttest.mm",
@@ -608,11 +613,8 @@ js_compile_bundle("all_frames_web_bundle") {
   closure_entry_point = "__crWeb.allFramesWebBundle"
 
   sources = [
-    "js_messaging/resources/message.js",
     "web_state/js/resources/all_frames_context_menu.js",
     "web_state/js/resources/all_frames_web_bundle.js",
-    "web_state/js/resources/base.js",
-    "web_state/js/resources/common.js",
     "web_state/js/resources/cookie.js",
     "web_state/js/resources/find_in_page.js",
     "web_state/js/resources/share_workaround.js",
@@ -640,12 +642,39 @@ js_compile_bundle("main_frame_document_end_web_bundle") {
   ]
 }
 
+js_compile_bundle("base_js") {
+  visibility = [ ":web" ]
+  closure_entry_point = "__crWeb.base"
+
+  sources = [ "web_state/js/resources/base.js" ]
+}
+
+js_compile_bundle("common_js") {
+  visibility = [ ":web" ]
+  closure_entry_point = "__crWeb.common"
+
+  sources = [ "web_state/js/resources/common.js" ]
+}
+
+js_compile_bundle("message_js") {
+  visibility = [ ":web" ]
+  closure_entry_point = "__crWeb.message"
+
+  sources = [ "js_messaging/resources/message.js" ]
+}
+
 js_compile_checked("js_resources") {
   public_deps = [
     ":all_frames_document_end_web_bundle",
     ":all_frames_web_bundle",
     ":main_frame_document_end_web_bundle",
     ":main_frame_web_bundle",
+  ]
+
+  js_modules = [
+    "//ios/web/web_state/js/resources/base.js",
+    "//ios/web/web_state/js/resources/common.js",
+    "//ios/web/js_messaging/resources/message.js",
   ]
 
   sources = [ "js_messaging/resources/window_id.js" ]

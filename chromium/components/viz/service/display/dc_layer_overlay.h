@@ -100,7 +100,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
                        const FilterOperationsMap& render_pass_backdrop_filters,
                        AggregatedRenderPassList* render_passes,
                        gfx::Rect* damage_rect,
-                       SurfaceDamageRectList* surface_damage_rect_list,
+                       SurfaceDamageRectList surface_damage_rect_list,
                        DCLayerOverlayList* dc_layer_overlays);
   void ClearOverlayState();
   // This is the damage contribution due to previous frame's overlays which can
@@ -161,7 +161,6 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
 
   bool has_overlay_support_;
   const bool use_overlay_damage_list_;
-  // TODO(magchen@): We are going to support more than one YUV overlay.
   const int allowed_yuv_overlay_count_;
   int processed_yuv_overlay_count_ = 0;
 
@@ -186,7 +185,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlayProcessor
   };
   std::vector<OverlayRect> previous_frame_overlay_rects_;
   std::vector<OverlayRect> current_frame_overlay_rects_;
-  SurfaceDamageRectList* surface_damage_rect_list_;
+  SurfaceDamageRectList surface_damage_rect_list_;
 
   scoped_refptr<base::SingleThreadTaskRunner> viz_task_runner_;
 

@@ -23,6 +23,7 @@
 #include "ios/chrome/browser/sync/sync_observer_bridge.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_account_item.h"
 #import "ios/chrome/browser/ui/authentication/resized_avatar_cache.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
 #import "ios/chrome/browser/ui/settings/cells/account_sign_in_item.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
@@ -30,6 +31,7 @@
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_command_handler.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/sync_error_settings_command_handler.h"
+#import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/ui/settings/utils/observable_boolean.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
@@ -39,9 +41,12 @@
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
+#import "ios/public/provider/chrome/browser/signin/signin_resources_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -91,6 +96,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ImproveChromeItemType,
   BetterSearchAndBrowsingItemType,
   ItemTypePasswordLeakCheckSwitch,
+  SignInDisabledItemType,
 };
 
 // Enterprise icon.
@@ -264,6 +270,10 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
 // Creates, removes or updates the identity section as needed. And notifies the
 // consumer.
 - (void)updateIdentitySectionAndNotifyConsumer {
+  // Do not display the identity section in Google Services for MICE.
+  if (base::FeatureList::IsEnabled(signin::kMobileIdentityConsistency)) {
+    return;
+  }
   TableViewModel* model = self.consumer.tableViewModel;
   BOOL hasIdentitySection =
       [model hasSectionForSectionIdentifier:IdentitySectionIdentifier];
@@ -360,6 +370,29 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
 
   if (hasAccountSignInItem)
     return NO;
+
+  if (!signin::IsSigninAllowed(self.userPrefService)) {
+    // Sign-in is disabled by policy.
+    TableViewInfoButtonItem* signinDisabledItem =
+        [[TableViewInfoButtonItem alloc] initWithType:SignInDisabledItemType];
+    signinDisabledItem.text =
+        l10n_util::GetNSString(IDS_IOS_SIGN_IN_TO_CHROME_SETTING_TITLE);
+    signinDisabledItem.detailText =
+        l10n_util::GetNSString(IDS_IOS_SETTINGS_SIGNIN_DISABLED);
+    signinDisabledItem.accessibilityHint = l10n_util::GetNSString(
+        IDS_IOS_TOGGLE_SETTING_MANAGED_ACCESSIBILITY_HINT);
+    signinDisabledItem.image =
+        CircularImageFromImage(ios::GetChromeBrowserProvider()
+                                   ->GetSigninResourcesProvider()
+                                   ->GetDefaultAvatar(),
+                               kAccountProfilePhotoDimension);
+    signinDisabledItem.textColor = [UIColor colorNamed:kTextSecondaryColor];
+    signinDisabledItem.tintColor = [UIColor colorNamed:kGrey300Color];
+    [model addItem:signinDisabledItem
+        toSectionWithIdentifier:SyncSectionIdentifier];
+    return YES;
+  }
+
   AccountSignInItem* accountSignInItem =
       [[AccountSignInItem alloc] initWithType:SignInItemType];
   accountSignInItem.detailText =
@@ -569,6 +602,7 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
       case SyncSettingsNotCofirmedErrorItemType:
       case SyncChromeDataItemType:
       case ManageSyncItemType:
+      case SignInDisabledItemType:
         NOTREACHED();
         break;
     }
@@ -810,10 +844,10 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
 - (void)googleServicesSettingsViewControllerLoadModel:
     (GoogleServicesSettingsViewController*)controller {
   DCHECK_EQ(self.consumer, controller);
-  [self loadIdentitySection];
   // For the MICE experiment Chrome will display the Sync section within "Manage
   // Sync Settings".
   if (!base::FeatureList::IsEnabled(signin::kMobileIdentityConsistency)) {
+    [self loadIdentitySection];
     [self loadSyncSection];
   }
   [self loadNonPersonalizedSection];
@@ -883,6 +917,7 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
     case SyncDisabledByAdministratorErrorItemType:
     case SyncSettingsNotCofirmedErrorItemType:
     case ManageSyncItemType:
+    case SignInDisabledItemType:
       NOTREACHED();
       break;
   }
@@ -895,11 +930,7 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
       [self.commandHandler openAccountSettings];
       break;
     case ManageGoogleAccountItemType:
-      if (base::FeatureList::IsEnabled(kEnableMyGoogle)) {
-        [self.commandHandler openManageGoogleAccount];
-      } else {
-        [self.commandHandler openManageGoogleAccountWebPage];
-      }
+      [self.commandHandler openManageGoogleAccount];
       break;
     case SignInItemType:
       [self.commandHandler showSignIn];
@@ -929,6 +960,7 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
     case ImproveChromeItemType:
     case BetterSearchAndBrowsingItemType:
     case SyncChromeDataItemType:
+    case SignInDisabledItemType:
       break;
   }
 }

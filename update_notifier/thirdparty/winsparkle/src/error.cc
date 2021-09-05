@@ -25,7 +25,10 @@
 
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
 
-#include <windows.h>
+#include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
+
+#include <Windows.h>
 #include <string>
 
 namespace winsparkle {
@@ -42,24 +45,25 @@ std::string GetWin32ErrorMessage(const char* api_function,
   if (!message.empty()) {
     message += ": ";
   }
-  message += "Windows reported the error";
+  message += "Windows reported the error ";
+  message += std::to_string(win32_error_code);
   if (api_function) {
     message += " from ";
     message += api_function;
     message += "()";
   }
 
-  LPSTR buf;
-  bool ok = FormatMessageA(
-                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                0,  // source - not set
-                win32_error_code,
-                0,  // language - use best
-                (LPSTR)&buf, 0, NULL) != 0;
-
-  if (ok) {
+  // This is not a user-facing message so always use english.
+  DWORD lang_id = MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US);
+  LPWSTR buf = nullptr;
+  DWORD n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                               FORMAT_MESSAGE_FROM_SYSTEM |
+                               FORMAT_MESSAGE_IGNORE_INSERTS,
+                           nullptr, win32_error_code, lang_id,
+                           reinterpret_cast<LPWSTR>(&buf), 0, nullptr);
+  if (n != 0) {
     message += " - ";
-    message += buf;
+    message += base::UTF16ToUTF8(base::StringPiece16(buf, n));
     LocalFree(buf);
   }
 
@@ -74,16 +78,8 @@ std::string LastWin32Error(const char* api_function, std::string message) {
                               std::move(message));
 }
 
-/*--------------------------------------------------------------------------*
-                                 Logging
- *--------------------------------------------------------------------------*/
-
-void LogError(const char* msg) {
-  std::string err("WinSparkle: ");
-  err.append(msg);
-  err.append("\n");
-
-  OutputDebugStringA(err.c_str());
+std::string Error::log_message() const {
+  return "error_kind=" + std::to_string(kind()) + " " + message();
 }
 
 }  // namespace winsparkle

@@ -19,6 +19,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
@@ -183,7 +184,7 @@ struct VideoCaptureImpl::BufferContext
       sii->UpdateSharedImage(buffer_context->gmb_resources_->release_sync_token,
                              buffer_context->gmb_resources_->mailbox);
     }
-    gpu::SyncToken sync_token = sii->GenUnverifiedSyncToken();
+    gpu::SyncToken sync_token = sii->GenVerifiedSyncToken();
     CHECK(!buffer_context->gmb_resources_->mailbox.IsZero());
     CHECK(buffer_context->gmb_resources_->mailbox.IsSharedImage());
     gpu::MailboxHolder mailbox_holder_array[media::VideoFrame::kMaxPlanes];
@@ -196,8 +197,8 @@ struct VideoCaptureImpl::BufferContext
         mailbox_holder_array,
         base::BindOnce(&BufferContext::MailboxHolderReleased, buffer_context),
         info->timestamp);
-    frame->metadata()->allow_overlay = true;
-    frame->metadata()->read_lock_fences_enabled = true;
+    frame->metadata().allow_overlay = true;
+    frame->metadata().read_lock_fences_enabled = true;
 
     std::move(on_texture_bound)
         .Run(std::move(info), std::move(frame), std::move(buffer_context));
@@ -502,6 +503,7 @@ void VideoCaptureImpl::OnStateChanged(media::mojom::VideoCaptureState state) {
       // a frame refresh to start the video call with.
       // Capture device will make a decision if it should refresh a frame.
       RequestRefreshFrame();
+      RecordStartOutcomeUMA(VideoCaptureStartOutcome::kStarted);
       break;
     case media::mojom::VideoCaptureState::STOPPED:
       OnLog("VideoCaptureImpl changing state to VIDEO_CAPTURE_STATE_STOPPED");
@@ -527,6 +529,10 @@ void VideoCaptureImpl::OnStateChanged(media::mojom::VideoCaptureState state) {
         client.second.state_update_cb.Run(blink::VIDEO_CAPTURE_STATE_ERROR);
       clients_.clear();
       state_ = VIDEO_CAPTURE_STATE_ERROR;
+
+      RecordStartOutcomeUMA(start_timedout_
+                                ? VideoCaptureStartOutcome::kTimedout
+                                : VideoCaptureStartOutcome::kFailed);
       break;
     case media::mojom::VideoCaptureState::ENDED:
       OnLog("VideoCaptureImpl changing state to VIDEO_CAPTURE_STATE_ENDED");
@@ -752,8 +758,7 @@ void VideoCaptureImpl::OnVideoFrameReady(
   if (info->color_space.has_value() && info->color_space->IsValid())
     frame->set_color_space(info->color_space.value());
 
-  media::VideoFrameMetadata metadata = info->metadata;
-  frame->metadata()->MergeMetadataFrom(&metadata);
+  frame->metadata().MergeMetadataFrom(info->metadata);
 
   // TODO(qiangchen): Dive into the full code path to let frame metadata hold
   // reference time rather than using an extra parameter.
@@ -849,6 +854,9 @@ void VideoCaptureImpl::StartCaptureInternal() {
                            base::BindOnce(&VideoCaptureImpl::OnStartTimedout,
                                           base::Unretained(this)));
   }
+  start_timedout_ = false;
+  start_outcome_reported_ = false;
+  base::UmaHistogramBoolean("Media.VideoCapture.Start", true);
 
   GetVideoCaptureHost()->Start(device_id_, session_id_, params_,
                                observer_receiver_.BindNewPipeAndPassRemote());
@@ -857,6 +865,9 @@ void VideoCaptureImpl::StartCaptureInternal() {
 void VideoCaptureImpl::OnStartTimedout() {
   DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
   OnLog("VideoCaptureImpl timed out during starting");
+
+  start_timedout_ = true;
+
   OnStateChanged(media::mojom::VideoCaptureState::FAILED);
 }
 
@@ -894,6 +905,15 @@ media::mojom::blink::VideoCaptureHost* VideoCaptureImpl::GetVideoCaptureHost() {
   if (!video_capture_host_.is_bound())
     video_capture_host_.Bind(std::move(pending_video_capture_host_));
   return video_capture_host_.get();
+}
+
+void VideoCaptureImpl::RecordStartOutcomeUMA(VideoCaptureStartOutcome outcome) {
+  // Record the success or failure of starting only the first time we transition
+  // into such a state, not eg when resuming after pausing.
+  if (!start_outcome_reported_) {
+    base::UmaHistogramEnumeration("Media.VideoCapture.StartOutcome", outcome);
+    start_outcome_reported_ = true;
+  }
 }
 
 // static

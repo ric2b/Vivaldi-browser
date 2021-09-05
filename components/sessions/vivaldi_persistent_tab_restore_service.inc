@@ -56,7 +56,7 @@
   }
 
 void VivaldiScheduleTabCommands(
-    SnapshottingCommandStorageManager* command_storage_manager,
+    CommandStorageManager* command_storage_manager,
     const TabRestoreService::Tab& tab) {
   if (!tab.ext_data.empty()) {
     command_storage_manager->ScheduleCommand(
@@ -73,7 +73,7 @@ void VivaldiScheduleTabCommands(
 }
 
 void VivaldiWindowsScheduleExtCommand(
-    SnapshottingCommandStorageManager* command_storage_manager,
+    CommandStorageManager* command_storage_manager,
     const TabRestoreService::Window& window) {
   if (!window.ext_data.empty()) {
     command_storage_manager->ScheduleCommand(

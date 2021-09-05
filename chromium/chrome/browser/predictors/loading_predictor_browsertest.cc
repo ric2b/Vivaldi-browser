@@ -41,7 +41,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/no_state_prefetch/browser/prerender_handle.h"
 #include "components/no_state_prefetch/browser/prerender_manager.h"
-#include "components/optimization_guide/optimization_guide_features.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -800,10 +800,6 @@ class TestPrerenderStopObserver : public prerender::PrerenderHandle::Observer {
     }
   }
 
-  void OnPrerenderStart(prerender::PrerenderHandle* handle) override {}
-  void OnPrerenderStopLoading(prerender::PrerenderHandle* handle) override {}
-  void OnPrerenderDomContentLoaded(
-      prerender::PrerenderHandle* handle) override {}
   void OnPrerenderNetworkBytesChanged(
       prerender::PrerenderHandle* handle) override {}
 
@@ -1665,6 +1661,12 @@ class LoadingPredictorBrowserTestWithOptimizationGuide
     }
   }
 
+  void SetUpCommandLine(base::CommandLine* cmd) override {
+    LoadingPredictorBrowserTest::SetUpCommandLine(cmd);
+    cmd->AppendSwitch(
+        switches::kLoadingPredictorOptimizationGuideAllowNonGwsForTesting);
+  }
+
   bool IsLocalPredictionEnabled() const { return std::get<0>(GetParam()); }
 
   bool ShouldUseOptimizationGuidePredictions() const {
@@ -2027,6 +2029,8 @@ class LoadingPredictorPrefetchBrowserTest
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    LoadingPredictorBrowserTestWithOptimizationGuide::SetUpCommandLine(
+        command_line);
     command_line->AppendSwitch(
         switches::kLoadingPredictorAllowLocalRequestForTesting);
   }

@@ -11,8 +11,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/time/clock.h"
-#include "base/time/tick_clock.h"
+#include "base/time/time.h"
 #include "components/feed/core/common/pref_names.h"
 #include "components/feed/core/proto/v2/store.pb.h"
 #include "components/feed/core/proto/v2/ui.pb.h"
@@ -143,12 +142,11 @@ void FeedStream::Metadata::SetSessionId(std::string token,
 }
 
 void FeedStream::Metadata::MaybeUpdateSessionId(
-    base::Optional<std::string> token,
-    const base::Clock* clock) {
+    base::Optional<std::string> token) {
   if (token && metadata_.session_id().token() != *token) {
     base::Time expiry_time =
         token->empty() ? base::Time()
-                       : clock->Now() + GetFeedConfig().session_id_max_age;
+                       : base::Time::Now() + GetFeedConfig().session_id_max_age;
     SetSessionId(*token, expiry_time);
   }
 }
@@ -170,10 +168,9 @@ FeedStream::FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
                        FeedNetwork* feed_network,
                        ImageFetcher* image_fetcher,
                        FeedStore* feed_store,
+                       PersistentKeyValueStoreImpl* persistent_key_value_store,
                        offline_pages::PrefetchService* prefetch_service,
                        offline_pages::OfflinePageModel* offline_page_model,
-                       const base::Clock* clock,
-                       const base::TickClock* tick_clock,
                        const ChromeInfo& chrome_info)
     : prefetch_service_(prefetch_service),
       refresh_task_scheduler_(refresh_task_scheduler),
@@ -183,11 +180,10 @@ FeedStream::FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
       feed_network_(feed_network),
       image_fetcher_(image_fetcher),
       store_(feed_store),
-      clock_(clock),
-      tick_clock_(tick_clock),
+      persistent_key_value_store_(persistent_key_value_store),
       chrome_info_(chrome_info),
       task_queue_(this),
-      request_throttler_(profile_prefs, clock),
+      request_throttler_(profile_prefs),
       metadata_(feed_store),
       notice_card_tracker_(profile_prefs) {
   static WireResponseTranslator default_translator;
@@ -241,9 +237,10 @@ void FeedStream::TriggerStreamLoad() {
 
 void FeedStream::InitialStreamLoadComplete(LoadStreamTask::Result result) {
   PopulateDebugStreamData(result, *profile_prefs_);
-  metrics_reporter_->OnLoadStream(result.load_from_store_status,
-                                  result.final_status,
-                                  std::move(result.latencies));
+  metrics_reporter_->OnLoadStream(
+      result.load_from_store_status, result.final_status,
+      result.loaded_new_content_from_network, result.stored_content_age,
+      std::move(result.latencies));
   UpdateIsActivityLoggingEnabled();
 
   model_loading_in_progress_ = false;
@@ -416,7 +413,7 @@ EphemeralChangeId FeedStream::CreateEphemeralChangeFromPackedData(
     base::StringPiece data) {
   feedpacking::DismissData msg;
   msg.ParseFromArray(data.data(), data.size());
-  return CreateEphemeralChange(TranslateDismissData(clock_->Now(), msg));
+  return CreateEphemeralChange(TranslateDismissData(base::Time::Now(), msg));
 }
 
 bool FeedStream::CommitEphemeralChange(EphemeralChangeId id) {
@@ -515,7 +512,7 @@ base::Time FeedStream::GetLastFetchTime() {
   const base::Time fetch_time =
       profile_prefs_->GetTime(feed::prefs::kLastFetchAttemptTime);
   // Ignore impossible time values.
-  if (fetch_time > clock_->Now())
+  if (fetch_time > base::Time::Now())
     return base::Time();
   return fetch_time;
 }
@@ -579,6 +576,15 @@ LoadStreamStatus FeedStream::ShouldAttemptLoad(bool model_loading) {
   return LoadStreamStatus::kNoStatus;
 }
 
+bool FeedStream::MissedLastRefresh() {
+  RequestSchedule schedule = prefs::GetRequestSchedule(*profile_prefs_);
+  if (schedule.refresh_offsets.empty())
+    return false;
+  base::Time scheduled_time =
+      schedule.anchor_time + schedule.refresh_offsets[0];
+  return scheduled_time < base::Time::Now();
+}
+
 LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest(bool is_load_more,
                                                         bool consume_quota) {
   if (!is_load_more) {
@@ -637,7 +643,7 @@ RequestMetadata FeedStream::GetRequestMetadata(bool is_for_next_page) const {
     if (delegate_->IsSignedIn() && !ShouldForceSignedOutFeedQueryRequest()) {
       result.client_instance_id = GetClientInstanceId();
     } else if (!GetMetadata()->GetSessionIdToken().empty() &&
-               GetMetadata()->GetSessionIdExpiryTime() > clock_->Now()) {
+               GetMetadata()->GetSessionIdExpiryTime() > base::Time::Now()) {
       result.session_id = GetMetadata()->GetSessionIdToken();
     }
   }
@@ -656,7 +662,7 @@ void FeedStream::OnAllHistoryDeleted() {
   // Give sync the time to propagate the changes in history to the server.
   // In the interim, only send signed-out FeedQuery requests.
   signed_out_refreshes_until_ =
-      tick_clock_->NowTicks() + kSuppressRefreshDuration;
+      base::TimeTicks::Now() + kSuppressRefreshDuration;
   ClearAll();
 }
 
@@ -716,7 +722,7 @@ void FeedStream::BackgroundRefreshComplete(LoadStreamTask::Result result) {
 }
 
 void FeedStream::ClearAll() {
-  metrics_reporter_->OnClearAll(clock_->Now() - GetLastFetchTime());
+  metrics_reporter_->OnClearAll(base::Time::Now() - GetLastFetchTime());
 
   task_queue_.AddTask(std::make_unique<ClearAllTask>(this));
 }
@@ -731,6 +737,10 @@ ImageFetchId FeedStream::FetchImage(
     const GURL& url,
     base::OnceCallback<void(NetworkResponse)> callback) {
   return image_fetcher_->Fetch(url, std::move(callback));
+}
+
+PersistentKeyValueStoreImpl* FeedStream::GetPersistentKeyValueStore() {
+  return persistent_key_value_store_;
 }
 
 void FeedStream::CancelImageFetch(ImageFetchId id) {
@@ -760,7 +770,7 @@ void FeedStream::LoadModel(std::unique_ptr<StreamModel> model) {
 }
 
 void FeedStream::SetRequestSchedule(RequestSchedule schedule) {
-  const base::Time now = clock_->Now();
+  const base::Time now = base::Time::Now();
   base::Time run_time = NextScheduledRequestTime(now, &schedule);
   if (!run_time.is_null()) {
     refresh_task_scheduler_->EnsureScheduled(run_time - now);

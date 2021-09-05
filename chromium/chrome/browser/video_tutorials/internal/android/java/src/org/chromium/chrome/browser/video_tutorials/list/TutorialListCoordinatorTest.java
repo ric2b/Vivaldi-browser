@@ -12,12 +12,10 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.support.test.rule.ActivityTestRule;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
 
-import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.action.ViewActions;
 import androidx.test.filters.SmallTest;
 
@@ -30,6 +28,7 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.Callback;
+import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.chrome.browser.video_tutorials.R;
 import org.chromium.chrome.browser.video_tutorials.Tutorial;
 import org.chromium.chrome.browser.video_tutorials.VideoTutorialUtils;
@@ -45,8 +44,8 @@ import org.chromium.ui.test.util.DummyUiActivity;
 @RunWith(ChromeJUnit4ClassRunner.class)
 public class TutorialListCoordinatorTest {
     @Rule
-    public ActivityTestRule<DummyUiActivity> mActivityTestRule =
-            new ActivityTestRule<>(DummyUiActivity.class);
+    public BaseActivityTestRule<DummyUiActivity> mActivityTestRule =
+            new BaseActivityTestRule<>(DummyUiActivity.class);
 
     private Activity mActivity;
     private View mContentView;
@@ -59,6 +58,7 @@ public class TutorialListCoordinatorTest {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
+        mActivityTestRule.launchActivity(null);
         mActivity = mActivityTestRule.getActivity();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             FrameLayout parentView = new FrameLayout(mActivity);
@@ -72,8 +72,8 @@ public class TutorialListCoordinatorTest {
                     org.chromium.chrome.browser.video_tutorials.R.drawable.btn_close);
             TestImageFetcher imageFetcher = new TestImageFetcher(testImage);
             mCoordinator = new TutorialListCoordinatorImpl(
-                    (RecyclerView) mContentView.findViewById(R.id.recycler_view),
-                    mTestVideoTutorialService, imageFetcher, mClickCallback);
+                    mContentView.findViewById(R.id.video_tutorial_list), mTestVideoTutorialService,
+                    imageFetcher, mClickCallback);
         });
     }
 

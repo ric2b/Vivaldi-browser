@@ -9,15 +9,15 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
-#include "chrome/browser/engagement/site_engagement_score.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
-#include "chrome/browser/optimization_guide/optimization_guide_permissions_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/optimization_guide/hints_processing_util.h"
-#include "components/optimization_guide/optimization_guide_features.h"
-#include "components/optimization_guide/optimization_guide_prefs.h"
+#include "components/optimization_guide/core/hints_processing_util.h"
+#include "components/optimization_guide/core/optimization_guide_features.h"
+#include "components/optimization_guide/core/optimization_guide_permissions_util.h"
+#include "components/optimization_guide/core/optimization_guide_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/site_engagement/content/site_engagement_score.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "components/site_engagement/core/mojom/site_engagement_details.mojom.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -100,8 +100,9 @@ void ResetTopHostBlacklistState(PrefService* pref_service) {
 std::unique_ptr<OptimizationGuideTopHostProvider>
 OptimizationGuideTopHostProvider::CreateIfAllowed(
     content::BrowserContext* browser_context) {
-  if (IsUserPermittedToFetchFromRemoteOptimizationGuide(
-          Profile::FromBrowserContext(browser_context))) {
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  if (optimization_guide::IsUserPermittedToFetchFromRemoteOptimizationGuide(
+          profile->IsOffTheRecord(), profile->GetPrefs())) {
     return base::WrapUnique(new OptimizationGuideTopHostProvider(
         browser_context, base::DefaultClock::GetInstance()));
   }
@@ -132,18 +133,18 @@ void OptimizationGuideTopHostProvider::
              ->empty());
 
   Profile* profile = Profile::FromBrowserContext(browser_context_);
-  SiteEngagementService* engagement_service =
-      SiteEngagementService::Get(profile);
+  auto* engagement_service =
+      site_engagement::SiteEngagementService::Get(profile);
 
   std::unique_ptr<base::DictionaryValue> top_host_blacklist =
       std::make_unique<base::DictionaryValue>();
 
-  std::vector<mojom::SiteEngagementDetails> engagement_details =
-      engagement_service->GetAllDetails();
+  std::vector<site_engagement::mojom::SiteEngagementDetails>
+      engagement_details = engagement_service->GetAllDetails();
 
   std::sort(engagement_details.begin(), engagement_details.end(),
-            [](const mojom::SiteEngagementDetails& lhs,
-               const mojom::SiteEngagementDetails& rhs) {
+            [](const site_engagement::mojom::SiteEngagementDetails& lhs,
+               const site_engagement::mojom::SiteEngagementDetails& rhs) {
               return lhs.total_score > rhs.total_score;
             });
 
@@ -203,10 +204,16 @@ void OptimizationGuideTopHostProvider::MaybeUpdateTopHostBlacklist(
 
   Profile* profile = Profile::FromBrowserContext(
       navigation_handle->GetWebContents()->GetBrowserContext());
+
+  // Do not update the top host list if the profile is off the record.
+  if (profile->IsOffTheRecord())
+    return;
+
   PrefService* pref_service = profile->GetPrefs();
 
   bool is_user_permitted_to_fetch_hints =
-      IsUserPermittedToFetchFromRemoteOptimizationGuide(profile);
+      optimization_guide::IsUserPermittedToFetchFromRemoteOptimizationGuide(
+          profile->IsOffTheRecord(), pref_service);
   if (!is_user_permitted_to_fetch_hints) {
     // User toggled state during the session. Make sure the blacklist is
     // cleared.
@@ -248,7 +255,8 @@ std::vector<std::string> OptimizationGuideTopHostProvider::GetTopHosts() {
   Profile* profile = Profile::FromBrowserContext(browser_context_);
 
   // The user toggled state during the session. Return empty.
-  if (!IsUserPermittedToFetchFromRemoteOptimizationGuide(profile))
+  if (!optimization_guide::IsUserPermittedToFetchFromRemoteOptimizationGuide(
+          profile->IsOffTheRecord(), pref_service_))
     return std::vector<std::string>();
 
   // It's possible that the blacklist is initialized but
@@ -275,8 +283,8 @@ std::vector<std::string> OptimizationGuideTopHostProvider::GetTopHosts() {
   }
 
   // Create SiteEngagementService to request site engagement scores.
-  SiteEngagementService* engagement_service =
-      SiteEngagementService::Get(profile);
+  auto* engagement_service =
+      site_engagement::SiteEngagementService::Get(profile);
 
   const base::DictionaryValue* top_host_blacklist = nullptr;
   if (GetCurrentBlacklistState(pref_service_) !=
@@ -303,12 +311,12 @@ std::vector<std::string> OptimizationGuideTopHostProvider::GetTopHosts() {
   // size. Currently utilizes just the first |max_sites| entries. Only HTTPS
   // schemed hosts are included. Hosts are filtered by the blacklist that is
   // populated when DataSaver is first enabled.
-  std::vector<mojom::SiteEngagementDetails> engagement_details =
-      engagement_service->GetAllDetails();
+  std::vector<site_engagement::mojom::SiteEngagementDetails>
+      engagement_details = engagement_service->GetAllDetails();
 
   std::sort(engagement_details.begin(), engagement_details.end(),
-            [](const mojom::SiteEngagementDetails& lhs,
-               const mojom::SiteEngagementDetails& rhs) {
+            [](const site_engagement::mojom::SiteEngagementDetails& lhs,
+               const site_engagement::mojom::SiteEngagementDetails& rhs) {
               return lhs.total_score > rhs.total_score;
             });
 

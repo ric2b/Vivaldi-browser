@@ -16,6 +16,7 @@ struct LocaleInfo;
 class SystemTray;
 enum class LoginStatus;
 enum class NotificationStyle;
+enum class UpdateType;
 }  // namespace ash
 
 // Handles method calls delegated back to chrome from ash. Also notifies ash of
@@ -31,15 +32,15 @@ class SystemTrayClient : public ash::SystemTrayClient,
 
   static SystemTrayClient* Get();
 
-  // Shows an update icon for an Adobe Flash update and forces a device reboot
-  // when the update is applied.
-  void SetFlashUpdateAvailable();
-
   // Specifies if notification is recommended or required by administrator and
   // triggers the notification to be shown with the given body and title.
+  // Only applies to OS updates.
   void SetUpdateNotificationState(ash::NotificationStyle style,
                                   const base::string16& notification_title,
                                   const base::string16& notification_body);
+
+  // Shows a notification that a Lacros browser update is available.
+  void SetLacrosUpdateAvailable();
 
   // Wrappers around ash::mojom::SystemTray interface:
   void SetPrimaryTrayEnabled(bool enabled);
@@ -82,12 +83,15 @@ class SystemTrayClient : public ash::SystemTrayClient,
   void SetLocaleAndExit(const std::string& locale_iso_code) override;
 
  private:
+  // Opens cellular setup dialog in os settings
+  void ShowSettingsCellularSetupFlow();
+
   // Helper function shared by ShowNetworkSettings() and ShowNetworkConfigure().
   void ShowNetworkSettingsHelper(const std::string& network_id,
                                  bool show_configure);
 
   // Requests that ash show the update available icon.
-  void HandleUpdateAvailable();
+  void HandleUpdateAvailable(ash::UpdateType update_type);
 
   // chromeos::system::SystemClockObserver:
   void OnSystemClockChanged(chromeos::system::SystemClock* clock) override;
@@ -105,9 +109,6 @@ class SystemTrayClient : public ash::SystemTrayClient,
 
   // The system tray model in ash.
   ash::SystemTray* const system_tray_;
-
-  // Whether an Adobe Flash component update is available.
-  bool flash_update_available_ = false;
 
   // Tells update notification style, for example required by administrator.
   ash::NotificationStyle update_notification_style_;

@@ -10,6 +10,14 @@
 
 namespace extensions {
 
+class ContextMenuAPI {
+ public:
+  static void RequestMenu(content::BrowserContext* browser_context,
+                          int window_id,
+                          int document_id,
+                          const vivaldi::context_menu::DocumentParams& request);
+};
+
 class ContextMenuShowFunction :
     public ExtensionFunction,
     public ::vivaldi::ContextMenuController::Delegate {

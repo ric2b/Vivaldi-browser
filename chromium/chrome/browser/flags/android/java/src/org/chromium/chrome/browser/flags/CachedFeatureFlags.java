@@ -55,6 +55,7 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_DOWNLOAD, true);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH, true);
             put(ChromeFeatureList.COMMAND_LINE_ON_NON_ROOTED, false);
+            put(ChromeFeatureList.DEX_FIXER, false);
             put(ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE, true);
             put(ChromeFeatureList.EARLY_LIBRARY_LOAD, false);
             put(ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS, true);
@@ -81,7 +82,10 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP, false);
             put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR, false);
             put(ChromeFeatureList.USE_CHIME_ANDROID_SDK, false);
+            put(ChromeFeatureList.CCT_INCOGNITO_AVAILABLE_TO_THIRD_PARTY, false);
             put(ChromeFeatureList.READ_LATER, false);
+            put(ChromeFeatureList.CCT_REMOVE_REMOTE_VIEW_IDS, true);
+            put(ChromeFeatureList.OFFLINE_MEASUREMENTS_BACKGROUND_TASK, false);
         }
     };
 
@@ -216,6 +220,10 @@ public class CachedFeatureFlags {
 
     @VisibleForTesting
     public static void setOverrideTestValue(String preferenceKey, String overrideValue) {
+        if (sOverridesTestFeatures == null) {
+            sOverridesTestFeatures = new HashMap<>();
+        }
+
         sOverridesTestFeatures.put(preferenceKey, overrideValue);
     }
 

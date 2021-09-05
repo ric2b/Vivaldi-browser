@@ -276,12 +276,6 @@ TEST_F(BitmapImageTest, isAllDataReceived) {
 
   image->SetData(image_data, true);
   EXPECT_TRUE(image->IsAllDataReceived());
-
-  image->SetData(SharedBuffer::Create("data", sizeof("data")), false);
-  EXPECT_FALSE(image->IsAllDataReceived());
-
-  image->SetData(image_data, true);
-  EXPECT_TRUE(image->IsAllDataReceived());
 }
 
 TEST_F(BitmapImageTest, noColorProfile) {
@@ -832,33 +826,6 @@ TEST_F(BitmapHistogramTest, DecodedImageType) {
                            "Blink.DecodedImageType",
                            BitmapImageMetrics::DecodedImageType::kAVIF);
 #endif  // BUILDFLAG(ENABLE_AV1_DECODER)
-}
-
-TEST_F(BitmapHistogramTest, DecodedImageDensitySizeCorrectionDetected) {
-  ExpectImageRecordsSample("exif-resolution-none.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           false);
-  ExpectImageRecordsSample("exif-resolution-invalid-cm.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           false);
-  ExpectImageRecordsSample("exif-resolution-invalid-no-match.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           false);
-  ExpectImageRecordsSample("exif-resolution-invalid-partial.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           false);
-  ExpectImageRecordsSample("exif-resolution-no-change.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           false);
-  ExpectImageRecordsSample("exif-resolution-valid-hires.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           true);
-  ExpectImageRecordsSample("exif-resolution-valid-lores.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           true);
-  ExpectImageRecordsSample("exif-resolution-valid-non-uniform.jpg",
-                           "Blink.DecodedImage.DensitySizeCorrectionDetected",
-                           true);
 }
 
 TEST_F(BitmapHistogramTest, DecodedImageDensityKiBWeighted_JpegDensity) {

@@ -105,24 +105,18 @@ const char kAccessibilitySelectToSpeakEnabled[] =
 // A boolean pref which determines whether Switch Access is enabled.
 const char kAccessibilitySwitchAccessEnabled[] =
     "settings.a11y.switch_access.enabled";
-// A pref that stores the key code for the "select" action.
-const char kAccessibilitySwitchAccessSelectKeyCodes[] =
-    "settings.a11y.switch_access.select.key_codes";
-// A pref that stores the setting value for the "select" action.
-const char kAccessibilitySwitchAccessSelectSetting[] =
-    "settings.a11y.switch_access.select.setting";
-// A pref that stores the key code for the "next" action.
-const char kAccessibilitySwitchAccessNextKeyCodes[] =
-    "settings.a11y.switch_access.next.key_codes";
-// A pref that stores the setting value for the "next" action.
-const char kAccessibilitySwitchAccessNextSetting[] =
-    "settings.a11y.switch_access.next.setting";
-// A pref that stores the key code for the "previous" action.
-const char kAccessibilitySwitchAccessPreviousKeyCodes[] =
-    "settings.a11y.switch_access.previous.key_codes";
-// A pref that stores the setting value for the "previous" action.
-const char kAccessibilitySwitchAccessPreviousSetting[] =
-    "settings.a11y.switch_access.previous.setting";
+// A dictionary pref keyed on a key code mapped to a list value of device types
+// for the "select" action.
+const char kAccessibilitySwitchAccessSelectDeviceKeyCodes[] =
+    "settings.a11y.switch_access.select.device_key_codes";
+// A dictionary pref keyed on a key code mapped to a list value of device types
+// for the "next" action.
+const char kAccessibilitySwitchAccessNextDeviceKeyCodes[] =
+    "settings.a11y.switch_access.next.device_key_codes";
+// A dictionary pref keyed on a key code mapped to a list value of device types
+// for the "previous" action.
+const char kAccessibilitySwitchAccessPreviousDeviceKeyCodes[] =
+    "settings.a11y.switch_access.previous.device_key_codes";
 // A boolean pref which determines whether auto-scanning is enabled within
 // Switch Access.
 const char kAccessibilitySwitchAccessAutoScanEnabled[] =
@@ -144,9 +138,16 @@ const char kAccessibilityTabletModeShelfNavigationButtonsEnabled[] =
     "settings.a11y.tablet_mode_shelf_nav_buttons_enabled";
 // A boolean pref which determines whether dictation is enabled.
 const char kAccessibilityDictationEnabled[] = "settings.a11y.dictation";
+// Whether the Live Caption feature is enabled.
+const char kLiveCaptionEnabled[] =
+    "accessibility.captions.live_caption_enabled";
 // A boolean pref which determines whether the accessibility menu shows
 // regardless of the state of a11y features.
 const char kShouldAlwaysShowAccessibilityMenu[] = "settings.a11y.enable_menu";
+
+// A boolean pref which determines whether alt-tab should show only windows in
+// the current desk or all windows.
+const char kAltTabPerDesk[] = "ash.alttab.per_desk";
 
 // A dictionary storing the number of times and most recent time all contextual
 // tooltips have been shown.
@@ -525,22 +526,6 @@ const char kBatteryChargeCustomStopCharging[] =
 // For details see "DeviceUsbPowerShareEnabled" in policy_templates.json.
 // Ignored unless powerd is configured to honor charging-related prefs.
 const char kUsbPowerShareEnabled[] = "ash.power.usb_power_share_enabled";
-
-// An integer pref that specifies how many times the Assistant privacy info has
-// been shown in Launcher. This value will increment by one every time when
-// Launcher changes state from Peeking to Half or FullscreenSearch up to a
-// predefined threshold, e.g. six times. If the info has been shown for more
-// than the threshold, do not show the privacy info any more.
-const char kAssistantPrivacyInfoShownInLauncher[] =
-    "ash.launcher.assistant_privacy_info_shown";
-
-// A boolean pref that indicates whether the Assistant privacy info may be
-// displayed to user. A false value indicates that the info can be displayed if
-// the value of |kAssistantPrivacyInfoShownInLauncher| is smaller than the
-// predefined threshold. A true value implies that the user has dismissed the
-// info view, and do not show the privacy info any more.
-const char kAssistantPrivacyInfoDismissedInLauncher[] =
-    "ash.launcher.assistant_privacy_info_dismissed";
 
 // An integer pref that specifies how many times the Suggested Content privacy
 // info has been shown in Launcher. This value will increment by one every time

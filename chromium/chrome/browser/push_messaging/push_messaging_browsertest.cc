@@ -20,11 +20,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/engagement/site_engagement_score.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/gcm/instance_id/instance_id_profile_service_factory.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
@@ -59,6 +57,8 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/permissions/permission_request_manager.h"
+#include "components/site_engagement/content/site_engagement_score.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
@@ -170,7 +170,7 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
     content::SetupCrossSiteRedirector(https_server_.get());
     ASSERT_TRUE(https_server_->Start());
 
-    SiteEngagementScore::SetParamValuesForTesting();
+    site_engagement::SiteEngagementScore::SetParamValuesForTesting();
     InProcessBrowserTest::SetUp();
   }
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -350,8 +350,8 @@ class PushMessagingBrowserTest : public InProcessBrowserTest {
   PushMessagingServiceImpl* push_service() const { return push_service_; }
 
   void SetSiteEngagementScore(const GURL& url, double score) {
-    SiteEngagementService* service =
-        SiteEngagementService::Get(GetBrowser()->profile());
+    site_engagement::SiteEngagementService* service =
+        site_engagement::SiteEngagementService::Get(GetBrowser()->profile());
     service->ResetBaseScoreForURL(url, score);
     EXPECT_EQ(score, service->GetScore(url));
   }
@@ -2710,7 +2710,7 @@ IN_PROC_BROWSER_TEST_F(
   content::BrowsingDataRemoverCompletionObserver observer(remover);
   remover->RemoveAndReply(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA,
+      chrome_browsing_data_remover::DATA_TYPE_SITE_DATA,
       content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, &observer);
   observer.BlockUntilCompletion();
 

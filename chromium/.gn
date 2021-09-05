@@ -49,6 +49,13 @@ default_args = {
   # Changes some setup for the Crashpad build to set them to build against
   # Chromium's zlib, base, etc.
   crashpad_dependencies = "chromium"
+
+  # Override ANGLE's Vulkan dependencies.
+  angle_vulkan_headers_dir = "//third_party/vulkan-deps/vulkan-headers/src"
+  angle_vulkan_loader_dir = "//third_party/vulkan-deps/vulkan-loader/src"
+  angle_vulkan_tools_dir = "//third_party/vulkan-deps/vulkan-tools/src"
+  angle_vulkan_validation_layers_dir =
+      "//third_party/vulkan-deps/vulkan-validation-layers/src"
 }
 
 # These are the targets to skip header checking by default. The files in targets
@@ -68,18 +75,9 @@ no_check_targets = [
   "//chrome/browser/safety_check/android:*",  # 3 errors
   "//chrome/browser/storage_access_api:*",  # 2 errors
   "//chrome/browser/touch_to_fill/android:*",  # 8 errors
-  "//chrome/browser/updates/announcement_notification:*",  # 15 errors
-  "//chrome/browser/updates/internal:*",  # 8 errors
-  "//chrome/browser/updates:*",  # 21 errors
-  "//chrome/install_static:*",  # 4 errors
   "//chrome/notification_helper:*",  # 4 errors
-  "//chrome/services/cups_proxy/public/cpp:*",  # 2 errors
-  "//chrome/services/cups_proxy:*",  # 6 errors
-  "//chrome/services/ipp_parser:*",  # 1 error
   "//chrome/services/removable_storage_writer:*",  # 1 error
   "//chrome/services/util_win:*",  # 1 error
-  "//chrome/test/data/nacl:*",  # 350 errors
-  "//chrome/test/media_router:*",  # 5 errors
   "//chrome/test:*",  # 2682 errors
 
   "//clank/third_party/gvr_shim:*",  # 1 error
@@ -92,15 +90,10 @@ no_check_targets = [
   "//extensions/browser/api/bluetooth_low_energy:*",  # 22 errors
   "//extensions/browser/api/bluetooth_socket:*",  # 12 errors
   "//extensions/browser/api/cast_channel:*",  # 3 errors
-  "//extensions/browser/api/cec_private:*",  # 4 errors
-  "//extensions/browser/api/clipboard:*",  # 3 errors
   "//extensions/browser/api/declarative:*",  # 20 errors
   "//extensions/browser/api/declarative_content:*",  # 2 errors
-  "//extensions/browser/api/declarative_net_request/filter_list_converter:*",  # 1
-                                                                               # error
   "//extensions/browser/api/declarative_net_request:*",  # 18 errors
   "//extensions/browser/api/declarative_webrequest:*",  # 29 errors
-  "//extensions/browser/api/diagnostics:*",  # 2 errors
   "//extensions/browser/api/display_source:*",  # 7 errors
   "//extensions/browser/api/dns:*",  # 3 errors
   "//extensions/browser/api/document_scan:*",  # 2 errors
@@ -123,24 +116,18 @@ no_check_targets = [
   "//extensions/browser/api/sockets_tcp:*",  # 6 errors
   "//extensions/browser/api/sockets_tcp_server:*",  # 8 errors
   "//extensions/browser/api/sockets_udp:*",  # 9 errors
-  "//extensions/browser/api/storage:*",  # 9 errors
   "//extensions/browser/api/system_cpu:*",  # 1 error
   "//extensions/browser/api/system_display:*",  # 3 errors
   "//extensions/browser/api/system_info:*",  # 8 errors
   "//extensions/browser/api/system_memory:*",  # 1 error
   "//extensions/browser/api/system_network:*",  # 2 errors
-  "//extensions/browser/api/system_power_source:*",  # 2 errors
   "//extensions/browser/api/system_storage:*",  # 6 errors
   "//extensions/browser/api/test:*",  # 1 error
   "//extensions/browser/api/usb:*",  # 12 errors
-  "//extensions/browser/api/virtual_keyboard:*",  # 1 error
   "//extensions/browser/api/virtual_keyboard_private:*",  # 2 errors
-  "//extensions/browser/api/vpn_provider:*",  # 13 errors
   "//extensions/browser/api/web_request:*",  # 37 errors
-  "//extensions/browser/api/webcam_private:*",  # 8 errors
   "//extensions/browser/api:*",  # 7 errors
   "//extensions/browser/updater:*",  # 31 errors
-  "//extensions/browser/value_store:*",  # 5 errors
   "//extensions/browser:*",  # 20 errors
   "//extensions:*",  # 75 errors
   "//headless:*",  # 167 errors
@@ -164,7 +151,6 @@ no_check_targets = [
   "//remoting/host/input_monitor:*",  # 3 errors
   "//remoting/host/installer/mac:*",  # 1 error
   "//remoting/host/it2me:*",  # 18 errors
-  "//remoting/host/linux:*",  # 64 errors
   "//remoting/host/mac:*",  # 49 errors
   "//remoting/host/native_messaging:*",  # 3 errors
   "//remoting/host/security_key:*",  # 68 errors
@@ -184,7 +170,6 @@ no_check_targets = [
   "//remoting/test:*",  # 20 errors
   "//remoting:*",  # 27 errors
   "//sandbox/linux:*",  # 13 errors
-  "//sandbox/mac:*",  # 14 errors
   "//sandbox/win:*",  # 7 errors
 
   "//third_party/breakpad:*",  # 34 errors

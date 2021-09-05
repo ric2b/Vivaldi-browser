@@ -26,6 +26,7 @@ class XRImageTrackingResult;
 class XRInputSource;
 class XRLightEstimate;
 class XRLightProbe;
+class XRPlaneSet;
 class XRPose;
 class XRReferenceSpace;
 class XRRigidTransform;
@@ -35,24 +36,23 @@ class XRTransientInputHitTestResult;
 class XRTransientInputHitTestSource;
 class XRView;
 class XRViewerPose;
-class XRWorldInformation;
 
 class XRFrame final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  explicit XRFrame(XRSession* session, XRWorldInformation* world_information);
+  explicit XRFrame(XRSession* session, bool is_animation_frame = false);
 
   XRSession* session() const { return session_; }
 
   XRViewerPose* getViewerPose(XRReferenceSpace*, ExceptionState&);
   XRPose* getPose(XRSpace*, XRSpace*, ExceptionState&);
-  XRWorldInformation* worldInformation() const { return world_information_; }
   XRAnchorSet* trackedAnchors() const;
   XRLightEstimate* getLightEstimate(XRLightProbe*, ExceptionState&) const;
   XRDepthInformation* getDepthInformation(
       XRView* view,
       ExceptionState& exception_state) const;
+  XRPlaneSet* detectedPlanes(ExceptionState& exception_state) const;
 
   void Trace(Visitor*) const override;
 
@@ -60,9 +60,7 @@ class XRFrame final : public ScriptWrappable {
 
   bool IsActive() const;
 
-  void SetAnimationFrame(bool is_animation_frame) {
-    is_animation_frame_ = is_animation_frame;
-  }
+  bool IsAnimationFrame() const { return is_animation_frame_; }
 
   HeapVector<Member<XRHitTestResult>> getHitTestResults(
       XRHitTestSource* hit_test_source,
@@ -97,8 +95,6 @@ class XRFrame final : public ScriptWrappable {
       XRSpace* space,
       ExceptionState& exception_state);
 
-  Member<XRWorldInformation> world_information_;
-
   const Member<XRSession> session_;
 
   // Frames are only active during callbacks. getPose and getViewerPose should
@@ -108,7 +104,7 @@ class XRFrame final : public ScriptWrappable {
   // Only frames created by XRSession.requestAnimationFrame callbacks are
   // animation frames. getViewerPose should only be called from JS on active
   // animation frames.
-  bool is_animation_frame_ = false;
+  bool is_animation_frame_;
 };
 
 }  // namespace blink

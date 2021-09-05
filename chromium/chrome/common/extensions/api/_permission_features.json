@@ -164,12 +164,6 @@
       "extension", "legacy_packaged_app", "hosted_app", "platform_app"
     ]
   },
-  "cloudPrintPrivate": {
-    "channel": "stable",
-    "extension_types": ["hosted_app"],
-    // CloudPrint
-    "whitelist": ["99060B01DE911EB85FD630C8BA6320C9186CA3AB"]
-  },
   "commandLinePrivate": [{
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"],
@@ -224,13 +218,6 @@
     "location": "component",
     "whitelist": [
       "E24F1786D842E91E74C27929B0B3715A4689A473"  // Cryptotoken
-    ]
-  },
-  "dataReductionProxy": {
-    "channel": "stable",
-    "extension_types": ["extension"],
-    "whitelist": [
-      "852290F2442EEE45EF673B8DA6090112079012A2"   // http://crbug.com/375484
     ]
   },
   "debugger": [
@@ -309,7 +296,7 @@
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
     "location": "policy",
-    "platforms": ["chromeos"]
+    "platforms": ["chromeos", "lacros"]
   }, {
     "channel": "stable",
     "dependencies": ["behavior:imprivata_login_screen_extension"],
@@ -336,7 +323,7 @@
   },
   "enterprise.platformKeys": [{
     "channel": "stable",
-    "platforms": ["chromeos"],
+    "platforms": ["chromeos", "lacros"],
     "extension_types": ["extension", "platform_app", "legacy_packaged_app"],
     "location": "policy"
   },
@@ -706,7 +693,7 @@
   "platformKeys": [{
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
-    "platforms": ["chromeos"]
+    "platforms": ["chromeos", "lacros"]
   }, {
     "channel": "stable",
     "dependencies": ["behavior:imprivata_login_screen_extension"],
@@ -876,7 +863,7 @@
     "location": "component"
   },
   "tabGroups": {
-    "channel": "dev",
+    "channel": "stable",
     "extension_types": ["extension"],
     "min_manifest_version": 3
   },

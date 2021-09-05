@@ -15,18 +15,19 @@
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/task_runner_util.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -2691,7 +2692,8 @@ TEST_P(ArcDefaultAppTest, LoadAdaptiveIcon) {
   VerifyIcon(src_image_skia, model_updater()->FindItem(app_id)->icon());
 }
 
-TEST_P(ArcAppModelIconTest, LoadManyIcons) {
+// TODO(crbug.com/1132117) Disabled due to flake.
+TEST_P(ArcAppModelIconTest, DISABLED_LoadManyIcons) {
   if (!base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
     return;
 
@@ -2717,7 +2719,8 @@ TEST_P(ArcAppModelIconTest, LoadManyIcons) {
   EXPECT_GE(kMaxSimultaneousIconRequests, max_arc_app_icon_request_count());
 }
 
-TEST_P(ArcAppModelIconTest, LoadManyIconsWithSomeBadIcons) {
+// TODO(crbug.com/1132117) Disabled due to flake.
+TEST_P(ArcAppModelIconTest, DISABLED_LoadManyIconsWithSomeBadIcons) {
   if (!base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon))
     return;
 
@@ -2771,7 +2774,7 @@ TEST_P(ArcAppModelBuilderTest, IconLoaderCompressed) {
                                                       fake_apps().begin() + 1));
 
   base::RunLoop run_loop;
-  base::Closure quit = run_loop.QuitClosure();
+  base::RepeatingClosure quit = run_loop.QuitClosure();
 
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
     apps::AppServiceProxy* proxy =
@@ -2922,7 +2925,7 @@ TEST_P(ArcAppModelIconTest, IconInvalidationOnIconVersionUpdate) {
 }
 
 // TODO(crbug.com/1005069) Disabled on Chrome OS due to flake
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_IconLoadNonSupportedScales DISABLED_IconLoadNonSupportedScales
 #else
 #define MAYBE_IconLoadNonSupportedScales IconLoadNonSupportedScales

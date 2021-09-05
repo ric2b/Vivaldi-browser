@@ -440,7 +440,7 @@ class TabStripModel : public TabGroupController {
   // being moved, and adds them to the tab group |group|.
   void MoveTabsAndSetGroup(const std::vector<int>& indices,
                            int destination_index,
-                           const tab_groups::TabGroupId& group);
+                           base::Optional<tab_groups::TabGroupId> group);
 
   // Similar to AddToExistingGroup(), but creates a group with id |group| if it
   // doesn't exist. This is only intended to be called from session restore
@@ -474,7 +474,9 @@ class TabStripModel : public TabGroupController {
   void CreateTabGroup(const tab_groups::TabGroupId& group) override;
   void OpenTabGroupEditor(const tab_groups::TabGroupId& group) override;
   void ChangeTabGroupContents(const tab_groups::TabGroupId& group) override;
-  void ChangeTabGroupVisuals(const tab_groups::TabGroupId& group) override;
+  void ChangeTabGroupVisuals(
+      const tab_groups::TabGroupId& group,
+      const TabGroupChange::VisualsChange& visuals) override;
   void MoveTabGroup(const tab_groups::TabGroupId& group) override;
   void CloseTabGroup(const tab_groups::TabGroupId& group) override;
   // The same as count(), but overridden for TabGroup to access.
@@ -592,8 +594,7 @@ class TabStripModel : public TabGroupController {
   // that TabDetachedAt() is called.
   std::unique_ptr<content::WebContents> DetachWebContentsImpl(
       int index,
-      bool create_historical_tab,
-      bool will_delete);
+      bool create_historical_tab);
 
   // We batch send notifications. This has two benefits:
   //   1) This allows us to send the minimal number of necessary notifications.
@@ -610,7 +611,9 @@ class TabStripModel : public TabGroupController {
   bool RunUnloadListenerBeforeClosing(content::WebContents* contents);
   bool ShouldRunUnloadListenerBeforeClosing(content::WebContents* contents);
 
-  int ConstrainInsertionIndex(int index, bool pinned_tab);
+  int ConstrainInsertionIndex(int index, bool pinned_tab) const;
+
+  int ConstrainMoveIndex(int index, bool pinned_tab) const;
 
   // If |index| is selected all the selected indices are returned, otherwise a
   // vector with |index| is returned. This is used when executing commands to
@@ -667,7 +670,8 @@ class TabStripModel : public TabGroupController {
   // UI for the WebContents. See UnloadController for details on how unload
   // handlers are processed.
   bool CloseWebContentses(base::span<content::WebContents* const> items,
-                          uint32_t close_types);
+                          uint32_t close_types,
+                          DetachNotifications* notifications);
 
   // Gets the WebContents at an index. Does no bounds checking.
   content::WebContents* GetWebContentsAtImpl(int index) const;

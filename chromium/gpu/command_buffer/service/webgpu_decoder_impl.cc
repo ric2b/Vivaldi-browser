@@ -30,6 +30,11 @@
 #include "gpu/config/gpu_preferences.h"
 #include "ipc/ipc_channel.h"
 
+#if defined(OS_WIN)
+#include <dawn_native/D3D12Backend.h>
+#include "ui/gl/gl_angle_util_win.h"
+#endif
+
 namespace gpu {
 namespace webgpu {
 
@@ -110,8 +115,9 @@ bool WireServerCommandSerializer::Flush() {
                  "WireServerCommandSerializer::Flush", "bytes", put_offset_);
 
     static uint32_t return_trace_id = 0;
-    TRACE_EVENT_FLOW_BEGIN0(TRACE_DISABLED_BY_DEFAULT("gpu.dawn"),
-                            "DawnReturnCommands", return_trace_id++);
+    TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("gpu.dawn"),
+                           "DawnReturnCommands", TRACE_EVENT_FLAG_FLOW_OUT,
+                           return_trace_id++);
 
     client_->HandleReturnData(base::make_span(buffer_.data(), put_offset_));
     put_offset_ = kDawnReturnCmdsOffset;
@@ -583,7 +589,8 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
   std::unique_ptr<dawn_native::Instance> dawn_instance_;
   std::vector<dawn_native::Adapter> dawn_adapters_;
 
-  bool disable_dawn_robustness_;
+  std::vector<std::string> force_enabled_toggles_;
+  std::vector<std::string> force_disabled_toggles_;
 
   DISALLOW_COPY_AND_ASSIGN(WebGPUDecoderImpl);
 };
@@ -627,11 +634,13 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
               memory_tracker)),
       dawn_platform_(new DawnPlatform()),
       memory_transfer_service_(new DawnServiceMemoryTransferService(this)),
-      dawn_instance_(new dawn_native::Instance()),
-      disable_dawn_robustness_(gpu_preferences.disable_dawn_robustness) {
+      dawn_instance_(new dawn_native::Instance()) {
   dawn_instance_->SetPlatform(dawn_platform_.get());
   dawn_instance_->EnableBackendValidation(
       gpu_preferences.enable_dawn_backend_validation);
+
+  force_enabled_toggles_ = gpu_preferences.enabled_dawn_features_list;
+  force_disabled_toggles_ = gpu_preferences.disabled_dawn_features_list;
 }
 
 WebGPUDecoderImpl::~WebGPUDecoderImpl() {
@@ -668,13 +677,18 @@ error::Error WebGPUDecoderImpl::InitDawnDeviceAndSetWireServer(
   if (request_device_properties.shaderFloat16) {
     device_descriptor.requiredExtensions.push_back("shader_float16");
   }
-
+  if (request_device_properties.pipelineStatisticsQuery) {
+    device_descriptor.requiredExtensions.push_back("pipeline_statistics_query");
+  }
   if (request_device_properties.timestampQuery) {
     device_descriptor.requiredExtensions.push_back("timestamp_query");
   }
 
-  if (disable_dawn_robustness_) {
-    device_descriptor.forceEnabledToggles.push_back("disable_robustness");
+  for (const std::string& toggles : force_enabled_toggles_) {
+    device_descriptor.forceEnabledToggles.push_back(toggles.c_str());
+  }
+  for (const std::string& toggles : force_disabled_toggles_) {
+    device_descriptor.forceDisabledToggles.push_back(toggles.c_str());
   }
 
   WGPUDevice wgpu_device =
@@ -692,26 +706,29 @@ error::Error WebGPUDecoderImpl::InitDawnDeviceAndSetWireServer(
 }
 
 void WebGPUDecoderImpl::DiscoverAdapters() {
+#if defined(OS_WIN)
+  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device =
+      gl::QueryD3D11DeviceObjectFromANGLE();
+  if (!d3d11_device) {
+    // In the case where the d3d11 device is nullptr, we want to return a null
+    // adapter
+    return;
+  }
+  Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
+  d3d11_device.As(&dxgi_device);
+  Microsoft::WRL::ComPtr<IDXGIAdapter> dxgi_adapter;
+  dxgi_device->GetAdapter(&dxgi_adapter);
+  dawn_native::d3d12::AdapterDiscoveryOptions options(std::move(dxgi_adapter));
+  dawn_instance_->DiscoverAdapters(&options);
+#else
   dawn_instance_->DiscoverDefaultAdapters();
+#endif
+
   std::vector<dawn_native::Adapter> adapters = dawn_instance_->GetAdapters();
   for (const dawn_native::Adapter& adapter : adapters) {
-#if defined(OS_WIN)
-    // On Windows 10, we pick D3D12 backend because the rest of Chromium renders
-    // with D3D11. By the same token, we pick the first adapter because ANGLE
-    // also picks the first adapter. Later, we'll need to centralize adapter
-    // picking such that Dawn and ANGLE are told which adapter to use by
-    // Chromium. If we decide to handle multiple adapters, code on the Chromium
-    // side will need to change to do appropriate cross adapter copying to make
-    // this happen, either manually or by using DirectComposition.
-    if (adapter.GetBackendType() == dawn_native::BackendType::D3D12) {
-#else
     if (adapter.GetBackendType() != dawn_native::BackendType::Null &&
         adapter.GetBackendType() != dawn_native::BackendType::OpenGL) {
-#endif
       dawn_adapters_.push_back(adapter);
-#if defined(OS_WIN)
-      break;
-#endif
     }
   }
 }
@@ -1010,8 +1027,9 @@ error::Error WebGPUDecoderImpl::HandleDawnCommands(
     return error::kOutOfBounds;
   }
 
-  TRACE_EVENT_FLOW_END0(
+  TRACE_EVENT_WITH_FLOW0(
       TRACE_DISABLED_BY_DEFAULT("gpu.dawn"), "DawnCommands",
+      TRACE_EVENT_FLAG_FLOW_IN,
       (static_cast<uint64_t>(commands_shm_id) << 32) + commands_shm_offset);
 
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("gpu.dawn"),

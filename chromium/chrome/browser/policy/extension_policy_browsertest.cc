@@ -10,6 +10,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/background/background_contents_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_content_verifier_delegate.h"
@@ -24,7 +25,6 @@
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
-#include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/policy/profile_policy_connector_builder.h"
 #include "chrome/browser/profiles/profile.h"
@@ -40,6 +40,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/policy/policy_constants.h"
 #include "components/version_info/channel.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/test/browser_test.h"
@@ -56,6 +57,7 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/updater/extension_cache_fake.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/feature_switch.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest.h"
@@ -69,10 +71,10 @@
 #include "base/win/win_util.h"
 #endif
 
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/extensions/updater/local_extension_cache.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/components/web_app_id_constants.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #endif
@@ -174,10 +176,10 @@ void RegisterURLReplacingHandler(net::EmbeddedTestServer* test_server,
 class ExtensionPolicyTest : public PolicyTest {
  public:
   ExtensionPolicyTest() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     scoped_feature_list_.InitAndDisableFeature(
         chromeos::features::kCameraSystemWebApp);
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
 
  protected:
@@ -276,7 +278,7 @@ class ExtensionPolicyTest : public PolicyTest {
     web_app::AppId return_app_id;
     web_app_provider_base()->install_manager().InstallWebAppFromInfo(
         std::move(web_application), web_app::ForInstallableSite::kYes,
-        WebappInstallSource::SYNC,
+        webapps::WebappInstallSource::SYNC,
         base::BindLambdaForTesting(
             [&](const web_app::AppId& app_id, web_app::InstallResultCode code) {
               EXPECT_EQ(code, web_app::InstallResultCode::kSuccessNewInstall);
@@ -290,7 +292,7 @@ class ExtensionPolicyTest : public PolicyTest {
     return return_app_id;
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   const extensions::Extension* InstallOSSettings() {
     WebApplicationInfo web_app;
     web_app.title = base::ASCIIToUTF16("Settings");
@@ -311,7 +313,7 @@ class ExtensionPolicyTest : public PolicyTest {
     web_app::ExternallyInstalledWebAppPrefs web_app_prefs(
         browser()->profile()->GetPrefs());
     web_app_prefs.Insert(GURL("chrome://os-settings/"),
-                         chromeos::default_web_apps::kOsSettingsAppId,
+                         web_app::kOsSettingsAppId,
                          web_app::ExternalInstallSource::kSystemInstalled);
 
     content::Details<const extensions::Extension> details = observer.details();
@@ -390,7 +392,7 @@ class ExtensionPolicyTest : public PolicyTest {
 
 }  // namespace
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Check that component extension can't be blocklisted, besides the camera app
 // that can be disabled by extension policy. This is a temporary solution until
 // there's a dedicated policy to disable the camera, at which point the special
@@ -442,11 +444,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   extensions::ExtensionRegistry* registry = extension_registry();
   const extensions::Extension* bookmark_app = InstallOSSettings();
   ASSERT_TRUE(bookmark_app);
-  ASSERT_TRUE(registry->enabled_extensions().GetByID(
-      chromeos::default_web_apps::kOsSettingsAppId));
+  ASSERT_TRUE(
+      registry->enabled_extensions().GetByID(web_app::kOsSettingsAppId));
 
   base::ListValue blocklist;
-  blocklist.AppendString(chromeos::default_web_apps::kOsSettingsAppId);
+  blocklist.AppendString(web_app::kOsSettingsAppId);
   PolicyMap policies;
   policies.Set(key::kExtensionInstallBlacklist, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, blocklist.Clone(),
@@ -454,10 +456,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   UpdateProviderPolicy(policies);
 
   extensions::ExtensionService* service = extension_service();
-  EXPECT_TRUE(service->IsExtensionEnabled(
-      chromeos::default_web_apps::kOsSettingsAppId));
+  EXPECT_TRUE(service->IsExtensionEnabled(web_app::kOsSettingsAppId));
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        ExtensionInstallBlocklistSelective) {
@@ -1054,7 +1055,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
       extension_cache()->GetExtension(kGoodCrxId, "", nullptr, nullptr));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Verifies that if the cache entry contains inconsistent extension version,
 // the crx installation fails and download of a new crx file is attempted.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, CrxVersionInconsistencyInCache) {
@@ -1151,7 +1152,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, CrxVersionInconsistencyInCache) {
   EXPECT_EQ(version, kGoodCrxVersion);
   EXPECT_NE(file_path, filename);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallForcelist) {
   // Verifies that extensions that are force-installed by policies are
@@ -1657,6 +1658,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   // Verifies that extensions that are recommended-installed by policies are
   // installed, can be disabled but not uninstalled.
 
+  // Recommended-installed extensions should auto-enable on install without a
+  // user prompt.
+  extensions::FeatureSwitch::ScopedOverride external_prompt_override(
+      extensions::FeatureSwitch::prompt_for_external_extensions(), true);
+
   ExtensionRequestInterceptor interceptor;
 
   // Extensions that are force-installed come from an update URL, which defaults
@@ -1690,19 +1696,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                nullptr);
   extensions::TestExtensionRegistryObserver observer(registry);
   UpdateProviderPolicy(policies);
-  observer.WaitForExtensionWillBeInstalled();
-
-  // TODO(crbug.com/1006342): There is a race condition here where the extension
-  // may or may not be enabled by the time we get here.
+  observer.WaitForExtensionInstalled();
   EXPECT_TRUE(registry->GetExtensionById(
-      kGoodCrxId, extensions::ExtensionRegistry::ENABLED |
-                      extensions::ExtensionRegistry::DISABLED));
+      kGoodCrxId, extensions::ExtensionRegistry::ENABLED));
 
   // The user is not allowed to uninstall recommended-installed extensions.
   UninstallExtension(kGoodCrxId, false);
-
-  // Explicitly re-enables the extension.
-  service->EnableExtension(kGoodCrxId);
 
   // But the user is allowed to disable them.
   EXPECT_TRUE(service->IsExtensionEnabled(kGoodCrxId));
@@ -2054,7 +2053,7 @@ class ExtensionPolicyTest2Contexts : public PolicyTest {
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     command_line->AppendSwitch(
         chromeos::switches::kIgnoreUserProfileMappingForTests);
 #endif
@@ -2075,8 +2074,10 @@ class ExtensionPolicyTest2Contexts : public PolicyTest {
 
   void SetUpInProcessBrowserTestFixture() override {
     PolicyTest::SetUpInProcessBrowserTestFixture();
-    EXPECT_CALL(profile1_policy_, IsInitializationComplete(testing::_))
-        .WillRepeatedly(testing::Return(true));
+    ON_CALL(profile1_policy_, IsInitializationComplete(testing::_))
+        .WillByDefault(testing::Return(true));
+    ON_CALL(profile1_policy_, IsFirstPolicyLoadComplete(testing::_))
+        .WillByDefault(testing::Return(true));
     policy::PushProfilePolicyConnectorProviderForTesting(&profile1_policy_);
   }
 
@@ -2159,8 +2160,10 @@ class ExtensionPolicyTest2Contexts : public PolicyTest {
   // The policy for the profile has to be passed via policy_for_profile.
   // This method is called from SetUp and only from there.
   Profile* CreateProfile(MockConfigurationPolicyProvider* policy_for_profile) {
-    EXPECT_CALL(*policy_for_profile, IsInitializationComplete(testing::_))
-        .WillRepeatedly(testing::Return(true));
+    ON_CALL(*policy_for_profile, IsInitializationComplete(testing::_))
+        .WillByDefault(testing::Return(true));
+    ON_CALL(*policy_for_profile, IsFirstPolicyLoadComplete(testing::_))
+        .WillByDefault(testing::Return(true));
     Profile* profile = nullptr;
     policy::PushProfilePolicyConnectorProviderForTesting(policy_for_profile);
 

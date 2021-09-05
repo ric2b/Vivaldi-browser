@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// eslint-disable-next-line no-unused-vars
-import {AppWindow} from './app_window.js';
+import {
+  AppWindow,  // eslint-disable-line no-unused-vars
+  getDefaultWindowSize,
+} from './app_window.js';
 import {
   BackgroundOps,  // eslint-disable-line no-unused-vars
   createFakeBackgroundOps,
@@ -23,9 +25,10 @@ import * as metrics from './metrics.js';
 import * as filesystem from './models/file_system.js';
 import {notifyCameraResourceReady} from './mojo/device_operator.js';
 import * as nav from './nav.js';
+import {preloadImagesList} from './preload_images.js';
 import * as state from './state.js';
 import * as tooltip from './tooltip.js';
-import {Mode, PerfEvent, ViewName} from './type.js';
+import {ErrorLevel, ErrorType, Mode, PerfEvent, ViewName} from './type.js';
 import * as util from './util.js';
 import {Camera} from './views/camera.js';
 import {CameraIntent} from './views/camera_intent.js';
@@ -223,7 +226,6 @@ export class App {
     }
 
     const showWindow = (async () => {
-      await browserProxy.fitWindow();
       windowController.enable();
       this.backgroundOps_.notifyActivation();
       // For intent only requiring open camera with specific mode without
@@ -257,6 +259,12 @@ export class App {
       await cameraResourceInitialized.wait();
       const isSuccess = await this.cameraView_.start();
 
+      if (isSuccess) {
+        const aspectRatio = this.cameraView_.getPreviewAspectRatio();
+        const {width, height} = getDefaultWindowSize(aspectRatio);
+        window.resizeTo(width, height);
+      }
+
       nav.close(ViewName.SPLASH);
       nav.open(ViewName.CAMERA);
       await browserProxy.setLaunchingFromWindowCreationStartTime(async () => {
@@ -271,8 +279,28 @@ export class App {
       }
     })();
 
+    const preloadImages = (async () => {
+      const loadImage = (url) => new Promise((resolve, reject) => {
+        const link = dom.create('link', HTMLLinkElement);
+        link.rel = 'preload';
+        link.as = 'image';
+        link.href = url;
+        link.onload = () => resolve();
+        link.onerror = (e) => reject(e.reason);
+        document.head.appendChild(link);
+      });
+      const results = await Promise.allSettled(
+          preloadImagesList.map((name) => loadImage(`/images/${name}`)));
+      const failure = results.find(({status}) => status === 'rejected');
+      if (failure !== undefined) {
+        error.reportError(
+            ErrorType.PRELOAD_IMAGE_FAILURE, ErrorLevel.ERROR,
+            assertInstanceof(failure.reason, Error));
+      }
+    })();
+
     metrics.sendLaunchEvent({ackMigrate: false});
-    return Promise.all([showWindow, startCamera]);
+    return Promise.all([showWindow, startCamera, preloadImages]);
   }
 
   /**
@@ -331,13 +359,13 @@ let instance = null;
     bgOps = createFakeBackgroundOps();
   }
 
+  state.set(state.State.INTENT, bgOps.getIntent() !== null);
+
   browserProxy.setupUnloadListener(() => {
-    const intent = bgOps.getIntent();
-    if (intent !== null && !intent.done) {
-      // TODO(crbug.com/1125997): Move the task to ServiceWorker once it is
-      // supported on SWA.
-      intent.cancel();
-    }
+    // For SWA, we don't cancel the unhandled intent here since there is no
+    // guarantee that asynchronous calls in unload listener can be executed
+    // properly. Therefore, we moved the logic for canceling unhandled intent to
+    // Chrome (CameraAppHelper).
     if (appWindow !== null) {
       appWindow.notifyClosed();
     }

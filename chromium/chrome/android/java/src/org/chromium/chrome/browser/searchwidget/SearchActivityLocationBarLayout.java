@@ -9,24 +9,33 @@ import android.os.Handler;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.WindowDelegate;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.UrlBar;
+import org.chromium.chrome.browser.omnibox.UrlBarCoordinator;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator.SelectionState;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
+import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
+import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
+import org.chromium.ui.base.WindowAndroid;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 
 /** Implementation of the {@link LocationBarLayout} that is displayed for widget searches. */
 public class SearchActivityLocationBarLayout extends LocationBarLayout {
     /** Delegates calls out to the containing Activity. */
     public static interface Delegate {
-        /** Load a URL in the associated tab. */
-        void loadUrl(String url, @Nullable String postDataType, @Nullable byte[] postData);
-
         /** The user hit the back button. */
         void backKeyPressed();
     }
@@ -34,19 +43,19 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
     private Delegate mDelegate;
     private boolean mPendingSearchPromoDecision;
     private boolean mPendingBeginQuery;
-    private boolean mNativeLibraryReady;
     private boolean mHasWindowFocus;
     private boolean mUrlBarFocusRequested;
 
     public SearchActivityLocationBarLayout(Context context, AttributeSet attrs) {
         super(context, attrs, R.layout.location_bar_base);
-        setUrlBarFocusable(true);
         setBackground(ToolbarPhone.createModernLocationBarBackground(getResources()));
         setShouldShowMicButtonWhenUnfocused(true);
 
-        mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
-        getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
-                mPendingSearchPromoDecision);
+        // Vivaldi (VB-58674 / VB-77045)
+        if (ChromeApplication.isVivaldi()) {
+            mCompositeTouchDelegate = new CompositeTouchDelegate(this);
+            setTouchDelegate(mCompositeTouchDelegate);
+        }
     }
 
     /** Set the {@link Delegate}. */
@@ -55,10 +64,19 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
     }
 
     @Override
-    public void loadUrlWithPostData(String url, int transition, long inputStart,
-            @Nullable String postDataType, @Nullable byte[] postData) {
-        mDelegate.loadUrl(url, postDataType, postData);
-        LocaleManager.getInstance().recordLocaleBasedSearchMetrics(true, url, transition);
+    public void initialize(@NonNull AutocompleteCoordinator autocompleteCoordinator,
+            @NonNull UrlBarCoordinator urlCoordinator, @NonNull StatusCoordinator statusCoordinator,
+            @NonNull LocationBarDataProvider locationBarDataProvider,
+            @NonNull WindowDelegate windowDelegate, @NonNull WindowAndroid windowAndroid,
+            @NonNull VoiceRecognitionHandler voiceRecognitionHandler,
+            @NonNull OneshotSupplier<AssistantVoiceSearchService>
+                    assistantVoiceSearchServiceSupplier) {
+        super.initialize(autocompleteCoordinator, urlCoordinator, statusCoordinator,
+                locationBarDataProvider, windowDelegate, windowAndroid, voiceRecognitionHandler,
+                assistantVoiceSearchServiceSupplier);
+        mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
+        getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
+                mPendingSearchPromoDecision);
     }
 
     @Override
@@ -74,7 +92,6 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
     @Override
     public void onFinishNativeInitialization() {
         super.onFinishNativeInitialization();
-        mNativeLibraryReady = true;
 
         mPendingSearchPromoDecision = LocaleManager.getInstance().needToCheckForSearchEnginePromo();
         getAutocompleteCoordinator().setShouldPreventOmniboxAutocomplete(
@@ -119,7 +136,7 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
                 UrlBarData.forNonUrlText(optionalText == null ? "" : optionalText),
                 UrlBar.ScrollType.NO_SCROLL, SelectionState.SELECT_ALL);
 
-        if (mPendingSearchPromoDecision || (isVoiceSearchIntent && !mNativeLibraryReady)) {
+        if (mPendingSearchPromoDecision || (isVoiceSearchIntent && !mNativeInitialized)) {
             mPendingBeginQuery = true;
             return;
         }
@@ -129,7 +146,7 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
 
     private void beginQueryInternal(boolean isVoiceSearchIntent) {
         assert !mPendingSearchPromoDecision;
-        assert !isVoiceSearchIntent || mNativeLibraryReady;
+        assert !isVoiceSearchIntent || mNativeInitialized;
 
         if (getVoiceRecognitionHandler().isVoiceSearchEnabled() && isVoiceSearchIntent) {
             getVoiceRecognitionHandler().startVoiceRecognition(
@@ -190,6 +207,6 @@ public class SearchActivityLocationBarLayout extends LocationBarLayout {
             mUrlBarFocusRequested = false;
         }
         // Use cached suggestions only if native is not yet ready.
-        getAutocompleteCoordinator().setShowCachedZeroSuggestResults(!mNativeLibraryReady);
+        getAutocompleteCoordinator().setShowCachedZeroSuggestResults(!mNativeInitialized);
     }
 }

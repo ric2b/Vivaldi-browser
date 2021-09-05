@@ -136,6 +136,7 @@
 <translation id="3222066309010235055">Trình kết xuất trước: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mi-cờ-rô</translation>
 <translation id="3241680850019875542">Chọn thư mục gốc của tiện ích để đóng gói. Để cập nhật tiện ích, bạn cũng chọn tệp khóa cá nhân để sử dụng lại.</translation>
+<translation id="3266179261140759675">Không cho các trang web đã đóng gửi và nhận dữ liệu</translation>
 <translation id="3280237271814976245">Lưu &amp;dưới dạng...</translation>
 <translation id="3285322247471302225">&amp;Tab Mới</translation>
 <translation id="3288047731229977326">Tiện ích chạy ở chế độ nhà phát triển có thể gây hại cho máy tính của bạn. Nếu bạn không phải là nhà phát triển, bạn nên vô hiệu hóa các tiện ích này chạy trong chế độ nhà phát triển để giữ an toàn.</translation>
@@ -161,6 +162,7 @@
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; muốn chia sẻ máy in &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; với một nhóm bạn sở hữu: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Nếu bạn chấp nhận, tất cả thành viên của nhóm sẽ có thể in tới máy in.</translation>
 <translation id="3587482841069643663">Tất cả</translation>
 <translation id="3627588569887975815">Mở liên kết tron&amp;g cửa số ẩn danh</translation>
+<translation id="3627879631695760395">Cài đặt <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Trình xử lý</translation>
 <translation id="3678156199662914018">Tiện ích: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Yêu cầu Chia sẻ Màn hình <ph name="APP_NAME" /></translation>

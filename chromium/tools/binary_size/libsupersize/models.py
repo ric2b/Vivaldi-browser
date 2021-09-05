@@ -54,6 +54,7 @@ BUILD_CONFIG_KEYS = (
 
 METADATA_APK_FILENAME = 'apk_file_name'  # Path relative to output_directory.
 METADATA_APK_SIZE = 'apk_size'  # File size of apk in bytes.
+METADATA_APK_SPLIT_NAME = 'apk_split_name'  # Name of the split if applicable.
 METADATA_ZIPALIGN_OVERHEAD = 'zipalign_padding'  # Overhead from zipalign.
 METADATA_SIGNING_BLOCK_SIZE = 'apk_signature_block_size'  # Size in bytes.
 METADATA_MAP_FILENAME = 'map_file_name'  # Path relative to output_directory.
@@ -1229,7 +1230,7 @@ class SymbolGroup(BaseSymbol):
     # A full second faster to cluster per-section. Plus, don't need create
     # (section_name, name) tuples in cluster_func.
     ret = []
-    for section in self.GroupedBySectionName():
+    for section in self.GroupedByContainerAndSectionName():
       ret.extend(section.GroupedBy(
           cluster_func, min_count=2, group_factory=group_factory))
 

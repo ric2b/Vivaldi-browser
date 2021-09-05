@@ -101,7 +101,7 @@ void MenubarMenuAPI::SendAction(content::BrowserContext* browser_context,
                                 int event_state) {
 	vivaldi::menubar_menu::Action action;
   // Convert to api id before sending to JS.
-	action.id = command - IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST - 1;
+	action.id = command - IDC_VIV_MENU_FIRST - 1;
   action.state = FlagToEventState(event_state);
   ::vivaldi::BroadcastEvent(
       vivaldi::menubar_menu::OnAction::kEventName,
@@ -278,7 +278,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
     ui::SimpleMenuModel* menu_model) {
   for (const vivaldi::menubar_menu::Element& child: list) {
     if (child.item) {
-      int id = child.item->id + IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1;
+      int id = child.item->id + IDC_VIV_MENU_FIRST + 1;
       const base::string16 label = base::UTF8ToUTF16(child.item->label);
       if (child.children) {
         // We create the SimpleMenuModel sub menu but do not populate it. That

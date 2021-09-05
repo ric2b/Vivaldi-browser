@@ -58,6 +58,7 @@ OpenXrApiWrapper::~OpenXrApiWrapper() {
 }
 
 void OpenXrApiWrapper::Reset() {
+  anchor_manager_.reset();
   unbounded_space_ = XR_NULL_HANDLE;
   local_space_ = XR_NULL_HANDLE;
   stage_space_ = XR_NULL_HANDLE;
@@ -254,6 +255,15 @@ OpenXrApiWrapper::PickEnvironmentBlendModeForSession(
   return GetMojoBlendMode(blend_mode_);
 }
 
+OpenXrAnchorManager* OpenXrApiWrapper::GetOrCreateAnchorManager(
+    const OpenXrExtensionHelper& extension_helper) {
+  if (session_ && !anchor_manager_) {
+    anchor_manager_ = std::make_unique<OpenXrAnchorManager>(
+        extension_helper, session_, local_space_);
+  }
+  return anchor_manager_.get();
+}
+
 bool OpenXrApiWrapper::UpdateAndGetSessionEnded() {
   // Ensure we have the latest state from the OpenXR runtime.
   if (XR_FAILED(ProcessEvents())) {
@@ -379,6 +389,23 @@ XrResult OpenXrApiWrapper::CreateSwapchain() {
   color_swapchain_ = color_swapchain;
   color_swapchain_images_ = std::move(color_swapchain_images);
   return XR_SUCCESS;
+}
+
+XrSpace OpenXrApiWrapper::GetReferenceSpace(
+    device::mojom::XRReferenceSpaceType type) const {
+  switch (type) {
+    case device::mojom::XRReferenceSpaceType::kLocal:
+      return local_space_;
+    case device::mojom::XRReferenceSpaceType::kViewer:
+      return view_space_;
+    case device::mojom::XRReferenceSpaceType::kBoundedFloor:
+      return stage_space_;
+    case device::mojom::XRReferenceSpaceType::kUnbounded:
+      return unbounded_space_;
+      // Ignore local-floor as that has no direct space
+    case device::mojom::XRReferenceSpaceType::kLocalFloor:
+      return XR_NULL_HANDLE;
+  }
 }
 
 XrResult OpenXrApiWrapper::CreateSpace(XrReferenceSpaceType type,
@@ -684,6 +711,7 @@ XrResult OpenXrApiWrapper::ProcessEvents() {
           session_running_ = false;
           xr_result = xrEndSession(session_);
           Uninitialize();
+          on_session_ended_callback_.Run();
           return xr_result;
         case XR_SESSION_STATE_SYNCHRONIZED:
           visibility_changed_callback_.Run(
@@ -856,6 +884,11 @@ void OpenXrApiWrapper::RegisterVisibilityChangeCallback(
     const base::RepeatingCallback<void(mojom::XRVisibilityState)>&
         visibility_changed_callback) {
   visibility_changed_callback_ = std::move(visibility_changed_callback);
+}
+
+void OpenXrApiWrapper::RegisterOnSessionEndedCallback(
+    const base::RepeatingCallback<void()>& on_session_ended_callback) {
+  on_session_ended_callback_ = std::move(on_session_ended_callback);
 }
 
 VRTestHook* OpenXrApiWrapper::test_hook_ = nullptr;

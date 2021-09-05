@@ -46,6 +46,10 @@ base::TimeTicks VivaldiLocationBar::GetMatchSelectionTimestamp() const {
   return base::TimeTicks();
 }
 
+bool VivaldiLocationBar::IsInputTypedUrlWithoutScheme() const {
+  return false;
+}
+
 void VivaldiLocationBar::UpdateContentSettingsIcons() {
   // Fetch tab specific content settings for current tab and make events based
   // on that to display to the user.

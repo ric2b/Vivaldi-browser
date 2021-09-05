@@ -54,12 +54,21 @@ Polymer({
       type: Object,
       value: {},
     },
+
+    /**
+     * Status of the current transfer.
+     * @private {?nearbyShare.mojom.TransferStatus}
+     */
+    transferStatus_: {
+      type: nearbyShare.mojom.TransferStatus,
+      value: null,
+    }
   },
 
   listeners: {
-    'change-page': 'onChangePage_',
+    'accept': 'onAccept_',
     'cancel': 'onCancel_',
-    'confirm': 'onConfirm_',
+    'change-page': 'onChangePage_',
     'onboarding-complete': 'onOnboardingComplete_',
     'reject': 'onReject_',
   },
@@ -92,6 +101,16 @@ Polymer({
   /** @private {number} */
   closeTimeoutId_: 0,
 
+  /**
+   * Timestamp in milliseconds since unix epoch of when high visibility will
+   * be turned off.
+   * @private {number}
+   */
+  highVisibilityShutoffTimestamp_: 0,
+
+  /** @private {?nearbyShare.mojom.RegisterReceiveSurfaceResult} */
+  registerForegroundReceiveSurfaceResult_: null,
+
   /** @override */
   attached() {
     this.closing_ = false;
@@ -110,11 +129,14 @@ Polymer({
 
   /**
    * Mojo callback when high visibility changes. If high visibility is false
-   * we force this dialog to close as well.
+   * due to a user cancel, we force this dialog to close as well.
    * @param {boolean} inHighVisibility
    */
   onHighVisibilityChanged(inHighVisibility) {
-    if (inHighVisibility === false) {
+    const now = performance.now();
+
+    if (inHighVisibility === false &&
+        now < this.highVisibilityShutoffTimestamp_) {
       // TODO(crbug/1134745): Exiting high visibility can happen for multiple
       // reasons (timeout, user cancel, etc). During a receive transfer, it
       // happens before we start connecting (because we need to stop
@@ -134,6 +156,8 @@ Polymer({
    * @param {!nearbyShare.mojom.TransferMetadata} metadata
    */
   onTransferUpdate(shareTarget, metadata) {
+    this.transferStatus_ = metadata.status;
+
     if (metadata.status ===
         nearbyShare.mojom.TransferStatus.kAwaitingLocalConfirmation) {
       clearTimeout(this.closeTimeoutId_);
@@ -223,17 +247,26 @@ Polymer({
 
   /**
    * Call to show the high visibility page.
+   * @param {number} shutoffTimeoutInSeconds Duration of the high
+   *     visibility session, after which the session would be turned off.
    */
-  showHighVisibilityPage() {
+  showHighVisibilityPage(shutoffTimeoutInSeconds) {
     // Check if we need to wait for settings values from mojo or if we need to
     // run onboarding first before showing the page.
-    if (this.deferCallIfNecessary(this.showHighVisibilityPage.bind(this))) {
+    if (this.deferCallIfNecessary(
+            this.showHighVisibilityPage.bind(this, shutoffTimeoutInSeconds))) {
       return;
     }
 
+    // performance.now() returns DOMHighResTimeStamp in milliseconds.
+    this.highVisibilityShutoffTimestamp_ =
+        performance.now() + (shutoffTimeoutInSeconds * 1000);
+
     // Register a receive surface to enter high visibility and show the page.
-    this.receiveManager_.registerForegroundReceiveSurface();
-    this.getViewManager_().switchView(Page.HIGH_VISIBILITY);
+    this.receiveManager_.registerForegroundReceiveSurface().then((result) => {
+      this.registerForegroundReceiveSurfaceResult_ = result.result;
+      this.getViewManager_().switchView(Page.HIGH_VISIBILITY);
+    });
   },
 
   /**
@@ -263,7 +296,7 @@ Polymer({
   },
 
   /** @private */
-  onConfirm_() {
+  onAccept_() {
     assert(this.shareTarget);
     this.receiveManager_.accept(this.shareTarget.id).then((success) => {
       if (success) {

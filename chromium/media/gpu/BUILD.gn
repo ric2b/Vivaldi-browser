@@ -146,7 +146,7 @@ component("gpu") {
       "//gpu/ipc/common:android_image_reader_utils",
 
       # TODO(crbug.com/789435): This can be removed once CdmManager is removed.
-      "//gpu/ipc/common:ipc_common_sources",
+      "//gpu/ipc/common",
       "//media/mojo:buildflags",
       "//services/service_manager/public/cpp:cpp",
       "//ui/gl:gl_jni_headers",
@@ -170,6 +170,8 @@ component("gpu") {
   if (is_win) {
     sources += [
       "windows/av1_guids.h",
+      "windows/d3d11_av1_accelerator.cc",
+      "windows/d3d11_av1_accelerator.h",
       "windows/d3d11_com_defs.h",
       "windows/d3d11_copying_texture_wrapper.cc",
       "windows/d3d11_copying_texture_wrapper.h",
@@ -297,6 +299,7 @@ source_set("common") {
     ]
   }
 
+  public_deps = []
   deps = [
     ":buildflags",
     "//base",
@@ -307,6 +310,17 @@ source_set("common") {
     "//ui/gfx:memory_buffer",
     "//ui/gfx/geometry",
   ]
+
+  if ((is_chromeos_ash && use_vaapi) || is_win) {
+    assert(use_libgav1_parser)
+    sources += [
+      "av1_decoder.cc",
+      "av1_decoder.h",
+      "av1_picture.cc",
+      "av1_picture.h",
+    ]
+    public_deps += [ "//third_party/libgav1:libgav1" ]
+  }
 }
 
 source_set("command_buffer_helper") {
@@ -510,7 +524,7 @@ source_set("unit_tests") {
   if (proprietary_codecs && enable_platform_hevc) {
     sources += [ "h265_decoder_unittest.cc" ]
   }
-  if (is_ash && (use_v4l2_codec || use_vaapi)) {
+  if (is_chromeos_ash && (use_v4l2_codec || use_vaapi)) {
     deps += [ "//media/gpu/chromeos:unit_tests" ]
   }
   if (use_vaapi) {
@@ -524,6 +538,15 @@ source_set("unit_tests") {
   if (use_v4l2_codec || use_vaapi) {
     sources += [ "vp8_decoder_unittest.cc" ]
   }
+
+  if ((is_chromeos_ash && use_vaapi) || is_win) {
+    sources += [ "av1_decoder_unittest.cc" ]
+    deps += [
+      "//build:chromeos_buildflags",
+      "//third_party/ffmpeg",
+    ]
+  }
+
   if (is_win && enable_library_cdms) {
     sources += [
       "windows/d3d11_copying_texture_wrapper_unittest.cc",
@@ -600,8 +623,11 @@ if (use_v4l2_codec || use_vaapi) {
     data = [ "//media/test/data/" ]
     deps = [
       ":buildflags",
+      "test:frame_validator",
       "test:helpers",
+      "test:test_helpers",
       "test:video_encoder",
+      "test:video_encoder_test_environment",
       "test:video_encoder_test_environment",
       "//media:test_support",
       "//testing/gtest",

@@ -30,13 +30,6 @@ NetworkPortalDetector::CaptivePortalStatus GetCaptivePortalStatus() {
 
 }  // namespace
 
-// static
-AutoEnrollmentCheckScreen* AutoEnrollmentCheckScreen::Get(
-    ScreenManager* manager) {
-  return static_cast<AutoEnrollmentCheckScreen*>(
-      manager->GetScreen(AutoEnrollmentCheckScreenView::kScreenId));
-}
-
 AutoEnrollmentCheckScreen::AutoEnrollmentCheckScreen(
     AutoEnrollmentCheckScreenView* view,
     ErrorScreen* error_screen,
@@ -62,8 +55,8 @@ AutoEnrollmentCheckScreen::~AutoEnrollmentCheckScreen() {
 }
 
 void AutoEnrollmentCheckScreen::ClearState() {
-  auto_enrollment_progress_subscription_.reset();
-  connect_request_subscription_.reset();
+  auto_enrollment_progress_subscription_ = {};
+  connect_request_subscription_ = {};
   network_portal_detector::GetInstance()->RemoveObserver(this);
 
   auto_enrollment_state_ = policy::AUTO_ENROLLMENT_STATE_IDLE;
@@ -264,8 +257,8 @@ void AutoEnrollmentCheckScreen::SignalCompletion() {
   network_portal_detector::GetInstance()->RemoveObserver(this);
   error_screen_->SetHideCallback(base::OnceClosure());
   error_screen_->SetParentScreen(OobeScreen::SCREEN_UNKNOWN);
-  auto_enrollment_progress_subscription_.reset();
-  connect_request_subscription_.reset();
+  auto_enrollment_progress_subscription_ = {};
+  connect_request_subscription_ = {};
 
   // Running exit callback can cause `this` destruction, so let other methods
   // finish their work before.

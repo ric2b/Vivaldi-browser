@@ -101,6 +101,10 @@ suite('NewTabPageMostVisitedTest', () => {
     updateScreenWidth(true, true);
   }
 
+  function leaveUrlInput() {
+    mostVisited.$.dialogInputUrl.dispatchEvent(new Event('blur'));
+  }
+
   suiteSetup(() => {
     loadTimeData.overrideValues({
       linkRemovedMsg: '',
@@ -445,10 +449,12 @@ suite('NewTabPageMostVisitedTest', () => {
     });
 
     test('http is a valid scheme', async () => {
+      assertTrue(saveButton.disabled);
       inputUrl.value = 'http://url';
       const addCalled = testProxy.handler.whenCalled('addMostVisitedTile');
       saveButton.click();
       await addCalled;
+      assertFalse(saveButton.disabled);
     });
 
     test('https is a valid scheme', async () => {
@@ -459,19 +465,40 @@ suite('NewTabPageMostVisitedTest', () => {
     });
 
     test('chrome is not a valid scheme', () => {
+      assertTrue(saveButton.disabled);
       inputUrl.value = 'chrome://url';
       assertFalse(inputUrl.invalid);
-      saveButton.click();
+      leaveUrlInput();
       assertTrue(inputUrl.invalid);
+      assertTrue(saveButton.disabled);
     });
 
     test('invalid cleared when text entered', () => {
       inputUrl.value = '%';
       assertFalse(inputUrl.invalid);
-      saveButton.click();
+      leaveUrlInput();
       assertTrue(inputUrl.invalid);
+      assertEquals('Type a valid URL', inputUrl.errorMessage);
       inputUrl.value = '';
       assertFalse(inputUrl.invalid);
+    });
+
+    test('shortcut already exists', async () => {
+      await addTiles(2);
+      inputUrl.value = 'b';
+      assertFalse(inputUrl.invalid);
+      leaveUrlInput();
+      assertTrue(inputUrl.invalid);
+      assertEquals('Shortcut already exists', inputUrl.errorMessage);
+      inputUrl.value = 'c';
+      assertFalse(inputUrl.invalid);
+      leaveUrlInput();
+      assertFalse(inputUrl.invalid);
+      inputUrl.value = '%';
+      assertFalse(inputUrl.invalid);
+      leaveUrlInput();
+      assertTrue(inputUrl.invalid);
+      assertEquals('Type a valid URL', inputUrl.errorMessage);
     });
   });
 
@@ -533,7 +560,7 @@ suite('NewTabPageMostVisitedTest', () => {
       inputUrl.value = 'updated-url';
       assertFalse(mostVisited.$.toast.open);
       saveButton.click();
-      await flushTasks();
+      await testProxy.handler.whenCalled('updateMostVisitedTile');
       assertTrue(mostVisited.$.toast.open);
     });
 
@@ -569,6 +596,20 @@ suite('NewTabPageMostVisitedTest', () => {
 
       const [url, newUrl, newTitle] = await updateCalled;
       assertEquals('https://updated-url/', newUrl.url);
+    });
+
+    test('shortcut already exists', async () => {
+      inputUrl.value = 'a';
+      assertFalse(inputUrl.invalid);
+      leaveUrlInput();
+      assertTrue(inputUrl.invalid);
+      assertEquals('Shortcut already exists', inputUrl.errorMessage);
+      // The shortcut being editted has a URL of https://b/. Entering the same
+      // URL is not an error.
+      inputUrl.value = 'b';
+      assertFalse(inputUrl.invalid);
+      leaveUrlInput();
+      assertFalse(inputUrl.invalid);
     });
   });
 

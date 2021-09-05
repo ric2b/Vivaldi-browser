@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "base/numerics/ranges.h"
 #include "cc/animation/animation_delegate.h"
@@ -35,6 +36,12 @@ ElementId CalculateTargetElementId(const ElementAnimations* element_animations,
   return element_animations->element_id();
 }
 
+bool UsingPaintWorklet(int property_index) {
+  // The set of properties where its animation uses paint worklet infra.
+  return property_index == TargetProperty::CSS_CUSTOM_PROPERTY ||
+         property_index == TargetProperty::NATIVE_PROPERTY;
+}
+
 }  // namespace
 
 scoped_refptr<ElementAnimations> ElementAnimations::Create(
@@ -51,10 +58,8 @@ ElementAnimations::ElementAnimations(AnimationHost* host, ElementId element_id)
       has_element_in_active_list_(false),
       has_element_in_pending_list_(false),
       needs_push_properties_(false),
-      active_maximum_scale_(kNotScaled),
-      active_starting_scale_(kNotScaled),
-      pending_maximum_scale_(kNotScaled),
-      pending_starting_scale_(kNotScaled) {
+      active_maximum_scale_(kInvalidScale),
+      pending_maximum_scale_(kInvalidScale) {
   InitAffectedElementTypes();
 }
 
@@ -183,25 +188,16 @@ bool ElementAnimations::AnimationsPreserveAxisAlignment() const {
   return true;
 }
 
-void ElementAnimations::GetAnimationScales(ElementListType list_type,
-                                           float* maximum_scale,
-                                           float* starting_scale) const {
-  *maximum_scale = kNotScaled;
-  *starting_scale = kNotScaled;
+float ElementAnimations::MaximumScale(ElementListType list_type) const {
+  float maximum_scale = kInvalidScale;
   for (auto& keyframe_effect : keyframe_effects_list_) {
-    float keyframe_effect_maximum_scale = kNotScaled;
-    float keyframe_effect_starting_scale = kNotScaled;
-    bool success = keyframe_effect.GetAnimationScales(
-        list_type, &keyframe_effect_maximum_scale,
-        &keyframe_effect_starting_scale);
-    if (!success) {
-      *maximum_scale = kNotScaled;
-      *starting_scale = kNotScaled;
-      return;
-    }
-    *maximum_scale = std::max(*maximum_scale, keyframe_effect_maximum_scale);
-    *starting_scale = std::max(*starting_scale, keyframe_effect_starting_scale);
+    float keyframe_effect_maximum_scale =
+        keyframe_effect.MaximumScale(list_type);
+    if (keyframe_effect_maximum_scale == kInvalidScale)
+      return kInvalidScale;
+    maximum_scale = std::max(maximum_scale, keyframe_effect_maximum_scale);
   }
+  return maximum_scale;
 }
 
 bool ElementAnimations::ScrollOffsetAnimationWasInterrupted() const {
@@ -216,15 +212,16 @@ void ElementAnimations::NotifyClientFloatAnimated(
     float value,
     int target_property_id,
     KeyframeModel* keyframe_model) {
-  switch (keyframe_model->target_property_id()) {
+  switch (keyframe_model->target_property_type()) {
     case TargetProperty::CSS_CUSTOM_PROPERTY:
+    case TargetProperty::NATIVE_PROPERTY:
       // Custom properties are only tracked on the pending tree, where they may
       // be used as inputs for PaintWorklets (which are only dispatched from the
       // pending tree). As such, we don't need to notify in the case where a
       // KeyframeModel only affects active elements.
       if (KeyframeModelAffectsPendingElements(keyframe_model))
         OnCustomPropertyAnimated(PaintWorkletInput::PropertyValue(value),
-                                 keyframe_model);
+                                 keyframe_model, target_property_id);
       break;
     case TargetProperty::OPACITY: {
       float opacity = base::ClampToRange(value, 0.0f, 1.0f);
@@ -243,7 +240,7 @@ void ElementAnimations::NotifyClientFilterAnimated(
     const FilterOperations& filters,
     int target_property_id,
     KeyframeModel* keyframe_model) {
-  switch (keyframe_model->target_property_id()) {
+  switch (keyframe_model->target_property_type()) {
     case TargetProperty::BACKDROP_FILTER:
       if (KeyframeModelAffectsActiveElements(keyframe_model))
         OnBackdropFilterAnimated(ElementListType::ACTIVE, filters,
@@ -267,10 +264,10 @@ void ElementAnimations::NotifyClientColorAnimated(
     SkColor value,
     int target_property_id,
     KeyframeModel* keyframe_model) {
-  DCHECK_EQ(keyframe_model->target_property_id(),
+  DCHECK_EQ(keyframe_model->target_property_type(),
             TargetProperty::CSS_CUSTOM_PROPERTY);
   OnCustomPropertyAnimated(PaintWorkletInput::PropertyValue(value),
-                           keyframe_model);
+                           keyframe_model, target_property_id);
 }
 
 void ElementAnimations::NotifyClientTransformOperationsAnimated(
@@ -347,19 +344,13 @@ void ElementAnimations::UpdateClientAnimationState() {
           element_id_map, ElementListType::ACTIVE, diff_active, active_state_);
     }
 
-    float maximum_scale = kNotScaled;
-    float starting_scale = kNotScaled;
-    if (transform_element_id) {
-      GetAnimationScales(ElementListType::ACTIVE, &maximum_scale,
-                         &starting_scale);
-    }
-    if (maximum_scale != active_maximum_scale_ ||
-        starting_scale != active_starting_scale_) {
-      animation_host_->mutator_host_client()->AnimationScalesChanged(
-          transform_element_id, ElementListType::ACTIVE, maximum_scale,
-          starting_scale);
+    float maximum_scale = transform_element_id
+                              ? MaximumScale(ElementListType::ACTIVE)
+                              : kInvalidScale;
+    if (maximum_scale != active_maximum_scale_) {
+      animation_host_->mutator_host_client()->MaximumScaleChanged(
+          transform_element_id, ElementListType::ACTIVE, maximum_scale);
       active_maximum_scale_ = maximum_scale;
-      active_starting_scale_ = starting_scale;
     }
   }
 
@@ -371,19 +362,13 @@ void ElementAnimations::UpdateClientAnimationState() {
           pending_state_);
     }
 
-    float maximum_scale = kNotScaled;
-    float starting_scale = kNotScaled;
-    if (transform_element_id) {
-      GetAnimationScales(ElementListType::PENDING, &maximum_scale,
-                         &starting_scale);
-    }
-    if (maximum_scale != pending_maximum_scale_ ||
-        starting_scale != pending_starting_scale_) {
-      animation_host_->mutator_host_client()->AnimationScalesChanged(
-          transform_element_id, ElementListType::PENDING, maximum_scale,
-          starting_scale);
+    float maximum_scale = transform_element_id
+                              ? MaximumScale(ElementListType::PENDING)
+                              : kInvalidScale;
+    if (maximum_scale != pending_maximum_scale_) {
+      animation_host_->mutator_host_client()->MaximumScaleChanged(
+          transform_element_id, ElementListType::PENDING, maximum_scale);
       pending_maximum_scale_ = maximum_scale;
-      pending_starting_scale_ = starting_scale;
     }
   }
 }
@@ -474,13 +459,20 @@ void ElementAnimations::OnOpacityAnimated(ElementListType list_type,
 }
 
 void ElementAnimations::OnCustomPropertyAnimated(
-    PaintWorkletInput::PropertyValue custom_prop_value,
-    KeyframeModel* keyframe_model) {
+    PaintWorkletInput::PropertyValue property_value,
+    KeyframeModel* keyframe_model,
+    int target_property_id) {
   DCHECK(animation_host_);
   DCHECK(animation_host_->mutator_host_client());
+  ElementId id = CalculateTargetElementId(this, keyframe_model);
+  PaintWorkletInput::PropertyKey property_key =
+      target_property_id == TargetProperty::NATIVE_PROPERTY
+          ? PaintWorkletInput::PropertyKey(
+                keyframe_model->native_property_type(), id)
+          : PaintWorkletInput::PropertyKey(
+                keyframe_model->custom_property_name(), id);
   animation_host_->mutator_host_client()->OnCustomPropertyMutated(
-      CalculateTargetElementId(this, keyframe_model),
-      keyframe_model->custom_property_name(), std::move(custom_prop_value));
+      std::move(property_key), std::move(property_value));
 }
 
 void ElementAnimations::OnTransformAnimated(ElementListType list_type,
@@ -534,6 +526,18 @@ PropertyToElementIdMap ElementAnimations::GetPropertyToElementIdMap() const {
   for (int property_index = TargetProperty::FIRST_TARGET_PROPERTY;
        property_index <= TargetProperty::LAST_TARGET_PROPERTY;
        ++property_index) {
+    // We skip the set of properties that uses paint worklet, because the
+    // animation is not directly associated with the element its compositing
+    // layer targets and we use reserved element id when we attach a layer for
+    // the animation. In that case, the DCHECK here is no longer applicable.
+    // For example, when we have two paint worklet elements with two different
+    // custom property animations, then these two KeyframeModels would have
+    // different element_id and thus fail the first DCHECK here.
+    // It is not valid to include these properties in the PropertyToElementIdMap
+    // as they do not map to a single element id. Therefore, these properties
+    // should not be included in the map.
+    if (UsingPaintWorklet(property_index))
+      continue;
     TargetProperty::Type property =
         static_cast<TargetProperty::Type>(property_index);
     ElementId element_id_for_property;

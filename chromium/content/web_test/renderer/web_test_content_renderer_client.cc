@@ -22,14 +22,15 @@
 #include "content/web_test/renderer/web_frame_test_proxy.h"
 #include "content/web_test/renderer/web_test_render_thread_observer.h"
 #include "content/web_test/renderer/web_view_test_proxy.h"
-#include "content/web_test/renderer/web_widget_test_proxy.h"
 #include "media/base/audio_latency.h"
 #include "media/base/mime_util.h"
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/unique_name/unique_name_helper.h"
 #include "third_party/blink/public/platform/web_audio_latency_hint.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
+#include "third_party/blink/public/test/frame_widget_test_helper.h"
 #include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_testing_support.h"
 #include "ui/gfx/icc_profile.h"
@@ -58,13 +59,32 @@ RenderViewImpl* CreateWebViewTestProxy(
       WebTestRenderThreadObserver::GetInstance()->test_runner());
 }
 
-std::unique_ptr<RenderWidget> CreateWebWidgetTestProxy(
-    CompositorDependencies* compositor_deps) {
-  return std::make_unique<WebWidgetTestProxy>(compositor_deps);
-}
-
 RenderFrameImpl* CreateWebFrameTestProxy(RenderFrameImpl::CreateParams params) {
   return new WebFrameTestProxy(std::move(params));
+}
+
+blink::WebFrameWidget* CreateWebTestWebFrameWidget(
+    base::PassKey<blink::WebLocalFrame> pass_key,
+    blink::CrossVariantMojoAssociatedRemote<
+        blink::mojom::FrameWidgetHostInterfaceBase> frame_widget_host,
+    blink::CrossVariantMojoAssociatedReceiver<
+        blink::mojom::FrameWidgetInterfaceBase> frame_widget,
+    blink::CrossVariantMojoAssociatedRemote<
+        blink::mojom::WidgetHostInterfaceBase> widget_host,
+    blink::CrossVariantMojoAssociatedReceiver<blink::mojom::WidgetInterfaceBase>
+        widget,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    const viz::FrameSinkId& frame_sink_id,
+    bool hidden,
+    bool never_composited,
+    bool is_for_child_local_root,
+    bool is_for_nested_main_frame) {
+  return blink::FrameWidgetTestHelper::CreateTestWebFrameWidget(
+      std::move(pass_key), std::move(frame_widget_host),
+      std::move(frame_widget), std::move(widget_host), std::move(widget),
+      std::move(task_runner), frame_sink_id, hidden, never_composited,
+      is_for_child_local_root, is_for_nested_main_frame,
+      WebTestRenderThreadObserver::GetInstance()->test_runner());
 }
 
 }  // namespace
@@ -74,14 +94,16 @@ WebTestContentRendererClient::WebTestContentRendererClient() {
   // the creation of the production type with the subclasses.
   RenderViewImpl::InstallCreateHook(CreateWebViewTestProxy);
   RenderFrameImpl::InstallCreateHook(CreateWebFrameTestProxy);
-  // For RenderWidgets, web tests only subclass the ones attached to frames.
-  RenderWidget::InstallCreateForFrameHook(CreateWebWidgetTestProxy);
+  create_widget_callback_ = base::BindRepeating(&CreateWebTestWebFrameWidget);
+  blink::InstallCreateWebFrameWidgetHook(&create_widget_callback_);
 
   blink::UniqueNameHelper::PreserveStableUniqueNameForTesting();
   WebWorkerFetchContextImpl::InstallRewriteURLFunction(RewriteWebTestsURL);
 }
 
-WebTestContentRendererClient::~WebTestContentRendererClient() = default;
+WebTestContentRendererClient::~WebTestContentRendererClient() {
+  blink::InstallCreateWebFrameWidgetHook(nullptr);
+}
 
 void WebTestContentRendererClient::RenderThreadStarted() {
   ShellContentRendererClient::RenderThreadStarted();
@@ -134,6 +156,8 @@ void WebTestContentRendererClient::DidInitializeWorkerContextOnWorkerThread(
 
 void WebTestContentRendererClient::
     SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() {
+  // PerformanceManager is used by measure-memory web platform tests.
+  blink::WebRuntimeFeatures::EnablePerformanceManagerInstrumentation(true);
   // We always expose GC to web tests.
   std::string flags("--expose-gc");
   auto* command_line = base::CommandLine::ForCurrentProcess();

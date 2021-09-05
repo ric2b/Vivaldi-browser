@@ -21,6 +21,7 @@
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
 #include "base/logging.h"
+#include "base/strings/strcat.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "fuchsia/base/agent_manager.h"
@@ -46,7 +47,7 @@ static constexpr const char* kServices[] = {
     "fuchsia.mediacodec.CodecFactory",
     "fuchsia.memorypressure.Provider",
     "fuchsia.net.NameLookup",
-    "fuchsia.netstack.Netstack",
+    "fuchsia.net.interfaces.State",
     "fuchsia.posix.socket.Provider",
     "fuchsia.process.Launcher",
     "fuchsia.settings.Display",
@@ -181,7 +182,7 @@ class FrameHostComponent : public fuchsia::sys::ComponentController {
   // it to connect to the MetricsRecorder.
   static base::WeakPtr<const sys::ServiceDirectory>
   StartAndReturnIncomingServiceDirectory(
-      std::unique_ptr<base::fuchsia::StartupContext> startup_context,
+      std::unique_ptr<base::StartupContext> startup_context,
       fidl::InterfaceRequest<fuchsia::sys::ComponentController>
           controller_request,
       fuchsia::web::FrameHost* const frame_host_impl) {
@@ -193,11 +194,10 @@ class FrameHostComponent : public fuchsia::sys::ComponentController {
   }
 
  private:
-  FrameHostComponent(
-      std::unique_ptr<base::fuchsia::StartupContext> startup_context,
-      fidl::InterfaceRequest<fuchsia::sys::ComponentController>
-          controller_request,
-      fuchsia::web::FrameHost* const frame_host_impl)
+  FrameHostComponent(std::unique_ptr<base::StartupContext> startup_context,
+                     fidl::InterfaceRequest<fuchsia::sys::ComponentController>
+                         controller_request,
+                     fuchsia::web::FrameHost* const frame_host_impl)
       : startup_context_(std::move(startup_context)),
         frame_host_binding_(startup_context_->outgoing(), frame_host_impl),
         weak_incoming_services_(startup_context_->svc()) {
@@ -214,7 +214,7 @@ class FrameHostComponent : public fuchsia::sys::ComponentController {
     delete this;
   }
 
-  const std::unique_ptr<base::fuchsia::StartupContext> startup_context_;
+  const std::unique_ptr<base::StartupContext> startup_context_;
   const base::fuchsia::ScopedServiceBinding<fuchsia::web::FrameHost>
       frame_host_binding_;
   fidl::Binding<fuchsia::sys::ComponentController> binding_{this};
@@ -228,22 +228,20 @@ class DataResetComponent : public fuchsia::sys::ComponentController,
                            public chromium::cast::DataReset {
  public:
   // Creates a DataResetComponent with lifetime managed by |controller_request|.
-  static void Start(
-      base::OnceCallback<bool()> delete_persistent_data,
-      std::unique_ptr<base::fuchsia::StartupContext> startup_context,
-      fidl::InterfaceRequest<fuchsia::sys::ComponentController>
-          controller_request) {
+  static void Start(base::OnceCallback<bool()> delete_persistent_data,
+                    std::unique_ptr<base::StartupContext> startup_context,
+                    fidl::InterfaceRequest<fuchsia::sys::ComponentController>
+                        controller_request) {
     new DataResetComponent(std::move(delete_persistent_data),
                            std::move(startup_context),
                            std::move(controller_request));
   }
 
  private:
-  DataResetComponent(
-      base::OnceCallback<bool()> delete_persistent_data,
-      std::unique_ptr<base::fuchsia::StartupContext> startup_context,
-      fidl::InterfaceRequest<fuchsia::sys::ComponentController>
-          controller_request)
+  DataResetComponent(base::OnceCallback<bool()> delete_persistent_data,
+                     std::unique_ptr<base::StartupContext> startup_context,
+                     fidl::InterfaceRequest<fuchsia::sys::ComponentController>
+                         controller_request)
       : delete_persistent_data_(std::move(delete_persistent_data)),
         startup_context_(std::move(startup_context)),
         data_reset_handler_binding_(startup_context_->outgoing(), this) {
@@ -272,7 +270,7 @@ class DataResetComponent : public fuchsia::sys::ComponentController,
   }
 
   base::OnceCallback<bool()> delete_persistent_data_;
-  std::unique_ptr<base::fuchsia::StartupContext> startup_context_;
+  std::unique_ptr<base::StartupContext> startup_context_;
   const base::fuchsia::ScopedServiceBinding<chromium::cast::DataReset>
       data_reset_handler_binding_;
   fidl::Binding<fuchsia::sys::ComponentController> binding_{this};
@@ -335,7 +333,7 @@ void CastRunner::StartComponent(
   }
 
   auto startup_context =
-      std::make_unique<base::fuchsia::StartupContext>(std::move(startup_info));
+      std::make_unique<base::StartupContext>(std::move(startup_info));
 
   if (cors_exempt_headers_) {
     StartComponentInternal(cast_url, std::move(startup_context),
@@ -435,7 +433,8 @@ void CastRunner::LaunchPendingComponent(PendingCastComponent* pending_component,
   }
 
   auto cast_component = std::make_unique<CastComponent>(
-      component_owner, std::move(params), is_headless_);
+      base::StrCat({"cast:", pending_component->app_id()}), component_owner,
+      std::move(params), is_headless_);
 
   // Start the component, which creates and configures the web.Frame, and load
   // the specified web content into it.
@@ -447,17 +446,36 @@ void CastRunner::LaunchPendingComponent(PendingCastComponent* pending_component,
                           std::vector<fuchsia::net::http::Header>());
 
   if (component_owner == main_context_.get()) {
+    const auto& application_config = cast_component->application_config();
+
     // If this component has the microphone permission then use it to route
     // Audio service requests through.
     if (IsPermissionGrantedInAppConfig(
-            cast_component->application_config(),
-            fuchsia::web::PermissionType::MICROPHONE)) {
-      audio_capturer_component_ = cast_component.get();
+            application_config, fuchsia::web::PermissionType::MICROPHONE)) {
+      if (first_audio_capturer_agent_url_.empty()) {
+        first_audio_capturer_agent_url_ = application_config.agent_url();
+      } else {
+        LOG_IF(WARNING, first_audio_capturer_agent_url_ !=
+                            application_config.agent_url())
+            << "Audio capturer already in use for different agent. "
+               "Current agent: "
+            << application_config.agent_url();
+      }
+      audio_capturer_components_.emplace(cast_component.get());
     }
 
-    if (IsPermissionGrantedInAppConfig(cast_component->application_config(),
+    if (IsPermissionGrantedInAppConfig(application_config,
                                        fuchsia::web::PermissionType::CAMERA)) {
-      video_capturer_component_ = cast_component.get();
+      if (first_video_capturer_agent_url_.empty()) {
+        first_video_capturer_agent_url_ = application_config.agent_url();
+      } else {
+        LOG_IF(WARNING, first_video_capturer_agent_url_ !=
+                            application_config.agent_url())
+            << "Video capturer already in use for different agent. "
+               "Current agent: "
+            << application_config.agent_url();
+      }
+      video_capturer_components_.emplace(cast_component.get());
     }
   }
 
@@ -481,11 +499,8 @@ void CastRunner::CancelPendingComponent(
 }
 
 void CastRunner::OnComponentDestroyed(CastComponent* component) {
-  if (component == audio_capturer_component_)
-    audio_capturer_component_ = nullptr;
-
-  if (component == video_capturer_component_)
-    video_capturer_component_ = nullptr;
+  audio_capturer_components_.erase(component);
+  video_capturer_components_.erase(component);
 }
 
 fuchsia::web::CreateContextParams CastRunner::GetCommonContextParams() {
@@ -503,9 +518,9 @@ fuchsia::web::CreateContextParams CastRunner::GetCommonContextParams() {
         fuchsia::web::ContextFeatureFlags::VULKAN;
   }
 
-  // TODO(b/141956135): Fetch this information from the agent.
+  // TODO(crbug.com/1166790): Fetch UserAgent version strings from Agent.
   params.set_user_agent_product("CrKey");
-  params.set_user_agent_version("1.52.000000");
+  params.set_user_agent_version("1.52.999999");
 
   // When tests require that VULKAN be disabled, DRM must also be disabled.
   if (disable_vulkan_for_test_) {
@@ -612,13 +627,15 @@ void CastRunner::OnIsolatedContextEmpty(WebContentRunner* context) {
   isolated_contexts_.erase(it);
 }
 
+// TODO(crbug.com/1171057): Add integration test.
 void CastRunner::OnAudioServiceRequest(
     fidl::InterfaceRequest<fuchsia::media::Audio> request) {
   // If we have a component that allows AudioCapturer access then redirect the
   // fuchsia.media.Audio requests to the corresponding agent.
-  if (audio_capturer_component_) {
-    audio_capturer_component_->agent_manager()->ConnectToAgentService(
-        audio_capturer_component_->application_config().agent_url(),
+  if (!audio_capturer_components_.empty()) {
+    CastComponent* capturer_component = *audio_capturer_components_.begin();
+    capturer_component->agent_manager()->ConnectToAgentService(
+        capturer_component->application_config().agent_url(),
         std::move(request));
     return;
   }
@@ -629,13 +646,15 @@ void CastRunner::OnAudioServiceRequest(
   base::ComponentContextForProcess()->svc()->Connect(std::move(request));
 }
 
+// TODO(crbug.com/1171057): Add integration test.
 void CastRunner::OnCameraServiceRequest(
     fidl::InterfaceRequest<fuchsia::camera3::DeviceWatcher> request) {
   // If we have a component that allows camera access then redirect the
   // fuchsia.camera3.DeviceWatcher requests to the corresponding agent.
-  if (video_capturer_component_) {
-    video_capturer_component_->agent_manager()->ConnectToAgentService(
-        video_capturer_component_->application_config().agent_url(),
+  if (!video_capturer_components_.empty()) {
+    CastComponent* capturer_component = *video_capturer_components_.begin();
+    capturer_component->agent_manager()->ConnectToAgentService(
+        capturer_component->application_config().agent_url(),
         std::move(request));
     return;
   }
@@ -673,7 +692,7 @@ void CastRunner::OnMetricsRecorderServiceRequest(
 
 void CastRunner::StartComponentInternal(
     const GURL& url,
-    std::unique_ptr<base::fuchsia::StartupContext> startup_context,
+    std::unique_ptr<base::StartupContext> startup_context,
     fidl::InterfaceRequest<fuchsia::sys::ComponentController>
         controller_request) {
   // TODO(crbug.com/1120914): Remove this once Component Framework v2 can be

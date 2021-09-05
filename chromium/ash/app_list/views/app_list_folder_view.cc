@@ -95,11 +95,11 @@ class BackgroundAnimation : public AppListFolderView::Animation,
         AppListColorProvider::Get()->GetFolderBackgroundColor(
             folder_view_->GetAppListConfig().folder_background_color());
     const SkColor from_color =
-        show_ ? folder_view_->GetAppListConfig().folder_bubble_color()
+        show_ ? AppListColorProvider::Get()->GetFolderBubbleColor()
               : background_color;
     const SkColor to_color =
         show_ ? background_color
-              : folder_view_->GetAppListConfig().folder_bubble_color();
+              : AppListColorProvider::Get()->GetFolderBubbleColor();
 
     background_view_->layer()->SetColor(from_color);
     background_view_->layer()->SetBackgroundBlur(
@@ -478,7 +478,9 @@ AppListFolderView::AppListFolderView(AppsContainerView* container_view,
   page_switcher_ =
       contents_container_->AddChildView(std::make_unique<PageSwitcher>(
           items_grid_view_->pagination_model(), false /* vertical */,
-          contents_view_->app_list_view()->is_tablet_mode()));
+          contents_view_->app_list_view()->is_tablet_mode(),
+          AppListColorProvider::Get()->GetFolderBackgroundColor(
+              items_grid_view_->GetAppListConfig().folder_background_color())));
   view_model_->Add(page_switcher_, kIndexPageSwitcher);
 
   model_->AddObserver(this);

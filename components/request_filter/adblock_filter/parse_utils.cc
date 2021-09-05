@@ -5,27 +5,8 @@
 #include "base/i18n/case_conversion.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/request_filter/adblock_filter/adblock_filter_rule.h"
 
 namespace adblock_filter {
-
-const std::map<base::StringPiece, int> kTypeStringMap{
-    {"script", FilterRule::kScript},
-    {"image", FilterRule::kImage},
-    {"background", FilterRule::kImage},  // Compat with older filter formats
-    {"stylesheet", FilterRule::kStylesheet},
-    {"object", FilterRule::kObject},
-    {"xmlhttprequest", FilterRule::kXmlHttpRequest},
-    {"subdocument", FilterRule::kSubDocument},
-    {"ping", FilterRule::kPing},
-    {"websocket", FilterRule::kWebSocket},
-    {"webrtc", FilterRule::kWebRTC},
-    {"font", FilterRule::kFont},
-    {"media", FilterRule::kMedia},
-    {"other", FilterRule::kOther},
-    {"xbl", FilterRule::kOther},   // Compat with older filter formats
-    {"dtd", FilterRule::kOther}};  // Compat with older filter formats
-
 std::string BuildNgramSearchString(const base::StringPiece& pattern) {
   // Build a suitable search string for NGrams, allowing for indexing and fast
   // retrieval of the pattern when matching the url.

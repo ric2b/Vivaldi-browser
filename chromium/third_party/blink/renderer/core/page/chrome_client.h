@@ -32,6 +32,7 @@
 #include "cc/input/overscroll_behavior.h"
 #include "cc/paint/paint_image.h"
 #include "cc/trees/paint_holding_commit_trigger.h"
+#include "components/viz/common/delegated_ink_metadata.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
@@ -39,11 +40,10 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/blame_context.h"
-#include "third_party/blink/public/platform/web_battery_savings.h"
 #include "third_party/blink/public/web/web_swap_result.h"
-#include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/html/battery_savings.h"
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/popup_menu.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
@@ -216,7 +216,6 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                      const AtomicString& frame_name,
                      const WebWindowFeatures&,
                      network::mojom::blink::WebSandboxFlags,
-                     const FeaturePolicyFeatureState&,
                      const SessionStorageNamespaceId&,
                      bool& consumed_user_gesture);
 
@@ -264,8 +263,10 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   virtual void SetOverscrollBehavior(LocalFrame& main_frame,
                                      const cc::OverscrollBehavior&) = 0;
 
-  virtual bool ShouldReportDetailedMessageForSource(LocalFrame&,
-                                                    const String& source) = 0;
+  virtual bool ShouldReportDetailedMessageForSourceAndSeverity(
+      LocalFrame&,
+      mojom::blink::ConsoleMessageLevel log_level,
+      const String& source) = 0;
   virtual void AddMessageToConsole(LocalFrame*,
                                    mojom::ConsoleMessageSource,
                                    mojom::ConsoleMessageLevel,
@@ -389,7 +390,9 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                FullscreenRequestType) {}
   virtual void ExitFullscreen(LocalFrame&) {}
   virtual void FullscreenElementChanged(Element* old_element,
-                                        Element* new_element) {}
+                                        Element* new_element,
+                                        const FullscreenOptions* options,
+                                        FullscreenRequestType) {}
 
   virtual void AnimateDoubleTapZoom(const gfx::Point& point,
                                     const gfx::Rect& rect) {}
@@ -490,11 +493,13 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
   }
 
   // The |callback| will be fired when the corresponding renderer frame for the
-  // |frame| is submitted (still called "swapped") to the display compositor
-  // (either with DidSwap or DidNotSwap).
+  // |frame| is presented in the display compositor. The reported time could
+  // sometimes be the swap time, as is the case when the swap is aborted. In
+  // this case, WebSwapResult will be DidNotSwap.
   using ReportTimeCallback =
       WTF::CrossThreadOnceFunction<void(WebSwapResult, base::TimeTicks)>;
-  virtual void NotifySwapTime(LocalFrame& frame, ReportTimeCallback callback) {}
+  virtual void NotifyPresentationTime(LocalFrame& frame,
+                                      ReportTimeCallback callback) {}
 
   // Enable or disable BeginMainFrameNotExpected signals from the compositor of
   // the local root of |frame|. These signals would be consumed by the blink
@@ -524,7 +529,7 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
       std::unique_ptr<viz::DelegatedInkMetadata> metadata) {}
 
   virtual void BatterySavingsChanged(LocalFrame& main_frame,
-                                     WebBatterySavingsFlags savings) = 0;
+                                     BatterySavingsFlags savings) = 0;
 
   virtual void FormElementReset(HTMLFormElement& element) {}
 
@@ -549,7 +554,6 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
                                      const AtomicString& frame_name,
                                      const WebWindowFeatures&,
                                      network::mojom::blink::WebSandboxFlags,
-                                     const FeaturePolicyFeatureState&,
                                      const SessionStorageNamespaceId&,
                                      bool& consumed_user_gesture) = 0;
 

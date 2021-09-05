@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//testing/test.gni")
 
@@ -304,22 +305,16 @@ static_library("rest_of_sync") {
 static_library("test_support_engine") {
   testonly = true
   sources = [
-    "engine/fake_model_type_connector.cc",
-    "engine/fake_model_type_connector.h",
-    "engine/fake_model_type_processor.cc",
-    "engine/fake_model_type_processor.h",
-    "engine/fake_sync_engine.cc",
-    "engine/fake_sync_engine.h",
-    "engine/fake_sync_manager.cc",
-    "engine/fake_sync_manager.h",
-    "engine/mock_sync_engine.cc",
-    "engine/mock_sync_engine.h",
-    "engine/sync_engine_host_stub.cc",
-    "engine/sync_engine_host_stub.h",
-    "engine/test_engine_components_factory.cc",
-    "engine/test_engine_components_factory.h",
     "engine_impl/cycle/mock_debug_info_getter.cc",
     "engine_impl/cycle/mock_debug_info_getter.h",
+    "test/engine/fake_model_type_connector.cc",
+    "test/engine/fake_model_type_connector.h",
+    "test/engine/fake_model_type_processor.cc",
+    "test/engine/fake_model_type_processor.h",
+    "test/engine/fake_sync_engine.cc",
+    "test/engine/fake_sync_engine.h",
+    "test/engine/fake_sync_manager.cc",
+    "test/engine/fake_sync_manager.h",
     "test/engine/fake_sync_scheduler.cc",
     "test/engine/fake_sync_scheduler.h",
     "test/engine/mock_connection_manager.cc",
@@ -330,10 +325,16 @@ static_library("test_support_engine") {
     "test/engine/mock_model_type_worker.h",
     "test/engine/mock_nudge_handler.cc",
     "test/engine/mock_nudge_handler.h",
+    "test/engine/mock_sync_engine.cc",
+    "test/engine/mock_sync_engine.h",
     "test/engine/mock_update_handler.cc",
     "test/engine/mock_update_handler.h",
     "test/engine/single_type_mock_server.cc",
     "test/engine/single_type_mock_server.h",
+    "test/engine/sync_engine_host_stub.cc",
+    "test/engine/sync_engine_host_stub.h",
+    "test/engine/test_engine_components_factory.cc",
+    "test/engine/test_engine_components_factory.h",
     "test/fake_sync_encryption_handler.cc",
     "test/fake_sync_encryption_handler.h",
   ]
@@ -475,10 +476,14 @@ source_set("unit_tests") {
     "nigori/nigori_unittest.cc",
     "protocol/proto_enum_conversions_unittest.cc",
     "protocol/proto_value_conversions_unittest.cc",
+    "trusted_vault/download_keys_response_handler_unittest.cc",
+    "trusted_vault/proto_string_bytes_conversion_unittest.cc",
+    "trusted_vault/register_authentication_factor_request_unittest.cc",
     "trusted_vault/securebox_unittest.cc",
     "trusted_vault/standalone_trusted_vault_backend_unittest.cc",
     "trusted_vault/trusted_vault_access_token_fetcher_frontend_unittest.cc",
     "trusted_vault/trusted_vault_connection_impl_unittest.cc",
+    "trusted_vault/trusted_vault_crypto_unittest.cc",
     "trusted_vault/trusted_vault_request_unittest.cc",
   ]
 
@@ -496,6 +501,7 @@ source_set("unit_tests") {
     ":test_support_nigori",
     "//base",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//components/gcm_driver:test_support",
     "//components/invalidation/impl",
     "//components/os_crypt",
@@ -540,7 +546,7 @@ source_set("unit_tests") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     deps += [ "//chromeos/constants" ]
   }
 }

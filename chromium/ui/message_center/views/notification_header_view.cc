@@ -30,8 +30,6 @@
 #include "ui/views/painter.h"
 #include "ui/views/view_class_properties.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace message_center {
 
 namespace {

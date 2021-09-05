@@ -9,6 +9,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -48,7 +49,6 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/test/ui_controls.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/point.h"
@@ -420,17 +420,14 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
   EXPECT_EQ(main_frame, web_contents->GetFocusedFrame());
 }
 
-#if (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || defined(OS_WIN)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || defined(OS_WIN)
 // Ensures that renderers know to advance focus to sibling frames and parent
 // frames in the presence of mouse click initiated focus changes.
 // Verifies against regression of https://crbug.com/702330
 IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
                        TabAndMouseFocusNavigation) {
-#if defined(USE_OZONE)
-  // TODO(https://crbug.com/1109696): enable for ozone.
-  if (features::IsUsingOzonePlatform())
-    return;
-#endif
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
   ui_test_utils::NavigateToURL(browser(), main_url);
@@ -1248,6 +1245,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractivePDFTest,
   auto send_right_mouse_event = [](content::RenderWidgetHost* host, int x,
                                    int y, blink::WebInputEvent::Type type) {
     blink::WebMouseEvent event;
+    event.SetTimeStamp(blink::WebInputEvent::GetStaticTimeStampForTests());
     event.SetPositionInWidget(x, y);
     event.button = blink::WebMouseEvent::Button::kRight;
     event.SetType(type);
@@ -1552,6 +1550,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessInteractiveBrowserTest,
 
     // Now simulate a click outside the bounds of the popup.
     blink::WebMouseEvent event;
+    event.SetTimeStamp(blink::WebInputEvent::GetStaticTimeStampForTests());
     // Click a little bit to the right and top of the <input>.
     event.SetPositionInWidget(130, 10);
     event.button = blink::WebMouseEvent::Button::kLeft;

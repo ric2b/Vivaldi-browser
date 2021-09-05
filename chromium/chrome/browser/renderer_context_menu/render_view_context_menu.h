@@ -13,6 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_sub_menu_model.h"
@@ -32,8 +33,6 @@
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/menu_manager.h"
 #endif
-
-#include "notes/notes_submenu_observer.h"
 
 class AccessibilityLabelsMenuObserver;
 class ClickToCallContextMenuObserver;
@@ -255,9 +254,6 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   // on URL.
   ProtocolHandlerRegistry::ProtocolHandlerList GetHandlersForLinkUrl();
 
-  // Vivaldi
-  void AppendInsertNoteSubMenu();
-
   // The destination URL to use if the user tries to search for or navigate to
   // a text selection.
   GURL selection_navigation_url_;
@@ -284,7 +280,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
       spelling_options_submenu_observer_;
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // An observer that handles "Open with <app>" items.
   std::unique_ptr<RenderViewContextMenuObserver> open_with_menu_observer_;
   // An observer that handles smart text selection action items.
@@ -317,8 +313,9 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   std::unique_ptr<SharedClipboardContextMenuObserver>
       shared_clipboard_context_menu_observer_;
 
-  // Vivaldi
-  std::unique_ptr<NotesSubMenuObserver> insert_note_submenu_observer_;
+#ifdef VIVALDI_BUILD
+#include "browser/menus/vivaldi_render_view_context_menu.inc"
+#endif // VIVALDI_BUILD
 
   DISALLOW_COPY_AND_ASSIGN(RenderViewContextMenu);
 };

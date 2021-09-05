@@ -77,6 +77,12 @@ interface BroadcastChannel : EventTarget
     method postMessage
     setter onmessage
     setter onmessageerror
+interface BucketManager
+    attribute @@toStringTag
+    method constructor
+    method delete
+    method keys
+    method openOrCreate
 interface ByteLengthQueuingStrategy
     attribute @@toStringTag
     getter highWaterMark
@@ -789,7 +795,7 @@ interface ImageData
     getter height
     getter width
     method constructor
-    method getColorSettings
+    method getSettings
 interface InstallEvent : ExtendableEvent
     attribute @@toStringTag
     method constructor
@@ -895,7 +901,7 @@ interface NativeIOFile
     method read
     method setLength
     method write
-interface NativeIOManager
+interface NativeIOFileManager
     attribute @@toStringTag
     method constructor
     method delete
@@ -981,6 +987,7 @@ interface OffscreenCanvasRenderingContext2D
     getter filter
     getter font
     getter fontKerning
+    getter fontStretch
     getter fontVariantCaps
     getter globalAlpha
     getter globalCompositeOperation
@@ -1050,6 +1057,7 @@ interface OffscreenCanvasRenderingContext2D
     setter filter
     setter font
     setter fontKerning
+    setter fontStretch
     setter fontVariantCaps
     setter globalAlpha
     setter globalCompositeOperation
@@ -1270,6 +1278,14 @@ interface QuicTransport
     method receiveDatagrams
     method receiveStreams
     method sendDatagrams
+interface ReadableByteStreamController
+    attribute @@toStringTag
+    getter byobRequest
+    getter desiredSize
+    method close
+    method constructor
+    method enqueue
+    method error
 interface ReadableStream
     attribute @@toStringTag
     getter locked
@@ -1279,6 +1295,26 @@ interface ReadableStream
     method pipeThrough
     method pipeTo
     method tee
+interface ReadableStreamBYOBReader
+    attribute @@toStringTag
+    getter closed
+    method cancel
+    method constructor
+    method read
+    method releaseLock
+interface ReadableStreamBYOBRequest
+    attribute @@toStringTag
+    getter view
+    method constructor
+    method respond
+    method respondWithNewView
+interface ReadableStreamDefaultController
+    attribute @@toStringTag
+    getter desiredSize
+    method close
+    method constructor
+    method enqueue
+    method error
 interface ReadableStreamDefaultReader
     attribute @@toStringTag
     getter closed
@@ -1528,6 +1564,11 @@ interface URL
     setter protocol
     setter search
     setter username
+interface URLPattern
+    attribute @@toStringTag
+    method constructor
+    method exec
+    method test
 interface URLSearchParams
     attribute @@toStringTag
     method @@iterator
@@ -2871,6 +2912,7 @@ interface WebTransport
     method constructor
     method createBidirectionalStream
     method createUnidirectionalStream
+    method setDatagramWritableQueueExpirationDuration
 interface WindowClient : Client
     attribute @@toStringTag
     getter focused
@@ -2946,12 +2988,10 @@ interface WorkerNavigator
     getter permissions
     getter platform
     getter product
-    getter serial
     getter storage
-    getter usb
+    getter storageBuckets
     getter userAgent
     getter userAgentData
-    getter wakeLock
     method clearAppBadge
     method constructor
     method setAppBadge

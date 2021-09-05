@@ -111,6 +111,12 @@ export class ChromeHelper {
 
     const {controller} = await this.remote_.getWindowStateController();
     await windowController.bind(controller);
+
+    const closeConnection = () => {
+      usageCallbackRouter.$.close();
+      window.removeEventListener('beforeunload', closeConnection);
+    };
+    window.addEventListener('beforeunload', closeConnection);
   }
 
   /**
@@ -250,6 +256,15 @@ export class ChromeHelper {
   async isMetricsAndCrashReportingEnabled() {
     const {isEnabled} = await this.remote_.isMetricsAndCrashReportingEnabled();
     return isEnabled;
+  }
+
+  /**
+   * Sends the broadcast to ARC to notify the new photo/video is captured.
+   * @param {{isVideo: boolean, name: string}} info
+   * @return {!Promise}
+   */
+  async sendNewCaptureBroadcast({isVideo, name}) {
+    this.remote_.sendNewCaptureBroadcast(isVideo, name);
   }
 
   /**

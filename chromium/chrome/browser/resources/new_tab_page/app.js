@@ -18,6 +18,7 @@ import {hexColorToSkColor, skColorToRgba} from 'chrome://resources/js/color_util
 import {FocusOutlineManager} from 'chrome://resources/js/cr/ui/focus_outline_manager.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BackgroundManager} from './background_manager.js';
@@ -166,7 +167,7 @@ class AppElement extends PolymerElement {
         type: Boolean,
       },
 
-      /** @private {skia.mojom.SkColor} */
+      /** @private {SkColor} */
       backgroundColor_: {
         computed: 'computeBackgroundColor_(showBackgroundImage_, theme_)',
         type: Object,
@@ -194,6 +195,24 @@ class AppElement extends PolymerElement {
       realboxShown_: {
         type: Boolean,
         computed: 'computeRealboxShown_(theme_)',
+      },
+
+      /** @private */
+      logoEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('logoEnabled'),
+      },
+
+      /** @private */
+      shortcutsEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('shortcutsEnabled'),
+      },
+
+      /** @private */
+      middleSlotPromoEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('middleSlotPromoEnabled'),
       },
 
       /** @private */
@@ -247,21 +266,15 @@ class AppElement extends PolymerElement {
       moduleDescriptors_: Object,
 
       /**
-       * The <ntp-module-wrapper> element of the last dismissed module.
-       * @type {?Element}
+       * Data about the most recently dismissed module.
+       * @type {?{id: string, element: !Element, message: string,
+       *     restoreCallback: function()}}
        * @private
        */
-      dismissedModuleWrapper_: {
+      dismissedModuleData_: {
         type: Object,
         value: null,
       },
-
-      /**
-       * The message shown in the toast when a module is dismissed.
-       * @type {string}
-       * @private
-       */
-      dismissModuleToastMessage_: String,
     };
   }
 
@@ -523,7 +536,8 @@ class AppElement extends PolymerElement {
    * @private
    */
   computePromoAndModulesLoaded_() {
-    return this.middleSlotPromoLoaded_ &&
+    return (!loadTimeData.getBoolean('middleSlotPromoEnabled') ||
+            this.middleSlotPromoLoaded_) &&
         (!loadTimeData.getBoolean('modulesEnabled') || this.modulesLoaded_);
   }
 
@@ -541,7 +555,8 @@ class AppElement extends PolymerElement {
       return;
     }
     this.moduleDescriptors_ =
-        await ModuleRegistry.getInstance().initializeModules();
+        await ModuleRegistry.getInstance().initializeModules(
+            loadTimeData.getInteger('modulesLoadTimeout'));
   }
 
   /** @private */
@@ -588,7 +603,7 @@ class AppElement extends PolymerElement {
   }
 
   /**
-   * @param {skia.mojom.SkColor} skColor
+   * @param {SkColor} skColor
    * @return {string}
    * @private
    */
@@ -700,7 +715,7 @@ class AppElement extends PolymerElement {
   }
 
   /**
-   * @return {skia.mojom.SkColor}
+   * @return {SkColor}
    * @private
    */
   computeBackgroundColor_() {
@@ -711,7 +726,7 @@ class AppElement extends PolymerElement {
   }
 
   /**
-   * @return {skia.mojom.SkColor}
+   * @return {SkColor}
    * @private
    */
   computeLogoColor_() {
@@ -863,19 +878,6 @@ class AppElement extends PolymerElement {
   /** @private */
   onMiddleSlotPromoLoaded_() {
     this.middleSlotPromoLoaded_ = true;
-    // The promo is always shown when modules are enabled since it will not
-    // overlap with other elements.
-    if (this.modulesEnabled_) {
-      return;
-    }
-    const onResize = () => {
-      const promoElement = $$(this, 'ntp-middle-slot-promo');
-      promoElement.hidden =
-          $$(this, '#mostVisited').getBoundingClientRect().bottom >=
-          promoElement.offsetTop;
-    };
-    this.eventTracker_.add(window, 'resize', onResize);
-    onResize();
   }
 
   /** @private */
@@ -884,19 +886,24 @@ class AppElement extends PolymerElement {
   }
 
   /**
-   * @param {!CustomEvent<string>} e Event notifying a module was dismissed.
-   *     Contains the message to show in the toast.
+   * @param {!CustomEvent<{message: string, restoreCallback: function()}>} e
+   *     Event notifying a module was dismissed. Contains the message to show in
+   *     the toast.
    * @private
    */
   onDismissModule_(e) {
-    this.dismissedModuleWrapper_ = /** @type {!Element} */ (e.target);
+    this.dismissedModuleData_ = {
+      id: $$(this, '#modules').itemForElement(e.target).id,
+      element: /** @type {!Element} */ (e.target),
+      message: e.detail.message,
+      restoreCallback: e.detail.restoreCallback,
+    };
+    this.dismissedModuleData_.element.hidden = true;
 
     // Notify the user.
-    this.dismissModuleToastMessage_ = e.detail;
     $$(this, '#dismissModuleToast').show();
     // Notify the backend.
-    this.pageHandler_.onDismissModule(
-        this.dismissedModuleWrapper_.descriptor.id);
+    this.pageHandler_.onDismissModule(this.dismissedModuleData_.id);
   }
 
   /**
@@ -904,14 +911,15 @@ class AppElement extends PolymerElement {
    */
   onUndoDismissModuleButtonClick_() {
     // Restore the module.
-    this.dismissedModuleWrapper_.restore();
+    this.dismissedModuleData_.restoreCallback();
+    this.dismissedModuleData_.element.hidden = false;
+
     // Notify the user.
     $$(this, '#dismissModuleToast').hide();
     // Notify the backend.
-    this.pageHandler_.onRestoreModule(
-        this.dismissedModuleWrapper_.descriptor.id);
+    this.pageHandler_.onRestoreModule(this.dismissedModuleData_.id);
 
-    this.dismissedModuleWrapper_ = null;
+    this.dismissedModuleData_ = null;
   }
 
   /**

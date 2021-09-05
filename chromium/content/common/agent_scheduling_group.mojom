@@ -5,11 +5,11 @@
 module content.mojom;
 
 import "content/common/associated_interfaces.mojom";
-import "content/common/document_scoped_interface_bundle.mojom";
 import "content/common/native_types.mojom";
 import "ipc/constants.mojom";
 import "mojo/public/mojom/base/generic_pending_receiver.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
+import "third_party/blink/public/mojom/browser_interface_broker.mojom";
 import "third_party/blink/public/mojom/frame/frame_owner_properties.mojom";
 import "third_party/blink/public/mojom/frame/policy_container.mojom";
 import "third_party/blink/public/mojom/page/page.mojom";
@@ -51,7 +51,8 @@ struct CreateViewParams {
 
   // This is null precisely when |main_frame_routing_id| is MSG_ROUTING_NONE,
   // that is, when creating a RenderView for a remote main frame.
-  DocumentScopedInterfaceBundle? main_frame_interface_bundle;
+  pending_remote<blink.mojom.BrowserInterfaceBroker>?
+      main_frame_interface_broker;
 
   // The communication interfaces for the WebFrameWidget in blink. All should
   // be set if there is a |main_frame_routing_id|.
@@ -175,7 +176,7 @@ struct CreateFrameParams {
   // parent frame, in front of any other children.
   int32 previous_sibling_routing_id;
 
-  DocumentScopedInterfaceBundle interface_bundle;
+  pending_remote<blink.mojom.BrowserInterfaceBroker> interface_broker;
 
   // When the new frame has a parent, |replication_state| holds the new frame's
   // properties replicated from the process rendering the parent frame, such as
@@ -215,26 +216,32 @@ struct CreateFrameParams {
 // AgentSchedulingGroup and the browser process's AgentSchedulingGroupHost.
 // Implemented by AgentSchedulingGroupHost (in the browser process).
 interface AgentSchedulingGroupHost {
+  // Acknowledge a RenderFrame was unloaded due to NavigationControl::Unload().
+  // This is not simply a reply callback on NavigationControl::Unload() because
+  // it needs to be invoked after the AssociatedReceiver (owned by RenderFrame)
+  // is already destroyed. This timing is required to ensure that any scheduled
+  // postMessages are dispatched prior to acknowledging the unload (which tears
+  // down the browser-side RFHI by removing it from the pending delete list)
+  DidUnloadRenderFrame(mojo_base.mojom.UnguessableToken frame_token);
 };
 
 // Interface for general communication between the browser process's
 // AgentSchedulingGroupHost and the renderer process's AgentSchedulingGroup.
 // Implemented by content::AgentSchedulingGroup (in the renderer process).
 interface AgentSchedulingGroup {
-  // Tells the renderer to bind the receiver to a backing RouteProvider
-  // implementation, which in practice is itself. Also passes a remote to the
-  // RouteProvider interface owned by AgentSchedulingGroupHost so that we
-  // immediately have bidirectional RouteProvider communication between
-  // AgentSchedulingGroup <=> AgentSchedulingGroupHost. We have this as a
-  // method on this interface, as opposed to passing this remote/receiver pair
-  // over the method that creates the remote AgentSchedulingGroup. This is
-  // because we need the RouteProvider remote/receiver pair to be associated
-  // with the message pipe that the AgentSchedulingGroup is associated with,
-  // which may be different than the message pipe that we create the
-  // AgentSchedulingGroup over.
-  BindAssociatedRouteProvider(
-    pending_associated_remote<RouteProvider> remote,
-    pending_associated_receiver<RouteProvider> receiver);
+  // Tells the renderer to bind the AgentSchedulingGroup's associated
+  // interfaces. This includes the host remote (mojom::AgentSchedulingGroupHost)
+  // as well as RouteProvider remote/receiver pair.
+  // We have this as a method on this interface, as opposed to passing the
+  // pending interfaces over the method that creates the AgentSchedulingGroup.
+  // This is because we need these interfaces to be associated with the message
+  // pipe that the AgentSchedulingGroup is associated with, which may be
+  // different than the message pipe that we create the AgentSchedulingGroup
+  // over.
+  BindAssociatedInterfaces(
+    pending_associated_remote<AgentSchedulingGroupHost> remote_host,
+    pending_associated_remote<RouteProvider> remote_route_provider,
+    pending_associated_receiver<RouteProvider> route_provider_receiver);
 
   // Tells the renderer to create a new view.
   CreateView(CreateViewParams params);

@@ -28,6 +28,7 @@ const char *const vivaldi_extra_locales_array[] = {
   "ja-KS",
   "jbo",
   "ka",
+  "kab",
   "ku",
   "mk",
   "nn",

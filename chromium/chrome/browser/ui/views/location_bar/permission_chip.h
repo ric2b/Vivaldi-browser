@@ -39,10 +39,15 @@ class PermissionChip : public views::View,
 
   ~PermissionChip() override;
 
-  void Show(permissions::PermissionPrompt::Delegate* delegate);
+  void DisplayRequest(permissions::PermissionPrompt::Delegate* delegate);
+  void FinalizeRequest();
+  void OpenBubble();
   void Hide();
+  void Reshow();
+  bool HasActiveRequest();
 
   views::Button* button() { return chip_button_; }
+  bool is_collapsed() { return is_collapsed_; }
 
   // views::AnimationDelegateViews:
   void AnimationEnded(const gfx::Animation* animation) override;
@@ -59,6 +64,10 @@ class PermissionChip : public views::View,
   // BubbleOwnerDelegate:
   bool IsBubbleShowing() const override;
 
+  PermissionPromptBubbleView* prompt_bubble_for_testing() {
+    return prompt_bubble_;
+  }
+
  private:
   void ChipButtonPressed();
   void Collapse();
@@ -67,6 +76,9 @@ class PermissionChip : public views::View,
   void UpdatePermissionIconAndTextColor();
   base::string16 GetPermissionMessage();
   const gfx::VectorIcon& GetPermissionIconId();
+
+  void AnimateCollapse();
+  void AnimateExpand();
 
   Browser* browser_ = nullptr;
   permissions::PermissionPrompt::Delegate* delegate_ = nullptr;
@@ -86,6 +98,10 @@ class PermissionChip : public views::View,
 
   // If uma metric was already recorded on the button click.
   bool already_recorded_interaction_ = false;
+
+  // If chip is collapsed. In the collapsed state, only an icon is visible,
+  // without text.
+  bool is_collapsed_ = false;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_LOCATION_BAR_PERMISSION_CHIP_H_

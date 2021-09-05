@@ -173,6 +173,7 @@ void DiceTurnSyncOnHelper::Delegate::ShowLoginErrorForBrowser(
 void DiceTurnSyncOnHelper::Delegate::
     ShowEnterpriseAccountConfirmationForBrowser(
         const std::string& email,
+        bool prompt_for_new_profile,
         DiceTurnSyncOnHelper::SigninChoiceCallback callback,
         Browser* browser) {
   DCHECK(callback);
@@ -187,7 +188,7 @@ void DiceTurnSyncOnHelper::Delegate::
       base::UserMetricsAction("Signin_Show_EnterpriseAccountPrompt"));
   TabDialogs::FromWebContents(web_contents)
       ->ShowProfileSigninConfirmation(
-          browser, browser->profile(), email,
+          browser, email, prompt_for_new_profile,
           std::make_unique<SigninDialogDelegate>(std::move(callback)));
 }
 
@@ -212,8 +213,9 @@ DiceTurnSyncOnHelper::DiceTurnSyncOnHelper(
       shutdown_subscription_(
           DiceTurnSyncOnHelperShutdownNotifierFactory::GetInstance()
               ->Get(profile)
-              ->Subscribe(base::Bind(&DiceTurnSyncOnHelper::AbortAndDelete,
-                                     base::Unretained(this)))) {
+              ->Subscribe(base::AdaptCallbackForRepeating(
+                  base::BindOnce(&DiceTurnSyncOnHelper::AbortAndDelete,
+                                 base::Unretained(this))))) {
   DCHECK(delegate_);
   DCHECK(profile_);
   // Should not start syncing if the profile is already authenticated
@@ -442,6 +444,7 @@ void DiceTurnSyncOnHelper::CreateNewSignedInProfile() {
       std::make_unique<DiceSignedInProfileCreator>(
           profile_, account_info_.account_id,
           /*local_profile_name=*/base::string16(), /*icon_index=*/base::nullopt,
+          /*use_guest=*/false,
           base::BindOnce(&DiceTurnSyncOnHelper::OnNewSignedInProfileCreated,
                          base::Unretained(this)));
 }
@@ -552,6 +555,9 @@ void DiceTurnSyncOnHelper::ShowSyncConfirmationUI() {
         base::BindOnce(&DiceTurnSyncOnHelper::FinishSyncSetupAndDelete,
                        weak_pointer_factory_.GetWeakPtr()));
   } else {
+    // The sync disabled dialog has an explicit "sign-out" label for the
+    // LoginUIService::ABORT_SYNC action, force the mode to remove the account.
+    signin_aborted_mode_ = SigninAbortedMode::REMOVE_ACCOUNT;
     delegate_->ShowSyncDisabledConfirmation(
         base::BindOnce(&DiceTurnSyncOnHelper::FinishSyncSetupAndDelete,
                        weak_pointer_factory_.GetWeakPtr()));
@@ -578,16 +584,21 @@ void DiceTurnSyncOnHelper::FinishSyncSetupAndDelete(
         consent_service->SetUrlKeyedAnonymizedDataCollectionEnabled(true);
       break;
     }
-    case LoginUIService::ABORT_SIGNIN:
+    case LoginUIService::ABORT_SYNC: {
       auto* primary_account_mutator =
           identity_manager_->GetPrimaryAccountMutator();
       DCHECK(primary_account_mutator);
-      primary_account_mutator->ClearPrimaryAccount(
-          signin::PrimaryAccountMutator::ClearAccountsAction::kKeepAll,
+      primary_account_mutator->RevokeSyncConsent(
           signin_metrics::ABORT_SIGNIN,
           signin_metrics::SignoutDelete::IGNORE_METRIC);
       AbortAndDelete();
       return;
+    }
+    // No explicit action when the ui gets closed. If the embedder wants the
+    // helper to abort sync in this case, it must redirect this action to
+    // ABORT_SYNC.
+    case LoginUIService::UI_CLOSED:
+      break;
   }
   delete this;
 }
@@ -606,8 +617,8 @@ void DiceTurnSyncOnHelper::SwitchToProfile(Profile* new_profile) {
   shutdown_subscription_ =
       DiceTurnSyncOnHelperShutdownNotifierFactory::GetInstance()
           ->Get(profile_)
-          ->Subscribe(base::Bind(&DiceTurnSyncOnHelper::AbortAndDelete,
-                                 base::Unretained(this)));
+          ->Subscribe(base::AdaptCallbackForRepeating(base::BindOnce(
+              &DiceTurnSyncOnHelper::AbortAndDelete, base::Unretained(this))));
   delegate_->SwitchToProfile(new_profile);
   // Since this is a fresh profile, it's better to remove the token if the user
   // aborts the signin.

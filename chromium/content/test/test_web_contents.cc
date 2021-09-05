@@ -24,6 +24,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/common/referrer_type_converters.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
@@ -50,7 +51,8 @@ TestWebContents::TestWebContents(BrowserContext* browser_context)
       expect_set_history_offset_and_length_(false),
       expect_set_history_offset_and_length_history_length_(0),
       pause_subresource_loading_called_(false),
-      audio_group_id_(base::UnguessableToken::Create()) {
+      audio_group_id_(base::UnguessableToken::Create()),
+      is_page_frozen_(false) {
   if (!RenderProcessHostImpl::get_render_process_host_factory_for_testing()) {
     // Most unit tests should prefer to create a generic MockRenderProcessHost
     // (instead of a real RenderProcessHostImpl).  Tests that need to use a
@@ -128,18 +130,15 @@ const base::string16& TestWebContents::GetTitle() {
 }
 
 void TestWebContents::TestDidNavigate(RenderFrameHost* render_frame_host,
-                                      int nav_entry_id,
                                       bool did_create_new_entry,
                                       const GURL& url,
                                       ui::PageTransition transition) {
-  TestDidNavigateWithSequenceNumber(render_frame_host, nav_entry_id,
-                                    did_create_new_entry, url, Referrer(),
-                                    transition, false, -1, -1);
+  TestDidNavigateWithSequenceNumber(render_frame_host, did_create_new_entry,
+                                    url, Referrer(), transition, false, -1, -1);
 }
 
 void TestWebContents::TestDidNavigateWithSequenceNumber(
     RenderFrameHost* render_frame_host,
-    int nav_entry_id,
     bool did_create_new_entry,
     const GURL& url,
     const Referrer& referrer,
@@ -154,41 +153,39 @@ void TestWebContents::TestDidNavigateWithSequenceNumber(
   if (!rfh->is_loading())
     rfh->SimulateNavigationStart(url);
 
-  FrameHostMsg_DidCommitProvisionalLoad_Params params;
-
-  params.nav_entry_id = nav_entry_id;
-  params.item_sequence_number = item_sequence_number;
-  params.document_sequence_number = document_sequence_number;
-  params.url = url;
-  params.base_url = GURL();
-  params.referrer = referrer;
-  params.transition = transition;
-  params.redirects = std::vector<GURL>();
-  params.should_update_history = true;
-  params.contents_mime_type = std::string("text/html");
-  params.intended_as_new_entry = did_create_new_entry;
-  params.did_create_new_entry = did_create_new_entry;
-  params.should_replace_current_entry = false;
-  params.gesture = NavigationGestureUser;
-  params.method = "GET";
-  params.post_id = 0;
-  params.http_status_code = 200;
-  params.url_is_unreachable = false;
+  auto params = mojom::DidCommitProvisionalLoadParams::New();
+  params->item_sequence_number = item_sequence_number;
+  params->document_sequence_number = document_sequence_number;
+  params->url = url;
+  params->base_url = GURL();
+  params->referrer = blink::mojom::Referrer::From(referrer);
+  params->transition = transition;
+  params->redirects = std::vector<GURL>();
+  params->should_update_history = true;
+  params->contents_mime_type = std::string("text/html");
+  params->intended_as_new_entry = did_create_new_entry;
+  params->did_create_new_entry = did_create_new_entry;
+  params->should_replace_current_entry = false;
+  params->gesture = NavigationGestureUser;
+  params->method = "GET";
+  params->post_id = 0;
+  params->http_status_code = 200;
+  params->url_is_unreachable = false;
   if (item_sequence_number != -1 && document_sequence_number != -1) {
-    params.page_state = blink::PageState::CreateForTestingWithSequenceNumbers(
+    params->page_state = blink::PageState::CreateForTestingWithSequenceNumbers(
         url, item_sequence_number, document_sequence_number);
   } else {
-    params.page_state = blink::PageState::CreateFromURL(url);
+    params->page_state = blink::PageState::CreateFromURL(url);
   }
-  params.original_request_url = GURL();
-  params.is_overriding_user_agent = false;
-  params.history_list_was_cleared = false;
-  params.origin = url::Origin::Create(url);
-  params.insecure_request_policy =
+  params->original_request_url = GURL();
+  params->is_overriding_user_agent = false;
+  params->history_list_was_cleared = false;
+  params->origin = url::Origin::Create(url);
+  params->insecure_request_policy =
       blink::mojom::InsecureRequestPolicy::kLeaveInsecureRequestsAlone;
-  params.has_potentially_trustworthy_unique_origin = false;
+  params->has_potentially_trustworthy_unique_origin = false;
 
-  rfh->SendNavigateWithParams(&params, was_within_same_document);
+  rfh->SendNavigateWithParams(std::move(params), was_within_same_document);
 }
 
 const std::string& TestWebContents::GetSaveFrameHeaders() {
@@ -207,6 +204,10 @@ void TestWebContents::OnWebPreferencesChanged() {
   WebContentsImpl::OnWebPreferencesChanged();
   if (web_preferences_changed_counter_)
     ++*web_preferences_changed_counter_;
+}
+
+bool TestWebContents::IsPageFrozen() {
+  return is_page_frozen_;
 }
 
 bool TestWebContents::TestDidDownloadImage(
@@ -271,7 +272,18 @@ void TestWebContents::TestDidFailLoadWithError(const GURL& url,
 }
 
 bool TestWebContents::CrossProcessNavigationPending() {
-  return GetRenderManager()->speculative_render_frame_host_ != nullptr;
+  // If we don't have a speculative RenderFrameHost then it means we did not
+  // change SiteInstances so we must be in the same process.
+  if (GetRenderManager()->speculative_render_frame_host_ == nullptr)
+    return false;
+
+  auto* current_instance =
+      GetRenderManager()->current_frame_host()->GetSiteInstance();
+  auto* speculative_instance =
+      GetRenderManager()->speculative_frame_host()->GetSiteInstance();
+  if (current_instance == speculative_instance)
+    return false;
+  return current_instance->GetProcess() != speculative_instance->GetProcess();
 }
 
 bool TestWebContents::CreateRenderViewForRenderManager(
@@ -455,6 +467,10 @@ WebContents* TestWebContents::GetPortalContents(
   if (!portal)
     return nullptr;
   return portal->GetPortalContents();
+}
+
+void TestWebContents::SetPageFrozen(bool frozen) {
+  is_page_frozen_ = frozen;
 }
 
 }  // namespace content

@@ -253,9 +253,9 @@ class WebMediaPlayerMS::FrameDeliverer {
       bool tracing_enabled = false;
       TRACE_EVENT_CATEGORY_GROUP_ENABLED("media", &tracing_enabled);
       if (tracing_enabled) {
-        if (frame->metadata()->reference_time.has_value()) {
+        if (frame->metadata().reference_time.has_value()) {
           TRACE_EVENT1("media", "EnqueueFrame", "Ideal Render Instant",
-                       frame->metadata()->reference_time->ToInternalValue());
+                       frame->metadata().reference_time->ToInternalValue());
         } else {
           TRACE_EVENT0("media", "EnqueueFrame");
         }
@@ -409,7 +409,8 @@ void WebMediaPlayerMS::OnAudioRenderErrorCallback() {
 WebMediaPlayer::LoadTiming WebMediaPlayerMS::Load(
     LoadType load_type,
     const WebMediaPlayerSource& source,
-    CorsMode /*cors_mode*/) {
+    CorsMode /*cors_mode*/,
+    bool is_cache_disabled) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   SendLogMessage(String::Format("%s({load_type=%s})", __func__,
                                 LoadTypeToString(load_type)));
@@ -660,7 +661,7 @@ void WebMediaPlayerMS::ReloadVideo() {
 
   DCHECK_NE(renderer_action, RendererReloadAction::KEEP_RENDERER);
   if (!paused_)
-    delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
+    client_->DidPlayerSizeChange(NaturalSize());
 
   // TODO(perkj, magjed): We use OneShot focus type here so that it takes
   // audio focus once it starts, and then will not respond to further audio
@@ -744,7 +745,7 @@ void WebMediaPlayerMS::Play() {
     audio_renderer_->Play();
 
   if (HasVideo())
-    delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
+    client_->DidPlayerSizeChange(NaturalSize());
 
   delegate_->DidPlay(delegate_id_);
 
@@ -790,7 +791,7 @@ void WebMediaPlayerMS::SetVolume(double volume) {
   volume_ = volume;
   if (audio_renderer_.get())
     audio_renderer_->SetVolume(volume_ * volume_multiplier_);
-  delegate_->DidPlayerMutedStatusChange(delegate_id_, volume == 0.0);
+  client_->DidPlayerMutedStatusChange(volume == 0.0);
 }
 
 void WebMediaPlayerMS::SetLatencyHint(double seconds) {
@@ -806,16 +807,14 @@ void WebMediaPlayerMS::SetPreservesPitch(bool preserves_pitch) {
   // and thus there should be no pitch-shifting.
 }
 
+void WebMediaPlayerMS::SetAutoplayInitiated(bool autoplay_initiated) {}
+
 void WebMediaPlayerMS::OnRequestPictureInPicture() {
   if (!bridge_)
     ActivateSurfaceLayerForVideo();
 
   DCHECK(bridge_);
   DCHECK(bridge_->GetSurfaceId().is_valid());
-}
-
-void WebMediaPlayerMS::OnPictureInPictureAvailabilityChanged(bool available) {
-  delegate_->DidPictureInPictureAvailabilityChange(delegate_id_, available);
 }
 
 void WebMediaPlayerMS::SetSinkId(
@@ -1083,38 +1082,6 @@ void WebMediaPlayerMS::OnFrameShown() {
 
 void WebMediaPlayerMS::OnIdleTimeout() {}
 
-void WebMediaPlayerMS::OnPlay() {
-  // TODO(perkj, magjed): It's not clear how WebRTC should work with an
-  // MediaSession, until these issues are resolved, disable session controls.
-  // https://crbug.com/595297.
-}
-
-void WebMediaPlayerMS::OnPause() {
-  // TODO(perkj, magjed): See TODO in OnPlay().
-}
-
-void WebMediaPlayerMS::OnMuted(bool muted) {
-  SendLogMessage(
-      String::Format("%s({muted=%s})", __func__, muted ? "true" : "false"));
-  client_->RequestMuted(muted);
-}
-
-void WebMediaPlayerMS::OnSeekForward(double seconds) {
-  // TODO(perkj, magjed): See TODO in OnPlay().
-}
-
-void WebMediaPlayerMS::OnSeekBackward(double seconds) {
-  // TODO(perkj, magjed): See TODO in OnPlay().
-}
-
-void WebMediaPlayerMS::OnEnterPictureInPicture() {
-  client_->RequestEnterPictureInPicture();
-}
-
-void WebMediaPlayerMS::OnExitPictureInPicture() {
-  client_->RequestExitPictureInPicture();
-}
-
 void WebMediaPlayerMS::OnSetAudioSink(const std::string& sink_id) {
   SetSinkId(WebString::FromASCII(sink_id),
             base::DoNothing::Once<base::Optional<blink::WebSetSinkIdError>>());
@@ -1356,7 +1323,7 @@ void WebMediaPlayerMS::TriggerResize() {
   if (HasVideo())
     get_client()->SizeChanged();
 
-  delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
+  client_->DidPlayerSizeChange(NaturalSize());
 }
 
 void WebMediaPlayerMS::SetGpuMemoryBufferVideoForTesting(

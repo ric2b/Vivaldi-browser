@@ -37,6 +37,7 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
+#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
@@ -127,14 +128,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
       closeSettingsOnAddAccount:(BOOL)closeSettingsOnAddAccount {
   DCHECK(browser);
   DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
-  UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
-                               ? UITableViewStylePlain
-                               : UITableViewStyleGrouped;
-  self = [super initWithStyle:style];
+
+  self = [super initWithStyle:ChromeTableViewStyle()];
   if (self) {
     _browser = browser;
     _closeSettingsOnAddAccount = closeSettingsOnAddAccount;
-    [self authService]->WaitUntilCacheIsPopulated();
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(
             IdentityManagerFactory::GetForBrowserState(
@@ -427,74 +425,69 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)showAccountDetails:(ChromeIdentity*)identity
                   itemView:(UIView*)itemView {
-  if ([_alertCoordinator isVisible])
+  if (_alertCoordinator.isVisible) {
     return;
-  if (base::FeatureList::IsEnabled(kEnableMyGoogle)) {
-    _alertCoordinator = [[ActionSheetCoordinator alloc]
-        initWithBaseViewController:self
-                           browser:_browser
-                             title:nil
-                           message:identity.userEmail
-                              rect:itemView.frame
-                              view:itemView];
-
-    [_alertCoordinator
-        addItemWithTitle:l10n_util::GetNSString(
-                             IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE)
-                  action:^{
-                    _dimissAccountDetailsViewControllerBlock =
-                        ios::GetChromeBrowserProvider()
-                            ->GetChromeIdentityService()
-                            ->PresentAccountDetailsController(identity, self,
-                                                              /*animated=*/YES);
-                  }
-                   style:UIAlertActionStyleDefault];
-
-    self.removeAccountCoordinator = [[AlertCoordinator alloc]
-        initWithBaseViewController:self
-                           browser:_browser
-                             title:l10n_util::GetNSStringF(
-                                       IDS_IOS_REMOVE_ACCOUNT_ALERT_TITLE,
-                                       base::SysNSStringToUTF16(
-                                           identity.userEmail))
-                           message:
-                               l10n_util::GetNSString(
-                                   IDS_IOS_REMOVE_ACCOUNT_CONFIRMATION_MESSAGE)];
-
-    __weak AccountsTableViewController* weakSelf = self;
-    [_alertCoordinator
-        addItemWithTitle:l10n_util::GetNSString(
-                             IDS_IOS_REMOVE_GOOGLE_ACCOUNT_TITLE)
-                  action:^{
-                    [weakSelf.removeAccountCoordinator
-                        addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                                  action:nil
-                                   style:UIAlertActionStyleCancel];
-                    [weakSelf.removeAccountCoordinator
-                        addItemWithTitle:l10n_util::GetNSString(
-                                             IDS_IOS_REMOVE_ACCOUNT_LABEL)
-                                  action:^{
-                                    weakSelf.uiDisabled = YES;
-                                    ios::GetChromeBrowserProvider()
-                                        ->GetChromeIdentityService()
-                                        ->ForgetIdentity(
-                                            identity, ^(NSError* error) {
-                                              weakSelf.uiDisabled = NO;
-                                            });
-                                  }
-                                   style:UIAlertActionStyleDestructive];
-
-                    [weakSelf.removeAccountCoordinator start];
-                  }
-                   style:UIAlertActionStyleDestructive];
-
-    [_alertCoordinator start];
-  } else {
-    _dimissAccountDetailsViewControllerBlock =
-        ios::GetChromeBrowserProvider()
-            ->GetChromeIdentityService()
-            ->PresentAccountDetailsController(identity, self, /*animated=*/YES);
   }
+
+  _alertCoordinator = [[ActionSheetCoordinator alloc]
+      initWithBaseViewController:self
+                         browser:_browser
+                           title:nil
+                         message:identity.userEmail
+                            rect:itemView.frame
+                            view:itemView];
+
+  [_alertCoordinator
+      addItemWithTitle:l10n_util::GetNSString(
+                           IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE)
+                action:^{
+                  _dimissAccountDetailsViewControllerBlock =
+                      ios::GetChromeBrowserProvider()
+                          ->GetChromeIdentityService()
+                          ->PresentAccountDetailsController(identity, self,
+                                                            /*animated=*/YES);
+                }
+                 style:UIAlertActionStyleDefault];
+
+  self.removeAccountCoordinator = [[AlertCoordinator alloc]
+      initWithBaseViewController:self
+                         browser:_browser
+                           title:l10n_util::GetNSStringF(
+                                     IDS_IOS_REMOVE_ACCOUNT_ALERT_TITLE,
+                                     base::SysNSStringToUTF16(
+                                         identity.userEmail))
+                         message:
+                             l10n_util::GetNSString(
+                                 IDS_IOS_REMOVE_ACCOUNT_CONFIRMATION_MESSAGE)];
+
+  __weak AccountsTableViewController* weakSelf = self;
+  [_alertCoordinator
+      addItemWithTitle:l10n_util::GetNSString(
+                           IDS_IOS_REMOVE_GOOGLE_ACCOUNT_TITLE)
+                action:^{
+                  [weakSelf.removeAccountCoordinator
+                      addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                                action:nil
+                                 style:UIAlertActionStyleCancel];
+                  [weakSelf.removeAccountCoordinator
+                      addItemWithTitle:l10n_util::GetNSString(
+                                           IDS_IOS_REMOVE_ACCOUNT_LABEL)
+                                action:^{
+                                  weakSelf.uiDisabled = YES;
+                                  ios::GetChromeBrowserProvider()
+                                      ->GetChromeIdentityService()
+                                      ->ForgetIdentity(
+                                          identity, ^(NSError* error) {
+                                            weakSelf.uiDisabled = NO;
+                                          });
+                                }
+                                 style:UIAlertActionStyleDestructive];
+
+                  [weakSelf.removeAccountCoordinator start];
+                }
+                 style:UIAlertActionStyleDestructive];
+
+  [_alertCoordinator start];
 }
 
 - (void)showSignOutWithClearData:(BOOL)forceClearData

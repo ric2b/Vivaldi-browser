@@ -16,8 +16,8 @@
 
 #include "base/callback.h"
 #include "base/containers/queue.h"
+#include "base/location.h"
 #include "base/memory/weak_ptr.h"
-#include "pdf/paint_manager.h"
 #include "pdf/pdf_view_plugin_base.h"
 #include "pdf/preview_mode_client.h"
 #include "ppapi/c/private/ppp_pdf.h"
@@ -26,9 +26,9 @@
 #include "ppapi/cpp/instance.h"
 #include "ppapi/cpp/private/find_private.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace gfx {
-class Rect;
 class Size;
 class Vector2d;
 }  // namespace gfx
@@ -52,7 +52,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
                              public pp::Instance,
                              public pp::Find_Private,
                              public pp::Printing_Dev,
-                             public PaintManager::Client,
                              public PreviewModeClient::Client {
  public:
   explicit OutOfProcessInstance(PP_Instance instance);
@@ -71,13 +70,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   bool StartFind(const std::string& text, bool case_sensitive) override;
   void SelectFindResult(bool forward) override;
   void StopFind() override;
-
-  // pp::PaintManager::Client:
-  std::unique_ptr<Graphics> CreatePaintGraphics(const gfx::Size& size) override;
-  bool BindPaintGraphics(Graphics& graphics) override;
-  void OnPaint(const std::vector<gfx::Rect>& paint_rects,
-               std::vector<PaintReadyRect>* ready,
-               std::vector<gfx::Rect>* pending) override;
 
   // pp::Printing_Dev:
   uint32_t QuerySupportedPrintOutputFormats() override;
@@ -157,7 +149,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void DocumentLoadProgress(uint32_t available, uint32_t doc_size) override;
   void FormTextFieldFocusChange(bool in_focus) override;
   bool IsPrintPreview() override;
-  uint32_t GetBackgroundColor() override;
   void IsSelectingChanged(bool is_selecting) override;
   void SelectionChanged(const gfx::Rect& left, const gfx::Rect& right) override;
   void EnteredEditMode() override;
@@ -166,6 +157,13 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void SetSelectedText(const std::string& selected_text) override;
   void SetLinkUnderCursor(const std::string& link_under_cursor) override;
   bool IsValidLink(const std::string& url) override;
+  std::unique_ptr<Graphics> CreatePaintGraphics(const gfx::Size& size) override;
+  bool BindPaintGraphics(Graphics& graphics) override;
+  void ScheduleTaskOnMainThread(
+      base::TimeDelta delay,
+      ResultCallback callback,
+      int32_t result,
+      const base::Location& from_here = base::Location::Current()) override;
 
   // PreviewModeClient::Client:
   void PreviewDocumentLoadComplete() override;
@@ -186,6 +184,10 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void DidOpen(std::unique_ptr<UrlLoader> loader, int32_t result) override;
   void DidOpenPreview(std::unique_ptr<UrlLoader> loader,
                       int32_t result) override;
+  void DoPaint(const std::vector<gfx::Rect>& paint_rects,
+               std::vector<PaintReadyRect>* ready,
+               std::vector<gfx::Rect>* pending) override;
+  void OnGeometryChanged(double old_zoom, float old_device_scale) override;
 
  private:
   // Message handlers.
@@ -199,6 +201,7 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void HandleResetPrintPreviewModeMessage(const pp::VarDictionary& dict);
   void HandleSaveAttachmentMessage(const pp::VarDictionary& dict);
   void HandleSaveMessage(const pp::VarDictionary& dict);
+  void HandleSetReadOnlyMessage(const pp::VarDictionary& dict);
   void HandleSetTwoUpViewMessage(const pp::VarDictionary& dict);
   void HandleUpdateScrollMessage(const pp::VarDictionary& dict);
   void HandleViewportMessage(const pp::VarDictionary& dict);
@@ -208,14 +211,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
 
   void ResetRecentlySentFindUpdate(int32_t);
 
-  // Called whenever the plugin geometry changes to update the location of the
-  // background parts, and notifies the pdf engine.
-  void OnGeometryChanged(double old_zoom, float old_device_scale);
-
-  // Figures out the location of any background rectangles (i.e. those that
-  // aren't painted by the PDF engine).
-  void CalculateBackgroundParts();
-
   // Returns a VarArray of Attachments. Each Attachment is a VarDictionary
   // which contains the following key/values:
   // - "name" - a string Var.
@@ -224,13 +219,8 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // - "readable" a bool Var.
   pp::VarArray GetDocumentAttachments();
 
-  // Computes document width/height in device pixels, based on current zoom and
-  // device scale
-  int GetDocumentPixelWidth() const;
-  int GetDocumentPixelHeight() const;
-
   // Draws a rectangle with the specified dimensions and color in our buffer.
-  void FillRect(const pp::Rect& rect, uint32_t color);
+  void FillRect(const gfx::Rect& rect, uint32_t color);
 
   bool CanSaveEdits() const;
   void SaveToFile(const std::string& token);
@@ -265,9 +255,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
     kEdited = 2,
   };
 
-  // Set new zoom scale.
-  void SetZoom(double scale);
-
   // Reduces the document to 1 page and appends |print_preview_page_count_| - 1
   // blank pages to the document for print preview.
   void AppendBlankPrintPreviewPages();
@@ -287,8 +274,14 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // Send a notification that the print preview has loaded.
   void SendPrintPreviewLoadedNotification();
 
-  // Send document metadata. (e.g. PDF title, attachments and bookmarks.)
-  void SendDocumentMetadata();
+  // Send attachments.
+  void SendAttachments();
+
+  // Send bookmarks.
+  void SendBookmarks();
+
+  // Send document metadata.
+  void SendMetadata();
 
   // Send the loading progress, where |percentage| represents the progress, or
   // -1 for loading error.
@@ -350,18 +343,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // The current cursor.
   PP_CursorType_Dev cursor_ = PP_CURSORTYPE_POINTER;
 
-  // Size, in pixels, of plugin rectangle.
-  pp::Size plugin_size_;
-  // Size, in DIPs, of plugin rectangle.
-  pp::Size plugin_dip_size_;
-  // Remaining area, in pixels, to render the pdf in after accounting for
-  // horizontal centering.
-  pp::Rect available_area_;
-  // Size of entire document in pixels (i.e. if each page is 800 pixels high and
-  // there are 10 pages, the height will be 8000).
-  pp::Size document_size_;
-  // Positional offset, in CSS pixels, of the plugin rectangle.
-  pp::Point plugin_offset_;
   // The scroll offset in CSS pixels.
   pp::Point scroll_offset_;
 
@@ -376,8 +357,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
     PINCH_END = 4
   };
 
-  // Current zoom factor.
-  double zoom_ = 1.0;
   // True if we request a new bitmap rendering.
   bool needs_reraster_ = true;
   // The scroll position for the last raster, before any transformations are
@@ -385,27 +364,11 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   pp::FloatPoint scroll_offset_at_last_raster_;
   // True if last bitmap was smaller than screen.
   bool last_bitmap_smaller_ = false;
-  // Current device scale factor. Multiply by |device_scale_| to convert from
-  // viewport to screen coordinates. Divide by |device_scale_| to convert from
-  // screen to viewport coordinates.
-  float device_scale_ = 1.0f;
   // True if the plugin is full-page.
   bool full_ = false;
 
-  PaintManager paint_manager_;
-
-  // True if we haven't painted the plugin viewport yet.
-  bool first_paint_ = true;
-  // Whether OnPaint() is in progress or not.
-  bool in_paint_ = false;
   // Deferred invalidates while |in_paint_| is true.
   std::vector<gfx::Rect> deferred_invalidates_;
-
-  struct BackgroundPart {
-    pp::Rect location;
-    uint32_t color;
-  };
-  std::vector<BackgroundPart> background_parts_;
 
   struct PrintSettings {
     PrintSettings() { Clear(); }
@@ -506,13 +469,6 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   // zooming the plugin so that flickering doesn't occur while zooming.
   bool stop_scrolling_ = false;
 
-  // The background color of the PDF viewer.
-  uint32_t background_color_ = 0;
-
-  // The blank space above the first page of the document reserved for the
-  // toolbar.
-  int top_toolbar_height_in_viewport_coords_ = 0;
-
   bool edit_mode_ = false;
 
   // The current state of accessibility: either off, enabled but waiting
@@ -522,6 +478,10 @@ class OutOfProcessInstance : public PdfViewPluginBase,
     ACCESSIBILITY_STATE_PENDING,  // Enabled but waiting for doc to load.
     ACCESSIBILITY_STATE_LOADED
   } accessibility_state_ = ACCESSIBILITY_STATE_OFF;
+
+  // The next accessibility page index, used to track interprocess calls when
+  // reconstructing the tree for new document layouts.
+  int32_t next_accessibility_page_index_ = 0;
 
   base::WeakPtrFactory<OutOfProcessInstance> weak_factory_{this};
 };

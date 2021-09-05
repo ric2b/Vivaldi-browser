@@ -414,6 +414,8 @@ const char* ToString(ax::mojom::Role role) {
       return "paragraph";
     case ax::mojom::Role::kPdfActionableHighlight:
       return "pdfActionableHighlight";
+    case ax::mojom::Role::kPdfRoot:
+      return "pdfRoot";
     case ax::mojom::Role::kPluginObject:
       return "pluginObject";
     case ax::mojom::Role::kPopUpButton:
@@ -462,8 +464,6 @@ const char* ToString(ax::mojom::Role role) {
       return "searchBox";
     case ax::mojom::Role::kSlider:
       return "slider";
-    case ax::mojom::Role::kSliderThumb:
-      return "sliderThumb";
     case ax::mojom::Role::kSpinButton:
       return "spinButton";
     case ax::mojom::Role::kSplitter:
@@ -512,8 +512,6 @@ const char* ToString(ax::mojom::Role role) {
       return "tooltip";
     case ax::mojom::Role::kVideo:
       return "video";
-    case ax::mojom::Role::kWebArea:
-      return "webArea";
     case ax::mojom::Role::kWebView:
       return "webView";
     case ax::mojom::Role::kWindow:
@@ -1373,8 +1371,6 @@ const char* ToString(ax::mojom::AriaCurrentState aria_current_state) {
       return "step";
     case ax::mojom::AriaCurrentState::kLocation:
       return "location";
-    case ax::mojom::AriaCurrentState::kUnclippedLocation:
-      return "unclippedLocation";
     case ax::mojom::AriaCurrentState::kDate:
       return "date";
     case ax::mojom::AriaCurrentState::kTime:

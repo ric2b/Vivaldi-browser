@@ -29,6 +29,14 @@ public final class NavigationImpl extends INavigation.Stub {
     // WARNING: NavigationImpl may outlive the native side, in which case this member is set to 0.
     private long mNativeNavigationImpl;
 
+    // Set to true if/when it is determined that an external intent was launched for this
+    // navigation.
+    private boolean mIntentLaunched;
+
+    // Set to true if/when it is determined that this navigation result in UI being presented to the
+    // user via which the user will determine whether an intent should be launched.
+    private boolean mIsUserDecidingIntentLaunch;
+
     public NavigationImpl(INavigationControllerClient client, long nativeNavigationImpl) {
         mNativeNavigationImpl = nativeNavigationImpl;
         try {
@@ -141,6 +149,23 @@ public final class NavigationImpl extends INavigation.Stub {
     }
 
     @Override
+    public boolean isKnownProtocol() {
+        StrictModeWorkaround.apply();
+        throwIfNativeDestroyed();
+        return NavigationImplJni.get().isKnownProtocol(mNativeNavigationImpl);
+    }
+
+    @Override
+    public boolean wasIntentLaunched() {
+        return mIntentLaunched;
+    }
+
+    @Override
+    public boolean isUserDecidingIntentLaunch() {
+        return mIsUserDecidingIntentLaunch;
+    }
+
+    @Override
     public boolean wasStopCalled() {
         StrictModeWorkaround.apply();
         throwIfNativeDestroyed();
@@ -162,10 +187,43 @@ public final class NavigationImpl extends INavigation.Stub {
     }
 
     @Override
+    public boolean isServedFromBackForwardCache() {
+        StrictModeWorkaround.apply();
+        throwIfNativeDestroyed();
+        return NavigationImplJni.get().isServedFromBackForwardCache(mNativeNavigationImpl);
+    }
+
+    @Override
     public void disableNetworkErrorAutoReload() {
         if (!NavigationImplJni.get().disableNetworkErrorAutoReload(mNativeNavigationImpl)) {
             throw new IllegalStateException();
         }
+    }
+
+    @Override
+    public boolean isFormSubmission() {
+        StrictModeWorkaround.apply();
+        throwIfNativeDestroyed();
+        return NavigationImplJni.get().isFormSubmission(mNativeNavigationImpl);
+    }
+
+    @Override
+    public String getReferrer() {
+        StrictModeWorkaround.apply();
+        throwIfNativeDestroyed();
+        return NavigationImplJni.get().getReferrer(mNativeNavigationImpl);
+    }
+
+    public void setIntentLaunched() {
+        mIntentLaunched = true;
+    }
+
+    public void setIsUserDecidingIntentLaunch() {
+        mIsUserDecidingIntentLaunch = true;
+    }
+
+    public boolean areIntentLaunchesAllowedInBackground() {
+        return NavigationImplJni.get().areIntentLaunchesAllowedInBackground(mNativeNavigationImpl);
     }
 
     private void throwIfNativeDestroyed() {
@@ -212,6 +270,7 @@ public final class NavigationImpl extends INavigation.Stub {
         boolean isSameDocument(long nativeNavigationImpl);
         boolean isErrorPage(long nativeNavigationImpl);
         boolean isDownload(long nativeNavigationImpl);
+        boolean isKnownProtocol(long nativeNavigationImpl);
         boolean wasStopCalled(long nativeNavigationImpl);
         int getLoadError(long nativeNavigationImpl);
         boolean setRequestHeader(long nativeNavigationImpl, String name, String value);
@@ -220,6 +279,10 @@ public final class NavigationImpl extends INavigation.Stub {
         boolean setUserAgentString(long nativeNavigationImpl, String value);
         boolean isPageInitiated(long nativeNavigationImpl);
         boolean isReload(long nativeNavigationImpl);
+        boolean isServedFromBackForwardCache(long nativeNavigationImpl);
         boolean disableNetworkErrorAutoReload(long nativeNavigationImpl);
+        boolean areIntentLaunchesAllowedInBackground(long nativeNavigationImpl);
+        boolean isFormSubmission(long nativeNavigationImpl);
+        String getReferrer(long nativeNavigationImpl);
     }
 }

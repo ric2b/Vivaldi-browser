@@ -56,10 +56,14 @@ class PriorityAndReason {
 using Vote = voting::
     Vote<ExecutionContext, base::TaskPriority, base::TaskPriority::LOWEST>;
 using VoteReceipt = voting::VoteReceipt<Vote>;
+using VoterId = voting::VoterId<Vote>;
 using VotingChannel = voting::VotingChannel<Vote>;
 using VotingChannelFactory = voting::VotingChannelFactory<Vote>;
 using VoteConsumer = voting::VoteConsumer<Vote>;
 using AcceptedVote = voting::AcceptedVote<Vote>;
+using VoteObserver = voting::VoteObserver<Vote>;
+using VoteConsumerDefaultImpl = voting::VoteConsumerDefaultImpl<Vote>;
+using VotingChannelWrapper = voting::VotingChannelWrapper<Vote>;
 
 }  // namespace execution_context_priority
 }  // namespace performance_manager

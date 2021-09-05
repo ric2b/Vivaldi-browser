@@ -54,18 +54,21 @@ const NetFilteringResultCache = class {
         return this;
     }
 
+    // https://github.com/gorhill/uBlock/issues/3619
+    //   Don't collapse redirected resources
     rememberResult(fctxt, result) {
         if ( fctxt.tabId <= 0 ) { return; }
         if ( this.results.size === 0 ) {
             this.pruneAsync();
         }
-        const key = fctxt.getDocHostname() + ' ' + fctxt.type + ' ' + fctxt.url;
+        const key = `${fctxt.getDocHostname()} ${fctxt.type} ${fctxt.url}`;
         this.results.set(key, {
-            result: result,
+            result,
+            redirectURL: fctxt.redirectURL,
             logData: fctxt.filter,
             tstamp: Date.now()
         });
-        if ( result !== 1 ) { return; }
+        if ( result !== 1 || fctxt.redirectURL !== undefined ) { return; }
         const now = Date.now();
         this.blocked.set(key, now);
         this.hash = now;
@@ -76,12 +79,19 @@ const NetFilteringResultCache = class {
         if ( this.blocked.size === 0 ) {
             this.pruneAsync();
         }
+        if ( fctxt.redirectURL !== undefined ) { return; }
         const now = Date.now();
         this.blocked.set(
-            fctxt.getDocHostname() + ' ' + fctxt.type + ' ' + fctxt.url,
+            `${fctxt.getDocHostname()} ${fctxt.type} ${fctxt.url}`,
             now
         );
         this.hash = now;
+    }
+
+    forgetResult(docHostname, type, url) {
+        const key = `${docHostname} ${type} ${url}`;
+        this.results.delete(key);
+        this.blocked.delete(key);
     }
 
     empty() {
@@ -124,11 +134,23 @@ const NetFilteringResultCache = class {
     }
 
     lookupResult(fctxt) {
-        return this.results.get(
+        const entry = this.results.get(
             fctxt.getDocHostname() + ' ' +
             fctxt.type + ' ' +
             fctxt.url
         );
+        if ( entry === undefined ) { return; }
+        // We need to use a new WAR secret if one is present since WAR secrets
+        // can only be used once.
+        if (
+            entry.redirectURL !== undefined &&
+            entry.redirectURL.startsWith(this.extensionOriginURL)
+        ) {
+            const redirectURL = new URL(entry.redirectURL);
+            redirectURL.searchParams.set('secret', vAPI.warSecret());
+            entry.redirectURL = redirectURL.href;
+        }
+        return entry;
     }
 
     lookupAllBlocked(hostname) {
@@ -148,23 +170,22 @@ const NetFilteringResultCache = class {
 };
 
 NetFilteringResultCache.prototype.shelfLife = 15000;
+NetFilteringResultCache.prototype.extensionOriginURL = vAPI.getURL('/');
 
 /******************************************************************************/
 
 // Frame stores are used solely to associate a URL with a frame id.
 
-// To mitigate memory churning
-const frameStoreJunkyard = [];
-const frameStoreJunkyardMax = 50;
-
 const FrameStore = class {
-    constructor(frameURL) {
-        this.init(frameURL);
+    constructor(frameURL, parentId) {
+        this.init(frameURL, parentId);
     }
 
-    init(frameURL) {
+    init(frameURL, parentId) {
         this.t0 = Date.now();
+        this.parentId = parentId;
         this.exceptCname = undefined;
+        this.clickToLoad = false;
         this.rawURL = frameURL;
         if ( frameURL !== undefined ) {
             this.hostname = vAPI.hostnameFromURI(frameURL);
@@ -175,42 +196,94 @@ const FrameStore = class {
     }
 
     dispose() {
-        this.exceptCname = undefined;
         this.rawURL = this.hostname = this.domain = '';
-        if ( frameStoreJunkyard.length < frameStoreJunkyardMax ) {
-            frameStoreJunkyard.push(this);
+        if ( FrameStore.junkyard.length < FrameStore.junkyardMax ) {
+            FrameStore.junkyard.push(this);
         }
         return null;
     }
 
-    static factory(frameURL) {
-        const entry = frameStoreJunkyard.pop();
+    static factory(frameURL, parentId = -1) {
+        const entry = FrameStore.junkyard.pop();
         if ( entry === undefined ) {
-            return new FrameStore(frameURL);
+            return new FrameStore(frameURL, parentId);
         }
-        return entry.init(frameURL);
+        return entry.init(frameURL, parentId);
+    }
+};
+
+// To mitigate memory churning
+FrameStore.junkyard = [];
+FrameStore.junkyardMax = 50;
+
+/******************************************************************************/
+
+const CountDetails = class {
+    constructor() {
+        this.allowed = { any: 0, frame: 0, script: 0 };
+        this.blocked = { any: 0, frame: 0, script: 0 };
+    }
+    reset() {
+        const { allowed, blocked } = this;
+        blocked.any = blocked.frame = blocked.script =
+        allowed.any = allowed.frame = allowed.script = 0;
+    }
+    inc(blocked, type = undefined) {
+        const stat = blocked ? this.blocked : this.allowed;
+        if ( type !== undefined ) { stat[type] += 1; }
+        stat.any += 1;
+    }
+};
+
+const HostnameDetails = class {
+    constructor(hostname) {
+        this.counts = new CountDetails();
+        this.init(hostname);
+    }
+    init(hostname) {
+        this.hostname = hostname;
+        this.counts.reset();
+    }
+    dispose() {
+        this.hostname = '';
+        if ( HostnameDetails.junkyard.length < HostnameDetails.junkyardMax ) {
+            HostnameDetails.junkyard.push(this);
+        }
+    }
+};
+
+HostnameDetails.junkyard = [];
+HostnameDetails.junkyardMax = 100;
+
+const HostnameDetailsMap = class extends Map {
+    reset() {
+        this.clear();
+    }
+    dispose() {
+        for ( const item of this.values() ) {
+            item.dispose();
+        }
+        this.reset();
     }
 };
 
 /******************************************************************************/
 
-// To mitigate memory churning
-const pageStoreJunkyard = [];
-const pageStoreJunkyardMax = 10;
-
 const PageStore = class {
     constructor(tabId, context) {
         this.extraData = new Map();
         this.journal = [];
-        this.journalTimer = null;
-        this.journalLastCommitted = this.journalLastUncommitted = undefined;
-        this.journalLastUncommittedURL = undefined;
+        this.journalTimer = undefined;
+        this.journalLastCommitted = this.journalLastUncommitted = -1;
+        this.journalLastUncommittedOrigin = undefined;
         this.netFilteringCache = NetFilteringResultCache.factory();
+        this.hostnameDetailsMap = new HostnameDetailsMap();
+        this.counts = new CountDetails();
         this.init(tabId, context);
     }
 
     static factory(tabId, context) {
-        let entry = pageStoreJunkyard.pop();
+        let entry = PageStore.junkyard.pop();
         if ( entry === undefined ) {
             entry = new PageStore(tabId, context);
         } else {
@@ -233,39 +306,26 @@ const PageStore = class {
             typeof this.allowLargeMediaElementsUntil !== 'number' ||
             tabContext.rootHostname !== this.tabHostname
         ) {
-            this.allowLargeMediaElementsUntil = 0;
+            this.allowLargeMediaElementsUntil = Date.now();
         }
 
         this.tabHostname = tabContext.rootHostname;
         this.title = tabContext.rawURL;
         this.rawURL = tabContext.rawURL;
-        this.hostnameToCountMap = new Map();
+        this.hostnameDetailsMap.reset();
         this.contentLastModified = 0;
         this.logData = undefined;
-        this.perLoadBlockedRequestCount = 0;
-        this.perLoadAllowedRequestCount = 0;
+        this.counts.reset();
         this.remoteFontCount = 0;
         this.popupBlockedCount = 0;
         this.largeMediaCount = 0;
         this.largeMediaTimer = null;
-        this.internalRedirectionCount = 0;
+        this.allowLargeMediaElementsRegex = undefined;
         this.extraData.clear();
 
         this.frameAddCount = 0;
         this.frames = new Map();
-        this.setFrame(0, tabContext.rawURL);
-
-        // The current filtering context is cloned because:
-        // - We may be called with or without the current context having been
-        //   initialized.
-        // - If it has been initialized, we do not want to change the state
-        //   of the current context.
-        const fctxt = µb.logger.enabled
-            ? µb.filteringContext
-                .duplicate()
-                .fromTabId(tabId)
-                .setURL(tabContext.rawURL)
-            : undefined;
+        this.setFrameURL({ url: tabContext.rawURL });
 
         // https://github.com/uBlockOrigin/uBlock-issues/issues/314
         const masterSwitch = tabContext.getNetFilteringSwitch();
@@ -280,10 +340,14 @@ const PageStore = class {
             µb.logger.enabled &&
             context === 'tabCommitted'
         ) {
-            fctxt.setRealm('cosmetic')
-                 .setType('dom')
-                 .setFilter(µb.sessionSwitches.toLogData())
-                 .toLogger();
+            µb.filteringContext
+                .duplicate()
+                .fromTabId(tabId)
+                .setURL(tabContext.rawURL)
+                .setRealm('cosmetic')
+                .setType('dom')
+                .setFilter(µb.sessionSwitches.toLogData())
+                .toLogger();
         }
 
         return this;
@@ -308,7 +372,7 @@ const PageStore = class {
             // As part of https://github.com/chrisaljoudi/uBlock/issues/405
             // URL changed, force a re-evaluation of filtering switch
             this.rawURL = tabContext.rawURL;
-            this.setFrame(0, this.rawURL);
+            this.setFrameURL({ url: this.rawURL });
             return this;
         }
 
@@ -326,22 +390,24 @@ const PageStore = class {
         this.tabHostname = '';
         this.title = '';
         this.rawURL = '';
-        this.hostnameToCountMap = null;
+        this.hostnameDetailsMap.dispose();
         this.netFilteringCache.empty();
-        this.allowLargeMediaElementsUntil = 0;
+        this.allowLargeMediaElementsUntil = Date.now();
+        this.allowLargeMediaElementsRegex = undefined;
         if ( this.largeMediaTimer !== null ) {
             clearTimeout(this.largeMediaTimer);
             this.largeMediaTimer = null;
         }
         this.disposeFrameStores();
-        if ( this.journalTimer !== null ) {
+        if ( this.journalTimer !== undefined ) {
             clearTimeout(this.journalTimer);
-            this.journalTimer = null;
+            this.journalTimer = undefined;
         }
         this.journal = [];
-        this.journalLastUncommittedURL = undefined;
-        if ( pageStoreJunkyard.length < pageStoreJunkyardMax ) {
-            pageStoreJunkyard.push(this);
+        this.journalLastUncommittedOrigin = undefined;
+        this.journalLastCommitted = this.journalLastUncommitted = -1;
+        if ( PageStore.junkyard.length < PageStore.junkyardMax ) {
+            PageStore.junkyard.push(this);
         }
         return null;
     }
@@ -353,20 +419,44 @@ const PageStore = class {
         this.frames.clear();
     }
 
-    getFrame(frameId) {
+    getFrameStore(frameId) {
         return this.frames.get(frameId) || null;
     }
 
-    setFrame(frameId, frameURL) {
-        const frameStore = this.frames.get(frameId);
+    setFrameURL(details) {
+        let { frameId, url, parentFrameId } = details;
+        if ( frameId === undefined ) { frameId = 0; }
+        if ( parentFrameId === undefined ) { parentFrameId = -1; }
+        let frameStore = this.frames.get(frameId);
         if ( frameStore !== undefined ) {
-            frameStore.init(frameURL);
-            return;
+            if ( url === frameStore.rawURL ) {
+                frameStore.parentId = parentFrameId;
+            } else {
+                frameStore.init(url, parentFrameId);
+            }
+            return frameStore;
         }
-        this.frames.set(frameId, FrameStore.factory(frameURL));
+        frameStore = FrameStore.factory(url, parentFrameId);
+        this.frames.set(frameId, frameStore);
         this.frameAddCount += 1;
-        if ( (this.frameAddCount & 0b111111) !== 0 ) { return; }
-        this.pruneFrames();
+        if ( (this.frameAddCount & 0b111111) === 0 ) {
+            this.pruneFrames();
+        }
+        return frameStore;
+    }
+
+    getEffectiveFrameURL(sender) {
+        let { frameId } = sender;
+        for (;;) {
+            const frameStore = this.getFrameStore(frameId);
+            if ( frameStore === null ) { break; }
+            if ( frameStore.rawURL.startsWith('about:') === false ) {
+                return frameStore.rawURL;
+            }
+            frameId = frameStore.parentId;
+            if ( frameId === -1 ) { break; }
+        }
+        return sender.frameURL;
     }
 
     // There is no event to tell us a specific subframe has been removed from
@@ -412,6 +502,23 @@ const PageStore = class {
         this.netFilteringCache.empty();
     }
 
+    // https://github.com/gorhill/uBlock/issues/2105
+    //   Be sure to always include the current page's hostname -- it might not
+    //   be present when the page itself is pulled from the browser's
+    //   short-term memory cache.
+    getAllHostnameDetails() {
+        if (
+            this.hostnameDetailsMap.has(this.tabHostname) === false &&
+            µb.URI.isNetworkURI(this.rawURL)
+        ) {
+            this.hostnameDetailsMap.set(
+                this.tabHostname,
+                new HostnameDetails(this.tabHostname)
+            );
+        }
+        return this.hostnameDetailsMap;
+    }
+
     injectLargeMediaElementScriptlet() {
         vAPI.tabs.executeScript(this.tabId, {
             file: '/js/scriptlets/load-large-media-interactive.js',
@@ -424,43 +531,50 @@ const PageStore = class {
     temporarilyAllowLargeMediaElements(state) {
         this.largeMediaCount = 0;
         µb.contextMenu.update(this.tabId);
-        this.allowLargeMediaElementsUntil = state ? Date.now() + 86400000 : 0;
+        if ( state ) {
+            this.allowLargeMediaElementsUntil = 0;
+            this.allowLargeMediaElementsRegex = undefined;
+        } else {
+            this.allowLargeMediaElementsUntil = Date.now();
+        }
         µb.scriptlets.injectDeep(this.tabId, 'load-large-media-all');
     }
 
     // https://github.com/gorhill/uBlock/issues/2053
     //   There is no way around using journaling to ensure we deal properly with
     //   potentially out of order navigation events vs. network request events.
-    journalAddRequest(hostname, result) {
+    journalAddRequest(fctxt, result) {
+        const hostname = fctxt.getHostname();
         if ( hostname === '' ) { return; }
-        this.journal.push(
-            hostname,
-            result === 1 ? 0x00000001 : 0x00010000
+        this.journal.push(hostname, result, fctxt.itype);
+        if ( this.journalTimer !== undefined ) { return; }
+        this.journalTimer = vAPI.setTimeout(
+            ( ) => { this.journalProcess(true); },
+            µb.hiddenSettings.requestJournalProcessPeriod
         );
-        if ( this.journalTimer === null ) {
-            this.journalTimer = vAPI.setTimeout(
-                ( ) => { this.journalProcess(true); },
-                µb.hiddenSettings.requestJournalProcessPeriod
-            );
-        }
     }
 
     journalAddRootFrame(type, url) {
         if ( type === 'committed' ) {
             this.journalLastCommitted = this.journal.length;
             if (
-                this.journalLastUncommitted !== undefined &&
+                this.journalLastUncommitted !== -1 &&
                 this.journalLastUncommitted < this.journalLastCommitted &&
-                this.journalLastUncommittedURL === url
+                this.journalLastUncommittedOrigin === vAPI.hostnameFromURI(url)
             ) {
                 this.journalLastCommitted = this.journalLastUncommitted;
-                this.journalLastUncommitted = undefined;
             }
         } else if ( type === 'uncommitted' ) {
-            this.journalLastUncommitted = this.journal.length;
-            this.journalLastUncommittedURL = url;
+            const newOrigin = vAPI.hostnameFromURI(url);
+            if (
+                this.journalLastUncommitted === -1 ||
+                this.journalLastUncommittedOrigin !== newOrigin
+            ) {
+                this.journalLastUncommitted = this.journal.length;
+                this.journalLastUncommittedOrigin = newOrigin;
+            }
         }
-        if ( this.journalTimer !== null ) {
+        if ( this.journalTimer !== undefined ) {
             clearTimeout(this.journalTimer);
         }
         this.journalTimer = vAPI.setTimeout(
@@ -469,49 +583,64 @@ const PageStore = class {
         );
     }
 
-    journalProcess(fromTimer) {
-        if ( !fromTimer ) {
-            clearTimeout(this.journalTimer);
-        }
-        this.journalTimer = null;
+    journalProcess(fromTimer = false) {
+        if ( fromTimer === false ) { clearTimeout(this.journalTimer); }
+        this.journalTimer = undefined;
 
         const journal = this.journal;
+        const pivot = Math.max(0, this.journalLastCommitted);
         const now = Date.now();
-        let aggregateCounts = 0;
-        let pivot = this.journalLastCommitted || 0;
+        const { SCRIPT, SUB_FRAME } = µb.FilteringContext;
+        let aggregateAllowed = 0;
+        let aggregateBlocked = 0;
 
         // Everything after pivot originates from current page.
-        for ( let i = pivot; i < journal.length; i += 2 ) {
-            const hostname = journal[i];
-            let hostnameCounts = this.hostnameToCountMap.get(hostname);
-            if ( hostnameCounts === undefined ) {
-                hostnameCounts = 0;
+        for ( let i = pivot; i < journal.length; i += 3 ) {
+            const hostname = journal[i+0];
+            let hnDetails = this.hostnameDetailsMap.get(hostname);
+            if ( hnDetails === undefined ) {
+                hnDetails = new HostnameDetails(hostname);
+                this.hostnameDetailsMap.set(hostname, hnDetails);
                 this.contentLastModified = now;
             }
-            let count = journal[i+1];
-            this.hostnameToCountMap.set(hostname, hostnameCounts + count);
-            aggregateCounts += count;
+            const blocked = journal[i+1] === 1;
+            const itype = journal[i+2];
+            if ( itype === SCRIPT ) {
+                hnDetails.counts.inc(blocked, 'script');
+                this.counts.inc(blocked, 'script');
+            } else if ( itype === SUB_FRAME ) {
+                hnDetails.counts.inc(blocked, 'frame');
+                this.counts.inc(blocked, 'frame');
+            } else {
+                hnDetails.counts.inc(blocked);
+                this.counts.inc(blocked);
+            }
+            if ( blocked ) {
+                aggregateBlocked += 1;
+            } else {
+                aggregateAllowed += 1;
+            }
         }
-        this.perLoadBlockedRequestCount += aggregateCounts & 0xFFFF;
-        this.perLoadAllowedRequestCount += aggregateCounts >>> 16 & 0xFFFF;
-        this.journalLastCommitted = undefined;
+        this.journalLastUncommitted = this.journalLastCommitted = -1;
 
         // https://github.com/chrisaljoudi/uBlock/issues/905#issuecomment-76543649
         //   No point updating the badge if it's not being displayed.
-        if ( (aggregateCounts & 0xFFFF) && µb.userSettings.showIconBadge ) {
+        if ( aggregateBlocked !== 0 && µb.userSettings.showIconBadge ) {
             µb.updateToolbarIcon(this.tabId, 0x02);
         }
 
         // Everything before pivot does not originate from current page -- we
         // still need to bump global blocked/allowed counts.
-        for ( let i = 0; i < pivot; i += 2 ) {
-            aggregateCounts += journal[i+1];
+        for ( let i = 0; i < pivot; i += 3 ) {
+            if ( journal[i+1] === 1 ) {
+                aggregateBlocked += 1;
+            } else {
+                aggregateAllowed += 1;
+            }
         }
-        if ( aggregateCounts !== 0 ) {
-            µb.localSettings.blockedRequestCount +=
-                aggregateCounts & 0xFFFF;
-            µb.localSettings.allowedRequestCount +=
-                aggregateCounts >>> 16 & 0xFFFF;
+        if ( aggregateAllowed !== 0 || aggregateBlocked !== 0 ) {
+            µb.localSettings.blockedRequestCount += aggregateBlocked;
+            µb.localSettings.allowedRequestCount += aggregateAllowed;
             µb.localSettingsLastModified = now;
         }
         journal.length = 0;
@@ -519,40 +648,48 @@ const PageStore = class {
 
     filterRequest(fctxt) {
         fctxt.filter = undefined;
+        fctxt.redirectURL = undefined;
 
         if ( this.getNetFilteringSwitch(fctxt) === false ) {
             return 0;
         }
 
-        const requestType = fctxt.type;
-
         if (
-            requestType === 'csp_report' &&
+            fctxt.itype === fctxt.CSP_REPORT &&
             this.filterCSPReport(fctxt) === 1
         ) {
             return 1;
         }
 
-        if ( requestType.endsWith('font') && this.filterFont(fctxt) === 1 ) {
+        if (
+            (fctxt.itype & fctxt.FONT_ANY) !== 0 &&
+            this.filterFont(fctxt) === 1 )
+        {
             return 1;
         }
 
         if (
-            requestType === 'script' &&
+            fctxt.itype === fctxt.SCRIPT &&
             this.filterScripting(fctxt, true) === 1
         ) {
             return 1;
         }
 
-        const cacheableResult = this.cacheableResults.has(requestType);
+        const cacheableResult =
+            this.cacheableResults.has(fctxt.itype) &&
+            fctxt.aliasURL === undefined;
 
         if ( cacheableResult ) {
             const entry = this.netFilteringCache.lookupResult(fctxt);
             if ( entry !== undefined ) {
+                fctxt.redirectURL = entry.redirectURL;
                 fctxt.filter = entry.logData;
                 return entry.result;
             }
         }
+
+        const requestType = fctxt.type;
+        const loggerEnabled = µb.logger.enabled;
 
         // Dynamic URL filtering.
         let result = µb.sessionURLFiltering.evaluateZ(
@@ -560,7 +697,7 @@ const PageStore = class {
             fctxt.url,
             requestType
         );
-        if ( result !== 0 && µb.logger.enabled ) {
+        if ( result !== 0 && loggerEnabled ) {
             fctxt.filter = µb.sessionURLFiltering.toLogData();
         }
 
@@ -571,18 +708,18 @@ const PageStore = class {
                 fctxt.getHostname(),
                 requestType
             );
-            if ( result !== 0 && result !== 3 && µb.logger.enabled ) {
+            if ( result !== 0 && result !== 3 && loggerEnabled ) {
                 fctxt.filter = µb.sessionFirewall.toLogData();
             }
         }
 
         // Static filtering has lowest precedence.
+        const snfe = µb.staticNetFilteringEngine;
         if ( result === 0 || result === 3 ) {
-            const snfe = µb.staticNetFilteringEngine;
             result = snfe.matchString(fctxt);
             if ( result !== 0 ) {
-                if ( µb.logger.enabled ) {
-                    fctxt.filter = snfe.toLogData();
+                if ( loggerEnabled ) {
+                    fctxt.setFilter(snfe.toLogData());
                 }
                 // https://github.com/uBlockOrigin/uBlock-issues/issues/943
                 //   Blanket-except blocked aliased canonical hostnames?
@@ -597,16 +734,115 @@ const PageStore = class {
             }
         }
 
+        // Click-to-load?
+        // When frameId is not -1, the resource is always sub_frame.
+        if ( result === 1 && fctxt.frameId !== -1 ) {
+            const frameStore = this.getFrameStore(fctxt.frameId);
+            if ( frameStore !== null && frameStore.clickToLoad ) {
+                result = 2;
+                if ( loggerEnabled ) {
+                    fctxt.pushFilter({
+                        result,
+                        source: 'network',
+                        raw: 'click-to-load',
+                    });
+                }
+            }
+        }
+
+        // Modifier(s)?
+        // A modifier is an action which transform the original network request.
+        // https://github.com/gorhill/uBlock/issues/949
+        //   Redirect blocked request?
+        // https://github.com/uBlockOrigin/uBlock-issues/issues/760
+        //   Redirect non-blocked request?
+        if ( (fctxt.itype & fctxt.INLINE_ANY) === 0 ) {
+            if ( result === 1 ) {
+                this.redirectBlockedRequest(fctxt);
+            } else if ( snfe.hasQuery(fctxt) ) {
+                this.redirectNonBlockedRequest(fctxt);
+            }
+        }
+
         if ( cacheableResult ) {
             this.netFilteringCache.rememberResult(fctxt, result);
-        } else if (
-            result === 1 &&
-            this.collapsibleResources.has(requestType)
-        ) {
-            this.netFilteringCache.rememberBlock(fctxt, true);
+        } else if ( result === 1 && this.collapsibleResources.has(fctxt.itype) ) {
+            this.netFilteringCache.rememberBlock(fctxt);
         }
 
         return result;
+    }
+
+    filterOnHeaders(fctxt, headers) {
+        fctxt.filter = undefined;
+
+        if ( this.getNetFilteringSwitch(fctxt) === false ) { return 0; }
+
+        let result = µb.staticNetFilteringEngine.matchHeaders(fctxt, headers);
+        if ( result === 0 ) { return 0; }
+
+        const loggerEnabled = µb.logger.enabled;
+        if ( loggerEnabled ) {
+            fctxt.filter = µb.staticNetFilteringEngine.toLogData();
+        }
+
+        // Dynamic filtering allow rules
+        // URL filtering
+        if (
+            result === 1 &&
+            µb.sessionURLFiltering.evaluateZ(
+                fctxt.getTabHostname(),
+                fctxt.url,
+                fctxt.type
+            ) === 2
+        ) {
+            result = 2;
+            if ( loggerEnabled ) {
+                fctxt.filter = µb.sessionURLFiltering.toLogData();
+            }
+        }
+        // Hostname filtering
+        if (
+            result === 1 &&
+            µb.userSettings.advancedUserEnabled &&
+            µb.sessionFirewall.evaluateCellZY(
+                fctxt.getTabHostname(),
+                fctxt.getHostname(),
+                fctxt.type
+            ) === 2
+        ) {
+            result = 2;
+            if ( loggerEnabled ) {
+                fctxt.filter = µb.sessionFirewall.toLogData();
+            }
+        }
+
+        return result;
+    }
+
+    redirectBlockedRequest(fctxt) {
+        if ( µb.hiddenSettings.ignoreRedirectFilters === true ) { return; }
+        const directives = µb.staticNetFilteringEngine.redirectRequest(fctxt);
+        if ( directives === undefined ) { return; }
+        if ( µb.logger.enabled !== true ) { return; }
+        fctxt.pushFilters(directives.map(a => a.logData()));
+        if ( fctxt.redirectURL === undefined ) { return; }
+        fctxt.pushFilter({
+            source: 'redirect',
+            raw: µb.redirectEngine.resourceNameRegister
+        });
+    }
+
+    redirectNonBlockedRequest(fctxt) {
+        const directives = µb.staticNetFilteringEngine.filterQuery(fctxt);
+        if ( directives === undefined ) { return; }
+        if ( µb.logger.enabled !== true ) { return; }
+        fctxt.pushFilters(directives.map(a => a.logData()));
+        if ( fctxt.redirectURL === undefined ) { return; }
+        fctxt.pushFilter({
+            source: 'redirect',
+            raw: fctxt.redirectURL
+        });
     }
 
     filterCSPReport(fctxt) {
@@ -625,7 +861,7 @@ const PageStore = class {
     }
 
     filterFont(fctxt) {
-        if ( fctxt.type === 'font' ) {
+        if ( fctxt.itype === fctxt.FONT ) {
             this.remoteFontCount += 1;
         }
         if (
@@ -666,7 +902,23 @@ const PageStore = class {
     filterLargeMediaElement(fctxt, size) {
         fctxt.filter = undefined;
 
+        if ( this.allowLargeMediaElementsUntil === 0 ) {
+            return 0;
+        }
+        // Disregard large media elements previously allowed: for example, to
+        // seek inside a previously allowed audio/video.
+        if (
+            this.allowLargeMediaElementsRegex instanceof RegExp &&
+            this.allowLargeMediaElementsRegex.test(fctxt.url)
+        ) {
+            return 0;
+        }
         if ( Date.now() < this.allowLargeMediaElementsUntil ) {
+            const sources = this.allowLargeMediaElementsRegex instanceof RegExp
+                ? [ this.allowLargeMediaElementsRegex.source ]
+                : [];
+            sources.push('^' + µb.escapeRegex(fctxt.url));
+            this.allowLargeMediaElementsRegex = new RegExp(sources.join('|'));
             return 0;
         }
         if (
@@ -675,6 +927,7 @@ const PageStore = class {
                 fctxt.getTabHostname()
             ) !== true
         ) {
+            this.allowLargeMediaElementsUntil = 0;
             return 0;
         }
         if ( (size >>> 10) < µb.userSettings.largeMediaSize ) {
@@ -696,11 +949,24 @@ const PageStore = class {
         return 1;
     }
 
+    clickToLoad(frameId, frameURL) {
+        let frameStore = this.getFrameStore(frameId);
+        if ( frameStore === null ) {
+            frameStore = this.setFrameURL({ frameId, url: frameURL });
+        }
+        this.netFilteringCache.forgetResult(
+            this.tabHostname,
+            'sub_frame',
+            frameURL
+        );
+        frameStore.clickToLoad = true;
+    }
+
     shouldExceptCname(fctxt) {
         let exceptCname;
         let frameStore;
         if ( fctxt.docId !== undefined ) {
-            frameStore = this.getFrame(fctxt.docId);
+            frameStore = this.getFrameStore(fctxt.docId);
             if ( frameStore instanceof Object ) {
                 exceptCname = frameStore.exceptCname;
             }
@@ -712,13 +978,9 @@ const PageStore = class {
                     ? frameStore.rawURL
                     : fctxt.getDocOrigin()
             );
-            if ( result === 2 ) {
-                exceptCname = µb.logger.enabled
-                    ? µb.staticNetFilteringEngine.toLogData()
-                    : true;
-            } else {
-                exceptCname = false;
-            }
+            exceptCname = result === 2
+                ? µb.staticNetFilteringEngine.toLogData()
+                : false;
             if ( frameStore instanceof Object ) {
                 frameStore.exceptCname = exceptCname;
             }
@@ -743,8 +1005,7 @@ const PageStore = class {
         if ( Array.isArray(resources) && resources.length !== 0 ) {
             for ( const resource of resources ) {
                 this.filterRequest(
-                    fctxt.setType(resource.type)
-                         .setURL(resource.url)
+                    fctxt.setType(resource.type).setURL(resource.url)
                 );
             }
         }
@@ -756,15 +1017,19 @@ const PageStore = class {
 };
 
 PageStore.prototype.cacheableResults = new Set([
-    'sub_frame',
+    µb.FilteringContext.SUB_FRAME,
 ]);
 
 PageStore.prototype.collapsibleResources = new Set([
-    'image',
-    'media',
-    'object',
-    'sub_frame',
+    µb.FilteringContext.IMAGE,
+    µb.FilteringContext.MEDIA,
+    µb.FilteringContext.OBJECT,
+    µb.FilteringContext.SUB_FRAME,
 ]);
+
+// To mitigate memory churning
+PageStore.junkyard = [];
+PageStore.junkyardMax = 10;
 
 µb.PageStore = PageStore;
 

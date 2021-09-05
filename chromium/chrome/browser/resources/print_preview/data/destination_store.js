@@ -10,11 +10,15 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
 import {CloudPrintInterface, CloudPrintInterfaceEventType, CloudPrintInterfacePrinterFailedDetail, CloudPrintInterfaceProcessInviteDetail, CloudPrintInterfaceSearchDoneDetail} from '../cloud_print_interface.js';
 import {Metrics, MetricsContext} from '../metrics.js';
-import {CapabilitiesResponse, LocalDestinationInfo, NativeLayer, NativeLayerImpl, PrinterSetupResponse, PrivetPrinterDescription, ProvisionalDestinationInfo} from '../native_layer.js';
+import {CapabilitiesResponse, NativeLayer, NativeLayerImpl} from '../native_layer.js';
+// <if expr="chromeos">
+import {NativeLayerCros, NativeLayerCrosImpl, PrinterSetupResponse} from '../native_layer_cros.js';
 
-import {Cdd, CloudOrigins, createDestinationKey, createRecentDestinationKey, Destination, DestinationConnectionStatus, DestinationOrigin, DestinationProvisionalType, DestinationType, RecentDestination} from './destination.js';
+// </if>
+import {Cdd} from './cdd.js';
+import {CloudOrigins, createDestinationKey, createRecentDestinationKey, Destination, DestinationConnectionStatus, DestinationOrigin, DestinationProvisionalType, DestinationType, RecentDestination} from './destination.js';
 import {DestinationMatch, getPrinterTypeForDestination, originToType, PrinterType} from './destination_match.js';
-import {parseDestination, parseExtensionDestination} from './local_parsers.js';
+import {LocalDestinationInfo, parseDestination, parseExtensionDestination, PrivetPrinterDescription, ProvisionalDestinationInfo} from './local_parsers.js';
 
 /**
  * Printer search statuses used by the destination store.
@@ -210,8 +214,7 @@ export class DestinationStore extends EventTarget {
 
     // TODO (rbpotter): Remove the code below once this flag and policy are no
     // longer supported. Remove the privet flag in M90.
-    if (loadTimeData.getBoolean('forceEnablePrivetPrinting') ||
-        loadTimeData.getBoolean('cloudPrintDeprecationWarningsSuppressed')) {
+    if (loadTimeData.getBoolean('forceEnablePrivetPrinting')) {
       this.destinationSearchStatus_.set(
           PrinterType.PRIVET_PRINTER,
           DestinationStorePrinterSearchStatus.START);
@@ -238,6 +241,14 @@ export class DestinationStore extends EventTarget {
      * @private {!NativeLayer}
      */
     this.nativeLayer_ = NativeLayerImpl.getInstance();
+
+    // <if expr="chromeos">
+    /**
+     * Used to fetch information about Chrome OS local print destinations.
+     * @private {!NativeLayerCros}
+     */
+    this.nativeLayerCros_ = NativeLayerCrosImpl.getInstance();
+    // </if>
 
     /**
      * Whether PDF printer is enabled. It's disabled, for example, in App
@@ -574,7 +585,7 @@ export class DestinationStore extends EventTarget {
    * @param {string} destinationId ID of the destination.
    */
   fetchEulaUrl(destinationId) {
-    this.nativeLayer_.getEulaUrl(destinationId).then(response => {
+    this.nativeLayerCros_.getEulaUrl(destinationId).then(response => {
       // Check that the currently selected destination ID still matches the
       // destination ID we used to fetch the EULA URL.
       if (this.selectedDestination_ &&
@@ -584,6 +595,14 @@ export class DestinationStore extends EventTarget {
             {detail: response}));
       }
     });
+  }
+
+  /**
+   * Reloads all local printers.
+   * @return {!Promise}
+   */
+  reloadLocalPrinters() {
+    return this.nativeLayer_.getPrinters(PrinterType.LOCAL_PRINTER);
   }
   // </if>
 
@@ -792,7 +811,7 @@ export class DestinationStore extends EventTarget {
    */
   resolveCrosDestination(destination) {
     assert(destination.origin === DestinationOrigin.CROS);
-    return this.nativeLayer_.setupPrinter(destination.id);
+    return this.nativeLayerCros_.setupPrinter(destination.id);
   }
 
   /**
@@ -806,7 +825,7 @@ export class DestinationStore extends EventTarget {
         destination.provisionalType ===
             DestinationProvisionalType.NEEDS_USB_PERMISSION,
         'Provisional type cannot be resolved.');
-    return this.nativeLayer_.grantExtensionPrinterAccess(destination.id)
+    return this.nativeLayerCros_.grantExtensionPrinterAccess(destination.id)
         .then(
             destinationInfo => {
               /**
@@ -918,8 +937,7 @@ export class DestinationStore extends EventTarget {
 
     // TODO (rbpotter): Remove the code below once this flag and policy are no
     // longer supported. Remove the privet flag in M90.
-    if (loadTimeData.getBoolean('forceEnablePrivetPrinting') ||
-        loadTimeData.getBoolean('cloudPrintDeprecationWarningsSuppressed')) {
+    if (loadTimeData.getBoolean('forceEnablePrivetPrinting')) {
       types.push(PrinterType.PRIVET_PRINTER);
     }
 

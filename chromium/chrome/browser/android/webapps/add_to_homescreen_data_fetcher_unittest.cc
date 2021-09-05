@@ -22,16 +22,18 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "chrome/browser/installable/installable_manager.h"
-#include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/webapps/browser/installable/installable_manager.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "url/gurl.h"
+
+namespace webapps {
 
 namespace {
 
@@ -137,8 +139,7 @@ class TestInstallableManager : public InstallableManager {
       is_installable = false;
     } else if (params.valid_manifest && params.has_worker) {
       if (!IsManifestValidForWebApp(manifest_,
-                                    true /* check_webapp_manifest_display */,
-                                    false /* prefer_maskable_icon */)) {
+                                    true /* check_webapp_manifest_display */)) {
         code = valid_manifest_->errors.at(0);
         is_installable = false;
       } else if (!is_installable_) {
@@ -162,6 +163,7 @@ class TestInstallableManager : public InstallableManager {
          params.valid_primary_icon ? primary_icon_.get() : nullptr,
          params.prefer_maskable_icon, GURL() /* splash_icon_url */,
          nullptr /* splash_icon */,
+         std::map<GURL, SkBitmap>() /* screenshots */,
          params.valid_manifest ? is_installable : false,
          params.has_worker ? is_installable : false});
   }
@@ -564,3 +566,5 @@ TEST_F(AddToHomescreenDataFetcherTest, ManifestNoNameNoShortName) {
   EXPECT_EQ(fetcher->shortcut_info().best_primary_icon_url,
             GURL(kDefaultIconUrl));
 }
+
+}  // namespace webapps

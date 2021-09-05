@@ -39,6 +39,7 @@ include_rules = [
   "+components/printing/common",
   "+components/printing/renderer",
   "+components/rappor/public/mojom",
+  "+components/search/ntp_features.h",
   "+components/safe_browsing/buildflags.h",
   "+components/safe_browsing/content/renderer",
   "+components/safe_browsing/content/common",
@@ -51,6 +52,7 @@ include_rules = [
   "+components/subresource_filter/content/common",
   "+components/subresource_filter/content/renderer",
   "+components/subresource_filter/core/common/common_features.h",
+  "+components/subresource_redirect/common",
   "+components/sync/driver/sync_driver_switches.h",
   "+components/sync/engine/sync_engine_switches.h",
   "+components/translate/content/common",
@@ -89,5 +91,9 @@ specific_include_rules = {
     "+chrome/browser/ui",
     "+chrome/browser/ui/tabs",
     "+content/public/browser/browser_task_traits.h",
+  ],
+  "commerce_hint_agent_browsertest\.cc" : [
+    "+chrome/browser/cart",
+    "+chrome/browser/persisted_state_db/profile_proto_db.h",
   ],
 }

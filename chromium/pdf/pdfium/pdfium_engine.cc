@@ -26,16 +26,19 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "gin/array_buffer.h"
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
 #include "gin/public/v8_platform.h"
+#include "pdf/accessibility_structs.h"
 #include "pdf/document_loader_impl.h"
 #include "pdf/draw_utils/coordinates.h"
 #include "pdf/draw_utils/shadow.h"
 #include "pdf/pdf_features.h"
 #include "pdf/pdf_transform.h"
+#include "pdf/pdf_utils/dates.h"
 #include "pdf/pdfium/pdfium_api_string_buffer_adapter.h"
 #include "pdf/pdfium/pdfium_document.h"
 #include "pdf/pdfium/pdfium_mem_buffer_file_read.h"
@@ -377,6 +380,71 @@ base::string16 GetAttachmentName(FPDF_ATTACHMENT attachment) {
       /*check_expected_size=*/true);
 }
 
+void SetXYZParamsInScreenCoords(PDFiumPage* page, float* params) {
+  gfx::PointF page_coords(params[0], params[1]);
+  gfx::PointF screen_coords = page->TransformPageToScreenXY(page_coords);
+  params[0] = screen_coords.x();
+  params[1] = screen_coords.y();
+}
+
+void SetFitRParamsInScreenCoords(PDFiumPage* page, float* params) {
+  gfx::PointF point_1 =
+      page->TransformPageToScreenXY(gfx::PointF(params[0], params[1]));
+  gfx::PointF point_2 =
+      page->TransformPageToScreenXY(gfx::PointF(params[2], params[3]));
+  params[0] = point_1.x();
+  params[1] = point_1.y();
+  params[2] = point_2.x();
+  params[3] = point_2.y();
+}
+
+void SetFitVParamsInScreenCoords(PDFiumPage* page, float* params) {
+  // FitV/FitBV only has 1 parameter for x coordinate.
+  gfx::PointF screen_coords =
+      page->TransformPageToScreenXY(gfx::PointF(params[0], 0));
+  params[0] = screen_coords.x();
+}
+
+void SetFitHParamsInScreenCoords(PDFiumPage* page, float* params) {
+  // FitH/FitBH only has 1 parameter for y coordinate.
+  gfx::PointF screen_coords =
+      page->TransformPageToScreenXY(gfx::PointF(0, params[0]));
+  params[0] = screen_coords.y();
+}
+
+// A helper function that transforms the in-page coordinates in `params` to
+// in-screen coordinates depending on the view's fit type. `params` is both an
+// input and a output parameter.
+void ParamsTransformPageToScreen(unsigned long view_fit_type,
+                                 PDFiumPage* page,
+                                 float* params) {
+  switch (view_fit_type) {
+    case PDFDEST_VIEW_XYZ:
+      SetXYZParamsInScreenCoords(page, params);
+      break;
+    case PDFDEST_VIEW_FIT:
+    case PDFDEST_VIEW_FITB:
+      // No parameters for coordinates to be transformed.
+      break;
+    case PDFDEST_VIEW_FITBH:
+    case PDFDEST_VIEW_FITH:
+      SetFitHParamsInScreenCoords(page, params);
+      break;
+    case PDFDEST_VIEW_FITBV:
+    case PDFDEST_VIEW_FITV:
+      SetFitVParamsInScreenCoords(page, params);
+      break;
+    case PDFDEST_VIEW_FITR:
+      SetFitRParamsInScreenCoords(page, params);
+      break;
+    case PDFDEST_VIEW_UNKNOWN_MODE:
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+}
+
 }  // namespace
 
 void InitializeSDK(bool enable_v8) {
@@ -672,13 +740,13 @@ void PDFiumEngine::OnPendingRequestComplete() {
   if (!fpdf_availability()) {
     document_->file_access().m_FileLen = doc_loader_->GetDocumentSize();
     document_->CreateFPDFAvailability();
-    DCHECK(fpdf_availability());
+
     // Currently engine does not deal efficiently with some non-linearized
     // files.
     // See http://code.google.com/p/chromium/issues/detail?id=59400
     // To improve user experience we download entire file for non-linearized
     // PDF.
-    if (FPDFAvail_IsLinearized(fpdf_availability()) != PDF_LINEARIZED) {
+    if (!IsLinearized()) {
       // Wait complete document.
       process_when_pending_request_complete_ = false;
       document_->ResetFPDFAvailability();
@@ -975,7 +1043,7 @@ void PDFiumEngine::KillFormFocus() {
 
 void PDFiumEngine::UpdateFocus(bool has_focus) {
   base::AutoReset<bool> updating_focus_guard(&updating_focus_, true);
-  if (has_focus) {
+  if (has_focus && !IsReadOnly()) {
     UpdateFocusItemType(last_focused_item_type_);
     if (focus_item_type_ == FocusElementType::kPage &&
         PageIndexInBounds(last_focused_page_) &&
@@ -1744,10 +1812,10 @@ void PDFiumEngine::StartFind(const std::string& text, bool case_sensitive) {
   if (doc_loader_set_for_testing_) {
     ContinueFind(case_sensitive ? 1 : 0);
   } else {
-    pp::Module::Get()->core()->CallOnMainThread(
-        0,
-        PPCompletionCallbackFromResultCallback(base::BindOnce(
-            &PDFiumEngine::ContinueFind, find_weak_factory_.GetWeakPtr())),
+    client_->ScheduleTaskOnMainThread(
+        base::TimeDelta(),
+        base::BindOnce(&PDFiumEngine::ContinueFind,
+                       find_weak_factory_.GetWeakPtr()),
         case_sensitive ? 1 : 0);
   }
 }
@@ -2057,6 +2125,28 @@ void PDFiumEngine::RotateCounterclockwise() {
   ProposeNextDocumentLayout();
 }
 
+bool PDFiumEngine::IsReadOnly() const {
+  return read_only_;
+}
+
+void PDFiumEngine::SetReadOnly(bool enable) {
+  read_only_ = enable;
+
+  // Restore form highlights.
+  if (!read_only_) {
+    FPDF_SetFormFieldHighlightAlpha(form(), kFormHighlightAlpha);
+    return;
+  }
+
+  // Hide form highlights.
+  FPDF_SetFormFieldHighlightAlpha(form(), /*alpha=*/0);
+  KillFormFocus();
+
+  // Unselect text.
+  SelectionChangeInvalidator selection_invalidator(this);
+  selection_.clear();
+}
+
 void PDFiumEngine::SetTwoUpView(bool enable) {
   desired_layout_options_.set_two_up_view_enabled(enable);
   ProposeNextDocumentLayout();
@@ -2179,6 +2269,10 @@ void PDFiumEngine::HandleAccessibilityAction(
           IsPageCharacterIndexInBounds(action_data.selection_end_index)) {
         SetSelection(action_data.selection_start_index,
                      action_data.selection_end_index);
+        gfx::Rect target_rect = RectFromPPRect(action_data.target_rect);
+        if (GetVisibleRect().Contains(target_rect))
+          return;
+        client_->ScrollBy(GetScreenRect(target_rect).OffsetFromOrigin());
       }
       break;
     }
@@ -2209,7 +2303,7 @@ bool PDFiumEngine::HasPermission(DocumentPermission permission) const {
 }
 
 void PDFiumEngine::SelectAll() {
-  if (in_form_text_area_)
+  if (in_form_text_area_ || IsReadOnly())
     return;
 
   SelectionChangeInvalidator selection_invalidator(this);
@@ -2408,6 +2502,13 @@ base::Optional<PDFEngine::NamedDestination> PDFiumEngine::GetNamedDestination(
   result.page = page;
   unsigned long view_int =
       FPDFDest_GetView(dest, &result.num_params, result.params);
+
+  // FPDFDest_GetView() gets the in-page coordinates directly from the PDF
+  // document. The in-page coordinates need to be transformed into in-screen
+  // coordinates before getting sent to the viewport.
+  PDFiumPage* page_ptr = pages_[page].get();
+  ParamsTransformPageToScreen(view_int, page_ptr, result.params);
+
   result.view = ConvertViewIntToViewString(view_int);
   return result;
 }
@@ -2468,8 +2569,9 @@ uint32_t PDFiumEngine::GetCharUnicode(int page_index, int char_index) {
   return pages_[page_index]->GetCharUnicode(char_index);
 }
 
-base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo>
-PDFiumEngine::GetTextRunInfo(int page_index, int start_char_index) {
+base::Optional<AccessibilityTextRunInfo> PDFiumEngine::GetTextRunInfo(
+    int page_index,
+    int start_char_index) {
   DCHECK(PageIndexInBounds(page_index));
   auto info = pages_[page_index]->GetTextRunInfo(start_char_index);
   if (!client_->IsPrintPreview() && start_char_index >= 0)
@@ -2723,9 +2825,8 @@ std::vector<gfx::Size> PDFiumEngine::LoadPageSizes(
   pending_pages_.clear();
   size_t new_page_count = FPDF_GetPageCount(doc());
 
-  bool doc_complete = doc_loader_->IsDocumentComplete();
-  bool is_linear =
-      FPDFAvail_IsLinearized(fpdf_availability()) == PDF_LINEARIZED;
+  const bool doc_complete = doc_loader_->IsDocumentComplete();
+  const bool is_linear = IsLinearized();
   for (size_t i = 0; i < new_page_count; ++i) {
     // Get page availability. If |document_loaded_| == true and the page is not
     // new, then the page has been constructed already. Get page availability
@@ -2776,12 +2877,10 @@ std::vector<gfx::Size> PDFiumEngine::LoadPageSizes(
 
 void PDFiumEngine::LoadBody() {
   DCHECK(doc());
-  DCHECK(fpdf_availability());
   if (doc_loader_->IsDocumentComplete()) {
     LoadForm();
-  } else if (FPDFAvail_IsLinearized(fpdf_availability()) == PDF_LINEARIZED &&
-             FPDF_GetPageCount(doc()) == 1) {
-    // If we have only one page we should load form first, bacause it is may be
+  } else if (IsLinearized() && FPDF_GetPageCount(doc()) == 1) {
+    // If we have only one page we should load form first, because it may be an
     // XFA document. And after loading form the page count and its contents may
     // be changed.
     LoadForm();
@@ -2834,6 +2933,11 @@ void PDFiumEngine::LoadForm() {
       DCHECK(ret);
     }
   }
+}
+
+bool PDFiumEngine::IsLinearized() {
+  DCHECK(fpdf_availability());
+  return FPDFAvail_IsLinearized(fpdf_availability()) == PDF_LINEARIZED;
 }
 
 void PDFiumEngine::CalculateVisiblePages() {
@@ -3919,21 +4023,30 @@ void PDFiumEngine::LoadDocumentAttachmentInfoList() {
 void PDFiumEngine::LoadDocumentMetadata() {
   DCHECK(document_loaded_);
 
-  // Document information dictionary entries
   doc_metadata_.version = GetDocumentVersion();
-  doc_metadata_.title = GetMetadataByField("Title");
-  doc_metadata_.author = GetMetadataByField("Author");
-  doc_metadata_.subject = GetMetadataByField("Subject");
-  doc_metadata_.creator = GetMetadataByField("Creator");
-  doc_metadata_.producer = GetMetadataByField("Producer");
+  doc_metadata_.linearized = IsLinearized();
+
+  // Document information dictionary entries
+  doc_metadata_.title = GetTrimmedMetadataByField("Title");
+  doc_metadata_.author = GetTrimmedMetadataByField("Author");
+  doc_metadata_.subject = GetTrimmedMetadataByField("Subject");
+  doc_metadata_.keywords = GetTrimmedMetadataByField("Keywords");
+  doc_metadata_.creator = GetTrimmedMetadataByField("Creator");
+  doc_metadata_.producer = GetTrimmedMetadataByField("Producer");
+  doc_metadata_.creation_date =
+      ParsePdfDate(GetTrimmedMetadataByField("CreationDate"));
+  doc_metadata_.mod_date = ParsePdfDate(GetTrimmedMetadataByField("ModDate"));
 }
 
-std::string PDFiumEngine::GetMetadataByField(FPDF_BYTESTRING field) const {
+std::string PDFiumEngine::GetTrimmedMetadataByField(
+    FPDF_BYTESTRING field) const {
   DCHECK(doc());
 
-  return base::UTF16ToUTF8(CallPDFiumWideStringBufferApi(
+  base::string16 metadata = CallPDFiumWideStringBufferApi(
       base::BindRepeating(&FPDF_GetMetaText, doc(), field),
-      /*check_expected_size=*/false));
+      /*check_expected_size=*/false);
+
+  return base::UTF16ToUTF8(base::TrimWhitespace(metadata, base::TRIM_ALL));
 }
 
 PdfVersion PDFiumEngine::GetDocumentVersion() const {

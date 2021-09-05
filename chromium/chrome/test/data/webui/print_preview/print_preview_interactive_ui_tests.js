@@ -15,14 +15,6 @@ const PrintPreviewInteractiveUITest = class extends PolymerInteractiveUITest {
     throw 'this is abstract and should be overriden by subclasses';
   }
 
-  /** @override */
-  get extraLibraries() {
-    return [
-      '//third_party/mocha/mocha.js',
-      '//chrome/test/data/webui/mocha_adapter.js',
-    ];
-  }
-
   // The name of the mocha suite. Should be overridden by subclasses.
   get suiteName() {
     return null;
@@ -61,6 +53,7 @@ TEST_F(
           button_strip_interactive_test.TestNames.FocusPrintOnReady);
     });
 
+GEN('#if !defined(OS_CHROMEOS)');
 // eslint-disable-next-line no-var
 var PrintPreviewDestinationDialogInteractiveTest =
     class extends PrintPreviewInteractiveUITest {
@@ -88,6 +81,37 @@ TEST_F(
       this.runMochaTest(
           destination_dialog_interactive_test.TestNames.EscapeSearchBox);
     });
+GEN('#else');
+
+// eslint-disable-next-line no-var
+var PrintPreviewDestinationDialogCrosInteractiveTest =
+    class extends PrintPreviewInteractiveUITest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://print/test_loader.html?module=print_preview/destination_dialog_cros_interactive_test.js';
+  }
+
+  /** @override */
+  get suiteName() {
+    return destination_dialog_cros_interactive_test.suiteName;
+  }
+};
+
+TEST_F(
+    'PrintPreviewDestinationDialogCrosInteractiveTest', 'FocusSearchBox',
+    function() {
+      this.runMochaTest(
+          destination_dialog_cros_interactive_test.TestNames.FocusSearchBox);
+    });
+
+TEST_F(
+    'PrintPreviewDestinationDialogCrosInteractiveTest', 'EscapeSearchBox',
+    function() {
+      this.runMochaTest(
+          destination_dialog_cros_interactive_test.TestNames.EscapeSearchBox);
+    });
+GEN('#endif');
+
 
 // eslint-disable-next-line no-var
 var PrintPreviewPagesSettingsTest =

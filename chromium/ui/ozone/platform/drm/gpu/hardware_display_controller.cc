@@ -76,14 +76,12 @@ HardwareDisplayController::~HardwareDisplayController() = default;
 void HardwareDisplayController::GetModesetProps(CommitRequest* commit_request,
                                                 const DrmOverlayPlane& primary,
                                                 const drmModeModeInfo& mode) {
-  TRACE_EVENT0("drm", "HDC::GetModesetProps");
   GetModesetPropsForCrtcs(commit_request, primary,
                           /*use_current_crtc_mode=*/false, mode);
 }
 
 void HardwareDisplayController::GetEnableProps(CommitRequest* commit_request,
                                                const DrmOverlayPlane& primary) {
-  TRACE_EVENT0("drm", "HDC::GetEnableProps");
   // TODO(markyacoub): Simplify and remove the use of empty_mode.
   drmModeModeInfo empty_mode = {};
   GetModesetPropsForCrtcs(commit_request, primary,
@@ -107,15 +105,13 @@ void HardwareDisplayController::GetModesetPropsForCrtcs(
     overlays.push_back(primary.Clone());
 
     CrtcCommitRequest request = CrtcCommitRequest::EnableCrtcRequest(
-        controller->crtc(), controller->connector(), modeset_mode,
+        controller->crtc(), controller->connector(), modeset_mode, origin_,
         &owned_hardware_planes_, std::move(overlays));
     commit_request->push_back(std::move(request));
   }
 }
 
 void HardwareDisplayController::GetDisableProps(CommitRequest* commit_request) {
-  TRACE_EVENT0("drm", "HDC::GetDisableProps");
-
   for (const auto& controller : crtc_controllers_) {
     CrtcCommitRequest request = CrtcCommitRequest::DisableCrtcRequest(
         controller->crtc(), controller->connector(), &owned_hardware_planes_);
@@ -146,6 +142,24 @@ void HardwareDisplayController::SchedulePageFlip(
 
   bool status =
       ScheduleOrTestPageFlip(plane_list, page_flip_request, &out_fence);
+  if (!status) {
+    for (const auto& plane : plane_list) {
+      // If the page flip failed and we see that the buffer has been allocated
+      // before the latest modeset, it could mean it was an in-flight buffer
+      // carrying an obsolete configuration.
+      // Request a buffer reallocation to reflect the new change.
+      if (plane.buffer &&
+          plane.buffer->modeset_sequence_id_at_allocation() <
+              plane.buffer->drm_device()->modeset_sequence_id()) {
+        std::move(submission_callback)
+            .Run(gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS, nullptr);
+        std::move(presentation_callback)
+            .Run(gfx::PresentationFeedback::Failure());
+        return;
+      }
+    }
+  }
+
   CHECK(status) << "SchedulePageFlip failed";
 
   if (page_flip_request->page_flip_count() == 0) {

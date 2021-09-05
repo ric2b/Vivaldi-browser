@@ -14,6 +14,7 @@
 
 #include "ash/app_list/model/app_list_model_export.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/sync/model/string_ordinal.h"
@@ -86,7 +87,15 @@ class APP_LIST_MODEL_EXPORT AppListItem {
 
   bool has_notification_badge() const { return has_notification_badge_; }
 
-  void UpdateBadgeForTesting(bool has_badge) { UpdateBadge(has_badge); }
+  void UpdateNotificationBadgeForTesting(bool has_badge) {
+    UpdateNotificationBadge(has_badge);
+  }
+
+  AppStatus app_status() const { return metadata_->app_status; }
+
+  void UpdateAppStatusForTesting(AppStatus app_status) {
+    metadata_->app_status = app_status;
+  }
 
  protected:
   // Subclasses also have mutable access to the metadata ptr.
@@ -109,7 +118,7 @@ class APP_LIST_MODEL_EXPORT AppListItem {
                            const std::string& short_name);
 
   // Updates whether the notification badge is shown on the view.
-  void UpdateBadge(bool has_badge);
+  void UpdateNotificationBadge(bool has_badge);
 
   void set_position(const syncer::StringOrdinal& new_position) {
     DCHECK(new_position.IsValid());

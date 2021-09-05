@@ -12,11 +12,12 @@
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -913,8 +914,7 @@ class LayerTreeHostTestInvisibleLayersSkipRenderPass
 
   void AddBackgroundBlurFilter(Layer* layer) {
     FilterOperations filters;
-    filters.Append(FilterOperation::CreateBlurFilter(
-        30, SkBlurImageFilter::kClamp_TileMode));
+    filters.Append(FilterOperation::CreateBlurFilter(30, SkTileMode::kClamp));
     layer->SetBackdropFilters(filters);
   }
 
@@ -8817,7 +8817,7 @@ MULTI_THREAD_TEST_F(LayerTreeHostTopControlsDeltaTriggersViewportUpdate);
 // Tests that custom sequence throughput tracking result is reported to
 // LayerTreeHostClient.
 constexpr MutatorHost::TrackedAnimationSequenceId kSequenceId = 1u;
-class LayerTreeHostCustomThrougputTrackerTest : public LayerTreeHostTest {
+class LayerTreeHostCustomThroughputTrackerTest : public LayerTreeHostTest {
  public:
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -8850,7 +8850,7 @@ class LayerTreeHostCustomThrougputTrackerTest : public LayerTreeHostTest {
   }
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCustomThrougputTrackerTest);
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCustomThroughputTrackerTest);
 
 // Confirm that DelegatedInkMetadata set on the LTH propagates to the
 // CompositorFrameMetadata and RenderFrameMetadata, and then both are correctly
@@ -8901,9 +8901,10 @@ class LayerTreeHostTestDelegatedInkMetadataOnAndOff
     gfx::PointF point = gfx::PointF(135, 45);
     gfx::RectF area = gfx::RectF(173, 438);
     base::TimeTicks timestamp = base::TimeTicks::Now();
+    bool is_hovering = true;
 
-    expected_metadata_ =
-        viz::DelegatedInkMetadata(point, diameter, color, timestamp, area);
+    expected_metadata_ = viz::DelegatedInkMetadata(
+        point, diameter, color, timestamp, area, is_hovering);
     layer_tree_host()->SetDelegatedInkMetadata(
         std::make_unique<viz::DelegatedInkMetadata>(
             expected_metadata_.value()));
@@ -8925,24 +8926,29 @@ class LayerTreeHostTestDelegatedInkMetadataOnAndOff
     }
   }
 
-  void ExpectMetadata(bool had_delegated_ink_metadata,
+  void ExpectMetadata(base::Optional<DelegatedInkBrowserMetadata>
+                          browser_delegated_ink_metadata,
                       viz::DelegatedInkMetadata* actual_metadata) {
     if (expected_metadata_.has_value()) {
-      EXPECT_TRUE(had_delegated_ink_metadata);
+      EXPECT_TRUE(browser_delegated_ink_metadata.has_value());
       EXPECT_TRUE(actual_metadata);
+      EXPECT_TRUE(
+          browser_delegated_ink_metadata.value().delegated_ink_is_hovering);
       EXPECT_EQ(expected_metadata_->point(), actual_metadata->point());
       EXPECT_EQ(expected_metadata_->color(), actual_metadata->color());
       EXPECT_EQ(expected_metadata_->diameter(), actual_metadata->diameter());
       EXPECT_EQ(expected_metadata_->presentation_area(),
                 actual_metadata->presentation_area());
       EXPECT_EQ(expected_metadata_->timestamp(), actual_metadata->timestamp());
+      EXPECT_EQ(expected_metadata_->is_hovering(),
+                actual_metadata->is_hovering());
 
       // Record the frame time from the metadata so we can confirm that it
       // matches the LayerTreeHostImpl's frame time in DrawLayersOnThread.
       EXPECT_GT(actual_metadata->frame_time(), base::TimeTicks::Min());
       metadata_frame_time_ = actual_metadata->frame_time();
     } else {
-      EXPECT_FALSE(had_delegated_ink_metadata);
+      EXPECT_FALSE(browser_delegated_ink_metadata.has_value());
       EXPECT_FALSE(actual_metadata);
       EndTest();
     }
@@ -8954,7 +8960,7 @@ class LayerTreeHostTestDelegatedInkMetadataOnAndOff
       const RenderFrameMetadata& render_frame_metadata,
       viz::CompositorFrameMetadata* compositor_frame_metadata,
       bool force_send) override {
-    ExpectMetadata(render_frame_metadata.has_delegated_ink_metadata,
+    ExpectMetadata(render_frame_metadata.delegated_ink_metadata,
                    compositor_frame_metadata->delegated_ink_metadata.get());
   }
 
@@ -8999,18 +9005,30 @@ class LayerTreeHostTestEventsMetrics : public LayerTreeHostTest {
 
  private:
   void SimulateEventOnMain() {
-    std::unique_ptr<EventMetrics> metrics = EventMetrics::Create(
+    base::SimpleTestTickClock tick_clock;
+    tick_clock.Advance(base::TimeDelta::FromMicroseconds(10));
+    base::TimeTicks event_time = tick_clock.NowTicks();
+    tick_clock.Advance(base::TimeDelta::FromMicroseconds(10));
+    std::unique_ptr<EventMetrics> metrics = EventMetrics::CreateForTesting(
         ui::ET_GESTURE_SCROLL_UPDATE,
-        EventMetrics::ScrollUpdateType::kContinued, base::TimeTicks::Now(),
-        ui::ScrollInputType::kWheel);
+        EventMetrics::ScrollUpdateType::kContinued, ui::ScrollInputType::kWheel,
+        event_time, &tick_clock);
+    DCHECK_NE(metrics, nullptr);
     {
+      tick_clock.Advance(base::TimeDelta::FromMicroseconds(10));
+      metrics->SetDispatchStageTimestamp(
+          EventMetrics::DispatchStage::kRendererCompositorStarted);
       auto done_callback = base::BindOnce(
-          [](std::unique_ptr<EventMetrics> metrics, bool handled) {
+          [](std::unique_ptr<EventMetrics> metrics,
+             base::SimpleTestTickClock* tick_clock, bool handled) {
+            tick_clock->Advance(base::TimeDelta::FromMicroseconds(10));
+            metrics->SetDispatchStageTimestamp(
+                EventMetrics::DispatchStage::kRendererCompositorFinished);
             std::unique_ptr<EventMetrics> result =
                 handled ? std::move(metrics) : nullptr;
             return result;
           },
-          std::move(metrics));
+          std::move(metrics), &tick_clock);
       auto scoped_event_monitor =
           layer_tree_host()->GetScopedEventMetricsMonitor(
               std::move(done_callback));

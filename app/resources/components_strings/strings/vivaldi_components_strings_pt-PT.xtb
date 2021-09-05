@@ -19,7 +19,7 @@
 <translation id="1734878702283171397">Experimente contactar o administrador do sistema.</translation>
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente executar os diagnósticos de rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este website contém programas prejudiciais</translation>
-<translation id="1916770123977586577">Para aplicar as definições atualizadas a este website, atualize esta página</translation>
+<translation id="1916770123977586577">Para aplicar as definições atualizadas a este website, recarregue esta página</translation>
 <translation id="1919345977826869612">Publicidade</translation>
 <translation id="1974060860693918893">Avançadas</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />A verificar o proxy e a firewall<ph name="END_LINK" /></translation>
@@ -65,7 +65,7 @@
       se certificar de que o servidor proxy está a funcionar. Se achar que não deve
       utilizar um servidor proxy:
       <ph name="PLATFORM_TEXT" /></translation>
-<translation id="3226128629678568754">Prima o botão de atualização para enviar novamente os dados necessários para carregar a página.</translation>
+<translation id="3226128629678568754">Prima o botão recarregar para enviar novamente os dados necessários para carregar a página.</translation>
 <translation id="3227137524299004712">Microfone</translation>
 <translation id="3234666976984236645">Detetar sempre conteúdo importante neste website</translation>
 <translation id="3308738399950580893">anúncios</translation>
@@ -105,7 +105,6 @@
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> não aceitou o seu certificado de início de sessão ou este pode não ter sido fornecido.</translation>
 <translation id="4506599922270137252">Contactar o administrador do sistema</translation>
 <translation id="4522570452068850558">Detalhes</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Experimente desativar as extensões.</translation>
 <translation id="4592951414987517459">A sua ligação a <ph name="DOMAIN" /> está cifrada através de um conjunto de cifras moderno.</translation>
 <translation id="4690462567478992370">Deixar de usar um certificado inválido</translation>

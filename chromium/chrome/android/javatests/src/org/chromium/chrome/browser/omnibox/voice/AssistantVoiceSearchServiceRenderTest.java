@@ -23,16 +23,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.Spy;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.AppHooks;
-import org.chromium.chrome.browser.AppHooksImpl;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.gsa.GSAState;
@@ -41,6 +38,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.externalauth.ExternalAuthUtils;
 
 import java.io.IOException;
 
@@ -60,8 +58,6 @@ public class AssistantVoiceSearchServiceRenderTest {
 
     @Mock
     GSAState mGsaState;
-    @Spy
-    AppHooksImpl mAppHooksSpy;
 
     @Before
     public void setUp() {
@@ -78,15 +74,14 @@ public class AssistantVoiceSearchServiceRenderTest {
         ExternalAuthUtils externalAuthUtils = Mockito.mock(ExternalAuthUtils.class);
         doReturn(true).when(externalAuthUtils).isGoogleSigned(anyString());
         doReturn(true).when(externalAuthUtils).isChromeGoogleSigned();
-        mAppHooksSpy = Mockito.spy((AppHooksImpl) AppHooks.get());
-        doReturn(externalAuthUtils).when(mAppHooksSpy).getExternalAuthUtils();
-        AppHooks.setInstanceForTesting(mAppHooksSpy);
+        ExternalAuthUtils.setInstanceForTesting(externalAuthUtils);
 
         mActivityTestRule.startMainActivityOnBlankPage();
     }
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/1165682")
     @CommandLineFlags.Add({"force-fieldtrial-params=Study.Group:colorful_mic/true"})
     @Feature({"RenderTest"})
     public void testAssistantColorfulMic() throws IOException {

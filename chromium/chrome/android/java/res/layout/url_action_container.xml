@@ -24,7 +24,7 @@
             android:id="@+id/qrcode_button"
             style="@style/LocationBarActionButton"
             android:src="@drawable/qr_48dp"
-            android:visibility="invisible"
+            android:visibility="gone"
             android:contentDescription="@string/accessibility_toolbar_btn_qrcode" />
 
         <org.chromium.ui.widget.ChromeImageButton

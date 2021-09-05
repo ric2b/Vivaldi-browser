@@ -35,11 +35,24 @@ class RulesIndex : public content::RenderProcessHostObserver {
     ActivationsFound();
     ActivationsFound(const ActivationsFound& other);
     ~ActivationsFound();
+    ActivationsFound& operator=(const ActivationsFound& other);
 
     bool operator==(const ActivationsFound& other);
 
     uint8_t in_block_rules = 0;
     uint8_t in_allow_rules = 0;
+  };
+
+  using ScriptletInjection = std::pair<std::string, std::vector<std::string>>;
+
+  struct InjectionData {
+    InjectionData();
+    InjectionData(InjectionData&& other);
+    ~InjectionData();
+    InjectionData& operator=(InjectionData&& other);
+
+    std::string stylesheet;
+    std::vector<ScriptletInjection> scriptlet_injections;
   };
 
   static std::unique_ptr<RulesIndex> CreateInstance(
@@ -62,14 +75,14 @@ class RulesIndex : public content::RenderProcessHostObserver {
       base::RepeatingCallback<bool(url::Origin)> is_origin_wanted,
       content::RenderFrameHost* frame);
 
-  const flat::FilterRule* FindMatchingBeforeRequestRule(
+  const flat::RequestFilterRule* FindMatchingBeforeRequestRule(
       const GURL& url,
       const url::Origin& document_origin,
       flat::ResourceType resource_type,
       bool is_third_party,
       bool disable_generic_rules);
 
-  std::vector<const flat::FilterRule*> FindMatchingHeadersReceivedRules(
+  std::vector<const flat::RequestFilterRule*> FindMatchingHeadersReceivedRules(
       const GURL& url,
       const url::Origin& document_origin,
       bool is_third_party,
@@ -77,8 +90,8 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
   std::string GetDefaultStylesheet();
 
-  std::string GetStyleSheetForOrigin(const url::Origin& origin,
-                                     bool disable_generic_rules);
+  InjectionData GetInjectionDataForOrigin(const url::Origin& origin,
+                                          bool disable_generic_rules);
 
   // Implementing content::RenderProcessHostObserver
   void RenderProcessHostDestroyed(content::RenderProcessHost* host) override;

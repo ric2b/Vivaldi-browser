@@ -18,7 +18,8 @@ class Profile;
 
 namespace base {
 class FilePath;
-}
+class GUID;
+}  // namespace base
 
 namespace content {
 class BrowserContext;
@@ -92,25 +93,34 @@ class NotesModel : public KeyedService {
     return node && (node == root_.get() || node->parent() == root_.get());
   }
 
+  // Adds a new folder node at the specified position with the given |guid|. If
+  // no GUID is provided (i.e. nullopt), then a random one will be generated. If
+  // a GUID is provided, it must be valid.
   NoteNode* AddFolder(const NoteNode* parent,
                       size_t index,
                       const base::string16& name,
-                      base::Optional<std::string> guid = base::nullopt);
+                      base::Optional<base::GUID> guid = base::nullopt);
 
+  // Adds a note at the specified position with the given |creation_time| and
+  // |guid|. If no GUID is provided (i.e. nullopt), then a random one will be
+  // generated. If a GUID is provided, it must be valid.
   NoteNode* AddNote(const NoteNode* parent,
                     size_t index,
                     const base::string16& subject,
                     const GURL& url,
                     const base::string16& content,
                     base::Optional<base::Time> creation_time = base::nullopt,
-                    base::Optional<std::string> guid = base::nullopt);
+                    base::Optional<base::GUID> guid = base::nullopt);
 
+  // Adds a separator at the specified position with the given |creation_time|
+  // and |guid|. If no GUID is provided (i.e. nullopt), then a random one will
+  // be generated. If a GUID is provided, it must be valid.
   NoteNode* AddSeparator(
       const NoteNode* parent,
       size_t index,
       base::Optional<base::string16> name = base::nullopt,
       base::Optional<base::Time> creation_time = base::nullopt,
-      base::Optional<std::string> guid = base::nullopt);
+      base::Optional<base::GUID> guid = base::nullopt);
 
   NoteNode* AddNode(NoteNode* parent,
                     int index,

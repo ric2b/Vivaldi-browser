@@ -33,6 +33,15 @@ namespace blink {
 class Document;
 class Event;
 
+// This enum is for EventType UKM and existing values should not be removed or
+// modified.
+enum class InputEventType {
+  kMousedown = 0,
+  kClick = 1,
+  kKeydown = 2,
+  kPointerup = 3
+};
+
 // Detects when a page reaches First Idle and Time to Interactive. See
 // https://goo.gl/SYt55W for detailed description and motivation of First Idle
 // and Time to Interactive.
@@ -130,10 +139,10 @@ class CORE_EXPORT InteractiveDetector
 
   void SetUkmRecorderForTesting(ukm::UkmRecorder* test_ukm_recorder);
 
-  void RecordInputEventTimingUKM(const Event& event,
-                                 base::TimeTicks event_timestamp,
-                                 base::TimeTicks processing_start,
-                                 base::TimeTicks processing_end);
+  void RecordInputEventTimingUKM(base::TimeDelta input_delay,
+                                 base::TimeDelta processing_time,
+                                 base::TimeDelta time_to_next_paint,
+                                 WTF::AtomicString event_type);
 
   void DidObserveFirstScrollDelay(base::TimeDelta first_scroll_delay,
                                   base::TimeTicks first_scroll_timestamp);
@@ -227,10 +236,6 @@ class CORE_EXPORT InteractiveDetector
   // LongTaskObserver implementation
   void OnLongTaskDetected(base::TimeTicks start_time,
                           base::TimeTicks end_time) override;
-
-  // The duration of event handlers processing the event for the previous
-  // pointer down.
-  base::Optional<base::TimeDelta> pending_pointerdown_processing_time_;
 
   // The duration between the hardware timestamp and when we received the event
   // for the previous pointer down. Only non-zero if we've received a pointer

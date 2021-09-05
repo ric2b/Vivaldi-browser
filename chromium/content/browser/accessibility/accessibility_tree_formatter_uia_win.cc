@@ -16,7 +16,6 @@
 #include <string>
 #include <utility>
 
-#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -29,8 +28,8 @@
 #include "base/win/scoped_safearray.h"
 #include "base/win/scoped_variant.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_win.h"
+#include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
-#include "ui/accessibility/accessibility_switches.h"
 #include "ui/gfx/win/hwnd_util.h"
 
 namespace {
@@ -257,12 +256,6 @@ const long AccessibilityTreeFormatterUia::pattern_properties_[] = {
     UIA_TableRowOrColumnMajorPropertyId,              // 30083
     UIA_ToggleToggleStatePropertyId,                  // 30086
 };
-// static
-std::unique_ptr<ui::AXTreeFormatter>
-AccessibilityTreeFormatterUia::CreateUia() {
-  base::win::AssertComInitialized();
-  return std::make_unique<AccessibilityTreeFormatterUia>();
-}
 
 AccessibilityTreeFormatterUia::AccessibilityTreeFormatterUia() {
   // Create an instance of the CUIAutomation class.
@@ -325,24 +318,20 @@ void AccessibilityTreeFormatterUia::AddDefaultFilters(
   AddPropertyFilter(property_filters, "Window.IsModal=*");
 }
 
-// static
-void AccessibilityTreeFormatterUia::SetUpCommandLineForTestPass(
-    base::CommandLine* command_line) {
-  command_line->AppendSwitch(::switches::kEnableExperimentalUIAutomation);
-}
-
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterUia::BuildAccessibilityTree(
-    BrowserAccessibility* start) {
+base::Value AccessibilityTreeFormatterUia::BuildTree(
+    ui::AXPlatformNodeDelegate* start) const {
   // We use the UI Automation client API to produce the tree dump, but
   // BrowserAccessibility has a pointer to a provider API implementation, and
   // we can't directly relate the two -- the OS manages the relationship.
   // To locate the client element we want, we'll construct a RuntimeId
   // corresponding to our provider element, then search for that.
 
+  BrowserAccessibility* start_internal =
+      BrowserAccessibility::FromAXPlatformNodeDelegate(start);
   // Start by getting the root element for the HWND hosting the web content.
-  HWND hwnd =
-      start->manager()->GetRoot()->GetTargetForNativeAccessibilityEvent();
+  HWND hwnd = start_internal->manager()
+                  ->GetRoot()
+                  ->GetTargetForNativeAccessibilityEvent();
   Microsoft::WRL::ComPtr<IUIAutomationElement> root;
   uia_->ElementFromHandle(hwnd, &root);
   CHECK(root.Get());
@@ -379,7 +368,8 @@ AccessibilityTreeFormatterUia::BuildAccessibilityTree(
                           reinterpret_cast<void**>(&runtime_id_array));
     CHECK(runtime_id_array);
     CHECK((upper_bound - lower_bound) >= 0);
-    runtime_id_array[upper_bound - lower_bound] = start->GetUniqueId().Get();
+    runtime_id_array[upper_bound - lower_bound] =
+        start_internal->GetUniqueId().Get();
     ::SafeArrayUnaccessData(runtime_id.Get());
   }
 
@@ -392,13 +382,12 @@ AccessibilityTreeFormatterUia::BuildAccessibilityTree(
   Microsoft::WRL::ComPtr<IUIAutomationElement> start_element;
 
   root->FindFirst(TreeScope_Subtree, condition.Get(), &start_element);
-  std::unique_ptr<base::DictionaryValue> tree =
-      std::make_unique<base::DictionaryValue>();
 
+  base::DictionaryValue tree;
   if (start_element.Get()) {
     // Build an accessibility tree starting from that element.
-    RecursiveBuildAccessibilityTree(start_element.Get(), root_bounds.left,
-                                    root_bounds.top, tree.get());
+    RecursiveBuildTree(start_element.Get(), root_bounds.left, root_bounds.top,
+                       &tree);
   } else {
     // If the search failed, start dumping with the first thing that isn't a
     // Pane.
@@ -416,10 +405,10 @@ AccessibilityTreeFormatterUia::BuildAccessibilityTree(
                     &non_pane_descendant);
 
     DCHECK(non_pane_descendant.Get());
-    RecursiveBuildAccessibilityTree(non_pane_descendant.Get(), root_bounds.left,
-                                    root_bounds.top, tree.get());
+    RecursiveBuildTree(non_pane_descendant.Get(), root_bounds.left,
+                       root_bounds.top, &tree);
   }
-  return tree;
+  return std::move(tree);
 }
 
 base::Value AccessibilityTreeFormatterUia::BuildTreeForWindow(
@@ -434,8 +423,7 @@ base::Value AccessibilityTreeFormatterUia::BuildTreeForWindow(
   root->get_CurrentBoundingRectangle(&root_bounds);
 
   base::DictionaryValue tree;
-  RecursiveBuildAccessibilityTree(root.Get(), root_bounds.left, root_bounds.top,
-                                  &tree);
+  RecursiveBuildTree(root.Get(), root_bounds.left, root_bounds.top, &tree);
   return std::move(tree);
 }
 
@@ -446,7 +434,7 @@ base::Value AccessibilityTreeFormatterUia::BuildTreeForSelector(
   return base::Value(base::Value::Type::DICTIONARY);
 }
 
-void AccessibilityTreeFormatterUia::RecursiveBuildAccessibilityTree(
+void AccessibilityTreeFormatterUia::RecursiveBuildTree(
     IUIAutomationElement* uncached_node,
     int root_x,
     int root_y,
@@ -470,8 +458,7 @@ void AccessibilityTreeFormatterUia::RecursiveBuildAccessibilityTree(
     std::unique_ptr<base::DictionaryValue> child_dict =
         std::make_unique<base::DictionaryValue>();
     if (SUCCEEDED(children->GetElement(i, &child))) {
-      RecursiveBuildAccessibilityTree(child.Get(), root_x, root_y,
-                                      child_dict.get());
+      RecursiveBuildTree(child.Get(), root_x, root_y, child_dict.get());
     } else {
       child_dict->SetString("error", L"[Error retrieving child]");
     }
@@ -1008,8 +995,7 @@ void AccessibilityTreeFormatterUia::BuildCacheRequests() {
 }
 
 std::string AccessibilityTreeFormatterUia::ProcessTreeForOutput(
-    const base::DictionaryValue& dict,
-    base::DictionaryValue* filtered_result) {
+    const base::DictionaryValue& dict) const {
   std::unique_ptr<base::DictionaryValue> tree;
   std::string line;
 
@@ -1018,16 +1004,10 @@ std::string AccessibilityTreeFormatterUia::ProcessTreeForOutput(
   dict.GetString(UiaIdentifierToCondensedString(UIA_ControlTypePropertyId),
                  &control_type_value);
   WriteAttribute(true, control_type_value, &line);
-  if (filtered_result) {
-    filtered_result->SetString(
-        UiaIdentifierToStringUTF8(UIA_ControlTypePropertyId),
-        control_type_value);
-  }
 
   // properties
   for (long i : properties_) {
-    ProcessPropertyForOutput(UiaIdentifierToCondensedString(i), dict, line,
-                             filtered_result);
+    ProcessPropertyForOutput(UiaIdentifierToCondensedString(i), dict, line);
   }
 
   // patterns
@@ -1061,8 +1041,7 @@ std::string AccessibilityTreeFormatterUia::ProcessTreeForOutput(
       "Window.IsModal"};
 
   for (const std::string& pattern_property_name : pattern_property_names) {
-    ProcessPropertyForOutput(pattern_property_name, dict, line,
-                             filtered_result);
+    ProcessPropertyForOutput(pattern_property_name, dict, line);
   }
 
   return line;
@@ -1071,75 +1050,60 @@ std::string AccessibilityTreeFormatterUia::ProcessTreeForOutput(
 void AccessibilityTreeFormatterUia::ProcessPropertyForOutput(
     const std::string& property_name,
     const base::DictionaryValue& dict,
-    std::string& line,
-    base::DictionaryValue* filtered_result) {
+    std::string& line) const {
   //
   const base::Value* value;
   if (dict.Get(property_name, &value))
-    ProcessValueForOutput(property_name, value, line, filtered_result);
+    ProcessValueForOutput(property_name, value, line);
 }
 
 void AccessibilityTreeFormatterUia::ProcessValueForOutput(
     const std::string& name,
     const base::Value* value,
-    std::string& line,
-    base::DictionaryValue* filtered_result) {
+    std::string& line) const {
   switch (value->type()) {
     case base::Value::Type::STRING: {
       std::string string_value;
       value->GetAsString(&string_value);
-      bool did_pass_filters = WriteAttribute(
+      WriteAttribute(
           false,
           base::StringPrintf("%s='%s'", name.c_str(), string_value.c_str()),
           &line);
-      if (filtered_result && did_pass_filters)
-        filtered_result->SetString(name, string_value);
       break;
     }
     case base::Value::Type::BOOLEAN: {
       bool bool_value = 0;
       value->GetAsBoolean(&bool_value);
-      bool did_pass_filters =
           WriteAttribute(false,
                          base::StringPrintf("%s=%s", name.c_str(),
                                             (bool_value ? "true" : "false")),
                          &line);
-      if (filtered_result && did_pass_filters)
-        filtered_result->SetBoolean(name, bool_value);
       break;
     }
     case base::Value::Type::INTEGER: {
       int int_value = 0;
       value->GetAsInteger(&int_value);
-      bool did_pass_filters = WriteAttribute(
+      WriteAttribute(
           false, base::StringPrintf("%s=%d", name.c_str(), int_value), &line);
-      if (filtered_result && did_pass_filters)
-        filtered_result->SetInteger(name, int_value);
       break;
     }
     case base::Value::Type::DOUBLE: {
       double double_value = 0.0;
       value->GetAsDouble(&double_value);
-      bool did_pass_filters = WriteAttribute(
-          false, base::StringPrintf("%s=%.2f", name.c_str(), double_value),
-          &line);
-      if (filtered_result && did_pass_filters)
-        filtered_result->SetDouble(name, double_value);
+      WriteAttribute(false,
+                     base::StringPrintf("%s=%.2f", name.c_str(), double_value),
+                     &line);
       break;
     }
     case base::Value::Type::DICTIONARY: {
       const base::DictionaryValue* dict_value = nullptr;
       value->GetAsDictionary(&dict_value);
-      bool did_pass_filters = false;
       if (name == "BoundingRectangle") {
-        did_pass_filters =
-            WriteAttribute(false,
-                           FormatRectangle(*dict_value, "BoundingRectangle",
-                                           "left", "top", "width", "height"),
-                           &line);
+        WriteAttribute(false,
+                       FormatRectangle(*dict_value, "BoundingRectangle", "left",
+                                       "top", "width", "height"),
+                       &line);
       }
-      if (filtered_result && did_pass_filters)
-        filtered_result->SetKey(name, dict_value->Clone());
       break;
     }
     default:

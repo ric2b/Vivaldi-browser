@@ -30,9 +30,12 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "third_party/blink/renderer/platform/graphics/decoding_image_generator.h"
 #include "third_party/blink/renderer/platform/graphics/image_decoding_store.h"
 #include "third_party/blink/renderer/platform/graphics/image_frame_generator.h"
+#include "third_party/blink/renderer/platform/graphics/parkable_image_manager.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/image-decoders/segment_reader.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
@@ -45,30 +48,30 @@ namespace {
 
 // Do not rename entries or reuse numeric values to ensure the histogram is
 // consistent over time.
-enum IncrementalDecodePerImageType {
+enum class IncrementalDecodePerImageType {
   kJpegIncrementalNeeded = 0,
   kJpegAllDataReceivedInitially = 1,
   kWebPIncrementalNeeded = 2,
   kWebPAllDataReceivedInitially = 3,
-  kBoundaryValue
+  kMaxValue = kWebPAllDataReceivedInitially,
 };
 
 void ReportIncrementalDecodeNeeded(bool all_data_received,
                                    const String& image_type) {
   DCHECK(IsMainThread());
-  DEFINE_STATIC_LOCAL(EnumerationHistogram, incremental_decode_needed_histogram,
-                      ("Blink.ImageDecoders.IncrementalDecodeNeeded",
-                       IncrementalDecodePerImageType::kBoundaryValue));
+  base::Optional<IncrementalDecodePerImageType> status;
   if (image_type == "jpg") {
-    incremental_decode_needed_histogram.Count(
-        all_data_received
-            ? IncrementalDecodePerImageType::kJpegAllDataReceivedInitially
-            : IncrementalDecodePerImageType::kJpegIncrementalNeeded);
+    status = all_data_received
+                 ? IncrementalDecodePerImageType::kJpegAllDataReceivedInitially
+                 : IncrementalDecodePerImageType::kJpegIncrementalNeeded;
   } else if (image_type == "webp") {
-    incremental_decode_needed_histogram.Count(
-        all_data_received
-            ? IncrementalDecodePerImageType::kWebPAllDataReceivedInitially
-            : IncrementalDecodePerImageType::kWebPIncrementalNeeded);
+    status = all_data_received
+                 ? IncrementalDecodePerImageType::kWebPAllDataReceivedInitially
+                 : IncrementalDecodePerImageType::kWebPIncrementalNeeded;
+  }
+  if (status) {
+    UMA_HISTOGRAM_ENUMERATION("Blink.ImageDecoders.IncrementalDecodeNeeded",
+                              *status);
   }
 }
 
@@ -167,9 +170,13 @@ DeferredImageDecoder::DeferredImageDecoder(
       can_yuv_decode_(false),
       has_hot_spot_(false),
       image_is_high_bit_depth_(false),
-      complete_frame_content_id_(PaintImage::GetNextContentId()) {}
+      complete_frame_content_id_(PaintImage::GetNextContentId()) {
+  ParkableImageManager::Instance().Add(this);
+}
 
-DeferredImageDecoder::~DeferredImageDecoder() = default;
+DeferredImageDecoder::~DeferredImageDecoder() {
+  ParkableImageManager::Instance().Remove(this);
+}
 
 String DeferredImageDecoder::FilenameExtension() const {
   return metadata_decoder_ ? metadata_decoder_->FilenameExtension()
@@ -188,9 +195,9 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator() {
   DCHECK_GT(decoded_size.width(), 0);
   DCHECK_GT(decoded_size.height(), 0);
 
-  sk_sp<SkROBuffer> ro_buffer(rw_buffer_->makeROBufferSnapshot());
+  scoped_refptr<ROBuffer> ro_buffer(rw_buffer_->MakeROBufferSnapshot());
   scoped_refptr<SegmentReader> segment_reader =
-      SegmentReader::CreateFromSkROBuffer(std::move(ro_buffer));
+      SegmentReader::CreateFromROBuffer(std::move(ro_buffer));
 
   SkImageInfo info =
       SkImageInfo::MakeN32(decoded_size.width(), decoded_size.height(),
@@ -249,12 +256,12 @@ sk_sp<PaintImageGenerator> DeferredImageDecoder::CreateGenerator() {
 scoped_refptr<SharedBuffer> DeferredImageDecoder::Data() {
   if (!rw_buffer_)
     return nullptr;
-  sk_sp<SkROBuffer> ro_buffer(rw_buffer_->makeROBufferSnapshot());
+  scoped_refptr<ROBuffer> ro_buffer(rw_buffer_->MakeROBufferSnapshot());
   scoped_refptr<SharedBuffer> shared_buffer = SharedBuffer::Create();
-  SkROBuffer::Iter it(ro_buffer.get());
+  ROBuffer::Iter it(ro_buffer.get());
   do {
     shared_buffer->Append(static_cast<const char*>(it.data()), it.size());
-  } while (it.next());
+  } while (it.Next());
   return shared_buffer;
 }
 
@@ -266,6 +273,8 @@ void DeferredImageDecoder::SetData(scoped_refptr<SharedBuffer> data,
 void DeferredImageDecoder::SetDataInternal(scoped_refptr<SharedBuffer> data,
                                            bool all_data_received,
                                            bool push_data_to_decoder) {
+  // Once all the data has been received, the image should not change.
+  DCHECK(!all_data_received_);
   if (metadata_decoder_) {
     all_data_received_ = all_data_received;
     if (push_data_to_decoder)
@@ -275,13 +284,13 @@ void DeferredImageDecoder::SetDataInternal(scoped_refptr<SharedBuffer> data,
 
   if (frame_generator_) {
     if (!rw_buffer_)
-      rw_buffer_ = std::make_unique<SkRWBuffer>(data->size());
+      rw_buffer_ = std::make_unique<RWBuffer>(data->size());
 
     for (auto it = data->GetIteratorAt(rw_buffer_->size()); it != data->cend();
          ++it) {
       DCHECK_GE(data->size(), rw_buffer_->size() + it->size());
       const size_t remaining = data->size() - rw_buffer_->size() - it->size();
-      rw_buffer_->append(it->data(), it->size(), remaining);
+      rw_buffer_->Append(it->data(), it->size(), remaining);
     }
   }
 }
@@ -438,15 +447,12 @@ void DeferredImageDecoder::PrepareLazyDecodedFrames() {
     frame_data_[i].duration_ = metadata_decoder_->FrameDurationAtIndex(i);
     frame_data_[i].orientation_ = metadata_decoder_->Orientation();
     frame_data_[i].density_corrected_size_ = metadata_decoder_->DensityCorrectedSize();
-    frame_data_[i].is_received_ = metadata_decoder_->FrameIsReceivedAtIndex(i);
   }
 
-  // The last lazy decoded frame created from previous call might be
-  // incomplete so update its state.
-  if (previous_size) {
-    const size_t last_frame = previous_size - 1;
-    frame_data_[last_frame].is_received_ =
-        metadata_decoder_->FrameIsReceivedAtIndex(last_frame);
+  // Update the is_received_ state of incomplete frames.
+  while (received_frame_count_ < frame_data_.size() &&
+         metadata_decoder_->FrameIsReceivedAtIndex(received_frame_count_)) {
+    frame_data_[received_frame_count_++].is_received_ = true;
   }
 
   can_yuv_decode_ =

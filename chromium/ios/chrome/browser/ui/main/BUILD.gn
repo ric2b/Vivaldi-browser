@@ -17,6 +17,22 @@ source_set("scene_state_observer") {
   frameworks = [ "UIKit.framework" ]
 }
 
+source_set("observing_scene_agent") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  sources = [
+    "observing_scene_state_agent.h",
+    "observing_scene_state_agent.mm",
+  ]
+
+  frameworks = [ "UIKit.framework" ]
+
+  public_deps = [
+    ":scene_state_header",
+    ":scene_state_observer",
+  ]
+}
+
 source_set("scene_state_header") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -63,6 +79,7 @@ source_set("scene") {
   deps = [
     ":incognito_blocker_scene_agent",
     ":main",
+    ":observing_scene_agent",
     ":scene_testing",
     "//base",
     "//components/infobars/core",
@@ -91,6 +108,7 @@ source_set("scene") {
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/main",
     "//ios/chrome/browser/ntp:features",
+    "//ios/chrome/browser/policy",
     "//ios/chrome/browser/screenshot",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/snapshots",
@@ -104,6 +122,7 @@ source_set("scene") {
     "//ios/chrome/browser/ui/first_run",
     "//ios/chrome/browser/ui/first_run:field_trial",
     "//ios/chrome/browser/ui/history",
+    "//ios/chrome/browser/ui/incognito_reauth:incognito_reauth_scene_agent",
     "//ios/chrome/browser/ui/settings:settings_root",
     "//ios/chrome/browser/ui/settings/sync",
     "//ios/chrome/browser/ui/tab_switcher/tab_grid",
@@ -117,6 +136,7 @@ source_set("scene") {
     "//ios/chrome/browser/web_state_list:agents",
     "//ios/chrome/browser/web_state_list:session_metrics",
     "//ios/chrome/browser/window_activities",
+    "//ios/chrome/common/ui/reauthentication",
     "//ios/chrome/common/ui/util",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/mailto",
@@ -185,6 +205,7 @@ source_set("main") {
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
     "//ios/chrome/browser/ui/download",
+    "//ios/chrome/browser/ui/incognito_reauth:incognito_reauth_scene_agent",
     "//ios/chrome/browser/ui/page_info:coordinator",
     "//ios/chrome/browser/ui/print",
     "//ios/chrome/browser/ui/qr_scanner:coordinator",
@@ -241,10 +262,13 @@ source_set("unit_tests") {
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/main",
     "//ios/chrome/browser/main:test_support",
+    "//ios/chrome/browser/sessions:restoration_agent",
+    "//ios/chrome/browser/sessions:test_support",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/browser_view",
     "//ios/chrome/test:block_cleanup_test",
+    "//ios/testing:block_swizzler",
     "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/ocmock",

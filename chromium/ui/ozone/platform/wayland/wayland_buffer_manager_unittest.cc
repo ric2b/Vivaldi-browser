@@ -84,7 +84,7 @@ class WaylandBufferManagerTest : public WaylandTest {
     // callback and bind the interface again if the manager failed.
     manager_host_->SetTerminateGpuCallback(callback_.Get());
     auto interface_ptr = manager_host_->BindInterface();
-    buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false);
+    buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, false);
   }
 
  protected:
@@ -119,7 +119,7 @@ class WaylandBufferManagerTest : public WaylandTest {
             // Recreate the gpu side manager (the production code does the
             // same).
             buffer_manager_gpu_ = std::make_unique<WaylandBufferManagerGpu>();
-            buffer_manager_gpu_->Initialize(std::move(interface_ptr), {},
+            buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false,
                                             false);
           }));
     }
@@ -933,6 +933,8 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditionsAckConfigured) {
       DCHECK(mock_surface->xdg_surface());
       ActivateSurface(mock_surface->xdg_surface());
     } else {
+      // WaylandAuxiliaryWindow uses the focused window as a parent.
+      window_->SetPointerFocus(true);
       // See the comment near Show() call above.
       temp_window->Show(false);
     }
@@ -943,6 +945,7 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditionsAckConfigured) {
 
     Sync();
 
+    window_->SetPointerFocus(false);
     temp_window.reset();
     DestroyBufferAndSetTerminateExpectation(widget, kDmabufBufferId,
                                             false /*fail*/);

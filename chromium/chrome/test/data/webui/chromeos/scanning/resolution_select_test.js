@@ -27,11 +27,11 @@ export function resolutionSelectTest() {
   });
 
   test('initializeResolutionSelect', () => {
-    // Before options are added, the dropdown should be disabled and empty.
+    // Before options are added, the dropdown should be enabled and empty.
     const select =
         /** @type {!HTMLSelectElement} */ (resolutionSelect.$$('select'));
     assertTrue(!!select);
-    assertTrue(select.disabled);
+    assertFalse(select.disabled);
     assertEquals(0, select.length);
 
     const firstResolution = 75;
@@ -39,9 +39,8 @@ export function resolutionSelectTest() {
     resolutionSelect.resolutions = [firstResolution, secondResolution];
     flush();
 
-    // Verify that adding more than one resolution results in the dropdown
-    // becoming enabled with the correct options.
-    assertFalse(select.disabled);
+    // Verify that adding resolutions results in the dropdown displaying the
+    // correct options.
     assertEquals(2, select.length);
     assertEquals(
         secondResolution.toString() + ' dpi',
@@ -58,27 +57,6 @@ export function resolutionSelectTest() {
           assertEquals(
               secondResolution.toString(), resolutionSelect.selectedResolution);
         });
-  });
-
-  test('resolutionSelectDisabled', () => {
-    const select = resolutionSelect.$$('select');
-    assertTrue(!!select);
-
-    let resolutionArr = [75];
-    resolutionSelect.resolutions = resolutionArr;
-    flush();
-
-    // Verify the dropdown is disabled when there's only one option.
-    assertEquals(1, select.length);
-    assertTrue(select.disabled);
-
-    resolutionArr = resolutionArr.concat([150]);
-    resolutionSelect.resolutions = resolutionArr;
-    flush();
-
-    // Verify the dropdown is enabled when there's more than one option.
-    assertEquals(2, select.length);
-    assertFalse(select.disabled);
   });
 
   test('resolutionsSortedCorrectly', () => {
@@ -102,5 +80,24 @@ export function resolutionSelectTest() {
     // Verify the first resolution in the sorted resolution array is selected by
     // default when 300 is not an available option.
     assertEquals('1200', resolutionSelect.selectedResolution);
+  });
+
+  // Verify the correct default option is selected when a scanner is selected
+  // and the options change.
+  test('selectDefaultWhenOptionsChange', () => {
+    const select =
+        /** @type {!HTMLSelectElement} */ (resolutionSelect.$$('select'));
+    resolutionSelect.resolutions = [600, 300, 150];
+    flush();
+    return changeSelect(select, /* value */ null, /* selectedIndex */ 0)
+        .then(() => {
+          assertEquals('600', resolutionSelect.selectedResolution);
+          assertEquals('600', select.options[select.selectedIndex].value);
+
+          resolutionSelect.resolutions = [300, 150];
+          flush();
+          assertEquals('300', resolutionSelect.selectedResolution);
+          assertEquals('300', select.options[select.selectedIndex].value);
+        });
   });
 }

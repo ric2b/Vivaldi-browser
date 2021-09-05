@@ -42,6 +42,7 @@
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/federated_learning/floc.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink-forward.h"
@@ -61,7 +62,6 @@
 #include "third_party/blink/renderer/core/dom/user_action_element_set.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
 #include "third_party/blink/renderer/core/frame/fragment_directive.h"
-#include "third_party/blink/renderer/core/html/custom/v0_custom_element.h"
 #include "third_party/blink/renderer/core/html/parser/parser_synchronization_policy.h"
 #include "third_party/blink/renderer/core/loader/font_preload_manager.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
@@ -114,10 +114,9 @@ class ComputedStyle;
 class ConsoleMessage;
 class ContextFeatures;
 class CookieJar;
-class V0CustomElementMicrotaskRunQueue;
-class V0CustomElementRegistrationContext;
 class DOMImplementation;
 class DOMWindow;
+class DocumentAnimations;
 class DocumentFragment;
 class DocumentInit;
 class DocumentLoader;
@@ -127,7 +126,6 @@ class DocumentOutliveTimeReporter;
 class DocumentParser;
 class DocumentResourceCoordinator;
 class DocumentState;
-class DocumentAnimations;
 class DocumentTimeline;
 class DocumentType;
 class DOMFeaturePolicy;
@@ -246,11 +244,7 @@ enum DocumentClass {
   kXMLDocumentClass = 1 << 6,
 };
 
-enum ShadowCascadeOrder {
-  kShadowCascadeNone,
-  kShadowCascadeV0,
-  kShadowCascadeV1
-};
+enum ShadowCascadeOrder { kShadowCascadeNone, kShadowCascade };
 
 using DocumentClassFlags = unsigned char;
 
@@ -800,10 +794,9 @@ class CORE_EXPORT Document : public ContainerNode,
   void SetPrinting(PrintingState);
 
   bool IsPaintingPreview() const { return is_painting_preview_; }
-  bool IsCapturingLayout() const {
-    return printing_ == kPrinting || is_painting_preview_;
+  bool IsPrintingOrPaintingPreview() const {
+    return Printing() || IsPaintingPreview();
   }
-  void SetIsPaintingPreview(bool);
 
   enum CompatibilityMode { kQuirksMode, kLimitedQuirksMode, kNoQuirksMode };
 
@@ -1000,7 +993,7 @@ class CORE_EXPORT Document : public ContainerNode,
                                       int margin_height,
                                       mojom::blink::ScrollbarMode,
                                       bool is_display_none,
-                                      mojom::ColorScheme color_scheme);
+                                      mojom::blink::ColorScheme color_scheme);
 
   String title() const { return title_; }
   void setTitle(const String&);
@@ -1073,10 +1066,10 @@ class CORE_EXPORT Document : public ContainerNode,
       ExecutionContext* execution_context);
 
   // Sends a query via Mojo to ask for the interest cohort. This can reject on
-  // permissions errors (e.g. cookies not allowed, etc.) or when the interest
-  // cohort is unavailable.
+  // permissions errors (e.g. preferences, content settings, feature policy,
+  // etc.) or when the interest cohort is unavailable.
   // https://github.com/jkarlin/floc
-  ScriptPromise interestCohort(ScriptState* script_state);
+  ScriptPromise interestCohort(ScriptState* script_state, ExceptionState&);
 
   // The following implements the rule from HTML 4 for what valid names are.
   // To get this right for all the XML cases, we probably have to improve this
@@ -1316,8 +1309,6 @@ class CORE_EXPORT Document : public ContainerNode,
                               const AtomicString& name,
                               const ElementRegistrationOptions*,
                               ExceptionState&);
-  V0CustomElementRegistrationContext* RegistrationContext() const;
-  V0CustomElementMicrotaskRunQueue* CustomElementMicrotaskRunQueue();
 
   void ClearImportsController();
   HTMLImportsController* EnsureImportsController();
@@ -1346,9 +1337,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void DidLoadAllPendingParserBlockingStylesheets();
   void DidRemoveAllPendingStylesheets();
 
-  bool InStyleRecalc() const {
-    return lifecycle_.GetState() == DocumentLifecycle::kInStyleRecalc;
-  }
+  bool InStyleRecalc() const;
 
   // Return a Locale for the default locale if the argument is null or empty.
   Locale& GetCachedLocale(const AtomicString& locale = g_null_atom);
@@ -1433,15 +1422,13 @@ class CORE_EXPORT Document : public ContainerNode,
   SnapCoordinator& GetSnapCoordinator();
   void PerformScrollSnappingTasks();
 
-  bool MayContainV0Shadow() const { return may_contain_v0_shadow_; }
-
   ShadowCascadeOrder GetShadowCascadeOrder() const {
     return shadow_cascade_order_;
   }
   void SetShadowCascadeOrder(ShadowCascadeOrder);
 
-  bool ContainsV1ShadowTree() const {
-    return shadow_cascade_order_ == ShadowCascadeOrder::kShadowCascadeV1;
+  bool ContainsShadowTree() const {
+    return shadow_cascade_order_ == ShadowCascadeOrder::kShadowCascade;
   }
 
   RootScrollerController& GetRootScrollerController() const {
@@ -1492,8 +1479,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool CurrentFrameHadRAF() const;
   bool NextFrameHasPendingRAF() const;
-
-  const AtomicString& RequiredCSP();
 
   StylePropertyMapReadOnly* ComputedStyleMap(Element*);
   void AddComputedStyleMapItem(Element*, StylePropertyMapReadOnly*);
@@ -1625,15 +1610,6 @@ class CORE_EXPORT Document : public ContainerNode,
     return use_count_fragment_directive_;
   }
 
-#if DCHECK_IS_ON()
-  bool AllowDirtyShadowV0Traversal() const {
-    return allow_dirty_shadow_v0_traversal_;
-  }
-  void SetAllowDirtyShadowV0Traversal(bool allow) {
-    allow_dirty_shadow_v0_traversal_ = allow;
-  }
-#endif
-
   void ApplyScrollRestorationLogic();
 
   void MarkHasFindInPageRequest();
@@ -1653,7 +1629,7 @@ class CORE_EXPORT Document : public ContainerNode,
                                  unsigned new_length);
   void NotifyChangeChildren(const ContainerNode& container);
 
-  FontPreloadManager& GetFontPreloadManager() { return font_preload_manager_; }
+  FontPreloadManager& GetFontPreloadManager() { return *font_preload_manager_; }
   void FontPreloadingFinishedOrTimedOut();
 
   void IncrementAsyncScriptCount() { async_script_count_++; }
@@ -1668,10 +1644,24 @@ class CORE_EXPORT Document : public ContainerNode,
     kDeny
   };
   DeclarativeShadowRootAllowState GetDeclarativeShadowRootAllowState() const;
-  void setAllowDeclarativeShadowRoot(bool val);
+  void setAllowDeclarativeShadowRoots(bool val);
 
   void SetFindInPageActiveMatchNode(Node*);
   const Node* GetFindInPageActiveMatchNode() const;
+
+  class CORE_EXPORT PaintPreviewScope {
+    STACK_ALLOCATED();
+
+   public:
+    explicit PaintPreviewScope(Document& document);
+    ~PaintPreviewScope();
+
+    PaintPreviewScope(PaintPreviewScope&) = delete;
+    PaintPreviewScope& operator=(PaintPreviewScope&) = delete;
+
+   private:
+    Document& document_;
+  };
 
  protected:
   void ClearXMLVersion() { xml_version_ = String(); }
@@ -1686,7 +1676,6 @@ class CORE_EXPORT Document : public ContainerNode,
  private:
   friend class DocumentTest;
   friend class IgnoreDestructiveWriteCountIncrementer;
-  friend class TextFragmentSelectorGeneratorTest;
   friend class ThrowOnDynamicMarkupInsertionCountIncrementer;
   friend class IgnoreOpensDuringUnloadCountIncrementer;
   friend class NthIndexCache;
@@ -1695,12 +1684,11 @@ class CORE_EXPORT Document : public ContainerNode,
   FRIEND_TEST_ALL_PREFIXES(FrameFetchContextSubresourceFilterTest,
                            DuringOnFreeze);
   FRIEND_TEST_ALL_PREFIXES(DocumentTest, FindInPageUkm);
+  FRIEND_TEST_ALL_PREFIXES(DocumentTest, FindInPageUkmInFrame);
   FRIEND_TEST_ALL_PREFIXES(TextFinderSimTest,
                            BeforeMatchExpandedHiddenMatchableUkm);
   FRIEND_TEST_ALL_PREFIXES(TextFinderSimTest,
                            BeforeMatchExpandedHiddenMatchableUkmNoHandler);
-  FRIEND_TEST_ALL_PREFIXES(TextFragmentAnchorMetricsTest, LinkOpenedSuccessUKM);
-  FRIEND_TEST_ALL_PREFIXES(TextFragmentAnchorMetricsTest, LinkOpenedFailedUKM);
   class NetworkStateObserver;
 
   friend class AXContext;
@@ -1726,8 +1714,6 @@ class CORE_EXPORT Document : public ContainerNode,
   bool NeedsFullLayoutTreeUpdate() const;
 
   void PropagateStyleToViewport();
-
-  void InvalidateScrollbars();
 
   void UpdateUseShadowTreesIfNeeded();
   void EvaluateMediaQueryListIfNeeded();
@@ -2046,9 +2032,6 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<ScriptedIdleTaskController> scripted_idle_task_controller_;
   Member<TextAutosizer> text_autosizer_;
 
-  Member<V0CustomElementRegistrationContext> registration_context_;
-  Member<V0CustomElementMicrotaskRunQueue> custom_element_microtask_run_queue_;
-
   void ElementDataCacheClearTimerFired(TimerBase*);
   TaskRunnerTimer<Document> element_data_cache_clear_timer_;
 
@@ -2079,8 +2062,6 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<IntersectionObserverController> intersection_observer_controller_;
 
   int node_count_;
-
-  bool may_contain_v0_shadow_ = false;
 
   Member<SnapCoordinator> snap_coordinator_;
 
@@ -2145,12 +2126,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // opposed to a PluginView.
   bool is_for_external_handler_;
 
-#if DCHECK_IS_ON()
-  // Allow traversal of Shadow DOM V0 traversal with dirty distribution.
-  // Required for marking ancestors style-child-dirty.
-  bool allow_dirty_shadow_v0_traversal_ = false;
-#endif
-
   Member<LazyLoadImageObserver> lazy_load_image_observer_;
 
   // Tracks which feature policies have already been parsed, so as not to count
@@ -2210,7 +2185,7 @@ class CORE_EXPORT Document : public ContainerNode,
   // call or potential user prompt.
   bool expressly_denied_storage_access_ = false;
 
-  FontPreloadManager font_preload_manager_;
+  Member<FontPreloadManager> font_preload_manager_;
 
   int async_script_count_ = 0;
   bool first_paint_recorded_ = false;
@@ -2245,10 +2220,6 @@ inline void Document::ScheduleLayoutTreeUpdateIfNeeded() {
   if (ShouldScheduleLayoutTreeUpdate() && NeedsLayoutTreeUpdate())
     ScheduleLayoutTreeUpdate();
 }
-
-#define DEFINE_DOCUMENT_TYPE_CASTS(thisType)                                \
-  DEFINE_TYPE_CASTS(thisType, Document, document, document->Is##thisType(), \
-                    document.Is##thisType())
 
 // This is needed to avoid ambiguous overloads with the Node and TreeScope
 // versions.

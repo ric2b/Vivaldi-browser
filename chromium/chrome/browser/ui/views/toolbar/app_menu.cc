@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -90,7 +91,7 @@ namespace {
 // Horizontal padding on the edges of the in-menu buttons.
 const int kHorizontalPadding = 15;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Extra horizontal space to reserve for the fullscreen button.
 const int kFullscreenPadding = 74;
 // Padding to left and right of the XX% label.
@@ -315,8 +316,7 @@ class AppMenuView : public views::View {
     DCHECK(menu_);
     InMenuButton* button = new InMenuButton(
         std::move(callback),
-        gfx::RemoveAcceleratorChar(l10n_util::GetStringUTF16(string_id), '&',
-                                   nullptr, nullptr));
+        gfx::RemoveAccelerator(l10n_util::GetStringUTF16(string_id)));
     button->Init(type);
     button->SetAccessibleName(GetAccessibleNameForAppMenuItem(
         menu_model_, index, acc_string_id, add_accelerator_text));
@@ -474,7 +474,17 @@ class AppMenu::ZoomView : public AppMenuView {
         InMenuButtonBackground::LEADING_BORDER));
     fullscreen_button_->SetAccessibleName(GetAccessibleNameForAppMenuItem(
         menu_model, fullscreen_index, IDS_ACCNAME_FULLSCREEN,
-        /*add_accelerator_text*/ true));
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+        // ChromeOS uses a dedicated "fullscreen" media key for fullscreen
+        // mode on most ChromeOS devices which cannot be specified in the
+        // standard way here, so omit the accelerator to avoid providing
+        // misleading or confusing information to screen reader users.
+        // See crbug.com/1110468 for more context.
+        /*add_accelerator_text*/ false
+#else
+        /*add_accelerator_text*/ true
+#endif
+        ));
     AddChildView(fullscreen_button_);
 
     // Need to set a font list for the zoom label width calculations.
@@ -619,8 +629,7 @@ class AppMenu::ZoomView : public AppMenuView {
     return zoom_label_max_width_;
   }
 
-  std::unique_ptr<content::HostZoomMap::Subscription>
-      browser_zoom_subscription_;
+  base::CallbackListSubscription browser_zoom_subscription_;
 
   // Button for incrementing the zoom.
   LabelButton* increment_button_;
@@ -719,7 +728,7 @@ AppMenu::AppMenu(Browser* browser, int run_types, bool alert_reopen_tab_items)
     : browser_(browser),
       run_types_(run_types),
       alert_reopen_tab_items_(alert_reopen_tab_items) {
-  global_error_observer_.Add(
+  global_error_observation_.Observe(
       GlobalErrorServiceFactory::GetForProfile(browser->profile()));
 }
 
@@ -1015,7 +1024,7 @@ void AppMenu::PopulateMenu(MenuItemView* parent, MenuModel* model) {
     MenuItemView* item =
         AddMenuItem(parent, menu_index, model, i, model->GetTypeAt(i));
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (model->GetCommandIdAt(i) == IDC_EDIT_MENU ||
         model->GetCommandIdAt(i) == IDC_ZOOM_MENU) {
       // ChromeOS adds extra vertical space for the menu buttons.
@@ -1071,7 +1080,7 @@ void AppMenu::PopulateMenu(MenuItemView* parent, MenuModel* model) {
         break;
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       case IDC_TAKE_SCREENSHOT:
         DCHECK(!screenshot_menu_item_);
         screenshot_menu_item_ = item;
@@ -1161,8 +1170,12 @@ void AppMenu::CreateBookmarkMenu() {
   // TODO(oshima): Replace with views only API.
   views::Widget* parent = views::Widget::GetWidgetForNativeWindow(
       browser_->window()->GetNativeWindow());
-  bookmark_menu_delegate_.reset(
-      new BookmarkMenuDelegate(browser_, browser_, parent));
+  bookmark_menu_delegate_.reset(new BookmarkMenuDelegate(
+      browser_,
+      base::BindRepeating(
+          [](content::PageNavigator* navigator) { return navigator; },
+          browser_),
+      parent));
   bookmark_menu_delegate_->Init(this, bookmark_menu_,
                                 model->bookmark_bar_node(), 0,
                                 BookmarkMenuDelegate::SHOW_PERMANENT_FOLDERS,

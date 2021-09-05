@@ -30,9 +30,11 @@
 #include "base/time/time.h"
 #include "base/util/values/values_util.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
@@ -141,12 +143,12 @@
 #include "content/public/browser/host_zoom_map.h"
 #endif  // !defined(OS_ANDROID)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
 #include "chromeos/dbus/attestation/fake_attestation_client.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "chrome/common/chrome_paths.h"
@@ -186,6 +188,8 @@ using testing::Return;
 using testing::SizeIs;
 using testing::WithArgs;
 
+namespace constants = chrome_browsing_data_remover;
+
 namespace {
 
 const char kTestRegisterableDomain1[] = "host1.com";
@@ -199,8 +203,7 @@ const char kWebOrigin[] = "https://www.example.com/";
 
 // Shorthands for origin types.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-const uint64_t kExtension =
-    ChromeBrowsingDataRemoverDelegate::ORIGIN_TYPE_EXTENSION;
+const uint64_t kExtension = constants::ORIGIN_TYPE_EXTENSION;
 #endif
 const uint64_t kProtected =
     content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
@@ -1262,12 +1265,10 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryForever) {
   tester.AddHistory(Origin1(), base::Time::Now());
   ASSERT_TRUE(tester.HistoryContainsURL(Origin1()));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   EXPECT_FALSE(tester.HistoryContainsURL(Origin1()));
@@ -1284,12 +1285,10 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryForLastHour) {
   ASSERT_TRUE(tester.HistoryContainsURL(Origin1()));
   ASSERT_TRUE(tester.HistoryContainsURL(Origin2()));
 
-  BlockUntilBrowsingDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   EXPECT_FALSE(tester.HistoryContainsURL(Origin1()));
@@ -1315,12 +1314,10 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryForOlderThan30Days) {
   ASSERT_TRUE(tester.HistoryContainsURL(Origin2()));
   ASSERT_TRUE(tester.HistoryContainsURL(Origin3()));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), older_than_30days,
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), older_than_30days,
+                                constants::DATA_TYPE_HISTORY, false);
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
 
@@ -1347,11 +1344,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryProhibited) {
   ASSERT_TRUE(tester.HistoryContainsURL(Origin1()));
   ASSERT_TRUE(tester.HistoryContainsURL(Origin2()));
 
-  BlockUntilBrowsingDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
 
@@ -1377,8 +1372,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_CALL(*tester.profile_store(), RemoveLoginsByURLAndTimeImpl(_, _, _));
 
   uint64_t removal_mask =
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY |
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS;
+      constants::DATA_TYPE_HISTORY | constants::DATA_TYPE_PASSWORDS;
 
   BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(), removal_mask,
                                 false);
@@ -1410,10 +1404,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveExternalProtocolData) {
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
           ->empty());
 
-  BlockUntilBrowsingDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_EXTERNAL_PROTOCOL_DATA,
-      false);
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_EXTERNAL_PROTOCOL_DATA,
+                                false);
   EXPECT_TRUE(
       profile->GetPrefs()
           ->GetDictionary(prefs::kProtocolHandlerPerOriginAllowedProtocols)
@@ -1434,9 +1427,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePersistentIsolatedOrigins) {
           ->empty());
 
   // Clear history and ensure the stored isolated origins are cleared.
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
   EXPECT_TRUE(
       prefs->GetList(site_isolation::prefs::kUserTriggeredIsolatedOrigins)
           ->empty());
@@ -1450,9 +1442,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePersistentIsolatedOrigins) {
   // Now clear cookies and other site data, and ensure foo.com is cleared.
   // Note that this uses a short time period to document that time ranges are
   // currently ignored by stored isolated origins.
-  BlockUntilBrowsingDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA, false);
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_SITE_DATA, false);
   EXPECT_TRUE(
       prefs->GetList(site_isolation::prefs::kUserTriggeredIsolatedOrigins)
           ->empty());
@@ -1464,9 +1455,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePersistentIsolatedOrigins) {
           ->empty());
 
   // Clear the isolated origins data type.
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ISOLATED_ORIGINS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_ISOLATED_ORIGINS, false);
   EXPECT_TRUE(
       prefs->GetList(site_isolation::prefs::kUserTriggeredIsolatedOrigins)
           ->empty());
@@ -1481,9 +1471,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePersistentIsolatedOrigins) {
   // are cleared.
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY |
-          ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA,
-      false);
+      constants::DATA_TYPE_HISTORY | constants::DATA_TYPE_SITE_DATA, false);
   EXPECT_TRUE(
       prefs->GetList(site_isolation::prefs::kUserTriggeredIsolatedOrigins)
           ->empty());
@@ -1498,11 +1486,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveFaviconsForever) {
   favicon_tester.VisitAndAddFavicon(page_url);
   ASSERT_TRUE(favicon_tester.HasFaviconForPageURL(page_url));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_FALSE(favicon_tester.HasFaviconForPageURL(page_url));
 }
 
@@ -1526,11 +1512,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ExpireBookmarkFavicons) {
   favicon_tester.VisitAndAddFavicon(bookmarked_page);
   ASSERT_TRUE(favicon_tester.HasFaviconForPageURL(bookmarked_page));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_TRUE(favicon_tester.HasExpiredFaviconForPageURL(bookmarked_page));
 }
 
@@ -1544,9 +1528,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, DeleteBookmarks) {
   bookmark_model->AddURL(bookmark_model->bookmark_bar_node(), 0,
                          base::ASCIIToUTF16("a"), bookmarked_page);
   EXPECT_EQ(1u, bookmark_model->bookmark_bar_node()->children().size());
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_BOOKMARKS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_BOOKMARKS, false);
   EXPECT_EQ(0u, bookmark_model->bookmark_bar_node()->children().size());
 }
 
@@ -1567,12 +1550,10 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   std::unique_ptr<BrowsingDataFilterBuilder> builder(
       BrowsingDataFilterBuilder::Create(
           BrowsingDataFilterBuilder::Mode::kPreserve));
-  BlockUntilOriginDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, std::move(builder));
+  BlockUntilOriginDataRemoved(AnHourAgo(), base::Time::Max(),
+                              constants::DATA_TYPE_HISTORY, std::move(builder));
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   EXPECT_FALSE(tester.HistoryContainsURL(Origin1()));
@@ -1591,12 +1572,10 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AutofillRemovalLastHour) {
   tester.AddProfilesAndCards();
   ASSERT_TRUE(tester.HasProfile());
 
-  BlockUntilBrowsingDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_FORM_DATA, false);
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_FORM_DATA, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   ASSERT_FALSE(tester.HasProfile());
@@ -1624,21 +1603,17 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AutofillRemovalOlderThan30Days) {
   tester.AddProfilesAndCards();
   ASSERT_TRUE(tester.HasProfile());
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), k32DaysOld,
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), k32DaysOld,
+                                constants::DATA_TYPE_FORM_DATA, false);
   ASSERT_TRUE(tester.HasProfile());
 
-  BlockUntilBrowsingDataRemoved(
-      k30DaysOld, base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
+  BlockUntilBrowsingDataRemoved(k30DaysOld, base::Time::Max(),
+                                constants::DATA_TYPE_FORM_DATA, false);
   ASSERT_TRUE(tester.HasProfile());
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), k30DaysOld,
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA,
-            GetRemovalMask());
+  BlockUntilBrowsingDataRemoved(base::Time(), k30DaysOld,
+                                constants::DATA_TYPE_FORM_DATA, false);
+  EXPECT_EQ(constants::DATA_TYPE_FORM_DATA, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   ASSERT_FALSE(tester.HasProfile());
@@ -1655,12 +1630,10 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AutofillRemovalEverything) {
   tester.AddProfilesAndCards();
   ASSERT_TRUE(tester.HasProfile());
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_FORM_DATA, false);
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_FORM_DATA, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   ASSERT_FALSE(tester.HasProfile());
@@ -1679,15 +1652,13 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   ASSERT_TRUE(tester.HasProfile());
 
   autofill::StrikeDatabaseTester strike_database_tester(GetProfile());
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_FORM_DATA, false);
 
   // StrikeDatabase should be empty when DATA_TYPE_FORM_DATA browsing data
   // gets deleted.
   ASSERT_TRUE(strike_database_tester.IsEmpty());
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_FORM_DATA, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   ASSERT_FALSE(tester.HasProfile());
@@ -1707,12 +1678,10 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_TRUE(tester.HasOrigin(kWebOrigin));
   EXPECT_TRUE(tester.HasOrigin(autofill::kSettingsOrigin));
 
-  BlockUntilBrowsingDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_HISTORY, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
   EXPECT_TRUE(tester.HasOrigin(std::string()));
@@ -1735,7 +1704,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ZeroSuggestCacheClear) {
             GetOriginTypeMask());
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
        ContentProtectionPlatformKeysRemoval) {
   chromeos::MockUserManager* mock_user_manager =
@@ -1769,9 +1738,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, DomainReliability_Null) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, DomainReliability_Beacons) {
   ClearDomainReliabilityTester tester(GetProfile());
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
   EXPECT_EQ(1u, tester.clear_count());
   EXPECT_EQ(
       network::mojom::NetworkContext::DomainReliabilityClearMode::CLEAR_BEACONS,
@@ -1790,9 +1758,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
           BrowsingDataFilterBuilder::Mode::kDelete));
   builder->AddRegisterableDomain(kTestRegisterableDomain1);
 
-  BlockUntilOriginDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, builder->Copy());
+  BlockUntilOriginDataRemoved(base::Time(), base::Time::Max(),
+                              constants::DATA_TYPE_HISTORY, builder->Copy());
   EXPECT_EQ(1u, tester.clear_count());
   EXPECT_EQ(
       network::mojom::NetworkContext::DomainReliabilityClearMode::CLEAR_BEACONS,
@@ -1839,7 +1806,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, DomainReliability_ContextsWin) {
 
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY |
+      constants::DATA_TYPE_HISTORY |
           content::BrowsingDataRemover::DATA_TYPE_COOKIES,
       false);
   EXPECT_EQ(1u, tester.clear_count());
@@ -1869,7 +1836,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
        DISABLED_DomainReliability_NoMonitor) {
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY |
+      constants::DATA_TYPE_HISTORY |
           content::BrowsingDataRemover::DATA_TYPE_COOKIES,
       false);
 }
@@ -1892,9 +1859,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePasswordStatistics) {
   EXPECT_CALL(*tester.profile_store(), RemoveStatisticsByOriginAndTimeImpl(
                                            ProbablySameFilter(empty_filter),
                                            base::Time(), base::Time::Max()));
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 }
 
 // TODO(crbug.com/589586): Disabled, since history is not yet marked as
@@ -1912,9 +1878,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_CALL(*tester.profile_store(),
               RemoveStatisticsByOriginAndTimeImpl(
                   ProbablySameFilter(filter), base::Time(), base::Time::Max()));
-  BlockUntilOriginDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, std::move(builder));
+  BlockUntilOriginDataRemoved(base::Time(), base::Time::Max(),
+                              constants::DATA_TYPE_HISTORY, std::move(builder));
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePasswordsByTimeOnly) {
@@ -1926,9 +1891,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemovePasswordsByTimeOnly) {
               RemoveLoginsByURLAndTimeImpl(ProbablySameFilter(filter), _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_PASSWORDS, false);
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
@@ -1946,9 +1910,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_CALL(*tester.account_store(), RemoveLoginsByURLAndTimeImpl(_, _, _))
       .Times(0);
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_PASSWORDS, false);
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
@@ -1970,9 +1933,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_CALL(*tester.account_metadata_store(), HasUnsyncedDeletions())
       .WillRepeatedly(Return(false));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_ACCOUNT_PASSWORDS, false);
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
@@ -1998,10 +1960,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   tester.account_store()->SetSyncTaskTimeoutForTest(base::TimeDelta());
 
   uint64_t failed_data_types = BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS, false);
-  EXPECT_EQ(failed_data_types,
-            ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS);
+      base::Time(), base::Time::Max(), constants::DATA_TYPE_ACCOUNT_PASSWORDS,
+      false);
+  EXPECT_EQ(failed_data_types, constants::DATA_TYPE_ACCOUNT_PASSWORDS);
 }
 
 // Disabled, since passwords are not yet marked as a filterable datatype.
@@ -2017,10 +1978,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_CALL(*tester.profile_store(),
               RemoveLoginsByURLAndTimeImpl(ProbablySameFilter(filter), _, _))
       .WillOnce(Return(password_manager::PasswordStoreChangeList()));
-  BlockUntilOriginDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS,
-      std::move(builder));
+  BlockUntilOriginDataRemoved(base::Time(), base::Time::Max(),
+                              constants::DATA_TYPE_PASSWORDS,
+                              std::move(builder));
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, DisableAutoSignIn) {
@@ -2052,45 +2012,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   BlockUntilBrowsingDataRemoved(
       base::Time(), base::Time::Max(),
       content::BrowsingDataRemover::DATA_TYPE_COOKIES |
-          ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS,
+          constants::DATA_TYPE_PASSWORDS,
       false);
-}
-
-TEST_F(ChromeBrowsingDataRemoverDelegateTest,
-       RemoveCompromisedCredentialsByTimeOnly) {
-  RemovePasswordsTester tester(GetProfile());
-  base::RepeatingCallback<bool(const GURL&)> empty_filter;
-
-  EXPECT_CALL(
-      *tester.profile_store(),
-      RemoveCompromisedCredentialsByUrlAndTimeImpl(
-          ProbablySameFilter(empty_filter), base::Time(), base::Time::Max()));
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
-}
-
-TEST_F(ChromeBrowsingDataRemoverDelegateTest,
-       RemoveCompromisedAccountCredentialsByTimeOnly_WithAccountStore) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordsAccountStorage);
-
-  RemovePasswordsTester tester(GetProfile());
-  base::RepeatingCallback<bool(const GURL&)> empty_filter;
-
-  EXPECT_CALL(*tester.profile_store(),
-              RemoveCompromisedCredentialsByUrlAndTimeImpl(_, _, _))
-      .Times(0);
-
-  EXPECT_CALL(
-      *tester.account_store(),
-      RemoveCompromisedCredentialsByUrlAndTimeImpl(
-          ProbablySameFilter(empty_filter), base::Time(), base::Time::Max()));
-
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS, false);
 }
 
 // TODO(crbug.com/589586): Disabled, since history is not yet marked as
@@ -2106,9 +2029,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_CALL(*tester.profile_store(),
               RemoveCompromisedCredentialsByUrlAndTimeImpl(
                   ProbablySameFilter(filter), base::Time(), base::Time::Max()));
-  BlockUntilOriginDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, std::move(builder));
+  BlockUntilOriginDataRemoved(base::Time(), base::Time::Max(),
+                              constants::DATA_TYPE_HISTORY, std::move(builder));
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
@@ -2135,13 +2057,11 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
           BrowsingDataFilterBuilder::Mode::kPreserve));
   filter->AddRegisterableDomain(kTestRegisterableDomain1);
   filter->AddRegisterableDomain(kTestRegisterableDomain3);
-  BlockUntilOriginDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA,
-      std::move(filter));
+  BlockUntilOriginDataRemoved(AnHourAgo(), base::Time::Max(),
+                              constants::DATA_TYPE_SITE_USAGE_DATA,
+                              std::move(filter));
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_SITE_USAGE_DATA, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
 
@@ -2179,9 +2099,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
   map->SetContentSettingCustomScope(pattern, ContentSettingsPattern::Wildcard(),
                                     ContentSettingsType::COOKIES,
                                     CONTENT_SETTING_BLOCK);
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
 
   // Everything except the default settings should be deleted. On Android the
   // default search engine setting should also not be deleted.
@@ -2256,25 +2175,24 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveProtocolHandler) {
   registry->OnAcceptRegisterProtocolHandler(
       ProtocolHandler::CreateProtocolHandler("news", Origin1()));
   registry->OnAcceptRegisterProtocolHandler(
-      ProtocolHandler("mailto", Origin1(), yesterday));
+      ProtocolHandler("mailto", Origin1(), yesterday,
+                      blink::ProtocolHandlerSecurityLevel::kStrict));
   EXPECT_TRUE(registry->IsHandledProtocol("news"));
   EXPECT_TRUE(registry->IsHandledProtocol("mailto"));
   EXPECT_EQ(
       2U,
       registry->GetUserDefinedHandlers(base::Time(), base::Time::Max()).size());
   // Delete last hour.
-  BlockUntilBrowsingDataRemoved(
-      one_hour_ago, base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+  BlockUntilBrowsingDataRemoved(one_hour_ago, base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
   EXPECT_FALSE(registry->IsHandledProtocol("news"));
   EXPECT_TRUE(registry->IsHandledProtocol("mailto"));
   EXPECT_EQ(
       1U,
       registry->GetUserDefinedHandlers(base::Time(), base::Time::Max()).size());
   // Delete everything.
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
   EXPECT_FALSE(registry->IsHandledProtocol("news"));
   EXPECT_FALSE(registry->IsHandledProtocol("mailto"));
   EXPECT_EQ(
@@ -2400,9 +2318,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveZoomLevel) {
   EXPECT_EQ(2u, zoom_map->GetAllZoomLevels().size());
 
   // Remove everything created during the last hour.
-  BlockUntilBrowsingDataRemoved(
-      now - base::TimeDelta::FromHours(1), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+  BlockUntilBrowsingDataRemoved(now - base::TimeDelta::FromHours(1),
+                                base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
 
   // Nothing should be deleted as the zoomlevels were created earlier.
   EXPECT_EQ(2u, zoom_map->GetAllZoomLevels().size());
@@ -2411,9 +2329,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveZoomLevel) {
   zoom_map->SetZoomLevelForHost(kTestRegisterableDomain3, 2.0);
 
   // Remove everything changed during the last hour (domain3).
-  BlockUntilBrowsingDataRemoved(
-      now - base::TimeDelta::FromHours(1), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+  BlockUntilBrowsingDataRemoved(now - base::TimeDelta::FromHours(1),
+                                base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
 
   // Verify we still have the zoom_level for domain1.
   auto levels = zoom_map->GetAllZoomLevels();
@@ -2422,9 +2340,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveZoomLevel) {
 
   zoom_map->SetZoomLevelForHostAndScheme("chrome", "print", 4.0);
   // Remove everything.
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
 
   // Host and scheme zoomlevels should not be affected.
   levels = zoom_map->GetAllZoomLevels();
@@ -2437,25 +2354,23 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveZoomLevel) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveTranslateBlocklist) {
   auto translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(GetProfile()->GetPrefs());
-  translate_prefs->BlacklistSite("google.com");
+  translate_prefs->AddSiteToNeverPromptList("google.com");
   base::PlatformThread::Sleep(TestTimeouts::tiny_timeout());
   base::Time t = base::Time::Now();
-  translate_prefs->BlacklistSite("maps.google.com");
+  translate_prefs->AddSiteToNeverPromptList("maps.google.com");
 
-  EXPECT_TRUE(translate_prefs->IsSiteBlacklisted("google.com"));
-  EXPECT_TRUE(translate_prefs->IsSiteBlacklisted("maps.google.com"));
+  EXPECT_TRUE(translate_prefs->IsSiteOnNeverPromptList("google.com"));
+  EXPECT_TRUE(translate_prefs->IsSiteOnNeverPromptList("maps.google.com"));
 
-  BlockUntilBrowsingDataRemoved(
-      t, base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
-  EXPECT_TRUE(translate_prefs->IsSiteBlacklisted("google.com"));
-  EXPECT_FALSE(translate_prefs->IsSiteBlacklisted("maps.google.com"));
+  BlockUntilBrowsingDataRemoved(t, base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
+  EXPECT_TRUE(translate_prefs->IsSiteOnNeverPromptList("google.com"));
+  EXPECT_FALSE(translate_prefs->IsSiteOnNeverPromptList("maps.google.com"));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
-  EXPECT_FALSE(translate_prefs->IsSiteBlacklisted("google.com"));
-  EXPECT_FALSE(translate_prefs->IsSiteBlacklisted("maps.google.com"));
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_CONTENT_SETTINGS, false);
+  EXPECT_FALSE(translate_prefs->IsSiteOnNeverPromptList("google.com"));
+  EXPECT_FALSE(translate_prefs->IsSiteOnNeverPromptList("maps.google.com"));
 }
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveDurablePermission) {
@@ -2475,13 +2390,11 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveDurablePermission) {
           BrowsingDataFilterBuilder::Mode::kPreserve));
   filter->AddRegisterableDomain(kTestRegisterableDomain1);
   filter->AddRegisterableDomain(kTestRegisterableDomain3);
-  BlockUntilOriginDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_DURABLE_PERMISSION,
-      std::move(filter));
+  BlockUntilOriginDataRemoved(AnHourAgo(), base::Time::Max(),
+                              constants::DATA_TYPE_DURABLE_PERMISSION,
+                              std::move(filter));
 
-  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_DURABLE_PERMISSION,
-            GetRemovalMask());
+  EXPECT_EQ(constants::DATA_TYPE_DURABLE_PERMISSION, GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
             GetOriginTypeMask());
 
@@ -2549,9 +2462,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
                                 kTestRealm, net::HttpAuth::AUTH_SCHEME_BASIC,
                                 net::NetworkIsolationKey()));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_PASSWORDS, false);
 
   EXPECT_EQ(nullptr,
             http_auth_cache->Lookup(
@@ -2598,10 +2510,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearPermissionPromptCounts) {
     tester.CheckEmbargo(Origin2(), ContentSettingsType::NOTIFICATIONS,
                         CONTENT_SETTING_BLOCK);
 
-    BlockUntilOriginDataRemoved(
-        AnHourAgo(), base::Time::Max(),
-        ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA,
-        std::move(filter_builder_1));
+    BlockUntilOriginDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_SITE_USAGE_DATA,
+                                std::move(filter_builder_1));
 
     // Origin1() should be gone, but Origin2() remains.
     EXPECT_EQ(
@@ -2617,9 +2528,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearPermissionPromptCounts) {
     tester.CheckEmbargo(Origin2(), ContentSettingsType::NOTIFICATIONS,
                         CONTENT_SETTING_BLOCK);
 
-    BlockUntilBrowsingDataRemoved(
-        AnHourAgo(), base::Time::Max(),
-        ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+    BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                  constants::DATA_TYPE_HISTORY, false);
 
     // Everything should be gone.
     EXPECT_EQ(
@@ -2652,10 +2562,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearPermissionPromptCounts) {
     EXPECT_FALSE(tester.RecordDismissAndEmbargo(
         Origin2(), ContentSettingsType::NOTIFICATIONS));
 
-    BlockUntilOriginDataRemoved(
-        AnHourAgo(), base::Time::Max(),
-        ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA,
-        std::move(filter_builder_2));
+    BlockUntilOriginDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_SITE_USAGE_DATA,
+                                std::move(filter_builder_2));
 
     // Origin2() should be gone, but Origin1() remains.
     EXPECT_EQ(
@@ -2678,9 +2587,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearPermissionPromptCounts) {
     tester.CheckEmbargo(Origin1(), ContentSettingsType::MIDI_SYSEX,
                         CONTENT_SETTING_BLOCK);
 
-    BlockUntilBrowsingDataRemoved(
-        AnHourAgo(), base::Time::Max(),
-        ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA, false);
+    BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                  constants::DATA_TYPE_SITE_USAGE_DATA, false);
 
     // Everything should be gone.
     EXPECT_EQ(
@@ -2714,18 +2622,16 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   }
 
   // Clearing a part of the history has no effect.
-  BlockUntilBrowsingDataRemoved(
-      AnHourAgo(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 
   EXPECT_THAT(language_histogram->GetTopLanguages(), SizeIs(2));
   EXPECT_THAT(language_histogram->GetLanguageFrequency("en"), FloatEq(0.75));
   EXPECT_THAT(language_histogram->GetLanguageFrequency("es"), FloatEq(0.25));
 
   // Clearing the full history does the trick.
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 
   EXPECT_THAT(language_histogram->GetTopLanguages(), SizeIs(0));
   EXPECT_THAT(language_histogram->GetLanguageFrequency("en"), FloatEq(0.0));
@@ -2805,9 +2711,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, OriginTypeMasksNoPolicy) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, ReportingCache_NoService) {
   ClearReportingCacheTester tester(network_context(), false);
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, true);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, true);
 
   // Nothing to check, since there's no mock service; we're just making sure
   // nothing crashes without a service.
@@ -2816,9 +2721,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ReportingCache_NoService) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, ReportingCache) {
   ClearReportingCacheTester tester(network_context(), true);
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, true);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, true);
 
   EXPECT_EQ(0, tester.mock().remove_calls());
   EXPECT_EQ(1, tester.mock().remove_all_calls());
@@ -2839,9 +2743,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
           BrowsingDataFilterBuilder::Mode::kDelete));
   builder->AddRegisterableDomain(kTestRegisterableDomain1);
 
-  BlockUntilOriginDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, builder->Copy());
+  BlockUntilOriginDataRemoved(base::Time(), base::Time::Max(),
+                              constants::DATA_TYPE_HISTORY, builder->Copy());
 
   EXPECT_EQ(1, tester.mock().remove_calls());
   EXPECT_EQ(0, tester.mock().remove_all_calls());
@@ -2854,9 +2757,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, NetworkErrorLogging_NoDelegate) {
   ClearNetworkErrorLoggingTester tester(network_context(), false);
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, true);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, true);
 
   // Nothing to check, since there's no mock service; we're just making sure
   // nothing crashes without a service.
@@ -2866,9 +2768,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, NetworkErrorLogging_NoDelegate) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, NetworkErrorLogging_History) {
   ClearNetworkErrorLoggingTester tester(network_context(), true);
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, true);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, true);
 
   EXPECT_EQ(0, tester.mock().remove_calls());
   EXPECT_EQ(1, tester.mock().remove_all_calls());
@@ -2949,9 +2850,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AllTypesAreGettingDeleted) {
   }
 
   // Delete all data types that trigger website setting deletions.
-  uint64_t mask = ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY |
-                  ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_DATA |
-                  ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS;
+  uint64_t mask = constants::DATA_TYPE_HISTORY |
+                  constants::DATA_TYPE_SITE_DATA |
+                  constants::DATA_TYPE_CONTENT_SETTINGS;
 
   BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(), mask, false);
 
@@ -2976,9 +2877,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AllTypesAreGettingDeleted) {
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeOriginVerifierData) {
   int before =
       customtabs::OriginVerifier::GetClearBrowsingDataCallCountForTesting();
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
   EXPECT_EQ(
       before + 1,
       customtabs::OriginVerifier::GetClearBrowsingDataCallCountForTesting());
@@ -2987,7 +2887,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeOriginVerifierData) {
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeCrashData) {
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   // This test applies only when using a logfile of Crash uploads. Chrome Linux
   // will use Crashpad's database instead of the logfile. Chrome Chrome OS
   // continues to use the logfile even when Crashpad is enabled.
@@ -3006,17 +2906,16 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeCrashData) {
   initial_contents.append(kCrashEntry2);
   ASSERT_TRUE(base::WriteFile(upload_log_path, initial_contents));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time::FromTimeT(67890u), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time::FromTimeT(67890u),
+                                base::Time::Max(), constants::DATA_TYPE_HISTORY,
+                                false);
 
   std::string contents;
   base::ReadFileToString(upload_log_path, &contents);
   EXPECT_EQ(kCrashEntry1, contents);
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 
   EXPECT_FALSE(base::PathExists(upload_log_path));
 }
@@ -3043,10 +2942,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, WipeCustomDictionaryData) {
   EXPECT_TRUE(base::PathExists(dict_path));
   EXPECT_TRUE(base::PathExists(backup_path));
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_LOCAL_CUSTOM_DICTIONARY,
-      false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_LOCAL_CUSTOM_DICTIONARY,
+                                false);
 
   std::string contents;
   base::ReadFileToString(dict_path, &contents);
@@ -3083,9 +2981,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_EQ(3u,
             prefs->GetList(kNotificationPermissionActionsPrefPath)->GetSize());
   // Remove the first and the second element.
-  BlockUntilBrowsingDataRemoved(
-      first_recorded_time, third_recorded_time,
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA, false);
+  BlockUntilBrowsingDataRemoved(first_recorded_time, third_recorded_time,
+                                constants::DATA_TYPE_SITE_USAGE_DATA, false);
   // There is only one element left.
   EXPECT_EQ(1u,
             prefs->GetList(kNotificationPermissionActionsPrefPath)->GetSize());
@@ -3097,9 +2994,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
       third_recorded_time);
 
   // Test we wiped all the elements left.
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_SITE_USAGE_DATA, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_SITE_USAGE_DATA, false);
   EXPECT_TRUE(prefs->GetList(kNotificationPermissionActionsPrefPath)->empty());
 }
 
@@ -3112,16 +3008,16 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   auto* delegate = GetProfile()->GetBrowsingDataRemoverDelegate();
 
   auto domains = delegate->GetDomainsForDeferredCookieDeletion(
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_ACCOUNT_PASSWORDS);
+      constants::DATA_TYPE_ACCOUNT_PASSWORDS);
   EXPECT_EQ(domains.size(), 1u);
   EXPECT_EQ(domains[0], "google.com");
 
   domains = delegate->GetDomainsForDeferredCookieDeletion(
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_PASSWORDS);
+      constants::DATA_TYPE_PASSWORDS);
   EXPECT_EQ(domains.size(), 0u);
 
-  domains = delegate->GetDomainsForDeferredCookieDeletion(
-      ChromeBrowsingDataRemoverDelegate::ALL_DATA_TYPES);
+  domains =
+      delegate->GetDomainsForDeferredCookieDeletion(constants::ALL_DATA_TYPES);
   EXPECT_EQ(domains.size(), 0u);
 }
 
@@ -3138,9 +3034,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, LiteVideoClearHistoryData) {
       LiteVideoKeyedServiceFactory::GetForProfile(GetProfile());
   lite_video_keyed_service->Initialize(GetProfile()->GetPath());
 
-  BlockUntilBrowsingDataRemoved(
-      base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
 
   histogram_tester.ExpectUniqueSample("LiteVideo.UserBlocklist.ClearBlocklist",
                                       true, 1);

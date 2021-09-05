@@ -146,7 +146,9 @@ public class BookmarkModel extends BookmarkBridge {
     }
 
     /** Vivaldi **/
-    public String getBookmarkTitlePublic(BookmarkId bookmarkId) { return getBookmarkTitle(bookmarkId); }
+    public void moveBookmarksPublic(List<BookmarkId> bookmarkIds, BookmarkId newParentId) {
+        moveBookmarks(bookmarkIds, newParentId);
+    }
 
     public boolean isInsideTrashFolder(BookmarkId folderId) {
         BookmarkItem item = getBookmarkById(folderId);

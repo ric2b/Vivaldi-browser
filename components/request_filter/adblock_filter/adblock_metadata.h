@@ -3,6 +3,7 @@
 #ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_METADATA_H_
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_METADATA_H_
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -60,21 +61,42 @@ struct RuleSourceBase {
   RuleSourceBase(const base::FilePath& source_file, RuleGroup group);
   virtual ~RuleSourceBase();
   RuleSourceBase(const RuleSourceBase&);
+  RuleSourceBase& operator=(const RuleSourceBase&);
 
   GURL source_url;
   base::FilePath source_file;
+  bool allow_abp_snippets = false;
   bool is_from_url;
   RuleGroup group;
   uint32_t id;
+
  protected:
   RuleSourceBase();
 };
 
-struct RuleSource: public RuleSourceBase {
+// Known rule-sources can be manipulated by the user.
+struct KnownRuleSource : public RuleSourceBase {
+  KnownRuleSource(const GURL& source_url, RuleGroup group);
+  KnownRuleSource(const base::FilePath& source_file, RuleGroup group);
+  ~KnownRuleSource() override;
+  KnownRuleSource(const KnownRuleSource&);
+  KnownRuleSource& operator=(const KnownRuleSource&);
+
+  bool removable = true;
+  std::string preset_id = "";
+};
+
+using KnownRuleSources = std::map<uint32_t, KnownRuleSource>;
+
+// Rule-sources are the rule-sources that are currently actively in use
+// by the adblock engine.
+struct RuleSource : public RuleSourceBase {
+  explicit RuleSource(const KnownRuleSource& known_source);
   RuleSource(const GURL& source_url, RuleGroup group);
   RuleSource(const base::FilePath& source_file, RuleGroup group);
   ~RuleSource() override;
   RuleSource(const RuleSource&);
+  RuleSource& operator=(const RuleSource&);
 
   std::string rules_list_checksum;
   // These are pulled directly from the rules file with minimal validation.
@@ -87,9 +109,8 @@ struct RuleSource: public RuleSourceBase {
   bool has_tracker_infos = false;
 };
 
-// Usually, we'll want to manipulate list of rule sources.
+// Usually, we'll want to manipulate lists of rule sources.
 using RuleSources = std::vector<RuleSource>;
-
 }  // namespace adblock_filter
 
 #endif  // COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_ADBLOCK_METADATA_H_

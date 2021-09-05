@@ -1,0 +1,71 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/process_id.mojom";
+import "url/mojom/url.mojom";
+
+// Generic Pepper messages. Implemented by the browser.
+interface PepperHost {
+  // Notification that a Pepper plugin instance is created in the DOM.
+  InstanceCreated(int32 instance_id,
+                  pending_associated_remote<PepperPluginInstance> instance,
+                  pending_associated_receiver<PepperPluginInstanceHost> host);
+
+  // Bind a PepperHungDetectorHost. The interface will be used to inform the
+  // browser that a renderer's plugin module has been blocked for too long.
+  BindHungDetectorHost(pending_receiver<PepperHungDetectorHost> host,
+             int32 plugin_child_id,
+             mojo_base.mojom.FilePath plugin_path);
+};
+
+// Generic Pepper messages that run on the IO thread in the browser process.
+interface PepperIOHost {
+  // Notification an in-process instance has been created.
+  DidCreateInProcessInstance(int32 instance_id,
+                             int32 frame_routing_id,
+                             url.mojom.Url document_url,
+                             url.mojom.Url plugin_url);
+
+  // Notification that an in-process instance has been destroyed.
+  DidDeleteInProcessInstance(int32 instance_id);
+};
+
+// This interface is used on the renderer IO thread and is received on the
+// browser UI thread for determining an out of process pepper plugin container
+// has not responded to the renderer for too long.
+interface PepperHungDetectorHost {
+  // Sent to the browser when the renderer detects it is blocked on a pepper
+  // plugin message for too long. This is also sent when it becomes unhung
+  // (according to the value of is_hung). The browser can give the user the
+  // option of killing the plugin.
+  PluginHung(bool is_hung);
+};
+
+// Plugin instance specific host messages that are sent from the renderer
+// main thread and dispatched on the UI thread of the browser. Implemented by
+// the browser.
+interface PepperPluginInstanceHost {
+  // Notification a plugin instance has started playback.
+  StartsPlayback();
+
+  // Notification a plugin instance has stopped playback.
+  StopsPlayback();
+
+  // Notification that a plugin instance has crashed.
+  // Note: |plugin_pid| should not be trusted. The corresponding process has
+  // probably died. Moreover, the ID may have been reused by a new process. Any
+  // usage other than displaying it in a prompt to the user is very likely to be
+  // wrong.
+  InstanceCrashed(mojo_base.mojom.FilePath plugin_path,
+                  mojo_base.mojom.ProcessId plugin_pid);
+};
+
+// Plugin instance specific messages. Implemented by the renderer.
+interface PepperPluginInstance {
+  // Set the volume of a plugin. |volume| should be in the [0, 1] range.
+  SetVolume(double volume);
+};

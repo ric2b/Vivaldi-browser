@@ -127,7 +127,7 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
     }
 
     @Override
-    public void checkChildAccountStatus(Account account, Callback<Integer> callback) {}
+    public void checkChildAccountStatus(Account account, ChildAccountStatusListener listener) {}
 
     @Override
     public void createAddAccountIntent(Callback<Intent> callback) {}
@@ -173,13 +173,11 @@ public class FakeAccountManagerFacade implements AccountManagerFacade {
     }
 
     /**
-     * Sets profile data in the fake ProfileDataSource.
+     * Adds a {@link ProfileDataSource.ProfileData} to the FakeProfileDataSource.
      */
-    public void setProfileData(
-            String accountId, @Nullable ProfileDataSource.ProfileData profileData) {
+    public void addProfileData(ProfileDataSource.ProfileData profileData) {
         assert mFakeProfileDataSource != null : "ProfileDataSource was disabled!";
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> mFakeProfileDataSource.setProfileData(accountId, profileData));
+        mFakeProfileDataSource.addProfileData(profileData);
     }
 
     @GuardedBy("mLock")

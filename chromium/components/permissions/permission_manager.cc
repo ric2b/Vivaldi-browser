@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_context_base.h"
@@ -81,7 +82,7 @@ ContentSettingsType PermissionTypeToContentSettingSafe(
     case PermissionType::GEOLOCATION:
       return ContentSettingsType::GEOLOCATION;
     case PermissionType::PROTECTED_MEDIA_IDENTIFIER:
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
       return ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER;
 #else
       break;
@@ -94,8 +95,6 @@ ContentSettingsType PermissionTypeToContentSettingSafe(
       return ContentSettingsType::MEDIASTREAM_CAMERA;
     case PermissionType::BACKGROUND_SYNC:
       return ContentSettingsType::BACKGROUND_SYNC;
-    case PermissionType::FLASH:
-      return ContentSettingsType::PLUGINS;
     case PermissionType::SENSORS:
       return ContentSettingsType::SENSORS;
     case PermissionType::ACCESSIBILITY_EVENTS:
@@ -130,6 +129,8 @@ ContentSettingsType PermissionTypeToContentSettingSafe(
       return ContentSettingsType::WINDOW_PLACEMENT;
     case PermissionType::FONT_ACCESS:
       return ContentSettingsType::FONT_ACCESS;
+    case PermissionType::DISPLAY_CAPTURE:
+      return ContentSettingsType::DISPLAY_CAPTURE;
     case PermissionType::NUM:
       break;
   }

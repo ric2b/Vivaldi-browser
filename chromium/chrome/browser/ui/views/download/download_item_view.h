@@ -12,7 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string16.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
@@ -131,8 +131,8 @@ class DownloadItemView : public views::View,
   // Updates the visible and enabled state of all buttons.
   void UpdateButtons();
 
-  // Updates the accessible alert and timers for normal mode.
-  void UpdateAccessibleAlertAndTimersForNormalMode();
+  // Updates the accessible alert and animation-related state for normal mode.
+  void UpdateAccessibleAlertAndAnimationsForNormalMode();
 
   // Update accessible status text, and announce it if desired.
   void UpdateAccessibleAlert(const base::string16& alert);
@@ -175,6 +175,7 @@ class DownloadItemView : public views::View,
 
   // Returns the file name to report to the user. It might be elided to fit into
   // the text width. |label| dictates the default text style.
+  base::string16 ElidedFilename(const views::Label& label) const;
   base::string16 ElidedFilename(const views::StyledLabel& label) const;
 
   // Returns the Y coordinate that centers |element_height| within the current
@@ -252,7 +253,7 @@ class DownloadItemView : public views::View,
   // used, so that we can detect a change in the path and reload the icon.
   base::FilePath file_path_;
 
-  views::StyledLabel* file_name_label_;
+  views::Label* file_name_label_;
   views::Label* status_label_;
   views::StyledLabel* warning_label_;
   views::StyledLabel* deep_scanning_label_;
@@ -297,7 +298,8 @@ class DownloadItemView : public views::View,
   // Forces reading the current alert text the next time it updates.
   bool announce_accessible_alert_soon_ = false;
 
-  ScopedObserver<DownloadUIModel, DownloadUIModel::Observer> observer_{this};
+  base::ScopedObservation<DownloadUIModel, DownloadUIModel::Observer>
+      observation_{this};
 
   // Method factory used to delay reenabling of the item when opening the
   // downloaded file.

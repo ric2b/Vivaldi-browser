@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/test/metrics/histogram_tester.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/api/permissions/permissions_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_management_test_util.h"
@@ -15,7 +16,6 @@
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/common/permissions/permission_set.h"
-#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/common/switches.h"
 #include "net/dns/mock_host_resolver.h"
 
@@ -51,29 +51,14 @@ class PermissionsApiTest : public ExtensionApiTest {
 class PermissionsApiTestWithContextType
     : public PermissionsApiTest,
       public testing::WithParamInterface<ContextType> {
- public:
-  PermissionsApiTestWithContextType() {
-    // Service Workers are currently only available on certain channels, so set
-    // the channel for those tests.
-    if (GetParam() == ContextType::kServiceWorker) {
-      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
-    }
-  }
-
  protected:
   bool RunTest(const std::string& extension_name) {
-    // TODO(https://crbug.com/1146173): Change this to kFlagNone once the bug is
-    // fixed.
-    int browser_test_flags = kFlagEnableFileAccess;
+    int browser_test_flags = kFlagNone;
     if (GetParam() == ContextType::kServiceWorker)
       browser_test_flags |= kFlagRunAsServiceWorkerBasedExtension;
     return RunExtensionTestWithFlags(extension_name, browser_test_flags,
                                      kFlagNone);
   }
-
- private:
-  std::unique_ptr<extensions::ScopedWorkerBasedExtensionsChannel>
-      current_channel_;
 };
 
 IN_PROC_BROWSER_TEST_F(PermissionsApiTest, PermissionsFail) {
@@ -117,7 +102,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsApiTest, MAYBE_FaviconPermission) {
 // Test functions and APIs that are always allowed (even if you ask for no
 // permissions).
 // Flaky on MacOS and Linux (see crbug/1064929, crbug/1101043).
-#if (defined(OS_MAC) || defined(OS_CHROMEOS))
+#if (defined(OS_MAC) || BUILDFLAG(IS_CHROMEOS_ASH))
 #define MAYBE_AlwaysAllowed DISABLED_AlwaysAllowed
 #else
 #define MAYBE_AlwaysAllowed AlwaysAllowed

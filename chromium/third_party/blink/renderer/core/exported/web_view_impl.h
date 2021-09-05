@@ -94,7 +94,7 @@ class WebLocalFrame;
 class WebLocalFrameImpl;
 class WebSettingsImpl;
 class WebViewClient;
-class WebViewFrameWidget;
+class WebFrameWidgetImpl;
 
 enum class FullscreenRequestType;
 
@@ -136,7 +136,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidDetachLocalMainFrame() override;
   void DidAttachRemoteMainFrame() override;
   void DidDetachRemoteMainFrame() override;
-  void SetPrerendererClient(WebPrerendererClient*) override;
+  void SetNoStatePrefetchClient(WebNoStatePrefetchClient*) override;
   WebSettings* GetSettings() override;
   WebString PageEncoding() const override;
   void SetTabKeyCyclesThroughElements(bool value) override;
@@ -144,13 +144,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetIsActive(bool value) override;
   void SetWindowFeatures(const WebWindowFeatures&) override;
   void SetOpenedByDOM() override;
-  void ResizeWithBrowserControls(const gfx::Size& main_frame_widget_size,
-                                 float top_controls_height,
-                                 float bottom_controls_height,
-                                 bool browser_controls_shrink_layout) override;
-  void ResizeWithBrowserControls(const gfx::Size& main_frame_widget_size,
-                                 const gfx::Size& visible_viewport_size,
-                                 cc::BrowserControlsParams) override;
   WebFrame* MainFrame() override;
   WebLocalFrame* FocusedFrame() override;
   void SetFocusedFrame(WebFrame*) override;
@@ -169,7 +162,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetVisualViewportOffset(const gfx::PointF&) override;
   gfx::PointF VisualViewportOffset() const override;
   gfx::SizeF VisualViewportSize() const override;
-  void Resize(const gfx::Size&) override;
   void SetScreenOrientationOverrideForTesting(
       base::Optional<blink::mojom::ScreenOrientation> orientation) override;
   void UseSynchronousResizeModeForTesting(bool enable) override;
@@ -220,6 +212,24 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void ClearBackgroundColorOverride();
   void SetBaseBackgroundColorOverride(SkColor);
   void ClearBaseBackgroundColorOverride();
+
+  // Resize the WebView. You likely should be using
+  // MainFrameWidget()->Resize instead.
+  void Resize(const gfx::Size&);
+
+  // This method is used for testing.
+  // Resize the view at the same time as changing the state of the top
+  // controls. If |browser_controls_shrink_layout| is true, the embedder shrunk
+  // the WebView size by the browser controls height.
+  void ResizeWithBrowserControls(const gfx::Size& main_frame_widget_size,
+                                 float top_controls_height,
+                                 float bottom_controls_height,
+                                 bool browser_controls_shrink_layout);
+  // Same as ResizeWithBrowserControls(const gfx::Size&,float,float,bool), but
+  // includes all browser controls params such as the min heights.
+  void ResizeWithBrowserControls(const gfx::Size& main_frame_widget_size,
+                                 const gfx::Size& visible_viewport_size,
+                                 cc::BrowserControlsParams);
 
   // Requests a page-scale animation based on the specified point/rect.
   void AnimateDoubleTapZoom(const gfx::Point&, const WebRect& block_bounds);
@@ -289,6 +299,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // (local or remote) is attached, but this should not generally matter to code
   // outside this class.
   WebLocalFrameImpl* MainFrameImpl() const;
+
+  // TODO(https://crbug.com/1139104): Remove this.
+  std::string GetNullFrameReasonForBug1139104() const;
 
   // Changes the zoom and scroll for zooming into an editable element
   // with bounds |element_bounds_in_document| and caret bounds
@@ -398,7 +411,10 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
                        const FullscreenOptions*,
                        FullscreenRequestType);
   void ExitFullscreen(LocalFrame&);
-  void FullscreenElementChanged(Element* old_element, Element* new_element);
+  void FullscreenElementChanged(Element* old_element,
+                                Element* new_element,
+                                const FullscreenOptions* options,
+                                FullscreenRequestType);
 
   // Sends a request to the main frame's view to resize, and updates the page
   // scale limits if needed.
@@ -467,16 +483,14 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // limit.
   void SetMaximumLegibleScale(float);
 
-  void SetMainFrameViewWidget(WebViewFrameWidget* widget);
-  WebViewFrameWidget* MainFrameViewWidget();
+  void SetMainFrameViewWidget(WebFrameWidgetImpl* widget);
+  WebFrameWidgetImpl* MainFrameViewWidget();
 
   // Called when hovering over an anchor with the given URL.
   void SetMouseOverURL(const KURL&);
 
   // Called when keyboard focus switches to an anchor with the given URL.
   void SetKeyboardFocusURL(const KURL&);
-
-  void RunPaintBenchmark(int repeat_count, cc::PaintBenchmarkResult& result);
 
   // Asks the browser process to activate this web view.
   void Focus();
@@ -491,7 +505,20 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
             const gfx::Rect& rect,
             bool opened_by_user_gesture);
 
-  void SetWindowRect(const gfx::Rect& bounds);
+  // Send the window rect to the browser and call `ack_callback` when the
+  // browser has processed it.
+  void SendWindowRectToMainFrameHost(const gfx::Rect& bounds,
+                                     base::OnceClosure ack_callback);
+
+  // TODO(crbug.com/1149992): This is called from the associated widget and this
+  // code should eventually move out of WebView into somewhere else.
+  void ApplyViewportChanges(const ApplyViewportChangesArgs& args);
+
+  // Indication that the root layer for the main frame widget has changed.
+  void DidChangeRootLayer(bool root_layer_exists);
+
+  // Sets the page focus.
+  void SetPageFocus(bool enable);
 
   // This method is used for testing.
   // Resizes the unscaled (page scale = 1.0) visual viewport. Normally the
@@ -528,18 +555,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   friend class frame_test_helpers::WebViewHelper;
   friend class SimCompositor;
   friend class WebView;  // So WebView::Create can call our constructor
-  friend class WebViewFrameWidget;
   friend class WTF::RefCounted<WebViewImpl>;
 
-  // These are temporary methods to allow WebViewFrameWidget to delegate to
-  // WebViewImpl. We expect to eventually move these out.
-  void UpdateLifecycle(WebLifecycleUpdate requested_update,
-                       DocumentUpdateReason reason);
   void ThemeChanged();
-  void ApplyViewportChanges(const ApplyViewportChangesArgs& args);
-  void RecordManipulationTypeCounts(cc::ManipulationInfo info);
-  void MouseCaptureLost();
-  void SetFocus(bool enable) override;
 
   // Update the target url locally and tell the browser that the target URL has
   // changed. If |url| is empty, show |fallback_url|.
@@ -606,17 +624,13 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   float DeviceScaleFactor() const;
 
-  void DidChangeRootLayer(bool root_layer_exists);
-
   LocalFrame* FocusedLocalFrameInWidget() const;
-  LocalFrame* FocusedLocalFrameAvailableForIme() const;
 
   // Clear focus and text input state of the page. If there was a focused
   // element, this will trigger updates to observers and send focus, selection,
   // and text input-related events.
   void RemoveFocusAndTextInputState();
 
-  bool ScrollFocusedEditableElementIntoView();
   // Finds the zoom and scroll parameters for zooming into an editable element
   // with bounds |element_bounds_in_document| and caret bounds
   // |caret_bounds_in_document|. If the original element belongs to the local
@@ -638,10 +652,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // Callback when this widget window has been displayed by the browser.
   // Corresponds to a Show method call.
   void DidShowCreatedWindow();
-
-  // Callback when the window rect has been adjusted by the browser.
-  // Corresponds to a SetWindowRect method call.
-  void DidSetWindowRect();
 
   // Can be null (e.g. unittests, shared workers, etc).
   WebViewClient* web_view_client_;
@@ -724,11 +734,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   float compositor_device_scale_factor_override_ = 0.f;
   TransformationMatrix device_emulation_transform_;
 
-  // TODO(ekaramad): Can we remove this and make sure IME events are not called
-  // when there is no page focus?
-  // Represents whether or not this object should process incoming IME events.
-  bool ime_accept_events_ = true;
-
   // The popup associated with an input/select element. The popup is owned via
   // closership (self-owned-but-deleted-via-close) by RenderWidget. We also hold
   // a reference here because we can extend the lifetime of the popup while
@@ -763,12 +768,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   SkColor base_background_color_override_ = Color::kTransparent;
   bool background_color_override_enabled_ = false;
   SkColor background_color_override_ = Color::kTransparent;
-  base::Optional<SkColor> last_background_color_;
   float zoom_factor_override_ = 0.f;
-
-  bool should_dispatch_first_visually_non_empty_layout_ = false;
-  bool should_dispatch_first_layout_after_finished_parsing_ = false;
-  bool should_dispatch_first_layout_after_finished_loading_ = false;
 
   FloatSize elastic_overscroll_;
 
@@ -795,7 +795,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   // The WebWidget for the main frame. This is expected to be unset when the
   // WebWidget destroys itself. This will be null if the main frame is remote.
-  WeakPersistent<WebViewFrameWidget> web_widget_;
+  WeakPersistent<WebFrameWidgetImpl> web_widget_;
 
   // We defer commits when transitioning to a new page. ChromeClientImpl calls
   // StopDeferringCommits() to release this when a new page is loaded.
@@ -820,7 +820,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   base::Optional<mojom::blink::ScreenOrientation> screen_orientation_override_;
 
-  mojom::blink::PageLifecycleStatePtr lifecycle_state_;
   mojo::AssociatedReceiver<mojom::blink::PageBroadcast> receiver_;
 
   // These are observing changes in |renderer_preferences_|. This is used for

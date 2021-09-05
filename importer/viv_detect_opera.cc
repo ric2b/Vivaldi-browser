@@ -6,8 +6,8 @@
 #include "importer/viv_importer_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 
-//static const char OPERA_PREFS_NAME[] = "operaprefs.ini";
-//static const char OPERA_SPEEDDIAL_NAME[] = "speeddial.ini";
+// static const char OPERA_PREFS_NAME[] = "operaprefs.ini";
+// static const char OPERA_SPEEDDIAL_NAME[] = "speeddial.ini";
 
 namespace viv_importer {
 
@@ -16,14 +16,13 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
   opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA);
   opera.importer_type = importer::TYPE_OPERA;
   opera.source_path = GetProfileDir();
+  opera.mail_path = GetMailDirectory();
 #if defined(OS_WIN)
   opera.app_path = GetOperaInstallPathFromRegistry();
 #endif
-  opera.services_supported = importer::SPEED_DIAL |
-      importer::FAVORITES | importer::NOTES | importer::PASSWORDS /*|
-          importer::HISTORY |
-          importer::COOKIES |
-          importer::SEARCH_ENGINES*/;
+  opera.services_supported = importer::SPEED_DIAL | importer::FAVORITES |
+                             importer::NOTES | importer::PASSWORDS |
+                             importer::EMAIL;
 
 #if 0
   // Check if this profile need the master password

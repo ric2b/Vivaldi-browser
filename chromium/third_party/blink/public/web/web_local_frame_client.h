@@ -43,10 +43,11 @@
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
-#include "third_party/blink/public/common/navigation/triggering_event_info.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom-shared.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-shared.h"
@@ -87,6 +88,10 @@
 #include "ui/accessibility/ax_event.h"
 #include "ui/events/types/scroll_types.h"
 #include "v8/include/v8.h"
+
+namespace cc {
+class LayerTreeSettings;
+}  // namespace cc
 
 namespace blink {
 namespace mojom {
@@ -141,12 +146,14 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // May return null.
   // WebContentDecryptionModule* may be null if one has not yet been set.
-  virtual WebMediaPlayer* CreateMediaPlayer(const WebMediaPlayerSource&,
-                                            WebMediaPlayerClient*,
-                                            blink::MediaInspectorContext*,
-                                            WebMediaPlayerEncryptedMediaClient*,
-                                            WebContentDecryptionModule*,
-                                            const WebString& sink_id) {
+  virtual WebMediaPlayer* CreateMediaPlayer(
+      const WebMediaPlayerSource&,
+      WebMediaPlayerClient*,
+      blink::MediaInspectorContext*,
+      WebMediaPlayerEncryptedMediaClient*,
+      WebContentDecryptionModule*,
+      const WebString& sink_id,
+      const cc::LayerTreeSettings& settings) {
     return nullptr;
   }
 
@@ -216,15 +223,23 @@ class BLINK_EXPORT WebLocalFrameClient {
   // to prevent the new child frame from being attached. Otherwise, embedders
   // should create a new WebLocalFrame, insert it into the frame tree, and
   // return the created frame.
-  virtual WebLocalFrame* CreateChildFrame(WebLocalFrame* parent,
-                                          mojom::TreeScopeType,
-                                          const WebString& name,
-                                          const WebString& fallback_name,
-                                          const FramePolicy&,
-                                          const WebFrameOwnerProperties&,
-                                          mojom::FrameOwnerElementType) {
+  virtual WebLocalFrame* CreateChildFrame(
+      mojom::TreeScopeType,
+      const WebString& name,
+      const WebString& fallback_name,
+      const FramePolicy&,
+      const WebFrameOwnerProperties&,
+      mojom::FrameOwnerElementType,
+      CrossVariantMojoAssociatedReceiver<
+          mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) {
     return nullptr;
   }
+  // When CreateChildFrame() returns there is no core LocalFrame backing the
+  // WebFrame yet so using the WebLocalFrame is not entirely valid. This is
+  // called after finishing the initialization of WebLocalFrame so that the
+  // client can complete its initialization making use of it.
+  virtual void InitializeAsChildFrame(WebLocalFrame* parent) {}
 
   // Request the creation of a new portal.
   virtual std::pair<WebRemoteFrame*, PortalToken> CreatePortal(
@@ -259,14 +274,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // This frame's name has changed.
   virtual void DidChangeName(const WebString& name) {}
 
-  // Called when a Feature-Policy or Document-Policy or Content-Security-Policy
-  // HTTP header (for sandbox flags) is encountered while loading the frame's
-  // document.
-  virtual void DidSetFramePolicyHeaders(
-      network::mojom::WebSandboxFlags flags,
-      const ParsedFeaturePolicy& feature_policy_header,
-      const DocumentPolicyFeatureState& document_policy_header) {}
-
   // Called when a watched CSS selector matches or stops matching.
   virtual void DidMatchCSS(
       const WebVector<WebString>& newly_matching_selectors,
@@ -274,8 +281,11 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // Console messages ----------------------------------------------------
 
-  // Whether or not we should report a detailed message for the given source.
-  virtual bool ShouldReportDetailedMessageForSource(const WebString& source) {
+  // Whether or not we should report a detailed message for the given source and
+  // severity level.
+  virtual bool ShouldReportDetailedMessageForSourceAndSeverity(
+      mojom::ConsoleMessageLevel log_level,
+      const WebString& source) {
     return false;
   }
 
@@ -329,6 +339,16 @@ class BLINK_EXPORT WebLocalFrameClient {
   // datasource will become the provisional datasource for the frame.
   virtual void DidCreateDocumentLoader(WebDocumentLoader*) {}
 
+  // A navigation is about to commit in a new frame that is still provisional
+  // (i.e. not swapped into the frame tree). Implementations should perform any
+  // bookkeeping work to sync the state of the previous frame and the new frame
+  // and use `WebFrame::Swap()` to swap in the new frame.
+  //
+  // The return value should be the return value of `WebFrame::Swap()`, which
+  // returns false if the navigation should not proceed due to the frame being
+  // removed from the frame tree by JS while swapping it in, or true otherwise.
+  virtual bool SwapIn(WebFrame* previous_frame) { return false; }
+
   // The navigation has been committed, as a result of
   // WebNavigationControl::CommitNavigation call. The newly created document
   // is committed to the frame, the encoding of the response body is known,
@@ -341,10 +361,12 @@ class BLINK_EXPORT WebLocalFrameClient {
   // The one exception is if the Window object is reused; in that case, blink
   // passes |should_reset_browser_interface_broker| = false, and the old
   // BrowserInterfaceBroker connection will be reused.
-  virtual void DidCommitNavigation(const WebHistoryItem&,
-                                   WebHistoryCommitType,
-                                   bool should_reset_browser_interface_broker) {
-  }
+  virtual void DidCommitNavigation(
+      WebHistoryCommitType commit_type,
+      bool should_reset_browser_interface_broker,
+      network::mojom::WebSandboxFlags sandbox_flags,
+      const ParsedFeaturePolicy& feature_policy_header,
+      const DocumentPolicyFeatureState& document_policy_header) {}
 
   // The frame's initial empty document has just been initialized.
   virtual void DidCreateInitialEmptyDocument() {}
@@ -394,9 +416,10 @@ class BLINK_EXPORT WebLocalFrameClient {
   // The navigation resulted in no change to the documents within the page.
   // For example, the navigation may have just resulted in scrolling to a
   // named anchor or a PopState event may have been dispatched.
-  virtual void DidFinishSameDocumentNavigation(const WebHistoryItem&,
-                                               WebHistoryCommitType,
-                                               bool content_initiated) {}
+  virtual void DidFinishSameDocumentNavigation(WebHistoryCommitType,
+                                               bool content_initiated,
+                                               bool is_history_api_navigation) {
+  }
 
   // Called when a RenderFrame's page lifecycle state gets updated.
   virtual void DidSetPageLifecycleState() {}
@@ -456,9 +479,15 @@ class BLINK_EXPORT WebLocalFrameClient {
   virtual void OnMainFrameIntersectionChanged(
       const WebRect& intersection_rect) {}
 
+  // Called when an overlay interstitial pop up ad is detected.
+  virtual void OnOverlayPopupAdDetected() {}
+
+  // Called when a large sticky ad is detected.
+  virtual void OnLargeStickyAdDetected() {}
+
   // Low-level resource notifications ------------------------------------
 
-  using ForRedirect = util::StrongAlias<class ForRedirectTag, bool>;
+  using ForRedirect = base::StrongAlias<class ForRedirectTag, bool>;
   // A request is about to be sent out, and the client may modify it.  Request
   // is writable, and changes to the URL, for example, will change the request
   // made.
@@ -674,13 +703,6 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // Update the current frame selection to the browser.
   virtual void SyncSelectionIfRequired() {}
-
-  // Scroll the focused editable element into the rect. This should eventually
-  // be removed and all be done inside blink.
-  virtual void ScrollFocusedEditableElementIntoRect(const gfx::Rect& rect) {}
-
-  // Reset the currently tracked scrolled focused node.
-  virtual void ResetHasScrolledFocusedEditableIntoView() {}
 
   // TODO(https://crbug.com/787252): Remove the methods below and use the
   // Supplement mechanism.

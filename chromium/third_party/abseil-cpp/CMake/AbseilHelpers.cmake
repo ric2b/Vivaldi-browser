@@ -122,7 +122,11 @@ function(absl_cc_library)
   # 4. "static"  -- This target does not depend on the DLL and should be built
   #                 statically.
   if (${ABSL_BUILD_DLL})
-    absl_internal_dll_contains(TARGET ${_NAME} OUTPUT _in_dll)
+    if(ABSL_ENABLE_INSTALL)
+      absl_internal_dll_contains(TARGET ${_NAME} OUTPUT _in_dll)
+    else()
+      absl_internal_dll_contains(TARGET ${ABSL_CC_LIB_NAME} OUTPUT _in_dll)
+    endif()
     if (${_in_dll})
       # This target should be replaced by the DLL
       set(_build_type "dll")
@@ -256,6 +260,8 @@ Cflags: -I\${includedir}${PC_CFLAGS}\n")
     if(ABSL_ENABLE_INSTALL)
       set_target_properties(${_NAME} PROPERTIES
         OUTPUT_NAME "absl_${_NAME}"
+        # TODO(b/173696973): Figure out how to set SOVERSION for LTS releases.
+        SOVERSION 0
       )
     endif()
   else()

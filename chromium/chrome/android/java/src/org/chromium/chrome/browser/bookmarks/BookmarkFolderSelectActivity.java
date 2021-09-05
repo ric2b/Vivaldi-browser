@@ -37,6 +37,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
+
+import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity;
+import org.vivaldi.browser.bookmarks.VivaldiBookmarkEditActivity;
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
 
@@ -433,4 +436,22 @@ public class BookmarkFolderSelectActivity extends SynchronousInitializationActiv
         return INTENT_BOOKMARKS_TO_MOVE;
     }
     public static int getCreateFolderRequestCode() { return CREATE_FOLDER_REQUEST_CODE; }
+
+    /**
+     * Starts a select folder activity for the new folder that is about to be created. This method
+     * is only supposed to be called by {@link BookmarkAddEditFolderActivity}
+     */
+    public static void startNewFolderSelectActivityForVivaldi(
+            BookmarkAddEditFolderActivity activity, List<BookmarkId> bookmarks) {
+        assert ChromeApplication.isVivaldi() || bookmarks.size() > 0;
+        Intent intent = new Intent(activity, BookmarkFolderSelectActivity.class);
+        intent.putExtra(INTENT_IS_CREATING_FOLDER, true);
+        ArrayList<String> bookmarkStrings = new ArrayList<>(bookmarks.size());
+        for (BookmarkId id : bookmarks) {
+            bookmarkStrings.add(id.toString());
+        }
+        intent.putStringArrayListExtra(INTENT_BOOKMARKS_TO_MOVE, bookmarkStrings);
+        activity.startActivityForResult(intent,
+                BookmarkAddEditFolderActivity.PARENT_FOLDER_REQUEST_CODE);
+    }
 }

@@ -69,15 +69,13 @@ source_set("constants") {
 
   deps = [
     "//base",
-    "//chrome/updater:version_header",
+    "//chrome/updater:branding_header",
   ]
 }
 
 source_set("lib") {
   sources = [
     "action_handler.cc",
-    "control_service_proxy.cc",
-    "control_service_proxy.h",
     "group_policy_manager.cc",
     "group_policy_manager.h",
     "net/net_util.cc",
@@ -104,6 +102,8 @@ source_set("lib") {
     "setup/uninstall.h",
     "task_scheduler.cc",
     "task_scheduler.h",
+    "update_service_internal_proxy.cc",
+    "update_service_internal_proxy.h",
     "update_service_proxy.cc",
     "update_service_proxy.h",
     "user_info.cc",
@@ -128,8 +128,11 @@ source_set("lib") {
     "//base",
     "//chrome/installer/util:with_no_strings",
     "//chrome/updater:base",
+    "//chrome/updater:branding_header",
     "//chrome/updater:version_header",
     "//chrome/updater/app/server/win:updater_idl_idl",
+    "//chrome/updater/app/server/win:updater_internal_idl_idl",
+    "//chrome/updater/app/server/win:updater_legacy_idl_idl",
     "//components/update_client",
     "//url:url",
   ]
@@ -241,7 +244,7 @@ test("updater_unittests") {
     ":lib",
     "//base",
     "//base/test:test_support",
-    "//chrome/updater:version_header",
+    "//chrome/updater:branding_header",
     "//chrome/updater/win/test:test_executables",
     "//chrome/updater/win/test:test_strings",
     "//testing/gtest",

@@ -8,11 +8,12 @@
 #include "android_webview/browser/gfx/aw_render_thread_context_provider.h"
 #include "android_webview/browser/gfx/aw_vulkan_context_provider.h"
 #include "android_webview/browser/gfx/deferred_gpu_command_service.h"
-#include "android_webview/browser/gfx/gpu_service_web_view.h"
+#include "android_webview/browser/gfx/gpu_service_webview.h"
 #include "android_webview/browser/gfx/parent_output_surface.h"
 #include "android_webview/browser/gfx/skia_output_surface_dependency_webview.h"
-#include "android_webview/browser/gfx/task_queue_web_view.h"
+#include "android_webview/browser/gfx/task_queue_webview.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "components/viz/common/features.h"
@@ -20,6 +21,7 @@
 #include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/single_task_sequence.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/init/gl_factory.h"
@@ -39,7 +41,7 @@ void OnContextLost(bool synthetic_loss) {
 
 }  // namespace
 
-OutputSurfaceProviderWebview::OutputSurfaceProviderWebview(
+OutputSurfaceProviderWebView::OutputSurfaceProviderWebView(
     AwVulkanContextProvider* vulkan_context_provider)
     : vulkan_context_provider_(vulkan_context_provider) {
   // Should be kept in sync with compositor_impl_android.cc.
@@ -63,16 +65,20 @@ OutputSurfaceProviderWebview::OutputSurfaceProviderWebview(
       << "--webview-enable-vulkan only works with skia renderer "
          "(--enable-features=UseSkiaRenderer).";
 
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  debug_settings_.tint_composited_content =
+      command_line->HasSwitch(switches::kTintCompositedContent);
+
   InitializeContext();
 }
-OutputSurfaceProviderWebview::~OutputSurfaceProviderWebview() {
+OutputSurfaceProviderWebView::~OutputSurfaceProviderWebView() {
   // We must to destroy |gl_surface_| before |shared_context_state_|, so we will
   // still have context. NOTE: |shared_context_state_| holds ref to surface, but
   // it loses it before context.
   gl_surface_.reset();
 }
 
-void OutputSurfaceProviderWebview::InitializeContext() {
+void OutputSurfaceProviderWebView::InitializeContext() {
   DCHECK(!gl_surface_) << "InitializeContext() called twice";
 
   if (renderer_settings_.use_skia_renderer && !enable_vulkan_) {
@@ -122,7 +128,7 @@ void OutputSurfaceProviderWebview::InitializeContext() {
 }
 
 std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
-OutputSurfaceProviderWebview::CreateDisplayController() {
+OutputSurfaceProviderWebView::CreateDisplayController() {
   DCHECK(gl_surface_)
       << "InitializeContext() must be called before CreateOutputSurface()";
 
@@ -140,7 +146,7 @@ OutputSurfaceProviderWebview::CreateDisplayController() {
 }
 
 std::unique_ptr<viz::OutputSurface>
-OutputSurfaceProviderWebview::CreateOutputSurface(
+OutputSurfaceProviderWebView::CreateOutputSurface(
     viz::DisplayCompositorMemoryAndTaskController*
         display_compositor_controller) {
   DCHECK(gl_surface_)

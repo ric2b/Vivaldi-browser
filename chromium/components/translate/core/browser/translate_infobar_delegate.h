@@ -19,6 +19,7 @@
 #include "base/observer_list_types.h"
 #include "build/build_config.h"
 #include "components/infobars/core/infobar_delegate.h"
+#include "components/translate/core/browser/translate_metrics_logger.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/browser/translate_step.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
@@ -149,8 +150,8 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
   // Methods called by the Options menu delegate.
   virtual bool IsTranslatableLanguageByPrefs() const;
   virtual void ToggleTranslatableLanguageByPrefs();
-  virtual bool IsSiteBlacklisted() const;
-  virtual void ToggleSiteBlacklist();
+  virtual bool IsSiteOnNeverPromptList() const;
+  virtual void ToggleNeverPrompt();
   virtual bool ShouldAlwaysTranslate() const;
   virtual void ToggleAlwaysTranslate();
 
@@ -227,6 +228,9 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
   // and the user selects to never translate the language.
   void OnInfoBarClosedByUser();
 
+  // Records a high level UI interaction.
+  void ReportUIInteraction(UIInteraction ui_interaction);
+
   // InfoBarDelegate:
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
   int GetIconId() const override;
@@ -244,7 +248,7 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
       bool triggered_from_menu);
 
  private:
-  friend class TranslationInfoBarTest;
+  friend class TranslateInfoBarDelegateTest;
   typedef std::pair<std::string, base::string16> LanguageNamePair;
 
   bool is_off_the_record_;

@@ -51,8 +51,14 @@ inline void InlineSizesFromStyle(
     if (*min_inline_size)
       *max_inline_size = std::max(**min_inline_size, **max_inline_size);
   }
-  if (length.IsPercent())
+  if (length.IsPercent()) {
     *percentage_inline_size = length.Percent();
+  } else if (length.IsCalculated()) {
+    // crbug.com/1154376 Style engine should handle %+0px case automatically.
+    PixelsAndPercent pixels_and_percent = length.GetPixelsAndPercent();
+    if (pixels_and_percent.pixels == 0.0f)
+      *percentage_inline_size = pixels_and_percent.percent;
+  }
 
   if (*percentage_inline_size && max_length.IsPercent()) {
     *percentage_inline_size =
@@ -70,7 +76,8 @@ constexpr LayoutUnit NGTableTypes::kTableMaxInlineSize;
 // "outer min-content and outer max-content widths for colgroups"
 NGTableTypes::Column NGTableTypes::CreateColumn(
     const ComputedStyle& style,
-    base::Optional<LayoutUnit> default_inline_size) {
+    base::Optional<LayoutUnit> default_inline_size,
+    bool is_table_fixed) {
   base::Optional<LayoutUnit> inline_size;
   base::Optional<LayoutUnit> min_inline_size;
   base::Optional<LayoutUnit> max_inline_size;
@@ -91,7 +98,8 @@ NGTableTypes::Column NGTableTypes::CreateColumn(
                 percentage_inline_size,
                 LayoutUnit() /* percent_border_padding */,
                 is_constrained,
-                is_collapsed};
+                is_collapsed,
+                is_table_fixed};
 }
 
 // Implements https://www.w3.org/TR/css-tables-3/#computing-cell-measures
@@ -134,8 +142,6 @@ NGTableTypes::CellInlineConstraint NGTableTypes::CreateCellInlineConstraint(
       builder.SetOrthogonalFallbackInlineSize(
           IsHorizontalWritingMode(table_writing_mode) ? icb_size.height
                                                       : icb_size.width);
-
-      builder.SetIsShrinkToFit(style.LogicalWidth().IsAuto());
     }
     NGConstraintSpace space = builder.ToConstraintSpace();
     // It'd be nice to avoid computing minmax if not needed, but the criteria
@@ -267,8 +273,6 @@ void NGTableTypes::CellInlineConstraint::Encompass(
     max_inline_size = std::max(min_inline_size, other.max_inline_size);
   }
   is_constrained = is_constrained || other.is_constrained;
-  max_inline_size = std::max(max_inline_size, other.max_inline_size);
-  percent = std::max(percent, other.percent);
   if (other.percent > percent) {
     percent = other.percent;
     percent_border_padding = other.percent_border_padding;
@@ -278,6 +282,10 @@ void NGTableTypes::CellInlineConstraint::Encompass(
 void NGTableTypes::Column::Encompass(
     const base::Optional<NGTableTypes::CellInlineConstraint>& cell) {
   if (!cell)
+    return;
+
+  // Constrained columns in fixed tables take precedence over cells.
+  if (is_constrained && is_table_fixed)
     return;
 
   if (min_inline_size) {

@@ -8,7 +8,6 @@
 #include "content/browser/permissions/permission_controller_impl.h"
 #include "base/bind.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
-#include "content/common/content_export.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_controller_delegate.h"
 #include "content/public/browser/render_frame_host.h"
@@ -51,7 +50,6 @@ PermissionToSchedulingFeature(PermissionType permission_name) {
           kRequestedStorageAccessGrant;
     case PermissionType::PROTECTED_MEDIA_IDENTIFIER:
     case PermissionType::DURABLE_STORAGE:
-    case PermissionType::FLASH:
     case PermissionType::ACCESSIBILITY_EVENTS:
     case PermissionType::CLIPBOARD_READ_WRITE:
     case PermissionType::CLIPBOARD_SANITIZED_WRITE:
@@ -67,6 +65,7 @@ PermissionToSchedulingFeature(PermissionType permission_name) {
     case PermissionType::CAMERA_PAN_TILT_ZOOM:
     case PermissionType::WINDOW_PLACEMENT:
     case PermissionType::FONT_ACCESS:
+    case PermissionType::DISPLAY_CAPTURE:
       return base::nullopt;
   }
 }

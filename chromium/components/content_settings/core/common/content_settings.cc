@@ -32,7 +32,7 @@ constexpr HistogramValue kHistogramValue[] = {
     {ContentSettingsType::COOKIES, 0},
     {ContentSettingsType::IMAGES, 1},
     {ContentSettingsType::JAVASCRIPT, 2},
-    {ContentSettingsType::PLUGINS, 3},
+    {ContentSettingsType::DEPRECATED_PLUGINS, 3},
     {ContentSettingsType::POPUPS, 4},
     {ContentSettingsType::GEOLOCATION, 5},
     {ContentSettingsType::NOTIFICATIONS, 6},
@@ -93,6 +93,7 @@ constexpr HistogramValue kHistogramValue[] = {
     {ContentSettingsType::FONT_ACCESS, 71},
     {ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA, 72},
     {ContentSettingsType::FILE_SYSTEM_LAST_PICKED_DIRECTORY, 73},
+    {ContentSettingsType::DISPLAY_CAPTURE, 74},
 };
 
 }  // namespace

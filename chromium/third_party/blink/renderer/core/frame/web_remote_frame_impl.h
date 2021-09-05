@@ -22,9 +22,11 @@ class Layer;
 namespace blink {
 
 class FrameOwner;
+struct FrameVisualProperties;
 class RemoteFrame;
 class RemoteFrameClientImpl;
 enum class WebFrameLoadType;
+class WebFrameWidget;
 class WebView;
 struct WebRect;
 class WindowAgentFactory;
@@ -81,9 +83,7 @@ class CORE_EXPORT WebRemoteFrameImpl final
                                     AssociatedInterfaceProvider*,
                                     const base::UnguessableToken& frame_token,
                                     WebFrame* opener) override;
-  void SetCcLayer(cc::Layer*,
-                  bool prevent_contents_opaque_changes,
-                  bool is_surface_layer) override;
+  void SetCcLayer(cc::Layer*, bool is_surface_layer) override;
   void SetReplicatedOrigin(
       const WebSecurityOrigin&,
       bool is_potentially_trustworthy_opaque_origin) override;
@@ -91,9 +91,8 @@ class CORE_EXPORT WebRemoteFrameImpl final
       network::mojom::blink::WebSandboxFlags) override;
   void SetReplicatedName(const WebString& name,
                          const WebString& unique_name) override;
-  void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
-      const ParsedFeaturePolicy& parsed_header,
-      const FeaturePolicyFeatureState&) override;
+  void SetReplicatedFeaturePolicyHeader(
+      const ParsedFeaturePolicy& parsed_header) override;
   void AddReplicatedContentSecurityPolicyHeader(
       const WebString& header_value,
       network::mojom::ContentSecurityPolicyType,
@@ -110,9 +109,17 @@ class CORE_EXPORT WebRemoteFrameImpl final
       mojom::blink::UserActivationUpdateType update_type,
       mojom::blink::UserActivationNotificationType notification_type) override;
   void SetHadStickyUserActivationBeforeNavigation(bool value) override;
+  void EnableAutoResize(const gfx::Size& min_size,
+                        const gfx::Size& max_size) override;
+  void DisableAutoResize() override;
   v8::Local<v8::Object> GlobalProxy() const override;
   WebRect GetCompositingRect() override;
+  void SynchronizeVisualProperties() override;
+  void ResendVisualProperties() override;
+  float GetCompositingScaleFactor() override;
   WebString UniqueName() const override;
+  const FrameVisualProperties& GetPendingVisualPropertiesForTesting()
+      const override;
   void InitializeCoreFrame(Page&,
                            FrameOwner*,
                            WebFrame* parent,
@@ -132,6 +139,8 @@ class CORE_EXPORT WebRemoteFrameImpl final
   friend class RemoteFrameClientImpl;
 
   void SetCoreFrame(RemoteFrame*);
+  void InitializeFrameVisualProperties(WebFrameWidget* ancestor_widget,
+                                       WebView* web_view);
 
   // Inherited from WebFrame, but intentionally hidden: it never makes sense
   // to call these on a WebRemoteFrameImpl.

@@ -12,6 +12,8 @@
 #include "base/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "chrome/browser/bad_message.h"
 #include "chrome/browser/media/webrtc/desktop_capture_devices_util.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_factory_impl.h"
 #include "chrome/browser/media/webrtc/native_desktop_media_list.h"
@@ -30,9 +32,9 @@
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_MAC)
 #include "chrome/browser/media/webrtc/system_media_capture_permissions_mac.h"
@@ -139,15 +141,29 @@ void DisplayMediaAccessHandler::HandleRequest(
 
   if (request.video_type ==
       blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB) {
-    // TODO(crbug.com/1136942): Add support for capture-this-tab instead of
-    // returning an error
-    std::move(callback).Run(
-        blink::MediaStreamDevices(),
-        blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED, nullptr);
-    return;
+    // Repeat the permission test from the render process.
+    content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
+        request.render_process_id, request.render_frame_id);
+    if (!rfh) {
+      std::move(callback).Run(
+          blink::MediaStreamDevices(),
+          blink::mojom::MediaStreamRequestResult::INVALID_STATE, nullptr);
+      return;
+    }
+    if (!rfh->IsFeatureEnabled(
+            blink::mojom::FeaturePolicyFeature::kDisplayCapture)) {
+      bad_message::ReceivedBadMessage(
+          rfh->GetProcess(), bad_message::BadMessageReason::
+                                 RFH_DISPLAY_CAPTURE_PERMISSION_MISSING);
+      std::move(callback).Run(
+          blink::MediaStreamDevices(),
+          blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED, nullptr);
+      return;
+    }
   }
 
-  std::unique_ptr<DesktopMediaPicker> picker = picker_factory_->CreatePicker();
+  std::unique_ptr<DesktopMediaPicker> picker =
+      picker_factory_->CreatePicker(&request);
   if (!picker) {
     std::move(callback).Run(
         blink::MediaStreamDevices(),
@@ -200,6 +216,14 @@ void DisplayMediaAccessHandler::ProcessQueuedAccessRequest(
       content::DesktopMediaID::TYPE_SCREEN,
       content::DesktopMediaID::TYPE_WINDOW,
       content::DesktopMediaID::TYPE_WEB_CONTENTS};
+
+  // Avoid offering window-capture as a separate source, since PipeWire's
+  // content-picker will offer both screen and window sources.
+  // See crbug.com/1157006.
+  if (content::desktop_capture::CanUsePipeWire()) {
+    base::Erase(media_types, content::DesktopMediaID::TYPE_WINDOW);
+  }
+
   auto source_lists = picker_factory_->CreateMediaList(media_types);
 
   DesktopMediaPicker::DoneCallback done_callback =
@@ -265,7 +289,7 @@ void DisplayMediaAccessHandler::OnPickerDialogResults(
       request_result =
           blink::mojom::MediaStreamRequestResult::TAB_CAPTURE_FAILURE;
     }
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (request_result == blink::mojom::MediaStreamRequestResult::OK) {
       if (policy::DlpContentManager::Get()->IsScreenCaptureRestricted(
               media_id)) {

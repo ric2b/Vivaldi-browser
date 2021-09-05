@@ -157,6 +157,14 @@ WARN_UNUSED_RESULT bool NavigateToURLFromRendererWithoutUserGesture(
     const ToRenderFrameHost& adapter,
     const GURL& url);
 
+// Perform a renderer-initiated navigation of |window| to |url|. Unlike the
+// previous set of helpers, does not block. The navigation is done by assigning
+// location.href in the frame |adapter|. Returns the result of executing the IPC
+// to evaluate the JS that assigns location.href.
+WARN_UNUSED_RESULT bool BeginNavigateToURLFromRenderer(
+    const ToRenderFrameHost& adapter,
+    const GURL& url);
+
 // Navigate a frame with ID |iframe_id| to |url|, blocking until the navigation
 // finishes.  Uses a renderer-initiated navigation from script code in the
 // main frame.
@@ -1652,11 +1660,13 @@ class WebContentsConsoleObserver : public WebContentsObserver {
 
  private:
   // WebContentsObserver:
-  void OnDidAddMessageToConsole(RenderFrameHost* source_frame,
-                                blink::mojom::ConsoleMessageLevel log_level,
-                                const base::string16& message,
-                                int32_t line_no,
-                                const base::string16& source_id) override;
+  void OnDidAddMessageToConsole(
+      RenderFrameHost* source_frame,
+      blink::mojom::ConsoleMessageLevel log_level,
+      const base::string16& message,
+      int32_t line_no,
+      const base::string16& source_id,
+      const base::Optional<base::string16>& untrusted_stack_trace) override;
 
   Filter filter_;
   std::string pattern_;
@@ -1776,23 +1786,25 @@ int LoadBasicRequest(RenderFrameHost* frame, const GURL& url);
 // cookies flushed to disk.
 void EnsureCookiesFlushed(BrowserContext* browser_context);
 
-// Returns true if there is a valid process for |process_group_name|. Must be
-// called on the IO thread.
-bool HasValidProcessForProcessGroup(const std::string& process_group_name);
-
 // Performs a simple auto-resize flow and ensures that the embedder gets a
 // single response messages back from the guest, with the expected values.
-bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
-                         RenderWidgetHost* guest_rwh);
+bool TestGuestAutoresize(WebContents* embedder_web_contents,
+                         WebContents* guest_web_contents);
 
-// Class to sniff incoming IPCs for FrameHostMsg_SynchronizeVisualProperties
-// messages. This allows the message to continue to the target child so that
-// processing can be verified by tests. It also monitors for
-// GesturePinchBegin/End events.
-class SynchronizeVisualPropertiesMessageFilter
-    : public content::BrowserMessageFilter {
+// Class to intercept SynchronizeVisualProperties method. This allows the
+// message to continue to the target child so that processing can be verified by
+// tests. It also monitors for GesturePinchBegin/End events.
+class SynchronizeVisualPropertiesInterceptor
+    : public blink::mojom::RemoteFrameHostInterceptorForTesting {
  public:
-  SynchronizeVisualPropertiesMessageFilter();
+  explicit SynchronizeVisualPropertiesInterceptor(
+      RenderFrameProxyHost* render_frame_proxy_host);
+  ~SynchronizeVisualPropertiesInterceptor() override;
+
+  blink::mojom::RemoteFrameHost* GetForwardingInterface() override;
+
+  void SynchronizeVisualProperties(
+      const blink::FrameVisualProperties& visual_properties) override;
 
   gfx::Rect last_rect() const { return last_rect_; }
 
@@ -1807,36 +1819,34 @@ class SynchronizeVisualPropertiesMessageFilter
 
   void WaitForPinchGestureEnd();
 
- protected:
-  ~SynchronizeVisualPropertiesMessageFilter() override;
-
  private:
-  void OnSynchronizeFrameHostVisualProperties(
-      const blink::FrameVisualProperties& visual_properties);
-  void OnSynchronizeVisualProperties(
-      const blink::FrameVisualProperties& visual_properties);
   // |rect| is in DIPs.
   void OnUpdatedFrameRectOnUI(const gfx::Rect& rect);
   void OnUpdatedFrameSinkIdOnUI();
   void OnUpdatedSurfaceIdOnUI(viz::LocalSurfaceId surface_id);
 
-  bool OnMessageReceived(const IPC::Message& message) override;
-
   base::RunLoop run_loop_;
 
+  RenderFrameProxyHost* render_frame_proxy_host_;
+
   std::unique_ptr<base::RunLoop> screen_space_rect_run_loop_;
-  bool screen_space_rect_received_;
+  bool screen_space_rect_received_ = false;
   gfx::Rect last_rect_;
 
   viz::LocalSurfaceId last_surface_id_;
   std::unique_ptr<base::RunLoop> surface_id_run_loop_;
 
-  bool pinch_gesture_active_set_;
-  bool pinch_gesture_active_cleared_;
-  bool last_pinch_gesture_active_;
+  bool pinch_gesture_active_set_ = false;
+  bool pinch_gesture_active_cleared_ = false;
+  bool last_pinch_gesture_active_ = false;
   std::unique_ptr<base::RunLoop> pinch_end_run_loop_;
 
-  DISALLOW_COPY_AND_ASSIGN(SynchronizeVisualPropertiesMessageFilter);
+  blink::mojom::RemoteFrameHost* impl_;
+
+  base::WeakPtrFactory<SynchronizeVisualPropertiesInterceptor> weak_factory_{
+      this};
+
+  DISALLOW_COPY_AND_ASSIGN(SynchronizeVisualPropertiesInterceptor);
 };
 
 // This class allows monitoring of mouse events received by a specific

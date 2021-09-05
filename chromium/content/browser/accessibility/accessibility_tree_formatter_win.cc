@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "content/browser/accessibility/accessibility_tree_formatter_base.h"
+#include "ui/accessibility/platform/inspect/ax_tree_formatter_base.h"
 
 #include <math.h>
 #include <oleacc.h>
@@ -14,7 +14,6 @@
 #include <string>
 #include <utility>
 
-#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -30,38 +29,32 @@
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_win.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_win.h"
+#include "content/public/browser/ax_inspect_factory.h"
 #include "third_party/iaccessible2/ia2_api_all.h"
-#include "ui/accessibility/accessibility_switches.h"
 #include "ui/base/win/atl_module.h"
 #include "ui/gfx/win/hwnd_util.h"
 
 namespace content {
 
-class AccessibilityTreeFormatterWin : public AccessibilityTreeFormatterBase {
+class AccessibilityTreeFormatterWin : public ui::AXTreeFormatterBase {
  public:
   AccessibilityTreeFormatterWin();
   ~AccessibilityTreeFormatterWin() override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
-      BrowserAccessibility* start) override;
+  base::Value BuildTree(ui::AXPlatformNodeDelegate* start) const override;
   base::Value BuildTreeForWindow(gfx::AcceleratedWidget hwnd) const override;
   base::Value BuildTreeForSelector(
       const AXTreeSelector& selector) const override;
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
-      Microsoft::WRL::ComPtr<IAccessible> start,
-      LONG window_x = 0,
-      LONG window_y = 0);
 
-  static void SetUpCommandLineForTestPass(base::CommandLine* command_line);
+ protected:
   void AddDefaultFilters(
       std::vector<AXPropertyFilter>* property_filters) override;
 
  private:
-  void RecursiveBuildAccessibilityTree(
-      const Microsoft::WRL::ComPtr<IAccessible> node,
-      base::DictionaryValue* dict,
-      LONG root_x,
-      LONG root_y) const;
+  void RecursiveBuildTree(const Microsoft::WRL::ComPtr<IAccessible> node,
+                          base::DictionaryValue* dict,
+                          LONG root_x,
+                          LONG root_y) const;
 
   void AddProperties(const Microsoft::WRL::ComPtr<IAccessible>,
                      base::DictionaryValue* dict,
@@ -88,33 +81,35 @@ class AccessibilityTreeFormatterWin : public AccessibilityTreeFormatterBase {
   void AddIA2ValueProperties(const Microsoft::WRL::ComPtr<IAccessible>,
                              base::DictionaryValue* dict) const;
   std::string ProcessTreeForOutput(
-      const base::DictionaryValue& node,
-      base::DictionaryValue* filtered_dict_result = nullptr) override;
+      const base::DictionaryValue& node) const override;
 };
 
+// TODO(crbug.com/1133330): move implementation into
+// content/public/ax_inspect_factory.cc when AccessibilityTreeFormatterWin is
+// relocated under ui/accessibility/platform
+
 // static
-std::unique_ptr<ui::AXTreeFormatter> AccessibilityTreeFormatter::Create() {
-  base::win::AssertComInitialized();
-  return std::make_unique<AccessibilityTreeFormatterWin>();
+std::unique_ptr<ui::AXTreeFormatter>
+AXInspectFactory::CreatePlatformFormatter() {
+  return CreateFormatter(kWinIA2);
 }
 
 // static
-std::vector<AccessibilityTreeFormatter::TestPass>
-AccessibilityTreeFormatter::GetTestPasses() {
-  // In addition to the 'Blink' pass, Windows includes two accessibility APIs
-  // that need to be tested independently (MSAA & UIA).
-  return {
-      {"blink", &AccessibilityTreeFormatterBlink::CreateBlink, nullptr},
-      {"win", &AccessibilityTreeFormatter::Create,
-       &AccessibilityTreeFormatterWin::SetUpCommandLineForTestPass},
-      {"uia", &AccessibilityTreeFormatterUia::CreateUia,
-       &AccessibilityTreeFormatterUia::SetUpCommandLineForTestPass},
-  };
-}
-
-void AccessibilityTreeFormatterWin::SetUpCommandLineForTestPass(
-    base::CommandLine* command_line) {
-  command_line->RemoveSwitch(::switches::kEnableExperimentalUIAutomation);
+std::unique_ptr<ui::AXTreeFormatter> AXInspectFactory::CreateFormatter(
+    AXInspectFactory::Type type) {
+  switch (type) {
+    case kBlink:
+      return std::make_unique<AccessibilityTreeFormatterBlink>();
+    case kWinIA2:
+      base::win::AssertComInitialized();
+      return std::make_unique<AccessibilityTreeFormatterWin>();
+    case kWinUIA:
+      base::win::AssertComInitialized();
+      return std::make_unique<AccessibilityTreeFormatterUia>();
+    default:
+      NOTREACHED() << "Unsupported formatter type " << type;
+  }
+  return nullptr;
 }
 
 void AccessibilityTreeFormatterWin::AddDefaultFilters(
@@ -264,12 +259,14 @@ static HRESULT QueryIAccessibleValue(IAccessible* accessible,
   return service_provider->QueryService(IID_IAccessibleValue, accessibleValue);
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterWin::BuildAccessibilityTree(
-    BrowserAccessibility* start_node) {
-  DCHECK(start_node);
+base::Value AccessibilityTreeFormatterWin::BuildTree(
+    ui::AXPlatformNodeDelegate* start) const {
+  DCHECK(start);
+  BrowserAccessibility* start_internal =
+      BrowserAccessibility::FromAXPlatformNodeDelegate(start);
+  DCHECK(start_internal);
   BrowserAccessibilityManager* root_manager =
-      start_node->manager()->GetRootManager();
+      start_internal->manager()->GetRootManager();
   DCHECK(root_manager);
 
   base::win::ScopedVariant variant_self(CHILDID_SELF);
@@ -280,22 +277,11 @@ AccessibilityTreeFormatterWin::BuildAccessibilityTree(
   DCHECK(SUCCEEDED(hr));
 
   Microsoft::WRL::ComPtr<IAccessible> start_ia =
-      ToBrowserAccessibilityComWin(start_node);
+      ToBrowserAccessibilityComWin(start_internal);
 
-  return BuildAccessibilityTree(start_ia, root_x, root_y);
-}
-
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterWin::BuildAccessibilityTree(
-    Microsoft::WRL::ComPtr<IAccessible> start,
-    LONG root_x,
-    LONG root_y) {
-  CHECK(start);
-
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
-  RecursiveBuildAccessibilityTree(start, dict.get(), root_x, root_y);
-
-  return dict;
+  base::DictionaryValue dict;
+  RecursiveBuildTree(start_ia, &dict, root_x, root_y);
+  return std::move(dict);
 }
 
 base::Value AccessibilityTreeFormatterWin::BuildTreeForWindow(
@@ -311,7 +297,7 @@ base::Value AccessibilityTreeFormatterWin::BuildTreeForWindow(
     return base::Value(base::Value::Type::DICTIONARY);
 
   base::DictionaryValue dict;
-  RecursiveBuildAccessibilityTree(start, &dict, 0, 0);
+  RecursiveBuildTree(start, &dict, 0, 0);
   return std::move(dict);
 }
 
@@ -322,7 +308,7 @@ base::Value AccessibilityTreeFormatterWin::BuildTreeForSelector(
   return base::Value(base::Value::Type::DICTIONARY);
 }
 
-void AccessibilityTreeFormatterWin::RecursiveBuildAccessibilityTree(
+void AccessibilityTreeFormatterWin::RecursiveBuildTree(
     const Microsoft::WRL::ComPtr<IAccessible> node,
     base::DictionaryValue* dict,
     LONG root_x,
@@ -381,8 +367,7 @@ void AccessibilityTreeFormatterWin::RecursiveBuildAccessibilityTree(
     if (dispatch) {
       Microsoft::WRL::ComPtr<IAccessible> accessible;
       if (SUCCEEDED(dispatch.As(&accessible)))
-        RecursiveBuildAccessibilityTree(accessible, child_dict.get(), root_x,
-                                        root_y);
+        RecursiveBuildTree(accessible, child_dict.get(), root_x, root_y);
     }
     children->Append(std::move(child_dict));
   }
@@ -425,6 +410,8 @@ const char* const ALL_ATTRIBUTES[] = {
     "selection_end",
     "localized_extended_role",
     "inner_html",
+    "ia2_table_cell_column_index",
+    "ia2_table_cell_row_index",
 };
 
 void AccessibilityTreeFormatterWin::AddProperties(
@@ -784,6 +771,16 @@ void AccessibilityTreeFormatterWin::AddIA2TableCellProperties(
   if (S_OK != QueryIAccessibleTableCell(node.Get(), &ia2cell))
     return;  // No IA2Text, we are finished with this node.
 
+  LONG column_index;
+  if (SUCCEEDED(ia2cell->get_columnIndex(&column_index))) {
+    dict->SetInteger("ia2_table_cell_column_index", column_index);
+  }
+
+  LONG row_index;
+  if (SUCCEEDED(ia2cell->get_rowIndex(&row_index))) {
+    dict->SetInteger("ia2_table_cell_row_index", row_index);
+  }
+
   LONG n_row_header_cells;
   IUnknown** row_headers;
   if (SUCCEEDED(
@@ -901,16 +898,13 @@ void AccessibilityTreeFormatterWin::AddIA2ValueProperties(
 }
 
 std::string AccessibilityTreeFormatterWin::ProcessTreeForOutput(
-    const base::DictionaryValue& dict,
-    base::DictionaryValue* filtered_dict_result) {
+    const base::DictionaryValue& dict) const {
   std::string line;
 
   // Always show role, and show it first.
   std::string role_value;
   dict.GetString("role", &role_value);
   WriteAttribute(true, role_value, &line);
-  if (filtered_dict_result)
-    filtered_dict_result->SetString("role", role_value);
 
   for (const char* attribute_name : ALL_ATTRIBUTES) {
     const base::Value* value;
@@ -921,32 +915,26 @@ std::string AccessibilityTreeFormatterWin::ProcessTreeForOutput(
       case base::Value::Type::STRING: {
         std::string string_value;
         value->GetAsString(&string_value);
-        bool did_pass_filters = WriteAttribute(
+        WriteAttribute(
             false,
             base::StringPrintf("%s='%s'", attribute_name, string_value.c_str()),
             &line);
-        if (filtered_dict_result && did_pass_filters)
-          filtered_dict_result->SetString(attribute_name, string_value);
         break;
       }
       case base::Value::Type::INTEGER: {
         int int_value = 0;
         value->GetAsInteger(&int_value);
-        bool did_pass_filters = WriteAttribute(
-            false, base::StringPrintf("%s=%d", attribute_name, int_value),
-            &line);
-        if (filtered_dict_result && did_pass_filters)
-          filtered_dict_result->SetInteger(attribute_name, int_value);
+        WriteAttribute(false,
+                       base::StringPrintf("%s=%d", attribute_name, int_value),
+                       &line);
         break;
       }
       case base::Value::Type::DOUBLE: {
         double double_value = 0.0;
         value->GetAsDouble(&double_value);
-        bool did_pass_filters = WriteAttribute(
+        WriteAttribute(
             false, base::StringPrintf("%s=%.2f", attribute_name, double_value),
             &line);
-        if (filtered_dict_result && did_pass_filters)
-          filtered_dict_result->SetDouble(attribute_name, double_value);
         break;
       }
       case base::Value::Type::LIST: {
@@ -963,8 +951,6 @@ std::string AccessibilityTreeFormatterWin::ProcessTreeForOutput(
             if (WriteAttribute(false, string_value, &line))
               filtered_list->AppendString(string_value);
         }
-        if (filtered_dict_result && !filtered_list->empty())
-          filtered_dict_result->Set(attribute_name, std::move(filtered_list));
         break;
       }
       case base::Value::Type::DICTIONARY: {
@@ -972,18 +958,15 @@ std::string AccessibilityTreeFormatterWin::ProcessTreeForOutput(
         // Revisit this if that changes.
         const base::DictionaryValue* dict_value;
         value->GetAsDictionary(&dict_value);
-        bool did_pass_filters = false;
         if (strcmp(attribute_name, "size") == 0) {
-          did_pass_filters = WriteAttribute(
+          WriteAttribute(
               false, FormatCoordinates(*dict_value, "size", "width", "height"),
               &line);
         } else if (strcmp(attribute_name, "location") == 0) {
-          did_pass_filters = WriteAttribute(
-              false, FormatCoordinates(*dict_value, "location", "x", "y"),
-              &line);
+          WriteAttribute(false,
+                         FormatCoordinates(*dict_value, "location", "x", "y"),
+                         &line);
         }
-        if (filtered_dict_result && did_pass_filters)
-          filtered_dict_result->SetKey(attribute_name, dict_value->Clone());
         break;
       }
       default:

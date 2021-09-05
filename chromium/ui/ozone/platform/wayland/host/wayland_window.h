@@ -15,6 +15,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "ui/events/platform/platform_event_dispatcher.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
@@ -23,10 +24,7 @@
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_init_properties.h"
-
-namespace gfx {
-class PointF;
-}
+#include "ui/platform_window/wm/wm_drag_handler.h"
 
 namespace ui {
 
@@ -38,7 +36,9 @@ class WaylandWindowDragController;
 
 using WidgetSubsurfaceSet = base::flat_set<std::unique_ptr<WaylandSubsurface>>;
 
-class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
+class WaylandWindow : public PlatformWindow,
+                      public PlatformEventDispatcher,
+                      public WmDragHandler {
  public:
   ~WaylandWindow() override;
 
@@ -111,6 +111,14 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
   // Returns current type of the window.
   PlatformWindowType type() const { return type_; }
 
+  // WmDragHandler
+  bool StartDrag(const ui::OSExchangeData& data,
+                 int operation,
+                 gfx::NativeCursor cursor,
+                 bool can_grab_pointer,
+                 WmDragHandler::Delegate* delegate) override;
+  void CancelDrag() override;
+
   // PlatformWindow
   void Show(bool inactive) override;
   void Hide() override;
@@ -165,9 +173,11 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
                            std::unique_ptr<OSExchangeData> data,
                            int operation);
   virtual int OnDragMotion(const gfx::PointF& point, int operation);
-  virtual void OnDragDrop(std::unique_ptr<OSExchangeData> data);
+  virtual void OnDragDrop();
   virtual void OnDragLeave();
   virtual void OnDragSessionClose(uint32_t dnd_action);
+
+  virtual base::Optional<std::vector<gfx::Rect>> GetWindowShape() const;
 
   // Returns a root parent window within the same hierarchy.
   WaylandWindow* GetRootParentWindow();
@@ -203,6 +213,9 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
 
   void set_ui_scale(int32_t ui_scale) { ui_scale_ = ui_scale; }
 
+  // Calls set_opaque_region for this window.
+  virtual void UpdateWindowMask();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(WaylandScreenTest, SetBufferScale);
 
@@ -211,12 +224,14 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
 
   void UpdateCursorPositionFromEvent(std::unique_ptr<Event> event);
 
-  WaylandWindow* GetTopLevelWindow();
+  gfx::PointF TranslateLocationToRootWindow(const gfx::PointF& location);
 
   uint32_t DispatchEventToDelegate(const PlatformEvent& native_event);
 
   // Additional initialization of derived classes.
   virtual bool OnInitialize(PlatformWindowInitProperties properties) = 0;
+
+  virtual void UpdateWindowShape();
 
   // WaylandWindowDragController might need to take ownership of the wayland
   // surface whether the window that originated the DND session gets destroyed
@@ -287,6 +302,12 @@ class WaylandWindow : public PlatformWindow, public PlatformEventDispatcher {
 
   // AcceleratedWidget for this window. This will be unique even over time.
   gfx::AcceleratedWidget accelerated_widget_;
+
+  WmDragHandler::Delegate* drag_handler_delegate_ = nullptr;
+
+  base::OnceClosure drag_loop_quit_closure_;
+
+  base::WeakPtrFactory<WaylandWindow> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WaylandWindow);
 };

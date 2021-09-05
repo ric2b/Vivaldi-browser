@@ -67,14 +67,14 @@ void ChromiumImporter::StartImport(
 
   if ((items & importer::PASSWORDS) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::PASSWORDS);
-    ImportPasswords();
+    ImportPasswords(source_profile.importer_type);
     bridge_->NotifyItemEnded(importer::PASSWORDS);
   }
 
   bridge_->NotifyEnded();
 }
 
-void ChromiumImporter::ImportPasswords() {
+void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
   // Initializes Chrome decryptor
 
   std::vector<importer::ImportedPasswordForm> forms;
@@ -82,9 +82,8 @@ void ChromiumImporter::ImportPasswords() {
 
   base::FilePath file = source_path.AppendASCII("Login Data");
   if (base::PathExists(file)) {
-    ReadAndParseSignons(file, &forms);
+    ReadAndParseSignons(file, &forms, importer_type);
   }
-
   if (!cancelled()) {
     for (size_t i = 0; i < forms.size(); ++i) {
       if (!forms[i].username_value.empty() ||
@@ -97,14 +96,15 @@ void ChromiumImporter::ImportPasswords() {
 
 bool ChromiumImporter::ReadAndParseSignons(
     const base::FilePath& sqlite_file,
-    std::vector<importer::ImportedPasswordForm>* forms) {
+    std::vector<importer::ImportedPasswordForm>* forms,
+    importer::ImporterType importer_type) {
   sql::Database db;
   if (!db.Open(sqlite_file))
     return false;
 
   const char query2[] =
       "SELECT origin_url, action_url, username_element, username_value, "
-      "password_element, password_value, submit_element, signon_realm "
+      "password_element, password_value, signon_realm "
       "FROM logins";
 
   sql::Statement s2(db.GetUniqueStatement(query2));
@@ -122,8 +122,32 @@ bool ChromiumImporter::ReadAndParseSignons(
     base::string16 plain_text;
 
 #if defined(OS_MAC)
-    const std::string service_name = "Chrome Safe Storage";
-    const std::string account_name = "Chrome";
+    std::string service_name = "Chrome Safe Storage";
+    std::string account_name = "Chrome";
+    if (importer_type == importer::TYPE_BRAVE) {
+      service_name = "Brave Safe Storage";
+      account_name = "Brave";
+    }
+    if (importer_type == importer::TYPE_EDGE_CHROMIUM) {
+      service_name = "Microsoft Edge Safe Storage";
+      account_name = "Microsoft Edge";
+    }
+    if (importer_type == importer::TYPE_OPERA_OPIUM) {
+      service_name = "Opera Safe Storage";
+      account_name = "Opera";
+    }
+    if (importer_type == importer::TYPE_VIVALDI) {
+      service_name = "Vivaldi Safe Storage";
+      account_name = "Vivaldi";
+    }
+    if (importer_type == importer::TYPE_YANDEX) {
+      service_name = "Yandex Safe Storage";
+      account_name = "Yandex";
+    }
+    if (importer_type == importer::TYPE_CHROMIUM) {
+      service_name = "Chromium Safe Storage";
+      account_name = "Chromium";
+    }
     OSCrypt::DecryptImportedString16(cipher_text, &plain_text, service_name,
                                      account_name);
 #else

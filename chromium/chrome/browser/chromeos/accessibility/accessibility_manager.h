@@ -40,6 +40,7 @@ class Browser;
 namespace ash {
 struct AccessibilityFocusRingInfo;
 enum class SelectToSpeakState;
+enum class SelectToSpeakPanelAction;
 }  // namespace ash
 
 namespace gfx {
@@ -51,6 +52,7 @@ namespace chromeos {
 class AccessibilityExtensionLoader;
 class DictationChromeos;
 class SelectToSpeakEventHandlerDelegate;
+enum class Sound;
 
 enum AccessibilityNotificationType {
   ACCESSIBILITY_MANAGER_SHUTDOWN,
@@ -83,8 +85,6 @@ using AccessibilityStatusCallbackList =
     base::RepeatingCallbackList<void(const AccessibilityStatusEventDetails&)>;
 using AccessibilityStatusCallback =
     AccessibilityStatusCallbackList::CallbackType;
-using AccessibilityStatusSubscription =
-    AccessibilityStatusCallbackList::Subscription;
 
 class AccessibilityPanelWidgetObserver;
 
@@ -232,7 +232,7 @@ class AccessibilityManager
 
   // Register a callback to be notified when the status of an accessibility
   // option changes.
-  std::unique_ptr<AccessibilityStatusSubscription> RegisterCallback(
+  base::CallbackListSubscription RegisterCallback(
       const AccessibilityStatusCallback& cb) WARN_UNUSED_RESULT;
 
   // Notify registered callbacks of a status change in an accessibility setting.
@@ -263,7 +263,7 @@ class AccessibilityManager
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
   // the their mapped event has occurred. The |sound_key| enums can be found in
   // chromeos/audio/chromeos_sounds.h.
-  bool PlayEarcon(int sound_key, PlaySoundOption option);
+  bool PlayEarcon(Sound sound_key, PlaySoundOption option);
 
   // Forward an accessibility gesture from the touch exploration controller
   // to ChromeVox.
@@ -337,6 +337,10 @@ class AccessibilityManager
   const std::string GetFocusRingId(const std::string& extension_id,
                                    const std::string& focus_ring_name);
 
+  // Sends a panel action event to the Select-to-speak extension.
+  void OnSelectToSpeakPanelAction(ash::SelectToSpeakPanelAction action,
+                                  double value);
+
   // Test helpers:
   void SetProfileForTest(Profile* profile);
   static void SetBrailleControllerForTest(
@@ -346,7 +350,8 @@ class AccessibilityManager
       base::RepeatingCallback<void()> observer);
   void SetCaretBoundsObserverForTest(
       base::RepeatingCallback<void(const gfx::Rect&)> observer);
-  void SetSwitchAccessKeysForTest(const std::vector<int>& keys);
+  void SetSwitchAccessKeysForTest(const std::set<int>& action_keys,
+                                  const std::string& pref_name);
 
   const std::set<std::string>& GetAccessibilityCommonEnabledFeaturesForTest() {
     return accessibility_common_enabled_features_;

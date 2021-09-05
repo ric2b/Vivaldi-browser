@@ -51,7 +51,8 @@ class StoragePartitionImpl;
 // content/public/browser/site_info.h.
 class CONTENT_EXPORT SiteInfo {
  public:
-  static SiteInfo CreateForErrorPage();
+  static SiteInfo CreateForErrorPage(
+      const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
   static SiteInfo CreateForDefaultSiteInstance(
       const CoopCoepCrossOriginIsolatedInfo& cross_origin_isolated_info);
   static SiteInfo CreateForGuest(const GURL& guest_site_url);
@@ -123,6 +124,7 @@ class CONTENT_EXPORT SiteInfo {
   }
 
   bool is_guest() const { return is_guest_; }
+  bool is_error_page() const;
 
   // Returns true if the site_url() is empty.
   bool is_empty() const { return site_url().possibly_invalid_spec().empty(); }
@@ -363,7 +365,7 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   };
 
   void set_process_reuse_policy(ProcessReusePolicy policy) {
-    DCHECK(!IsDefaultSiteInstance());
+    CHECK(!IsDefaultSiteInstance());
     process_reuse_policy_ = policy;
   }
   ProcessReusePolicy process_reuse_policy() const {
@@ -685,6 +687,10 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   bool IsOriginalUrlSameSite(const UrlInfo& dest_url_info,
                              bool should_compare_effective_urls);
 
+  // Add |site_info| to the set that tracks what sites have been allowed
+  // to be handled by this default SiteInstance.
+  void AddSiteInfoToDefault(const SiteInfo& site_info);
+
   // Return whether both UrlInfos must share a process to preserve script
   // relationships.  The decision is based on a variety of factors such as
   // the registered domain of the URLs (google.com, bbc.co.uk), the scheme
@@ -782,6 +788,10 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   SiteInstanceProcessAssignment process_assignment_;
 
   base::ObserverList<Observer, true>::Unchecked observers_;
+
+  // Contains the state that is only required for default SiteInstances.
+  class DefaultSiteInstanceState;
+  std::unique_ptr<DefaultSiteInstanceState> default_site_instance_state_;
 
   DISALLOW_COPY_AND_ASSIGN(SiteInstanceImpl);
 };

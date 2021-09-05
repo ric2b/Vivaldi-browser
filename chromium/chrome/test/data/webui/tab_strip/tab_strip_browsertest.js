@@ -12,13 +12,6 @@ var TabStripBrowserTest = class extends testing.Test {
   get webuiHost() {
     return 'tab-strip';
   }
-
-  get extraLibraries() {
-    return [
-      '//third_party/mocha/mocha.js',
-      '//chrome/test/data/webui/mocha_adapter.js',
-    ];
-  }
 };
 
 var TabStripTabListTest = class extends TabStripBrowserTest {

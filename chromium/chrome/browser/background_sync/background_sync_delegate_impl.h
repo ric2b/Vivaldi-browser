@@ -8,8 +8,8 @@
 #include <set>
 
 #include "build/build_config.h"
-#include "chrome/browser/engagement/site_engagement_observer.h"
 #include "components/background_sync/background_sync_delegate.h"
+#include "components/site_engagement/content/site_engagement_observer.h"
 #include "url/origin.h"
 
 class Profile;
@@ -22,7 +22,7 @@ class UkmBackgroundRecorderService;
 // Chrome's customization of the logic in components/background_sync
 class BackgroundSyncDelegateImpl
     : public background_sync::BackgroundSyncDelegate,
-      public SiteEngagementObserver {
+      public site_engagement::SiteEngagementObserver {
  public:
   static const int kEngagementLevelNonePenalty = 0;
   static const int kEngagementLevelHighOrMaxPenalty = 1;
@@ -55,14 +55,14 @@ class BackgroundSyncDelegateImpl
       content::WebContents* web_contents,
       const GURL& url,
       double score,
-      SiteEngagementService::EngagementType engagement_type) override;
+      site_engagement::EngagementType engagement_type) override;
 
  private:
   Profile* profile_;
   bool off_the_record_;
   ukm::UkmBackgroundRecorderService* ukm_background_service_;
   // Same lifetime as |profile_|.
-  SiteEngagementService* site_engagement_service_;
+  site_engagement::SiteEngagementService* site_engagement_service_;
   std::set<url::Origin> suspended_periodic_sync_origins_;
 };
 

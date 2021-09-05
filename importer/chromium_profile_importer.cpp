@@ -27,6 +27,8 @@ ChromiumProfileImporter::ChromiumProfileImporter() {
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_CHROME));
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_CHROMIUM));
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_YANDEX));
+  chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_BRAVE));
+  chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_EDGE_CHROMIUM));
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM));
   chromeProfiles.push_back(
       GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM_BETA));
@@ -74,6 +76,16 @@ ChromiumProfile ChromiumProfileImporter::GetChromeProfile(
     case ImporterType::TYPE_VIVALDI:
       prof.importer_type = importerType;
       prof.import_name_resource_idx = IDS_IMPORT_FROM_VIVALDI;
+      return prof;
+
+    case ImporterType::TYPE_BRAVE:
+      prof.importer_type = importerType;
+      prof.import_name_resource_idx = IDS_IMPORT_FROM_BRAVE;
+      return prof;
+
+    case ImporterType::TYPE_EDGE_CHROMIUM:
+      prof.importer_type = importerType;
+      prof.import_name_resource_idx = IDS_IMPORT_FROM_EDGE_CHROMIUM;
       return prof;
 
     default:

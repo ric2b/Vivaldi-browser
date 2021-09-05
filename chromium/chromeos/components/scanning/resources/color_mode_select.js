@@ -6,6 +6,7 @@ import './scanning.mojom-lite.js';
 import './scan_settings_section.js';
 import './strings.m.js';
 
+import {assert} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -13,7 +14,7 @@ import {alphabeticalCompare, getColorModeString} from './scanning_app_util.js';
 import {SelectBehavior} from './select_behavior.js';
 
 /** @type {chromeos.scanning.mojom.ColorMode} */
-const DEFAULT_COLOR_MODE = chromeos.scanning.mojom.ColorMode.kBlackAndWhite;
+const DEFAULT_COLOR_MODE = chromeos.scanning.mojom.ColorMode.kColor;
 
 /**
  * @fileoverview
@@ -40,9 +41,7 @@ Polymer({
     },
   },
 
-  observers: [
-    'onNumOptionsChange(colorModes.length)', 'onColorModesChange_(colorModes.*)'
-  ],
+  observers: ['onColorModesChange_(colorModes.*)'],
 
   /**
    * @param {chromeos.scanning.mojom.ColorMode} mojoColorMode
@@ -54,19 +53,19 @@ Polymer({
   },
 
   /**
-   * Black and white should be the default option if it exists. If not, use
+   * Get the index of the default option if it exists. If not, use the index of
    * the first color mode in the color modes array.
-   * @return {string}
+   * @return {number}
    * @private
    */
-  getDefaultSelectedColorMode_() {
-    const blackAndWhiteIndex = this.colorModes.findIndex((colorMode) => {
+  getDefaultSelectedColorModeIndex_() {
+    assert(this.colorModes.length > 0);
+
+    const defaultColorModeIndex = this.colorModes.findIndex((colorMode) => {
       return this.isDefaultColorMode_(colorMode);
     });
 
-    return blackAndWhiteIndex === -1 ?
-        this.colorModes[0].toString() :
-        this.colorModes[blackAndWhiteIndex].toString();
+    return defaultColorModeIndex === -1 ? 0 : defaultColorModeIndex;
   },
 
   /**
@@ -82,7 +81,10 @@ Polymer({
     }
 
     if (this.colorModes.length > 0) {
-      this.selectedColorMode = this.getDefaultSelectedColorMode_();
+      const selectedColorModeIndex = this.getDefaultSelectedColorModeIndex_();
+      this.selectedColorMode =
+          this.colorModes[selectedColorModeIndex].toString();
+      this.$.colorModeSelect.selectedIndex = selectedColorModeIndex;
     }
   },
 

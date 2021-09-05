@@ -53,6 +53,7 @@ void PrerenderHost::StartPrerendering() {
   // Start prerendering navigation.
   NavigationController::LoadURLParams load_url_params(attributes_->url);
   load_url_params.initiator_origin = initiator_origin_;
+  load_url_params.is_prerendering = true;
   // TODO(https://crbug.com/1132746): Set up other fields of `load_url_params`
   // as well, and add tests for them.
   prerendered_contents_->GetController().LoadURLWithParams(load_url_params);
@@ -70,6 +71,9 @@ void PrerenderHost::DidFinishNavigation(NavigationHandle* navigation_handle) {
 
 bool PrerenderHost::ActivatePrerenderedContents(
     RenderFrameHostImpl& current_render_frame_host) {
+  DCHECK_EQ(blink::features::kPrerender2Param.Get(),
+            blink::features::Prerender2ActivationMode::kEnabled);
+
   DCHECK(is_ready_for_activation_);
   is_ready_for_activation_ = false;
 
@@ -78,22 +82,38 @@ bool PrerenderHost::ActivatePrerenderedContents(
   if (!current_web_contents)
     return false;
 
+  // Merge browsing history.
+  prerendered_contents_->GetController().CopyStateFromAndPrune(
+      &current_web_contents->GetController(), /*replace_entry=*/false);
+
   // Activate the prerendered contents.
   WebContentsDelegate* delegate = current_web_contents->GetDelegate();
   DCHECK(delegate);
   DCHECK(prerendered_contents_);
+  static_cast<RenderFrameHostImpl*>(prerendered_contents_->GetMainFrame())
+      ->OnPrerenderedPageActivated();
   // Tentatively use Portal's activation function.
   // TODO(https://crbug.com/1132746): Replace this with the MPArch.
   std::unique_ptr<WebContents> predecessor_web_contents =
       delegate->ActivatePortalWebContents(current_web_contents,
                                           std::move(prerendered_contents_));
+
   // Stop loading on the predecessor WebContents.
   predecessor_web_contents->Stop();
+
+  // TODO(https://crbug.com/1142658): Notify renderer processes that the
+  // contents get activated.
 
   // TODO(https://crbug.com/1132752): Notify the mojo capability controller that
   // the prerendered contents get activated.
 
   return true;
+}
+
+RenderFrameHostImpl* PrerenderHost::GetPrerenderedMainFrameHostForTesting() {
+  DCHECK(prerendered_contents_);
+  return static_cast<RenderFrameHostImpl*>(
+      prerendered_contents_->GetMainFrame());
 }
 
 }  // namespace content

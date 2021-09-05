@@ -24,7 +24,7 @@
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
+#include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/win/titlebar_config.h"
 #include "content/public/browser/web_contents.h"
@@ -42,6 +42,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/win/hwnd_util.h"
 #include "ui/views/window/client_view.h"
 
@@ -69,8 +70,6 @@ base::win::ScopedHICON CreateHICONFromSkBitmapSizedTo(
 ///////////////////////////////////////////////////////////////////////////////
 // GlassBrowserFrameView, public:
 
-constexpr char GlassBrowserFrameView::kClassName[];
-
 SkColor GlassBrowserFrameView::GetReadableFeatureColor(
     SkColor background_color) {
   // color_utils::GetColorWithMaxContrast()/IsDark() aren't used here because
@@ -96,14 +95,16 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
   if (browser_view->CanShowWindowIcon()) {
     InitThrobberIcons();
 
-    window_icon_ = new TabIconView(this, views::Button::PressedCallback());
-    window_icon_->set_is_light(true);
-    window_icon_->SetID(VIEW_ID_WINDOW_ICON);
-    // Stop the icon from intercepting clicks intended for the HTSYSMENU region
-    // of the window. Even though it does nothing on click, it will still
-    // prevent us from giving the event back to Windows to handle properly.
-    window_icon_->SetCanProcessEventsWithinSubtree(false);
-    AddChildView(window_icon_);
+    AddChildView(views::Builder<TabIconView>()
+                     .CopyAddressTo(&window_icon_)
+                     .SetModel(this)
+                     .SetID(VIEW_ID_WINDOW_ICON)
+                     // Stop the icon from intercepting clicks intended for the
+                     // HTSYSMENU region of the window. Even though it does
+                     // nothing on click, it will still prevent us from giving
+                     // the event back to Windows to handle properly.
+                     .SetCanProcessEventsWithinSubtree(false)
+                     .Build());
   }
 
   web_app::AppBrowserController* controller =
@@ -183,7 +184,7 @@ bool GlassBrowserFrameView::HasVisibleBackgroundTabShapes(
   // colors).
   // TODO(pkasting): https://crbug.com/831769  Change the architecture of the
   // high contrast support to respect system colors, then remove this.
-  if (GetNativeTheme()->UsesHighContrastColors())
+  if (GetNativeTheme()->UserHasContrastPreference())
     return true;
 
   return BrowserNonClientFrameView::HasVisibleBackgroundTabShapes(active_state);
@@ -369,7 +370,8 @@ void GlassBrowserFrameView::ResetWindowControls() {
 }
 
 bool GlassBrowserFrameView::ShouldTabIconViewAnimate() const {
-  DCHECK(ShouldShowWindowIcon(TitlebarType::kCustom));
+  if (!ShouldShowWindowIcon(TitlebarType::kCustom))
+    return false;
   content::WebContents* current_tab = browser_view()->GetActiveWebContents();
   return current_tab && current_tab->IsLoading();
 }
@@ -390,10 +392,6 @@ bool GlassBrowserFrameView::IsWebUITabStrip() const {
 
 ///////////////////////////////////////////////////////////////////////////////
 // GlassBrowserFrameView, views::View overrides:
-
-const char* GlassBrowserFrameView::GetClassName() const {
-  return kClassName;
-}
 
 void GlassBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
   TRACE_EVENT0("views.frame", "GlassBrowserFrameView::OnPaint");
@@ -818,3 +816,6 @@ void GlassBrowserFrameView::InitThrobberIcons() {
     initialized = true;
   }
 }
+
+BEGIN_METADATA(GlassBrowserFrameView, BrowserNonClientFrameView)
+END_METADATA

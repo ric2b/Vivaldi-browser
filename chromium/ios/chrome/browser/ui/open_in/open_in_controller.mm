@@ -429,8 +429,7 @@ class OpenInControllerBridge
 }
 
 - (void)showErrorWithMessage:(NSString*)message {
-  UIViewController* topViewController =
-      [[[UIApplication sharedApplication] keyWindow] rootViewController];
+  UIViewController* topViewController = [GetAnyKeyWindow() rootViewController];
 
   _alertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:topViewController
@@ -483,8 +482,7 @@ class OpenInControllerBridge
                                            UIViewAutoresizingFlexibleHeight)];
   [_overlayedView addSubview:grayBackgroundView];
 
-  UIActivityIndicatorView* spinner = [[UIActivityIndicatorView alloc]
-      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhiteLarge];
+  UIActivityIndicatorView* spinner = GetLargeUIActivityIndicatorView();
   [spinner setFrame:[_overlayedView frame]];
   [spinner setHidesWhenStopped:YES];
   [spinner setUserInteractionEnabled:NO];

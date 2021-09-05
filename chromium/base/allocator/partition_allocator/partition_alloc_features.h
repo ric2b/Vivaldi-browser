@@ -6,6 +6,7 @@
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_PARTITION_ALLOC_FEATURES_H_
 
 #include "base/allocator/buildflags.h"
+#include "base/allocator/partition_allocator/checked_ptr_support.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/base_export.h"
 #include "base/feature_list.h"
@@ -19,7 +20,11 @@
 #include <VersionHelpers.h>
 #endif
 
-#define ALLOW_ENABLING_PCSCAN 0
+#if defined(PA_HAS_64_BITS_POINTERS) && !ENABLE_REF_COUNT_FOR_BACKUP_REF_PTR
+#define ALLOW_PCSCAN 1
+#else
+#define ALLOW_PCSCAN 0
+#endif
 
 namespace base {
 
@@ -28,7 +33,13 @@ struct Feature;
 namespace features {
 
 extern const BASE_EXPORT Feature kPartitionAllocGigaCage;
+
+#if ALLOW_PCSCAN
 extern const BASE_EXPORT Feature kPartitionAllocPCScan;
+#endif  // ALLOW_PCSCAN
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+extern const BASE_EXPORT Feature kPartitionAllocPCScanBrowserOnly;
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 ALWAYS_INLINE bool IsPartitionAllocGigaCageEnabled() {
 #if defined(PA_HAS_64_BITS_POINTERS) && defined(OS_WIN)
@@ -60,15 +71,6 @@ ALWAYS_INLINE bool IsPartitionAllocGigaCageEnabled() {
 #else
   return FeatureList::IsEnabled(kPartitionAllocGigaCage);
 #endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-}
-
-ALWAYS_INLINE bool IsPartitionAllocPCScanEnabled() {
-#if !defined(PA_HAS_64_BITS_POINTERS) || !ALLOW_ENABLING_PCSCAN
-  return false;
-#endif
-  // TODO(bikineev): Calling this function can allocate which can cause
-  // reentrancy for the 'PA as malloc' configuration.
-  return FeatureList::IsEnabled(kPartitionAllocPCScan);
 }
 
 }  // namespace features

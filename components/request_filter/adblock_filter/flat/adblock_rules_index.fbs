@@ -57,13 +57,20 @@ table SourceChecksum {
   checksum: string;
 }
 
-table CosmeticRuleForDomain {
+enum ContentInjectionRuleType : ubyte {
+  COSMETIC,
+  SCRIPTLET_INJECTION
+}
+
+
+table ContentInjectionRuleForDomain {
   rule_id: RuleId;
+  rule_type: ContentInjectionRuleType;
   allow_for_domain: bool;
 }
 
-table CosmeticRulesNode {
-  rules: [CosmeticRuleForDomain];
+table ContentInjectionRulesNode {
+  rules: [ContentInjectionRuleForDomain];
   first_child_node_index: uint;
   subdomains: [string];
 }
@@ -86,8 +93,8 @@ table RulesIndex {
   headers_received_map: RulesMap;
 
   default_stylesheet : string;
-  cosmetic_rule_tree_root_index: uint;
-  cosmetic_rules_tree : [CosmeticRulesNode];
+  content_injection_rule_tree_root_index: uint;
+  content_injection_rules_tree : [ContentInjectionRulesNode];
 }
 
 root_type RulesIndex;

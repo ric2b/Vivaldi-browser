@@ -37,7 +37,6 @@ enum class ConfigKey {
   kDeltaPatchFailed,
   kLastCheckTime,
   kSkipThisVersion,
-  kUpdateTempDir,
 };
 
 class Settings {

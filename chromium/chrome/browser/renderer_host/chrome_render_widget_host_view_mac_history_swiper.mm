@@ -540,7 +540,7 @@ BOOL forceMagicMouse = NO;
   // relies on these events. The workaround is to test for the phase in
   // scrollwheel events. Only magic mouse will set NSEventPhaseBegan and
   // NSEventPhaseEnd.
-  if (vivaldi::IsVivaldiRunning() && base::mac::IsAtLeastOS10_11()) {
+  if (vivaldi::IsVivaldiRunning()) {
     if (theEvent.type == NSScrollWheel) {
       if (theEvent.phase == NSEventPhaseBegan) {
         [self beginGestureWithEvent:theEvent];
