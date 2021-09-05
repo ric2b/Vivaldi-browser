@@ -75,7 +75,7 @@ base::SingleThreadTaskRunner* DummyModulator::TaskRunner() {
 
 void DummyModulator::FetchTree(const KURL&,
                                ResourceFetcher*,
-                               mojom::RequestContextType,
+                               mojom::blink::RequestContextType,
                                network::mojom::RequestDestination,
                                const ScriptFetchOptions&,
                                ModuleScriptCustomFetchType,
@@ -94,7 +94,7 @@ void DummyModulator::FetchSingle(const ModuleScriptFetchRequest&,
 void DummyModulator::FetchDescendantsForInlineScript(
     ModuleScript*,
     ResourceFetcher*,
-    mojom::RequestContextType,
+    mojom::blink::RequestContextType,
     network::mojom::RequestDestination,
     ModuleTreeClient*) {
   NOTREACHED();
@@ -169,17 +169,13 @@ Vector<ModuleRequest> DummyModulator::ModuleRequestsFromModuleRecord(
   return Vector<ModuleRequest>();
 }
 
-ScriptEvaluationResult DummyModulator::ExecuteModule(ModuleScript*,
-                                                     CaptureEvalErrorFlag) {
-  NOTREACHED();
-  return ScriptEvaluationResult::FromModuleNotRun();
-}
-
 ModuleScriptFetcher* DummyModulator::CreateModuleScriptFetcher(
     ModuleScriptCustomFetchType,
     util::PassKey<ModuleScriptLoader> pass_key) {
   NOTREACHED();
   return nullptr;
 }
+
+void DummyModulator::ProduceCacheModuleTreeTopLevel(ModuleScript*) {}
 
 }  // namespace blink

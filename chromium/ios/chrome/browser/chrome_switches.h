@@ -13,12 +13,10 @@ extern const char kDisableEnterprisePolicy[];
 extern const char kDisableIOSPasswordSuggestions[];
 extern const char kDisableThirdPartyKeyboardWorkaround[];
 
-extern const char kEnableChromeBrowserCloudManagement[];
 extern const char kEnableEnterprisePolicy[];
 extern const char kEnableIOSHandoffToOtherDevices[];
 extern const char kEnableSpotlightActions[];
 extern const char kEnableThirdPartyKeyboardWorkaround[];
-extern const char kInstallManagedBookmarksHandler[];
 extern const char kInstallURLBlocklistHandlers[];
 
 extern const char kUserAgent[];

@@ -59,7 +59,7 @@ void DrawDisplayList(unsigned char* buffer,
       SkImageInfo::MakeN32Premul(layer_rect.width(), layer_rect.height());
   SkBitmap bitmap;
   bitmap.installPixels(info, buffer, info.minRowBytes());
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.clipRect(gfx::RectToSkRect(layer_rect));
   list->Raster(&canvas);
 }
@@ -176,7 +176,7 @@ DrawImage CreateDiscardableDrawImage(const gfx::Size& size,
   SkIRect irect;
   rect.roundOut(&irect);
 
-  return DrawImage(CreateDiscardablePaintImage(size, color_space), irect,
+  return DrawImage(CreateDiscardablePaintImage(size, color_space), false, irect,
                    filter_quality, matrix);
 }
 

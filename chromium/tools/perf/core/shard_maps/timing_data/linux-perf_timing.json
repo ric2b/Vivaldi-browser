@@ -433,15 +433,7 @@
     },
     {
         "duration": "7.0",
-        "name": "blink_perf.events/EventsDispatchingInDeeplyNestedV0ShadowTrees.html"
-    },
-    {
-        "duration": "7.0",
         "name": "blink_perf.events/EventsDispatchingInDeeplyNestedV1ShadowTrees.html"
-    },
-    {
-        "duration": "12.0",
-        "name": "blink_perf.events/EventsDispatchingInV0ShadowTrees.html"
     },
     {
         "duration": "12.0",
@@ -1130,42 +1122,6 @@
     {
         "duration": "1.0",
         "name": "blink_perf.shadow_dom/style-sheet-insert.html"
-    },
-    {
-        "duration": "1.0",
-        "name": "blink_perf.shadow_dom/v0-changing-classname-with-shadow-dom.html"
-    },
-    {
-        "duration": "2.0",
-        "name": "blink_perf.shadow_dom/v0-changing-classname-without-shadow-dom.html"
-    },
-    {
-        "duration": "3.0",
-        "name": "blink_perf.shadow_dom/v0-changing-select-with-shadow-dom.html"
-    },
-    {
-        "duration": "3.0",
-        "name": "blink_perf.shadow_dom/v0-changing-select-without-shadow-dom.html"
-    },
-    {
-        "duration": "1.0",
-        "name": "blink_perf.shadow_dom/v0-content-reprojection.html"
-    },
-    {
-        "duration": "1.0",
-        "name": "blink_perf.shadow_dom/v0-large-distribution-without-layout.html"
-    },
-    {
-        "duration": "1.0",
-        "name": "blink_perf.shadow_dom/v0-multiple-insertion-points.html"
-    },
-    {
-        "duration": "1.0",
-        "name": "blink_perf.shadow_dom/v0-shadow-reprojection.html"
-    },
-    {
-        "duration": "1.0",
-        "name": "blink_perf.shadow_dom/v0-small-distribution-with-layout.html"
     },
     {
         "duration": "3.0",
@@ -4234,10 +4190,6 @@
     {
         "duration": "270.0",
         "name": "base_perftests/_gtest_"
-    },
-    {
-        "duration": "60.0",
-        "name": "net_perftests/_gtest_"
     },
     {
         "duration": "16.0",

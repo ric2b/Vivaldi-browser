@@ -4,14 +4,16 @@
 
 #import "ios/chrome/browser/ui/main/scene_controller.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/i18n/message_formatter.h"
 #import "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
+#include "components/infobars/core/infobar_manager.h"
 #include "components/prefs/pref_service.h"
+#import "components/previous_session_info/previous_session_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/web_resource/web_resource_pref_names.h"
@@ -34,17 +36,19 @@
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_browser_agent.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
+#include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_manager.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #include "ios/chrome/browser/crash_report/crash_report_helper.h"
 #import "ios/chrome/browser/crash_report/crash_restore_helper.h"
 #import "ios/chrome/browser/first_run/first_run.h"
+#include "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
 #import "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
+#include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/main/browser_list.h"
 #import "ios/chrome/browser/main/browser_list_factory.h"
 #import "ios/chrome/browser/main/browser_util.h"
-#import "ios/chrome/browser/metrics/previous_session_info.h"
 #include "ios/chrome/browser/ntp/features.h"
 #include "ios/chrome/browser/screenshot/screenshot_delegate.h"
 #include "ios/chrome/browser/signin/constants.h"
@@ -54,6 +58,7 @@
 #import "ios/chrome/browser/ui/authentication/signed_in_accounts_view_controller.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_utils.h"
+#import "ios/chrome/browser/ui/authentication/signin_notification_infobar_delegate.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
@@ -62,6 +67,9 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
+#import "ios/chrome/browser/ui/first_run/location_permissions_commands.h"
+#import "ios/chrome/browser/ui/first_run/location_permissions_coordinator.h"
+#import "ios/chrome/browser/ui/first_run/location_permissions_field_trial.h"
 #import "ios/chrome/browser/ui/first_run/orientation_limiting_navigation_controller.h"
 #import "ios/chrome/browser/ui/first_run/welcome_to_chrome_view_controller.h"
 #include "ios/chrome/browser/ui/history/history_coordinator.h"
@@ -72,8 +80,9 @@
 #import "ios/chrome/browser/ui/main/ui_blocker_scene_agent.h"
 #import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
-#include "ios/chrome/browser/ui/tab_grid/tab_grid_coordinator.h"
-#include "ios/chrome/browser/ui/tab_grid/tab_grid_coordinator_delegate.h"
+#include "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator.h"
+#include "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/top_view_controller.h"
@@ -128,6 +137,18 @@ enum class EnterTabSwitcherSnapshotResult {
   kMaxValue = kPageNotLoadingAndSnapshotSucceeded,
 };
 
+// Histogram enum values for showing the experiment arms of the location
+// permissions experiment. These values are persisted to logs. Entries should
+// not be renumbered and numeric values should never be reused.
+enum class LocationPermissionsUI {
+  // The First Run native location prompt was not shown.
+  kFirstRunPromptNotShown = 0,
+  // The First Run location permissions modal was shown.
+  kFirstRunModal = 1,
+  // kMaxValue should share the value of the highest enumerator.
+  kMaxValue = kFirstRunModal,
+};
+
 // Used to update the current BVC mode if a new tab is added while the tab
 // switcher view is being dismissed.  This is different than ApplicationMode in
 // that it can be set to |NONE| when not in use.
@@ -144,7 +165,8 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
                                SettingsNavigationControllerDelegate,
                                SceneURLLoadingServiceDelegate,
                                TabGridCoordinatorDelegate,
-                               WebStateListObserving> {
+                               WebStateListObserving,
+                               LocationPermissionsCommands> {
   std::unique_ptr<WebStateListObserverBridge> _webStateListForwardingObserver;
 }
 
@@ -207,6 +229,9 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 // The coordinator used to control sign-in UI flows. Lazily created the first
 // time it is accessed.
 @property(nonatomic, strong) SigninCoordinator* signinCoordinator;
+
+@property(nonatomic, strong)
+    LocationPermissionsCoordinator* locationPermissionsCoordinator;
 
 // Additional product specific data used by UserFeedbackDataSource.
 // TODO(crbug.com/1117041): Move this into a UserFeedback config object.
@@ -498,6 +523,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 - (void)performActionForShortcutItem:(UIApplicationShortcutItem*)shortcutItem
                    completionHandler:(void (^)(BOOL succeeded))completionHandler
     API_AVAILABLE(ios(13)) {
+  self.sceneState.startupHadExternalIntent = YES;
   [UserActivityHandler
       performActionForShortcutItem:shortcutItem
                  completionHandler:completionHandler
@@ -518,6 +544,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
       self.sceneState.presentingModalOverlay) {
     sceneIsActive = NO;
   }
+  self.sceneState.startupHadExternalIntent = YES;
   [UserActivityHandler
        continueUserActivity:userActivity
         applicationIsActive:sceneIsActive
@@ -628,22 +655,20 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
     }
   }
 
-  // Before bringing up the UI, make sure the launch mode is correct, and
-  // check for previous crashes.
-  BOOL startInIncognito =
-      [[NSUserDefaults standardUserDefaults] boolForKey:kIncognitoCurrentKey];
-  BOOL switchFromIncognito =
-      startInIncognito &&
-      !self.sceneState.appState.startupInformation.canLaunchInIncognito;
+  // Make sure the launch mode is correct and consistent with the mode used
+  // when the application was terminated. It is possible for the incognito
+  // UI to have been presented but with no tabs (e.g. the tab switcher was
+  // active and user closed the last tab). In that case, switch to regular
+  // UI. Also, if the app crashed, always switch back to regular UI.
+  const BOOL startInIncognito =
+      self.sceneState.incognitoContentVisible &&
+      !self.sceneState.appState.postCrashLaunch &&
+      !self.interfaceProvider.incognitoInterface.browser->GetWebStateList()
+           ->empty();
 
-  if (self.sceneState.appState.postCrashLaunch || switchFromIncognito) {
+  // If the application crashed, clear incognito state.
+  if (self.sceneState.appState.postCrashLaunch)
     [self clearIOSSpecificIncognitoData];
-    if (switchFromIncognito)
-      [self.browserViewWrangler
-          switchGlobalStateToMode:ApplicationMode::NORMAL];
-  }
-  if (switchFromIncognito)
-    startInIncognito = NO;
 
   [self createInitialUI:(startInIncognito ? ApplicationMode::INCOGNITO
                                           : ApplicationMode::NORMAL)];
@@ -691,8 +716,6 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   // Decide if the First Run UI needs to run.
   const bool firstRun = ShouldPresentFirstRunExperience();
 
-  [self.browserViewWrangler switchGlobalStateToMode:launchMode];
-
   Browser* browser;
   if (launchMode == ApplicationMode::INCOGNITO) {
     browser = self.incognitoInterface.browser;
@@ -733,9 +756,10 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
     self.sceneState.appState.startupInformation.restoreHelper = nil;
   }
 
-  // If skipping first run and not in Safe Mode, consider showing the default
-  // browser promo.
-  if (!firstRun && !self.sceneState.appState.isInSafeMode) {
+  // If skipping first run, not in Safe Mode, and the launch is not after a
+  // crash, consider showing the default browser promo.
+  if (!firstRun && !self.sceneState.appState.isInSafeMode &&
+      !self.sceneState.appState.postCrashLaunch) {
     // Show the Default Browser promo UI if the user's past behavior fits
     // the categorization of potentially interested users or if the user is
     // signed in. Do not show if it is determined that Chrome is already the
@@ -819,6 +843,11 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   return base::SysUTF16ToNSString(formattedTitle);
 }
 
+- (void)logLocationPermissionsExperimentForGroupShown:
+    (LocationPermissionsUI)experimentGroup {
+  UMA_HISTOGRAM_ENUMERATION("IOS.LocationPermissionsUI", experimentGroup);
+}
+
 #pragma mark - First Run
 
 // Initializes the first run UI and presents it to the user.
@@ -892,10 +921,21 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
                 name:kChromeFirstRunUIDidFinishNotification
               object:nil];
 
-  // As soon as First Run has finished, give OmniboxGeolocationController an
-  // opportunity to present the iOS system location alert.
-  [[OmniboxGeolocationController sharedInstance]
-      triggerSystemPromptForNewUser:YES];
+  if (!location_permissions_field_trial::IsInRemoveFirstRunPromptGroup() &&
+      !location_permissions_field_trial::IsInFirstRunModalGroup()) {
+    [self logLocationPermissionsExperimentForGroupShown:
+              LocationPermissionsUI::kFirstRunPromptNotShown];
+    // As soon as First Run has finished, give OmniboxGeolocationController an
+    // opportunity to present the iOS system location alert.
+    [[OmniboxGeolocationController sharedInstance]
+        triggerSystemPromptForNewUser:YES];
+  } else if (location_permissions_field_trial::
+                 IsInRemoveFirstRunPromptGroup()) {
+    // If in RemoveFirstRunPrompt group, the system prompt will be delayed until
+    // the site requests location information.
+    [[OmniboxGeolocationController sharedInstance]
+        systemPromptSkippedForNewUser];
+  }
 }
 
 // Presents the sign-in upgrade promo if is relevant and possible.
@@ -992,8 +1032,15 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   [self.mainCoordinator prepareToShowTabGrid];
 }
 
-- (void)displayTabSwitcher {
-  DCHECK(!self.tabSwitcherIsActive);
+- (void)displayTabSwitcherInGridLayout {
+  if (!IsThumbStripEnabled()) {
+    // When the thumb strip feature is enabled, |self.tabSwitcherIsActive| could
+    // be YES if the tab switcher button is tapped while the thumb strip is
+    // visible, or it could be NO if tapped while thumb strip is hidden.
+    // Otherwise, when the thumb strip feature is disabled,
+    // |self.tabSwitcherIsActive| should always be NO at this point in code.
+    DCHECK(!self.tabSwitcherIsActive);
+  }
   if (!self.isProcessingVoiceSearchCommand) {
     [self.currentInterface.bvc userEnteredTabSwitcher];
     [self showTabSwitcher];
@@ -1023,13 +1070,16 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
 }
 
 - (void)showReportAnIssueFromViewController:
-    (UIViewController*)baseViewController {
+            (UIViewController*)baseViewController
+                                     sender:(UserFeedbackSender)sender {
   [self showReportAnIssueFromViewController:baseViewController
+                                     sender:sender
                         specificProductData:nil];
 }
 
 - (void)
     showReportAnIssueFromViewController:(UIViewController*)baseViewController
+                                 sender:(UserFeedbackSender)sender
                     specificProductData:(NSDictionary<NSString*, NSString*>*)
                                             specificProductData {
   DCHECK(baseViewController);
@@ -1045,6 +1095,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
         [SettingsNavigationController userFeedbackControllerForBrowser:browser
                                                               delegate:self
                                                     feedbackDataSource:self
+                                                                sender:sender
                                                                handler:self];
     [baseViewController presentViewController:self.settingsNavigationController
                                      animated:YES
@@ -1106,7 +1157,27 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   self.signinCoordinator = [SigninCoordinator
       advancedSettingsSigninCoordinatorWithBaseViewController:baseViewController
                                                       browser:mainBrowser];
-  [self startSigninCoordinatorWithCompletion:nil];
+  [self startSigninCoordinatorWithCompletion:^(BOOL success) {
+    if (location_permissions_field_trial::IsInFirstRunModalGroup()) {
+      [self showLocationPermissionsFromViewController:baseViewController];
+    }
+  }];
+}
+
+- (void)showLocationPermissionsFromViewController:
+    (UIViewController*)baseViewController {
+  [self logLocationPermissionsExperimentForGroupShown:LocationPermissionsUI::
+                                                          kFirstRunModal];
+  self.locationPermissionsCoordinator = [[LocationPermissionsCoordinator alloc]
+      initWithBaseViewController:baseViewController
+                         browser:self.mainInterface.browser];
+  self.locationPermissionsCoordinator.handler = self;
+  [self.locationPermissionsCoordinator start];
+}
+
+- (void)dismissLocationPermissionsExplanationModal {
+  [self.locationPermissionsCoordinator stop];
+  self.locationPermissionsCoordinator = nil;
 }
 
 - (void)
@@ -1146,6 +1217,19 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
                                                       browser:self.mainInterface
                                                                   .browser];
   [self startSigninCoordinatorWithCompletion:nil];
+}
+
+- (void)showSigninAccountNotificationFromViewController:
+    (UIViewController*)baseViewController {
+  web::WebState* webState =
+      self.mainInterface.browser->GetWebStateList()->GetActiveWebState();
+  DCHECK(webState);
+  infobars::InfoBarManager* infoBarManager =
+      InfoBarManagerImpl::FromWebState(webState);
+  DCHECK(infoBarManager);
+  SigninNotificationInfoBarDelegate::Create(
+      infoBarManager, self.mainInterface.browser->GetBrowserState(), self,
+      baseViewController);
 }
 
 - (void)setIncognitoContentVisible:(BOOL)incognitoContentVisible {
@@ -1528,6 +1612,9 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
       };
     case START_QR_CODE_SCANNER:
       return ^{
+        if (!self.currentInterface.browser) {
+          return;
+        }
         id<QRScannerCommands> QRHandler = HandlerForProtocol(
             self.currentInterface.browser->GetCommandDispatcher(),
             QRScannerCommands);
@@ -1535,6 +1622,9 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
       };
     case FOCUS_OMNIBOX:
       return ^{
+        if (!self.currentInterface.browser) {
+          return;
+        }
         id<OmniboxCommands> focusHandler = HandlerForProtocol(
             self.currentInterface.browser->GetCommandDispatcher(),
             OmniboxCommands);
@@ -2263,6 +2353,7 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   [self.currentInterface setPrimary:YES];
 }
 
+// Shows the tab switcher UI.
 - (void)showTabSwitcher {
   DCHECK(self.mainCoordinator);
   [self.mainCoordinator setActivePage:[self activePage]];
@@ -2407,10 +2498,14 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
     [sceneController willDestroyIncognitoBrowserState];
   }
 
+  BreadcrumbPersistentStorageManager* persistentStorageManager = nullptr;
   if (base::FeatureList::IsEnabled(kLogBreadcrumbs)) {
-    breakpad::StopMonitoringBreadcrumbManagerService(
+    BreadcrumbManagerKeyedService* service =
         BreadcrumbManagerKeyedServiceFactory::GetForBrowserState(
-            mainBrowserState->GetOffTheRecordChromeBrowserState()));
+            mainBrowserState->GetOffTheRecordChromeBrowserState());
+    persistentStorageManager = service->GetPersistentStorageManager();
+    breakpad::StopMonitoringBreadcrumbManagerService(service);
+    service->StopPersisting();
   }
 
   // Record off-the-record metrics before detroying the BrowserState.
@@ -2431,9 +2526,14 @@ const char kMultiWindowOpenInNewWindowHistogram[] =
   }
 
   if (base::FeatureList::IsEnabled(kLogBreadcrumbs)) {
-    breakpad::MonitorBreadcrumbManagerService(
+    BreadcrumbManagerKeyedService* service =
         BreadcrumbManagerKeyedServiceFactory::GetForBrowserState(
-            mainBrowserState->GetOffTheRecordChromeBrowserState()));
+            mainBrowserState->GetOffTheRecordChromeBrowserState());
+
+    if (persistentStorageManager) {
+      service->StartPersisting(persistentStorageManager);
+    }
+    breakpad::MonitorBreadcrumbManagerService(service);
   }
 
   // This seems the best place to deem the destroying and rebuilding the

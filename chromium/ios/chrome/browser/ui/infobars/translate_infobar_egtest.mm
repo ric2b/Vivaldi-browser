@@ -10,7 +10,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "components/infobars/core/infobar_feature.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/common/translate_constants.h"
@@ -247,12 +246,10 @@ void TestResponseProvider::GetLanguageResponse(
 @interface TranslateInfobarTestCase : WebHttpServerChromeTestCase
 @end
 
-@implementation TranslateInfobarTestCase {
-}
+@implementation TranslateInfobarTestCase
 
 - (void)setUp {
   [super setUp];
-
 
   // Set up the fake URL for the translate script to hit the mock HTTP server.
   GURL translateScriptURL = web::test::HttpServer::MakeUrl(

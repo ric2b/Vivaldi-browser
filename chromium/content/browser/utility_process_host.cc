@@ -8,7 +8,7 @@
 
 #include "base/base_switches.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/i18n/base_i18n_switches.h"
@@ -294,11 +294,13 @@ bool UtilityProcessHost::StartProcess() {
       switches::kDisableHighResTimer,
       switches::kEnableExclusiveAudio,
       switches::kForceWaveAudio,
+      switches::kRaiseTimerFrequency,
       switches::kTrySupportedChannelLayouts,
       switches::kWaveOutBuffers,
       switches::kWebXrForceRuntime,
       sandbox::policy::switches::kAddXrAppContainerCaps,
 #endif
+      network::switches::kUseFirstPartySet,
     };
     cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
                                base::size(kSwitchNames));

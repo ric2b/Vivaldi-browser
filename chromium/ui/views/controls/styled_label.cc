@@ -20,6 +20,7 @@
 #include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 namespace views {
@@ -526,7 +527,7 @@ std::unique_ptr<Label> StyledLabel::CreateLabel(
 
     // Note this ignores |default_text_style_|, in favor of style::STYLE_LINK.
     auto link = std::make_unique<Link>(text, text_context_);
-    link->set_callback(style_info.callback);
+    link->SetCallback(style_info.callback);
 
     result = std::move(link);
   } else if (style_info.custom_font) {

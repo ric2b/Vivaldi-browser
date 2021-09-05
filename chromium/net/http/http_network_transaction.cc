@@ -10,7 +10,7 @@
 
 #include "base/base64url.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
 #include "base/metrics/field_trial.h"
@@ -192,7 +192,9 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
     proxy_ssl_config_.disable_cert_verification_network_fetches = true;
   }
 
-  if (HttpUtil::IsMethodSafe(request_info->method)) {
+  if (request_->idempotency == IDEMPOTENT ||
+      (request_->idempotency == DEFAULT_IDEMPOTENCY &&
+       HttpUtil::IsMethodSafe(request_info->method))) {
     can_send_early_data_ = true;
   }
 
@@ -1329,8 +1331,8 @@ void HttpNetworkTransaction::ProcessReportToHeader() {
   if (!response_.headers->GetNormalizedHeader("Report-To", &value))
     return;
 
-  ReportingService* service = session_->reporting_service();
-  if (!service)
+  ReportingService* reporting_service = session_->reporting_service();
+  if (!reporting_service)
     return;
 
   // Only accept Report-To headers on HTTPS connections that have no
@@ -1340,7 +1342,8 @@ void HttpNetworkTransaction::ProcessReportToHeader() {
   if (IsCertStatusError(response_.ssl_info.cert_status))
     return;
 
-  service->ProcessHeader(url_.GetOrigin(), value);
+  reporting_service->ProcessHeader(url_.GetOrigin(), network_isolation_key_,
+                                   value);
 }
 
 void HttpNetworkTransaction::ProcessNetworkErrorLoggingHeader() {
@@ -1350,9 +1353,9 @@ void HttpNetworkTransaction::ProcessNetworkErrorLoggingHeader() {
     return;
   }
 
-  NetworkErrorLoggingService* service =
+  NetworkErrorLoggingService* network_error_logging_service =
       session_->network_error_logging_service();
-  if (!service)
+  if (!network_error_logging_service)
     return;
 
   // Don't accept NEL headers received via a proxy, because the IP address of
@@ -1370,8 +1373,9 @@ void HttpNetworkTransaction::ProcessNetworkErrorLoggingHeader() {
   if (remote_endpoint_.address().empty())
     return;
 
-  service->OnHeader(url::Origin::Create(url_), remote_endpoint_.address(),
-                    value);
+  network_error_logging_service->OnHeader(network_isolation_key_,
+                                          url::Origin::Create(url_),
+                                          remote_endpoint_.address(), value);
 }
 
 void HttpNetworkTransaction::GenerateNetworkErrorLoggingReportIfError(int rv) {
@@ -1410,6 +1414,7 @@ void HttpNetworkTransaction::GenerateNetworkErrorLoggingReport(int rv) {
 
   NetworkErrorLoggingService::RequestDetails details;
 
+  details.network_isolation_key = network_isolation_key_;
   details.uri = url_;
   if (!request_referrer_.empty())
     details.referrer = GURL(request_referrer_);

@@ -58,6 +58,11 @@ mojom("mojom") {
           nullable_is_same_type = true
         },
         {
+          mojom = "skia.mojom.UnsafeBitmap"
+          cpp = "::SkBitmap"
+          nullable_is_same_type = true
+        },
+        {
           mojom = "skia.mojom.InlineBitmap"
           cpp = "::SkBitmap"
           nullable_is_same_type = true
@@ -74,6 +79,7 @@ mojom("mojom") {
         {
           mojom = "skia.mojom.SkColor"
           cpp = "::SkColor"
+          copyable_pass_by_value = true
         },
       ]
       traits_headers = [ "skcolor_mojom_traits.h" ]
@@ -81,6 +87,14 @@ mojom("mojom") {
     },
     {
       types = [
+        {
+          mojom = "skia.mojom.AlphaType"
+          cpp = "::SkAlphaType"
+        },
+        {
+          mojom = "skia.mojom.ColorType"
+          cpp = "::SkColorType"
+        },
         {
           mojom = "skia.mojom.ImageInfo"
           cpp = "::SkImageInfo"

@@ -72,7 +72,7 @@ class TestLabelButton : public LabelButton {
  public:
   explicit TestLabelButton(const base::string16& text = base::string16(),
                            int button_context = style::CONTEXT_BUTTON)
-      : LabelButton(nullptr, text, button_context) {}
+      : LabelButton(Button::PressedCallback(), text, button_context) {}
 
   using LabelButton::GetVisualState;
   using LabelButton::image;
@@ -141,6 +141,10 @@ class LabelButtonTest : public test::WidgetTest {
 
   DISALLOW_COPY_AND_ASSIGN(LabelButtonTest);
 };
+
+TEST_F(LabelButtonTest, FocusBehavior) {
+  EXPECT_EQ(PlatformStyle::DefaultFocusBehavior(), button_->GetFocusBehavior());
+}
 
 TEST_F(LabelButtonTest, Init) {
   const base::string16 text(ASCIIToUTF16("abc"));
@@ -740,8 +744,8 @@ class InkDropLabelButtonTest : public ViewsTestBase {
     widget_->Init(std::move(params));
     widget_->Show();
 
-    button_ = widget_->SetContentsView(
-        std::make_unique<LabelButton>(nullptr, base::string16()));
+    button_ = widget_->SetContentsView(std::make_unique<LabelButton>(
+        Button::PressedCallback(), base::string16()));
 
     test_ink_drop_ = new test::TestInkDrop();
     test::InkDropHostViewTestApi(button_).SetInkDrop(

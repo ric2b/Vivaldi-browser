@@ -70,9 +70,11 @@ class TestContextMenuController : public ContextMenuController {
   DISALLOW_COPY_AND_ASSIGN(TestContextMenuController);
 };
 
-class TestButton : public Button, public ButtonListener {
+class TestButton : public Button {
  public:
-  explicit TestButton(bool has_ink_drop_action_on_click) : Button(this) {
+  explicit TestButton(bool has_ink_drop_action_on_click)
+      : Button(base::BindRepeating([](bool* pressed) { *pressed = true; },
+                                   &pressed_)) {
     SetHasInkDropActionOnClick(has_ink_drop_action_on_click);
   }
 
@@ -82,13 +84,6 @@ class TestButton : public Button, public ButtonListener {
     if (custom_key_click_action_ == KeyClickAction::kNone)
       return Button::GetKeyClickActionForEvent(event);
     return custom_key_click_action_;
-  }
-
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    pressed_ = true;
-
-    if (!on_button_pressed_handler_.is_null())
-      on_button_pressed_handler_.Run();
   }
 
   void OnClickCanceled(const ui::Event& event) override { canceled_ = true; }
@@ -103,17 +98,15 @@ class TestButton : public Button, public ButtonListener {
     Button::RemoveInkDropLayer(ink_drop_layer);
   }
 
-  bool pressed() { return pressed_; }
-  bool canceled() { return canceled_; }
-  int ink_drop_layer_add_count() { return ink_drop_layer_add_count_; }
-  int ink_drop_layer_remove_count() { return ink_drop_layer_remove_count_; }
+  bool pressed() const { return pressed_; }
+  bool canceled() const { return canceled_; }
+  int ink_drop_layer_add_count() const { return ink_drop_layer_add_count_; }
+  int ink_drop_layer_remove_count() const {
+    return ink_drop_layer_remove_count_;
+  }
 
   void set_custom_key_click_action(KeyClickAction custom_key_click_action) {
     custom_key_click_action_ = custom_key_click_action;
-  }
-
-  void set_on_button_pressed_handler(const base::RepeatingClosure& callback) {
-    on_button_pressed_handler_ = callback;
   }
 
   void Reset() {
@@ -132,9 +125,6 @@ class TestButton : public Button, public ButtonListener {
   int ink_drop_layer_remove_count_ = 0;
 
   KeyClickAction custom_key_click_action_ = KeyClickAction::kNone;
-
-  // If available, will be triggered when the button is pressed.
-  base::RepeatingClosure on_button_pressed_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(TestButton);
 };
@@ -169,21 +159,6 @@ class TestButtonObserver {
   PropertyChangedSubscription state_changed_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(TestButtonObserver);
-};
-
-class TestButtonListener : public ButtonListener {
- public:
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    pressed_ = true;
-    sender_ = sender;
-  }
-
-  bool pressed() const { return pressed_; }
-  Button* sender() const { return sender_; }
-
- private:
-  bool pressed_ = false;
-  Button* sender_ = nullptr;
 };
 
 TestInkDrop* AddTestInkDrop(TestButton* button) {
@@ -347,7 +322,7 @@ TEST_F(ButtonTest, HoverStatePreservedOnDescendantViewHierarchyChange) {
 TEST_F(ButtonTest, NotifyAction) {
   gfx::Point center(10, 10);
 
-  // By default the button should notify its listener on mouse release.
+  // By default the button should notify the callback on mouse release.
   button()->OnMousePressed(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
@@ -360,7 +335,7 @@ TEST_F(ButtonTest, NotifyAction) {
   EXPECT_EQ(Button::STATE_HOVERED, button()->GetState());
   EXPECT_TRUE(button()->pressed());
 
-  // Set the notify action to its listener on mouse press.
+  // Set the notify action to happen on mouse press.
   button()->Reset();
   button()->button_controller()->set_notify_action(
       ButtonController::NotifyAction::kOnPress);
@@ -384,7 +359,7 @@ TEST_F(ButtonTest, NotifyAction) {
 TEST_F(ButtonTest, NotifyActionNoClick) {
   gfx::Point center(10, 10);
 
-  // By default the button should notify its listener on mouse release.
+  // By default the button should notify the callback on mouse release.
   button()->OnMousePressed(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
@@ -395,7 +370,7 @@ TEST_F(ButtonTest, NotifyActionNoClick) {
       ui::EF_RIGHT_MOUSE_BUTTON, ui::EF_RIGHT_MOUSE_BUTTON));
   EXPECT_TRUE(button()->canceled());
 
-  // Set the notify action to its listener on mouse press.
+  // Set the notify action to happen on mouse press.
   button()->Reset();
   button()->button_controller()->set_notify_action(
       ButtonController::NotifyAction::kOnPress);
@@ -446,7 +421,7 @@ TEST_F(ButtonTest, GestureEventsSetState) {
 // events will not revert the disabled state back to normal.
 // https://crbug.com/1084241.
 TEST_F(ButtonTest, GestureEventsRespectDisabledState) {
-  button()->set_on_button_pressed_handler(base::BindRepeating(
+  button()->SetCallback(base::BindRepeating(
       [](TestButton* button) { button->SetEnabled(false); }, button()));
 
   EXPECT_EQ(Button::STATE_NORMAL, button()->GetState());
@@ -460,7 +435,7 @@ TEST_F(ButtonTest, GestureEventsRespectDisabledState) {
 TEST_F(ButtonTest, AsButton) {
   base::string16 text;
 
-  LabelButton label_button(nullptr, text);
+  LabelButton label_button(Button::PressedCallback(), text);
   EXPECT_TRUE(Button::AsButton(&label_button));
 
   ImageButton image_button;
@@ -472,7 +447,7 @@ TEST_F(ButtonTest, AsButton) {
   RadioButton radio_button(text, 0);
   EXPECT_TRUE(Button::AsButton(&radio_button));
 
-  MenuButton menu_button(nullptr, text);
+  MenuButton menu_button(Button::PressedCallback(), text);
   EXPECT_TRUE(Button::AsButton(&menu_button));
 
   ToggleButton toggle_button;
@@ -754,19 +729,19 @@ TEST_F(ButtonTest, InkDropStaysHiddenWhileDragging) {
 
 // Ensure PressedCallback is dynamically settable.
 TEST_F(ButtonTest, SetCallback) {
-  TestButtonListener listener;
-  button()->set_callback(Button::PressedCallback(&listener, button()));
+  bool pressed = false;
+  button()->SetCallback(
+      base::BindRepeating([](bool* pressed) { *pressed = true; }, &pressed));
 
   const gfx::Point center(10, 10);
   button()->OnMousePressed(ui::MouseEvent(
       ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  // Default button controller notifies listener at mouse release.
+  // Default button controller notifies callback at mouse release.
   button()->OnMouseReleased(ui::MouseEvent(
       ui::ET_MOUSE_RELEASED, center, center, ui::EventTimeForNow(),
       ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
-  EXPECT_TRUE(listener.pressed());
-  EXPECT_EQ(button(), listener.sender());
+  EXPECT_TRUE(pressed);
 }
 
 // VisibilityTestButton tests to see if an ink drop or a layer has been added to
@@ -820,7 +795,6 @@ TEST_F(ButtonTest, NoLayerAddedForWidgetVisibilityChanges) {
 // key-release on other platforms.
 TEST_F(ButtonTest, ActionOnSpace) {
   // Give focus to the button.
-  button()->SetFocusForPlatform();
   button()->RequestFocus();
   EXPECT_TRUE(button()->HasFocus());
 
@@ -852,7 +826,6 @@ TEST_F(ButtonTest, ActionOnSpace) {
 // with a dialog, even if a button has focus.
 TEST_F(ButtonTest, ActionOnReturn) {
   // Give focus to the button.
-  button()->SetFocusForPlatform();
   button()->RequestFocus();
   EXPECT_TRUE(button()->HasFocus());
 
@@ -876,7 +849,6 @@ TEST_F(ButtonTest, ActionOnReturn) {
 // Verify that a subclass may customize the action for a key pressed event.
 TEST_F(ButtonTest, CustomActionOnKeyPressedEvent) {
   // Give focus to the button.
-  button()->SetFocusForPlatform();
   button()->RequestFocus();
   EXPECT_TRUE(button()->HasFocus());
 
@@ -895,7 +867,7 @@ TEST_F(ButtonTest, CustomActionOnKeyPressedEvent) {
 
 // Verifies that button activation highlight state changes trigger property
 // change callbacks.
-TEST_F(ButtonTest, ChangingHighlightStateNotifiesListener) {
+TEST_F(ButtonTest, ChangingHighlightStateNotifiesCallback) {
   CreateButtonWithObserver();
   EXPECT_FALSE(button_observer()->highlighted_changed());
   EXPECT_FALSE(button()->GetHighlighted());

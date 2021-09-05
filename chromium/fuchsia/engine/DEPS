@@ -1,5 +1,6 @@
 include_rules = [
   "+cc/base/switches.h",
+  "+components/cast/message_port",
   "+components/version_info",
   "+components/viz/common",
   "+components/media_control",
@@ -7,6 +8,7 @@ include_rules = [
   "+content/public/app",
   "+gpu/command_buffer/service",
   "+gpu/config/gpu_finch_features.h",
+  "+gpu/config/gpu_switches.h",
   "+media/base",
   "+media/fuchsia",
   "+mojo/public",

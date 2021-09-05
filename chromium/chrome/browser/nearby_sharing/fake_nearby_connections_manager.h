@@ -14,7 +14,7 @@
 #include "base/callback.h"
 #include "base/optional.h"
 #include "chrome/browser/nearby_sharing/nearby_connections_manager.h"
-#include "chrome/services/sharing/public/mojom/nearby_connections.mojom.h"
+#include "chromeos/services/nearby/public/mojom/nearby_connections.mojom.h"
 
 class NearbyConnection;
 
@@ -35,6 +35,7 @@ class FakeNearbyConnectionsManager
                         ConnectionsCallback callback) override;
   void StopAdvertising() override;
   void StartDiscovery(DiscoveryListener* listener,
+                      DataUsage data_usage,
                       ConnectionsCallback callback) override;
   void StopDiscovery() override;
   void Connect(std::vector<uint8_t> endpoint_info,

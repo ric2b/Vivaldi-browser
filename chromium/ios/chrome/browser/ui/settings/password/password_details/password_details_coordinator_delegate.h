@@ -5,11 +5,11 @@
 #ifndef IOS_CHROME_BROWSER_UI_SETTINGS_PASSWORD_PASSWORD_DETAILS_PASSWORD_DETAILS_COORDINATOR_DELEGATE_H_
 #define IOS_CHROME_BROWSER_UI_SETTINGS_PASSWORD_PASSWORD_DETAILS_PASSWORD_DETAILS_COORDINATOR_DELEGATE_H_
 
-@class PasswordDetailsCoordinator;
-
-namespace autofill {
+namespace password_manager {
 struct PasswordForm;
-}
+}  // namespace password_manager
+
+@class PasswordDetailsCoordinator;
 
 // Delegate for PasswordIssuesCoordinator.
 @protocol PasswordDetailsCoordinatorDelegate
@@ -21,7 +21,8 @@ struct PasswordForm;
 // Called when user deleted password. This action should be handled
 // outside to update the list of passwords immediately.
 - (void)passwordDetailsCoordinator:(PasswordDetailsCoordinator*)coordinator
-                    deletePassword:(const autofill::PasswordForm&)password;
+                    deletePassword:
+                        (const password_manager::PasswordForm&)password;
 
 @end
 

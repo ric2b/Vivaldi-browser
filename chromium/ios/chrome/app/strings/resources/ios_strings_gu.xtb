@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">છાપવાનું નિષ્ફળ થયું.</translation>
 <translation id="1125564390852150847">નવું ટૅબ બનાવો.</translation>
 <translation id="1145536944570833626">અસ્તિત્વમાંના ડેટાને ડિલીટ કરો.</translation>
+<translation id="1147031633655575115"><ph name="USER" /> તરીકે સાઇન ઇન થયા</translation>
 <translation id="1154690515305205900">હાઇલાઇટ કરેલી ટેક્સ્ટ માટે લિંક બનાવી શકાતી નથી.</translation>
+<translation id="1157749421655780457">સ્થાનની મંજૂરી આપો...</translation>
 <translation id="1165039591588034296">ભૂલ</translation>
 <translation id="1172898394251786223">આગલું ફીલ્ડ</translation>
 <translation id="1176932207622159128">ફોટા સાચવી શકતું નથી</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">પાસવર્ડ છુપાવો</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> આઇટમ્સ</translation>
 <translation id="1491277525950327607">સેટિંગ ટૉગલ કરવા માટે બે વાર ટૅપ કરો</translation>
+<translation id="1492417797159476138">તમે આ સાઇટ માટે પહેલેથી જ વપરાશકર્તા નામ સાચવ્યું છે</translation>
 <translation id="1509486075633541495">વેબસાઇટમાં સાઇન ઇન કરો</translation>
 <translation id="1509960214886564027">ઘણી સાઇટ પરની સુવિધાઓને કદાચ બંધ કરવામાં આવી શકે</translation>
 <translation id="152234381334907219">ક્યારેય ન સચવાયેલું</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">પાછળ</translation>
 <translation id="3892144330757387737">તમને તમારો ઇતિહાસ અહીં મળશે</translation>
 <translation id="3897092660631435901">મેનૂ</translation>
+<translation id="3913386780052199712">Chromeમાં સાઇન ઇન કર્યું</translation>
 <translation id="3915450441834151894">સાઇટ માહિતી</translation>
 <translation id="3922310737605261887">કૉપિ કરેલી ટેક્સ્ટ માટે શોધ કરો</translation>
 <translation id="3928666092801078803">મારા ડેટાને સંયોજિત કરો</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">નવું છૂપું ટૅબ</translation>
 <translation id="4758977202923349869">ક્રેડિટ કાર્ડને આ ફ્રેમમાં મૂકો</translation>
 <translation id="4775879719735953715">ડિફૉલ્ટ બ્રાઉઝર</translation>
+<translation id="4778644898150334464">અન્ય પાસવર્ડનો ઉપયોગ કરો</translation>
 <translation id="4802417911091824046">પાસફ્રેઝ એન્ક્રિપ્શનમાં Google Payની ચુકવણી પદ્ધતિઓ અને ઍડ્રેસ સામેલ હોતા નથી. 
 
 આ સેટિંગ બદલવા માટે, <ph name="BEGIN_LINK" />સિંકને રીસેટ કરો<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">ઓકે</translation>
 <translation id="5062321486222145940">Google ડ્રાઇવ ઇન્સ્ટોલ કરો</translation>
 <translation id="5083464117946352670">ફાઇલ કદ નિર્ધારિત કરી શકાતું નથી.</translation>
+<translation id="5090832849094901128">આ પાસવર્ડ ડિલીટ કરવાથી <ph name="WEBSITE" />નું તમારું એકાઉન્ટ ડિલીટ થશે નહીં.</translation>
 <translation id="5094827893301452931">ટ્વિટ પૂર્ણ કરેલ છે.</translation>
 <translation id="5118764316110575523">બંધ</translation>
 <translation id="5127805178023152808">સમન્વયન બંધ છે</translation>
@@ -511,6 +517,9 @@
 <translation id="6476800141292307438">પેજનો અનુવાદ <ph name="LANGUAGE" />માં કરી રહ્યા છે. વિકલ્પો સ્ક્રીનની નીચેની બાજુએ ઉપલબ્ધ રહે છે.</translation>
 <translation id="648164694371393720">પ્રમાણીકરણ ભૂલ</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> આઇટમ કાઢી નાખી</translation>
+<translation id="6497772452874122664">જો <ph name="TIME" /> તમારા માટે વિશ્વસનીય હોય, તો તમે અન્ય સાઇટ પરથી સાચવેલા પાસવર્ડનો ઉપયોગ કરી શકો છો.
+
+દરેક સાઇટ માટે વિશિષ્ટ પાસવર્ડનો ઉપયોગ કરી જુઓ.</translation>
 <translation id="651505212789431520">સિંક કરવાનું રદ કરીએ? તમે સેટિંગમાં કોઈ પણ સમયે સિંક કરવાનું ચાલુ કરી શકો છો.</translation>
 <translation id="6561262006871132942">મોટું કરો</translation>
 <translation id="6585618849026997638">તમે બુકમાર્ક ઉમેરીને તમારા માટે મહત્ત્વપૂર્ણ હોય એવા પેજ પર પાછા જઈ શકો છો</translation>
@@ -590,6 +599,7 @@
 <translation id="739941347996872055">પાછલી ટૅબ</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> વાંચ્યા વગરના લેખ.</translation>
+<translation id="7412027924265291969">ચાલુ રાખો</translation>
 <translation id="7425346204213733349">તમારા બુકમાર્ક, ઇતિહાસ, પાસવર્ડ અને બીજા સેટિંગમાં ફેરફારને હવે તમારા Google એકાઉન્ટ પર સિંક કરવામાં આવશે નહિ. જોકે, તમારો અસ્તિત્વમાંનો ડેટા તમારા Google એકાઉન્ટમાં સ્ટોર રહેશે.</translation>
 <translation id="7435356471928173109">તમારા વ્યવસ્થાપક દ્વારા આ સુવિધા બંધ કરવામાં આવી છે</translation>
 <translation id="7454057999980797137">રાજ્ય / કાઉન્ટી</translation>
@@ -600,6 +610,7 @@
 <translation id="7472734401283673885">કંપનીનું નામ</translation>
 <translation id="7473891865547856676">નહીં આભાર</translation>
 <translation id="7481312909269577407">ફોર્વર્ડ કરો</translation>
+<translation id="7483467499335917849">તમારા વર્તમાન સ્થાનનો ઉપયોગ કરો</translation>
 <translation id="750493650310597496">0 પસંદ કર્યાં</translation>
 <translation id="7514365320538308">ડાઉનલોડ કરો</translation>
 <translation id="7537586195939242955">માફ કરશો, તમારો પાસ આ સમયે પાસબુક પર ઇન્સ્ટોલ કરી શકાતો નથી.</translation>
@@ -733,6 +744,7 @@
 <translation id="9094033019050270033">પાસવર્ડ અપડેટ કરો</translation>
 <translation id="9100610230175265781">પાસફ્રેઝ આવશ્યક છે</translation>
 <translation id="9107664647686727385">ચેડાં કરાયેલા પાસવર્ડ ચેક કરો</translation>
+<translation id="9137526406337347448">Google સેવાઓ</translation>
 <translation id="9148126808321036104">ફરીથી સાઇન ઇન કરો </translation>
 <translation id="9152539721251340337">QR કોડ બનાવો</translation>
 <translation id="9157836665414082580">સંવાદો નાબૂદ કરો</translation>

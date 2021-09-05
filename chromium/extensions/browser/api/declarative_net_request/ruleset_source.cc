@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -147,8 +148,8 @@ ReadJSONRulesResult ParseRulesFromJSON(const RulesetID& ruleset_id,
     dnr_api::Rule parsed_rule;
     base::string16 parse_error;
 
-    if (dnr_api::Rule::Populate(rules_list[i], &parsed_rule, &parse_error) &&
-        parse_error.empty()) {
+    if (dnr_api::Rule::Populate(rules_list[i], &parsed_rule, &parse_error)) {
+      DCHECK(parse_error.empty());
       if (result.rules.size() == rule_limit) {
         result.rule_parse_warnings.push_back(
             CreateInstallWarning(json_path, kRuleCountExceeded));
@@ -352,7 +353,7 @@ RulesetSource RulesetSource::CreateStatic(
       extension.path().Append(info.relative_path),
       extension.path().Append(
           file_util::GetIndexedRulesetRelativePath(info.id.value())),
-      info.id, GetStaticRuleLimit(), extension.id(), info.enabled);
+      info.id, GetMaximumRulesPerRuleset(), extension.id(), info.enabled);
 }
 
 // static
@@ -470,9 +471,9 @@ ParseInfo RulesetSource::IndexAndPersistRules(
       }
     }
   }
-  indexer.Finish();
-
-  if (!PersistIndexedRuleset(indexed_path_, indexer.GetData(),
+  flatbuffers::DetachedBuffer buffer = indexer.FinishAndReleaseBuffer();
+  if (!PersistIndexedRuleset(indexed_path_,
+                             base::make_span(buffer.data(), buffer.size()),
                              &ruleset_checksum)) {
     return ParseInfo(ParseResult::ERROR_PERSISTING_RULESET,
                      nullptr /* rule_id */);

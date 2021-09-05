@@ -13,9 +13,9 @@ import androidx.core.util.Pair;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.browser.password_check.CompromisedCredential;
-import org.chromium.chrome.browser.ui.favicon.IconType;
-import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.ui.favicon.R;
+import org.chromium.components.favicon.IconType;
+import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.url.GURL;
 
 /**
@@ -99,7 +99,7 @@ public class PasswordCheckIconHelper {
         }
         if (!iconOrigin.isValid()) {
             // If neither URL is valid, try the display origin as a last, very weak hope.
-            iconOrigin = credential.getOrigin();
+            iconOrigin = credential.getAssociatedUrl();
             fallbackUrl = credential.getDisplayOrigin();
         }
         return new Pair<>(iconOrigin, fallbackUrl);

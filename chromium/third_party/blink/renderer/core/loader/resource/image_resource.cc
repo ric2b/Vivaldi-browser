@@ -119,7 +119,7 @@ class ImageResource::ImageResourceInfoImpl final
       const KURL& url,
       const AtomicString& initiator_name) override {
     fetcher->EmulateLoadStartedForInspector(
-        resource_.Get(), url, mojom::RequestContextType::IMAGE,
+        resource_.Get(), url, mojom::blink::RequestContextType::IMAGE,
         network::mojom::RequestDestination::kImage, initiator_name);
   }
 
@@ -133,6 +133,12 @@ class ImageResource::ImageResourceInfoImpl final
 
   bool IsAdResource() const override {
     return resource_->GetResourceRequest().IsAdResource();
+  }
+
+  const HashSet<String>* GetUnsupportedImageMimeTypes() const override {
+    if (!resource_->Options().unsupported_image_mime_types)
+      return nullptr;
+    return &resource_->Options().unsupported_image_mime_types->data;
   }
 
   const Member<ImageResource> resource_;
@@ -155,8 +161,8 @@ class ImageResource::ImageResourceFactory : public NonTextResourceFactory {
 ImageResource* ImageResource::Fetch(FetchParameters& params,
                                     ResourceFetcher* fetcher) {
   if (params.GetResourceRequest().GetRequestContext() ==
-      mojom::RequestContextType::UNSPECIFIED) {
-    params.SetRequestContext(mojom::RequestContextType::IMAGE);
+      mojom::blink::RequestContextType::UNSPECIFIED) {
+    params.SetRequestContext(mojom::blink::RequestContextType::IMAGE);
     params.SetRequestDestination(network::mojom::RequestDestination::kImage);
   }
 

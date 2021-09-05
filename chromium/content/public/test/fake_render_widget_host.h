@@ -19,6 +19,7 @@
 namespace content {
 
 class FakeRenderWidgetHost : public blink::mojom::FrameWidgetHost,
+                             public blink::mojom::PopupWidgetHost,
                              public blink::mojom::WidgetHost,
                              public blink::mojom::WidgetInputHandlerHost {
  public:
@@ -61,6 +62,23 @@ class FakeRenderWidgetHost : public blink::mojom::FrameWidgetHost,
                               const gfx::Rect& focus_rect,
                               base::i18n::TextDirection focus_dir,
                               bool is_anchor_first) override;
+  void CreateFrameSink(
+      mojo::PendingReceiver<viz::mojom::CompositorFrameSink>
+          compositor_frame_sink_receiver,
+      mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient>
+          compositor_frame_sink_client) override;
+  void RegisterRenderFrameMetadataObserver(
+      mojo::PendingReceiver<cc::mojom::RenderFrameMetadataObserverClient>
+          render_frame_metadata_observer_client_receiver,
+      mojo::PendingRemote<cc::mojom::RenderFrameMetadataObserver>
+          render_frame_metadata_observer) override;
+
+  // blink::mojom::PopupWidgetHost overrides.
+  void RequestClosePopup() override;
+  void ShowPopup(const gfx::Rect& initial_rect,
+                 ShowPopupCallback callback) override;
+  void SetPopupBounds(const gfx::Rect& bounds,
+                      SetPopupBoundsCallback callback) override;
 
   // blink::mojom::WidgetInputHandlerHost overrides.
   void SetTouchActionFromMain(cc::TouchAction touch_action) override;
@@ -72,7 +90,6 @@ class FakeRenderWidgetHost : public blink::mojom::FrameWidgetHost,
       const std::vector<gfx::Rect>& bounds) override;
   void SetMouseCapture(bool capture) override;
   void RequestMouseLock(bool from_user_gesture,
-                        bool privileged,
                         bool unadjusted_movement,
                         RequestMouseLockCallback callback) override;
 

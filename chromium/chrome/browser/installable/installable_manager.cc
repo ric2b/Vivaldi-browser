@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -99,7 +99,7 @@ int GetMinimumSplashIconSizeInPx() {
 #endif
 }
 
-using IconPurpose = blink::Manifest::ImageResource::Purpose;
+using IconPurpose = blink::mojom::ManifestImageResource_Purpose;
 
 struct ImageTypeDetails {
   const char* extension;
@@ -150,11 +150,11 @@ bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest,
       continue;
 
     if (!(base::Contains(icon.purpose,
-                         blink::Manifest::ImageResource::Purpose::ANY) ||
+                         blink::mojom::ManifestImageResource_Purpose::ANY) ||
           (prefer_maskable_icon &&
            base::Contains(
                icon.purpose,
-               blink::Manifest::ImageResource::Purpose::MASKABLE)))) {
+               blink::mojom::ManifestImageResource_Purpose::MASKABLE)))) {
       continue;
     }
 
@@ -162,14 +162,15 @@ bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest,
       if (size.IsEmpty())  // "any"
         return true;
       if (base::Contains(icon.purpose,
-                         blink::Manifest::ImageResource::Purpose::ANY) &&
+                         blink::mojom::ManifestImageResource_Purpose::ANY) &&
           size.width() >= kMinimumPrimaryIconSizeInPx &&
           size.height() >= kMinimumPrimaryIconSizeInPx) {
         return true;
       }
       if (prefer_maskable_icon &&
-          base::Contains(icon.purpose,
-                         blink::Manifest::ImageResource::Purpose::MASKABLE) &&
+          base::Contains(
+              icon.purpose,
+              blink::mojom::ManifestImageResource_Purpose::MASKABLE) &&
           size.height() >= kMinimumPrimaryAdaptiveLauncherIconSizeInPx &&
           size.width() >= kMinimumPrimaryAdaptiveLauncherIconSizeInPx) {
         return true;
@@ -181,9 +182,12 @@ bool DoesManifestContainRequiredIcon(const blink::Manifest& manifest,
 }
 
 bool ShouldRejectDisplayMode(blink::mojom::DisplayMode display_mode) {
-  return !(display_mode == blink::mojom::DisplayMode::kStandalone ||
-           display_mode == blink::mojom::DisplayMode::kFullscreen ||
-           display_mode == blink::mojom::DisplayMode::kMinimalUi);
+  return !(
+      display_mode == blink::mojom::DisplayMode::kStandalone ||
+      display_mode == blink::mojom::DisplayMode::kFullscreen ||
+      display_mode == blink::mojom::DisplayMode::kMinimalUi ||
+      (display_mode == blink::mojom::DisplayMode::kWindowControlsOverlay &&
+       base::FeatureList::IsEnabled(features::kWebAppWindowControlsOverlay)));
 }
 
 // Returns true if |params| specifies a full PWA check.
@@ -715,15 +719,22 @@ void InstallableManager::OnDidCheckHasServiceWorker(
     case content::ServiceWorkerCapability::SERVICE_WORKER_WITH_FETCH_HANDLER:
       if (base::FeatureList::IsEnabled(
               blink::features::kCheckOfflineCapability)) {
+        const bool enforce_offline_capability =
+            (blink::features::kCheckOfflineCapabilityParam.Get() ==
+             blink::features::CheckOfflineCapabilityMode::kEnforce);
+
         service_worker_context_->CheckOfflineCapability(
             manifest().scope,
             base::BindOnce(&InstallableManager::OnDidCheckOfflineCapability,
                            weak_factory_.GetWeakPtr(),
-                           check_service_worker_start_time));
-        return;
-      } else {
-        worker_->has_worker = true;
+                           check_service_worker_start_time,
+                           enforce_offline_capability));
+
+        // Execution continues in OnDidCheckOfflineCapability.
+        if (enforce_offline_capability)
+          return;
       }
+      worker_->has_worker = true;
       break;
     case content::ServiceWorkerCapability::SERVICE_WORKER_NO_FETCH_HANDLER:
       worker_->has_worker = false;
@@ -745,10 +756,14 @@ void InstallableManager::OnDidCheckHasServiceWorker(
       break;
   }
 
-  InstallableMetrics::RecordCheckServiceWorkerTime(
-      base::TimeTicks::Now() - check_service_worker_start_time);
-  InstallableMetrics::RecordCheckServiceWorkerStatus(
-      InstallableMetrics::ConvertFromServiceWorkerCapability(capability));
+  // These are recorded in OnDidCheckOfflineCapability() when
+  // CheckOfflineCapability is enabled.
+  if (!base::FeatureList::IsEnabled(blink::features::kCheckOfflineCapability)) {
+    InstallableMetrics::RecordCheckServiceWorkerTime(
+        base::TimeTicks::Now() - check_service_worker_start_time);
+    InstallableMetrics::RecordCheckServiceWorkerStatus(
+        InstallableMetrics::ConvertFromServiceWorkerCapability(capability));
+  }
 
   worker_->fetched = true;
   WorkOnTask();
@@ -756,7 +771,17 @@ void InstallableManager::OnDidCheckHasServiceWorker(
 
 void InstallableManager::OnDidCheckOfflineCapability(
     base::TimeTicks check_service_worker_start_time,
-    content::OfflineCapability capability) {
+    bool enforce_offline_capability,
+    content::OfflineCapability capability,
+    int64_t service_worker_registration_id) {
+  InstallableMetrics::RecordCheckServiceWorkerTime(
+      base::TimeTicks::Now() - check_service_worker_start_time);
+  InstallableMetrics::RecordCheckServiceWorkerStatus(
+      InstallableMetrics::ConvertFromOfflineCapability(capability));
+
+  if (!enforce_offline_capability)
+    return;
+
   switch (capability) {
     case content::OfflineCapability::kSupported:
       worker_->has_worker = true;
@@ -766,11 +791,6 @@ void InstallableManager::OnDidCheckOfflineCapability(
       worker_->error = NOT_OFFLINE_CAPABLE;
       break;
   }
-
-  InstallableMetrics::RecordCheckServiceWorkerTime(
-      base::TimeTicks::Now() - check_service_worker_start_time);
-  InstallableMetrics::RecordCheckServiceWorkerStatus(
-      InstallableMetrics::ConvertFromOfflineCapability(capability));
 
   worker_->fetched = true;
   WorkOnTask();

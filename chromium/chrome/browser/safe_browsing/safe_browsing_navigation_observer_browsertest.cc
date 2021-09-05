@@ -116,7 +116,7 @@ class DownloadItemCreatedObserver : public DownloadManager::Observer {
       base::RunLoop run_loop;
       quit_waiting_callback_ = run_loop.QuitClosure();
       run_loop.Run();
-      quit_waiting_callback_ = base::Closure();
+      quit_waiting_callback_ = base::OnceClosure();
     }
 
     *items_seen = items_seen_;
@@ -131,17 +131,17 @@ class DownloadItemCreatedObserver : public DownloadManager::Observer {
     items_seen_.push_back(item);
 
     if (!quit_waiting_callback_.is_null())
-      quit_waiting_callback_.Run();
+      std::move(quit_waiting_callback_).Run();
   }
 
   void ManagerGoingDown(DownloadManager* manager) override {
     manager_->RemoveObserver(this);
     manager_ = nullptr;
     if (!quit_waiting_callback_.is_null())
-      quit_waiting_callback_.Run();
+      std::move(quit_waiting_callback_).Run();
   }
 
-  base::Closure quit_waiting_callback_;
+  base::OnceClosure quit_waiting_callback_;
   DownloadManager* manager_;
   std::vector<DownloadItem*> items_seen_;
 
@@ -2290,81 +2290,81 @@ IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
 IN_PROC_BROWSER_TEST_F(SBNavigationObserverBrowserTest,
                        VerifyNumberOfRecentNavigationsToCollect) {
   EXPECT_EQ(0, CountOfRecentNavigationsToAppend(
-                   /*sber=*/false, /*incognito=*/false,
+                   /*extended_reporting_enabled=*/false, /*is_incognito=*/false,
                    SafeBrowsingNavigationObserverManager::SUCCESS));
   EXPECT_EQ(0, CountOfRecentNavigationsToAppend(
-                   /*sber=*/false, /*incognito=*/true,
+                   /*extended_reporting_enabled=*/false, /*is_incognito=*/true,
                    SafeBrowsingNavigationObserverManager::SUCCESS));
   EXPECT_EQ(0,
             CountOfRecentNavigationsToAppend(
-                /*sber=*/false, /*incognito=*/false,
+                /*extended_reporting_enabled=*/false, /*is_incognito=*/false,
                 SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_PAGE));
   EXPECT_EQ(0,
             CountOfRecentNavigationsToAppend(
-                /*sber=*/false, /*incognito=*/true,
+                /*extended_reporting_enabled=*/false, /*is_incognito=*/true,
                 SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_PAGE));
   EXPECT_EQ(
       0, CountOfRecentNavigationsToAppend(
-             /*sber=*/false, /*incognito=*/false,
+             /*extended_reporting_enabled=*/false, /*is_incognito=*/false,
              SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_REFERRER));
   EXPECT_EQ(
       0, CountOfRecentNavigationsToAppend(
-             /*sber=*/false, /*incognito=*/true,
+             /*extended_reporting_enabled=*/false, /*is_incognito=*/true,
              SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_REFERRER));
   EXPECT_EQ(0, CountOfRecentNavigationsToAppend(
-                   /*sber=*/false, /*incognito=*/false,
+                   /*extended_reporting_enabled=*/false, /*is_incognito=*/false,
                    SafeBrowsingNavigationObserverManager::INVALID_URL));
   EXPECT_EQ(0, CountOfRecentNavigationsToAppend(
-                   /*sber=*/false, /*incognito=*/true,
+                   /*extended_reporting_enabled=*/false, /*is_incognito=*/true,
                    SafeBrowsingNavigationObserverManager::INVALID_URL));
   EXPECT_EQ(
       0,
       CountOfRecentNavigationsToAppend(
-          /*sber=*/false, /*incognito=*/false,
+          /*extended_reporting_enabled=*/false, /*is_incognito=*/false,
           SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND));
   EXPECT_EQ(
       0,
       CountOfRecentNavigationsToAppend(
-          /*sber=*/false, /*incognito=*/true,
+          /*extended_reporting_enabled=*/false, /*is_incognito=*/true,
           SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND));
 
   EXPECT_EQ(5, CountOfRecentNavigationsToAppend(
-                   /*sber=*/true, /*incognito=*/false,
+                   /*extended_reporting_enabled=*/true, /*is_incognito=*/false,
                    SafeBrowsingNavigationObserverManager::SUCCESS));
   EXPECT_EQ(0, CountOfRecentNavigationsToAppend(
-                   /*sber=*/true, /*incognito=*/true,
+                   /*extended_reporting_enabled=*/true, /*is_incognito=*/true,
                    SafeBrowsingNavigationObserverManager::SUCCESS));
   EXPECT_EQ(5,
             CountOfRecentNavigationsToAppend(
-                /*sber=*/true, /*incognito=*/false,
+                /*extended_reporting_enabled=*/true, /*is_incognito=*/false,
                 SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_PAGE));
   EXPECT_EQ(0,
             CountOfRecentNavigationsToAppend(
-                /*sber=*/true, /*incognito=*/true,
+                /*extended_reporting_enabled=*/true, /*is_incognito=*/true,
                 SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_PAGE));
   EXPECT_EQ(
       0, CountOfRecentNavigationsToAppend(
-             /*sber=*/true, /*incognito=*/false,
+             /*extended_reporting_enabled=*/true, /*is_incognito=*/false,
              SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_REFERRER));
   EXPECT_EQ(
       0, CountOfRecentNavigationsToAppend(
-             /*sber=*/true, /*incognito=*/true,
+             /*extended_reporting_enabled=*/true, /*is_incognito=*/true,
              SafeBrowsingNavigationObserverManager::SUCCESS_LANDING_REFERRER));
   EXPECT_EQ(5, CountOfRecentNavigationsToAppend(
-                   /*sber=*/true, /*incognito=*/false,
+                   /*extended_reporting_enabled=*/true, /*is_incognito=*/false,
                    SafeBrowsingNavigationObserverManager::INVALID_URL));
   EXPECT_EQ(0, CountOfRecentNavigationsToAppend(
-                   /*sber=*/true, /*incognito=*/true,
+                   /*extended_reporting_enabled=*/true, /*is_incognito=*/true,
                    SafeBrowsingNavigationObserverManager::INVALID_URL));
   EXPECT_EQ(
       5,
       CountOfRecentNavigationsToAppend(
-          /*sber=*/true, /*incognito=*/false,
+          /*extended_reporting_enabled=*/true, /*is_incognito=*/false,
           SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND));
   EXPECT_EQ(
       0,
       CountOfRecentNavigationsToAppend(
-          /*sber=*/true, /*incognito=*/true,
+          /*extended_reporting_enabled=*/true, /*is_incognito=*/true,
           SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND));
 }
 

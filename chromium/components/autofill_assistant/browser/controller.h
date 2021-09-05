@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "components/autofill_assistant/browser/basic_interactions.h"
@@ -24,8 +24,8 @@
 #include "components/autofill_assistant/browser/script.h"
 #include "components/autofill_assistant/browser/script_executor_delegate.h"
 #include "components/autofill_assistant/browser/script_tracker.h"
-#include "components/autofill_assistant/browser/service.h"
 #include "components/autofill_assistant/browser/service.pb.h"
+#include "components/autofill_assistant/browser/service/service.h"
 #include "components/autofill_assistant/browser/state.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/ui_delegate.h"
@@ -63,7 +63,7 @@ class Controller : public ScriptExecutorDelegate,
   Controller(content::WebContents* web_contents,
              Client* client,
              const base::TickClock* tick_clock,
-             RuntimeManagerImpl* runtime_manager,
+             base::WeakPtr<RuntimeManagerImpl> runtime_manager,
              std::unique_ptr<Service> service);
   ~Controller() override;
 
@@ -164,7 +164,7 @@ class Controller : public ScriptExecutorDelegate,
   void RemoveListener(ScriptExecutorDelegate::Listener* listener) override;
 
   void SetExpandSheetForPromptAction(bool expand) override;
-  void SetBrowseDomainsWhitelist(std::vector<std::string> domains) override;
+  void SetBrowseDomainsAllowlist(std::vector<std::string> domains) override;
 
   bool EnterState(AutofillAssistantState state) override;
   void SetOverlayBehavior(
@@ -251,6 +251,7 @@ class Controller : public ScriptExecutorDelegate,
   bool ShouldShowOverlay() const override;
   void ShutdownIfNecessary() override;
   bool IsRunningLiteScript() const override;
+  void OnKeyboardVisibilityChanged(bool visible) override;
 
  private:
   friend ControllerTest;
@@ -268,7 +269,9 @@ class Controller : public ScriptExecutorDelegate,
   // once right now and schedule regular checks. Otherwise, do nothing.
   void GetOrCheckScripts();
 
-  void OnGetScripts(const GURL& url, bool result, const std::string& response);
+  void OnGetScripts(const GURL& url,
+                    int http_status,
+                    const std::string& response);
 
   // Execute |script_path| and, if execution succeeds, enter |end_state| and
   // call |on_success|.
@@ -352,10 +355,12 @@ class Controller : public ScriptExecutorDelegate,
 
   bool StateNeedsUI(AutofillAssistantState state);
 
+  void SetVisibilityAndUpdateUserActions();
+
   ClientSettings settings_;
   Client* const client_;
   const base::TickClock* const tick_clock_;
-  RuntimeManagerImpl* const runtime_manager_;
+  base::WeakPtr<RuntimeManagerImpl> runtime_manager_;
 
   // Lazily instantiate in GetWebController().
   std::unique_ptr<WebController> web_controller_;
@@ -517,8 +522,9 @@ class Controller : public ScriptExecutorDelegate,
   BasicInteractions basic_interactions_{this};
 
   bool expand_sheet_for_prompt_action_ = true;
-  std::vector<std::string> browse_domains_whitelist_;
+  std::vector<std::string> browse_domains_allowlist_;
   bool browse_mode_invisible_ = false;
+  bool is_keyboard_showing_ = false;
 
   // Only set during a ShowGenericUiAction.
   std::unique_ptr<GenericUserInterfaceProto> generic_user_interface_;

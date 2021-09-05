@@ -23,7 +23,6 @@ extern const char kManagedDefaultCookiesSetting[];
 extern const char kManagedDefaultImagesSetting[];
 extern const char kManagedDefaultInsecureContentSetting[];
 extern const char kManagedDefaultJavaScriptSetting[];
-extern const char kManagedDefaultPluginsSetting[];
 extern const char kManagedDefaultPopupsSetting[];
 extern const char kManagedDefaultGeolocationSetting[];
 extern const char kManagedDefaultNotificationsSetting[];
@@ -46,8 +45,6 @@ extern const char kManagedInsecureContentAllowedForUrls[];
 extern const char kManagedInsecureContentBlockedForUrls[];
 extern const char kManagedJavaScriptAllowedForUrls[];
 extern const char kManagedJavaScriptBlockedForUrls[];
-extern const char kManagedPluginsAllowedForUrls[];
-extern const char kManagedPluginsBlockedForUrls[];
 extern const char kManagedPopupsAllowedForUrls[];
 extern const char kManagedPopupsBlockedForUrls[];
 extern const char kManagedNotificationsAllowedForUrls[];
@@ -68,6 +65,7 @@ extern const char kManagedSerialBlockedForUrls[];
 extern const char kManagedInsecurePrivateNetworkAllowedForUrls[];
 
 extern const char kEnableQuietNotificationPermissionUi[];
+extern const char kQuietNotificationPermissionUiEnablingMethod[];
 
 #if defined(OS_ANDROID)
 extern const char kNotificationsVibrateEnabled[];

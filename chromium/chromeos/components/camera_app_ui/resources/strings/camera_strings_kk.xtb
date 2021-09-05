@@ -3,6 +3,7 @@
 <translationbundle lang="kk">
 <translation id="1276998909102132017">Галерея суреттері</translation>
 <translation id="1430915738399379752">Басып шығару</translation>
+<translation id="1473110567575736769">3 секундтық таймер</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Ештеңе жазылмады.</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Камера ажыратымдылығы</translation>
 <translation id="3517926952904427380">Портреттік суретке түсіру мүмкін болмады.</translation>
 <translation id="3569311554794739032"><ph name="FILE" /> файлын шынымен өшіргіңіз келе ме?</translation>
+<translation id="3750315947605636967">Камераны басқа қолданба пайдаланып жатыр.</translation>
 <translation id="3810838688059735925">Бейне</translation>
+<translation id="4000398125663085899">Жаңа фотосуреттер мен бейнелер енді Files қолданбасының қалтасында сақталады: "Менің файлдарым &gt; Камера".</translation>
 <translation id="4118525110028899586">Жазуды кідірту</translation>
 <translation id="4279490309300973883">Экран көшірмесін көрсету</translation>
 <translation id="4329152592498422850">Шаршы сурет түсіруге ауысу</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">Камераңыз әзірге қолжетімді емес.
         Камераның дұрыс жалғанғанын тексеріңіз.</translation>
 <translation id="5152121255775685072">Галереяға өту</translation>
+<translation id="5422455049771430511">Фотосуреттеріңіз бен бейнелеріңіз сақталатын жаңа орын пайда болды</translation>
 <translation id="5671277269877808209">Шаршы</translation>
 <translation id="5775960006311140197">Сарапшы режимі</translation>
 <translation id="5869546221129391014">Тор</translation>
+<translation id="6040143037577758943">Жабу</translation>
 <translation id="6073451960410192870">Бейнеге түсіруді тоқтату</translation>
 <translation id="6197807149213783179">Метадеректі сақтау</translation>
 <translation id="6233780560267770709">3 x 3</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">Жарайды</translation>
 <translation id="698156982839284926">3 секунд</translation>
 <translation id="712848772518857951"><ph name="COUNT" /> элементті шынымен өшіргіңіз келе ме?</translation>
+<translation id="7134221860976209830">10 секундтық таймер</translation>
 <translation id="7243947652761655814">Бейне ажыратымдылығы</translation>
 <translation id="7337660886763914220">Файл жүйесінің қателері.</translation>
 <translation id="7557677699350329807">Келесі камераға ауысу</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">Анықтама</translation>
 <translation id="7658239707568436148">Бас тарту</translation>
 <translation id="7670511624014457267">60 кадр/сек</translation>
-<translation id="8049189770492311300">Таймер</translation>
 <translation id="8067883171444229417">Бейнені ойнату</translation>
 <translation id="8131740175452115882">Растау</translation>
 <translation id="8145038249676204903">Суретке түсіруге ауысу</translation>

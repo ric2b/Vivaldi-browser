@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/password_manager/credentials_cleaner_runner_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -36,13 +37,6 @@
 
 #if defined(OS_WIN)
 #include "chrome/browser/password_manager/password_manager_util_win.h"
-#elif defined(OS_MAC)
-// Use default store.
-#elif defined(OS_CHROMEOS) || defined(OS_ANDROID)
-// Don't do anything. We're going to use the default store.
-#elif defined(USE_X11)
-#include "chrome/browser/password_manager/password_store_x.h"
-#include "ui/base/ui_base_features.h"
 #endif
 
 #if defined(PASSWORD_REUSE_DETECTION_ENABLED)
@@ -52,11 +46,6 @@
 using password_manager::PasswordStore;
 
 namespace {
-
-#if defined(USE_X11)
-constexpr PasswordStoreX::MigrationToLoginDBStep
-    kMigrationToLoginDBNotAttempted = PasswordStoreX::NOT_ATTEMPTED;
-#endif
 
 #if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 std::string GetSyncUsername(Profile* profile) {
@@ -149,16 +138,8 @@ PasswordStoreFactory::BuildServiceInstanceFor(
 #endif
 
   scoped_refptr<PasswordStore> ps;
-#if defined(OS_WIN)
-  ps = new password_manager::PasswordStoreDefault(std::move(login_db));
-#elif defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_MAC)
-  ps = new password_manager::PasswordStoreDefault(std::move(login_db));
-#elif defined(USE_X11)
-  if (features::IsUsingOzonePlatform())
-    ps = new password_manager::PasswordStoreDefault(std::move(login_db));
-  else
-    ps = new PasswordStoreX(std::move(login_db), profile->GetPrefs());
-#elif defined(USE_OZONE)
+#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_ANDROID) || \
+    defined(OS_MAC) || defined(USE_X11) || defined(USE_OZONE)
   ps = new password_manager::PasswordStoreDefault(std::move(login_db));
 #else
   NOTIMPLEMENTED();
@@ -184,8 +165,10 @@ PasswordStoreFactory::BuildServiceInstanceFor(
             ->GetNetworkContext();
       },
       profile);
-  password_manager_util::RemoveUselessCredentials(ps, profile->GetPrefs(), 60,
-                                                  network_context_getter);
+  password_manager_util::RemoveUselessCredentials(
+      CredentialsCleanerRunnerFactory::GetForProfile(profile), ps,
+      profile->GetPrefs(), base::TimeDelta::FromSeconds(60),
+      network_context_getter);
 
 #if defined(OS_WIN) || defined(OS_MAC) || \
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
@@ -196,19 +179,6 @@ PasswordStoreFactory::BuildServiceInstanceFor(
 #endif
 
   return ps;
-}
-
-void PasswordStoreFactory::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-#if defined(USE_X11)
-  if (!features::IsUsingOzonePlatform()) {
-    // Notice that the preprocessor conditions above are exactly those that will
-    // result in using PasswordStoreX in BuildServiceInstanceFor().
-    registry->RegisterIntegerPref(
-        password_manager::prefs::kMigrationToLoginDBStep,
-        kMigrationToLoginDBNotAttempted);
-  }
-#endif
 }
 
 content::BrowserContext* PasswordStoreFactory::GetBrowserContextToUse(

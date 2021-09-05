@@ -19,6 +19,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/sequenced_task_runner.h"
@@ -41,6 +42,7 @@
 #include "sql/statement.h"
 #include "sql/transaction.h"
 #include "url/gurl.h"
+#include "url/third_party/mozilla/url_parse.h"
 
 using base::Time;
 
@@ -104,6 +106,10 @@ const int kLoadDelayMilliseconds = 0;
 const int kLoadDelayMilliseconds = 0;
 #endif
 
+// Port number to use for cookies whose source port is unknown at the time of
+// database migration to V13. The value -1 comes from url::PORT_UNSPECIFIED.
+const int kDefaultUnknownPort = -1;
+
 // A little helper to help us log (on client thread) if the background runner
 // gets stuck.
 class TimeoutTracker : public base::RefCountedThreadSafe<TimeoutTracker> {
@@ -148,6 +154,7 @@ namespace {
 
 // Version number of the database.
 //
+// Version 13 - 2020/10/28 - https://crrev.com/c/2505468
 // Version 12 - 2019/11/20 - https://crrev.com/c/1898301
 // Version 11 - 2019/04/17 - https://crrev.com/c/1570416
 // Version 10 - 2018/02/13 - https://crrev.com/c/906675
@@ -159,6 +166,12 @@ namespace {
 // Version 6  - 2013/04/23 - https://codereview.chromium.org/14208017
 // Version 5  - 2011/12/05 - https://codereview.chromium.org/8533013
 // Version 4  - 2009/09/01 - https://codereview.chromium.org/183021
+//
+// Version 13 adds two new fields: "source_port" (the port number of the source
+// origin, and "same_party" (boolean indicating whether the cookie had a
+// SameParty attribute). In migrating, source_port defaults to -1
+// (url::PORT_UNSPECIFIED) for old entries for which the source port is unknown,
+// and same_party defaults to false.
 //
 // Version 12 adds a column for "source_scheme" to store whether the
 // cookie was set from a URL with a cryptographic scheme.
@@ -211,8 +224,8 @@ namespace {
 // Version 3 updated the database to include the last access time, so we can
 // expire them in decreasing order of use when we've reached the maximum
 // number of cookies.
-const int kCurrentVersionNumber = 12;
-const int kCompatibleVersionNumber = 12;
+const int kCurrentVersionNumber = 13;
+const int kCompatibleVersionNumber = 13;
 
 }  // namespace
 
@@ -608,7 +621,7 @@ bool CreateV11Schema(sql::Database* db) {
 
 // Initializes the cookies table, returning true on success.
 // The table cannot exist when calling this function.
-bool CreateV12Schema(sql::Database* db) {
+bool CreateV13Schema(sql::Database* db) {
   DCHECK(!db->DoesTableExist("cookies"));
 
   std::string stmt(base::StringPrintf(
@@ -628,10 +641,12 @@ bool CreateV12Schema(sql::Database* db) {
       "encrypted_value BLOB DEFAULT '',"
       "samesite INTEGER NOT NULL DEFAULT %d,"
       "source_scheme INTEGER NOT NULL DEFAULT %d,"
+      "source_port INTEGER NOT NULL DEFAULT %d,"
+      "is_same_party INTEGER NOT NULL DEFAULT 0,"
       "UNIQUE (host_key, name, path))",
       CookiePriorityToDBCookiePriority(COOKIE_PRIORITY_DEFAULT),
       CookieSameSiteToDBCookieSameSite(CookieSameSite::UNSPECIFIED),
-      static_cast<int>(CookieSourceScheme::kUnset)));
+      static_cast<int>(CookieSourceScheme::kUnset), kDefaultUnknownPort));
   if (!db->Execute(stmt.c_str()))
     return false;
 
@@ -791,7 +806,7 @@ bool SQLitePersistentCookieStore::Backend::CreateDatabaseSchema() {
   if (db()->DoesTableExist("cookies"))
     return true;
 
-  return CreateV12Schema(db());
+  return CreateV13Schema(db());
 }
 
 bool SQLitePersistentCookieStore::Backend::DoInitializeDatabase() {
@@ -871,14 +886,15 @@ bool SQLitePersistentCookieStore::Backend::LoadCookiesForDomains(
         "SELECT creation_utc, host_key, name, value, encrypted_value, path, "
         "expires_utc, is_secure, is_httponly, samesite, "
         "last_access_utc, has_expires, is_persistent, priority, "
-        "source_scheme "
+        "source_scheme, source_port, is_same_party "
         "FROM cookies WHERE host_key = ?"));
   } else {
     smt.Assign(db()->GetCachedStatement(
         SQL_FROM_HERE,
         "SELECT creation_utc, host_key, name, value, encrypted_value, path, "
         "expires_utc, is_secure, is_httponly, samesite, last_access_utc, "
-        "has_expires, is_persistent, priority, source_scheme "
+        "has_expires, is_persistent, priority, source_scheme, source_port, "
+        "is_same_party "
         "FROM cookies WHERE host_key = ? AND is_persistent = 1"));
   }
   del_smt.Assign(db()->GetCachedStatement(
@@ -944,7 +960,8 @@ bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
     } else {
       value = smt.ColumnString(3);
     }
-    std::unique_ptr<CanonicalCookie> cc(std::make_unique<CanonicalCookie>(
+    // Returns nullptr if the resulting cookie is not canonical.
+    std::unique_ptr<net::CanonicalCookie> cc = CanonicalCookie::FromStorage(
         smt.ColumnString(2),                           // name
         value,                                         // value
         smt.ColumnString(1),                           // domain
@@ -958,10 +975,12 @@ bool SQLitePersistentCookieStore::Backend::MakeCookiesFromSQLStatement(
             static_cast<DBCookieSameSite>(smt.ColumnInt(9))),  // samesite
         DBCookiePriorityToCookiePriority(
             static_cast<DBCookiePriority>(smt.ColumnInt(13))),  // priority
-        DBToCookieSourceScheme(smt.ColumnInt(14))));            // source_scheme
-    DLOG_IF(WARNING, cc->CreationDate() > Time::Now())
-        << L"CreationDate too recent";
-    if (cc->IsCanonical()) {
+        smt.ColumnBool(16),                                     // is_same_party
+        DBToCookieSourceScheme(smt.ColumnInt(14)),              // source_scheme
+        smt.ColumnInt(15));                                     // source_port
+    if (cc) {
+      DLOG_IF(WARNING, cc->CreationDate() > Time::Now())
+          << L"CreationDate too recent";
       cookies->push_back(std::move(cc));
     } else {
       RecordCookieLoadProblem(COOKIE_LOAD_PROBLEM_NON_CANONICAL);
@@ -1018,12 +1037,11 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
     meta_table()->SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
     transaction.Commit();
-    UMA_HISTOGRAM_TIMES("Cookie.TimeDatabaseMigrationToV10",
-                        base::TimeTicks::Now() - start_time);
+    base::UmaHistogramTimes("Cookie.TimeDatabaseMigrationToV10",
+                            base::TimeTicks::Now() - start_time);
   }
 
   if (cur_version == 10) {
-    SCOPED_UMA_HISTOGRAM_TIMER("Cookie.TimeDatabaseMigrationToV11");
     sql::Transaction transaction(db());
     if (!transaction.Begin())
       return base::nullopt;
@@ -1083,6 +1101,41 @@ SQLitePersistentCookieStore::Backend::DoMigrateDatabaseSchema() {
     meta_table()->SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
     transaction.Commit();
+  }
+
+  if (cur_version == 12) {
+    const char kMigrationSuccessHistogram[] =
+        "Cookie.TimeDatabaseMigrationToV13Success";
+    const char kMigrationFailureHistogram[] =
+        "Cookie.TimeDatabaseMigrationToV13Failure";
+    const base::TimeTicks start_time = base::TimeTicks::Now();
+
+    sql::Transaction transaction(db());
+    if (!transaction.Begin()) {
+      base::UmaHistogramTimes(kMigrationFailureHistogram,
+                              base::TimeTicks::Now() - start_time);
+      return base::nullopt;
+    }
+
+    std::string update_stmt(
+        base::StringPrintf("ALTER TABLE cookies ADD COLUMN source_port "
+                           "INTEGER NOT NULL DEFAULT %d;"
+                           "ALTER TABLE cookies ADD COLUMN is_same_party "
+                           "INTEGER NOT NULL DEFAULT 0;",
+                           kDefaultUnknownPort));
+    if (!db()->Execute(update_stmt.c_str())) {
+      base::UmaHistogramTimes(kMigrationFailureHistogram,
+                              base::TimeTicks::Now() - start_time);
+      return base::nullopt;
+    }
+
+    ++cur_version;
+    meta_table()->SetVersionNumber(cur_version);
+    meta_table()->SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+    transaction.Commit();
+    base::UmaHistogramTimes(kMigrationSuccessHistogram,
+                            base::TimeTicks::Now() - start_time);
   }
 
   // Put future migration cases here.
@@ -1188,8 +1241,8 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
       "INSERT INTO cookies (creation_utc, host_key, name, value, "
       "encrypted_value, path, expires_utc, is_secure, is_httponly, "
       "samesite, last_access_utc, has_expires, is_persistent, priority,"
-      "source_scheme) "
-      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"));
+      "source_scheme, source_port, is_same_party) "
+      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"));
   if (!add_smt.is_valid())
     return;
 
@@ -1238,16 +1291,18 @@ void SQLitePersistentCookieStore::Backend::DoCommit() {
           }
           add_smt.BindString(5, po->cc().Path());
           add_smt.BindInt64(6, po->cc().ExpiryDate().ToInternalValue());
-          add_smt.BindInt(7, po->cc().IsSecure());
-          add_smt.BindInt(8, po->cc().IsHttpOnly());
+          add_smt.BindBool(7, po->cc().IsSecure());
+          add_smt.BindBool(8, po->cc().IsHttpOnly());
           add_smt.BindInt(
               9, CookieSameSiteToDBCookieSameSite(po->cc().SameSite()));
           add_smt.BindInt64(10, po->cc().LastAccessDate().ToInternalValue());
-          add_smt.BindInt(11, po->cc().IsPersistent());
-          add_smt.BindInt(12, po->cc().IsPersistent());
+          add_smt.BindBool(11, po->cc().IsPersistent());
+          add_smt.BindBool(12, po->cc().IsPersistent());
           add_smt.BindInt(
               13, CookiePriorityToDBCookiePriority(po->cc().Priority()));
           add_smt.BindInt(14, static_cast<int>(po->cc().SourceScheme()));
+          add_smt.BindInt(15, po->cc().SourcePort());
+          add_smt.BindBool(16, po->cc().IsSameParty());
           if (!add_smt.Run()) {
             DLOG(WARNING) << "Could not add a cookie to the DB.";
             RecordCookieCommitProblem(COOKIE_COMMIT_PROBLEM_ADD);

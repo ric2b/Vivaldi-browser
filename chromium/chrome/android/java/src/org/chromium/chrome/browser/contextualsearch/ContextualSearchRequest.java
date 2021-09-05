@@ -16,8 +16,12 @@ import java.net.MalformedURLException;
 import java.net.URL;
 
 /**
- * Bundles a Search Request URL with a low-priority version of the URL, helps manage the
- * fall-back when the low-priority version fails, and tracks which one is in use.
+ * Builds a Search Request URL to be used to populate the content of the Bottom Sheet in response
+ * to a particular Contextual Search.
+ * The URL has a low-priority version to help with server overload, and helps manage the
+ * fall-back to normal when that is needed after the low-priority version fails.
+ * The URL building includes triggering of feature one-boxes on the SERP like a translation
+ * One-box or a knowledge panel.
  */
 class ContextualSearchRequest {
     private final boolean mWasPrefetch;
@@ -62,7 +66,7 @@ class ContextualSearchRequest {
      * @param isLowPriorityEnabled Whether the request can be made at a low priority.
      */
     ContextualSearchRequest(String searchTerm, boolean isLowPriorityEnabled) {
-        this(searchTerm, null, null, isLowPriorityEnabled, null, null, true);
+        this(searchTerm, null, null, isLowPriorityEnabled, null, null);
     }
 
     /**
@@ -78,18 +82,17 @@ class ContextualSearchRequest {
      * @param isLowPriorityEnabled Whether the request can be made at a low priority.
      * @param searchUrlFull The URL for the full search to present in the overlay, or empty.
      * @param searchUrlPreload The URL for the search to preload into the overlay, or empty.
-     * @param doRequireGoogleUrl Whether a Google URL is required when server-supplied.
      */
     ContextualSearchRequest(String searchTerm, @Nullable String alternateTerm, @Nullable String mid,
             boolean isLowPriorityEnabled, @Nullable String searchUrlFull,
-            @Nullable String searchUrlPreload, boolean doRequireGoogleUrl) {
+            @Nullable String searchUrlPreload) {
         mWasPrefetch = isLowPriorityEnabled;
-        mIsFullSearchUrlProvided = !doRequireGoogleUrl || isGoogleUrl(searchUrlFull);
+        mIsFullSearchUrlProvided = isGoogleUrl(searchUrlFull);
         mNormalPriorityUri = mIsFullSearchUrlProvided
                 ? Uri.parse(searchUrlFull)
                 : getUriTemplate(searchTerm, alternateTerm, mid, false);
         if (isLowPriorityEnabled) {
-            if (!doRequireGoogleUrl || isGoogleUrl(searchUrlPreload)) {
+            if (isGoogleUrl(searchUrlPreload)) {
                 mLowPriorityUri = Uri.parse(searchUrlPreload);
             } else {
                 Uri baseLowPriorityUri = getUriTemplate(searchTerm, alternateTerm, mid, true);

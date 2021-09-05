@@ -31,6 +31,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/termination_notification.h"
+#include "chrome/browser/navigation_predictor/search_engine_preconnector.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/predictors/loading_predictor_config.h"
@@ -154,6 +155,17 @@ FakeDeviceSyncImplFactory* GetFakeDeviceSyncImplFactory() {
 }
 #endif  // defined(OS_CHROMEOS)
 
+#if !defined(OS_ANDROID)
+// An observer that returns back to test code after a new profile is
+// initialized.
+void UnblockOnProfileCreation(base::RunLoop* run_loop,
+                              Profile* profile,
+                              Profile::CreateStatus status) {
+  if (status == Profile::CREATE_STATUS_INITIALIZED)
+    run_loop->Quit();
+}
+#endif
+
 }  // namespace
 
 // static
@@ -209,6 +221,10 @@ void InProcessBrowserTest::Initialize() {
 #if defined(OS_MAC)
   bundle_swizzler_ = std::make_unique<ScopedBundleSwizzlerMac>();
 #endif
+
+  // Preconnecting can cause non-deterministic test behavior especially with
+  // various test fixtures that mock servers.
+  scoped_feature_list_.InitAndDisableFeature(features::kPreconnectToSearch);
 }
 
 InProcessBrowserTest::~InProcessBrowserTest() = default;
@@ -454,7 +470,7 @@ Browser* InProcessBrowserTest::OpenURLOffTheRecord(Profile* profile,
 // Creates a browser with a single tab (about:blank), waits for the tab to
 // finish loading and shows the browser.
 Browser* InProcessBrowserTest::CreateBrowser(Profile* profile) {
-  Browser* browser = new Browser(Browser::CreateParams(profile, true));
+  Browser* browser = Browser::Create(Browser::CreateParams(profile, true));
   AddBlankTabAndShow(browser);
   return browser;
 }
@@ -464,27 +480,50 @@ Browser* InProcessBrowserTest::CreateIncognitoBrowser(Profile* profile) {
   if (!profile)
     profile = browser()->profile();
   // Create a new browser with using the incognito profile.
-  Browser* incognito =
-      new Browser(Browser::CreateParams(profile->GetPrimaryOTRProfile(), true));
+  Browser* incognito = Browser::Create(
+      Browser::CreateParams(profile->GetPrimaryOTRProfile(), true));
   AddBlankTabAndShow(incognito);
   return incognito;
 }
 
 Browser* InProcessBrowserTest::CreateBrowserForPopup(Profile* profile) {
-  Browser* browser =
-      new Browser(Browser::CreateParams(Browser::TYPE_POPUP, profile, true));
+  Browser* browser = Browser::Create(
+      Browser::CreateParams(Browser::TYPE_POPUP, profile, true));
   AddBlankTabAndShow(browser);
   return browser;
 }
 
 Browser* InProcessBrowserTest::CreateBrowserForApp(const std::string& app_name,
                                                    Profile* profile) {
-  Browser* browser = new Browser(Browser::CreateParams::CreateForApp(
+  Browser* browser = Browser::Create(Browser::CreateParams::CreateForApp(
       app_name, false /* trusted_source */, gfx::Rect(), profile, true));
   AddBlankTabAndShow(browser);
   return browser;
 }
 #endif  // !defined(OS_MAC)
+
+#if !defined(OS_ANDROID) && !defined(CHROME_OS)
+Browser* InProcessBrowserTest::CreateGuestBrowser() {
+  // Get Guest profile.
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  base::FilePath guest_path = profile_manager->GetGuestProfilePath();
+
+  base::RunLoop run_loop;
+  profile_manager->CreateProfileAsync(
+      guest_path, base::BindRepeating(&UnblockOnProfileCreation, &run_loop),
+      base::string16(), std::string());
+  run_loop.Run();
+
+  Profile* profile = profile_manager->GetProfileByPath(guest_path);
+  if (!profile->IsEphemeralGuestProfile())
+    profile = profile->GetPrimaryOTRProfile();
+
+  // Create browser and add tab.
+  Browser* browser = Browser::Create(Browser::CreateParams(profile, true));
+  AddBlankTabAndShow(browser);
+  return browser;
+}
+#endif  // !defined(OS_ANDROID) && !defined(CHROME_OS)
 
 void InProcessBrowserTest::AddBlankTabAndShow(Browser* browser) {
   content::WindowedNotificationObserver observer(

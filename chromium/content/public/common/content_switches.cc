@@ -26,10 +26,6 @@ const char kAllowInsecureLocalhost[] = "allow-insecure-localhost";
 const char kAllowLoopbackInPeerConnection[] =
     "allow-loopback-in-peer-connection";
 
-// Allow a page to show popups during its unloading.
-// TODO(https://crbug.com/937569): Remove this in Chrome 88.
-const char kAllowPopupsDuringPageUnload[] = "allow-popups-during-page-unload";
-
 // Allow a page to send synchronus XHR during its unloading.
 // TODO(https://crbug.com/1003101): Remove this in Chrome 88.
 const char kAllowSyncXHRInPageDismissal[] = "allow-sync-xhr-in-page-dimissal";
@@ -262,6 +258,11 @@ const char kDisableSpeechAPI[]              = "disable-speech-api";
 // Disables the speech synthesis part of Web Speech API.
 const char kDisableSpeechSynthesisAPI[]     = "disable-speech-synthesis-api";
 
+// Used to communicate managed policy for the TargetBlankImpliesNoOpenerDisable
+// behavioral change.
+extern const char kDisableTargetBlankImpliesNoOpener[] =
+    "target-blank-implies-no-opener-disable";
+
 // Disables adding the test certs in the network process.
 const char kDisableTestCerts[]              = "disable-test-root-certs";
 
@@ -408,7 +409,9 @@ const char kEnableThreadedCompositing[]     = "enable-threaded-compositing";
 // Enable tracing during the execution of browser tests.
 const char kEnableTracing[]                 = "enable-tracing";
 
-// The filename to write the output of the test tracing to.
+// The filename to write the output of the test tracing to. If it is empty
+// or it ends in a directory separator then an auto-generated filename will be
+// appended.
 const char kEnableTracingOutput[]           = "enable-tracing-output";
 
 // Enable screen capturing support for MediaStream API.
@@ -432,9 +435,6 @@ const char kEnableVtune[]                   = "enable-vtune-support";
 // Removal of this deprecated API is blocked on crbug.com/937369.
 const char kEnableWebAuthDeprecatedMojoTestingApi[] =
     "enable-web-auth-deprecated-mojo-testing-api";
-
-// Enable WebGL2 Compute context.
-const char kEnableWebGL2ComputeContext[] = "enable-webgl2-compute-context";
 
 // Enables WebGL extensions not yet approved by the community.
 const char kEnableWebGLDraftExtensions[] = "enable-webgl-draft-extensions";
@@ -574,19 +574,6 @@ const char kNoV8UntrustedCodeMitigations[] = "no-v8-untrusted-code-mitigations";
 
 // Number of worker threads used to rasterize content.
 const char kNumRasterThreads[]              = "num-raster-threads";
-
-// Override the behavior of plugin throttling for testing.
-// By default the throttler is only enabled for a hard-coded list of plugins.
-// Set the value to 'always' to always throttle every plugin instance. Set the
-// value to 'never' to disable throttling.
-const char kOverridePluginPowerSaverForTesting[] =
-    "override-plugin-power-saver-for-testing";
-
-// Argument to the process type that indicates a PPAPI broker process type.
-const char kPpapiBrokerProcess[]            = "ppapi-broker";
-
-// "Command-line" arguments for the PPAPI Flash; used for debugging options.
-const char kPpapiFlashArgs[]                = "ppapi-flash-args";
 
 // Runs PPAPI (Pepper) plugins in-process.
 const char kPpapiInProcess[]                = "ppapi-in-process";
@@ -830,6 +817,9 @@ const char kWebOtpBackendSmsVerification[] = "web-otp-backend-sms-verification";
 // Enables User Consent backend for Web OTP API.
 const char kWebOtpBackendUserConsent[] = "web-otp-backend-user-consent";
 
+// Enables auto backend selection for Web OTP API.
+const char kWebOtpBackendAuto[] = "web-otp-backend-auto";
+
 // Disables encryption of RTP Media for WebRTC. When Chrome embeds Content, it
 // ignores this switch on its stable and beta channels.
 const char kDisableWebRtcEncryption[]      = "disable-webrtc-encryption";
@@ -1023,6 +1013,12 @@ const char kPpapiAntialiasedTextEnabled[] = "ppapi-antialiased-text-enabled";
 // processes.
 const char kPpapiSubpixelRenderingSetting[] =
     "ppapi-subpixel-rendering-setting";
+
+// Raise the timer interrupt frequency in all Chrome processes, for experimental
+// purposes. This feature is needed because as of Windows 10 2004 the scheduling
+// effects of changing the timer interrupt frequency are not global, and this
+// lets us prove/disprove whether this matters. See https://crbug.com/1128917
+const char kRaiseTimerFrequency[] = "raise-timer-frequency";
 
 // Causes the second GPU process used for gpu info collection to display a
 // dialog on launch.

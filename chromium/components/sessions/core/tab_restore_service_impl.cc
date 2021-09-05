@@ -121,6 +121,7 @@ const SessionCommand::id_type kCommandSetWindowUserTitle = 12;
 // Vivaldi extensions. Might be necessary to preserve these values
 const sessions::SessionCommand::id_type kCommandSetExtData = 200;
 const sessions::SessionCommand::id_type kCommandSetWindowExtData = 201;
+const sessions::SessionCommand::id_type kCommandPageActionOverrides = 202;
 
 // Number of entries (not commands) before we clobber the file and write
 // everything.
@@ -633,6 +634,11 @@ void TabRestoreServiceImpl::PersistenceDelegate::LoadTabsFromLastSession() {
 
 void TabRestoreServiceImpl::PersistenceDelegate::DeleteLastSession() {
   command_storage_manager_->DeleteLastSession();
+  #if defined(OS_ANDROID)
+  // Vivaldi - Note(nagamani@vivaldi.com): [ClearDataOnExit] Delayed save is not triggered before
+  // Vivaldi is closed. Hence, explicitly calling save to write changes to file.
+  command_storage_manager_->Save();
+  #endif
 }
 
 bool TabRestoreServiceImpl::PersistenceDelegate::IsLoaded() const {
@@ -742,7 +748,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::ScheduleCommandsForTab(
         kCommandSetExtensionAppID, tab.id, tab.extension_app_id));
   }
 
-  VivaldiTabScheduleExtCommand(command_storage_manager_.get(), tab);
+  VivaldiScheduleTabCommands(command_storage_manager_.get(), tab);
 
   if (!tab.user_agent_override.ua_string_override.empty()) {
     command_storage_manager_->ScheduleCommand(
@@ -1154,6 +1160,8 @@ bool TabRestoreServiceImpl::PersistenceDelegate::ConvertSessionWindowToWindow(
       tab.extension_app_id = session_window->tabs[i]->extension_app_id;
       tab.timestamp = base::Time();
       tab.ext_data = session_window->tabs[i]->ext_data;
+      tab.page_action_overrides =
+          session_window->tabs[i]->page_action_overrides;
     }
   }
   if (window->tabs.empty())

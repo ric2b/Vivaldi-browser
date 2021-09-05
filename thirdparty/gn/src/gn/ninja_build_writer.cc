@@ -281,6 +281,8 @@ void NinjaBuildWriter::WriteNinjaRules() {
        << build_settings_->ninja_required_version().Describe() << "\n\n";
   out_ << "rule gn\n";
   out_ << "  command = " << GetSelfInvocationCommand(build_settings_) << "\n";
+  // Putting gn rule to console pool for colorful output on regeneration
+  out_ << "  pool = console\n";
   out_ << "  description = Regenerating ninja files\n\n";
 
   // This rule will regenerate the ninja files when any input file has changed.

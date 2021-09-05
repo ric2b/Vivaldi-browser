@@ -1,5 +1,0 @@
-include_rules = [
-  "+chromeos/dbus/cfm",
-  "+chromeos/services/cfm/public/buildflags",
-  "+chromeos/services/cfm/public/features",
-]

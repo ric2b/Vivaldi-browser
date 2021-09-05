@@ -5,7 +5,6 @@
 #include "content/browser/notifications/notification_event_dispatcher_impl.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/optional.h"
@@ -72,6 +71,7 @@ PersistentNotificationStatus ConvertServiceWorkerStatus(
     case blink::ServiceWorkerStatusCode::kErrorRedundant:
     case blink::ServiceWorkerStatusCode::kErrorDisallowed:
     case blink::ServiceWorkerStatusCode::kErrorInvalidArguments:
+    case blink::ServiceWorkerStatusCode::kErrorStorageDisconnected:
       return PersistentNotificationStatus::kServiceWorkerError;
   }
   NOTREACHED();
@@ -141,6 +141,7 @@ void DispatchNotificationEventOnRegistration(
     case blink::ServiceWorkerStatusCode::kErrorRedundant:
     case blink::ServiceWorkerStatusCode::kErrorDisallowed:
     case blink::ServiceWorkerStatusCode::kErrorInvalidArguments:
+    case blink::ServiceWorkerStatusCode::kErrorStorageDisconnected:
       status = PersistentNotificationStatus::kServiceWorkerError;
       break;
     case blink::ServiceWorkerStatusCode::kOk:

@@ -4,12 +4,7 @@
 
 package org.chromium.chrome.browser.ntp;
 
-import android.accounts.Account;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.support.test.InstrumentationRegistry;
+import android.app.Activity;
 import android.view.View;
 
 import androidx.test.filters.LargeTest;
@@ -24,22 +19,21 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.RecentTabsPageTestUtils;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.test.util.FakeProfileDataSource;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.url.GURL;
 
@@ -55,18 +49,16 @@ import java.util.concurrent.ExecutionException;
 public class RecentTabsPageTest {
     // FakeProfileDataSource is required to create the ProfileDataCache entry with sync_off badge
     // for Sync promo.
-    private final FakeProfileDataSource mFakeProfileDataSource = new FakeProfileDataSource();
-
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule =
-            new AccountManagerTestRule(mFakeProfileDataSource);
+            new AccountManagerTestRule(new FakeProfileDataSource());
 
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
     public final ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus().setRevision(2).build();
 
     private FakeRecentlyClosedTabManager mManager;
     private Tab mTab;
@@ -83,14 +75,12 @@ public class RecentTabsPageTest {
     @After
     public void tearDown() {
         leaveRecentTabsPage();
-        RecentTabsManager.forcePromoStateForTests(null);
         RecentTabsManager.setRecentlyClosedTabManagerForTests(null);
     }
 
     @Test
     @MediumTest
     @Feature({"RecentTabsPage"})
-    @FlakyTest(message = "crbug.com/1075804")
     public void testRecentlyClosedTabs() throws ExecutionException {
         mPage = loadRecentTabsPage();
         // Set a recently closed tab and confirm a view is rendered for it.
@@ -100,7 +90,8 @@ public class RecentTabsPageTest {
         View view = waitForView(title);
 
         // Clear the recently closed tabs with the context menu and confirm the view is gone.
-        invokeContextMenu(view, RecentTabsRowAdapter.RecentlyClosedTabsGroup.ID_REMOVE_ALL);
+        openContextMenuAndInvokeItem(mActivityTestRule.getActivity(), view,
+                RecentTabsRowAdapter.RecentlyClosedTabsGroup.ID_REMOVE_ALL);
         Assert.assertEquals(0, mManager.getRecentlyClosedTabs(1).size());
         waitForViewToDisappear(title);
     }
@@ -108,15 +99,22 @@ public class RecentTabsPageTest {
     @Test
     @LargeTest
     @Feature("RenderTest")
+    @Features.DisableFeatures({ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY})
+    public void testPersonalizedSigninPromoInRecentTabsPageLegacy() throws Exception {
+        mAccountManagerTestRule.addAccount(mAccountManagerTestRule.createProfileDataFromName(
+                AccountManagerTestRule.TEST_ACCOUNT_EMAIL));
+        mPage = loadRecentTabsPage();
+        mRenderTestRule.render(
+                mPage.getView(), "personalized_signin_promo_recent_tabs_page_legacy");
+    }
+
+    @Test
+    @LargeTest
+    @Feature("RenderTest")
+    @Features.EnableFeatures({ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY})
     public void testPersonalizedSigninPromoInRecentTabsPage() throws Exception {
-        Account account = mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
-        TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> mFakeProfileDataSource.setProfileData(account.name,
-                                new ProfileDataSource.ProfileData(
-                                        account.name, createAvatar(), "Full Name", "Given Name")));
-        RecentTabsManager.forcePromoStateForTests(
-                RecentTabsManager.PromoState.PROMO_SIGNIN_PERSONALIZED);
+        mAccountManagerTestRule.addAccount(mAccountManagerTestRule.createProfileDataFromName(
+                AccountManagerTestRule.TEST_ACCOUNT_EMAIL));
         mPage = loadRecentTabsPage();
         mRenderTestRule.render(mPage.getView(), "personalized_signin_promo_recent_tabs_page");
     }
@@ -124,15 +122,9 @@ public class RecentTabsPageTest {
     @Test
     @LargeTest
     @Feature("RenderTest")
+    @Features.EnableFeatures({ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY})
     public void testPersonalizedSyncPromoInRecentTabsPage() throws Exception {
-        Account account = mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
-        TestThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> mFakeProfileDataSource.setProfileData(account.name,
-                                new ProfileDataSource.ProfileData(
-                                        account.name, createAvatar(), "Full Name", "Given Name")));
-        RecentTabsManager.forcePromoStateForTests(
-                RecentTabsManager.PromoState.PROMO_SYNC_PERSONALIZED);
+        mAccountManagerTestRule.addTestAccountThenSignin();
         mPage = loadRecentTabsPage();
         mRenderTestRule.render(mPage.getView(), "personalized_sync_promo_recent_tabs_page");
     }
@@ -195,29 +187,13 @@ public class RecentTabsPageTest {
         });
     }
 
-    private void invokeContextMenu(View view, int contextMenuItemId) throws ExecutionException {
-        TestTouchUtils.performLongClickOnMainSync(
-                InstrumentationRegistry.getInstrumentation(), view);
-        Assert.assertTrue(InstrumentationRegistry.getInstrumentation().invokeContextMenuAction(
-                mActivityTestRule.getActivity(), contextMenuItemId, 0));
-    }
-
-    /**
-     * TODO(https://crbug.com/1125452): Remove this method and use test only resource.
-     */
-    private Bitmap createAvatar() {
-        final int avatarSize = 40;
-
-        Bitmap result = Bitmap.createBitmap(avatarSize, avatarSize, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(result);
-        canvas.drawColor(Color.RED);
-
-        Paint paint = new Paint();
-        paint.setAntiAlias(true);
-
-        paint.setColor(Color.BLUE);
-        canvas.drawCircle(0, 0, avatarSize, paint);
-
-        return result;
+    private static void openContextMenuAndInvokeItem(
+            final Activity activity, final View view, final int itemId) {
+        // IMPLEMENTATION NOTE: Instrumentation.invokeContextMenuAction would've been much simpler,
+        // but it requires the View to be focused which is hard to achieve in touch mode.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            view.performLongClick();
+            activity.getWindow().performContextMenuIdentifierAction(itemId, 0);
+        });
     }
 }

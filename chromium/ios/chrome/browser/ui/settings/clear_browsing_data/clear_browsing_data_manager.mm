@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/scoped_observer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browsing_data/core/history_notice_utils.h"
 #include "components/browsing_data/core/pref_names.h"
@@ -35,7 +36,6 @@
 #include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
@@ -143,7 +143,6 @@ static NSDictionary* _imageNamesByItemTypes = @{
 @implementation ClearBrowsingDataManager
 @synthesize browserState = _browserState;
 @synthesize consumer = _consumer;
-@synthesize linkDelegate = _linkDelegate;
 @synthesize shouldShowNoticeAboutOtherFormsOfBrowsingHistory =
     _shouldShowNoticeAboutOtherFormsOfBrowsingHistory;
 @synthesize shouldPopupDialogAboutOtherFormsOfBrowsingHistory =

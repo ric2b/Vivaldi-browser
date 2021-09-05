@@ -15,7 +15,6 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/widget_messages.h"
 #include "content/public/common/url_constants.h"
 #include "net/http/http_util.h"
 #include "services/device/public/cpp/geolocation/geoposition.h"
@@ -308,13 +307,13 @@ Response EmulationHandler::SetDeviceMetricsOverride(
   params.screen_type = mobile ? blink::mojom::EmulatedScreenType::kMobile
                               : blink::mojom::EmulatedScreenType::kDesktop;
   params.screen_size =
-      blink::WebSize(screen_width.fromMaybe(0), screen_height.fromMaybe(0));
+      gfx::Size(screen_width.fromMaybe(0), screen_height.fromMaybe(0));
   if (position_x.isJust() && position_y.isJust()) {
     params.view_position =
         gfx::Point(position_x.fromMaybe(0), position_y.fromMaybe(0));
   }
   params.device_scale_factor = device_scale_factor;
-  params.view_size = blink::WebSize(width, height);
+  params.view_size = gfx::Size(width, height);
   params.scale = scale.fromMaybe(1);
   params.screen_orientation_type = orientationType;
   params.screen_orientation_angle = orientationAngle;
@@ -574,7 +573,7 @@ void EmulationHandler::UpdateDeviceEmulationStateForHost(
       if (auto* touch_emulator =
               host_->GetRenderWidgetHost()->GetTouchEmulator())
         render_widget_host->SetCursor(
-            touch_emulator->GetDefaultCursor());
+            touch_emulator->GetDefaultCursor().cursor());
       render_widget_host->SetDeviceEmulationActive(false);
     }
 

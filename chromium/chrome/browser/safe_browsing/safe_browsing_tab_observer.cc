@@ -9,7 +9,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/render_messages.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/browser/notification_details.h"
@@ -47,8 +46,9 @@ SafeBrowsingTabObserver::SafeBrowsingTabObserver(
     pref_change_registrar_.Init(prefs);
     pref_change_registrar_.Add(
         prefs::kSafeBrowsingEnabled,
-        base::Bind(&SafeBrowsingTabObserver::UpdateSafebrowsingDetectionHost,
-                   base::Unretained(this)));
+        base::BindRepeating(
+            &SafeBrowsingTabObserver::UpdateSafebrowsingDetectionHost,
+            base::Unretained(this)));
 
     ClientSideDetectionService* csd_service =
         ClientSideDetectionServiceFactory::GetForProfile(profile);

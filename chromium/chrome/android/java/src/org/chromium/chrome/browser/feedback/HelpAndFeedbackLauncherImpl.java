@@ -34,7 +34,8 @@ import org.vivaldi.browser.common.VivaldiUtils;
  */
 public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
     protected static final String FALLBACK_SUPPORT_URL =
-            "https://support.google.com/chrome/topic/6069782";
+            "https://help.vivaldi.com";
+            // TODO VIVALDI "https://support.google.com/chrome/topic/6069782";
     private static final String TAG = "HelpAndFeedback";
 
     private static HelpAndFeedbackLauncher sInstance;
@@ -96,7 +97,7 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
         }
         RecordUserAction.record("MobileHelpAndFeedback");
         new ChromeFeedbackCollector(activity, null /* categoryTag */, null /* description */,
-                true /* takeScreenshot */,
+                new ScreenshotTask(activity),
                 new ChromeFeedbackCollector.InitParams(profile, url, helpContext),
                 collector -> show(activity, helpContext, collector));
     }
@@ -114,7 +115,7 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
     public void showFeedback(final Activity activity, Profile profile, @Nullable String url,
             @Nullable final String categoryTag) {
         new ChromeFeedbackCollector(activity, categoryTag, null /* description */,
-                true /* takeScreenshot */,
+                new ScreenshotTask(activity),
                 new ChromeFeedbackCollector.InitParams(profile, url, null),
                 collector -> showFeedback(activity, collector));
     }
@@ -134,7 +135,7 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
             @Nullable final String categoryTag, @Nullable final Map<String, String> feedContext,
             @Nullable final String feedbackContext) {
         new FeedFeedbackCollector(activity, categoryTag, null /* description */, feedbackContext,
-                true /* takeScreenshot */,
+                new ScreenshotTask(activity),
                 new FeedFeedbackCollector.InitParams(profile, url, feedContext),
                 collector -> showFeedback(activity, collector));
     }
@@ -146,6 +147,9 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
      * @return Help context ID that matches the URL and incognito mode.
      */
     public static String getHelpContextIdFromUrl(Context context, String url, boolean isIncognito) {
+        if (ChromeApplication.isVivaldi()) {
+            return "https://help.vivaldi.com";
+        } else {
         if (TextUtils.isEmpty(url)) {
             return context.getString(R.string.help_context_general);
         } else if (url.startsWith(UrlConstants.BOOKMARKS_URL)) {
@@ -164,6 +168,7 @@ public class HelpAndFeedbackLauncherImpl implements HelpAndFeedbackLauncher {
             return context.getString(R.string.help_context_new_tab);
         }
         return context.getString(R.string.help_context_webpage);
+        }
     }
 
     protected static void launchFallbackSupportUri(Context context) {

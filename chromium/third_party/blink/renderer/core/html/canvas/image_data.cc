@@ -118,7 +118,7 @@ bool ImageData::ValidateConstructorArguments(
             std::numeric_limits<uint32_t>::max(),
         "We use UINT32_MAX as the upper bound of the input size and expect "
         "that the result fits into an `unsigned`.");
-    if (!base::CheckedNumeric<uint32_t>(data->byteLengthAsSizeT())
+    if (!base::CheckedNumeric<uint32_t>(data->byteLength())
              .AssignIfValid(&data_length)) {
       return RaiseDOMExceptionAndReturnFalse(
           exception_state, DOMExceptionCode::kNotSupportedError,
@@ -195,7 +195,7 @@ NotShared<DOMArrayBufferView> ImageData::AllocateAndValidateDataArray(
   size_t expected_size;
   if (!data_array || (!base::CheckMul(length, data_array->TypeSize())
                            .AssignIfValid(&expected_size) &&
-                      expected_size != data_array->byteLengthAsSizeT())) {
+                      expected_size != data_array->byteLength())) {
     if (exception_state)
       exception_state->ThrowRangeError("Out of memory at ImageData creation");
     return NotShared<DOMArrayBufferView>();
@@ -336,8 +336,6 @@ ImageData* ImageData::Create(scoped_refptr<StaticBitmapImage> image,
   if (!image_data)
     return nullptr;
 
-  // TODO(crbug.com/1115317): Verify if the color type uint16 needs to be
-  // considered separately.
   ImageDataArray data = image_data->data();
   SkColorType color_type = image_info.colorType();
   bool create_f32_image_data = (color_type == kRGBA_1010102_SkColorType ||
@@ -346,9 +344,15 @@ ImageData* ImageData::Create(scoped_refptr<StaticBitmapImage> image,
                                 color_type == kRGBA_F32_SkColorType);
 
   if (!create_f32_image_data) {
-    image_info = image_info.makeColorType(kRGBA_8888_SkColorType);
-    paint_image.readPixels(image_info, data.GetAsUint8ClampedArray()->Data(),
-                           image_info.minRowBytes(), 0, 0);
+    if (color_type == kR16G16B16A16_unorm_SkColorType) {
+      image_info = image_info.makeColorType(kR16G16B16A16_unorm_SkColorType);
+      paint_image.readPixels(image_info, data.GetAsUint16Array()->Data(),
+                             image_info.minRowBytes(), 0, 0);
+    } else {
+      image_info = image_info.makeColorType(kRGBA_8888_SkColorType);
+      paint_image.readPixels(image_info, data.GetAsUint8ClampedArray()->Data(),
+                             image_info.minRowBytes(), 0, 0);
+    }
   } else {
     image_info = image_info.makeColorType(kRGBA_F32_SkColorType);
     paint_image.readPixels(image_info, data.GetAsFloat32Array()->Data(),
@@ -384,8 +388,7 @@ ImageData* ImageData::Create(NotShared<DOMUint8ClampedArray> data,
                                                &exception_state))
     return nullptr;
 
-  unsigned height =
-      base::checked_cast<unsigned>(data->lengthAsSizeT()) / (width * 4);
+  unsigned height = base::checked_cast<unsigned>(data->length()) / (width * 4);
   return MakeGarbageCollected<ImageData>(IntSize(width, height), data);
 }
 
@@ -408,7 +411,7 @@ ImageData* ImageData::Create(NotShared<DOMUint16Array> data,
                                                nullptr, width, 0, data, nullptr,
                                                &exception_state))
     return nullptr;
-  unsigned height = base::checked_cast<unsigned>(data->lengthAsSizeT()) /
+  unsigned height = base::checked_cast<unsigned>(data->length()) /
                     (width * ImageData::StorageFormatBytesPerPixel(
                                  kUint16ArrayStorageFormatName));
   ImageDataColorSettings* image_setting = ImageDataColorSettings::Create();
@@ -440,7 +443,7 @@ ImageData* ImageData::Create(NotShared<DOMFloat32Array> data,
                                                &exception_state))
     return nullptr;
 
-  unsigned height = base::checked_cast<unsigned>(data->lengthAsSizeT()) /
+  unsigned height = base::checked_cast<unsigned>(data->length()) /
                     (width * ImageData::StorageFormatBytesPerPixel(
                                  kFloat32ArrayStorageFormatName));
   ImageDataColorSettings* image_setting = ImageDataColorSettings::Create();
@@ -620,13 +623,11 @@ v8::Local<v8::Object> ImageData::AssociateWithWrapper(
       ScriptWrappable::AssociateWithWrapper(isolate, wrapper_type, wrapper);
 
   if (!wrapper.IsEmpty() && data_.IsUint8ClampedArray()) {
-    // Create a V8 Uint8ClampedArray object and set the "data" property
+    // Create a V8 object with |data_| and set the "data" property
     // of the ImageData object to the created v8 object, eliminating the
     // C++ callback when accessing the "data" property.
-    // TODO(crbug.com/1115317): |pixel_array| should be compatible with uint_8,
-    // float16 and float32.
-    v8::Local<v8::Value> pixel_array =
-        ToV8(data_.GetAsUint8ClampedArray().Get(), wrapper, isolate);
+
+    v8::Local<v8::Value> pixel_array = ToV8(data_, wrapper, isolate);
     bool defined_property;
     if (pixel_array.IsEmpty() ||
         !wrapper
@@ -724,7 +725,7 @@ ImageData::ConvertPixelsFromCanvasPixelFormatToImageDataStorageFormat(
       storage_format == kUint8ClampedArrayStorageFormat) {
     DOMArrayBuffer* array_buffer = DOMArrayBuffer::Create(content);
     return NotShared<DOMArrayBufferView>(DOMUint8ClampedArray::Create(
-        array_buffer, 0, array_buffer->ByteLengthAsSizeT()));
+        array_buffer, 0, array_buffer->ByteLength()));
   }
 
   skcms_PixelFormat src_format = skcms_PixelFormat_RGBA_8888;
@@ -791,6 +792,17 @@ CanvasColorParams ImageData::GetCanvasColorParams() {
           ? CanvasPixelFormat::kF16
           : CanvasColorParams::GetNativeCanvasPixelFormat(),
       kNonOpaque);
+}
+
+SkImageInfo ImageData::GetSkImageInfo() {
+  SkColorType color_type = kN32_SkColorType;
+  if (data_u16_) {
+    color_type = kR16G16B16A16_unorm_SkColorType;
+  } else if (data_f32_) {
+    color_type = kRGBA_F32_SkColorType;
+  }
+  return SkImageInfo::Make(width(), height(), color_type,
+                           kUnpremul_SkAlphaType);
 }
 
 bool ImageData::ImageDataInCanvasColorSettings(
@@ -928,7 +940,7 @@ ImageData::ImageData(const IntSize& size,
       data_.SetUint8ClampedArray(data_u8_);
       SECURITY_CHECK(
           (base::CheckedNumeric<size_t>(size.Width()) * size.Height() * 4)
-              .ValueOrDie() <= data_.GetAsUint8ClampedArray()->lengthAsSizeT());
+              .ValueOrDie() <= data_.GetAsUint8ClampedArray()->length());
       break;
 
     case kUint16ArrayStorageFormat:
@@ -938,7 +950,7 @@ ImageData::ImageData(const IntSize& size,
       data_.SetUint16Array(data_u16_);
       SECURITY_CHECK(
           (base::CheckedNumeric<size_t>(size.Width()) * size.Height() * 4)
-              .ValueOrDie() <= data_.GetAsUint16Array()->lengthAsSizeT());
+              .ValueOrDie() <= data_.GetAsUint16Array()->length());
       break;
 
     case kFloat32ArrayStorageFormat:
@@ -948,7 +960,7 @@ ImageData::ImageData(const IntSize& size,
       data_.SetFloat32Array(data_f32_);
       SECURITY_CHECK(
           (base::CheckedNumeric<size_t>(size.Width()) * size.Height() * 4)
-              .ValueOrDie() <= data_.GetAsFloat32Array()->lengthAsSizeT());
+              .ValueOrDie() <= data_.GetAsFloat32Array()->length());
       break;
 
     default:

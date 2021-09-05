@@ -33,8 +33,7 @@ class TestAppListClient : public AppListClient {
                         int suggestion_index,
                         bool launch_as_default) override {}
   void InvokeSearchResultAction(const std::string& result_id,
-                                int action_index,
-                                int event_flags) override;
+                                int action_index) override;
   void GetSearchResultContextMenuModel(
       const std::string& result_id,
       GetContextMenuModelCallback callback) override;
@@ -55,9 +54,6 @@ class TestAppListClient : public AppListClient {
   void OnFolderDeleted(int profile_id,
                        std::unique_ptr<AppListItemMetadata> item) override {}
   void OnPageBreakItemDeleted(int profile_id, const std::string& id) override {}
-  void GetNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override {}
   void OnSearchResultVisibilityChanged(const std::string& id,
                                        bool visibility) override {}
   void OnQuickSettingsChanged(

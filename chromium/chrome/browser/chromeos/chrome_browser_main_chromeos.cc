@@ -67,6 +67,7 @@
 #include "chrome/browser/chromeos/dbus/virtual_file_request_service_provider.h"
 #include "chrome/browser/chromeos/dbus/vm/vm_permission_service_provider.h"
 #include "chrome/browser/chromeos/dbus/vm_applications_service_provider.h"
+#include "chrome/browser/chromeos/device_name_store.h"
 #include "chrome/browser/chromeos/display/quirks_manager_delegate_impl.h"
 #include "chrome/browser/chromeos/events/event_rewriter_delegate_impl.h"
 #include "chrome/browser/chromeos/extensions/default_app_order.h"
@@ -95,6 +96,7 @@
 #include "chrome/browser/chromeos/network_change_manager_client.h"
 #include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/lock_to_single_user_manager.h"
@@ -144,6 +146,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/audio/audio_devices_pref_handler_impl.h"
 #include "chromeos/audio/cras_audio_handler.h"
+#include "chromeos/components/chromebox_for_meetings/buildflags/buildflags.h"  // PLATFORM_CFM
 #include "chromeos/components/drivefs/fake_drivefs_launcher_client.h"
 #include "chromeos/components/power/dark_resume_controller.h"
 #include "chromeos/components/sensors/sensor_hal_dispatcher.h"
@@ -168,7 +171,6 @@
 #include "chromeos/network/network_cert_loader.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/portal_detector/network_portal_detector_stub.h"
-#include "chromeos/services/cfm/public/buildflags/buildflags.h"  // PLATFORM_CFM
 #include "chromeos/services/cros_healthd/public/cpp/service_connection.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/install_attributes.h"
@@ -214,7 +216,7 @@
 #include "ui/events/event_utils.h"
 
 #if BUILDFLAG(PLATFORM_CFM)
-#include "chrome/browser/chromeos/cfm/cfm_chrome_services.h"
+#include "chrome/browser/chromeos/chromebox_for_meetings/cfm_chrome_services.h"
 #endif
 
 #if BUILDFLAG(ENABLE_RLZ)
@@ -565,7 +567,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopStart() {
   dbus_services_.reset(new internal::DBusServices(parameters()));
 
   // Need to be done after LoginState has been initialized in DBusServices().
-  memory::MemoryKillsMonitor::Initialize();
+  ::memory::MemoryKillsMonitor::Initialize();
 
   ChromeBrowserMainPartsLinux::PostMainMessageLoopStart();
 }
@@ -584,6 +586,9 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   // Initialize NSS database for system token.
   system_token_certdb_initializer_ =
       std::make_unique<SystemTokenCertDBInitializer>();
+
+  system_token_key_permissions_manager_ = platform_keys::
+      KeyPermissionsManagerImpl::CreateSystemTokenKeyPermissionsManager();
 
   mojo::PendingRemote<media_session::mojom::MediaControllerManager>
       media_controller_manager;
@@ -680,7 +685,8 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
 
   arc_data_snapshotd_manager_ =
       std::make_unique<arc::data_snapshotd::ArcDataSnapshotdManager>(
-          g_browser_process->local_state());
+          g_browser_process->local_state(),
+          base::BindOnce(chrome::AttemptUserExit));
   if (base::FeatureList::IsEnabled(::features::kWilcoDtc))
     wilco_dtc_supportd_manager_ = std::make_unique<WilcoDtcSupportdManager>();
 
@@ -751,6 +757,11 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
 
   arc_kiosk_app_manager_.reset(new ArcKioskAppManager());
   web_kiosk_app_manager_.reset(new WebKioskAppManager());
+
+  if (base::FeatureList::IsEnabled(features::kEnableHostnameSetting)) {
+    DeviceNameStore::GetInstance()->Initialize(
+        g_browser_process->local_state());
+  }
 
   // Make sure that wallpaper boot transition and other delays in OOBE
   // are disabled for tests and kiosk app launch by default.
@@ -1049,6 +1060,10 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
   if (system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation())
     event_rewriter_controller->SetKeyboardDrivenEventRewriterEnabled(true);
 
+  // Add MagnificationManager as a pretarget handler after ash:Shell is
+  // initialized.
+  ash::Shell::Get()->AddPreTargetHandler(MagnificationManager::Get());
+
   // In classic ash must occur after ash::Shell is initialized. Triggers a
   // fetch of the initial CrosSettings DeviceRebootOnShutdown policy.
   shutdown_policy_forwarder_ = std::make_unique<ShutdownPolicyForwarder>();
@@ -1073,7 +1088,10 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
 
   // Enable Chrome OS USB detection.
   cros_usb_detector_ = std::make_unique<CrosUsbDetector>();
-  cros_usb_detector_->ConnectToDeviceManager();
+  content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(&CrosUsbDetector::ConnectToDeviceManager,
+                                base::Unretained(cros_usb_detector_.get())));
 
   crostini_unsupported_action_notifier_ =
       std::make_unique<crostini::CrostiniUnsupportedActionNotifier>();
@@ -1115,6 +1133,8 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   assistant_client_.reset();
 
   assistant_state_client_.reset();
+
+  ash::Shell::Get()->RemovePreTargetHandler(MagnificationManager::Get());
 
   // Unregister CrosSettings observers before CrosSettings is destroyed.
   shutdown_policy_forwarder_.reset();

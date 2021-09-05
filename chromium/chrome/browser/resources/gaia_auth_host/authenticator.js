@@ -126,6 +126,9 @@ cr.define('cr.login', function() {
                      // Default is |true|.
     'flow',          // One of 'default', 'enterprise', or 'theftprotection'.
     'enterpriseDisplayDomain',     // Current domain name to be displayed.
+    'enterpriseDomainManager',     // Manager of the current domain. Can be
+                                   // either a domain name (foo.com) or an email
+                                   // address (admin@foo.com).
     'enterpriseEnrollmentDomain',  // Domain in which hosting device is (or
                                    // should be) enrolled.
     'emailDomain',                 // Value used to prefill domain for email.
@@ -636,6 +639,9 @@ cr.define('cr.login', function() {
       }
       if (data.enterpriseDisplayDomain) {
         url = appendParam(url, 'manageddomain', data.enterpriseDisplayDomain);
+      }
+      if (data.enterpriseDomainManager) {
+        url = appendParam(url, 'devicemanager', data.enterpriseDomainManager);
       }
       if (data.clientVersion) {
         url = appendParam(url, 'client_version', data.clientVersion);
@@ -1232,13 +1238,6 @@ cr.define('cr.login', function() {
           this.webview_.contentWindow.postMessage(msg, currentUrl);
         } else {
           console.error('Authenticator: contentWindow is null.');
-        }
-
-        if (this.authMode == AuthMode.DEFAULT) {
-          chrome.send('metricsHandler:recordBooleanHistogram', [
-            'ChromeOS.GAIA.AuthenticatorContentWindowNull',
-            !this.webview_.contentWindow
-          ]);
         }
 
         this.fireReadyEvent_();

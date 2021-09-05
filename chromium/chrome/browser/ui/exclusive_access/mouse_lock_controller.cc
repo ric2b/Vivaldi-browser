@@ -29,7 +29,7 @@ const char kMouseLockBubbleReshowsHistogramName[] =
 // The amount of time to disallow repeated pointer lock calls after the user
 // successfully escapes from one lock request.
 constexpr base::TimeDelta kEffectiveUserEscapeDuration =
-    base::TimeDelta::FromMilliseconds(2000);
+    base::TimeDelta::FromMilliseconds(1250);
 
 }  // namespace
 
@@ -155,19 +155,10 @@ void MouseLockController::UnlockMouse() {
     return;
 
   content::RenderWidgetHostView* mouse_lock_view = nullptr;
-  FullscreenController* fullscreen_controller =
-      exclusive_access_manager()->fullscreen_controller();
-  if ((fullscreen_controller->exclusive_access_tab() == tab) &&
-      fullscreen_controller->IsPrivilegedFullscreenForTab()) {
-    mouse_lock_view =
-        exclusive_access_tab()->GetFullscreenRenderWidgetHostView();
-  }
-
-  if (!mouse_lock_view) {
-    RenderViewHost* const rvh = exclusive_access_tab()->GetRenderViewHost();
-    if (rvh)
-      mouse_lock_view = rvh->GetWidget()->GetView();
-  }
+  RenderViewHost* const rvh =
+      exclusive_access_tab()->GetMainFrame()->GetRenderViewHost();
+  if (rvh)
+    mouse_lock_view = rvh->GetWidget()->GetView();
 
   if (mouse_lock_view)
     mouse_lock_view->UnlockMouse();

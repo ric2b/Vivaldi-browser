@@ -84,7 +84,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kDisableFineGrainedTimeZoneDetection[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kDisableGaiaServices[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const char kDisableHIDDetectionOnOOBE[];
+extern const char kDisableHIDDetectionOnOOBEForTesting[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kDisableLoginAnimations[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -165,8 +165,6 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kGuestSession[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kGuestWallpaperLarge[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kGuestWallpaperSmall[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHasChromeOSKeyboard[];
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const char kHideAndroidFilesInFilesApp[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHomedir[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kIgnoreArcVmDevConf[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -208,8 +206,6 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kSafeMode[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kSamlPasswordChangeUrl[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShelfHoverPreviews[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShelfHotseat[];
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const char kShowAndroidFilesInFilesApp[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowLoginDevOverlay[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowOobeDevOverlay[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -248,10 +244,6 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsCellularFirstDevice();
 // Returns true if client certificate authentication for the sign-in frame on
 // the Chrome OS sign-in screen is enabled.
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsSigninFrameClientCertsEnabled();
-
-// Returns true if we should show the modular shelf with the hotseat UI and
-// a smaller shelf in clamshell mode.
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldShowShelfHotseat();
 
 // Returns true if we should show window previews when hovering over an app
 // on the shelf.

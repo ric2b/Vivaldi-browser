@@ -10,12 +10,13 @@
 
 #include "base/base_switches.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/file_version_info.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -149,15 +150,6 @@ void RecordCTHistograms(const net::SSLInfo& ssl_info) {
       "Net.CertificateTransparency.RequestComplianceStatus",
       ssl_info.ct_policy_compliance,
       net::ct::CTPolicyCompliance::CT_POLICY_COUNT);
-  // Record the CT compliance of each request which was required to be CT
-  // compliant. This gives a picture of the sites that are supposed to be
-  // compliant and how well they do at actually being compliant.
-  if (ssl_info.ct_policy_compliance_required) {
-    UMA_HISTOGRAM_ENUMERATION(
-        "Net.CertificateTransparency.CTRequiredRequestComplianceStatus",
-        ssl_info.ct_policy_compliance,
-        net::ct::CTPolicyCompliance::CT_POLICY_COUNT);
-  }
 }
 
 template <typename CookieWithMetadata>
@@ -210,6 +202,15 @@ void MarkSameSiteCompatPairs(
       }
     }
   }
+}
+
+net::CookieOptions CreateCookieOptions(
+    net::CookieOptions::SameSiteCookieContext cookie_context) {
+  net::CookieOptions options;
+  options.set_return_excluded_cookies();
+  options.set_include_httponly();
+  options.set_same_site_cookie_context(cookie_context);
+  return options;
 }
 
 }  // namespace
@@ -301,11 +302,17 @@ void URLRequestHttpJob::Start() {
 
   request_info_.network_isolation_key =
       request_->isolation_info().network_isolation_key();
+  request_info_.possibly_top_frame_origin =
+      request_->isolation_info().top_frame_origin();
+  request_info_.is_subframe_document_resource =
+      request_->isolation_info().request_type() ==
+      net::IsolationInfo::RequestType::kSubFrame;
   request_info_.load_flags = request_->load_flags();
   request_info_.disable_secure_dns = request_->disable_secure_dns();
   request_info_.traffic_annotation =
       net::MutableNetworkTrafficAnnotationTag(request_->traffic_annotation());
   request_info_.socket_tag = request_->socket_tag();
+  request_info_.idempotency = request_->GetIdempotency();
 #if BUILDFLAG(ENABLE_REPORTING)
   request_info_.reporting_upload_depth = request_->reporting_upload_depth();
 #endif
@@ -568,9 +575,6 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
   // is being overridden by NetworkDelegate and will eventually block them, as
   // blocked cookies still need to be logged in that case.
   if (cookie_store && request_->allow_credentials()) {
-    CookieOptions options;
-    options.set_return_excluded_cookies();
-    options.set_include_httponly();
     bool force_ignore_site_for_cookies =
         request_->force_ignore_site_for_cookies();
     if (cookie_store->cookie_access_delegate() &&
@@ -579,10 +583,13 @@ void URLRequestHttpJob::AddCookieHeaderAndStart() {
                                                request_->site_for_cookies())) {
       force_ignore_site_for_cookies = true;
     }
-    options.set_same_site_cookie_context(
+    CookieOptions::SameSiteCookieContext same_site_context =
         net::cookie_util::ComputeSameSiteContextForRequest(
             request_->method(), request_->url(), request_->site_for_cookies(),
-            request_->initiator(), force_ignore_site_for_cookies));
+            request_->initiator(), force_ignore_site_for_cookies);
+
+    CookieOptions options = CreateCookieOptions(same_site_context);
+
     cookie_store->GetCookieListWithOptionsAsync(
         request_->url(), options,
         base::BindOnce(&URLRequestHttpJob::SetCookieHeaderAndStart,
@@ -713,8 +720,6 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
   if (GetResponseHeaders()->GetDateValue(&response_date))
     server_time = base::make_optional(response_date);
 
-  CookieOptions options;
-  options.set_include_httponly();
   bool force_ignore_site_for_cookies =
       request_->force_ignore_site_for_cookies();
   if (cookie_store->cookie_access_delegate() &&
@@ -722,12 +727,12 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
           request_->url(), request_->site_for_cookies())) {
     force_ignore_site_for_cookies = true;
   }
-  options.set_same_site_cookie_context(
+  CookieOptions::SameSiteCookieContext same_site_context =
       net::cookie_util::ComputeSameSiteContextForResponse(
           request_->url(), request_->site_for_cookies(), request_->initiator(),
-          force_ignore_site_for_cookies));
+          force_ignore_site_for_cookies);
 
-  options.set_return_excluded_cookies();
+  CookieOptions options = CreateCookieOptions(same_site_context);
 
   // Set all cookies, without waiting for them to be set. Any subsequent read
   // will see the combined result of all cookie operation.

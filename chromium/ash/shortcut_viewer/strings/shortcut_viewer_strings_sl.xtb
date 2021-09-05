@@ -23,7 +23,7 @@
 <translation id="169515659049020177">Shift</translation>
 <translation id="1732295673545939435"><ph name="MODIFIER1" /> <ph name="SEPARATOR1" /> <ph name="MODIFIER2" /> <ph name="SEPARATOR2" /> <ph name="KEY" /></translation>
 <translation id="1733525068429116555">Dodajanje www. in .com vnosu v naslovni vrstici, nato pa odpiranje strani</translation>
-<translation id="1872219238824176091">Odstranitev trenutne delovne površine</translation>
+<translation id="1872219238824176091">Odstranitev trenutnega namizja</translation>
 <translation id="1920446759863417809"><ph name="SHIFT1" /> <ph name="SEPARATOR1" /> <ph name="ALT" /> <ph name="SEPARATOR2" /> <ph name="L" />, nato <ph name="SHIFT2" /> <ph name="SEPARATOR3" /> <ph name="TAB" /> ali <ph name="LEFT" /></translation>
 <translation id="1996162290124031907">Premik na naslednji zavihek</translation>
 <translation id="2010818616644390445">Premik na zadnji zavihek v oknu</translation>
@@ -186,6 +186,7 @@
 <translation id="8234414138295101081">Sukanje zaslona za 90 stopinj</translation>
 <translation id="8241665785394195545">zaklepaj</translation>
 <translation id="8264941229485248811">Prikaz ali skrivanje nadzornika orodij za razvijalce</translation>
+<translation id="8322502972606429618">Prikaz zadnjih nekaj stvari, kopiranih v odložišč.</translation>
 <translation id="836869401750819675">Odpiranje strani s prenosi</translation>
 <translation id="8388247778047144397">Povlecite povezavo na prazno območje na traku z zavihki</translation>
 <translation id="8389638407792712197">Odpiranje novega okna</translation>

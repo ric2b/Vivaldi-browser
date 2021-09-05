@@ -231,10 +231,10 @@ bool IsNodeFullyGrown(NGBlockNode node,
 
 bool FinishFragmentation(NGBlockNode node,
                          const NGConstraintSpace& space,
-                         const NGBlockBreakToken* previous_break_token,
                          LayoutUnit trailing_border_padding,
                          LayoutUnit space_left,
                          NGBoxFragmentBuilder* builder) {
+  const NGBlockBreakToken* previous_break_token = builder->PreviousBreakToken();
   LayoutUnit previously_consumed_block_size;
   if (previous_break_token && !previous_break_token->IsBreakBefore())
     previously_consumed_block_size = previous_break_token->ConsumedBlockSize();
@@ -329,18 +329,8 @@ bool FinishFragmentation(NGBlockNode node,
     sides.block_end = false;
   builder->SetSidesToInclude(sides);
 
-  LayoutUnit consumed_here = final_block_size;
-  if (builder->DidBreakSelf() || builder->HasChildBreakInside()) {
-    // If this node is to be resumed in the next fragmentainer, consumed
-    // block-size always includes the entire remainder of the fragmentainer. The
-    // frament itself will only do that unless we've reached the end of the node
-    // (and we are breaking because of overflow). We include the entire
-    // fragmentainer in consumed block-size in order to write offsets correctly
-    // back to legacy layout, which would otherwise become incorrect for
-    // overflowing content.
-    consumed_here = std::max(consumed_here, space_left);
-  }
-  builder->SetConsumedBlockSize(previously_consumed_block_size + consumed_here);
+  builder->SetConsumedBlockSize(previously_consumed_block_size +
+                                final_block_size);
   builder->SetFragmentBlockSize(final_block_size);
 
   if (builder->FoundColumnSpanner())
@@ -403,6 +393,18 @@ bool FinishFragmentation(NGBlockNode node,
       if (!builder->HasInflowChildBreakInside())
         builder->SetBreakAppeal(kBreakAppealPerfect);
     }
+
+    if (builder->IsAtBlockEnd()) {
+      // This node is to be resumed in the next fragmentainer. Make sure that
+      // consumed block-size includes the entire remainder of the fragmentainer.
+      // The fragment will normally take up all that space, but not if we've
+      // reached the end of the node (and we are breaking because of
+      // overflow). We include the entire fragmentainer in consumed block-size
+      // in order to write offsets correctly back to legacy layout.
+      builder->SetConsumedBlockSize(previously_consumed_block_size +
+                                    std::max(final_block_size, space_left));
+    }
+
     return true;
   }
 
@@ -537,7 +539,7 @@ void PropagateSpaceShortage(const NGConstraintSpace& space,
     // fragmentainer. If layout aborted, though, we can't propagate anything.
     if (layout_result.Status() != NGLayoutResult::kSuccess)
       return;
-    NGFragment fragment(space.GetWritingMode(),
+    NGFragment fragment(space.GetWritingDirection(),
                         layout_result.PhysicalFragment());
     space_shortage = fragmentainer_block_offset + fragment.BlockSize() -
                      space.FragmentainerBlockSize();
@@ -569,7 +571,7 @@ bool MovePastBreakpoint(const NGConstraintSpace& space,
   }
 
   const auto& physical_fragment = layout_result.PhysicalFragment();
-  NGFragment fragment(space.GetWritingMode(), physical_fragment);
+  NGFragment fragment(space.GetWritingDirection(), physical_fragment);
 
   if (!space.HasKnownFragmentainerBlockSize()) {
     if (space.IsInitialColumnBalancingPass() && builder) {
@@ -588,6 +590,9 @@ bool MovePastBreakpoint(const NGConstraintSpace& space,
     return true;
   }
 
+  const auto* break_token =
+      DynamicTo<NGBlockBreakToken>(physical_fragment.BreakToken());
+
   LayoutUnit space_left =
       space.FragmentainerBlockSize() - fragmentainer_block_offset;
 
@@ -598,13 +603,24 @@ bool MovePastBreakpoint(const NGConstraintSpace& space,
 
   // If the child starts past the end of the fragmentainer (probably due to a
   // block-start margin), we must break before it.
-  bool must_break_before = space_left < LayoutUnit();
+  bool must_break_before = false;
+  if (space_left < LayoutUnit()) {
+    must_break_before = true;
+  } else if (space_left == LayoutUnit()) {
+    // If the child starts exactly at the end, we'll allow the child here if the
+    // fragment contains the block-end of the child, or if it's a column
+    // spanner. Otherwise we have to break before it. We don't want empty
+    // fragments with nothing useful inside, if it's to be resumed in the next
+    // fragmentainer.
+    must_break_before = !layout_result.ColumnSpanner() && break_token &&
+                        !break_token->IsAtBlockEnd();
+  }
   if (must_break_before) {
     DCHECK(!refuse_break_before);
     return false;
   }
 
-  if (IsA<NGBlockBreakToken>(physical_fragment.BreakToken())) {
+  if (break_token) {
     // The block child broke inside. We now need to decide whether to keep that
     // break, or if it would be better to break before it.
     NGBreakAppeal appeal_inside = CalculateBreakAppealInside(
@@ -721,10 +737,10 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
     const NGConstraintSpace& parent_space,
     LogicalSize column_size,
     LogicalSize percentage_resolution_size,
-    bool is_first_fragmentainer,
+    bool allow_discard_start_margin,
     bool balance_columns) {
   NGConstraintSpaceBuilder space_builder(
-      parent_space, parent_space.GetWritingMode(), /* is_new_fc */ true);
+      parent_space, parent_space.GetWritingDirection(), /* is_new_fc */ true);
   space_builder.SetAvailableSize(column_size);
   space_builder.SetPercentageResolutionSize(percentage_resolution_size);
 
@@ -740,11 +756,12 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
   space_builder.SetIsInColumnBfc();
   if (balance_columns)
     space_builder.SetIsInsideBalancedColumns();
-  if (!is_first_fragmentainer) {
-    // Margins at fragmentainer boundaries should be eaten and truncated to
-    // zero. Note that this doesn't apply to margins at forced breaks, but we'll
-    // deal with those when we get to them. Set up a margin strut that eats all
-    // leading adjacent margins.
+  if (allow_discard_start_margin) {
+    // Unless it's the first column in the multicol container, or the first
+    // column after a spanner, margins at fragmentainer boundaries should be
+    // eaten and truncated to zero. Note that this doesn't apply to margins at
+    // forced breaks, but we'll deal with those when we get to them. Set up a
+    // margin strut that eats all leading adjacent margins.
     space_builder.SetDiscardingMarginStrut();
   }
 

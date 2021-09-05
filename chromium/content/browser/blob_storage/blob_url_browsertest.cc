@@ -4,7 +4,6 @@
 
 #include "base/macros.h"
 #include "base/strings/pattern.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/content_switches.h"
@@ -118,7 +117,7 @@ IN_PROC_BROWSER_TEST_F(BlobUrlBrowserTest, LinkToSameOriginBlobWithAuthority) {
       "link.innerText = 'Click Me!';"
       "link.href = 'blob:http://spoof.com@' + "
       "    URL.createObjectURL(new Blob(['potato'])).split('://')[1];"
-      "link.target = '_blank';"
+      "link.rel = 'opener'; link.target = '_blank';"
       "link.click()"));
 
   // The link should create a new tab.

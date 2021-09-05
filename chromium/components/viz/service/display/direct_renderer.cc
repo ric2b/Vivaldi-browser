@@ -33,45 +33,9 @@
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
+#include "ui/gfx/transform_util.h"
 
 namespace {
-
-static gfx::Transform OrthoProjectionMatrix(float left,
-                                            float right,
-                                            float bottom,
-                                            float top) {
-  // Use the standard formula to map the clipping frustum to the cube from
-  // [-1, -1, -1] to [1, 1, 1].
-  float delta_x = right - left;
-  float delta_y = top - bottom;
-  gfx::Transform proj;
-  if (!delta_x || !delta_y)
-    return proj;
-  proj.matrix().set(0, 0, 2.0f / delta_x);
-  proj.matrix().set(0, 3, -(right + left) / delta_x);
-  proj.matrix().set(1, 1, 2.0f / delta_y);
-  proj.matrix().set(1, 3, -(top + bottom) / delta_y);
-
-  // Z component of vertices is always set to zero as we don't use the depth
-  // buffer while drawing.
-  proj.matrix().set(2, 2, 0);
-
-  return proj;
-}
-
-static gfx::Transform window_matrix(int x, int y, int width, int height) {
-  gfx::Transform canvas;
-
-  // Map to window position and scale up to pixel coordinates.
-  canvas.Translate3d(x, y, 0);
-  canvas.Scale3d(width, height, 0);
-
-  // Map from ([-1, -1] to [1, 1]) -> ([0, 0] to [1, 1])
-  canvas.Translate3d(0.5, 0.5, 0.5);
-  canvas.Scale3d(0.5, 0.5, 0.5);
-
-  return canvas;
-}
 
 // Returns the bounding box that contains the specified rounded corner.
 gfx::RectF ComputeRoundedCornerBoundingBox(const gfx::RRectF& rrect,
@@ -169,10 +133,10 @@ void DirectRenderer::InitializeViewport(DrawingFrame* frame,
   DCHECK_LE(viewport_rect.bottom(), surface_size.height());
   bool flip_y = FlippedFramebuffer();
   if (flip_y) {
-    frame->projection_matrix = OrthoProjectionMatrix(
+    frame->projection_matrix = gfx::OrthoProjectionMatrix(
         draw_rect.x(), draw_rect.right(), draw_rect.bottom(), draw_rect.y());
   } else {
-    frame->projection_matrix = OrthoProjectionMatrix(
+    frame->projection_matrix = gfx::OrthoProjectionMatrix(
         draw_rect.x(), draw_rect.right(), draw_rect.y(), draw_rect.bottom());
   }
 
@@ -180,8 +144,8 @@ void DirectRenderer::InitializeViewport(DrawingFrame* frame,
   if (flip_y)
     window_rect.set_y(surface_size.height() - viewport_rect.bottom());
   frame->window_matrix =
-      window_matrix(window_rect.x(), window_rect.y(), window_rect.width(),
-                    window_rect.height());
+      gfx::WindowMatrix(window_rect.x(), window_rect.y(), window_rect.width(),
+                        window_rect.height());
   current_draw_rect_ = draw_rect;
   current_viewport_rect_ = viewport_rect;
   current_surface_size_ = surface_size;
@@ -244,7 +208,8 @@ void DirectRenderer::DrawFrame(
     AggregatedRenderPassList* render_passes_in_draw_order,
     float device_scale_factor,
     const gfx::Size& device_viewport_size,
-    const gfx::DisplayColorSpaces& display_color_spaces) {
+    const gfx::DisplayColorSpaces& display_color_spaces,
+    SurfaceDamageRectList* surface_damage_rect_list) {
   DCHECK(visible_);
   TRACE_EVENT0("viz,benchmark", "DirectRenderer::DrawFrame");
   UMA_HISTOGRAM_COUNTS_1M(
@@ -284,6 +249,21 @@ void DirectRenderer::DrawFrame(
   if (overlay_processor_) {
     current_frame()->root_damage_rect.Union(
         overlay_processor_->GetAndResetOverlayDamage());
+  }
+  if (DelegatedInkPointRendererBase* ink_renderer =
+          GetDelegatedInkPointRenderer()) {
+    // The path must be finalized before GetDamageRect() can return an accurate
+    // rect that will allow the old trail to be removed and the new trail to
+    // be drawn at the same time.
+    ink_renderer->FinalizePathForDraw();
+    gfx::Rect delegated_ink_damage_rect = ink_renderer->GetDamageRect();
+
+    // The viewport could have changed size since the presentation area was
+    // created and propagated, such as if is window was resized. Intersect the
+    // viewport here to ensure the damage rect doesn't extend beyond the current
+    // viewport.
+    delegated_ink_damage_rect.Intersect(gfx::Rect(device_viewport_size));
+    current_frame()->root_damage_rect.Union(delegated_ink_damage_rect);
   }
   current_frame()->root_damage_rect.Intersect(gfx::Rect(device_viewport_size));
   current_frame()->device_viewport_size = device_viewport_size;
@@ -346,17 +326,18 @@ void DirectRenderer::DrawFrame(
     overlay_processor_->ProcessForOverlays(
         resource_provider_, render_passes_in_draw_order,
         output_surface_->color_matrix(), render_pass_filters_,
-        render_pass_backdrop_filters_, primary_plane,
+        render_pass_backdrop_filters_, surface_damage_rect_list, primary_plane,
         &current_frame()->overlay_list, &current_frame()->root_damage_rect,
         &current_frame()->root_content_bounds);
 
     // If we promote any quad to an underlay then the main plane must support
     // alpha.
-    // TODO(ccameron): We should update
-    // |root_render_pass->has_transparent_background|, |frame_color_space|, and
+    // TODO(ccameron): We should update |frame_color_space|, and
     // |frame_buffer_format| based on the change in |frame_has_alpha|.
-    if (current_frame()->output_surface_plane)
+    if (current_frame()->output_surface_plane) {
       frame_has_alpha |= current_frame()->output_surface_plane->enable_blending;
+      root_render_pass->has_transparent_background = frame_has_alpha;
+    }
 
     overlay_processor_->AdjustOutputSurfaceOverlay(
         &(current_frame()->output_surface_plane));
@@ -717,9 +698,6 @@ void DirectRenderer::DrawRenderPass(const AggregatedRenderPass* render_pass) {
 
     DoDrawQuad(&quad, nullptr);
   }
-  if (is_root_render_pass && delegated_ink_point_renderer_)
-    delegated_ink_point_renderer_->DrawDelegatedInkTrail();
-
   FlushPolygons(&poly_list, render_pass_scissor_in_draw_space,
                 render_pass_requires_scissor);
   FinishDrawingQuadList();
@@ -906,11 +884,14 @@ bool DirectRenderer::HasAllocatedResourcesForTesting(
 
 bool DirectRenderer::ShouldApplyRoundedCorner(const DrawQuad* quad) const {
   const SharedQuadState* sqs = quad->shared_quad_state;
-  const gfx::RRectF& rounded_corner_bounds = sqs->rounded_corner_bounds;
+  const gfx::MaskFilterInfo& mask_filter_info = sqs->mask_filter_info;
 
   // There is no rounded corner set.
-  if (rounded_corner_bounds.IsEmpty())
+  if (!mask_filter_info.HasRoundedCorners())
     return false;
+
+  const gfx::RRectF& rounded_corner_bounds =
+      mask_filter_info.rounded_corner_bounds();
 
   const gfx::RectF target_quad = cc::MathUtil::MapClippedRect(
       sqs->quad_to_target_transform, gfx::RectF(quad->visible_rect));
@@ -948,18 +929,19 @@ bool DirectRenderer::CreateDelegatedInkPointRenderer() {
 }
 
 DelegatedInkPointRendererBase* DirectRenderer::GetDelegatedInkPointRenderer() {
-  if (!delegated_ink_point_renderer_ && !CreateDelegatedInkPointRenderer())
-    return nullptr;
-
-  return delegated_ink_point_renderer_.get();
+  return nullptr;
 }
 
 void DirectRenderer::SetDelegatedInkMetadata(
     std::unique_ptr<DelegatedInkMetadata> metadata) {
-  if (!delegated_ink_point_renderer_ && !CreateDelegatedInkPointRenderer())
+  if (!GetDelegatedInkPointRenderer() && !CreateDelegatedInkPointRenderer())
     return;
 
-  delegated_ink_point_renderer_->SetDelegatedInkMetadata(std::move(metadata));
+  GetDelegatedInkPointRenderer()->SetDelegatedInkMetadata(std::move(metadata));
+}
+
+void DirectRenderer::DrawDelegatedInkTrail() {
+  NOTREACHED();
 }
 
 bool DirectRenderer::CompositeTimeTracingEnabled() {
@@ -967,5 +949,12 @@ bool DirectRenderer::CompositeTimeTracingEnabled() {
 }
 
 void DirectRenderer::AddCompositeTimeTraces(base::TimeTicks ready_timestamp) {}
+
+gfx::Rect DirectRenderer::GetDelegatedInkTrailDamageRect() {
+  if (!GetDelegatedInkPointRenderer())
+    return gfx::Rect();
+
+  return GetDelegatedInkPointRenderer()->GetDamageRect();
+}
 
 }  // namespace viz

@@ -8,9 +8,20 @@
 
 @implementation NotificationBuilderBase
 
-- (instancetype)init {
+- (instancetype)initWithCloseLabel:(NSString*)closeLabel
+                      optionsLabel:(NSString*)optionsLabel
+                     settingsLabel:(NSString*)settingsLabel {
   if ((self = [super init])) {
     _notificationData.reset([[NSMutableDictionary alloc] init]);
+    [_notificationData
+        setObject:closeLabel
+           forKey:notification_constants::kNotificationCloseButtonTag];
+    [_notificationData
+        setObject:optionsLabel
+           forKey:notification_constants::kNotificationOptionsButtonTag];
+    [_notificationData
+        setObject:settingsLabel
+           forKey:notification_constants::kNotificationSettingsButtonTag];
   }
   return self;
 }
@@ -41,18 +52,6 @@
     [_notificationData
         setObject:contextMessage
            forKey:notification_constants::kNotificationInformativeText];
-  }
-}
-
-- (void)setIcon:(NSImage*)icon {
-  if (icon) {
-    if ([icon conformsToProtocol:@protocol(NSSecureCoding)]) {
-      [_notificationData setObject:icon
-                            forKey:notification_constants::kNotificationImage];
-    } else {  // NSImage only conforms to NSSecureCoding from 10.10 onwards.
-      [_notificationData setObject:[icon TIFFRepresentation]
-                            forKey:notification_constants::kNotificationImage];
-    }
   }
 }
 

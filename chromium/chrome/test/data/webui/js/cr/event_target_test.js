@@ -2,10 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* @const */ var EventTarget;
+// clang-format off
+// #import {assertEquals, assertTrue, assertFalse} from '../../../chai_assert.js';
+// #import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.m.js';
+// clang-format on
+
+/* #ignore */ /* @const */ var EventTarget;
 
 function setUp() {
-  EventTarget = cr.EventTarget;
+  /* #ignore */ EventTarget = cr.EventTarget;
 }
 
 function testFunctionListener() {
@@ -39,18 +44,18 @@ function testFunctionListener() {
 
 function testHandleEvent() {
   var fi = 0;
-  var f = {
+  var f = /** @type {!EventListener} */ ({
     handleEvent: function(e) {
       fi++;
     }
-  };
+  });
 
   var gi = 0;
-  var g = {
+  var g = /** @type {!EventListener} */ ({
     handleEvent: function(e) {
       gi++;
     }
-  };
+  });
 
   var et = new EventTarget;
   et.addEventListener('f', f);
@@ -95,3 +100,10 @@ function testPreventDefault() {
   assertEquals(2, j);
   assertEquals(1, i);
 }
+
+Object.assign(window, {
+  setUp,
+  testFunctionListener,
+  testHandleEvent,
+  testPreventDefault,
+});

@@ -31,8 +31,10 @@
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-forward.h"
+#include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
+#include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "url/gurl.h"
 
@@ -41,7 +43,9 @@ class WaitableEvent;
 }
 
 namespace blink {
+class ResourceLoadInfoNotifierWrapper;
 class ThrottlingURLLoader;
+struct SyncLoadResponse;
 }
 
 namespace net {
@@ -59,7 +63,6 @@ class URLLoaderFactory;
 namespace content {
 class RequestPeer;
 class ResourceDispatcherDelegate;
-struct SyncLoadResponse;
 class URLLoaderClientImpl;
 
 // This class serves as a communication interface to the ResourceDispatcherHost
@@ -98,12 +101,14 @@ class CONTENT_EXPORT ResourceDispatcher {
       int routing_id,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       uint32_t loader_options,
-      SyncLoadResponse* response,
+      blink::SyncLoadResponse* response,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
       base::TimeDelta timeout,
       mojo::PendingRemote<blink::mojom::BlobRegistry> download_to_blob_registry,
-      std::unique_ptr<RequestPeer> peer);
+      std::unique_ptr<RequestPeer> peer,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper);
 
   // Call this method to initiate the request. If this method succeeds, then
   // the peer's methods will be called asynchronously to report various events.
@@ -122,7 +127,9 @@ class CONTENT_EXPORT ResourceDispatcher {
       uint32_t loader_options,
       std::unique_ptr<RequestPeer> peer,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles);
+      std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper);
 
   // Removes a request from the |pending_requests_| list, returning true if the
   // request was found and removed.
@@ -136,7 +143,8 @@ class CONTENT_EXPORT ResourceDispatcher {
                       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // Toggles the is_deferred attribute for the specified request.
-  virtual void SetDefersLoading(int request_id, bool value);
+  virtual void SetDefersLoading(int request_id,
+                                blink::WebURLLoader::DeferType value);
 
   // Indicates the priority of the specified request changed.
   void DidChangePriority(int request_id,
@@ -154,6 +162,9 @@ class CONTENT_EXPORT ResourceDispatcher {
   }
 
   void OnTransferSizeUpdated(int request_id, int32_t transfer_size_diff);
+
+  void EvictFromBackForwardCache(blink::mojom::RendererEvictionReason reason,
+                                 int request_id);
 
   // Sets the CORS exempt header list for sanity checking.
   void SetCorsExemptHeaderList(const std::vector<std::string>& list);
@@ -180,14 +191,17 @@ class CONTENT_EXPORT ResourceDispatcher {
     PendingRequestInfo(std::unique_ptr<RequestPeer> peer,
                        network::mojom::RequestDestination request_destination,
                        int render_frame_id,
-                       const GURL& request_url);
+                       const GURL& request_url,
+                       std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+                           resource_load_info_notifier_wrapper);
 
     ~PendingRequestInfo();
 
     std::unique_ptr<RequestPeer> peer;
     network::mojom::RequestDestination request_destination;
     int render_frame_id;
-    bool is_deferred = false;
+    blink::WebURLLoader::DeferType is_deferred =
+        blink::WebURLLoader::DeferType::kNotDeferred;
     // Original requested url.
     GURL url;
     // The url, method and referrer of the latest response even in case of
@@ -207,15 +221,16 @@ class CONTENT_EXPORT ResourceDispatcher {
     blink::PreviewsState previews_state =
         blink::PreviewsTypes::PREVIEWS_UNSPECIFIED;
 
-    // These stats will be sent to the browser process.
-    blink::mojom::ResourceLoadInfoPtr resource_load_info;
-
     // For mojo loading.
     std::unique_ptr<blink::ThrottlingURLLoader> url_loader;
     std::unique_ptr<URLLoaderClientImpl> url_loader_client;
 
     // The Client Hints headers that need to be removed from a redirect.
     std::vector<std::string> removed_headers;
+
+    // Used to notify the loading stats.
+    std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+        resource_load_info_notifier_wrapper;
   };
   using PendingRequestMap = std::map<int, std::unique_ptr<PendingRequestInfo>>;
 

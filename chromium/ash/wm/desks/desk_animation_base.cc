@@ -27,13 +27,19 @@ DeskAnimationBase::DeskAnimationBase(DesksController* controller,
   DCHECK_GE(ending_desk_index_, 0);
 }
 
-DeskAnimationBase::~DeskAnimationBase() = default;
+DeskAnimationBase::~DeskAnimationBase() {
+  for (auto& observer : controller_->observers_)
+    observer.OnDeskSwitchAnimationFinished();
+}
 
 void DeskAnimationBase::Launch() {
   for (auto& observer : controller_->observers_)
     observer.OnDeskSwitchAnimationLaunching();
 
-  throughput_tracker_.Start(GetReportCallback());
+  // The throughput tracker measures the animation when the user lifts their
+  // fingers off the trackpad, which is done in EndSwipeAnimation.
+  if (!is_continuous_gesture_animation_)
+    throughput_tracker_.Start(GetReportCallback());
 
   // This step makes sure that the containers of the target desk are shown at
   // the beginning of the animation (but not actually visible to the user yet,
@@ -125,11 +131,21 @@ void DeskAnimationBase::OnDeskSwitchAnimationFinished() {
 
   throughput_tracker_.Stop();
 
-  for (auto& observer : controller_->observers_)
-    observer.OnDeskSwitchAnimationFinished();
+  if (skip_notify_controller_on_animation_finished_for_testing_)
+    return;
 
   controller_->OnAnimationFinished(this);
   // `this` is now deleted.
+}
+
+void DeskAnimationBase::OnVisibleDeskChanged() {
+  ++visible_desk_changes_;
+}
+
+RootWindowDeskSwitchAnimator*
+DeskAnimationBase::GetDeskSwitchAnimatorAtIndexForTesting(size_t index) const {
+  DCHECK_LT(index, desk_switch_animators_.size());
+  return desk_switch_animators_[index].get();
 }
 
 }  // namespace ash

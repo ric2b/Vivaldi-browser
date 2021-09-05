@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Site <ph name="SITE_NAME" /> toegevoegd</translation>
 <translation id="1383876407941801731">Zoeken</translation>
 <translation id="1384959399684842514">Download onderbroken</translation>
+<translation id="1415402041810619267">URL afgekapt</translation>
 <translation id="1431402976894535801">Voorkomen dat sites weten wanneer je aanwezig bent</translation>
 <translation id="1446450296470737166">Volledig beheer van MIDI-apparaten toestaan</translation>
 <translation id="1509960214886564027">Functies op veel sites werken mogelijk niet meer</translation>
 <translation id="1620510694547887537">Camera</translation>
-<translation id="1647391597548383849">Toegang tot camera</translation>
 <translation id="1660204651932907780">Toestaan dat sites geluid afspelen (aanbevolen)</translation>
 <translation id="1677097821151855053">Cookies en andere sitegegevens worden gebruikt om je te onthouden, bijvoorbeeld voor inloggen of gepersonaliseerde advertenties. Ga naar <ph name="BEGIN_LINK" />Instellingen<ph name="END_LINK" /> om de cookies voor alle sites te beheren.</translation>
 <translation id="1688867105868176567">Sitegegevens wissen?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">Site-URL</translation>
 <translation id="2025115093177348061">Augmented reality</translation>
 <translation id="2030769033451695672">Tik om terug te gaan naar <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">Je aanwezigheid</translation>
 <translation id="2079545284768500474">Ongedaan maken</translation>
 <translation id="2091887806945687916">Geluid</translation>
 <translation id="2107397443965016585">Vragen voordat sites beschermde content mogen afspelen (aanbevolen)</translation>
 <translation id="2146738493024040262">Instant-app openen</translation>
 <translation id="2148716181193084225">Vandaag</translation>
 <translation id="2182457891543959921">Vragen voordat sites een 3D-kaart van je omgeving mogen maken of de camerapositie mogen volgen (aanbevolen)</translation>
-<translation id="2187243482123994665">Aanwezigheid van gebruiker</translation>
 <translation id="2212565012507486665">Cookies toestaan</translation>
 <translation id="2228071138934252756">Als je <ph name="APP_NAME" /> toegang wilt geven tot je camera, moet je de camera ook inschakelen via de <ph name="BEGIN_LINK" />Android-instellingen<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Slechts één keer</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" /> toegestaan}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" /> toegestaan}}</translation>
 <translation id="2434158240863470628">Download voltooid <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Locatietoegang</translation>
 <translation id="2482878487686419369">Meldingen</translation>
 <translation id="2490684707762498678">Beheerd door <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Hulp en feedback</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Microfoon</translation>
 <translation id="3277252321222022663">Sites toegang geven tot sensoren (aanbevolen)</translation>
 <translation id="3295602654194328831">Informatie verbergen</translation>
+<translation id="3328801116991980348">Site-informatie</translation>
 <translation id="3333961966071413176">Alle contacten</translation>
 <translation id="3386292677130313581">Vragen of je sites toegang wilt verlenen tot je locatie (aanbevolen)</translation>
 <translation id="3538390592868664640">Voorkomen dat sites een 3D-kaart van je omgeving maken of de camerapositie volgen</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Sites toestaan om beschermde content af te spelen</translation>
 <translation id="4468959413250150279">Geluid dempen voor een specifieke site.</translation>
 <translation id="4479647676395637221">Eerst vragen voordat sites je camera mogen gebruiken (aanbevolen)</translation>
+<translation id="4505788138578415521">URL uitgevouwen</translation>
 <translation id="4534723447064627427">Als je <ph name="APP_NAME" /> toegang wilt geven tot je microfoon, moet je de microfoon ook inschakelen via de <ph name="BEGIN_LINK" />Android-instellingen<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Details</translation>
 <translation id="4645575059429386691">Beheerd door je ouder</translation>
@@ -182,7 +183,7 @@
 <translation id="6177111841848151710">Geblokkeerd voor de huidige zoekmachine</translation>
 <translation id="6181444274883918285">Site-uitzondering toevoegen</translation>
 <translation id="6192792657125177640">Uitzonderingen</translation>
-<translation id="6196640612572343990">Indirecte cookies blokkeren</translation>
+<translation id="6196640612572343990">Cookies van derden blokkeren</translation>
 <translation id="6206551242102657620">De verbinding is beveiligd. Site-informatie</translation>
 <translation id="6216432067784365534">Opties voor <ph name="NAME_OF_LIST_ITEM" /></translation>
 <translation id="6262279340360821358"><ph name="PERMISSION_1" /> en <ph name="PERMISSION_2" /> geblokkeerd</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" />}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> en nog <ph name="NUM_MORE" />}}</translation>
 <translation id="913657688200966289">Schakel rechten in voor <ph name="APP_NAME" /> via de <ph name="BEGIN_LINK" />Android-instellingen<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Toegang tot je microfoon</translation>
 <translation id="965817943346481315">Blokkeren als site opdringerige of misleidende advertenties weergeeft (aanbevolen)</translation>
 <translation id="967624055006145463">Opgeslagen gegevens</translation>
 </translationbundle>

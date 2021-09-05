@@ -87,7 +87,8 @@ void InspectorResourceContentLoader::Start() {
       resource_request = ResourceRequest(document->Url());
       resource_request.SetCacheMode(mojom::FetchCacheMode::kOnlyIfCached);
     }
-    resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+    resource_request.SetRequestContext(
+        mojom::blink::RequestContextType::INTERNAL);
     if (document->Loader() &&
         document->Loader()->GetResponse().WasFetchedViaServiceWorker()) {
       resource_request.SetCacheMode(mojom::FetchCacheMode::kDefault);
@@ -126,11 +127,12 @@ void InspectorResourceContentLoader::Start() {
       if (url.IsEmpty() || urls_to_fetch.Contains(url))
         continue;
       urls_to_fetch.insert(url);
-      ResourceRequest resource_request(url);
-      resource_request.SetRequestContext(mojom::RequestContextType::INTERNAL);
+      ResourceRequest style_sheet_resource_request(url);
+      style_sheet_resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::INTERNAL);
       ResourceLoaderOptions options(world);
       options.initiator_info.name = fetch_initiator_type_names::kInternal;
-      FetchParameters params(std::move(resource_request), options);
+      FetchParameters params(std::move(style_sheet_resource_request), options);
       ResourceClient* resource_client =
           MakeGarbageCollected<ResourceClient>(this);
       // Prevent garbage collection by holding a reference to this resource.

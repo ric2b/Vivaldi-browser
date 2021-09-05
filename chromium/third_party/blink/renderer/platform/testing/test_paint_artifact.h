@@ -45,14 +45,13 @@ class TransformPaintPropertyNodeOrAlias;
 // Usage:
 //   auto artifact = TestPaintArtifact().Chunk(0).Chunk(1).Build();
 //   DoSomethingWithArtifact(artifact);
+//  or
+//   DoSomethingWithArtifact(TestPaintArtifact().Chunk(0).Chunk(1).Build());
 //
 class TestPaintArtifact {
   STACK_ALLOCATED();
 
  public:
-  TestPaintArtifact();
-  ~TestPaintArtifact();
-
   // Add a chunk to the artifact. Each chunk will have a different automatically
   // created client.
   TestPaintArtifact& Chunk() { return Chunk(NewClient()); }
@@ -133,9 +132,8 @@ class TestPaintArtifact {
   void DidAddDisplayItem();
 
   Vector<std::unique_ptr<FakeDisplayItemClient>> clients_;
-
-  DisplayItemList display_item_list_;
-  Vector<PaintChunk> paint_chunks_;
+  scoped_refptr<PaintArtifact> paint_artifact_ =
+      base::MakeRefCounted<PaintArtifact>();
 };
 
 }  // namespace blink

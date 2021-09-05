@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/installable/installable_metrics.h"
@@ -20,7 +19,7 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "content/public/browser/web_contents_observer.h"
 
 class GURL;
@@ -41,6 +40,7 @@ class OsIntegrationManager;
 class InstallFinalizer;
 class WebAppDataRetriever;
 class WebAppUrlLoader;
+class AppRegistrar;
 
 // Used to do a variety of tasks involving installing web applications. Only one
 // of the public Load*, Update*, or Install* methods can be called on a single
@@ -54,7 +54,10 @@ class WebAppInstallTask : content::WebContentsObserver {
   WebAppInstallTask(Profile* profile,
                     OsIntegrationManager* os_integration_manager,
                     InstallFinalizer* install_finalizer,
-                    std::unique_ptr<WebAppDataRetriever> data_retriever);
+                    std::unique_ptr<WebAppDataRetriever> data_retriever,
+                    AppRegistrar* registrar);
+  WebAppInstallTask(const WebAppInstallTask&) = delete;
+  WebAppInstallTask& operator=(const WebAppInstallTask&) = delete;
   ~WebAppInstallTask() override;
 
   // Request the app_id expectation check. Install fails with
@@ -150,6 +153,8 @@ class WebAppInstallTask : content::WebContentsObserver {
 
   static std::unique_ptr<content::WebContents> CreateWebContents(
       Profile* profile);
+
+  base::WeakPtr<WebAppInstallTask> GetWeakPtr();
 
   // WebContentsObserver:
   void WebContentsDestroyed() override;
@@ -262,10 +267,10 @@ class WebAppInstallTask : content::WebContentsObserver {
   OsIntegrationManager* os_integration_manager_;
   InstallFinalizer* install_finalizer_;
   Profile* const profile_;
+  AppRegistrar* registrar_;
 
   base::WeakPtrFactory<WebAppInstallTask> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppInstallTask);
 };
 
 }  // namespace web_app

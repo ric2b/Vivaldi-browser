@@ -31,20 +31,8 @@ class Button;
 class ButtonController;
 class Event;
 
-// An interface implemented by an object to let it know that a button was
-// pressed.  DEPRECATED; use PressedCallback instead.
-// TODO(crbug.com/772945): Replace ButtonListener with PressedCallback.
-class VIEWS_EXPORT ButtonListener {
- public:
-  virtual void ButtonPressed(Button* sender, const ui::Event& event) = 0;
-
- protected:
-  virtual ~ButtonListener() = default;
-};
-
-// A View representing a button. A Button is not focusable by default and will
-// not be part of the focus chain, unless in accessibility mode (see
-// SetFocusForPlatform()).
+// A View representing a button. A Button is focusable by default and will
+// be part of the focus chain.
 class VIEWS_EXPORT Button : public InkDropHostView,
                             public AnimationDelegateViews {
  public:
@@ -87,13 +75,12 @@ class VIEWS_EXPORT Button : public InkDropHostView,
     DISALLOW_COPY_AND_ASSIGN(DefaultButtonControllerDelegate);
   };
 
-  // PressedCallback wraps a one-arg callback type with a variety of
-  // constructors, both to aid conversion from ButtonListener and to allow
-  // callers to specify a RepeatingClosure if they don't care about the callback
-  // arg.
-  // TODO(crbug.com/772945): Remove ButtonListener constructor, then re-evaluate
-  // if this class can/should be converted to a type alias + various helpers or
-  // overloads to support the RepeatingClosure case.
+  // PressedCallback wraps a one-arg callback type with multiple constructors to
+  // allow callers to specify a RepeatingClosure if they don't care about the
+  // callback arg.
+  // TODO(crbug.com/772945): Re-evaluate if this class can/should be converted
+  // to a type alias + various helpers or overloads to support the
+  // RepeatingClosure case.
   class VIEWS_EXPORT PressedCallback {
    public:
     using Callback = base::RepeatingCallback<void(const ui::Event& event)>;
@@ -103,8 +90,6 @@ class VIEWS_EXPORT Button : public InkDropHostView,
     // this way.
     PressedCallback(Callback callback = Callback());  // NOLINT
     PressedCallback(base::RepeatingClosure closure);  // NOLINT
-    // TODO(crbug.com/772945): Remove.
-    PressedCallback(ButtonListener* listener, Button* button);
     PressedCallback(const PressedCallback&);
     PressedCallback(PressedCallback&&);
     PressedCallback& operator=(const PressedCallback&);
@@ -132,16 +117,13 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
   static ButtonState GetButtonStateFrom(ui::NativeTheme::State state);
 
-  // Make the button focusable as per the platform.
-  void SetFocusForPlatform();
-
   void SetTooltipText(const base::string16& tooltip_text);
   base::string16 GetTooltipText() const;
 
   int tag() const { return tag_; }
   void set_tag(int tag) { tag_ = tag; }
 
-  void set_callback(PressedCallback callback) {
+  void SetCallback(PressedCallback callback) {
     callback_ = std::move(callback);
   }
 
@@ -253,7 +235,6 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
  protected:
   explicit Button(PressedCallback callback = PressedCallback());
-  explicit Button(ButtonListener* listener);
 
   // Called when the button has been clicked or tapped and should request focus
   // if necessary.
@@ -310,6 +291,9 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
   FocusRing* focus_ring() { return focus_ring_; }
 
+  // Getter used by metadata only.
+  const PressedCallback& GetCallback() const { return callback_; }
+
  private:
   friend class test::ButtonTestApi;
   FRIEND_TEST_ALL_PREFIXES(BlueButtonTest, Border);
@@ -325,10 +309,8 @@ class VIEWS_EXPORT Button : public InkDropHostView,
   // The button's listener. Notified when clicked.
   PressedCallback callback_;
 
-  // The id tag associated with this button. Used to disambiguate buttons in
-  // the ButtonListener implementation.
-  // TODO(pbos): Remove this after ButtonListener is gone since disambiguation
-  // shouldn't be needed.
+  // The id tag associated with this button. Used to disambiguate buttons.
+  // TODO(pbos): See if this can be removed, e.g. by replacing with SetID().
   int tag_ = -1;
 
   ButtonState state_ = STATE_NORMAL;
@@ -381,6 +363,8 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 };
 
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Button, InkDropHostView)
+VIEW_BUILDER_PROPERTY(base::string16, AccessibleName)
+VIEW_BUILDER_PROPERTY(Button::PressedCallback, Callback)
 VIEW_BUILDER_PROPERTY(base::TimeDelta, AnimationDuration)
 VIEW_BUILDER_PROPERTY(bool, AnimateOnStateChange)
 VIEW_BUILDER_PROPERTY(bool, HasInkDropActionOnClick)
@@ -391,9 +375,10 @@ VIEW_BUILDER_PROPERTY(bool, RequestFocusOnPress)
 VIEW_BUILDER_PROPERTY(Button::ButtonState, State)
 VIEW_BUILDER_PROPERTY(base::string16, TooltipText)
 VIEW_BUILDER_PROPERTY(int, TriggerableEventFlags)
-VIEW_BUILDER_METHOD(SetFocusForPlatform)
-END_VIEW_BUILDER(VIEWS_EXPORT, Button)
+END_VIEW_BUILDER
 
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Button)
 
 #endif  // UI_VIEWS_CONTROLS_BUTTON_BUTTON_H_

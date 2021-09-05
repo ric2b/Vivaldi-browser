@@ -16,18 +16,40 @@
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/path_service.h"
 #include "base/task/current_thread.h"
+#include "components/cast/message_port/message_port_fuchsia.h"
 #include "fuchsia/base/agent_manager.h"
 #include "fuchsia/base/mem_buffer_util.h"
-#include "fuchsia/base/message_port.h"
 #include "fuchsia/fidl/chromium/cast/cpp/fidl.h"
 #include "fuchsia/runners/cast/cast_runner.h"
 #include "fuchsia/runners/cast/cast_streaming.h"
+#include "fuchsia/runners/cast/create_web_message.h"
 #include "fuchsia/runners/common/web_component.h"
 
 namespace {
 
 constexpr int kBindingsFailureExitCode = 129;
 constexpr int kRewriteRulesProviderDisconnectExitCode = 130;
+
+fuchsia::web::ConsoleLogLevel SeverityToConsoleLogLevel(
+    fuchsia::diagnostics::Severity severity) {
+  switch (severity) {
+    case fuchsia::diagnostics::Severity::TRACE:
+    case fuchsia::diagnostics::Severity::DEBUG:
+      return fuchsia::web::ConsoleLogLevel::DEBUG;
+    case fuchsia::diagnostics::Severity::INFO:
+      return fuchsia::web::ConsoleLogLevel::INFO;
+    case fuchsia::diagnostics::Severity::WARN:
+      return fuchsia::web::ConsoleLogLevel::WARN;
+    case fuchsia::diagnostics::Severity::ERROR:
+      return fuchsia::web::ConsoleLogLevel::ERROR;
+    case fuchsia::diagnostics::Severity::FATAL:
+      // FATAL means none per the FIDL definition.
+      return fuchsia::web::ConsoleLogLevel::NONE;
+  }
+
+  // The safest thing to do for unrecognized values is to not log.
+  return fuchsia::web::ConsoleLogLevel::NONE;
+}
 
 }  // namespace
 
@@ -93,33 +115,31 @@ void CastComponent::StartComponent() {
   frame()->SetMediaSessionId(media_session_id_);
   frame()->ConfigureInputTypes(fuchsia::web::InputTypes::ALL,
                                fuchsia::web::AllowInputState::DENY);
-  frame()->SetJavaScriptLogLevel(fuchsia::web::ConsoleLogLevel::WARN);
+  if (application_config_.has_initial_min_console_log_severity()) {
+    frame()->SetJavaScriptLogLevel(SeverityToConsoleLogLevel(
+        application_config_.initial_min_console_log_severity()));
+  }
 
   if (IsAppConfigForCastStreaming(application_config_)) {
     // TODO(crbug.com/1082821): Remove this once the Cast Streaming Receiver
     // component has been implemented.
 
     // Register the MessagePort for the Cast Streaming Receiver.
-    fidl::InterfaceHandle<fuchsia::web::MessagePort> message_port;
-    fuchsia::web::WebMessage message;
-    message.set_data(cr_fuchsia::MemBufferFromString("", "empty_message"));
-    fuchsia::web::OutgoingTransferable outgoing_transferable;
-    outgoing_transferable.set_message_port(message_port.NewRequest());
-    std::vector<fuchsia::web::OutgoingTransferable> outgoing_transferables;
-    outgoing_transferables.push_back(std::move(outgoing_transferable));
-    message.set_outgoing_transfer(std::move(outgoing_transferables));
-
+    std::unique_ptr<cast_api_bindings::MessagePort> message_port_for_web_engine;
+    std::unique_ptr<cast_api_bindings::MessagePort> message_port_for_agent;
+    cast_api_bindings::MessagePort::CreatePair(&message_port_for_agent,
+                                               &message_port_for_web_engine);
     frame()->PostMessage(
-        kCastStreamingMessagePortOrigin, std::move(message),
+        kCastStreamingMessagePortOrigin,
+        CreateWebMessage("", std::move(message_port_for_web_engine)),
         [this](fuchsia::web::Frame_PostMessage_Result result) {
           if (result.is_err()) {
             DestroyComponent(kBindingsFailureExitCode,
                              fuchsia::sys::TerminationReason::INTERNAL_ERROR);
           }
         });
-    api_bindings_client_->OnPortConnected(
-        kCastStreamingMessagePortName,
-        cr_fuchsia::BlinkMessagePortFromFidl(std::move(message_port)));
+    api_bindings_client_->OnPortConnected(kCastStreamingMessagePortName,
+                                          std::move(message_port_for_agent));
   }
 
   api_bindings_client_->AttachToFrame(
@@ -127,6 +147,9 @@ void CastComponent::StartComponent() {
       base::BindOnce(&CastComponent::DestroyComponent, base::Unretained(this),
                      kBindingsFailureExitCode,
                      fuchsia::sys::TerminationReason::INTERNAL_ERROR));
+
+  // Get the theme from the system service.
+  frame()->SetPreferredTheme(fuchsia::settings::ThemeType::AUTO);
 
   // Media loading has to be unblocked by the agent via the
   // ApplicationController.
@@ -195,14 +218,16 @@ void CastComponent::OnNavigationStateChanged(
     OnNavigationStateChangedCallback callback) {
   if (change.has_is_main_document_loaded() &&
       change.is_main_document_loaded()) {
+    std::string connect_message;
+    std::unique_ptr<cast_api_bindings::MessagePort> connect_port;
+    connector_->GetConnectMessage(&connect_message, &connect_port);
+
     // Send the NamedMessagePortConnector handshake to the page.
-    frame()->PostMessage("*",
-                         *cr_fuchsia::FidlWebMessageFromBlink(
-                             connector_->GetConnectMessage(),
-                             cr_fuchsia::TransferableHostType::kRemote),
-                         [](fuchsia::web::Frame_PostMessage_Result result) {
-                           DCHECK(result.is_response());
-                         });
+    frame()->PostMessage(
+        "*", CreateWebMessage(connect_message, std::move(connect_port)),
+        [](fuchsia::web::Frame_PostMessage_Result result) {
+          DCHECK(result.is_response());
+        });
   }
 
   WebComponent::OnNavigationStateChanged(std::move(change),

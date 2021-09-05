@@ -115,6 +115,10 @@ ExecutionContext* ExecutionContext::ForRelevantRealm(
   return ToExecutionContext(ctx);
 }
 
+void ExecutionContext::SetIsInBackForwardCache(bool value) {
+  is_in_back_forward_cache_ = value;
+}
+
 void ExecutionContext::SetLifecycleState(mojom::FrameLifecycleState state) {
   if (lifecycle_state_ == state)
     return;
@@ -177,6 +181,11 @@ unsigned ExecutionContext::ContextLifecycleStateObserverCountForTesting()
   return lifecycle_state_observers;
 }
 
+bool ExecutionContext::SharedArrayBufferTransferAllowed() const {
+  return RuntimeEnabledFeatures::SharedArrayBufferEnabled(this) ||
+         CrossOriginIsolatedCapability();
+}
+
 void ExecutionContext::AddConsoleMessageImpl(mojom::ConsoleMessageSource source,
                                              mojom::ConsoleMessageLevel level,
                                              const String& message,
@@ -226,6 +235,22 @@ bool ExecutionContext::DispatchErrorEventInternal(
 
 bool ExecutionContext::IsContextPaused() const {
   return lifecycle_state_ == mojom::blink::FrameLifecycleState::kPaused;
+}
+
+WebURLLoader::DeferType ExecutionContext::DeferType() const {
+  if (is_in_back_forward_cache_) {
+    DCHECK_EQ(lifecycle_state_, mojom::blink::FrameLifecycleState::kFrozen);
+    return WebURLLoader::DeferType::kDeferredWithBackForwardCache;
+  } else if (lifecycle_state_ == mojom::blink::FrameLifecycleState::kFrozen ||
+             lifecycle_state_ == mojom::blink::FrameLifecycleState::kPaused) {
+    return WebURLLoader::DeferType::kDeferred;
+  }
+  return WebURLLoader::DeferType::kNotDeferred;
+}
+
+bool ExecutionContext::IsLoadDeferred() const {
+  return lifecycle_state_ == mojom::blink::FrameLifecycleState::kPaused ||
+         lifecycle_state_ == mojom::blink::FrameLifecycleState::kFrozen;
 }
 
 int ExecutionContext::CircularSequentialID() {
@@ -412,20 +437,6 @@ bool ExecutionContext::FeatureEnabled(OriginTrialFeature feature) const {
   return origin_trial_context_->IsFeatureEnabled(feature);
 }
 
-void ExecutionContext::FeaturePolicyPotentialBehaviourChangeObserved(
-    mojom::blink::FeaturePolicyFeature feature) const {
-  size_t feature_index = static_cast<size_t>(feature);
-  if (feature_policy_behaviour_change_counted_.size() == 0) {
-    feature_policy_behaviour_change_counted_.resize(
-        static_cast<size_t>(mojom::blink::FeaturePolicyFeature::kMaxValue) + 1);
-  } else if (feature_policy_behaviour_change_counted_[feature_index]) {
-    return;
-  }
-  feature_policy_behaviour_change_counted_[feature_index] = true;
-  UMA_HISTOGRAM_ENUMERATION(
-      "Blink.UseCounter.FeaturePolicy.ProposalWouldChangeBehaviour", feature);
-}
-
 bool ExecutionContext::IsFeatureEnabled(
     mojom::blink::FeaturePolicyFeature feature,
     ReportOptions report_on_failure,
@@ -439,20 +450,6 @@ bool ExecutionContext::IsFeatureEnabled(
 
   bool should_report;
   bool enabled = security_context_.IsFeatureEnabled(feature, &should_report);
-
-  if (enabled) {
-    // Report if the proposed header semantics change would have affected the
-    // outcome. (https://crbug.com/937131)
-    const FeaturePolicy* policy = security_context_.GetFeaturePolicy();
-    url::Origin origin = GetSecurityOrigin()->ToUrlOrigin();
-    if (!policy->GetProposedFeatureValueForOrigin(feature, origin)) {
-      // Count that there was a change in this page load.
-      const_cast<ExecutionContext*>(this)->CountUse(
-          WebFeature::kFeaturePolicyProposalWouldChangeBehaviour);
-      // Record the specific feature whose behaviour was changed.
-      FeaturePolicyPotentialBehaviourChangeObserved(feature);
-    }
-  }
 
   if (should_report && report_on_failure == ReportOptions::kReportOnFailure) {
     mojom::blink::PolicyDisposition disposition =

@@ -11,7 +11,6 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/power_monitor/power_monitor.h"
 #include "components/page_load_metrics/browser/observers/core/largest_contentful_paint_handler.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "content/public/common/process_type.h"
@@ -129,21 +128,23 @@ const char kHistogramFirstContentfulPaintInitiatingProcess[] =
 const char kHistogramFirstMeaningfulPaint[] =
     "PageLoad.Experimental.PaintTiming.NavigationToFirstMeaningfulPaint";
 const char kHistogramLargestContentfulPaint[] =
-    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint";
+    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint2";
 const char kHistogramLargestContentfulPaintContentType[] =
     "PageLoad.Internal.PaintTiming.LargestContentfulPaint.ContentType";
 const char kHistogramLargestContentfulPaintMainFrame[] =
-    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint.MainFrame";
+    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint2.MainFrame";
 const char kHistogramLargestContentfulPaintMainFrameContentType[] =
     "PageLoad.Internal.PaintTiming.LargestContentfulPaint.MainFrame."
     "ContentType";
-const char kHistogramExperimentalLargestContentfulPaint[] =
-    "PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint";
+// TODO(crbug.com/1045640): Stop reporting these obsolete versions after some
+// time.
+const char kDeprecatedHistogramLargestContentfulPaint[] =
+    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint";
 const char kHistogramExperimentalLargestContentfulPaintContentType[] =
     "PageLoad.Internal.PaintTiming.ExperimentalLargestContentfulPaint."
     "ContentType";
-const char kHistogramExperimentalLargestContentfulPaintMainFrame[] =
-    "PageLoad.PaintTiming.NavigationToExperimentalLargestContentfulPaint."
+const char kDeprecatedHistogramLargestContentfulPaintMainFrame[] =
+    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint."
     "MainFrame";
 const char kHistogramExperimentalLargestContentfulPaintMainFrameContentType[] =
     "PageLoad.Internal.PaintTiming.ExperimentalLargestContentfulPaint."
@@ -186,11 +187,6 @@ const char kHistogramParseBlockedOnScriptExecutionDocumentWrite[] =
 
 const char kHistogramFirstContentfulPaintNoStore[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.NoStore";
-
-const char kHistogramFirstContentfulPaintOnBattery[] =
-    "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.OnBattery";
-const char kHistogramFirstContentfulPaintNotOnBattery[] =
-    "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.NotOnBattery";
 
 const char kHistogramFirstContentfulPaintHiddenWhileFlushing[] =
     "PageLoad.PaintTiming.NavigationToFirstContentfulPaint.HiddenWhileFlushing";
@@ -519,14 +515,6 @@ void UmaPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
 
     if (was_no_store_main_resource_) {
       PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstContentfulPaintNoStore,
-                          timing.paint_timing->first_contentful_paint.value());
-    }
-
-    if (base::PowerMonitor::IsOnBatteryPower()) {
-      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstContentfulPaintOnBattery,
-                          timing.paint_timing->first_contentful_paint.value());
-    } else {
-      PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstContentfulPaintNotOnBattery,
                           timing.paint_timing->first_contentful_paint.value());
     }
 
@@ -1000,7 +988,7 @@ void UmaPageLoadMetricsObserver::RecordTimingHistograms(
           main_frame_experimental_largest_contentful_paint.Time(),
           GetDelegate())) {
     PAGE_LOAD_HISTOGRAM(
-        internal::kHistogramExperimentalLargestContentfulPaintMainFrame,
+        internal::kDeprecatedHistogramLargestContentfulPaintMainFrame,
         main_frame_experimental_largest_contentful_paint.Time().value());
     UMA_HISTOGRAM_ENUMERATION(
         internal::
@@ -1018,7 +1006,7 @@ void UmaPageLoadMetricsObserver::RecordTimingHistograms(
           all_frames_experimental_largest_contentful_paint.Time(),
           GetDelegate())) {
     PAGE_LOAD_HISTOGRAM(
-        internal::kHistogramExperimentalLargestContentfulPaint,
+        internal::kDeprecatedHistogramLargestContentfulPaint,
         all_frames_experimental_largest_contentful_paint.Time().value());
     UMA_HISTOGRAM_ENUMERATION(
         internal::kHistogramExperimentalLargestContentfulPaintContentType,

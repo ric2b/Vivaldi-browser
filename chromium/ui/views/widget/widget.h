@@ -98,6 +98,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   using Widgets = std::set<Widget*>;
   using ShapeRects = std::vector<gfx::Rect>;
   using PaintAsActiveCallbackList = base::RepeatingClosureList;
+  using Predicate = base::RepeatingCallback<bool(Widget*)>;
 
   enum class FrameType {
     kDefault,      // Use whatever the default would be.
@@ -396,16 +397,26 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Creates a decorated window Widget with the specified properties. The
   // returned Widget is owned by its NativeWidget; see Widget class comment for
   // details.
+  // The std::unique_ptr variant requires that delegate->owned_by_widget().
   static Widget* CreateWindowWithParent(WidgetDelegate* delegate,
                                         gfx::NativeView parent,
                                         const gfx::Rect& bounds = gfx::Rect());
+  static Widget* CreateWindowWithParent(
+      std::unique_ptr<WidgetDelegate> delegate,
+      gfx::NativeView parent,
+      const gfx::Rect& bounds = gfx::Rect());
 
   // Creates a decorated window Widget in the same desktop context as |context|.
   // The returned Widget is owned by its NativeWidget; see Widget class comment
   // for details.
+  // The std::unique_ptr variant requires that delegate->owned_by_widget().
   static Widget* CreateWindowWithContext(WidgetDelegate* delegate,
                                          gfx::NativeWindow context,
                                          const gfx::Rect& bounds = gfx::Rect());
+  static Widget* CreateWindowWithContext(
+      std::unique_ptr<WidgetDelegate> delegate,
+      gfx::NativeWindow context,
+      const gfx::Rect& bounds = gfx::Rect());
 
   // Closes all Widgets that aren't identified as "secondary widgets". Called
   // during application shutdown when the last non-secondary widget is closed.
@@ -615,7 +626,9 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Hides the widget.
   void Hide();
 
-  // Like Show(), but does not activate the window.
+  // Like Show(), but does not activate the window. Tests may be flaky on Mac:
+  // Mac browsertests do not have an activation policy so the widget may be
+  // activated.
   void ShowInactive();
 
   // Activates the widget, assuming it already exists and is visible.

@@ -18,6 +18,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "storage/browser/quota/quota_settings.h"
 
 namespace content {
@@ -185,12 +186,12 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories) override;
   bool ShouldIsolateErrorPage(bool in_main_frame) override;
   bool ShouldEnableStrictSiteIsolation() override;
-  bool ShouldLockProcess(content::BrowserContext* browser_context,
-                         const GURL& effective_url) override;
+  bool ShouldDisableSiteIsolation() override;
+  bool ShouldLockProcessToSite(content::BrowserContext* browser_context,
+                               const GURL& effective_url) override;
   bool WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
       content::RenderFrameHost* frame,
@@ -198,7 +199,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -225,13 +226,13 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                                    blink::mojom::WebFeature feature) override;
   bool IsOriginTrialRequiredForAppCache(
       content::BrowserContext* browser_text) override;
+  content::SpeechRecognitionManagerDelegate*
+  CreateSpeechRecognitionManagerDelegate() override;
+  bool HasErrorPage(int http_status_code) override;
 
   AwFeatureListCreator* aw_feature_list_creator() {
     return aw_feature_list_creator_;
   }
-
-  content::SpeechRecognitionManagerDelegate*
-  CreateSpeechRecognitionManagerDelegate() override;
 
   static void DisableCreatingThreadPool();
 

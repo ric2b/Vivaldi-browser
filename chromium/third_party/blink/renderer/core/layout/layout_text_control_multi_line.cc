@@ -50,26 +50,11 @@ bool LayoutTextControlMultiLine::NodeAtPoint(
     return true;
 
   if (result.InnerNode() == GetNode() ||
-      result.InnerNode() == InnerEditorElement())
-    HitInnerEditorElement(result, hit_test_location, accumulated_offset);
-
+      result.InnerNode() == InnerEditorElement()) {
+    HitInnerEditorElement(*this, *InnerEditorElement(), result,
+                          hit_test_location, accumulated_offset);
+  }
   return true;
-}
-
-LayoutUnit LayoutTextControlMultiLine::PreferredContentLogicalWidth(
-    float char_width) const {
-  NOT_DESTROYED();
-  int factor = To<HTMLTextAreaElement>(GetNode())->cols();
-  return static_cast<LayoutUnit>(ceilf(char_width * factor)) +
-         ScrollbarThickness();
-}
-
-LayoutUnit LayoutTextControlMultiLine::ComputeControlLogicalHeight(
-    LayoutUnit line_height,
-    LayoutUnit non_content_height) const {
-  NOT_DESTROYED();
-  return line_height * To<HTMLTextAreaElement>(GetNode())->rows() +
-         non_content_height;
 }
 
 LayoutUnit LayoutTextControlMultiLine::BaselinePosition(
@@ -93,29 +78,11 @@ LayoutObject* LayoutTextControlMultiLine::LayoutSpecialExcludedChild(
     return nullptr;
   if (!placeholder_layout_object->IsBox())
     return placeholder_layout_object;
-  LayoutBox* placeholder_box = ToLayoutBox(placeholder_layout_object);
+  auto* placeholder_box = To<LayoutBox>(placeholder_layout_object);
   placeholder_box->LayoutIfNeeded();
   placeholder_box->SetX(BorderLeft() + PaddingLeft());
   placeholder_box->SetY(BorderTop() + PaddingTop());
   return placeholder_layout_object;
-}
-
-LayoutUnit LayoutTextControlMultiLine::ScrollWidth() const {
-  NOT_DESTROYED();
-  // If in preview state, fake the scroll width to prevent that any information
-  // about the suggested content can be derived from the size.
-  if (!GetTextControlElement()->SuggestedValue().IsEmpty())
-    return ClientWidth();
-  return LayoutTextControl::ScrollWidth();
-}
-
-LayoutUnit LayoutTextControlMultiLine::ScrollHeight() const {
-  NOT_DESTROYED();
-  // If in preview state, fake the scroll height to prevent that any information
-  // about the suggested content can be derived from the size.
-  if (!GetTextControlElement()->SuggestedValue().IsEmpty())
-    return ClientHeight();
-  return LayoutTextControl::ScrollHeight();
 }
 
 }  // namespace blink

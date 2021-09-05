@@ -36,10 +36,6 @@ class TestResultView : public SearchResultBaseView {
     return nullptr;
   }
 
-  void ButtonPressed(Button* sender, const ui::Event& event) override {
-    // Do nothing for test.
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(TestResultView);
 };
@@ -56,7 +52,7 @@ class TestResultViewWithActions : public TestResultView,
   TestResultViewWithActions* AsResultViewWithActions() override { return this; }
 
   // SearchResultActionsViewDelegate:
-  void OnSearchResultActionActivated(size_t index, int event_flags) override {}
+  void OnSearchResultActionActivated(size_t index) override {}
   bool IsSearchResultHoveredOrSelected() override { return selected(); }
 
   SearchResultActionsView* GetActionsView() {

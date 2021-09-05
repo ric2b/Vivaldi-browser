@@ -25,7 +25,7 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_util.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "components/account_id/account_id.h"
@@ -111,14 +111,14 @@ bool SessionControllerImpl::ShouldEnableSettings() const {
     return false;
   }
 
-  return user_sessions_[0]->should_enable_settings;
+  return true;
 }
 
 bool SessionControllerImpl::ShouldShowNotificationTray() const {
   if (!IsActiveUserSessionStarted() || IsInSecondaryLoginScreen())
     return false;
 
-  return user_sessions_[0]->should_show_notification_tray;
+  return true;
 }
 
 const SessionControllerImpl::UserSessions&
@@ -132,6 +132,19 @@ const UserSession* SessionControllerImpl::GetUserSession(
     return nullptr;
 
   return user_sessions_[index].get();
+}
+
+const UserSession* SessionControllerImpl::GetUserSessionByAccountId(
+    const AccountId& account_id) const {
+  auto it =
+      std::find_if(user_sessions_.begin(), user_sessions_.end(),
+                   [&account_id](const std::unique_ptr<UserSession>& session) {
+                     return session->user_info.account_id == account_id;
+                   });
+  if (it == user_sessions_.end())
+    return nullptr;
+
+  return (*it).get();
 }
 
 const UserSession* SessionControllerImpl::GetPrimaryUserSession() const {

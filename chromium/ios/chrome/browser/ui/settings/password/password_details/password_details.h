@@ -9,9 +9,9 @@
 
 #include "url/gurl.h"
 
-namespace autofill {
+namespace password_manager {
 struct PasswordForm;
-}
+}  // namespace password_manager
 
 // Object which is used by |PasswordDetailsViewController| to show
 // information about password.
@@ -24,7 +24,10 @@ struct PasswordForm;
 @property(nonatomic, copy, readonly) NSString* website;
 
 // Associated username.
-@property(nonatomic, copy, readonly) NSString* username;
+@property(nonatomic, copy) NSString* username;
+
+// The federation providing this credential, if any.
+@property(nonatomic, copy, readonly) NSString* federation;
 
 // Associated password.
 @property(nonatomic, copy) NSString* password;
@@ -35,7 +38,7 @@ struct PasswordForm;
 // URL which allows to change the password of compromised credential.
 @property(nonatomic, readonly) GURL changePasswordURL;
 
-- (instancetype)initWithPasswordForm:(const autofill::PasswordForm&)form
+- (instancetype)initWithPasswordForm:(const password_manager::PasswordForm&)form
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

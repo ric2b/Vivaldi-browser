@@ -432,78 +432,6 @@ TEST_F(FocusManagerTest, SuspendAccelerators) {
   EXPECT_EQ(1, target.accelerator_count());
 }
 
-class FocusManagerDtorTest : public FocusManagerTest {
- protected:
-  using DtorTrackVector = std::vector<std::string>;
-
-  class FocusManagerDtorTracked : public FocusManager {
-   public:
-    FocusManagerDtorTracked(Widget* widget, DtorTrackVector* dtor_tracker)
-        : FocusManager(widget, nullptr /* delegate */),
-          dtor_tracker_(dtor_tracker) {}
-
-    FocusManagerDtorTracked(const FocusManagerDtorTracked&) = delete;
-    FocusManagerDtorTracked& operator=(const FocusManagerDtorTracked&) = delete;
-
-    ~FocusManagerDtorTracked() override {
-      dtor_tracker_->push_back("FocusManagerDtorTracked");
-    }
-
-    DtorTrackVector* dtor_tracker_;
-  };
-
-  class TestFocusManagerFactory : public FocusManagerFactory {
-   public:
-    explicit TestFocusManagerFactory(DtorTrackVector* dtor_tracker)
-        : dtor_tracker_(dtor_tracker) {}
-    TestFocusManagerFactory(const TestFocusManagerFactory&) = delete;
-    TestFocusManagerFactory& operator=(const TestFocusManagerFactory&) = delete;
-    ~TestFocusManagerFactory() override = default;
-
-    std::unique_ptr<FocusManager> CreateFocusManager(Widget* widget) override {
-      return std::make_unique<FocusManagerDtorTracked>(widget, dtor_tracker_);
-    }
-
-   private:
-    DtorTrackVector* dtor_tracker_;
-  };
-
-  class WindowDtorTracked : public Widget {
-   public:
-    explicit WindowDtorTracked(DtorTrackVector* dtor_tracker)
-        : dtor_tracker_(dtor_tracker) {}
-
-    ~WindowDtorTracked() override {
-      dtor_tracker_->push_back("WindowDtorTracked");
-    }
-
-    DtorTrackVector* dtor_tracker_;
-  };
-
-  void SetUp() override {
-    ViewsTestBase::SetUp();
-    FocusManagerFactory::Install(new TestFocusManagerFactory(&dtor_tracker_));
-    // Create WindowDtorTracked that uses FocusManagerDtorTracked.
-    Widget* widget = new WindowDtorTracked(&dtor_tracker_);
-    Widget::InitParams params;
-    params.delegate = this;
-    params.bounds = gfx::Rect(0, 0, 100, 100);
-    widget->Init(std::move(params));
-
-    tracked_focus_manager_ =
-        static_cast<FocusManagerDtorTracked*>(GetFocusManager());
-    widget->Show();
-  }
-
-  void TearDown() override {
-    FocusManagerFactory::Install(nullptr);
-    ViewsTestBase::TearDown();
-  }
-
-  FocusManager* tracked_focus_manager_;
-  DtorTrackVector dtor_tracker_;
-};
-
 namespace {
 
 class FocusInAboutToRequestFocusFromTabTraversalView : public View {
@@ -581,44 +509,46 @@ TEST_F(FocusManagerTest, RotatePaneFocus) {
   FocusManager* focus_manager = GetWidget()->GetFocusManager();
 
   // Advance forwards. Focus should stay trapped within each pane.
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(
-      FocusManager::kForward, FocusManager::FocusCycleWrapping::kEnabled));
+  using Direction = FocusManager::Direction;
+  using FocusCycleWrapping = FocusManager::FocusCycleWrapping;
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(Direction::kForward,
+                                             FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v2, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
 
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(
-      FocusManager::kForward, FocusManager::FocusCycleWrapping::kEnabled));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(Direction::kForward,
+                                             FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v4, focus_manager->GetFocusedView());
   focus_manager->AdvanceFocus(false);
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(
-      FocusManager::kForward, FocusManager::FocusCycleWrapping::kEnabled));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(Direction::kForward,
+                                             FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
 
   // Advance backwards.
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(
-      FocusManager::kBackward, FocusManager::FocusCycleWrapping::kEnabled));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(Direction::kBackward,
+                                             FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(
-      FocusManager::kBackward, FocusManager::FocusCycleWrapping::kEnabled));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(Direction::kBackward,
+                                             FocusCycleWrapping::kEnabled));
   EXPECT_EQ(v1, focus_manager->GetFocusedView());
 
   // Advance without wrap. When it gets to the end of the list of
   // panes, RotatePaneFocus should return false but the current
   // focused view shouldn't change.
-  EXPECT_TRUE(focus_manager->RotatePaneFocus(
-      FocusManager::kForward, FocusManager::FocusCycleWrapping::kDisabled));
+  EXPECT_TRUE(focus_manager->RotatePaneFocus(Direction::kForward,
+                                             FocusCycleWrapping::kDisabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 
-  EXPECT_FALSE(focus_manager->RotatePaneFocus(
-      FocusManager::kForward, FocusManager::FocusCycleWrapping::kDisabled));
+  EXPECT_FALSE(focus_manager->RotatePaneFocus(Direction::kForward,
+                                              FocusCycleWrapping::kDisabled));
   EXPECT_EQ(v3, focus_manager->GetFocusedView());
 }
 

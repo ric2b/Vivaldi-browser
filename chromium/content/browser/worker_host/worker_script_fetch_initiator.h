@@ -15,6 +15,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/service_worker_client_info.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -41,6 +42,7 @@ class SharedURLLoaderFactory;
 namespace content {
 
 class AppCacheHost;
+class DevToolsAgentHostImpl;
 class BrowserContext;
 class RenderFrameHost;
 class ServiceWorkerContextWrapper;
@@ -77,7 +79,7 @@ class CONTENT_EXPORT WorkerScriptFetchInitiator {
       network::mojom::CredentialsMode credentials_mode,
       blink::mojom::FetchClientSettingsObjectPtr
           outside_fetch_client_settings_object,
-      blink::mojom::ResourceType resource_type,
+      network::mojom::RequestDestination request_destination,
       scoped_refptr<ServiceWorkerContextWrapper> service_worker_context,
       ServiceWorkerMainResourceHandle* service_worker_handle,
       base::WeakPtr<AppCacheHost> appcache_host,
@@ -86,6 +88,9 @@ class CONTENT_EXPORT WorkerScriptFetchInitiator {
           url_loader_factory_override,
       StoragePartitionImpl* storage_partition,
       const std::string& storage_domain,
+      ukm::SourceId worker_source_id,
+      DevToolsAgentHostImpl* devtools_agent_host,
+      const base::UnguessableToken& devtools_worker_token,
       CompletionCallback callback);
 
   // Used for specifying how URLLoaderFactoryBundle is used.
@@ -129,6 +134,9 @@ class CONTENT_EXPORT WorkerScriptFetchInitiator {
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
       scoped_refptr<network::SharedURLLoaderFactory>
           url_loader_factory_override,
+      ukm::SourceId worker_source_id,
+      DevToolsAgentHostImpl* devtools_agent_host,
+      const base::UnguessableToken& devtools_worker_token,
       CompletionCallback callback);
 
   static void DidCreateScriptLoader(

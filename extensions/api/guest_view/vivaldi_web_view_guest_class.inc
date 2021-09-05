@@ -16,7 +16,6 @@
                                    int loaded_elements,
                                    int total_elements) override;
 
-  bool EmbedsFullscreenWidget() override;
   void NavigationStateChanged(content::WebContents* source,
                               content::InvalidateTypes changed_flags) override;
   void UpdateTargetURL(content::WebContents* source, const GURL& url) override;
@@ -24,8 +23,7 @@
   void PasteAndGo(const base::ListValue& search) override;
   void SimpleAction(const base::ListValue& search);
   void ToggleFullscreenModeForTab(content::WebContents* web_contents,
-                                  bool enter_fullscreen,
-                                  bool skip_window_state = false);
+                                  bool enter_fullscreen);
   void BeforeUnloadFired(content::WebContents* web_contents, bool proceed,
                          bool* proceed_to_fire_unload) override;
   // From WebContentsObserver, avoid compile error on the above override.
@@ -35,7 +33,7 @@
   bool IsVivaldiMail();
   bool IsVivaldiWebPanel();
 
-  void SetIsFullscreen(bool is_fullscreen, bool skip_window_state);
+  void SetIsFullscreen(bool is_fullscreen);
 
   // contentblocking handling
   void OnContentAllowed(ContentSettingsType settings_type);

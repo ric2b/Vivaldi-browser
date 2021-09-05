@@ -9,7 +9,7 @@
 
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -383,8 +383,9 @@ class CertificateReportingServiceTest : public ::testing::Test {
         test_helper_->server_public_key(),
         test_helper_->server_public_key_version(), kMaxReportCountInQueue,
         base::TimeDelta::FromHours(24), clock_.get(),
-        base::Bind(&CertificateReportingServiceObserver::OnServiceReset,
-                   base::Unretained(&service_observer_))));
+        base::BindRepeating(
+            &CertificateReportingServiceObserver::OnServiceReset,
+            base::Unretained(&service_observer_))));
     service_observer_.WaitForReset();
 
     event_histogram_tester_.reset(new EventHistogramTester());

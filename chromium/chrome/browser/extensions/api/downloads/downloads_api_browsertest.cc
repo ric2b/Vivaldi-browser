@@ -9,7 +9,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
@@ -18,7 +18,7 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -56,6 +56,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
+#include "content/public/test/slow_download_http_response.h"
 #include "content/public/test/test_download_http_response.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -700,7 +701,7 @@ class MockIconExtractorImpl : public DownloadFileIconExtractor {
     EXPECT_EQ(expected_icon_size_, icon_size);
     if (expected_path_ == path &&
         expected_icon_size_ == icon_size) {
-      callback_ = callback;
+      callback_ = std::move(callback);
       content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE, base::BindOnce(&MockIconExtractorImpl::RunCallback,
                                     base::Unretained(this)));
@@ -712,7 +713,8 @@ class MockIconExtractorImpl : public DownloadFileIconExtractor {
 
  private:
   void RunCallback() {
-    callback_.Run(response_);
+    DCHECK(callback_);
+    std::move(callback_).Run(response_);
     // Drop the reference on extension function to avoid memory leaks.
     callback_ = IconURLCallback();
   }
@@ -2601,10 +2603,11 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
 IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
                        DownloadExtensionTest_Download_Cancel) {
   LoadExtension("downloads_split");
+  embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+      &content::SlowDownloadHttpResponse::HandleSlowDownloadRequest));
   ASSERT_TRUE(StartEmbeddedTestServer());
-  ASSERT_TRUE(spawned_test_server()->Start());
   std::string download_url =
-      spawned_test_server()->GetURL("download-known-size").spec();
+      embedded_test_server()->GetURL("/download-known-size").spec();
   GoOnTheRecord();
 
   std::unique_ptr<base::Value> result(RunFunctionAndReturnResult(
@@ -3521,9 +3524,10 @@ IN_PROC_BROWSER_TEST_F(
                           result_id)));
 }
 
+// Flaky. crbug.com/1147804
 IN_PROC_BROWSER_TEST_F(
     DownloadExtensionTest,
-    DownloadExtensionTest_OnDeterminingFilename_EmptyBasenameInvalid) {
+    DISABLED_DownloadExtensionTest_OnDeterminingFilename_EmptyBasenameInvalid) {
   GoOnTheRecord();
   LoadExtension("downloads_split");
   AddFilenameDeterminer();

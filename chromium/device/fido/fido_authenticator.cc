@@ -26,7 +26,7 @@ void FidoAuthenticator::GetPinRetries(
 
 void FidoAuthenticator::GetPINToken(
     std::string pin,
-    const std::vector<pin::Permissions>& permissions,
+    std::vector<pin::Permissions> permissions,
     base::Optional<std::string> rp_id,
     FidoAuthenticator::GetTokenCallback callback) {
   NOTREACHED();
@@ -42,6 +42,7 @@ bool FidoAuthenticator::CanGetUvToken() {
 }
 
 void FidoAuthenticator::GetUvToken(
+    std::vector<pin::Permissions> permissions,
     base::Optional<std::string> rp_id,
     FidoAuthenticator::GetTokenCallback callback) {
   NOTREACHED();
@@ -58,11 +59,11 @@ void FidoAuthenticator::ChangePIN(const std::string& old_pin,
   NOTREACHED();
 }
 
-FidoAuthenticator::MakeCredentialPINDisposition
-FidoAuthenticator::WillNeedPINToMakeCredential(
+FidoAuthenticator::MakeCredentialPINUVDisposition
+FidoAuthenticator::PINUVDispositionForMakeCredential(
     const CtapMakeCredentialRequest& request,
     const FidoRequestHandlerBase::Observer* observer) {
-  return MakeCredentialPINDisposition::kNoPIN;
+  return MakeCredentialPINUVDisposition::kNoUV;
 }
 
 FidoAuthenticator::GetAssertionPINDisposition
@@ -145,6 +146,10 @@ void FidoAuthenticator::ReadLargeBlob(
 
 base::Optional<base::span<const int32_t>> FidoAuthenticator::GetAlgorithms() {
   return base::nullopt;
+}
+
+bool FidoAuthenticator::DiscoverableCredentialStorageFull() const {
+  return false;
 }
 
 void FidoAuthenticator::Reset(ResetCallback callback) {

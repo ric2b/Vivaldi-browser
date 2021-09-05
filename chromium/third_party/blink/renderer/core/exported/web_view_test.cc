@@ -34,7 +34,7 @@
 #include <memory>
 #include <string>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -62,6 +62,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/touch_event.mojom-blink.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
+#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
@@ -182,7 +183,7 @@ class TestData {
   void SetWebView(WebView* web_view) {
     web_view_ = static_cast<WebViewImpl*>(web_view);
   }
-  void SetSize(const WebSize& new_size) { size_ = new_size; }
+  void SetSize(const gfx::Size& new_size) { size_ = new_size; }
   HorizontalScrollbarState GetHorizontalScrollbarState() const {
     return web_view_->HasHorizontalScrollbar() ? kVisibleHorizontalScrollbar
                                                : kNoHorizontalScrollbar;
@@ -191,18 +192,18 @@ class TestData {
     return web_view_->HasVerticalScrollbar() ? kVisibleVerticalScrollbar
                                              : kNoVerticalScrollbar;
   }
-  int Width() const { return size_.width; }
-  int Height() const { return size_.height; }
+  int Width() const { return size_.width(); }
+  int Height() const { return size_.height(); }
 
  private:
-  WebSize size_;
+  gfx::Size size_;
   WebViewImpl* web_view_;
 };
 
 class AutoResizeWebViewClient : public frame_test_helpers::TestWebViewClient {
  public:
   // WebViewClient methods
-  void DidAutoResize(const WebSize& new_size) override {
+  void DidAutoResize(const gfx::Size& new_size) override {
     test_data_.SetSize(new_size);
   }
 
@@ -230,7 +231,7 @@ class WebViewTest : public testing::Test {
   }
 
  protected:
-  void SetViewportSize(const WebSize& size) {
+  void SetViewportSize(const gfx::Size& size) {
     cc::LayerTreeHost* layer_tree_host = web_view_helper_.GetLayerTreeHost();
     layer_tree_host->SetViewportRectAndScale(
         gfx::Rect(static_cast<gfx::Size>(size)), /*device_scale_factor=*/1.f,
@@ -282,6 +283,32 @@ class WebViewTest : public testing::Test {
     return detector;
   }
 
+  // Helper function that creates a widget for a main frame.
+  // Copy the steps done from WebViewHelper::InitializeWithOpener() to set up
+  // the appropriate pointers!
+  WebFrameWidget* CreateWidgetForMainFrame(WebWidgetClient* client,
+                                           WebLocalFrame* frame) {
+    mojo::AssociatedRemote<mojom::blink::FrameWidget> frame_widget;
+    mojo::PendingAssociatedReceiver<mojom::blink::FrameWidget>
+        frame_widget_receiver =
+            frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<mojom::blink::FrameWidgetHost> frame_widget_host;
+    ignore_result(frame_widget_host.BindNewEndpointAndPassDedicatedReceiver());
+
+    mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
+    mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
+        widget_remote.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<mojom::blink::WidgetHost> widget_host_remote;
+    ignore_result(widget_host_remote.BindNewEndpointAndPassDedicatedReceiver());
+
+    return blink::WebFrameWidget::CreateForMainFrame(
+        client, frame, frame_widget_host.Unbind(),
+        std::move(frame_widget_receiver), widget_host_remote.Unbind(),
+        std::move(widget_receiver), viz::FrameSinkId());
+  }
+
   std::string base_url_;
   frame_test_helpers::WebViewHelper web_view_helper_;
   scoped_refptr<base::TestMockTimeTaskRunner> test_task_runner_;
@@ -310,8 +337,8 @@ TEST_F(WebViewTest, HitTestVideo) {
   // Test that hit tests on parts of a video element result in hits on the video
   // element itself as opposed to its child elements.
   std::string url = RegisterMockedHttpURLLoad("video_200x200.html");
-  WebView* web_view = web_view_helper_.InitializeAndLoad(url);
-  web_view->MainFrameWidget()->Resize(WebSize(200, 200));
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(url);
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   // Center of video.
   EXPECT_EQ("video", HitTestElementId(web_view, 100, 100));
@@ -326,8 +353,8 @@ TEST_F(WebViewTest, HitTestVideo) {
 TEST_F(WebViewTest, HitTestContentEditableImageMaps) {
   std::string url =
       RegisterMockedHttpURLLoad("content-editable-image-maps.html");
-  WebView* web_view = web_view_helper_.InitializeAndLoad(url);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 500));
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(url);
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 500));
 
   EXPECT_EQ("areaANotEditable", HitTestElementId(web_view, 25, 25));
   EXPECT_FALSE(HitTestIsContentEditable(web_view, 25, 25));
@@ -366,8 +393,8 @@ static WebElement HitTestUrlElement(WebView* view, int x, int y) {
 
 TEST_F(WebViewTest, ImageMapUrls) {
   std::string url = RegisterMockedHttpURLLoad("image-map.html");
-  WebView* web_view = web_view_helper_.InitializeAndLoad(url);
-  web_view->MainFrameWidget()->Resize(WebSize(400, 400));
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(url);
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(400, 400));
 
   std::string image_url =
       "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
@@ -390,7 +417,7 @@ TEST_F(WebViewTest, BrokenImage) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
   web_view->GetSettings()->SetLoadsImagesAutomatically(true);
   LoadFrame(web_view->MainFrameImpl(), url);
-  web_view->MainFrameWidget()->Resize(WebSize(400, 400));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(400, 400));
 
   std::string image_url = "http://www.test.com/non_existent.png";
 
@@ -407,7 +434,7 @@ TEST_F(WebViewTest, BrokenInputImage) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
   web_view->GetSettings()->SetLoadsImagesAutomatically(true);
   LoadFrame(web_view->MainFrameImpl(), url);
-  web_view->MainFrameWidget()->Resize(WebSize(400, 400));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(400, 400));
 
   std::string image_url = "http://www.test.com/non_existent.png";
 
@@ -477,9 +504,17 @@ TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame) {
   // initialization code between WebView and WebLocalFrame creation.
   frame_test_helpers::TestWebViewClient web_view_client;
   frame_test_helpers::TestWebWidgetClient web_widget_client;
-  WebViewImpl* web_view = static_cast<WebViewImpl*>(WebView::Create(
-      &web_view_client, /*is_hidden=*/false, /*is_inside_portal=*/false,
-      /*compositing_enabled=*/true, nullptr, mojo::NullAssociatedReceiver()));
+  std::unique_ptr<blink::scheduler::WebAgentGroupScheduler>
+      agent_group_scheduler =
+          blink::scheduler::WebThreadScheduler::MainThreadScheduler()
+              ->CreateAgentGroupScheduler();
+  WebViewImpl* web_view = static_cast<WebViewImpl*>(
+      WebView::Create(&web_view_client,
+                      /*is_hidden=*/false,
+                      /*is_inside_portal=*/false,
+                      /*compositing_enabled=*/true,
+                      /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
+                      *agent_group_scheduler));
 
   EXPECT_NE(SK_ColorBLUE, web_view->BackgroundColor());
   // WebView does not have a frame yet, but we should still be able to set the
@@ -496,12 +531,8 @@ TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame) {
   {
     // Copy the steps done from WebViewHelper::InitializeWithOpener() to set up
     // the appropriate pointers!
-    WebFrameWidget* widget = blink::WebFrameWidget::CreateForMainFrame(
-        &web_widget_client, frame,
-        CrossVariantMojoAssociatedRemote<mojom::FrameWidgetHostInterfaceBase>(),
-        CrossVariantMojoAssociatedReceiver<mojom::FrameWidgetInterfaceBase>(),
-        CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>(),
-        CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase>());
+    WebFrameWidget* widget =
+        CreateWidgetForMainFrame(&web_widget_client, frame);
     cc::LayerTreeSettings layer_tree_settings =
         frame_test_helpers::GetSynchronousSingleThreadLayerTreeSettings();
     web_widget_client.set_layer_tree_host(widget->InitializeCompositing(
@@ -531,13 +562,13 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent) {
   // Set WebView background to green with alpha.
   web_view->SetBaseBackgroundColor(kAlphaGreen);
   web_view->GetSettings()->SetShouldClearDocumentBackground(false);
-  web_view->MainFrameWidget()->Resize(WebSize(kWidth, kHeight));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(kWidth, kHeight));
   UpdateAllLifecyclePhases();
 
   // Set canvas background to red with alpha.
   SkBitmap bitmap;
   bitmap.allocN32Pixels(kWidth, kHeight);
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.clear(kAlphaRed);
 
   PaintRecordBuilder builder;
@@ -566,11 +597,10 @@ TEST_F(WebViewTest, SetBaseBackgroundColorAndBlendWithExistingContent) {
 }
 
 TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
-  ScopedCSSColorSchemeForTest enable_color_scheme(true);
-
   WebViewImpl* web_view = web_view_helper_.Initialize();
   ColorSchemeHelper color_scheme_helper(*(web_view->GetPage()));
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
   web_view->SetBaseBackgroundColor(SK_ColorBLUE);
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
@@ -582,7 +612,8 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
   LocalFrameView* frame_view = web_view->MainFrameImpl()->GetFrame()->View();
   EXPECT_EQ(Color(0, 0, 255), frame_view->BaseBackgroundColor());
 
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(Color(0x12, 0x12, 0x12), frame_view->BaseBackgroundColor());
 
@@ -597,7 +628,7 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
   UpdateAllLifecyclePhases();
 
   Color system_background_color = LayoutTheme::GetTheme().SystemColor(
-      CSSValueID::kCanvas, ColorScheme::kLight);
+      CSSValueID::kCanvas, mojom::blink::ColorScheme::kLight);
   EXPECT_EQ(system_background_color, frame_view->BaseBackgroundColor());
 
   color_scheme_helper.SetForcedColors(*(web_view->GetPage()),
@@ -605,7 +636,8 @@ TEST_F(WebViewTest, SetBaseBackgroundColorWithColorScheme) {
   UpdateAllLifecyclePhases();
   EXPECT_EQ(Color(0x12, 0x12, 0x12), frame_view->BaseBackgroundColor());
 
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kLight);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kLight);
   UpdateAllLifecyclePhases();
   EXPECT_EQ(Color(0, 0, 255), frame_view->BaseBackgroundColor());
 }
@@ -754,8 +786,8 @@ TEST_F(WebViewTest, HitTestResultAtWithPageScale) {
   std::string url = base_url_ + "specify_size.html?" + "50px" + ":" + "50px";
   url_test_helpers::RegisterMockedURLLoad(
       ToKURL(url), test::CoreTestDataPath("specify_size.html"));
-  WebView* web_view = web_view_helper_.InitializeAndLoad(url);
-  web_view->MainFrameWidget()->Resize(WebSize(100, 100));
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(url);
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(100, 100));
   gfx::PointF hit_point(75, 75);
 
   // Image is at top left quandrant, so should not hit it.
@@ -779,24 +811,27 @@ TEST_F(WebViewTest, HitTestResultAtWithPageScaleAndPan) {
       ToKURL(url), test::CoreTestDataPath("specify_size.html"));
   WebViewImpl* web_view = web_view_helper_.Initialize();
   LoadFrame(web_view->MainFrameImpl(), url);
-  web_view->MainFrameWidget()->Resize(WebSize(100, 100));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(100, 100));
   gfx::PointF hit_point(75, 75);
 
   // Image is at top left quandrant, so should not hit it.
-  WebHitTestResult negative_result = web_view->HitTestResultAt(hit_point);
+  WebHitTestResult negative_result =
+      web_view->MainFrameWidget()->HitTestResultAt(hit_point);
   EXPECT_FALSE(
       negative_result.GetNode().To<WebElement>().HasHTMLTagName("img"));
   negative_result.Reset();
 
   // Scale page up 2x so image should occupy the whole viewport.
   web_view->SetPageScaleFactor(2.0f);
-  WebHitTestResult positive_result = web_view->HitTestResultAt(hit_point);
+  WebHitTestResult positive_result =
+      web_view->MainFrameWidget()->HitTestResultAt(hit_point);
   EXPECT_TRUE(positive_result.GetNode().To<WebElement>().HasHTMLTagName("img"));
   positive_result.Reset();
 
   // Pan around the zoomed in page so the image is not visible in viewport.
   web_view->SetVisualViewportOffset(gfx::PointF(100, 100));
-  WebHitTestResult negative_result2 = web_view->HitTestResultAt(hit_point);
+  WebHitTestResult negative_result2 =
+      web_view->MainFrameWidget()->HitTestResultAt(hit_point);
   EXPECT_FALSE(
       negative_result2.GetNode().To<WebElement>().HasHTMLTagName("img"));
   negative_result2.Reset();
@@ -804,8 +839,8 @@ TEST_F(WebViewTest, HitTestResultAtWithPageScaleAndPan) {
 
 TEST_F(WebViewTest, HitTestResultForTapWithTapArea) {
   std::string url = RegisterMockedHttpURLLoad("hit_test.html");
-  WebView* web_view = web_view_helper_.InitializeAndLoad(url);
-  web_view->MainFrameWidget()->Resize(WebSize(100, 100));
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(url);
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(100, 100));
   gfx::Point hit_point(55, 55);
 
   // Image is at top left quandrant, so should not hit it.
@@ -816,7 +851,7 @@ TEST_F(WebViewTest, HitTestResultForTapWithTapArea) {
   negative_result.Reset();
 
   // The tap area is 20 by 20 square, centered at 55, 55.
-  WebSize tap_area(20, 20);
+  gfx::Size tap_area(20, 20);
   WebHitTestResult positive_result =
       web_view->HitTestResultForTap(hit_point, tap_area);
   EXPECT_TRUE(positive_result.GetNode().To<WebElement>().HasHTMLTagName("img"));
@@ -835,18 +870,18 @@ TEST_F(WebViewTest, HitTestResultForTapWithTapAreaPageScaleAndPan) {
   std::string url = RegisterMockedHttpURLLoad("hit_test.html");
   WebViewImpl* web_view = web_view_helper_.Initialize();
   LoadFrame(web_view->MainFrameImpl(), url);
-  web_view->MainFrameWidget()->Resize(WebSize(100, 100));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(100, 100));
   gfx::Point hit_point(55, 55);
 
   // Image is at top left quandrant, so should not hit it.
   WebHitTestResult negative_result =
-      web_view->HitTestResultAt(gfx::PointF(hit_point));
+      web_view->MainFrameWidget()->HitTestResultAt(gfx::PointF(hit_point));
   EXPECT_FALSE(
       negative_result.GetNode().To<WebElement>().HasHTMLTagName("img"));
   negative_result.Reset();
 
   // The tap area is 20 by 20 square, centered at 55, 55.
-  WebSize tap_area(20, 20);
+  gfx::Size tap_area(20, 20);
   WebHitTestResult positive_result =
       web_view->HitTestResultForTap(hit_point, tap_area);
   EXPECT_TRUE(positive_result.GetNode().To<WebElement>().HasHTMLTagName("img"));
@@ -1190,7 +1225,7 @@ TEST_F(WebViewTest, LongPressOutsideInputShouldNotSelectPlaceholderText) {
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "input_placeholder.html");
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -1568,7 +1603,7 @@ TEST_F(WebViewTest, FinishCompositionDoesNotRevealSelection) {
   RegisterMockedHttpURLLoad("form_with_input.html");
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "form_with_input.html");
-  web_view->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
   EXPECT_EQ(0, web_view->MainFrameImpl()->GetScrollOffset().width);
   EXPECT_EQ(0, web_view->MainFrameImpl()->GetScrollOffset().height);
@@ -1870,11 +1905,10 @@ TEST_F(WebViewTest, IsSelectionAnchorFirst) {
   web_view->MainFrameImpl()->GetFrame()->SetInitialFocus(false);
   frame->SetEditableSelectionOffsets(4, 10);
   EXPECT_TRUE(frame->IsSelectionAnchorFirst());
-  WebRect anchor;
-  WebRect focus;
-  web_view->MainFrameWidget()->SelectionBounds(anchor, focus);
-  frame->SelectRange(gfx::Point(focus.x, focus.y),
-                     gfx::Point(anchor.x, anchor.y));
+  gfx::Rect anchor;
+  gfx::Rect focus;
+  web_view->MainFrameViewWidget()->CalculateSelectionBounds(anchor, focus);
+  frame->SelectRange(focus.origin(), anchor.origin());
   EXPECT_FALSE(frame->IsSelectionAnchorFirst());
 }
 
@@ -2402,7 +2436,7 @@ TEST_F(WebViewTest, ExitingDeviceEmulationResetsPageScale) {
   RegisterMockedHttpURLLoad("200-by-300.html");
   WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad(base_url_ + "200-by-300.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(200, 300));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(200, 300));
 
   float page_scale_expected = web_view_impl->PageScaleFactor();
 
@@ -2424,7 +2458,7 @@ TEST_F(WebViewTest, HistoryResetScrollAndScaleState) {
   RegisterMockedHttpURLLoad("200-by-300.html");
   WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad(base_url_ + "200-by-300.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(100, 150));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(100, 150));
   UpdateAllLifecyclePhases();
   EXPECT_EQ(0, web_view_impl->MainFrameImpl()->GetScrollOffset().width);
   EXPECT_EQ(0, web_view_impl->MainFrameImpl()->GetScrollOffset().height);
@@ -2470,7 +2504,7 @@ TEST_F(WebViewTest, BackForwardRestoreScroll) {
   RegisterMockedHttpURLLoad("back_forward_restore_scroll.html");
   WebViewImpl* web_view_impl = web_view_helper_.InitializeAndLoad(
       base_url_ + "back_forward_restore_scroll.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(640, 480));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(640, 480));
   web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
@@ -2536,7 +2570,7 @@ TEST_F(WebViewTest, FullscreenNoResetScroll) {
   RegisterMockedHttpURLLoad("fullscreen_style.html");
   WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad(base_url_ + "fullscreen_style.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   UpdateAllLifecyclePhases();
 
   // Scroll the page down.
@@ -2568,7 +2602,7 @@ TEST_F(WebViewTest, FullscreenBackgroundColor) {
   RegisterMockedHttpURLLoad("fullscreen_style.html");
   WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad(base_url_ + "fullscreen_style.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   UpdateAllLifecyclePhases();
   EXPECT_EQ(SK_ColorWHITE, web_view_impl->BackgroundColor());
 
@@ -2623,7 +2657,7 @@ static void DragAndDropURL(WebViewImpl* web_view, const std::string& url) {
   const gfx::PointF screen_point;
   WebFrameWidget* widget = web_view->MainFrameImpl()->FrameWidget();
   widget->DragTargetDragEnter(drag_data, client_point, screen_point,
-                              kDragOperationCopy, 0);
+                              kDragOperationCopy, 0, base::DoNothing());
   widget->DragTargetDrop(drag_data, client_point, screen_point, 0);
   frame_test_helpers::PumpPendingRequestsForFrameToLoad(
       web_view->MainFrameImpl());
@@ -2713,21 +2747,21 @@ ExternalDateTimeChooser* WebViewTest::GetExternalDateTimeChooser(
 TEST_F(WebViewTest, ClientTapHandlingNullWebViewClient) {
   // Note: this test doesn't use WebViewHelper since WebViewHelper creates an
   // internal WebViewClient on demand if the supplied WebViewClient is null.
+  std::unique_ptr<blink::scheduler::WebAgentGroupScheduler>
+      agent_group_scheduler =
+          blink::scheduler::WebThreadScheduler::MainThreadScheduler()
+              ->CreateAgentGroupScheduler();
   WebViewImpl* web_view = static_cast<WebViewImpl*>(WebView::Create(
-      nullptr, false, /*is_inside_portal=*/false,
-      /*compositing_enabled=*/false, nullptr, mojo::NullAssociatedReceiver()));
+      /*client=*/nullptr, /*is_hidden=*/false, /*is_inside_portal=*/false,
+      /*compositing_enabled=*/false, /*opener=*/nullptr,
+      mojo::NullAssociatedReceiver(), *agent_group_scheduler));
   frame_test_helpers::TestWebFrameClient web_frame_client;
   frame_test_helpers::TestWebWidgetClient web_widget_client;
   WebLocalFrame* local_frame =
       WebLocalFrame::CreateMainFrame(web_view, &web_frame_client, nullptr,
                                      base::UnguessableToken::Create(), nullptr);
   web_frame_client.Bind(local_frame);
-  blink::WebFrameWidget::CreateForMainFrame(
-      &web_widget_client, local_frame,
-      CrossVariantMojoAssociatedRemote<mojom::FrameWidgetHostInterfaceBase>(),
-      CrossVariantMojoAssociatedReceiver<mojom::FrameWidgetInterfaceBase>(),
-      CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>(),
-      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase>());
+  CreateWidgetForMainFrame(&web_widget_client, local_frame);
 
   WebGestureEvent event(WebInputEvent::Type::kGestureTap,
                         WebInputEvent::kNoModifiers,
@@ -2746,7 +2780,7 @@ TEST_F(WebViewTest, LongPressEmptyDiv) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "long_press_empty_div.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(false);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2767,7 +2801,7 @@ TEST_F(WebViewTest, LongPressEmptyDivAlwaysShow) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "long_press_empty_div.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2788,7 +2822,7 @@ TEST_F(WebViewTest, LongPressObject) {
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "long_press_object.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2813,7 +2847,7 @@ TEST_F(WebViewTest, LongPressObjectFallback) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "long_press_object_fallback.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2838,7 +2872,7 @@ TEST_F(WebViewTest, LongPressImage) {
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "long_press_image.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(false);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2862,7 +2896,7 @@ TEST_F(WebViewTest, LongPressVideo) {
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "long_press_video.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(false);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2883,7 +2917,7 @@ TEST_F(WebViewTest, LongPressLink) {
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "long_press_link.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(false);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2909,7 +2943,7 @@ TEST_F(WebViewTest, TouchCancelOnStartDragging) {
       base_url_ + "long_press_draggable_div.html");
 
   web_view->SettingsImpl()->SetTouchDragDropEnabled(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2950,7 +2984,7 @@ TEST_F(WebViewTest, TouchDragContextMenuWithoutDrag) {
 
   web_view->SettingsImpl()->SetTouchDragDropEnabled(true);
   web_view->SettingsImpl()->SetTouchDragEndContextMenu(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -2989,7 +3023,7 @@ TEST_F(WebViewTest, TouchDragContextMenuWithDrag) {
 
   web_view->SettingsImpl()->SetTouchDragDropEnabled(true);
   web_view->SettingsImpl()->SetTouchDragEndContextMenu(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3028,7 +3062,7 @@ TEST_F(WebViewTest, showContextMenuOnLongPressingLinks) {
       base_url_ + "long_press_links_and_images.html");
 
   web_view->SettingsImpl()->SetTouchDragDropEnabled(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3052,7 +3086,7 @@ TEST_F(WebViewTest, LongPressEmptyEditableSelection) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "long_press_empty_editable_selection.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(false);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3072,7 +3106,7 @@ TEST_F(WebViewTest, LongPressEmptyNonEditableSelection) {
 
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "long_press_image.html");
-  web_view->MainFrameWidget()->Resize(WebSize(500, 500));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 500));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3094,7 +3128,7 @@ TEST_F(WebViewTest, LongPressSelection) {
 
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "longpress_selection.html");
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3114,12 +3148,13 @@ TEST_F(WebViewTest, FinishComposingTextDoesNotDismissHandles) {
 
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "longpress_selection.html");
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
   WebString target = WebString::FromUTF8("target");
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
+  static_cast<WebView*>(web_view)->SetFocus(true);
   WebInputMethodController* active_input_method_controller =
       frame->FrameWidget()->GetActiveWebInputMethodController();
   EXPECT_TRUE(TapElementById(WebInputEvent::Type::kGestureTap, target));
@@ -3149,7 +3184,7 @@ TEST_F(WebViewTest, TouchDoesntSelectEmptyTextarea) {
 
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "longpress_textarea.html");
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3195,7 +3230,7 @@ TEST_F(WebViewTest, LongPressImageTextarea) {
 
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "longpress_image_contenteditable.html");
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3215,7 +3250,7 @@ TEST_F(WebViewTest, BlinkCaretAfterLongPress) {
 
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "blink_caret_on_typing_after_long_press.html");
-  web_view->MainFrameWidget()->Resize(WebSize(640, 480));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(640, 480));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3268,7 +3303,7 @@ TEST_F(WebViewTest, SelectionOnReadOnlyInput) {
   RegisterMockedHttpURLLoad("selection_readonly.html");
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "selection_readonly.html");
-  web_view->MainFrameWidget()->Resize(WebSize(640, 480));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(640, 480));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3290,7 +3325,7 @@ TEST_F(WebViewTest, KeyDownScrollsHandled) {
 
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "content-width-1000.html");
-  web_view->MainFrameWidget()->Resize(WebSize(100, 100));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(100, 100));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -3440,7 +3475,7 @@ TEST_F(WebViewTest, MiddleClickAutoscrollCursor) {
     WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
         base_url_ + "content-width-1000.html", nullptr, nullptr, &client);
     web_view->MainFrameWidget()->Resize(
-        WebSize(current_test.resize_width, current_test.resize_height));
+        gfx::Size(current_test.resize_width, current_test.resize_height));
     UpdateAllLifecyclePhases();
     RunPendingTasks();
 
@@ -3501,7 +3536,8 @@ TEST_F(WebViewTest, ShowPressOnTransformedLink) {
 
   int page_width = 640;
   int page_height = 480;
-  web_view_impl->MainFrameWidget()->Resize(WebSize(page_width, page_height));
+  web_view_impl->MainFrameViewWidget()->Resize(
+      gfx::Size(page_width, page_height));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
   frame_test_helpers::LoadHTMLString(
@@ -3726,7 +3762,8 @@ class ViewCreatingWebViewClient : public frame_test_helpers::TestWebViewClient {
                       WebNavigationPolicy,
                       network::mojom::blink::WebSandboxFlags,
                       const FeaturePolicyFeatureState&,
-                      const SessionStorageNamespaceId&) override {
+                      const SessionStorageNamespaceId&,
+                      bool& consumed_user_gesture) override {
     return web_view_helper_.InitializeWithOpener(opener);
   }
 
@@ -3810,7 +3847,8 @@ class ViewReusingWebViewClient : public frame_test_helpers::TestWebViewClient {
                       WebNavigationPolicy,
                       network::mojom::blink::WebSandboxFlags,
                       const FeaturePolicyFeatureState&,
-                      const SessionStorageNamespaceId&) override {
+                      const SessionStorageNamespaceId&,
+                      bool& consumed_user_gesture) override {
     return web_view_;
   }
 
@@ -4170,14 +4208,21 @@ TEST_F(WebViewTest, SetHasTouchEventConsumers) {
   // initialization code between WebView and WebLocalFrame creation.
   frame_test_helpers::TestWebViewClient web_view_client;
   frame_test_helpers::TestWebWidgetClient web_widget_client;
+  std::unique_ptr<blink::scheduler::WebAgentGroupScheduler>
+      agent_group_scheduler =
+          blink::scheduler::WebThreadScheduler::MainThreadScheduler()
+              ->CreateAgentGroupScheduler();
   WebViewImpl* web_view_impl = static_cast<WebViewImpl*>(WebView::Create(
-      &web_view_client, /*is_hidden*/ false, /*is_inside_portal=*/false,
-      /*compositing_enabled=*/true, nullptr, mojo::NullAssociatedReceiver()));
+      &web_view_client, /*is_hidden=*/false, /*is_inside_portal=*/false,
+      /*compositing_enabled=*/true, /*opener=*/nullptr,
+      mojo::NullAssociatedReceiver(), *agent_group_scheduler));
 
   frame_test_helpers::TestWebFrameClient web_frame_client;
-  WebLocalFrame* frame =
-      WebLocalFrame::CreateMainFrame(web_view_impl, &web_frame_client, nullptr,
-                                     base::UnguessableToken::Create(), nullptr);
+  WebLocalFrame* frame = WebLocalFrame::CreateMainFrame(
+      web_view_impl, &web_frame_client, nullptr,
+      base::UnguessableToken::Create(),
+      std::make_unique<WebPolicyContainer>(WebPolicyContainerDocumentPolicies(),
+                                           mojo::NullAssociatedRemote()));
   web_frame_client.Bind(frame);
 
   FakeFrameWidgetHost frame_widget_host;
@@ -4185,13 +4230,24 @@ TEST_F(WebViewTest, SetHasTouchEventConsumers) {
       frame_widget_host.BindNewFrameWidgetInterfaces();
 
   {
+    mojo::AssociatedRemote<mojom::blink::FrameWidget> frame_widget;
+    mojo::PendingAssociatedReceiver<mojom::blink::FrameWidget>
+        frame_widget_receiver =
+            frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
+    mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
+        widget_remote.BindNewEndpointAndPassDedicatedReceiver();
+
+    mojo::AssociatedRemote<mojom::blink::WidgetHost> widget_host_remote;
+    ignore_result(widget_host_remote.BindNewEndpointAndPassDedicatedReceiver());
+
     // Copy the steps done from WebViewHelper::InitializeWithOpener() to set up
     // the appropriate pointers!
     WebFrameWidget* widget = blink::WebFrameWidget::CreateForMainFrame(
         &web_widget_client, frame, std::move(blink_frame_widget_host),
-        CrossVariantMojoAssociatedReceiver<mojom::FrameWidgetInterfaceBase>(),
-        CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>(),
-        CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase>());
+        std::move(frame_widget_receiver), widget_host_remote.Unbind(),
+        std::move(widget_receiver), viz::FrameSinkId());
     cc::LayerTreeSettings layer_tree_settings =
         frame_test_helpers::GetSynchronousSingleThreadLayerTreeSettings();
     web_widget_client.set_layer_tree_host(widget->InitializeCompositing(
@@ -4581,26 +4637,26 @@ TEST_F(WebViewTest, PreferredSize) {
       ToKURL(url), test::CoreTestDataPath("specify_size.html"));
   WebView* web_view = web_view_helper_.InitializeAndLoad(url);
 
-  WebSize size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(100, size.width);
-  EXPECT_EQ(100, size.height);
+  gfx::Size size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(100, size.width());
+  EXPECT_EQ(100, size.height());
 
   web_view->SetZoomLevel(PageZoomFactorToZoomLevel(2.0));
   size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(200, size.width);
-  EXPECT_EQ(200, size.height);
+  EXPECT_EQ(200, size.width());
+  EXPECT_EQ(200, size.height());
 
   // Verify that both width and height are rounded (in this case up)
   web_view->SetZoomLevel(PageZoomFactorToZoomLevel(0.9995));
   size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(100, size.width);
-  EXPECT_EQ(100, size.height);
+  EXPECT_EQ(100, size.width());
+  EXPECT_EQ(100, size.height());
 
   // Verify that both width and height are rounded (in this case down)
   web_view->SetZoomLevel(PageZoomFactorToZoomLevel(1.0005));
   size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(100, size.width);
-  EXPECT_EQ(100, size.height);
+  EXPECT_EQ(100, size.width());
+  EXPECT_EQ(100, size.height());
 
   url = base_url_ + "specify_size.html?1.5px:1.5px";
   url_test_helpers::RegisterMockedURLLoad(
@@ -4609,13 +4665,13 @@ TEST_F(WebViewTest, PreferredSize) {
 
   web_view->SetZoomLevel(PageZoomFactorToZoomLevel(1));
   size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(2, size.width);
-  EXPECT_EQ(2, size.height);
+  EXPECT_EQ(2, size.width());
+  EXPECT_EQ(2, size.height());
 }
 
 TEST_F(WebViewTest, PreferredMinimumSizeQuirksMode) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
-  web_view->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   frame_test_helpers::LoadHTMLString(
       web_view->MainFrameImpl(),
       R"HTML(<html>
@@ -4625,10 +4681,10 @@ TEST_F(WebViewTest, PreferredMinimumSizeQuirksMode) {
       </html>)HTML",
       url_test_helpers::ToKURL("http://example.com/"));
 
-  WebSize size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(99, size.width);
+  gfx::Size size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(99, size.width());
   // When in quirks mode the preferred height stretches to fill the viewport.
-  EXPECT_EQ(600, size.height);
+  EXPECT_EQ(600, size.height());
 }
 
 TEST_F(WebViewTest, PreferredSizeWithGrid) {
@@ -4648,9 +4704,9 @@ TEST_F(WebViewTest, PreferredSizeWithGrid) {
                                    )HTML",
                                      base_url);
 
-  WebSize size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(100, size.width);
-  EXPECT_EQ(100, size.height);
+  gfx::Size size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(100, size.width());
+  EXPECT_EQ(100, size.height());
 }
 
 TEST_F(WebViewTest, PreferredSizeWithGridMinWidth) {
@@ -4666,8 +4722,8 @@ TEST_F(WebViewTest, PreferredSizeWithGridMinWidth) {
                                    )HTML",
                                      base_url);
 
-  WebSize size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(200, size.width);
+  gfx::Size size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(200, size.width());
 }
 
 TEST_F(WebViewTest, PreferredSizeWithGridMinWidthFlexibleTracks) {
@@ -4683,8 +4739,8 @@ TEST_F(WebViewTest, PreferredSizeWithGridMinWidthFlexibleTracks) {
                                    )HTML",
                                      base_url);
 
-  WebSize size = web_view->ContentsPreferredMinimumSize();
-  EXPECT_EQ(200, size.width);
+  gfx::Size size = web_view->ContentsPreferredMinimumSize();
+  EXPECT_EQ(200, size.width());
 }
 
 #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
@@ -4765,7 +4821,7 @@ class ShowUnhandledTapTest : public WebViewTest {
         WebString::FromUTF8(base_url_ + test_file), web_view_helper_));
 
     web_view_ = mojo_test_helper_->WebView();
-    web_view_->MainFrameWidget()->Resize(WebSize(500, 300));
+    web_view_->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
     web_view_->MainFrameWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
     RunPendingTasks();
@@ -4867,18 +4923,18 @@ TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeeded) {
 
 TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeededWithMutateDom) {
   // Test dom mutation.
-  TestEachMouseEvent("mutateDom", FALSE);
+  TestEachMouseEvent("mutateDom", false);
 
   // Test without any DOM mutation.
-  TestEachMouseEvent("none", TRUE);
+  TestEachMouseEvent("none", true);
 }
 
 TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeededWithMutateStyle) {
   // Test style mutation.
-  TestEachMouseEvent("mutateStyle", FALSE);
+  TestEachMouseEvent("mutateStyle", false);
 
   // Test checkbox:indeterminate style mutation.
-  TestEachMouseEvent("mutateIndeterminate", FALSE);
+  TestEachMouseEvent("mutateIndeterminate", false);
 
   // Test click div with :active style.
   Tap("style_active");
@@ -4887,10 +4943,10 @@ TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeededWithMutateStyle) {
 
 TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeededWithPreventDefault) {
   // Test swallowing.
-  TestEachMouseEvent("preventDefault", FALSE);
+  TestEachMouseEvent("preventDefault", false);
 
   // Test without any preventDefault.
-  TestEachMouseEvent("none", TRUE);
+  TestEachMouseEvent("none", true);
 }
 
 TEST_F(ShowUnhandledTapTest, ShowUnhandledTapUIIfNeededWithNonTriggeringNodes) {
@@ -5071,8 +5127,8 @@ TEST_F(WebViewTest, ForceAndResetViewport) {
   RegisterMockedHttpURLLoad("200-by-300.html");
   WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad(base_url_ + "200-by-300.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(100, 150));
-  SetViewportSize(WebSize(100, 150));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(100, 150));
+  SetViewportSize(gfx::Size(100, 150));
   DevToolsEmulator* dev_tools_emulator = web_view_impl->GetDevToolsEmulator();
 
   TransformationMatrix expected_matrix;
@@ -5123,7 +5179,7 @@ TEST_F(WebViewTest, ViewportOverrideIntegratesDeviceMetricsOffsetAndScale) {
   RegisterMockedHttpURLLoad("200-by-300.html");
   WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad(base_url_ + "200-by-300.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(100, 150));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(100, 150));
 
   TransformationMatrix expected_matrix;
   expected_matrix.MakeIdentity();
@@ -5150,8 +5206,8 @@ TEST_F(WebViewTest, ViewportOverrideAdaptsToScaleAndScroll) {
   RegisterMockedHttpURLLoad("200-by-300.html");
   WebViewImpl* web_view_impl =
       web_view_helper_.InitializeAndLoad(base_url_ + "200-by-300.html");
-  web_view_impl->MainFrameWidget()->Resize(WebSize(100, 150));
-  SetViewportSize(WebSize(100, 150));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(100, 150));
+  SetViewportSize(gfx::Size(100, 150));
   LocalFrameView* frame_view =
       web_view_impl->MainFrameImpl()->GetFrame()->View();
   DevToolsEmulator* dev_tools_emulator = web_view_impl->GetDevToolsEmulator();
@@ -5219,7 +5275,7 @@ TEST_F(WebViewTest, ViewportOverrideAdaptsToScaleAndScroll) {
 
 TEST_F(WebViewTest, ResizeForPrintingViewportUnits) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
-  web_view->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
   frame_test_helpers::LoadHTMLString(web_view->MainFrameImpl(),
@@ -5249,12 +5305,12 @@ TEST_F(WebViewTest, ResizeForPrintingViewportUnits) {
   EXPECT_EQ(expected_size.Width(), vw_element->OffsetWidth());
   EXPECT_EQ(expected_size.Height(), vw_element->OffsetHeight());
 
-  web_view->MainFrameWidget()->Resize(FlooredIntSize(page_size));
+  web_view->MainFrameWidget()->Resize(gfx::Size(FlooredIntSize(page_size)));
 
   EXPECT_EQ(expected_size.Width(), vw_element->OffsetWidth());
   EXPECT_EQ(expected_size.Height(), vw_element->OffsetHeight());
 
-  web_view->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   frame->PrintEnd();
 
   EXPECT_EQ(800, vw_element->OffsetWidth());
@@ -5262,7 +5318,7 @@ TEST_F(WebViewTest, ResizeForPrintingViewportUnits) {
 
 TEST_F(WebViewTest, WidthMediaQueryWithPageZoomAfterPrinting) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
-  web_view->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   web_view->SetZoomLevel(PageZoomFactorToZoomLevel(2.0));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
@@ -5297,7 +5353,7 @@ TEST_F(WebViewTest, WidthMediaQueryWithPageZoomAfterPrinting) {
 
 TEST_F(WebViewTest, ViewportUnitsPrintingWithPageZoom) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
-  web_view->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   web_view->SetZoomLevel(PageZoomFactorToZoomLevel(2.0));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
@@ -5336,7 +5392,7 @@ TEST_F(WebViewTest, ViewportUnitsPrintingWithPageZoom) {
 
 TEST_F(WebViewTest, DeviceEmulationResetScrollbars) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
-  web_view->MainFrameWidget()->Resize(WebSize(800, 600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
   frame_test_helpers::LoadHTMLString(web_view->MainFrameImpl(),
@@ -6022,7 +6078,7 @@ TEST_F(WebViewTest, DISABLED_PotentialViolationReportsForLayoutAnimations) {
 
 TEST_F(WebViewTest, ForceDarkModeInvalidatesPaint) {
   WebViewImpl* web_view = web_view_helper_.Initialize();
-  web_view->MainFrameWidget()->Resize(WebSize(500, 500));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 500));
   UpdateAllLifecyclePhases();
 
   Document* document = web_view->MainFrameImpl()->GetFrame()->GetDocument();
@@ -6038,7 +6094,7 @@ TEST_F(WebViewTest, LongPressImageAndThenLongTapImage) {
   WebViewImpl* web_view =
       web_view_helper_.InitializeAndLoad(base_url_ + "long_press_image.html");
   web_view->SettingsImpl()->SetAlwaysShowContextMenuOnTouch(false);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 
@@ -6085,7 +6141,7 @@ TEST_F(WebViewTest, LongPressAndThenLongTapLinkInIframeShouldShowContextMenu) {
   WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
       base_url_ + "long_press_link_in_iframe.html");
   web_view->SettingsImpl()->SetTouchDragDropEnabled(true);
-  web_view->MainFrameWidget()->Resize(WebSize(500, 300));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
   UpdateAllLifecyclePhases();
   RunPendingTasks();
 

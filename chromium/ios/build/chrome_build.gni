@@ -11,6 +11,9 @@ declare_args() {
   ios_enable_content_widget_extension = true
   ios_enable_search_widget_extension = true
 
+  # Enable iOS 14, WidgetKit extension.
+  ios_enable_widget_kit_extension = true
+
   # Enable share extension.
   ios_enable_share_extension = true
 
@@ -64,12 +67,26 @@ declare_args() {
   ios_chrome_cpe_entitlements_additions = []
 }
 
+# ScreenTime is only available in iOS 14.0+ SDK. It is not available either
+# in the iOS support libraries used by "catalyst" environment.
+ios_enable_screen_time =
+    xcode_version_int >= 1200 && target_environment != "catalyst"
+
+# Some extensions uses API that are not available in "catalyst" environment.
+if (target_environment == "catalyst") {
+  ios_enable_content_widget_extension = false
+  ios_enable_search_widget_extension = false
+  ios_enable_credential_provider_extension = false
+  ios_enable_widget_kit_extension = false
+  ios_enable_prebuilt_widget_kit_extension = false
+}
+
 # Configure whether breakpad support is enabled.
 breakpad_enabled = is_official_build && is_chrome_branded
 
 if (breakpad_enabled) {
   breakpad_enabled_as_int = 1
-  is_official_release = enable_dsyms && !use_ios_simulator &&
+  is_official_release = enable_dsyms && target_environment == "device" &&
                         current_toolchain == default_toolchain
 } else {
   breakpad_enabled_as_int = 0

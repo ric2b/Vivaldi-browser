@@ -542,8 +542,6 @@ def main():
       '-DCLANG_ENABLE_STATIC_ANALYZER=OFF',
       '-DCLANG_ENABLE_ARCMT=OFF',
       '-DBUG_REPORT_URL=' + BUG_REPORT_URL,
-      # See PR41956: Don't link libcxx into libfuzzer.
-      '-DCOMPILER_RT_USE_LIBCXX=NO',
       # Don't run Go bindings tests; PGO makes them confused.
       '-DLLVM_INCLUDE_GO_TESTS=OFF',
       # TODO(crbug.com/1113475): Update binutils.
@@ -576,11 +574,13 @@ def main():
     base_cmake_args.append('-DPython3_EXECUTABLE=/nonexistent')
 
   if args.gcc_toolchain:
-    # Don't use the custom gcc toolchain when building compiler-rt tests; those
-    # tests are built with the just-built Clang, and target both i386 and x86_64
-    # for example, so should use the system's libstdc++.
+    # Force compiler-rt tests to use our gcc toolchain (including libstdc++.so)
+    # because the one on the host may be too old.
     base_cmake_args.append(
-        '-DCOMPILER_RT_TEST_COMPILER_CFLAGS=--gcc-toolchain=')
+        '-DCOMPILER_RT_TEST_COMPILER_CFLAGS=--gcc-toolchain=' +
+        args.gcc_toolchain + ' -Wl,-rpath,' +
+        os.path.join(args.gcc_toolchain, 'lib64') + ' -Wl,-rpath,' +
+        os.path.join(args.gcc_toolchain, 'lib32'))
 
   if sys.platform == 'win32':
     base_cmake_args.append('-DLLVM_USE_CRT_RELEASE=MT')
@@ -642,6 +642,7 @@ def main():
           '-DCOMPILER_RT_BUILD_BUILTINS=ON',
           '-DCOMPILER_RT_BUILD_CRT=OFF',
           '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
+          '-DCOMPILER_RT_BUILD_MEMPROF=OFF',
           '-DCOMPILER_RT_BUILD_SANITIZERS=OFF',
           '-DCOMPILER_RT_BUILD_XRAY=OFF',
           '-DCOMPILER_RT_ENABLE_IOS=OFF',
@@ -654,6 +655,7 @@ def main():
           '-DCOMPILER_RT_BUILD_BUILTINS=OFF',
           '-DCOMPILER_RT_BUILD_CRT=OFF',
           '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
+          '-DCOMPILER_RT_BUILD_MEMPROF=OFF',
           '-DCOMPILER_RT_BUILD_PROFILE=ON',
           '-DCOMPILER_RT_BUILD_SANITIZERS=OFF',
           '-DCOMPILER_RT_BUILD_XRAY=OFF',
@@ -774,6 +776,7 @@ def main():
   compiler_rt_args = [
     '-DCOMPILER_RT_BUILD_CRT=OFF',
     '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
+    '-DCOMPILER_RT_BUILD_MEMPROF=OFF',
     '-DCOMPILER_RT_BUILD_PROFILE=ON',
     '-DCOMPILER_RT_BUILD_SANITIZERS=ON',
     '-DCOMPILER_RT_BUILD_XRAY=OFF',
@@ -787,8 +790,8 @@ def main():
         # armv7 is A5 and earlier, armv7s is A6+ (2012 and later, before 64-bit
         # iPhones). armv7k is Apple Watch, which we don't need.
         '-DDARWIN_ios_ARCHS=armv7;armv7s;arm64',
-        '-DDARWIN_iossim_ARCHS=i386;x86_64',
-        ])
+        '-DDARWIN_iossim_ARCHS=i386;x86_64;arm64',
+    ])
     if args.bootstrap:
       # mac/arm64 needs MacOSX11.0.sdk. System Xcode (+ SDK) on the chrome bots
       # is something much older.
@@ -812,7 +815,7 @@ def main():
       sys.path.insert(1, os.path.join(CHROMIUM_DIR, 'build'))
       import mac_toolchain
       LLVM_XCODE = os.path.join(THIRD_PARTY_DIR, 'llvm-xcode')
-      mac_toolchain.InstallXcodeBinaries('xcode_12_beta', LLVM_XCODE)
+      mac_toolchain.InstallXcodeBinaries(LLVM_XCODE)
       isysroot_11 = os.path.join(LLVM_XCODE, 'Contents', 'Developer',
                                  'Platforms', 'MacOSX.platform', 'Developer',
                                  'SDKs', 'MacOSX11.0.sdk')
@@ -941,6 +944,7 @@ def main():
         '-DCOMPILER_RT_BUILD_BUILTINS=OFF',
         '-DCOMPILER_RT_BUILD_CRT=OFF',
         '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
+        '-DCOMPILER_RT_BUILD_MEMPROF=OFF',
         '-DCOMPILER_RT_BUILD_PROFILE=ON',
         '-DCOMPILER_RT_BUILD_SANITIZERS=OFF',
         '-DCOMPILER_RT_BUILD_XRAY=OFF',
@@ -986,6 +990,7 @@ def main():
         '-DCOMPILER_RT_BUILD_BUILTINS=OFF',
         '-DCOMPILER_RT_BUILD_CRT=OFF',
         '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
+        '-DCOMPILER_RT_BUILD_MEMPROF=OFF',
         '-DCOMPILER_RT_BUILD_PROFILE=ON',
         '-DCOMPILER_RT_BUILD_SANITIZERS=ON',
         '-DCOMPILER_RT_BUILD_XRAY=OFF',
@@ -1036,6 +1041,7 @@ def main():
         '-DCOMPILER_RT_BUILD_BUILTINS=ON',
         '-DCOMPILER_RT_BUILD_CRT=OFF',
         '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
+        '-DCOMPILER_RT_BUILD_MEMPROF=OFF',
         '-DCOMPILER_RT_BUILD_PROFILE=OFF',
         '-DCOMPILER_RT_BUILD_SANITIZERS=OFF',
         '-DCOMPILER_RT_BUILD_XRAY=OFF',

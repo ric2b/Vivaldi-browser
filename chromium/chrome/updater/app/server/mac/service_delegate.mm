@@ -61,11 +61,30 @@
 }
 
 #pragma mark CRUUpdateChecking
+- (void)getVersionWithReply:(void (^_Nonnull)(NSString* version))reply {
+  auto cb =
+      base::BindOnce(base::RetainBlock(^(const base::Version& updaterVersion) {
+        VLOG(0) << "GetVersion complete: version = "
+                << (updaterVersion.IsValid() ? updaterVersion.GetString() : "");
+        if (reply) {
+          reply(base::SysUTF8ToNSString(
+              updaterVersion.IsValid() ? updaterVersion.GetString() : nil));
+        }
+
+        _appServer->TaskCompleted();
+      }));
+
+  _appServer->TaskStarted();
+  _callbackRunner->PostTask(
+      FROM_HERE, base::BindOnce(&updater::UpdateService::GetVersion, _service,
+                                std::move(cb)));
+}
+
 - (void)checkForUpdatesWithUpdateState:(id<CRUUpdateStateObserving>)updateState
                                  reply:(void (^_Nonnull)(int rc))reply {
   auto cb =
       base::BindOnce(base::RetainBlock(^(updater::UpdateService::Result error) {
-        VLOG(0) << "UpdateAll complete: error = " << static_cast<int>(error);
+        VLOG(0) << "UpdateAll complete: error = " << error;
         if (reply)
           reply(static_cast<int>(error));
 
@@ -112,7 +131,7 @@
                           reply:(void (^_Nonnull)(int rc))reply {
   auto cb =
       base::BindOnce(base::RetainBlock(^(updater::UpdateService::Result error) {
-        VLOG(0) << "Update complete: error = " << static_cast<int>(error);
+        VLOG(0) << "Update complete: error = " << error;
         if (reply)
           reply(static_cast<int>(error));
 

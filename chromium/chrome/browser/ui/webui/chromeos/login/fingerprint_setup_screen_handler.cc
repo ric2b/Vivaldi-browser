@@ -9,6 +9,7 @@
 #include "chrome/browser/chromeos/login/screens/fingerprint_setup_screen.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/login/localized_values_builder.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 namespace chromeos {
 
@@ -24,20 +25,18 @@ FingerprintSetupScreenHandler::~FingerprintSetupScreenHandler() = default;
 
 void FingerprintSetupScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
-  builder->Add("setupFingerprintScreenTitle",
-               IDS_OOBE_FINGERPINT_SETUP_SCREEN_TITLE);
+  builder->AddF("setupFingerprintScreenTitle",
+                IDS_OOBE_FINGERPINT_SETUP_SCREEN_TITLE,
+                ui::GetChromeOSDeviceName());
+  builder->AddF("setupFingerprintScreenFooter",
+                IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_FOOTER,
+                ui::GetChromeOSDeviceName());
   builder->Add("skipFingerprintSetup",
                IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_SKIP);
-  builder->Add("fingerprintSetupLater",
-               IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_LATER);
-  builder->Add("fingerprintSetupNext",
-               IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_NEXT);
   builder->Add("fingerprintSetupDone",
                IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_DONE);
   builder->Add("fingerprintSetupAddAnother",
                IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_ADD_ANOTHER);
-  builder->Add("placeFingerScreenTitle",
-               IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_LOCATION_TITLE);
   builder->Add("enrollmentProgressScreenTitle",
                IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_PROGRESS_TITLE);
   builder->Add("setupFingerprintEnrollmentSuccessTitle",
@@ -48,20 +47,36 @@ void FingerprintSetupScreenHandler::DeclareLocalizedValues(
                IDS_OOBE_FINGERPINT_SETUP_SCREEN_INSTRUCTION_MOVE_FINGER);
   builder->Add("setupFingerprintScanTryAgain",
                IDS_OOBE_FINGERPINT_SETUP_SCREEN_INSTRUCTION_TRY_AGAIN);
-  int description_id;
+
+  int description_id, aria_label_id;
   switch (quick_unlock::GetFingerprintLocation()) {
     case quick_unlock::FingerprintLocation::TABLET_POWER_BUTTON:
       description_id =
           IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_POWER_BUTTON_DESCRIPTION;
+      aria_label_id =
+          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_POWER_BUTTON_ARIA_LABEL;
       break;
     case quick_unlock::FingerprintLocation::KEYBOARD_BOTTOM_LEFT:
+      description_id =
+          IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_GENERAL_DESCRIPTION;
+      aria_label_id =
+          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD_BOTTOM_LEFT_ARIA_LABEL;
+      break;
     case quick_unlock::FingerprintLocation::KEYBOARD_BOTTOM_RIGHT:
+      description_id =
+          IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_GENERAL_DESCRIPTION;
+      aria_label_id =
+          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD_BOTTOM_RIGHT_ARIA_LABEL;
+      break;
     case quick_unlock::FingerprintLocation::KEYBOARD_TOP_RIGHT:
       description_id =
           IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_GENERAL_DESCRIPTION;
+      aria_label_id =
+          IDS_SETTINGS_ADD_FINGERPRINT_DIALOG_INSTRUCTION_LOCATE_SCANNER_KEYBOARD_TOP_RIGHT_ARIA_LABEL;
       break;
   }
   builder->Add("setupFingerprintScreenDescription", description_id);
+  builder->Add("setupFingerprintScreenAriaLabel", aria_label_id);
 }
 
 void FingerprintSetupScreenHandler::RegisterMessages() {

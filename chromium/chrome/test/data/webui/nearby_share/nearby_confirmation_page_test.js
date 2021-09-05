@@ -89,7 +89,7 @@ suite('ConfirmatonPageTest', function() {
   test('renders share target name', function() {
     const name = 'Device Name';
     confirmationPageElement.shareTarget = {
-      id: {high: 0, low: 0},
+      id: {high: BigInt(0), low: BigInt(0)},
       name,
       type: nearbyShare.mojom.ShareTargetType.kPhone,
     };
@@ -97,5 +97,27 @@ suite('ConfirmatonPageTest', function() {
                              .$$('#device-name')
                              .textContent;
     assertEquals(name, renderedName);
+  });
+
+  test('renders attachment title', function() {
+    const title = 'Filename';
+    confirmationPageElement.sendPreview = {
+      description: title,
+      fileCount: 1,
+      shareType: nearbyShare.mojom.ShareType.kUnknownFile
+    };
+    const renderedTitle =
+        confirmationPageElement.$$('nearby-preview').$$('#title').textContent;
+    assertEquals(title, renderedTitle);
+  });
+
+  test('renders error', async function() {
+    const token = 'TestToken1234';
+    transferUpdateListener.remote_.onTransferUpdate(
+        nearbyShare.mojom.TransferStatus.kRejected, token);
+    await transferUpdateListener.remote_.$.flushForTesting();
+
+    const errorTitle = confirmationPageElement.$$('#errorTitle').textContent;
+    assertTrue(!!errorTitle);
   });
 });

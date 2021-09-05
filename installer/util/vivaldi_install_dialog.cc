@@ -15,6 +15,7 @@
 #include <vector>
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/win/atl.h"

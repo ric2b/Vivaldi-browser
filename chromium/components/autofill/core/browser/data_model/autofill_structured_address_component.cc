@@ -27,6 +27,28 @@ namespace autofill {
 
 namespace structured_address {
 
+bool IsLessSignificantVerificationStatus(VerificationStatus left,
+                                         VerificationStatus right) {
+  // Both the KUserVerified and kObserved are larger then kServerParsed although
+  // the underlying integer suggests differently.
+  if (left == VerificationStatus::kServerParsed &&
+      (right == VerificationStatus::kObserved ||
+       right == VerificationStatus::kUserVerified)) {
+    return true;
+  }
+
+  if (right == VerificationStatus::kServerParsed &&
+      (left == VerificationStatus::kObserved ||
+       left == VerificationStatus::kUserVerified)) {
+    return false;
+  }
+
+  // In all other cases, it is sufficient to compare the underlying integer
+  // values.
+  return static_cast<std::underlying_type_t<VerificationStatus>>(left) <
+         static_cast<std::underlying_type_t<VerificationStatus>>(right);
+}
+
 AddressComponent::AddressComponent(ServerFieldType storage_type,
                                    AddressComponent* parent,
                                    std::vector<AddressComponent*> subcomponents,
@@ -482,6 +504,27 @@ void AddressComponent::ParseValueAndAssignSubcomponentsByFallbackMethod() {
   DCHECK(success);
 }
 
+bool AddressComponent::WipeInvalidStructure() {
+  if (IsAtomic()) {
+    return false;
+  }
+
+  // Test that each structured token is part of the subcomponent.
+  // This is not perfect, because different components can match with an
+  // overlapping portion of the unstructured string, but it guarantees that all
+  // information in the components is contained in the unstructured
+  // representation.
+  for (const auto* component : Subcomponents()) {
+    if (GetValue().find(component->GetValue()) == base::string16::npos) {
+      // If the value of one component could not have been found, wipe the full
+      // structure.
+      RecursivelyUnsetSubcomponents();
+      return true;
+    }
+  }
+  return false;
+}
+
 void AddressComponent::FormatValueFromSubcomponents() {
   // Get the most suited format string.
   base::string16 format_string = GetBestFormatString();
@@ -697,7 +740,7 @@ void AddressComponent::UnsetParsedAndFormattedValuesInEntireTree() {
 void AddressComponent::MergeVerificationStatuses(
     const AddressComponent& newer_component) {
   if (IsValueAssigned() && (GetValue() == newer_component.GetValue()) &&
-      (GetVerificationStatus() < newer_component.GetVerificationStatus())) {
+      HasNewerValuePrecendenceInMerging(newer_component)) {
     value_verification_status_ = newer_component.GetVerificationStatus();
   }
 
@@ -807,7 +850,7 @@ bool AddressComponent::MergeWithComponent(
 
   // If the normalized values are the same, optimize the verification status.
   if ((merge_mode_ & kUseBetterOrNewerForSameValue) && (value == value_newer)) {
-    if (newer_component.GetVerificationStatus() >= GetVerificationStatus()) {
+    if (HasNewerValuePrecendenceInMerging(newer_component)) {
       *this = newer_component;
     }
     return true;
@@ -900,7 +943,8 @@ bool AddressComponent::MergeWithComponent(
 
 bool AddressComponent::HasNewerValuePrecendenceInMerging(
     const AddressComponent& newer_component) const {
-  return newer_component.GetVerificationStatus() >= GetVerificationStatus();
+  return !IsLessSignificantVerificationStatus(
+      newer_component.GetVerificationStatus(), GetVerificationStatus());
 }
 
 bool AddressComponent::MergeTokenEquivalentComponent(
@@ -1109,6 +1153,7 @@ int AddressComponent::GetStructureVerificationScore() const {
     case VerificationStatus::kNoStatus:
     case VerificationStatus::kParsed:
     case VerificationStatus::kFormatted:
+    case VerificationStatus::kServerParsed:
       break;
     case VerificationStatus::kObserved:
       result += 1;

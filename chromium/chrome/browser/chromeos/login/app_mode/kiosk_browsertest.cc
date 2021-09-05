@@ -15,7 +15,7 @@
 #include "ash/public/cpp/wallpaper_controller_observer.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -134,6 +134,8 @@ namespace em = enterprise_management;
 namespace chromeos {
 
 namespace {
+
+const test::UIPath kConfigNetwork = {"app-launch-splash", "configNetwork"};
 
 // This is a simple test app that creates an app window and immediately closes
 // it again. Webstore data json is in
@@ -747,7 +749,7 @@ class KioskTest : public OobeBaseTest {
     WaitForAppLaunchNetworkTimeout();
 
     // Configure network link should be visible.
-    test::OobeJS().ExpectVisible("splash-config-network");
+    test::OobeJS().ExpectVisiblePath(kConfigNetwork);
 
     // Set up fake user manager with an owner for the test.
     LoginDisplayHost::default_host()->GetOobeUI()->ShowOobeUI(false);
@@ -775,7 +777,7 @@ class KioskTest : public OobeBaseTest {
   }
 
   // Waits for window width to change. Listens to a 'size_change' message sent
-  // from DOM automation to |message_queue|.
+  // from DOM automation to `message_queue`.
   // The message is expected to be in JSON format:
   // {'name': <msg_name>, 'data': <extra_msg_data>}.
   // This will wait until a message with a different width is seen. It will
@@ -1076,7 +1078,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppNetworkDownConfigureNotAllowed) {
   WaitForAppLaunchNetworkTimeout();
 
   // Configure network link should not be visible.
-  test::OobeJS().ExpectHidden("splash-config-network");
+  test::OobeJS().ExpectHiddenPath(kConfigNetwork);
 
   // Network becomes online and app launch is resumed.
   SimulateNetworkOnline();
@@ -1385,7 +1387,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, SettingsWindow) {
   const GURL page2_sub("https://page2.com/sub");
   const GURL page3("https://page3.com/");
 
-  // Replace the settings allowlist with |settings_pages|.
+  // Replace the settings allowlist with `settings_pages`.
   ScopedSettingsPages pages(&settings_pages);
   AppSession* app_session = KioskAppManager::Get()->app_session();
 
@@ -2614,7 +2616,7 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, PrivateStore) {
   const char kPrivateStoreUpdate[] = "/private_store_update";
   net::EmbeddedTestServer private_server;
 
-  // |private_server| serves crx from test data dir.
+  // `private_server` serves crx from test data dir.
   base::FilePath test_data_dir;
   base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
   private_server.ServeFilesFromDirectory(test_data_dir);

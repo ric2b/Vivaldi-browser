@@ -15,6 +15,8 @@ export class TestReadLaterApiProxy extends TestBrowserProxy {
       'openSavedEntry',
       'updateReadStatus',
       'removeEntry',
+      'showUI',
+      'closeUI',
     ]);
 
     /** @type {!readLater.mojom.PageCallbackRouter} */
@@ -43,6 +45,16 @@ export class TestReadLaterApiProxy extends TestBrowserProxy {
   /** @override */
   removeEntry(url) {
     this.methodCalled('removeEntry', url);
+  }
+
+  /** @override */
+  showUI() {
+    this.methodCalled('showUI');
+  }
+
+  /** @override */
+  closeUI() {
+    this.methodCalled('closeUI');
   }
 
   /** @override */

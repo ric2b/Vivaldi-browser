@@ -20,6 +20,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "media/capture/capture_export.h"
 #include "media/capture/video/video_capture_device.h"
@@ -40,6 +41,7 @@ class MFVideoCallback;
 class CAPTURE_EXPORT VideoCaptureDeviceMFWin : public VideoCaptureDevice {
  public:
   static bool GetPixelFormatFromMFSourceMediaSubtype(const GUID& guid,
+                                                     bool use_hardware_format,
                                                      VideoPixelFormat* format);
   static VideoCaptureControlSupport GetControlSupport(
       Microsoft::WRL::ComPtr<IMFMediaSource> source);
@@ -103,6 +105,8 @@ class CAPTURE_EXPORT VideoCaptureDeviceMFWin : public VideoCaptureDevice {
     dxgi_device_manager_ = std::move(dxgi_device_manager);
   }
 
+  base::Optional<int> camera_rotation() const { return camera_rotation_; }
+
  private:
   HRESULT ExecuteHresultCallbackWithRetries(
       base::RepeatingCallback<HRESULT()> callback,
@@ -159,6 +163,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceMFWin : public VideoCaptureDevice {
   base::WaitableEvent capture_initialize_;
   base::WaitableEvent capture_error_;
   scoped_refptr<VideoCaptureDXGIDeviceManager> dxgi_device_manager_;
+  base::Optional<int> camera_rotation_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

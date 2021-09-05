@@ -12,13 +12,13 @@
 #include <set>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -28,6 +28,7 @@
 #include "components/policy/core/common/cloud/mock_device_management_service.h"
 #include "components/policy/core/common/cloud/mock_signing_service.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
+#include "components/policy/core/common/cloud/reporting_job_configuration_base.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -512,6 +513,15 @@ class CloudPolicyClientTest : public testing::Test {
                             net::OK, DeviceManagementService::kSuccess, "{}")));
   }
 
+  void ExpectEncryptedReport() {
+    EXPECT_CALL(service_, StartJob(_))
+        .WillOnce(DoAll(service_.CaptureJobType(&job_type_),
+                        service_.CaptureQueryParams(&query_params_),
+                        service_.CapturePayload(&job_payload_),
+                        service_.StartJobAsync(
+                            net::OK, DeviceManagementService::kSuccess, "{}")));
+  }
+
   void ExpectFetchRemoteCommands(
       const em::DeviceManagementResponse& remote_command_response) {
     EXPECT_CALL(service_, StartJob(_))
@@ -574,6 +584,17 @@ class CloudPolicyClientTest : public testing::Test {
     policy_data.set_policy_type(dm_protocol::kChromeUserPolicyType);
     policy_data.set_policy_value(policy_value);
     return policy_data.SerializeAsString();
+  }
+
+  void AttemptUploadEncryptedWaitUntilIdle(
+      const ::reporting::EncryptedRecord& record,
+      base::Optional<base::Value> context = base::nullopt) {
+    CloudPolicyClient::StatusCallback callback =
+        base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
+                       base::Unretained(&callback_observer_));
+    client_->UploadEncryptedReport(record, std::move(context),
+                                   std::move(callback));
+    base::RunLoop().RunUntilIdle();
   }
 
   // Request protobufs used as expectations for the client requests.
@@ -1507,7 +1528,7 @@ TEST_F(CloudPolicyClientTest, UploadChromeOsUserReport) {
 
 #if defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
-TEST_F(CloudPolicyClientTest, UploadRealtimeReport) {
+TEST_F(CloudPolicyClientTest, UploadSecurityEventReport) {
   RegisterClient();
 
   ExpectRealtimeReport();
@@ -1516,8 +1537,8 @@ TEST_F(CloudPolicyClientTest, UploadRealtimeReport) {
       base::BindOnce(&MockStatusCallbackObserver::OnCallbackComplete,
                      base::Unretained(&callback_observer_));
 
-  client_->UploadRealtimeReport(MakeDefaultRealtimeReport(),
-                                std::move(callback));
+  client_->UploadSecurityEventReport(MakeDefaultRealtimeReport(),
+                                     std::move(callback));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(
       DeviceManagementService::JobConfiguration::TYPE_UPLOAD_REAL_TIME_REPORT,
@@ -1528,37 +1549,44 @@ TEST_F(CloudPolicyClientTest, UploadRealtimeReport) {
   ASSERT_TRUE(payload);
 
   EXPECT_EQ(kDMToken, *payload->FindStringPath(
-                          RealtimeReportingJobConfiguration::kDmTokenKey));
+                          ReportingJobConfigurationBase::
+                              DeviceDictionaryBuilder::GetDMTokenPath()));
   EXPECT_EQ(client_id_, *payload->FindStringPath(
-                            RealtimeReportingJobConfiguration::kClientIdKey));
+                            ReportingJobConfigurationBase::
+                                DeviceDictionaryBuilder::GetClientIdPath()));
   EXPECT_EQ(policy::GetOSUsername(),
             *payload->FindStringPath(
-                RealtimeReportingJobConfiguration::kMachineUserKey));
+                ReportingJobConfigurationBase::BrowserDictionaryBuilder::
+                    GetMachineUserPath()));
   EXPECT_EQ(version_info::GetVersionNumber(),
             *payload->FindStringPath(
-                RealtimeReportingJobConfiguration::kChromeVersionKey));
+                ReportingJobConfigurationBase::BrowserDictionaryBuilder::
+                    GetChromeVersionPath()));
   EXPECT_EQ(policy::GetOSPlatform(),
             *payload->FindStringPath(
-                RealtimeReportingJobConfiguration::kOsPlatformKey));
+                ReportingJobConfigurationBase::DeviceDictionaryBuilder::
+                    GetOSPlatformPath()));
   EXPECT_EQ(policy::GetOSVersion(),
             *payload->FindStringPath(
-                RealtimeReportingJobConfiguration::kOsVersionKey));
+                ReportingJobConfigurationBase::DeviceDictionaryBuilder::
+                    GetOSVersionPath()));
   EXPECT_FALSE(policy::GetDeviceName().empty());
-  EXPECT_EQ(policy::GetDeviceName(),
-            *payload->FindStringPath(
-                RealtimeReportingJobConfiguration::kDeviceNameKey));
+  EXPECT_EQ(
+      policy::GetDeviceName(),
+      *payload->FindStringPath(ReportingJobConfigurationBase::
+                                   DeviceDictionaryBuilder::GetNamePath()));
 
   base::Value* events =
-      payload->FindPath(RealtimeReportingJobConfiguration::kEventsKey);
+      payload->FindPath(RealtimeReportingJobConfiguration::kEventListKey);
   EXPECT_EQ(base::Value::Type::LIST, events->type());
   EXPECT_EQ(1u, events->GetList().size());
 }
 
 TEST_F(CloudPolicyClientTest, RealtimeReportMerge) {
   auto config = std::make_unique<RealtimeReportingJobConfiguration>(
-      client_.get(), DMAuth::FromDMToken(kDMToken),
-      service_.configuration()->GetReportingServerUrl(), false,
-      RealtimeReportingJobConfiguration::Callback());
+      client_.get(), service_.configuration()->GetRealtimeReportingServerUrl(),
+      /*add_connector_url_params=*/false,
+      RealtimeReportingJobConfiguration::UploadCompleteCallback());
 
   // Add one report to the config.
   {
@@ -1623,10 +1651,70 @@ TEST_F(CloudPolicyClientTest, RealtimeReportMerge) {
   ASSERT_EQ("C:\\User Data\\Profile 1",
             *payload->FindStringPath("profile.profilePath"));
   ASSERT_EQ("1.0.0.0", *payload->FindStringPath("browser.version"));
-  ASSERT_EQ(2u,
-            payload->FindListPath(RealtimeReportingJobConfiguration::kEventsKey)
-                ->GetList()
-                .size());
+  ASSERT_EQ(
+      2u,
+      payload->FindListPath(RealtimeReportingJobConfiguration::kEventListKey)
+          ->GetList()
+          .size());
+}
+
+TEST_F(CloudPolicyClientTest, UploadEncryptedReport) {
+  // Create record
+  ::reporting::EncryptedRecord record;
+  record.set_encrypted_wrapped_record("Enterprise");
+  auto* sequencing_information = record.mutable_sequencing_information();
+  sequencing_information->set_sequencing_id(1701);
+  sequencing_information->set_generation_id(12345678);
+  sequencing_information->set_priority(::reporting::IMMEDIATE);
+
+  RegisterClient();
+  ExpectEncryptedReport();
+
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(true)).Times(1);
+  AttemptUploadEncryptedWaitUntilIdle(record);
+
+  EXPECT_EQ(
+      job_type_,
+      DeviceManagementService::JobConfiguration::TYPE_UPLOAD_ENCRYPTED_REPORT);
+  EXPECT_EQ(client_->status(), DM_STATUS_SUCCESS);
+}
+
+TEST_F(CloudPolicyClientTest, DenyPoorlyFormedEncryptedRecords) {
+  RegisterClient();
+
+  // Create empty record
+  ::reporting::EncryptedRecord record;
+
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(false)).Times(4);
+
+  AttemptUploadEncryptedWaitUntilIdle(record);
+
+  // Add encrypted_wrapped_record without sequencing information.
+  record.set_encrypted_wrapped_record("Enterprise");
+  AttemptUploadEncryptedWaitUntilIdle(record);
+
+  // Incorrectly set sequencing information by only setting sequencing id.
+  auto* sequencing_information = record.mutable_sequencing_information();
+  sequencing_information->set_sequencing_id(1701);
+  AttemptUploadEncryptedWaitUntilIdle(record);
+
+  // Finish correctly setting sequencing information but incorrectly set
+  // encryption info.
+  sequencing_information->set_generation_id(12345678);
+  sequencing_information->set_priority(::reporting::IMMEDIATE);
+
+  auto* encryption_info = record.mutable_encryption_info();
+  encryption_info->set_encryption_key("Key");
+
+  AttemptUploadEncryptedWaitUntilIdle(record);
+
+  // Finish correctly setting encryption info - expect complete call.
+  encryption_info->set_public_key_id(1234);
+
+  EXPECT_CALL(callback_observer_, OnCallbackComplete(true)).Times(1);
+  ExpectEncryptedReport();
+
+  AttemptUploadEncryptedWaitUntilIdle(record);
 }
 
 TEST_F(CloudPolicyClientTest, UploadAppInstallReport) {

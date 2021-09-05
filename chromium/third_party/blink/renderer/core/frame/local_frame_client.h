@@ -107,6 +107,7 @@ class WebRemotePlaybackClient;
 class WebServiceWorkerProvider;
 class WebSpellCheckPanelHostClient;
 class WebTextCheckClient;
+class ResourceLoadInfoNotifierWrapper;
 
 class CORE_EXPORT LocalFrameClient : public FrameClient {
  public:
@@ -211,10 +212,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // placeholders.
   virtual void DidObserveLazyLoadBehavior(
       WebLocalFrameClient::LazyLoadBehavior lazy_load_behavior) {}
-
-  // Will be called by a Page upon DidCommitLoad, deciding whether to track
-  // UseCounter usage or not based on its url.
-  virtual bool ShouldTrackUseCounter(const KURL&) { return true; }
 
   // Transmits the change in the set of watched CSS selectors property that
   // match any element on the frame.
@@ -407,9 +404,16 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // printing layout.
   virtual bool UsePrintingLayout() const { return false; }
 
+  virtual std::unique_ptr<ResourceLoadInfoNotifierWrapper>
+  CreateResourceLoadInfoNotifierWrapper() {
+    return nullptr;
+  }
+
   // AppCache ------------------------------------------------------------
   virtual void UpdateSubresourceFactory(
       std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory) {}
+
+  virtual void DidChangeMobileFriendliness(const MobileFriendliness&) {}
 };
 
 }  // namespace blink

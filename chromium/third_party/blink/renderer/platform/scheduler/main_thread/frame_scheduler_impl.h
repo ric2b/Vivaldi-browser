@@ -110,7 +110,9 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
   CreateResourceLoadingTaskRunnerHandle() override;
 
-  AgentGroupSchedulerImpl* GetAgentGroupScheduler();
+  std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
+  CreateResourceLoadingMaybeUnfreezableTaskRunnerHandle() override;
+  WebAgentGroupScheduler* GetAgentGroupScheduler() override;
   PageScheduler* GetPageScheduler() const override;
   void DidStartProvisionalLoad(bool is_main_frame) override;
   void DidCommitProvisionalLoad(bool is_web_history_inert_commit,
@@ -150,15 +152,10 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   void UpdatePolicy();
 
-  // Whether the frame is opted-out from any kind of throttling.
-  bool opted_out_from_all_throttling() const {
-    return opted_out_from_all_throttling_;
-  }
   // Whether the frame is opted-out from CPU time throttling and intensive wake
   // up throttling.
   bool opted_out_from_aggressive_throttling() const {
-    return opted_out_from_all_throttling_ ||
-           opted_out_from_aggressive_throttling_;
+    return opted_out_from_aggressive_throttling_;
   }
 
   void OnTraceLogEnabled() { tracing_controller_.OnTraceLogEnabled(); }
@@ -270,9 +267,6 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   void AddPauseSubresourceLoadingHandle();
   void RemovePauseSubresourceLoadingHandle();
 
-  void OnAddedAllThrottlingOptOut();
-  void OnRemovedAllThrottlingOptOut();
-
   void OnAddedAggressiveThrottlingOptOut();
   void OnRemovedAggressiveThrottlingOptOut();
 
@@ -312,6 +306,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   static MainThreadTaskQueue::QueueTraits
   DoesNotUseVirtualTimeTaskQueueTraits();
   static MainThreadTaskQueue::QueueTraits LoadingTaskQueueTraits();
+  static MainThreadTaskQueue::QueueTraits UnfreezableLoadingTaskQueueTraits();
   static MainThreadTaskQueue::QueueTraits LoadingControlTaskQueueTraits();
   static MainThreadTaskQueue::QueueTraits FindInPageTaskQueueTraits();
 
@@ -349,10 +344,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   TraceableState<bool, TracingCategoryName::kInfo>
       preempted_for_cooperative_scheduling_;
   // TODO(https://crbug.com/827113): Trace the count of opt-outs.
-  int all_throttling_opt_out_count_;
   int aggressive_throttling_opt_out_count_;
-  TraceableState<bool, TracingCategoryName::kInfo>
-      opted_out_from_all_throttling_;
   TraceableState<bool, TracingCategoryName::kInfo>
       opted_out_from_aggressive_throttling_;
   size_t subresource_loading_pause_count_;

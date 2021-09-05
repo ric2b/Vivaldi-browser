@@ -54,7 +54,7 @@ class ScrollAnchorTest : public testing::WithParamInterface<bool>,
   }
 
   ScrollableArea* ScrollerForElement(Element* element) {
-    return ToLayoutBox(element->GetLayoutObject())->GetScrollableArea();
+    return To<LayoutBox>(element->GetLayoutObject())->GetScrollableArea();
   }
 
   ScrollAnchor& GetScrollAnchor(ScrollableArea* scroller) {
@@ -92,9 +92,7 @@ class ScrollAnchorTest : public testing::WithParamInterface<bool>,
   }
 
   Scrollbar* VerticalScrollbarForElement(Element* element) {
-    return ToLayoutBox(element->GetLayoutObject())
-        ->GetScrollableArea()
-        ->VerticalScrollbar();
+    return ScrollerForElement(element)->VerticalScrollbar();
   }
 
   void MouseDownOnVerticalScrollbar(Scrollbar* scrollbar) {
@@ -1083,7 +1081,7 @@ class ScrollAnchorFindInPageTest : public testing::Test {
   }
 
   void UpdateAllLifecyclePhasesForTest() {
-    GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+    GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   }
 
   void SetHtmlInnerHTML(const char* content) {
@@ -1092,7 +1090,7 @@ class ScrollAnchorFindInPageTest : public testing::Test {
   }
 
   void ResizeAndFocus() {
-    web_view_helper_.Resize(WebSize(640, 480));
+    web_view_helper_.Resize(gfx::Size(640, 480));
     web_view_helper_.GetWebView()->MainFrameWidget()->SetFocus(true);
     test::RunPendingTasks();
   }

@@ -17,6 +17,7 @@
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/texture_definition.h"
 #include "gpu/config/gpu_switches.h"
@@ -195,7 +196,7 @@ FeatureInfo::FeatureInfo(
           .status_values[GPU_FEATURE_TYPE_ANDROID_SURFACE_CONTROL] ==
       gpu::kGpuFeatureStatusEnabled;
 
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)
+#if BUILDFLAG(IS_ASH) || BUILDFLAG(IS_CHROMECAST)
   feature_flags_.chromium_image_ycbcr_420v = base::Contains(
       gpu_feature_info.supported_buffer_formats_for_allocation_and_texturing,
       gfx::BufferFormat::YUV_420_BIPLANAR);
@@ -203,10 +204,12 @@ FeatureInfo::FeatureInfo(
   feature_flags_.chromium_image_ycbcr_420v = true;
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   feature_flags_.chromium_image_ycbcr_p010 = base::Contains(
       gpu_feature_info.supported_buffer_formats_for_allocation_and_texturing,
       gfx::BufferFormat::P010);
+#elif defined(OS_MAC)
+  feature_flags_.chromium_image_ycbcr_p010 = base::mac::IsAtLeastOS11();
 #endif
 }
 
@@ -1561,12 +1564,6 @@ void FeatureInfo::InitializeFeatures() {
     validators_.dst_blend_factor.AddValue(GL_ONE_MINUS_SRC1_ALPHA_EXT);
     validators_.g_l_state.AddValue(GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT);
   }
-
-#if !defined(OS_MAC)
-  if (workarounds_.ignore_egl_sync_failures) {
-    gl::GLFenceEGL::SetIgnoreFailures();
-  }
-#endif
 
   if (workarounds_.avoid_egl_image_target_texture_reuse) {
     TextureDefinition::AvoidEGLTargetTextureReuse();

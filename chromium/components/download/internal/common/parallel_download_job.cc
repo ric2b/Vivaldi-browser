@@ -34,7 +34,6 @@ ParallelDownloadJob::ParallelDownloadJob(
       content_length_(create_info.total_bytes),
       requests_sent_(false),
       is_canceled_(false),
-      range_support_(create_info.accept_range),
       url_loader_factory_provider_(std::move(url_loader_factory_provider)),
       wake_lock_provider_binder_(std::move(wake_lock_provider_binder)) {}
 
@@ -130,9 +129,6 @@ void ParallelDownloadJob::OnInputStreamReady(
   bool success =
       DownloadJob::AddInputStream(std::move(input_stream), worker->offset());
 
-  RecordParallelDownloadAddStreamSuccess(
-      success, range_support_ == RangeRequestSupportType::kSupport);
-
   // Destroy the request if the sink is gone.
   if (!success) {
     VLOG(kDownloadJobVerboseLevel)
@@ -189,9 +185,6 @@ void ParallelDownloadJob::BuildParallelRequests() {
           first_slice_offset,
           content_length_ - first_slice_offset + initial_request_offset_,
           GetParallelRequestCount(), GetMinSliceSize());
-    } else {
-      RecordParallelDownloadCreationEvent(
-          ParallelDownloadCreationEvent::FALLBACK_REASON_REMAINING_TIME);
     }
   }
 

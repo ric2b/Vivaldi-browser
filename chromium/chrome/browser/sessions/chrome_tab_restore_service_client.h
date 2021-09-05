@@ -39,6 +39,8 @@ class ChromeTabRestoreServiceClient : public sessions::TabRestoreServiceClient {
   bool HasLastSession() override;
   void GetLastSession(sessions::GetLastSessionCallback callback) override;
   void OnTabRestored(const GURL& url) override;
+  const std::map<base::FilePath, bool>* GetPageActionOverridesForTab(
+      sessions::LiveTab* tab) override;
 
   Profile* profile_;
 

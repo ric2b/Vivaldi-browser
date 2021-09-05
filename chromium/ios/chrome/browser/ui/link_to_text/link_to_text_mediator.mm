@@ -50,12 +50,12 @@ using shared_highlighting::LinkGenerationError;
 
 - (BOOL)shouldOfferLinkToText {
   DCHECK(base::FeatureList::IsEnabled(kSharedHighlightingIOS));
-  return [self getLinkToTextTabHelper]->ShouldOffer();
+  return [self linkToTextTabHelper]->ShouldOffer();
 }
 
 - (void)handleLinkToTextSelection {
   DCHECK(base::FeatureList::IsEnabled(kSharedHighlightingIOS));
-  LinkToTextTabHelper* tabHelper = [self getLinkToTextTabHelper];
+  LinkToTextTabHelper* tabHelper = [self linkToTextTabHelper];
 
   __weak __typeof(self) weakSelf = self;
   tabHelper->GetLinkToText(^(LinkToTextResponse* response) {
@@ -66,8 +66,14 @@ using shared_highlighting::LinkGenerationError;
 - (void)receivedLinkToTextResponse:(LinkToTextResponse*)response {
   DCHECK(response);
   if (response.error.has_value()) {
-    [self linkGenerationFailedWithError:response.error.value()];
+    LinkGenerationError error = response.error.value();
+    shared_highlighting::LogLinkGeneratedErrorUkmEvent(response.sourceID,
+                                                       error);
+    shared_highlighting::LogGenerateErrorLatency(response.latency);
+    [self linkGenerationFailedWithError:error];
   } else {
+    shared_highlighting::LogLinkGeneratedSuccessUkmEvent(response.sourceID);
+    shared_highlighting::LogGenerateSuccessLatency(response.latency);
     [self shareLinkToText:response.payload];
   }
 }
@@ -84,7 +90,7 @@ using shared_highlighting::LinkGenerationError;
   [self.consumer linkGenerationFailed];
 }
 
-- (LinkToTextTabHelper*)getLinkToTextTabHelper {
+- (LinkToTextTabHelper*)linkToTextTabHelper {
   web::WebState* web_state = _webStateList->GetActiveWebState();
   DCHECK(web_state);
   LinkToTextTabHelper* helper = LinkToTextTabHelper::FromWebState(web_state);

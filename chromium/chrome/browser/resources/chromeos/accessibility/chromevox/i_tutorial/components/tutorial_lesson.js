@@ -9,13 +9,19 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/md_select_css.m.js';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {TutorialCommon} from './tutorial_common.js';
 
 export const TutorialLesson = Polymer({
   is: 'tutorial-lesson',
 
   _template: html`{__html_template__}`,
+
+  behaviors: [TutorialCommon],
 
   properties: {
     lessonNum: {type: Number},
@@ -51,6 +57,11 @@ export const TutorialLesson = Polymer({
 
   /** @override */
   ready() {
+    this.$.contentTemplate.addEventListener('dom-change', (evt) => {
+      this.dispatchEvent(new CustomEvent('lessonready', {composed: true}));
+    });
+
+
     if (this.practiceFile) {
       this.populatePracticeContent();
       for (const evt of this.events) {
@@ -123,12 +134,13 @@ export const TutorialLesson = Polymer({
    * @private
    */
   populatePracticeContent() {
-    const path = '../i_tutorial/lessons/' + this.practiceFile + '.html';
+    const path = '../i_tutorial/practice_areas/' + this.practiceFile + '.html';
     const xhr = new XMLHttpRequest();
     xhr.open('GET', path, true);
     xhr.onload = (evt) => {
       if (xhr.readyState === 4 && xhr.status === 200) {
         this.$.practiceContent.innerHTML = xhr.responseText;
+        this.localizePracticeAreaContent();
       } else {
         console.error(xhr.statusText);
       }
@@ -144,11 +156,12 @@ export const TutorialLesson = Polymer({
   startPractice() {
     this.notifyStartPractice();
     this.$.practice.showModal();
-    this.$.practiceTitle.focus();
+    this.$.practiceInstructions.focus();
   },
 
   /** @private */
   endPractice() {
+    this.$.practice.close();
     this.notifyEndPractice();
     this.$.startPractice.focus();
   },
@@ -201,7 +214,7 @@ export const TutorialLesson = Polymer({
 
     for (const [elt, state] of Object.entries(this.practiceState)) {
       for (const [evt, performed] of Object.entries(state)) {
-        if (performed == false) {
+        if (performed === false) {
           return false;
         }
       }
@@ -213,12 +226,6 @@ export const TutorialLesson = Polymer({
   onGoalStateReached() {
     const previousState = this.goalStateReached;
     this.goalStateReached = true;
-    if (previousState === false) {
-      // Only perform when crossing the threshold from not reached to reached.
-      this.requestSpeech(
-          'You have passed this tutorial lesson. Find and press the exit ' +
-          'practice area button to continue');
-    }
   },
 
   // Miscellaneous methods.
@@ -258,4 +265,24 @@ export const TutorialLesson = Polymer({
 
     return false;
   },
+
+  /** @return {Element} */
+  get contentDiv() {
+    return this.$.content;
+  },
+
+  /** @return {string} */
+  getTitleText() {
+    return this.$.title.textContent;
+  },
+
+  /** @private */
+  localizePracticeAreaContent() {
+    const root = this.$.practiceContent;
+    const elements = root.querySelectorAll('[msgid]');
+    for (const element of elements) {
+      const msgId = element.getAttribute('msgid');
+      element.textContent = this.getMsg(msgId);
+    }
+  }
 });

@@ -5,19 +5,25 @@
 package org.chromium.chrome.test.util.browser.signin;
 
 import android.accounts.Account;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 
 import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
 
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.core.browser.javatests.R;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
 import org.chromium.components.signin.test.util.FakeProfileDataSource;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -85,21 +91,19 @@ public class AccountManagerTestRule implements TestRule {
     }
 
     /**
-     * TODO(https://crbug.com/1117006): Change the return type of addAccount() to CoreAccountInfo
-     *
      * Add an account to the fake AccountManagerFacade.
-     * @return The account added.
+     * @return The CoreAccountInfo for the account added.
      */
-    public Account addAccount(Account account) {
+    public CoreAccountInfo addAccount(Account account) {
         mFakeAccountManagerFacade.addAccount(account);
-        return account;
+        return toCoreAccountInfo(account.name);
     }
 
     /**
      * Add an account of the given accountName to the fake AccountManagerFacade.
-     * @return The account added.
+     * @return The CoreAccountInfo for the account added.
      */
-    public Account addAccount(String accountName) {
+    public CoreAccountInfo addAccount(String accountName) {
         return addAccount(AccountUtils.createAccountFromName(accountName));
     }
 
@@ -108,10 +112,10 @@ public class AccountManagerTestRule implements TestRule {
      * ProfileDataSource of the fake AccountManagerFacade.
      * @return The account added.
      */
-    public Account addAccount(ProfileDataSource.ProfileData profileData) {
-        Account account = addAccount(profileData.getAccountName());
+    public CoreAccountInfo addAccount(ProfileDataSource.ProfileData profileData) {
+        CoreAccountInfo coreAccountInfo = addAccount(profileData.getAccountName());
         mFakeAccountManagerFacade.setProfileData(profileData.getAccountName(), profileData);
-        return account;
+        return coreAccountInfo;
     }
 
     /**
@@ -122,14 +126,17 @@ public class AccountManagerTestRule implements TestRule {
     }
 
     /**
-     * Adds an account and seed it in native code.
+     * Adds an account and seed it in native code. Will create a ProfileData entry for the account
+     * if ProfileDataSource is not null.
      *
      * This method invokes native code. It shouldn't be called in a Robolectric test.
      */
-    public Account addAccountAndWaitForSeeding(String accountName) {
-        Account account = addAccount(accountName);
+    public CoreAccountInfo addAccountAndWaitForSeeding(String accountName) {
+        CoreAccountInfo coreAccountInfo = mFakeAccountManagerFacade.getProfileDataSource() == null
+                ? addAccount(accountName)
+                : addAccount(createProfileDataFromName(accountName));
         waitForSeeding();
-        return account;
+        return coreAccountInfo;
     }
 
     /**
@@ -149,8 +156,7 @@ public class AccountManagerTestRule implements TestRule {
      */
     public CoreAccountInfo addTestAccountThenSignin() {
         assert !mIsSignedIn : "An account is already signed in!";
-        Account account = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
-        CoreAccountInfo coreAccountInfo = toCoreAccountInfo(account.name);
+        CoreAccountInfo coreAccountInfo = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
         SigninTestUtil.signin(coreAccountInfo);
         mIsSignedIn = true;
         return coreAccountInfo;
@@ -161,7 +167,7 @@ public class AccountManagerTestRule implements TestRule {
      *
      * This method invokes native code. It shouldn't be called in a Robolectric test.
      */
-    public Account addTestAccountThenSigninAndEnableSync() {
+    public CoreAccountInfo addTestAccountThenSigninAndEnableSync() {
         return addTestAccountThenSigninAndEnableSync(
                 TestThreadUtils.runOnUiThreadBlockingNoException(ProfileSyncService::get));
     }
@@ -174,14 +180,24 @@ public class AccountManagerTestRule implements TestRule {
      * @param profileSyncService ProfileSyncService object to set up sync, if null, sync won't
      *         start.
      */
-    public Account addTestAccountThenSigninAndEnableSync(
+    public CoreAccountInfo addTestAccountThenSigninAndEnableSync(
             @Nullable ProfileSyncService profileSyncService) {
         assert !mIsSignedIn : "An account is already signed in!";
-        Account account = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
-        CoreAccountInfo coreAccountInfo = toCoreAccountInfo(account.name);
+        CoreAccountInfo coreAccountInfo = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
         SigninTestUtil.signinAndEnableSync(coreAccountInfo, profileSyncService);
         mIsSignedIn = true;
-        return account;
+        return coreAccountInfo;
+    }
+
+    /**
+     * Creates ProfileData object from accountName.
+     */
+    public ProfileDataSource.ProfileData createProfileDataFromName(String accountName) {
+        String email = accountName.split("@", 2)[0];
+        String givenName = email + ".given";
+        String fullName = email + ".full";
+        return new ProfileDataSource.ProfileData(
+                accountName, createProfileImage(), fullName, givenName);
     }
 
     /**
@@ -189,7 +205,7 @@ public class AccountManagerTestRule implements TestRule {
      *
      * This method invokes native code. It shouldn't be called in a Robolectric test.
      */
-    public Account getCurrentSignedInAccount() {
+    public CoreAccountInfo getCurrentSignedInAccount() {
         return SigninTestUtil.getCurrentAccount();
     }
 
@@ -209,5 +225,19 @@ public class AccountManagerTestRule implements TestRule {
     public void signOut() {
         SigninTestUtil.signOut();
         mIsSignedIn = false;
+    }
+
+    /**
+     * Returns a profile image created from test resource.
+     */
+    public Bitmap createProfileImage() {
+        Drawable drawable = AppCompatResources.getDrawable(
+                ContextUtils.getApplicationContext(), R.drawable.test_profile_picture);
+        Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
+                drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
     }
 }

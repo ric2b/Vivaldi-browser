@@ -7,7 +7,10 @@
 
 #include <memory>
 
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/time/default_clock.h"
+#include "base/timer/timer.h"
 #include "chromeos/components/phonehub/connection_manager.h"
 #include "chromeos/services/secure_channel/public/cpp/client/client_channel.h"
 #include "chromeos/services/secure_channel/public/cpp/client/connection_attempt.h"
@@ -45,9 +48,37 @@ class ConnectionManagerImpl
   // ConnectionManager:
   ConnectionManager::Status GetStatus() const override;
   void AttemptConnection() override;
+  void Disconnect() override;
   void SendMessage(const std::string& payload) override;
 
  private:
+  friend class ConnectionManagerImplTest;
+
+  class MetricsRecorder : public ConnectionManager::Observer {
+   public:
+    MetricsRecorder(ConnectionManager* connection_manager, base::Clock* clock);
+    ~MetricsRecorder() override;
+    MetricsRecorder(const MetricsRecorder&) = delete;
+    MetricsRecorder* operator=(const MetricsRecorder&) = delete;
+
+    // ConnectionManager::Observer:
+    void OnConnectionStatusChanged() override;
+
+   private:
+    ConnectionManager* connection_manager_;
+    ConnectionManager::Status status_;
+
+    base::Clock* clock_;
+    base::Time status_change_timestamp_;
+  };
+
+  ConnectionManagerImpl(
+      multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
+      device_sync::DeviceSyncClient* device_sync_client,
+      chromeos::secure_channel::SecureChannelClient* secure_channel_client,
+      std::unique_ptr<base::OneShotTimer> timer,
+      base::Clock* clock);
+
   // chromeos::secure_channel::ConnectionAttempt::Delegate:
   void OnConnectionAttemptFailure(
       chromeos::secure_channel::mojom::ConnectionAttemptFailureReason reason)
@@ -58,6 +89,10 @@ class ConnectionManagerImpl
   // chromeos::secure_channel::ClientChannel::Observer:
   void OnDisconnected() override;
   void OnMessageReceived(const std::string& payload) override;
+
+  void OnConnectionTimeout();
+
+  void TearDownConnection();
 
   multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client_;
 
@@ -70,6 +105,11 @@ class ConnectionManagerImpl
       connection_attempt_;
 
   std::unique_ptr<chromeos::secure_channel::ClientChannel> channel_;
+
+  std::unique_ptr<base::OneShotTimer> timer_;
+  std::unique_ptr<MetricsRecorder> metrics_recorder_;
+
+  base::WeakPtrFactory<ConnectionManagerImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace phonehub

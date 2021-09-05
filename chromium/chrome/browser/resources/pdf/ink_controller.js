@@ -24,20 +24,31 @@ import {Viewport} from './viewport.js';
  */
 let ViewerInkHostElement;
 
-// Controller for annotation mode, on Chrome OS only. Fires the following events
-// from its event target:
-// has-unsaved-changes: Fired to indicate there are ink annotations that have
-//     not been saved.
-// set-annotation-undo-state: Contains information about whether undo or redo
-//     options are available.
-export class InkController extends ContentController {
+/**
+ * Event types dispatched by the ink controller.
+ * @enum {string}
+ */
+export const InkControllerEventType = {
+  HAS_UNSAVED_CHANGES: 'InkControllerEventType.HAS_UNSAVED_CHANGES',
+  LOADED: 'InkControllerEventType.LOADED',
+  SET_ANNOTATION_UNDO_STATE: 'InkControllerEventType.SET_ANNOTATION_UNDO_STATE',
+};
+
+/**
+ * Controller for annotation mode, on Chrome OS only. Fires the following events
+ * from its event target:
+ *   InkControllerEventType.HAS_UNSAVED_CHANGES: Fired to indicate there are ink
+ *       annotations that have not been saved.
+ *   InkControllerEventType.SET_ANNOTATION_UNDO_STATE: Contains information
+ *       about whether undo or redo options are available.
+ *  @implements {ContentController}
+ */
+export class InkController {
   /**
    * @param {!Viewport} viewport
    * @param {!HTMLDivElement} contentElement
    */
   constructor(viewport, contentElement) {
-    super();
-
     /** @private {!Viewport} */
     this.viewport_ = viewport;
 
@@ -54,7 +65,27 @@ export class InkController extends ContentController {
     this.tool_ = null;
   }
 
-  /** @return {!EventTarget} */
+  /**
+   * @return {boolean}
+   * @override
+   */
+  get isActive() {
+    // TODO(crbug.com/1134208): Implement when InkController is a singleton.
+    return false;
+  }
+
+  /**
+   * @param {boolean} isActive
+   * @override
+   */
+  set isActive(isActive) {
+    // TODO(crbug.com/1134208): Implement when InkController is a singleton.
+  }
+
+  /**
+   * @return {!EventTarget}
+   * @override
+   */
   getEventTarget() {
     return this.eventTarget_;
   }
@@ -66,6 +97,12 @@ export class InkController extends ContentController {
       this.inkHost_.setAnnotationTool(tool);
     }
   }
+
+  beforeZoom() {}
+
+  afterZoom() {}
+
+  print() {}
 
   /** @override */
   rotateClockwise() {
@@ -116,15 +153,18 @@ export class InkController extends ContentController {
       this.inkHost_ = /** @type {!ViewerInkHostElement} */ (inkHost);
       this.inkHost_.viewport = this.viewport_;
       inkHost.addEventListener('stroke-added', e => {
-        this.eventTarget_.dispatchEvent(new CustomEvent('has-unsaved-changes'));
+        this.eventTarget_.dispatchEvent(
+            new CustomEvent(InkControllerEventType.HAS_UNSAVED_CHANGES));
       });
       inkHost.addEventListener('undo-state-changed', e => {
-        this.eventTarget_.dispatchEvent(
-            new CustomEvent('set-annotation-undo-state', {detail: e.detail}));
+        this.eventTarget_.dispatchEvent(new CustomEvent(
+            InkControllerEventType.SET_ANNOTATION_UNDO_STATE,
+            {detail: e.detail}));
       });
     }
     return this.inkHost_.load(filename, data).then(() => {
-      this.eventTarget_.dispatchEvent(new CustomEvent('loaded'));
+      this.eventTarget_.dispatchEvent(
+          new CustomEvent(InkControllerEventType.LOADED));
     });
   }
 

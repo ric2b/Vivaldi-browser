@@ -14,6 +14,28 @@
 
 module chromeos.sensors.mojom;
 
+const string kScale = "scale";
+const string kSamplingFrequencyAvailable = "sampling_frequency_available";
+const string kLocation = "location";
+
+const string kLocationBase = "base";
+const string kLocationLid = "lid";
+const string kLocationCamera = "camera";
+
+// As Mojo doesn't support const arrays of strings and char, and also axes are
+// trivial, let Sensor clients append the axes.
+// Supported axes: {"x", "y", "z"}. Ex: "accel_x".
+const string kAccelerometerChannel = "accel";
+const string kGyroscopeChannel = "anglvel";
+const string kMagnetometerChannel = "magn";
+
+// The light sensor may have not only channel "illuminance", but three color
+// channels: illuminance_red, illuminance_green, and illuminance_blue.
+const string kLightChannel = "illuminance";
+const string kPressureChannel = "pressure";
+
+const string kTimestampChannel = "timestamp";
+
 enum DeviceType {
   NONE = 0,  // invalid device type
   ACCEL = 1,
@@ -40,7 +62,7 @@ enum ObserverErrorType {
 // multiple isolated SensorDevices for one physical device, if it wants
 // different frequencies of that device's samples.
 //
-// Next method ID: 3
+// Next method ID: 4
 interface SensorService {
   // Gets device ids as a vector of int given the device's type. Only devices
   // with id having "iio:device" as the prefix would be available.
@@ -59,6 +81,11 @@ interface SensorService {
   // If failed, the request won't be bound and will be destroyed directly.
   GetDevice@2(int32 iio_device_id,
       pending_receiver<SensorDevice> device_request);
+
+  // Registers a SensorServiceNewDevicesObserver to iioservice. Users will get
+  // notified when new devices are added and visible to iioservice.
+  RegisterNewDevicesObserver
+      @3(pending_remote<SensorServiceNewDevicesObserver> observer);
 };
 
 // SensorDevice, an interface sending requests for a physical device
@@ -71,11 +98,17 @@ interface SensorDevice {
   // Default: 5000 milliseconds.
   SetTimeout@0(uint32 timeout);
 
-  // Gets the |attr_name| attribute of this device into |value| in string.
-  // Returns base::nullopt if the attribute cannot be read.
-  GetAttribute@1(string attr_name) => (string? value);
+  // Gets the |attr_names| attributes of this device into |values| as strings.
+  // When an attribute cannot be read, its value in |values| is set to null.
+  // |values| and |attr_names| always have the same size.
+  GetAttributes@1(array<string> attr_names) => (array<string?> values);
 
-  // Sets the frequency of the device before starting to read samples.
+  // Sets the frequency in Hz of the device before starting to read samples.
+  // If no frequency or an invalid frequency is set, an
+  // ObserverErrorType::FREQUENCY_INVALID error will occur after calling
+  // |StartReadingSamples|.
+  // After starting to read samples, the client can set the frequency to 0 to
+  // pause the reading, and set a valid frequency later to resume the reading.
   // |result_freq| would be the frequency set by iioservice for the client.
   SetFrequency@2(double frequency) => (double result_freq);
 
@@ -120,4 +153,14 @@ interface SensorDeviceSamplesObserver {
 
   // An error occurs and is sent to the client as an enum type.
   OnErrorOccurred@1(ObserverErrorType type);
+};
+
+// One observer is created to track new sensors updated to iioservice, using
+// SensorService::RegisterNewDevicesObserver to register the observer.
+//
+// Next method ID: 1
+interface SensorServiceNewDevicesObserver {
+  // A new IIO device with |iio_device_id| and |types| is added and visible to
+  // iioservice. Sensor clients can get access to this device with the id.
+  OnNewDeviceAdded@0(int32 iio_device_id, array<DeviceType> types);
 };

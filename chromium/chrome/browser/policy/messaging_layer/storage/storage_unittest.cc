@@ -41,38 +41,35 @@ namespace {
 //
 //   TestEvent<ResType> e;
 //   ... Do some async work passing e.cb() as a completion callback of
-//   base::OnceCallback<void(ResType* res)> type which also may perform some
-//   other action specified by |done| callback provided by the caller.
+//       base::OnceCallback<void(ResType* res)> type which also may perform some
+//       other action specified by |done| callback provided by the caller.
 //   ... = e.result();  // Will wait for e.cb() to be called and return the
-//   collected result.
+//       collected result.
 //
 template <typename ResType>
 class TestEvent {
  public:
-  TestEvent()
-      : completed_(base::WaitableEvent::ResetPolicy::MANUAL,
-                   base::WaitableEvent::InitialState::NOT_SIGNALED) {}
-  ~TestEvent() { EXPECT_TRUE(completed_.IsSignaled()) << "Not responded"; }
+  TestEvent() : run_loop_(std::make_unique<base::RunLoop>()) {}
+  ~TestEvent() { EXPECT_FALSE(run_loop_->running()) << "Not responded"; }
   TestEvent(const TestEvent& other) = delete;
   TestEvent& operator=(const TestEvent& other) = delete;
   ResType result() {
-    completed_.Wait();
+    run_loop_->Run();
     return std::forward<ResType>(result_);
   }
 
   // Completion callback to hand over to the processing method.
   base::OnceCallback<void(ResType res)> cb() {
-    DCHECK(!completed_.IsSignaled());
     return base::BindOnce(
-        [](base::WaitableEvent* completed, ResType* result, ResType res) {
+        [](base::RunLoop* run_loop, ResType* result, ResType res) {
           *result = std::forward<ResType>(res);
-          completed->Signal();
+          run_loop->Quit();
         },
-        base::Unretained(&completed_), base::Unretained(&result_));
+        base::Unretained(run_loop_.get()), base::Unretained(&result_));
   }
 
  private:
-  base::WaitableEvent completed_;
+  std::unique_ptr<base::RunLoop> run_loop_;
   ResType result_;
 };
 
@@ -91,19 +88,14 @@ class MockUploadClient : public Storage::UploaderInterface {
   explicit MockUploadClient(LastRecordDigestMap* last_record_digest_map)
       : last_record_digest_map_(last_record_digest_map) {}
 
-  void ProcessRecord(StatusOr<EncryptedRecord> encrypted_record,
+  void ProcessRecord(EncryptedRecord encrypted_record,
                      base::OnceCallback<void(bool)> processed_cb) override {
-    if (!encrypted_record.ok()) {
-      std::move(processed_cb)
-          .Run(UploadRecordFailure(encrypted_record.status()));
-      return;
-    }
     WrappedRecord wrapped_record;
     ASSERT_TRUE(wrapped_record.ParseFromString(
-        encrypted_record.ValueOrDie().encrypted_wrapped_record()));
+        encrypted_record.encrypted_wrapped_record()));
     // Verify generation match.
     const auto& sequencing_information =
-        encrypted_record.ValueOrDie().sequencing_information();
+        encrypted_record.sequencing_information();
     if (generation_id_.has_value() &&
         generation_id_.value() != sequencing_information.generation_id()) {
       std::move(processed_cb)
@@ -158,6 +150,12 @@ class MockUploadClient : public Storage::UploaderInterface {
         .Run(UploadRecord(sequencing_information.priority(),
                           sequencing_information.sequencing_id(),
                           wrapped_record.record().data()));
+  }
+
+  void ProcessGap(SequencingInformation start,
+                  uint64_t count,
+                  base::OnceCallback<void(bool)> processed_cb) override {
+    LOG(FATAL) << "Gap not implemented yet";
   }
 
   void Completed(Status status) override { UploadComplete(status); }

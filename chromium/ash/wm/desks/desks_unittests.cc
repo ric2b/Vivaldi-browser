@@ -4,6 +4,7 @@
 
 #include <vector>
 
+#include "ash/app_list/app_list_controller_impl.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/multi_user/multi_user_window_manager_impl.h"
@@ -28,6 +29,7 @@
 #include "ash/window_factory.h"
 #include "ash/wm/desks/close_desk_button.h"
 #include "ash/wm/desks/desk.h"
+#include "ash/wm/desks/desk_animation_base.h"
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_name_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
@@ -36,6 +38,7 @@
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/new_desk_button.h"
+#include "ash/wm/desks/root_window_desk_switch_animator_test_api.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
@@ -55,6 +58,7 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/prefs/pref_service.h"
@@ -1230,6 +1234,28 @@ TEST_F(DesksTest, MinimizedWindow) {
   ActivateDesk(desk_1);
   EXPECT_TRUE(window_state->IsMinimized());
   EXPECT_NE(win0.get(), window_util::GetActiveWindow());
+}
+
+// Tests that the app list stays open when switching desks. Regression test for
+// http://crbug.com/1138982.
+TEST_F(DesksTest, AppListStaysOpen) {
+  auto* controller = DesksController::Get();
+  NewDesk();
+  ASSERT_EQ(2u, controller->desks().size());
+
+  // Create one app window on each desk.
+  auto win0 = CreateAppWindow(gfx::Rect(400, 400));
+  ActivateDesk(controller->desks()[1].get());
+  auto win1 = CreateAppWindow(gfx::Rect(400, 400));
+
+  // Open the app list.
+  auto* app_list_controller = Shell::Get()->app_list_controller();
+  app_list_controller->ShowAppList();
+  ASSERT_TRUE(app_list_controller->IsVisible(base::nullopt));
+
+  // Switch back to desk 1. Test that the app list is still open.
+  ActivateDesk(controller->desks()[0].get());
+  EXPECT_TRUE(app_list_controller->IsVisible(base::nullopt));
 }
 
 TEST_P(DesksTest, DragWindowToDesk) {
@@ -2748,7 +2774,8 @@ TEST_F(DesksWithSplitViewTest, SwitchToDeskWithSnappedActiveWindow) {
   WindowState* win0_state = WindowState::Get(win0.get());
   WMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_LEFT);
   win0_state->OnWMEvent(&snap_to_left);
-  EXPECT_EQ(WindowStateType::kLeftSnapped, win0_state->GetStateType());
+  EXPECT_EQ(chromeos::WindowStateType::kLeftSnapped,
+            win0_state->GetStateType());
 
   // Switch to |desk_2| and then back to |desk_1|. Verify that neither split
   // view nor overview arises.
@@ -2854,7 +2881,8 @@ constexpr char kUser2Email[] = "user2@desks";
 }  // namespace
 
 class DesksMultiUserTest : public NoSessionAshTestBase,
-                           public MultiUserWindowManagerDelegate {
+                           public MultiUserWindowManagerDelegate,
+                           public ::testing::WithParamInterface<bool> {
  public:
   DesksMultiUserTest() = default;
   ~DesksMultiUserTest() override = default;
@@ -2867,7 +2895,10 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
 
   // AshTestBase:
   void SetUp() override {
+    if (GetParam())
+      scoped_feature_list_.InitAndEnableFeature(features::kDesksRestore);
     NoSessionAshTestBase::SetUp();
+
     TestSessionControllerClient* session_controller =
         GetSessionControllerClient();
     session_controller->Reset();
@@ -2882,13 +2913,11 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
     RegisterUserProfilePrefs(user_2_prefs_->registry(), /*for_test=*/true);
     session_controller->AddUserSession(kUser1Email,
                                        user_manager::USER_TYPE_REGULAR,
-                                       /*enable_settings=*/true,
                                        /*provide_pref_service=*/false);
     session_controller->SetUserPrefService(GetUser1AccountId(),
                                            std::move(user_1_prefs));
     session_controller->AddUserSession(kUser2Email,
                                        user_manager::USER_TYPE_REGULAR,
-                                       /*enable_settings=*/true,
                                        /*provide_pref_service=*/false);
     session_controller->SetUserPrefService(GetUser2AccountId(),
                                            std::move(user_2_prefs));
@@ -2905,6 +2934,8 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
                                  bool was_minimized,
                                  bool teleported) override {}
   void OnTransitionUserShelfToNewAccount() override {}
+
+  bool IsDesksRestoreEnabled() const { return GetParam(); }
 
   AccountId GetUser1AccountId() const {
     return AccountId::FromUserEmail(kUser1Email);
@@ -2941,6 +2972,8 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   std::unique_ptr<MultiUserWindowManager> multi_user_window_manager_;
 
   TestingPrefServiceSimple* user_1_prefs_ = nullptr;
@@ -2949,7 +2982,7 @@ class DesksMultiUserTest : public NoSessionAshTestBase,
   DISALLOW_COPY_AND_ASSIGN(DesksMultiUserTest);
 };
 
-TEST_F(DesksMultiUserTest, SwitchUsersBackAndForth) {
+TEST_P(DesksMultiUserTest, SwitchUsersBackAndForth) {
   SimulateUserLogin(GetUser1AccountId());
   auto* controller = DesksController::Get();
   NewDesk();
@@ -3006,7 +3039,7 @@ TEST_F(DesksMultiUserTest, SwitchUsersBackAndForth) {
   EXPECT_TRUE(win3->IsVisible());
 }
 
-TEST_F(DesksMultiUserTest, RemoveDesks) {
+TEST_P(DesksMultiUserTest, RemoveDesks) {
   SimulateUserLogin(GetUser1AccountId());
   // Create two desks with several windows with different app types that
   // belong to different users.
@@ -3103,7 +3136,7 @@ TEST_F(DesksMultiUserTest, RemoveDesks) {
   EXPECT_TRUE(win6->IsVisible());
 }
 
-TEST_F(DesksMultiUserTest, SwitchingUsersEndsOverview) {
+TEST_P(DesksMultiUserTest, SwitchingUsersEndsOverview) {
   SimulateUserLogin(GetUser1AccountId());
   OverviewController* overview_controller = Shell::Get()->overview_controller();
   EXPECT_TRUE(overview_controller->StartOverview());
@@ -3114,8 +3147,15 @@ TEST_F(DesksMultiUserTest, SwitchingUsersEndsOverview) {
 
 using DesksRestoreMultiUserTest = DesksMultiUserTest;
 
-TEST_F(DesksRestoreMultiUserTest, DesksRestoredFromPrimaryUserPrefsOnly) {
+TEST_P(DesksRestoreMultiUserTest, DesksRestoredFromPrimaryUserPrefsOnly) {
+  constexpr int kDefaultActiveDesk = 0;
+  constexpr int kUser1StoredActiveDesk = 2;
   InitPrefsWithDesksRestoreData(user_1_prefs());
+
+  // Set the primary user1's active desk prefs to kUser1StoredActiveDesk.
+  if (IsDesksRestoreEnabled())
+    user_1_prefs()->SetInteger(prefs::kDesksActiveDesk, kUser1StoredActiveDesk);
+
   SimulateUserLogin(GetUser1AccountId());
   // User 1 is the first to login, hence the primary user.
   auto* controller = DesksController::Get();
@@ -3134,14 +3174,35 @@ TEST_F(DesksRestoreMultiUserTest, DesksRestoredFromPrimaryUserPrefsOnly) {
   };
 
   verify_desks("Before switching users");
+  if (IsDesksRestoreEnabled()) {
+    // The primary user1 should restore the saved active desk from its pref.
+    EXPECT_EQ(desks[kUser1StoredActiveDesk]->container_id(),
+              desks_util::GetActiveDeskContainerId());
+  }
 
   // Switching users should not change anything as restoring happens only at
   // the time when the first user signs in.
   SwitchActiveUser(GetUser2AccountId());
   verify_desks("After switching users");
+  if (IsDesksRestoreEnabled()) {
+    // The secondary user2 should start with a default active desk.
+    EXPECT_EQ(desks[kDefaultActiveDesk]->container_id(),
+              desks_util::GetActiveDeskContainerId());
+
+    // Activating the second desk in the secondary user session should not
+    // affect the primary user1's active desk pref. Moreover, switching back to
+    // user1 session should activate the user1's previously active desk
+    // correctly.
+    ActivateDesk(desks[1].get());
+    EXPECT_EQ(user_1_prefs()->GetInteger(prefs::kDesksActiveDesk),
+              kUser1StoredActiveDesk);
+    SwitchActiveUser(GetUser1AccountId());
+    EXPECT_EQ(desks[kUser1StoredActiveDesk]->container_id(),
+              desks_util::GetActiveDeskContainerId());
+  }
 }
 
-TEST_F(DesksRestoreMultiUserTest,
+TEST_P(DesksRestoreMultiUserTest,
        ChangesMadeBySecondaryUserAffectsOnlyPrimaryUserPrefs) {
   InitPrefsWithDesksRestoreData(user_1_prefs());
   SimulateUserLogin(GetUser1AccountId());
@@ -3456,6 +3517,38 @@ TEST_F(DesksAcceleratorsTest, CannotMoveAlwaysOnTopWindows) {
   EXPECT_TRUE(win0->IsVisible());
 }
 
+// Tests that hitting an acclerator to switch desks does not cause a crash if we
+// are already at an edge desk. Regression test for https://crbug.com/1159068.
+TEST_F(DesksAcceleratorsTest, HitAcceleratorWhenAlreadyAtEdge) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kEnhancedDeskAnimations);
+
+  NewDesk();
+
+  // Enable animations so that we can make sure that they occur.
+  ui::ScopedAnimationDurationScaleMode regular_animations(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  // First go right. Wait until the ending screenshot is taken.
+  const int flags = ui::EF_COMMAND_DOWN;
+  SendAccelerator(ui::VKEY_OEM_6, flags);
+
+  DeskAnimationBase* animation = DesksController::Get()->animation();
+  ASSERT_TRUE(animation);
+  base::RunLoop run_loop;
+  auto* desk_switch_animator =
+      animation->GetDeskSwitchAnimatorAtIndexForTesting(0);
+  ASSERT_TRUE(desk_switch_animator);
+  RootWindowDeskSwitchAnimatorTestApi(desk_switch_animator)
+      .SetOnEndingScreenshotTakenCallback(run_loop.QuitClosure());
+  run_loop.Run();
+
+  // Tap the accelerator to go left to desk 1, then tap again. There should be
+  // no crash.
+  SendAccelerator(ui::VKEY_OEM_4, flags);
+  SendAccelerator(ui::VKEY_OEM_4, flags);
+}
+
 class PerDeskShelfTest : public AshTestBase,
                          public ::testing::WithParamInterface<bool> {
  public:
@@ -3664,6 +3757,45 @@ TEST_P(PerDeskShelfTest, RemoveActiveDesk) {
   VerifyViewVisibility(app1, true);
   VerifyViewVisibility(app2, true);
 }
+
+// A test class that uses a mock time task environment.
+class DesksMockTimeTest : public AshTestBase {
+ public:
+  DesksMockTimeTest()
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+  DesksMockTimeTest(const DesksMockTimeTest&) = delete;
+  DesksMockTimeTest& operator=(const DesksMockTimeTest&) = delete;
+  ~DesksMockTimeTest() override = default;
+};
+
+TEST_F(DesksMockTimeTest, DeskTraversalNonTouchpadMetrics) {
+  NewDesk();
+  NewDesk();
+  NewDesk();
+  ASSERT_EQ(4u, DesksController::Get()->desks().size());
+
+  constexpr char kDeskTraversalsHistogramName[] =
+      "Ash.Desks.NumberOfDeskTraversals";
+
+  base::HistogramTester histogram_tester;
+  auto* controller = DesksController::Get();
+  const auto& desks = controller->desks();
+  ASSERT_EQ(controller->active_desk(), desks[0].get());
+
+  // Move 5 desks. There is nothing recorded at the end since the timer is still
+  // running.
+  ActivateDesk(desks[1].get());
+  ActivateDesk(desks[0].get());
+  ActivateDesk(desks[1].get());
+  ActivateDesk(desks[2].get());
+  ActivateDesk(desks[3].get());
+  histogram_tester.ExpectBucketCount(kDeskTraversalsHistogramName, 5, 0);
+
+  // Advance the time to end the timer. There should be 5 desks recorded.
+  task_environment()->FastForwardBy(base::TimeDelta::FromSeconds(5));
+  histogram_tester.ExpectBucketCount(kDeskTraversalsHistogramName, 5, 1);
+}
+
 // TODO(afakhry): Add more tests:
 // - Always on top windows are not tracked by any desk.
 // - Reusing containers when desks are removed and created.
@@ -3671,6 +3803,8 @@ TEST_P(PerDeskShelfTest, RemoveActiveDesk) {
 // Instantiate the parametrized tests.
 INSTANTIATE_TEST_SUITE_P(All, DesksTest, ::testing::Bool());
 INSTANTIATE_TEST_SUITE_P(All, PerDeskShelfTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, DesksMultiUserTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, DesksRestoreMultiUserTest, ::testing::Bool());
 
 }  // namespace
 

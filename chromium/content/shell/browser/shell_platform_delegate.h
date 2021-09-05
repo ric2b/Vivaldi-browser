@@ -10,7 +10,6 @@
 #include "base/containers/flat_map.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "content/public/browser/bluetooth_chooser.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -22,7 +21,6 @@ class GURL;
 
 namespace content {
 class JavaScriptDialogManager;
-class RenderFrameHost;
 class Shell;
 class ShellPlatformDataAura;
 class WebContents;
@@ -79,12 +77,12 @@ class ShellPlatformDelegate {
   virtual std::unique_ptr<JavaScriptDialogManager>
   CreateJavaScriptDialogManager(Shell* shell);
 
-  // Allows platforms to create and run a BluetoothChoose. By default returns
-  // null, which means no chooser is run at all.
-  virtual std::unique_ptr<BluetoothChooser> RunBluetoothChooser(
-      Shell* shell,
-      RenderFrameHost* frame,
-      const BluetoothChooser::EventHandler& event_handler);
+  // Requests handling of locking the mouse. This returns true if the request
+  // has been handled, otherwise false.
+  virtual bool HandleRequestToLockMouse(Shell* shell,
+                                        WebContents* web_contents,
+                                        bool user_gesture,
+                                        bool last_unlocked_by_target);
 
   // Allows platforms to prevent running insecure content. By default returns
   // false, only allowing what Shell allows on its own.

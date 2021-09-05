@@ -18,7 +18,6 @@
 <translation id="1221825588892235038">Solo selección</translation>
 <translation id="1244303850296295656">Error de extensión</translation>
 <translation id="125220115284141797">Predeterminado</translation>
-<translation id="1274977772557788323">Configuración del almacenamiento para Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Archivo HTML de Marcadores</translation>
 <translation id="1380436189840894976">¿Abandonar de todos modos el modo incógnito?</translation>
@@ -72,7 +71,6 @@
 <translation id="2218515861914035131">Pegar como texto sencillo</translation>
 <translation id="2249605167705922988">p. ej. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir los identificadores para contenido protegido (precisa reiniciar el ordenador)</translation>
-<translation id="2263497240924215535">(Deshabilitado)</translation>
 <translation id="2277255602909579701">Todas las cookies y todos los datos de sitios</translation>
 <translation id="2280486287150724112">Margen derecho</translation>
 <translation id="2282146716419988068">Proceso de GPU</translation>
@@ -122,7 +120,6 @@
 <translation id="3013291976881901233">Dispositivos MIDI</translation>
 <translation id="3021678814754966447">&amp;Ver fuente del marco</translation>
 <translation id="3036546437875325427">Habilitar Flash</translation>
-<translation id="3038675903128704560">No permitir que los sitios usen complementos para acceder a tu ordenador</translation>
 <translation id="3046910703532196514">Página web, completa</translation>
 <translation id="3067198360141518313">Ejecutar este complemento</translation>
 <translation id="3080207940057008665">Otro programa en tu computadora agregó un tema que puede cambiar el funcionamiento de Vivaldi.</translation>
@@ -151,12 +148,10 @@
 <translation id="3378572629723696641">Es posible que esta extensión esté dañada.</translation>
 <translation id="3387614642886316601">Usar el corrector ortográfico mejorado</translation>
 <translation id="3432227430032737297">Quitar todo lo que se muestra</translation>
-<translation id="3440761377721825626">Preguntarme cuando un sitio web intente usar un complemento para acceder a mi ordenador</translation>
 <translation id="345693547134384690">Abrir &amp;imagen en una nueva pestaña</translation>
 <translation id="3494769164076977169">Preguntarme cuando un sitio intente descargar archivos automáticamente después del primer archivo (recomendado)</translation>
 <translation id="3505030558724226696">Revocar el acceso al dispositivo</translation>
 <translation id="3511307672085573050">Copiar la &amp;dirección del vínculo</translation>
-<translation id="3523642406908660543">Preguntarme cuando un sitio web intente usar un complemento para acceder a mi ordenador (recomendado)</translation>
 <translation id="354068948465830244">Esta extensión puede leer y cambiar los datos del sitio</translation>
 <translation id="3560034655160545939">&amp;Corrección ortográfica</translation>
 <translation id="3574917942258583917">¿Deseas salir del modo de navegación incógnito de todas formas?</translation>
@@ -215,7 +210,6 @@
 <translation id="4423376891418188461">Restaurar configuración</translation>
 <translation id="4434045419905280838">Ventanas emergentes y redirecciones</translation>
 <translation id="4478664379124702289">Guardar vín&amp;culo como...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">No se puede transmitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Solo el administrador (<ph name="CUSTODIAN_NAME" />) puede modificar las apps y extensiones.</translation>
@@ -296,7 +290,6 @@
 <translation id="583281660410589416">Desconocido</translation>
 <translation id="5860491529813859533">Activar</translation>
 <translation id="5867841422488265304">Busca o escribe una dirección web</translation>
-<translation id="5908769186679515905">No ejecutar Flash</translation>
 <translation id="5910363049092958439">Gu&amp;ardar imagen como...</translation>
 <translation id="5956585768868398362">¿Esta es la página de búsqueda que esperabas ver?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> máximo)</translation>
@@ -368,7 +361,6 @@
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> ppp</translation>
 <translation id="7309257895202129721">Mostrar &amp;controles</translation>
-<translation id="7311079019872751559">Complementos con acceso no restringido a la zona de aislamiento</translation>
 <translation id="7385854874724088939">Algo falló al intentar imprimir. Comprueba tu impresora e inténtalo de nuevo.</translation>
 <translation id="7412226954991670867">Memoria de la GPU</translation>
 <translation id="7421925624202799674">&amp;Ver el código fuente de la página</translation>

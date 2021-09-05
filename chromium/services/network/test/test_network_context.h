@@ -12,6 +12,7 @@
 #include "base/component_export.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "build/chromeos_buildflags.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/address_list.h"
@@ -99,17 +100,19 @@ class TestNetworkContext : public mojom::NetworkContext {
   void QueueReport(const std::string& type,
                    const std::string& group,
                    const GURL& url,
+                   const net::NetworkIsolationKey& network_isolation_key,
                    const base::Optional<std::string>& user_agent,
                    base::Value body) override {}
   void QueueSignedExchangeReport(
-      mojom::SignedExchangeReportPtr report) override {}
+      mojom::SignedExchangeReportPtr report,
+      const net::NetworkIsolationKey& network_isolation_key) override {}
   void CloseAllConnections(CloseAllConnectionsCallback callback) override {}
   void CloseIdleConnections(CloseIdleConnectionsCallback callback) override {}
   void SetNetworkConditions(const base::UnguessableToken& throttling_profile_id,
                             mojom::NetworkConditionsPtr conditions) override {}
   void SetAcceptLanguage(const std::string& new_accept_language) override {}
   void SetEnableReferrers(bool enable_referrers) override {}
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   void UpdateAdditionalCertificates(
       mojom::AdditionalCertificatesPtr additional_certificates) override {}
 #endif
@@ -191,10 +194,12 @@ class TestNetworkContext : public mojom::NetworkContext {
       mojo::PendingReceiver<mojom::HostResolver> receiver) override {}
   void NotifyExternalCacheHit(const GURL& url,
                               const std::string& http_method,
-                              const net::NetworkIsolationKey& key) override {}
+                              const net::NetworkIsolationKey& key,
+                              bool is_subframe_document_resource) override {}
   void VerifyCertForSignedExchange(
       const scoped_refptr<net::X509Certificate>& certificate,
       const GURL& url,
+      const net::NetworkIsolationKey& network_isolation_key,
       const std::string& ocsp_result,
       const std::string& sct_list,
       VerifyCertForSignedExchangeCallback callback) override {}
@@ -265,7 +270,7 @@ class TestNetworkContext : public mojom::NetworkContext {
       const GURL& url,
       const net::NetworkIsolationKey& network_isolation_key,
       LookupServerBasicAuthCredentialsCallback callback) override {}
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   void LookupProxyAuthCredentials(
       const net::ProxyServer& proxy_server,
       const std::string& auth_scheme,

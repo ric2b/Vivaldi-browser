@@ -47,7 +47,6 @@ using quic::QuicSpdyClientSessionBase;
 using quic::QuicTagVector;
 using quic::QuicTime;
 using quic::TransportParameters;
-using quiche::QuicheStringPiece;
 using std::string;
 
 namespace net {
@@ -127,6 +126,9 @@ bool MockCryptoClientStream::CryptoConnect() {
               std::make_unique<MockDecrypter>(Perspective::IS_CLIENT));
         }
         session()->connection()->SetEncrypter(
+            ENCRYPTION_FORWARD_SECURE,
+            std::make_unique<MockEncrypter>(Perspective::IS_CLIENT));
+        session()->connection()->SetEncrypter(
             ENCRYPTION_ZERO_RTT,
             std::make_unique<MockEncrypter>(Perspective::IS_CLIENT));
       } else {
@@ -142,6 +144,9 @@ bool MockCryptoClientStream::CryptoConnect() {
         if (session()->version().UsesHttp3()) {
           SetConfigNegotiated();
         }
+        session()->connection()->SetEncrypter(
+            ENCRYPTION_FORWARD_SECURE,
+            std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
         session()->OnNewEncryptionKeyAvailable(
             ENCRYPTION_ZERO_RTT,
             std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
@@ -221,7 +226,7 @@ bool MockCryptoClientStream::CryptoConnect() {
     case COLD_START_WITH_CHLO_SENT: {
       handshake_confirmed_ = false;
       encryption_established_ = false;
-      SendHandshakeMessage(GetDummyCHLOMessage());
+      SendHandshakeMessage(GetDummyCHLOMessage(), ENCRYPTION_INITIAL);
       break;
     }
   }

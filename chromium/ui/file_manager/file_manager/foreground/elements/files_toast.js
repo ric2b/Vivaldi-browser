@@ -104,7 +104,7 @@ const FilesToast = Polymer({
    * @private
    */
   onTransitionEnd_() {
-    const hide = !this.$.container.hasAttribute('open');
+    const hide = !this.$.container.open;
 
     if (hide && this.visible) {
       this._setVisible(false);
@@ -125,3 +125,5 @@ const FilesToast = Polymer({
     }
   }
 });
+
+//# sourceURL=//ui/file_manager/file_manager/foreground/elements/files_toast.js

@@ -7,7 +7,7 @@ import("//components/vector_icons/vector_icons.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//ui/webui/webui_features.gni")
 
-aggregate_vector_icons2("chrome_vector_icons") {
+aggregate_vector_icons("chrome_vector_icons") {
   icon_directory = "."
 
   # Keep sorted alphabetically.
@@ -25,13 +25,12 @@ aggregate_vector_icons2("chrome_vector_icons") {
     "bookmarkbar_touch_overflow.icon",
     "browser_tools.icon",
     "browser_tools_error.icon",
-    "browser_tools_error_touch.icon",
     "browser_tools_touch.icon",
     "browser_tools_update.icon",
-    "browser_tools_update_touch.icon",
     "caret_down.icon",
     "caret_up.icon",
     "cast_for_education.icon",
+    "chevron_right.icon",
     "click_to_call_illustration.icon",
     "click_to_call_illustration_dark.icon",
     "close_all.icon",
@@ -53,6 +52,7 @@ aggregate_vector_icons2("chrome_vector_icons") {
     "globe.icon",
     "guest_menu_art.icon",
     "hardware_computer.icon",
+    "hardware_computer_small.icon",
     "hardware_smartphone.icon",
     "horizontal_menu.icon",
     "incognito.icon",
@@ -64,6 +64,7 @@ aggregate_vector_icons2("chrome_vector_icons") {
     "keyboard_arrow_right.icon",
     "keyboard_arrow_up.icon",
     "laptop.icon",
+    "live_caption.icon",
     "media_toolbar_button.icon",
     "media_toolbar_button_touch.icon",
     "mixed_content.icon",
@@ -90,6 +91,8 @@ aggregate_vector_icons2("chrome_vector_icons") {
     "remove_box.icon",
     "resize_handle.icon",
     "sad_tab.icon",
+    "scrolling_tabstrip_leading.icon",
+    "scrolling_tabstrip_trailing.icon",
     "security.icon",
     "send_tab_to_self.icon",
     "sign_out.icon",

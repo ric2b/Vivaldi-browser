@@ -13,7 +13,7 @@
 #include "content/browser/service_worker/service_worker_storage.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 
 namespace content {
 
@@ -36,10 +36,6 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
 
   ~ServiceWorkerStorageControlImpl() override;
 
-  // TODO(crbug.com/1055677): Remove this accessor after all
-  // ServiceWorkerStorage method calls are replaced with mojo methods.
-  ServiceWorkerStorage* storage() const { return storage_.get(); }
-
   void Bind(mojo::PendingReceiver<storage::mojom::ServiceWorkerStorageControl>
                 receiver);
 
@@ -48,9 +44,12 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
   void LazyInitializeForTest();
 
  private:
+  // storage::mojom::ServiceWorkerStorageControl implementations:
   void Disable() override;
   void Delete(DeleteCallback callback) override;
-  // storage::mojom::ServiceWorkerStorageControl implementations:
+  void Recover(
+      std::vector<storage::mojom::ServiceWorkerLiveVersionInfoPtr> versions,
+      RecoverCallback callback) override;
   void GetRegisteredOrigins(GetRegisteredOriginsCallback callback) override;
   void FindRegistrationForClientUrl(
       const GURL& client_url,
@@ -150,6 +149,14 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
   void ApplyPolicyUpdates(
       const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>
           policy_updates) override;
+  void GetPurgingResourceIdsForTest(
+      GetPurgingResourceIdsForTestCallback callback) override;
+  void GetPurgeableResourceIdsForTest(
+      GetPurgeableResourceIdsForTestCallback callback) override;
+  void GetUncommittedResourceIdsForTest(
+      GetUncommittedResourceIdsForTestCallback callback) override;
+  void SetPurgingCompleteCallbackForTest(
+      SetPurgingCompleteCallbackForTestCallback callback) override;
 
   using ResourceList =
       std::vector<storage::mojom::ServiceWorkerResourceRecordPtr>;
@@ -189,7 +196,7 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
 
   const std::unique_ptr<ServiceWorkerStorage> storage_;
 
-  mojo::ReceiverSet<storage::mojom::ServiceWorkerStorageControl> receivers_;
+  mojo::Receiver<storage::mojom::ServiceWorkerStorageControl> receiver_{this};
 
   base::flat_map<int64_t /*version_id*/,
                  std::unique_ptr<ServiceWorkerLiveVersionRefImpl>>

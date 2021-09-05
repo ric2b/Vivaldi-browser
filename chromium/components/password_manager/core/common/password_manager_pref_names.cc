@@ -11,10 +11,6 @@ namespace prefs {
 const char kCredentialsEnableAutosignin[] = "credentials_enable_autosignin";
 const char kCredentialsEnableService[] = "credentials_enable_service";
 
-#if !defined(OS_APPLE) && !defined(OS_CHROMEOS) && defined(OS_POSIX)
-const char kMigrationToLoginDBStep[] = "profile.migration_to_logindb_step";
-#endif
-
 #if defined(OS_WIN)
 const char kOsPasswordBlank[] = "password_manager.os_password_blank";
 const char kOsPasswordLastChanged[] =
@@ -63,9 +59,6 @@ const char kProfileStoreDateLastUsedForFilling[] =
     "password_manager.profile_store_date_last_used_for_filling";
 const char kAccountStoreDateLastUsedForFilling[] =
     "password_manager.account_store_date_last_used_for_filling";
-
-const char kSettingsLaunchedPasswordChecks[] =
-    "profile.settings_launched_password_checks";
 
 }  // namespace prefs
 }  // namespace password_manager

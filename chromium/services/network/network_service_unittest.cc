@@ -17,11 +17,12 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "net/base/escape.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
@@ -186,7 +187,7 @@ TEST_F(NetworkServiceTest, AuthDefaultParams) {
 
 #if BUILDFLAG(USE_KERBEROS) && !defined(OS_ANDROID)
   ASSERT_TRUE(GetNegotiateFactory(&network_context));
-#if defined(OS_POSIX) && !defined(OS_CHROMEOS)
+#if defined(OS_POSIX) && !BUILDFLAG(IS_ASH)
   EXPECT_EQ("",
             GetNegotiateFactory(&network_context)->GetLibraryNameForTesting());
 #endif
@@ -1172,6 +1173,8 @@ TEST_F(NetworkServiceTestWithService, SetNetworkConditions) {
 
   ResourceRequest request;
   request.url = test_server()->GetURL("/nocache.html");
+  request.request_initiator =
+      url::Origin::Create(GURL("https://initiator.example.com"));
   request.method = "GET";
 
   StartLoadingURL(request, 0);
@@ -1213,13 +1216,14 @@ TEST_F(NetworkServiceTestWithService, SetsTrustTokenKeyCommitments) {
   ASSERT_TRUE(service_->trust_token_key_commitments());
 
   auto expectation = mojom::TrustTokenKeyCommitmentResult::New();
-  ASSERT_TRUE(base::Base64Decode(
-      "aaaa", &expectation->signed_redemption_record_verification_key));
+  expectation->protocol_version =
+      mojom::TrustTokenProtocolVersion::kTrustTokenV2Pmb;
+  expectation->id = 1;
   expectation->batch_size = 5;
 
   base::RunLoop run_loop;
   network_service_->SetTrustTokenKeyCommitments(
-      R"( { "https://issuer.example": { "batchsize": 5, "srrkey": "aaaa" } } )",
+      R"( { "https://issuer.example": { "protocol_version": "TrustTokenV2PMB", "id": 1, "batchsize": 5 } } )",
       run_loop.QuitClosure());
   run_loop.Run();
 

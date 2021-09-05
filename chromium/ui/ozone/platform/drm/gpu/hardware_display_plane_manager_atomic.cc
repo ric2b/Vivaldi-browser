@@ -244,10 +244,9 @@ void HardwareDisplayPlaneManagerAtomic::SetAtomicPropsForCommit(
 
 bool HardwareDisplayPlaneManagerAtomic::Commit(
     HardwareDisplayPlaneList* plane_list,
-    bool should_modeset,
     scoped_refptr<PageFlipRequest> page_flip_request,
     std::unique_ptr<gfx::GpuFence>* out_fence) {
-  bool test_only = !should_modeset && !page_flip_request;
+  bool test_only = !page_flip_request;
 
   std::vector<uint32_t> crtcs = GetCrtcIdsOfPlanes(*plane_list);
 
@@ -273,11 +272,8 @@ bool HardwareDisplayPlaneManagerAtomic::Commit(
       }
     }
 
-    uint32_t flags = 0;
-    if (should_modeset)
-      flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
-    else
-      flags = test_only ? DRM_MODE_ATOMIC_TEST_ONLY : DRM_MODE_ATOMIC_NONBLOCK;
+    uint32_t flags =
+        test_only ? DRM_MODE_ATOMIC_TEST_ONLY : DRM_MODE_ATOMIC_NONBLOCK;
 
     if (!drm_->CommitProperties(plane_list->atomic_property_set.get(), flags,
                                 crtcs.size(), page_flip_request)) {
@@ -302,20 +298,24 @@ bool HardwareDisplayPlaneManagerAtomic::Commit(
 
 bool HardwareDisplayPlaneManagerAtomic::DisableOverlayPlanes(
     HardwareDisplayPlaneList* plane_list) {
-  for (HardwareDisplayPlane* plane : plane_list->old_plane_list) {
-    plane->set_in_use(false);
-    plane->set_owning_crtc(0);
+  bool ret = true;
 
-    HardwareDisplayPlaneAtomic* atomic_plane =
-        static_cast<HardwareDisplayPlaneAtomic*>(plane);
-    atomic_plane->AssignPlaneProps(0, 0, gfx::Rect(), gfx::Rect(),
-                                   gfx::OVERLAY_TRANSFORM_NONE,
-                                   base::kInvalidPlatformFile);
-    atomic_plane->SetPlaneProps(plane_list->atomic_property_set.get());
+  if (!plane_list->old_plane_list.empty()) {
+    for (HardwareDisplayPlane* plane : plane_list->old_plane_list) {
+      plane->set_in_use(false);
+      plane->set_owning_crtc(0);
+
+      HardwareDisplayPlaneAtomic* atomic_plane =
+          static_cast<HardwareDisplayPlaneAtomic*>(plane);
+      atomic_plane->AssignPlaneProps(0, 0, gfx::Rect(), gfx::Rect(),
+                                     gfx::OVERLAY_TRANSFORM_NONE,
+                                     base::kInvalidPlatformFile);
+      atomic_plane->SetPlaneProps(plane_list->atomic_property_set.get());
+    }
+    ret = drm_->CommitProperties(plane_list->atomic_property_set.get(),
+                                 /*flags=*/0, 0 /*unused*/, nullptr);
+    PLOG_IF(ERROR, !ret) << "Failed to commit properties for page flip.";
   }
-  bool ret = drm_->CommitProperties(plane_list->atomic_property_set.get(),
-                                    DRM_MODE_ATOMIC_NONBLOCK, 0, nullptr);
-  PLOG_IF(ERROR, !ret) << "Failed to commit properties for page flip.";
 
   plane_list->atomic_property_set.reset(drmModeAtomicAlloc());
   return ret;

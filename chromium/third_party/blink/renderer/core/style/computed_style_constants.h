@@ -64,6 +64,7 @@ enum PseudoId : uint8_t {
   kPseudoIdBackdrop,
   kPseudoIdSelection,
   kPseudoIdScrollbar,
+  kPseudoIdTargetText,
   // Internal IDs follow:
   kPseudoIdFirstLineInherited,
   kPseudoIdScrollbarThumb,
@@ -78,6 +79,10 @@ enum PseudoId : uint8_t {
   kFirstPublicPseudoId = kPseudoIdFirstLine,
   kFirstInternalPseudoId = kPseudoIdFirstLineInherited,
 };
+
+inline bool IsHighlightPseudoElement(PseudoId pseudo_id) {
+  return pseudo_id == kPseudoIdSelection || pseudo_id == kPseudoIdTargetText;
+}
 
 enum class OutlineIsAuto : bool { kOff = false, kOn = true };
 

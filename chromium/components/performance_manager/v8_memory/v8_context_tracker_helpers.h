@@ -20,9 +20,11 @@ namespace execution_context {
 class ExecutionContext;
 }  // namespace execution_context
 
-namespace v8_memory {
+namespace mojom {
+class V8ContextDescription;
+}  // namespace mojom
 
-struct V8ContextDescription;
+namespace v8_memory {
 
 // Helper function to convert a WorkerToken to an ExecutionContext token.
 // TODO(crbug.com/1126285): There should be automatic type conversion for this
@@ -41,6 +43,10 @@ bool IsValidExtensionId(const std::string& s) WARN_UNUSED_RESULT;
 
 // Returns true if an ExecutionContextToken corresponds to a worklet.
 bool IsWorkletToken(const blink::ExecutionContextToken& token)
+    WARN_UNUSED_RESULT;
+
+// Returns true if an ExecutionContextToken corresponds to a worker.
+bool IsWorkerToken(const blink::ExecutionContextToken& token)
     WARN_UNUSED_RESULT;
 
 // Looks up the execution context corresponding to the given token. Note that
@@ -68,15 +74,70 @@ enum class V8ContextDescriptionStatus {
 
 // Validates the given V8ContextDescription.
 V8ContextDescriptionStatus ValidateV8ContextDescription(
-    const V8ContextDescription& description) WARN_UNUSED_RESULT;
+    const mojom::V8ContextDescription& description) WARN_UNUSED_RESULT;
 
 // Determines whether or not IframeAttributionData is expected to accompany the
 // provided V8ContextDescription. This is not always able to be determined, in
 // which case base::nullopt will be returned. It is assumed that the
 // |description| has previously been validated.
 base::Optional<bool> ExpectIframeAttributionDataForV8ContextDescription(
-    const V8ContextDescription& description,
+    const mojom::V8ContextDescription& description,
     Graph* graph) WARN_UNUSED_RESULT;
+
+// Small helper class for maintaining a count of objects that are optionally
+// "marked".
+class MarkedObjectCount {
+ public:
+  MarkedObjectCount() = default;
+  MarkedObjectCount(const MarkedObjectCount&) = delete;
+  MarkedObjectCount& operator=(const MarkedObjectCount&) = delete;
+  ~MarkedObjectCount() = default;
+
+  size_t count() const { return count_; }
+  size_t marked_count() const { return marked_count_; }
+
+  void Increment() { ++count_; }
+  void Mark();
+  void Decrement(bool marked);
+
+ private:
+  size_t marked_count_ = 0;
+  size_t count_ = 0;
+};
+
+// Helper class for maintaining a pair of context counts for both
+// ExecutionContexts and V8Contexts.
+class ContextCounts {
+ public:
+  ContextCounts() = default;
+  ContextCounts(const ContextCounts&) = delete;
+  ContextCounts& operator=(const ContextCounts&) = delete;
+  ~ContextCounts() = default;
+
+  size_t GetExecutionContextDataCount() const { return ec_count_.count(); }
+  size_t GetDestroyedExecutionContextDataCount() const {
+    return ec_count_.marked_count();
+  }
+  void IncrementExecutionContextDataCount() { ec_count_.Increment(); }
+  void MarkExecutionContextDataDestroyed() { ec_count_.Mark(); }
+  void DecrementExecutionContextDataCount(bool destroyed) {
+    ec_count_.Decrement(destroyed);
+  }
+
+  size_t GetV8ContextDataCount() const { return v8_count_.count(); }
+  size_t GetDetachedV8ContextDataCount() const {
+    return v8_count_.marked_count();
+  }
+  void IncrementV8ContextDataCount() { v8_count_.Increment(); }
+  void MarkV8ContextDataDetached() { v8_count_.Mark(); }
+  void DecrementV8ContextDataCount(bool detached) {
+    v8_count_.Decrement(detached);
+  }
+
+ private:
+  MarkedObjectCount ec_count_;
+  MarkedObjectCount v8_count_;
+};
 
 }  // namespace v8_memory
 }  // namespace performance_manager

@@ -18,9 +18,8 @@
 
 namespace message_center {
 
-PaddedButton::PaddedButton(views::ButtonListener* listener)
-    : views::ImageButton(listener) {
-  SetFocusForPlatform();
+PaddedButton::PaddedButton(PressedCallback callback)
+    : views::ImageButton(std::move(callback)) {
   SetBorder(views::CreateEmptyBorder(gfx::Insets(kControlButtonBorderSize)));
   SetAnimateOnStateChange(false);
 

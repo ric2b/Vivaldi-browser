@@ -23,7 +23,6 @@ import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.omnibox.suggestions.SuggestionViewDelegate;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 /**
@@ -41,7 +40,7 @@ public class BaseSuggestionViewTest {
     private View mContentView;
 
     @Mock
-    SuggestionViewDelegate mMockDelegate;
+    private Runnable mOnFocusListener;
 
     // IMPORTANT: We need to extend the tested class here to support functionality currently
     // omitted by Robolectric, that is relevant to the tests below (layout direction change).
@@ -86,7 +85,7 @@ public class BaseSuggestionViewTest {
         mActivity = Robolectric.buildActivity(Activity.class).setup().get();
         mContentView = new View(mActivity);
         mView = new BaseSuggestionViewForTest(mContentView);
-        mView.setDelegate(mMockDelegate);
+        mView.setOnFocusViaSelectionListener(mOnFocusListener);
 
         mActionIconWidthPx = mActivity.getResources().getDimensionPixelSize(
                 R.dimen.omnibox_suggestion_action_icon_width);
@@ -333,12 +332,12 @@ public class BaseSuggestionViewTest {
     @Test
     public void setSelected_emitsOmniboxUpdateWhenSelected() {
         mView.setSelected(true);
-        verify(mMockDelegate, times(1)).onSetUrlToSuggestion();
+        verify(mOnFocusListener, times(1)).run();
     }
 
     @Test
     public void setSelected_noOmniboxUpdateWhenDeselected() {
         mView.setSelected(false);
-        verify(mMockDelegate, never()).onSetUrlToSuggestion();
+        verify(mOnFocusListener, never()).run();
     }
 }

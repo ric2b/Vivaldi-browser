@@ -8,11 +8,12 @@ import android.view.ViewGroup;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
-import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -39,12 +40,15 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
      */
     public LayoutManagerChromeTablet(LayoutManagerHost host, ViewGroup contentContainer,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
-            OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier) {
+            Supplier<LayerTitleCache> layerTitleCacheSupplier,
+            OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            OneshotSupplierImpl<LayoutStateProvider> layoutStateProviderOneshotSupplier) {
         super(host, contentContainer, false, null, tabContentManagerSupplier,
-                overviewModeBehaviorSupplier);
+                layerTitleCacheSupplier, overviewModeBehaviorSupplier,
+                layoutStateProviderOneshotSupplier);
 
-        mTabStripLayoutHelperManager = new StripLayoutHelperManager(
-                host.getContext(), this, mHost.getLayoutRenderHost(), () -> mTitleCache);
+        mTabStripLayoutHelperManager = new StripLayoutHelperManager(host.getContext(), this,
+                mHost.getLayoutRenderHost(), () -> mTitleCache, layerTitleCacheSupplier);
         addSceneOverlay(mTabStripLayoutHelperManager);
 
         setNextLayout(null);
@@ -84,14 +88,12 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
     @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
             ControlContainer controlContainer,
-            ContextualSearchManagementDelegate contextualSearchDelegate,
-            DynamicResourceLoader dynamicResourceLoader, ActivityTabProvider tabProvider) {
+            DynamicResourceLoader dynamicResourceLoader) {
         if (mTabStripLayoutHelperManager != null) {
             mTabStripLayoutHelperManager.setTabModelSelector(selector, creator);
         }
 
-        super.init(selector, creator, controlContainer, contextualSearchDelegate,
-                dynamicResourceLoader, tabProvider);
+        super.init(selector, creator, controlContainer, dynamicResourceLoader);
 
         // Make sure any tabs already restored get loaded into the title cache.
         List<TabModel> models = selector.getModels();

@@ -29,7 +29,10 @@ class CORE_EXPORT LayoutNGTableSection : public LayoutNGMixin<LayoutBlock>,
 
   void UpdateBlockLayout(bool relayout_children) override { NOTREACHED(); }
 
-  const char* GetName() const override { return "LayoutNGTableSection"; }
+  const char* GetName() const override {
+    NOT_DESTROYED();
+    return "LayoutNGTableSection";
+  }
 
   void AddChild(LayoutObject* child,
                 LayoutObject* before_child = nullptr) override;
@@ -42,9 +45,18 @@ class CORE_EXPORT LayoutNGTableSection : public LayoutNGMixin<LayoutBlock>,
   LayoutBox* CreateAnonymousBoxWithSameTypeAs(
       const LayoutObject* parent) const override;
 
-  bool AllowsNonVisibleOverflow() const override { return false; }
+  bool AllowsNonVisibleOverflow() const override {
+    NOT_DESTROYED();
+    return false;
+  }
 
   bool BackgroundIsKnownToBeOpaqueInRect(const PhysicalRect&) const override {
+    NOT_DESTROYED();
+    return false;
+  }
+
+  bool VisualRectRespectsVisibility() const final {
+    NOT_DESTROYED();
     return false;
   }
 
@@ -53,33 +65,44 @@ class CORE_EXPORT LayoutNGTableSection : public LayoutNGMixin<LayoutBlock>,
   // LayoutNGTableSectionInterface methods start.
 
   const LayoutTableSection* ToLayoutTableSection() const final {
+    NOT_DESTROYED();
     DCHECK(false);
     return nullptr;
   }
 
   const LayoutNGTableSectionInterface* ToLayoutNGTableSectionInterface()
       const final {
+    NOT_DESTROYED();
     return this;
   }
 
   LayoutNGTableSectionInterface* ToLayoutNGTableSectionInterface() {
+    NOT_DESTROYED();
     return this;
   }
 
-  const LayoutObject* ToLayoutObject() const final { return this; }
+  const LayoutObject* ToLayoutObject() const final {
+    NOT_DESTROYED();
+    return this;
+  }
 
-  LayoutObject* ToMutableLayoutObject() final { return this; }
+  LayoutObject* ToMutableLayoutObject() final {
+    NOT_DESTROYED();
+    return this;
+  }
 
   LayoutNGTableInterface* TableInterface() const final;
 
   void SetNeedsCellRecalc() final;
 
   bool IsRepeatingHeaderGroup() const final {
+    NOT_DESTROYED();
     // Used in printing, not used in LayoutNG
     return false;
   }
 
   bool IsRepeatingFooterGroup() const final {
+    NOT_DESTROYED();
     // Used in printing, not used in LayoutNG
     return false;
   }
@@ -94,15 +117,11 @@ class CORE_EXPORT LayoutNGTableSection : public LayoutNGMixin<LayoutBlock>,
 
   LayoutNGTableRowInterface* LastRowInterface() const final;
 
-  // Called by ax_layout_object.cc.
-  const LayoutNGTableCellInterface* PrimaryCellInterfaceAt(
-      unsigned row,
-      unsigned column) const final;
-
   // LayoutNGTableSectionInterface methods end.
 
  protected:
   bool IsOfType(LayoutObjectType type) const override {
+    NOT_DESTROYED();
     return type == kLayoutObjectTableSection ||
            LayoutNGMixin<LayoutBlock>::IsOfType(type);
   }

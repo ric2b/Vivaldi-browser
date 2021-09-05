@@ -16,6 +16,13 @@ SkColor DeprecatedGetShieldLayerColor(AshColorProvider::ShieldLayerType type,
   return AshColorProvider::Get()->GetShieldLayerColor(type);
 }
 
+SkColor DeprecatedGetBackgroundColor(SkColor default_color) {
+  if (!features::IsDarkLightModeEnabled())
+    return default_color;
+
+  return AshColorProvider::Get()->GetBackgroundColor();
+}
+
 SkColor DeprecatedGetBaseLayerColor(AshColorProvider::BaseLayerType type,
                                     SkColor default_color) {
   if (!features::IsDarkLightModeEnabled())
@@ -39,12 +46,6 @@ SkColor DeprecatedGetContentLayerColor(AshColorProvider::ContentLayerType type,
     return default_color;
 
   return AshColorProvider::Get()->GetContentLayerColor(type);
-}
-
-SkColor DeprecatedGetLoginBackgroundBaseColor(SkColor default_color) {
-  if (!features::IsDarkLightModeEnabled())
-    return default_color;
-  return AshColorProvider::Get()->GetLoginBackgroundBaseColor();
 }
 
 SkColor DeprecatedGetInkDropBaseColor(SkColor default_color) {

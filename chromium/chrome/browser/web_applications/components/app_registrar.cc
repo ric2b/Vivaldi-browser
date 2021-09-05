@@ -24,6 +24,10 @@ AppRegistrar::~AppRegistrar() {
     observer.OnAppRegistrarDestroyed();
 }
 
+void AppRegistrar::SetSubsystems(OsIntegrationManager* os_integration_manager) {
+  os_integration_manager_ = os_integration_manager;
+}
+
 bool AppRegistrar::IsLocallyInstalled(const GURL& start_url) const {
   return IsLocallyInstalled(GenerateAppIdFromURL(start_url));
 }
@@ -96,6 +100,11 @@ void AppRegistrar::NotifyWebAppProfileWillBeDeleted(const AppId& app_id) {
     observer.OnWebAppProfileWillBeDeleted(app_id);
 }
 
+void AppRegistrar::NotifyWebAppInstalledWithOsHooks(const AppId& app_id) {
+  for (AppRegistrarObserver& observer : observers_)
+    observer.OnWebAppInstalledWithOsHooks(app_id);
+}
+
 void AppRegistrar::NotifyAppRegistrarShutdown() {
   for (AppRegistrarObserver& observer : observers_)
     observer.OnAppRegistrarShutdown();
@@ -141,6 +150,11 @@ GURL AppRegistrar::GetAppLaunchUrl(const AppId& app_id) const {
   if (start_url.query_piece().empty()) {
     replacements.SetQueryStr(*launch_query_params);
     return start_url.ReplaceComponents(replacements);
+  }
+
+  if (start_url.query_piece().find(*launch_query_params) !=
+      base::StringPiece::npos) {
+    return start_url;
   }
 
   std::string query_params = start_url.query() + "&" + *launch_query_params;

@@ -195,11 +195,12 @@ void NGBoxFragmentBuilder::AddResult(const NGLayoutResult& child_layout_result,
     }
   }
 
-  NGMarginStrut end_margin_strut = child_layout_result.EndMarginStrut();
+  const NGMarginStrut end_margin_strut = child_layout_result.EndMarginStrut();
   // No margins should pierce outside formatting-context roots.
   DCHECK(!fragment.IsFormattingContextRoot() || end_margin_strut.IsEmpty());
 
-  AddChild(fragment, offset, /* inline_container */ nullptr, &end_margin_strut);
+  AddChild(fragment, offset, /* inline_container */ nullptr, &end_margin_strut,
+           child_layout_result.IsSelfCollapsing());
   if (fragment.IsBox())
     PropagateBreak(child_layout_result);
 }
@@ -207,7 +208,8 @@ void NGBoxFragmentBuilder::AddResult(const NGLayoutResult& child_layout_result,
 void NGBoxFragmentBuilder::AddChild(const NGPhysicalContainerFragment& child,
                                     const LogicalOffset& child_offset,
                                     const LayoutInline* inline_container,
-                                    const NGMarginStrut* margin_strut) {
+                                    const NGMarginStrut* margin_strut,
+                                    bool is_self_collapsing) {
   LogicalOffset adjusted_offset = child_offset;
 
   if (box_type_ != NGPhysicalBoxFragment::NGBoxType::kInlineBox) {
@@ -246,7 +248,7 @@ void NGBoxFragmentBuilder::AddChild(const NGPhysicalContainerFragment& child,
       if (child.IsCSSBox()) {
         margins =
             ComputeMarginsFor(child.Style(), child_available_size_.inline_size,
-                              GetWritingMode(), Direction());
+                              GetWritingDirection());
       }
 
       // If we are in block-flow layout we use the end *margin-strut* as the
@@ -254,20 +256,60 @@ void NGBoxFragmentBuilder::AddChild(const NGPhysicalContainerFragment& child,
       if (margin_strut) {
         NGMarginStrut end_margin_strut = *margin_strut;
         end_margin_strut.Append(margins.block_end, /* is_quirky */ false);
-        margins.block_end = end_margin_strut.Sum();
+
+        // Self-collapsing blocks are special, their end margin-strut is part
+        // of their inflow position. To correctly determine the "end" margin,
+        // we need to the "final" margin-strut from their end margin-strut.
+        margins.block_end = is_self_collapsing
+                                ? end_margin_strut.Sum() - margin_strut->Sum()
+                                : end_margin_strut.Sum();
       }
 
-      NGFragment fragment(GetWritingMode(), child);
+      // Use the original offset (*without* relative-positioning applied).
+      NGFragment fragment(GetWritingDirection(), child);
+      LogicalRect bounds = {child_offset, fragment.Size()};
 
-      // Use the original offset (*without* relative-positioning applied), and
-      // clamp any negative margins to zero.
-      margins.ClampNegativeToZero();
-      LogicalRect bounds = {
-          LogicalOffset(child_offset.inline_offset - margins.inline_start,
-                        child_offset.block_offset - margins.block_start),
-          LogicalSize(
-              margins.inline_start + fragment.InlineSize() + margins.inline_end,
-              margins.block_start + fragment.BlockSize() + margins.block_end)};
+      // Margins affect the inflow-bounds in interesting ways.
+      //
+      // For the margin which is closest to the direction which we are
+      // scrolling, we allow negative margins, but only up to the size of the
+      // fragment. For the margin furthest away we disallow negative margins.
+      if (!margins.IsEmpty()) {
+        // Convert the physical overflow directions to logical.
+        const bool has_top_overflow = Node().HasTopOverflow();
+        const bool has_left_overflow = Node().HasLeftOverflow();
+        PhysicalToLogical<bool> converter(GetWritingDirection(),
+                                          has_top_overflow, !has_left_overflow,
+                                          !has_top_overflow, has_left_overflow);
+
+        if (converter.InlineStart()) {
+          margins.inline_end = margins.inline_end.ClampNegativeToZero();
+          margins.inline_start =
+              std::max(margins.inline_start, -fragment.InlineSize());
+        } else {
+          margins.inline_start = margins.inline_start.ClampNegativeToZero();
+          margins.inline_end =
+              std::max(margins.inline_end, -fragment.InlineSize());
+        }
+        if (converter.BlockStart()) {
+          margins.block_end = margins.block_end.ClampNegativeToZero();
+          margins.block_start =
+              std::max(margins.block_start, -fragment.BlockSize());
+        } else {
+          margins.block_start = margins.block_start.ClampNegativeToZero();
+          margins.block_end =
+              std::max(margins.block_end, -fragment.BlockSize());
+        }
+
+        // Shift the bounds by the (potentially clamped) margins.
+        bounds.offset -= {margins.inline_start, margins.block_start};
+        bounds.size.inline_size += margins.InlineSum();
+        bounds.size.block_size += margins.BlockSum();
+
+        // Our bounds size should never go negative.
+        DCHECK_GE(bounds.size.inline_size, LayoutUnit());
+        DCHECK_GE(bounds.size.block_size, LayoutUnit());
+      }
 
       // Even an empty (0x0) fragment contributes to the inflow-bounds.
       if (!inflow_bounds_)
@@ -295,7 +337,7 @@ void NGBoxFragmentBuilder::AddOutOfFlowLegacyCandidate(
     const LayoutInline* inline_container) {
   oof_positioned_candidates_.emplace_back(
       node, static_position,
-      inline_container ? ToLayoutInline(inline_container->ContinuationRoot())
+      inline_container ? To<LayoutInline>(inline_container->ContinuationRoot())
                        : nullptr);
 }
 
@@ -329,6 +371,35 @@ NGPhysicalFragment::NGBoxType NGBoxFragmentBuilder::BoxType() const {
 EBreakBetween NGBoxFragmentBuilder::JoinedBreakBetweenValue(
     EBreakBetween break_before) const {
   return JoinFragmentainerBreakValues(previous_break_after_, break_before);
+}
+
+void NGBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta) {
+  DCHECK(is_new_fc_);
+  DCHECK(!has_oof_candidate_that_needs_block_offset_adjustment_);
+  DCHECK_NE(FragmentBlockSize(), kIndefiniteSize);
+  DCHECK(oof_positioned_descendants_.IsEmpty());
+
+  if (delta == LayoutUnit())
+    return;
+
+  if (baseline_)
+    *baseline_ += delta;
+  if (last_baseline_)
+    *last_baseline_ += delta;
+
+  if (inflow_bounds_)
+    inflow_bounds_->offset.block_offset += delta;
+
+  for (auto& child : children_)
+    child.offset.block_offset += delta;
+
+  for (auto& candidate : oof_positioned_candidates_)
+    candidate.static_position.offset.block_offset += delta;
+  for (auto& descendant : oof_positioned_fragmentainer_descendants_)
+    descendant.static_position.offset.block_offset += delta;
+
+  if (NGFragmentItemsBuilder* items_builder = ItemsBuilder())
+    items_builder->MoveChildrenInBlockDirection(delta);
 }
 
 void NGBoxFragmentBuilder::PropagateBreak(
@@ -432,7 +503,7 @@ LogicalOffset NGBoxFragmentBuilder::GetChildOffset(
       for (const auto& line_box_child : line_box_fragment.Children()) {
         if (line_box_child->GetLayoutObject() == object) {
           return child.offset + line_box_child.Offset().ConvertToLogical(
-                                    GetWritingMode(), Direction(),
+                                    GetWritingDirection(),
                                     line_box_fragment.Size(),
                                     line_box_child->Size());
         }
@@ -463,8 +534,8 @@ void NGBoxFragmentBuilder::ComputeInlineContainerGeometryFromFragmentTree(
     if (child.fragment->IsLineBox()) {
       const auto& linebox = To<NGPhysicalLineBoxFragment>(*child.fragment);
       const PhysicalOffset linebox_offset = child.offset.ConvertToPhysical(
-          GetWritingMode(), Direction(),
-          ToPhysicalSize(Size(), GetWritingMode()), linebox.Size());
+          GetWritingDirection(), ToPhysicalSize(Size(), GetWritingMode()),
+          linebox.Size());
       GatherInlineContainerFragmentsFromLinebox(inline_containing_block_map,
                                                 &containing_linebox_map,
                                                 linebox, linebox_offset);
@@ -482,8 +553,8 @@ void NGBoxFragmentBuilder::ComputeInlineContainerGeometryFromFragmentTree(
       // For more on this special case, see "css container is an inline, with
       // inline splitting" comment in NGOutOfFlowLayoutPart::LayoutDescendant.
       const PhysicalOffset box_offset = child.offset.ConvertToPhysical(
-          GetWritingMode(), Direction(),
-          ToPhysicalSize(Size(), GetWritingMode()), box_fragment.Size());
+          GetWritingDirection(), ToPhysicalSize(Size(), GetWritingMode()),
+          box_fragment.Size());
 
       // Traverse lineboxes of anonymous box.
       for (const auto& box_child : box_fragment.Children()) {
@@ -545,7 +616,7 @@ void NGBoxFragmentBuilder::ComputeInlineContainerGeometry(
       continue;
 
     const PhysicalOffset child_offset = child.offset.ConvertToPhysical(
-        GetWritingMode(), Direction(), ToPhysicalSize(Size(), GetWritingMode()),
+        GetWritingDirection(), ToPhysicalSize(Size(), GetWritingMode()),
         child_fragment.Size());
     GatherInlineContainerFragmentsFromItems(items->Items(), child_offset,
                                             inline_containing_block_map,
@@ -565,6 +636,13 @@ void NGBoxFragmentBuilder::SetLastBaselineToBlockEndMarginEdgeIfNeeded() {
   // should always use the block-end margin edge as the baseline.
   NGBoxStrut margins = ComputeMarginsForSelf(*ConstraintSpace(), Style());
   SetLastBaseline(FragmentBlockSize() + margins.block_end);
+}
+
+void NGBoxFragmentBuilder::SetMathItalicCorrection(
+    LayoutUnit italic_correction) {
+  if (!math_data_)
+    math_data_.emplace();
+  math_data_->italic_correction_ = italic_correction;
 }
 
 #if DCHECK_IS_ON()

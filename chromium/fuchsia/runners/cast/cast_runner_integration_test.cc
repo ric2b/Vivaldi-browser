@@ -25,7 +25,7 @@
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
@@ -43,7 +43,6 @@
 #include "fuchsia/runners/cast/cast_runner_switches.h"
 #include "fuchsia/runners/cast/fake_application_config_manager.h"
 #include "fuchsia/runners/cast/test_api_bindings.h"
-#include "mojo/core/embedder/embedder.h"
 #include "net/test/embedded_test_server/default_handlers.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -61,11 +60,31 @@ constexpr char kTestServerRoot[] = "fuchsia/runners/cast/testdata";
 constexpr char kDummyAgentUrl[] =
     "fuchsia-pkg://fuchsia.com/dummy_agent#meta/dummy_agent.cmx";
 
+constexpr char kEnableFrameHostComponent[] = "enable-frame-host-component";
+
+class FakeCorsExemptHeaderProvider
+    : public chromium::cast::CorsExemptHeaderProvider {
+ public:
+  FakeCorsExemptHeaderProvider() = default;
+  ~FakeCorsExemptHeaderProvider() final = default;
+
+  FakeCorsExemptHeaderProvider(const FakeCorsExemptHeaderProvider&) = delete;
+  FakeCorsExemptHeaderProvider& operator=(const FakeCorsExemptHeaderProvider&) =
+      delete;
+
+ private:
+  void GetCorsExemptHeaderNames(
+      GetCorsExemptHeaderNamesCallback callback) final {
+    callback({cr_fuchsia::StringToBytes("Test")});
+  }
+};
+
 class FakeUrlRequestRewriteRulesProvider
     : public chromium::cast::UrlRequestRewriteRulesProvider {
  public:
   FakeUrlRequestRewriteRulesProvider() = default;
-  ~FakeUrlRequestRewriteRulesProvider() override = default;
+  ~FakeUrlRequestRewriteRulesProvider() final = default;
+
   FakeUrlRequestRewriteRulesProvider(
       const FakeUrlRequestRewriteRulesProvider&) = delete;
   FakeUrlRequestRewriteRulesProvider& operator=(
@@ -73,7 +92,7 @@ class FakeUrlRequestRewriteRulesProvider
 
  private:
   void GetUrlRequestRewriteRules(
-      GetUrlRequestRewriteRulesCallback callback) override {
+      GetUrlRequestRewriteRulesCallback callback) final {
     // Only send the rules once. They do not expire
     if (rules_sent_)
       return;
@@ -194,16 +213,23 @@ class FakeComponentState : public cr_fuchsia::AgentImpl::ComponentStateBase {
   base::Optional<base::fuchsia::ScopedServiceBinding<
       chromium::cast::UrlRequestRewriteRulesProvider>>
       url_request_rules_provider_binding_;
+
   FakeApplicationContext application_context_;
   const base::fuchsia::ScopedServiceBinding<chromium::cast::ApplicationContext>
       context_binding_;
   base::OnceClosure on_delete_;
 };
 
+enum CastRunnerFeatures {
+  kCastRunnerFeaturesNone = 0,
+  kCastRunnerFeaturesHeadless = 1,
+  kCastRunnerFeaturesVulkan = 1 << 1,
+  kCastRunnerFeaturesFrameHost = 1 << 2
+};
+
 sys::ServiceDirectory StartCastRunner(
     fidl::InterfaceHandle<fuchsia::io::Directory> web_engine_host_directory,
-    bool enable_headless,
-    bool enable_vulkan,
+    CastRunnerFeatures runner_features,
     fidl::InterfaceRequest<fuchsia::sys::ComponentController>
         component_controller_request) {
   fuchsia::sys::LaunchInfo launch_info;
@@ -217,12 +243,18 @@ sys::ServiceDirectory StartCastRunner(
   zx_status_t status = fdio_fd_clone(
       STDERR_FILENO, launch_info.err->handle0.reset_and_get_address());
   ZX_CHECK(status == ZX_OK, status);
+
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   command_line.AppendSwitchASCII("enable-logging", "stderr");
-  if (enable_headless)
+
+  if (runner_features & kCastRunnerFeaturesHeadless)
     command_line.AppendSwitch(kForceHeadlessForTestsSwitch);
-  if (!enable_vulkan)
+  if (!(runner_features & kCastRunnerFeaturesVulkan))
     command_line.AppendSwitch(kDisableVulkanForTestsSwitch);
+  if (runner_features & kCastRunnerFeaturesFrameHost)
+    command_line.AppendSwitch(kEnableFrameHostComponent);
+
+  // Add all switches and arguments, skipping the program.
   launch_info.arguments.emplace(std::vector<std::string>(
       command_line.argv().begin() + 1, command_line.argv().end()));
 
@@ -250,13 +282,11 @@ sys::ServiceDirectory StartCastRunner(
 class CastRunnerIntegrationTest : public testing::Test {
  public:
   CastRunnerIntegrationTest()
-      : CastRunnerIntegrationTest(/*enable_headless=*/false,
-                                  /*enable_vulkan=*/false) {}
+      : CastRunnerIntegrationTest(kCastRunnerFeaturesNone) {}
+
   CastRunnerIntegrationTest(const CastRunnerIntegrationTest&) = delete;
   CastRunnerIntegrationTest& operator=(const CastRunnerIntegrationTest&) =
       delete;
-
-  void SetUp() override { mojo::core::Init(); }
 
   void TearDown() override {
     if (component_controller_)
@@ -264,7 +294,7 @@ class CastRunnerIntegrationTest : public testing::Test {
   }
 
  protected:
-  explicit CastRunnerIntegrationTest(bool enable_headless, bool enable_vulkan)
+  explicit CastRunnerIntegrationTest(CastRunnerFeatures runner_features)
       : app_config_manager_binding_(&component_services_,
                                     &app_config_manager_) {
     StartAndPublishWebEngine();
@@ -275,8 +305,8 @@ class CastRunnerIntegrationTest : public testing::Test {
         ::fuchsia::io::OPEN_RIGHT_READABLE | ::fuchsia::io::OPEN_RIGHT_WRITABLE,
         incoming_services.NewRequest().TakeChannel());
     sys::ServiceDirectory cast_runner_services =
-        StartCastRunner(std::move(incoming_services), enable_headless,
-                        enable_vulkan, cast_runner_controller_.NewRequest());
+        StartCastRunner(std::move(incoming_services), runner_features,
+                        cast_runner_controller_.NewRequest());
 
     // Connect to the CastRunner's fuchsia.sys.Runner interface.
     cast_runner_ = cast_runner_services.Connect<fuchsia::sys::Runner>();
@@ -352,7 +382,7 @@ class CastRunnerIntegrationTest : public testing::Test {
     provider.set_name("testdata");
     base::FilePath pkg_path;
     CHECK(base::PathService::Get(base::DIR_ASSETS, &pkg_path));
-    provider.set_directory(base::fuchsia::OpenDirectory(
+    provider.set_directory(base::OpenDirectoryHandle(
         pkg_path.AppendASCII("fuchsia/runners/cast/testdata")));
     std::vector<fuchsia::web::ContentDirectoryProvider> providers;
     providers.emplace_back(std::move(provider));
@@ -387,10 +417,6 @@ class CastRunnerIntegrationTest : public testing::Test {
   void StartCastComponent(base::StringPiece component_url) {
     // Configure the Runner, including a service directory channel to publish
     // services to.
-    fidl::InterfaceHandle<fuchsia::io::Directory> directory;
-    component_services_.GetOrCreateDirectory("svc")->Serve(
-        fuchsia::io::OPEN_RIGHT_READABLE | fuchsia::io::OPEN_RIGHT_WRITABLE,
-        directory.NewRequest().TakeChannel());
     fuchsia::sys::StartupInfo startup_info;
     startup_info.launch_info.url = component_url.as_string();
 
@@ -407,9 +433,17 @@ class CastRunnerIntegrationTest : public testing::Test {
     component_services_client_ =
         std::make_unique<sys::ServiceDirectory>(std::move(svc_directory));
 
-    // Place the ServiceDirectory in the |flat_namespace|.
-    startup_info.flat_namespace.paths.emplace_back(
-        base::fuchsia::kServiceDirectoryPath);
+    // Populate |component_services_| with services for the component to use.
+    fidl::InterfaceHandle<fuchsia::io::Directory> directory;
+    component_services_.GetOrCreateDirectory("svc")->Serve(
+        fuchsia::io::OPEN_RIGHT_READABLE | fuchsia::io::OPEN_RIGHT_WRITABLE,
+        directory.NewRequest().TakeChannel());
+    component_services_.AddPublicService(
+        cors_exempt_header_provider_binding_.GetHandler(
+            &cors_exempt_header_provider_));
+
+    // Provide the directory of services in the |flat_namespace|.
+    startup_info.flat_namespace.paths.emplace_back(base::kServiceDirectoryPath);
     startup_info.flat_namespace.directories.emplace_back(
         directory.TakeChannel());
 
@@ -469,10 +503,12 @@ class CastRunnerIntegrationTest : public testing::Test {
   void ShutdownComponent() {
     DCHECK(component_controller_);
 
-    base::RunLoop run_loop;
-    component_state_->set_on_delete(run_loop.QuitClosure());
-    component_controller_.Unbind();
-    run_loop.Run();
+    if (component_state_) {
+      base::RunLoop run_loop;
+      component_state_->set_on_delete(run_loop.QuitClosure());
+      component_controller_.Unbind();
+      run_loop.Run();
+    }
 
     component_controller_ = nullptr;
   }
@@ -520,6 +556,10 @@ class CastRunnerIntegrationTest : public testing::Test {
   TestApiBindings api_bindings_;
   std::unique_ptr<FakeUrlRequestRewriteRulesProvider>
       url_request_rewrite_rules_provider_;
+
+  FakeCorsExemptHeaderProvider cors_exempt_header_provider_;
+  fidl::BindingSet<chromium::cast::CorsExemptHeaderProvider>
+      cors_exempt_header_provider_binding_;
 
   // Incoming service directory, ComponentContext and per-component state.
   sys::OutgoingDirectory component_services_;
@@ -891,8 +931,7 @@ TEST_F(CastRunnerIntegrationTest, CameraAccessAfterComponentShutdown) {
 class HeadlessCastRunnerIntegrationTest : public CastRunnerIntegrationTest {
  public:
   HeadlessCastRunnerIntegrationTest()
-      : CastRunnerIntegrationTest(/*enable_headless=*/true,
-                                  /*enable_vulkan=*/false) {}
+      : CastRunnerIntegrationTest(kCastRunnerFeaturesHeadless) {}
 };
 
 // A basic integration test ensuring a basic cast request launches the right
@@ -1036,6 +1075,36 @@ TEST_F(CastRunnerIntegrationTest, OnTerminated_ComponentKill) {
   component_controller_.Unbind();
 }
 
+// Ensures that CastRunner handles the value not being specified.
+// TODO(https://crrev.com/c/2516246): Check for no logging.
+TEST_F(CastRunnerIntegrationTest, InitialMinConsoleLogSeverity_NotSet) {
+  GURL app_url = test_server_.GetURL(kBlankAppUrl);
+  auto app_config =
+      FakeApplicationConfigManager::CreateConfig(kTestAppId, app_url);
+
+  EXPECT_FALSE(app_config.has_initial_min_console_log_severity());
+  app_config_manager_.AddAppConfig(std::move(app_config));
+
+  CreateComponentContextAndStartComponent();
+
+  CheckAppUrl(app_url);
+}
+
+// TODO(https://crrev.com/c/2516246): Check for logging.
+TEST_F(CastRunnerIntegrationTest, InitialMinConsoleLogSeverity_DEBUG) {
+  GURL app_url = test_server_.GetURL(kBlankAppUrl);
+  auto app_config =
+      FakeApplicationConfigManager::CreateConfig(kTestAppId, app_url);
+
+  *app_config.mutable_initial_min_console_log_severity() =
+      fuchsia::diagnostics::Severity::DEBUG;
+  app_config_manager_.AddAppConfig(std::move(app_config));
+
+  CreateComponentContextAndStartComponent();
+
+  CheckAppUrl(app_url);
+}
+
 TEST_F(CastRunnerIntegrationTest, WebGLContextAbsentWithoutVulkanFeature) {
   const char kTestPath[] = "/webgl_presence.html";
   const GURL test_url = test_server_.GetURL(kTestPath);
@@ -1057,6 +1126,78 @@ TEST_F(CastRunnerIntegrationTest,
   EXPECT_EQ(ExecuteJavaScript("document.title"), "absent");
 }
 
+// Verifies that starting a component fails if CORS exempt headers cannot be
+// fetched.
+TEST_F(CastRunnerIntegrationTest, MissingCorsExemptHeaderProvider) {
+  GURL app_url = test_server_.GetURL(kBlankAppUrl);
+  app_config_manager_.AddApp(kTestAppId, app_url);
+
+  // Start the Cast component, and wait for the controller to disconnect.
+  StartCastComponent(base::StringPrintf("cast:%s", kTestAppId));
+
+  base::RunLoop run_loop;
+  component_controller_.set_error_handler([&run_loop](zx_status_t status) {
+    EXPECT_EQ(status, ZX_ERR_PEER_CLOSED);
+    run_loop.Quit();
+  });
+  run_loop.Run();
+
+  EXPECT_TRUE(!component_state_);
+}
+
+// Verifies that CastRunner offers a chromium.cast.DataReset service.
+// TODO(crbug.com/1146474): Expand the test to verify that the persisted data is
+// correctly cleared (e.g. using a custom test HTML app that uses persisted
+// data).
+TEST_F(CastRunnerIntegrationTest, DataReset) {
+  constexpr char kDataResetComponentName[] = "cast:chromium.cast.DataReset";
+  StartCastComponent(kDataResetComponentName);
+
+  base::RunLoop loop;
+  auto data_reset =
+      component_services_client_->Connect<chromium::cast::DataReset>();
+  data_reset.set_error_handler([quit_loop = loop.QuitClosure()](zx_status_t) {
+    quit_loop.Run();
+    ADD_FAILURE();
+  });
+  bool succeeded = false;
+  data_reset->DeletePersistentData([&succeeded, &loop](bool result) {
+    succeeded = result;
+    loop.Quit();
+  });
+  loop.Run();
+
+  EXPECT_TRUE(succeeded);
+}
+
+class CastRunnerFrameHostIntegrationTest : public CastRunnerIntegrationTest {
+ public:
+  CastRunnerFrameHostIntegrationTest()
+      : CastRunnerIntegrationTest(kCastRunnerFeaturesFrameHost) {}
+};
+
+// Verifies that the CastRunner offers a fuchsia.web.FrameHost service.
+// TODO(crbug.com/1144102): Clean up config-data vs command-line flags handling
+// and add a not-enabled test here.
+TEST_F(CastRunnerFrameHostIntegrationTest, FrameHostComponent) {
+  constexpr char kFrameHostComponentName[] = "cast:fuchsia.web.FrameHost";
+  StartCastComponent(kFrameHostComponentName);
+
+  // Connect to the fuchsia.web.FrameHost service and create a Frame.
+  auto frame_host =
+      component_services_client_->Connect<fuchsia::web::FrameHost>();
+  fuchsia::web::FramePtr frame;
+  frame_host->CreateFrameWithParams(fuchsia::web::CreateFrameParams(),
+                                    frame.NewRequest());
+
+  // Verify that a response is received for a LoadUrl() request to the frame.
+  fuchsia::web::NavigationControllerPtr controller;
+  frame->GetNavigationController(controller.NewRequest());
+  const GURL url = test_server_.GetURL(kBlankAppUrl);
+  EXPECT_TRUE(cr_fuchsia::LoadUrlAndExpectResponse(
+      controller.get(), fuchsia::web::LoadUrlParams(), url.spec()));
+}
+
 #if defined(ARCH_CPU_ARM_FAMILY)
 // TODO(crbug.com/1058247): Support Vulkan in tests on ARM64.
 #define MAYBE_VulkanCastRunnerIntegrationTest \
@@ -1068,8 +1209,7 @@ TEST_F(CastRunnerIntegrationTest,
 class MAYBE_VulkanCastRunnerIntegrationTest : public CastRunnerIntegrationTest {
  public:
   MAYBE_VulkanCastRunnerIntegrationTest()
-      : CastRunnerIntegrationTest(/*enable_headless=*/false,
-                                  /*enable_vulkan=*/true) {}
+      : CastRunnerIntegrationTest(kCastRunnerFeaturesVulkan) {}
 };
 
 TEST_F(MAYBE_VulkanCastRunnerIntegrationTest,

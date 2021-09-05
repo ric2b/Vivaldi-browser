@@ -312,9 +312,44 @@ const struct QuicErrorMapping {
     {quic::QUIC_TRANSPORT_INVALID_CLIENT_INDICATION,
      "quic.transport.invalid.client.indication"},
 
-    {quic::QUIC_QPACK_DECOMPRESSION_FAILED, "QUIC.QPACK.DECOMPRESSION.FAILED"},
-    {quic::QUIC_QPACK_ENCODER_STREAM_ERROR, "QUIC.QPACK.ENCODER.STREAM.ERROR"},
-    {quic::QUIC_QPACK_DECODER_STREAM_ERROR, "QUIC.QPACK.DECODER.STREAM.ERROR"},
+    {quic::QUIC_QPACK_DECOMPRESSION_FAILED, "quic.qpack.decompression.failed"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_ERROR, "quic.qpack.encoder.stream.error"},
+    {quic::QUIC_QPACK_DECODER_STREAM_ERROR, "quic.qpack.decoder.stream.error"},
+
+    {quic::QUIC_QPACK_ENCODER_STREAM_INTEGER_TOO_LARGE,
+     "quic.qpack.encoder.stream.integer.too.large"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_STRING_LITERAL_TOO_LONG,
+     "quic.qpack.encoder.stream.string.literal.too.long"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_HUFFMAN_ENCODING_ERROR,
+     "quic.qpack.encoder.stream.huffman.encoding.error"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_INVALID_STATIC_ENTRY,
+     "quic.qpack.encoder.stream.invalid.static.entry"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_ERROR_INSERTING_STATIC,
+     "quic.qpack.encoder.stream.error.inserting.static"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_INSERTION_INVALID_RELATIVE_INDEX,
+     "quic.qpack.encoder.stream.insertion.invalid.relative.index"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_INSERTION_DYNAMIC_ENTRY_NOT_FOUND,
+     "quic.qpack.encoder.stream.insertion.dynamic.entry.not.found"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_ERROR_INSERTING_DYNAMIC,
+     "quic.qpack.encoder.stream.error.inserting.dynamic"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_ERROR_INSERTING_LITERAL,
+     "quic.qpack.encoder.stream.error.inserting.literal"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_DUPLICATE_INVALID_RELATIVE_INDEX,
+     "quic.qpack.encoder.stream.duplicate.invalid.relative.index"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_DUPLICATE_DYNAMIC_ENTRY_NOT_FOUND,
+     "quic.qpack.encoder.stream.duplicate.dynamic.entry.not.found"},
+    {quic::QUIC_QPACK_ENCODER_STREAM_SET_DYNAMIC_TABLE_CAPACITY,
+     "quic.qpack.encoder.stream.set.dynamic.table.capacity"},
+    {quic::QUIC_QPACK_DECODER_STREAM_INTEGER_TOO_LARGE,
+     "quic.qpack.decoder.stream.integer.too.large"},
+    {quic::QUIC_QPACK_DECODER_STREAM_INVALID_ZERO_INCREMENT,
+     "quic.qpack.decoder.stream.invalid.zero.increment"},
+    {quic::QUIC_QPACK_DECODER_STREAM_INCREMENT_OVERFLOW,
+     "quic.qpack.decoder.stream.increment.overflow"},
+    {quic::QUIC_QPACK_DECODER_STREAM_IMPOSSIBLE_INSERT_COUNT,
+     "quic.qpack.decoder.stream.impossible.insert.count"},
+    {quic::QUIC_QPACK_DECODER_STREAM_INCORRECT_ACKNOWLEDGEMENT,
+     "quic.qpack.decoder.stream.incorrect.acknowledgement"},
 
     {quic::QUIC_STREAM_DATA_BEYOND_CLOSE_OFFSET,
      "quic.stream.data.beyond.close.offset"},
@@ -384,6 +419,10 @@ const struct QuicErrorMapping {
     {quic::QUIC_SILENT_IDLE_TIMEOUT, "quic.silent_idle_timeout"},
     {quic::QUIC_HTTP_RECEIVE_SPDY_SETTING, "quic.http_receive_spdy_setting"},
     {quic::QUIC_MISSING_WRITE_KEYS, "quic.missing_write_keys"},
+    {quic::QUIC_HTTP_RECEIVE_SPDY_FRAME, "quic.http_receive_spdy_frame"},
+
+    {quic::QUIC_KEY_UPDATE_ERROR, "quic.quic_key_update_error"},
+    {quic::QUIC_AEAD_LIMIT_REACHED, "quic.quic_aead_limit_reached"},
 
     // QUIC_INVALID_APPLICATION_CLOSE_DATA was code 101. The code has been
     // deprecated, but to keep the assert below happy, there needs to be
@@ -391,6 +430,7 @@ const struct QuicErrorMapping {
     {static_cast<quic::QuicErrorCode>(101),
      "quic.invalid.application_close_data"},
 
+    {quic::QUIC_MAX_AGE_TIMEOUT, "quic.quic_max_age_timeout"},
     // No error. Used as bound while iterating.
     {quic::QUIC_LAST_ERROR, "quic.last_error"}};
 

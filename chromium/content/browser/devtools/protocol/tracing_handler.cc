@@ -16,6 +16,7 @@
 #include "base/format_macros.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/optional.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -213,6 +214,17 @@ void FillFrameData(base::trace_event::TracedValue* data,
   }
 }
 
+base::Optional<base::trace_event::MemoryDumpLevelOfDetail>
+StringToMemoryDumpLevelOfDetail(const std::string& str) {
+  if (str == Tracing::MemoryDumpLevelOfDetailEnum::Detailed)
+    return {base::trace_event::MemoryDumpLevelOfDetail::DETAILED};
+  if (str == Tracing::MemoryDumpLevelOfDetailEnum::Background)
+    return {base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND};
+  if (str == Tracing::MemoryDumpLevelOfDetailEnum::Light)
+    return {base::trace_event::MemoryDumpLevelOfDetail::LIGHT};
+  return {};
+}
+
 // We currently don't support concurrent tracing sessions, but are planning to.
 // For the time being, we're using this flag as a workaround to prevent devtools
 // users from accidentally starting two concurrent sessions.
@@ -271,8 +283,7 @@ class TracingHandler::PerfettoTracingSession
     on_recording_enabled_callback_ = std::move(on_recording_enabled_callback);
     consumer_host_->EnableTracing(
         tracing_session_host_.BindNewPipeAndPassReceiver(),
-        receiver_.BindNewPipeAndPassRemote(), std::move(perfetto_config),
-        tracing::mojom::TracingClientPriority::kUserInitiated);
+        receiver_.BindNewPipeAndPassRemote(), std::move(perfetto_config));
 
     receiver_.set_disconnect_handler(
         base::BindOnce(&PerfettoTracingSession::OnTracingSessionFailed,
@@ -374,11 +385,15 @@ class TracingHandler::PerfettoTracingSession
     }
   }
 
-  void OnTracingDisabled() override {
+  void OnTracingDisabled(bool tracing_succeeded) override {
     // If we're converting to JSON, we will receive the data via
     // ConsumerHost::DisableTracingAndEmitJson().
     if (!use_proto_format_)
       return;
+    if (!tracing_succeeded) {
+      OnTracingSessionFailed();
+      return;
+    }
 
     DCHECK(agent_label_.empty());
     mojo::ScopedDataPipeProducerHandle producer_handle;
@@ -416,7 +431,11 @@ class TracingHandler::PerfettoTracingSession
     last_config_for_perfetto_ = std::move(processfilter_stripped_config);
 #endif
 
-    return tracing::GetDefaultPerfettoConfig(chrome_config);
+    return tracing::GetDefaultPerfettoConfig(
+        chrome_config,
+        /*privacy_filtering_enabled=*/false,
+        /*convert_to_legacy_json=*/false,
+        perfetto::protos::gen::ChromeConfig::USER_INITIATED);
   }
 
   void OnStartupTracingEnabled() {
@@ -923,9 +942,20 @@ void TracingHandler::OnCategoriesReceived(
 
 void TracingHandler::RequestMemoryDump(
     Maybe<bool> deterministic,
+    Maybe<std::string> level_of_detail,
     std::unique_ptr<RequestMemoryDumpCallback> callback) {
   if (!IsTracing()) {
     callback->sendFailure(Response::ServerError("Tracing is not started"));
+    return;
+  }
+
+  base::Optional<base::trace_event::MemoryDumpLevelOfDetail> memory_detail =
+      StringToMemoryDumpLevelOfDetail(level_of_detail.fromMaybe(
+          Tracing::MemoryDumpLevelOfDetailEnum::Detailed));
+
+  if (!memory_detail) {
+    callback->sendFailure(
+        Response::ServerError("Invalid levelOfDetail specified."));
     return;
   }
 
@@ -940,8 +970,7 @@ void TracingHandler::RequestMemoryDump(
   memory_instrumentation::MemoryInstrumentation::GetInstance()
       ->RequestGlobalDumpAndAppendToTrace(
           base::trace_event::MemoryDumpType::EXPLICITLY_TRIGGERED,
-          base::trace_event::MemoryDumpLevelOfDetail::DETAILED, determinism,
-          std::move(on_memory_dump_finished));
+          *memory_detail, determinism, std::move(on_memory_dump_finished));
 }
 
 void TracingHandler::OnMemoryDumpFinished(

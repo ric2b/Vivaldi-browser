@@ -4,6 +4,7 @@
 
 import("//build/apple/tweak_info_plist.gni")
 import("//build/config/mac/rules.gni")
+import("//build/config/python.gni")
 import("//build/util/version.gni")
 import("//chrome/updater/branding.gni")
 
@@ -78,6 +79,20 @@ source_set("xpc_names") {
   frameworks = [ "Foundation.framework" ]
 }
 
+source_set("util") {
+  sources = [
+    "util.h",
+    "util.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/updater:version_header",
+  ]
+
+  frameworks = [ "Foundation.framework" ]
+}
+
 source_set("updater_setup_sources") {
   sources = [
     "setup/setup.h",
@@ -86,6 +101,7 @@ source_set("updater_setup_sources") {
 
   deps = [
     ":network_fetcher_sources",
+    ":util",
     ":xpc_names",
     "//base",
     "//chrome/common/mac:launchd",
@@ -104,7 +120,8 @@ source_set("updater_setup_sources") {
   ]
 }
 
-action("updater_install_script") {
+# TODO(crbug.com/1112471): Get this to run cleanly under Python 3.
+python2_action("updater_install_script") {
   script = "embed_variables.py"
 
   inputs = [
@@ -124,7 +141,8 @@ action("updater_install_script") {
   ]
 }
 
-action("browser_install_script") {
+# TODO(crbug.com/1112471): Get this to run cleanly under Python 3.
+python2_action("browser_install_script") {
   script = "embed_variables.py"
 
   inputs = [

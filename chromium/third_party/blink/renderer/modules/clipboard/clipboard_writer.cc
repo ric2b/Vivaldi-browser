@@ -37,34 +37,36 @@ class ClipboardImageWriter final : public ClipboardWriter {
   ~ClipboardImageWriter() override = default;
 
  private:
-  void StartWrite(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                  DOMArrayBuffer* raw_data) override {
+  void StartWrite(
+      DOMArrayBuffer* raw_data,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     worker_pool::PostTask(
         FROM_HERE,
         CrossThreadBindOnce(&ClipboardImageWriter::DecodeOnBackgroundThread,
-                            WrapCrossThreadPersistent(this), task_runner,
-                            WrapCrossThreadPersistent(raw_data)));
+                            WrapCrossThreadPersistent(raw_data),
+                            WrapCrossThreadPersistent(this), task_runner));
   }
-  void DecodeOnBackgroundThread(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      DOMArrayBuffer* png_data) override {
+  static void DecodeOnBackgroundThread(
+      DOMArrayBuffer* png_data,
+      ClipboardImageWriter* writer,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
     DCHECK(!IsMainThread());
     std::unique_ptr<ImageDecoder> decoder = ImageDecoder::Create(
-        SegmentReader::CreateFromSkData(SkData::MakeWithoutCopy(
-            png_data->Data(), png_data->ByteLengthAsSizeT())),
+        SegmentReader::CreateFromSkData(
+            SkData::MakeWithoutCopy(png_data->Data(), png_data->ByteLength())),
         true, ImageDecoder::kAlphaPremultiplied, ImageDecoder::kDefaultBitDepth,
-        ColorBehavior::Tag(), ImageDecoder::OverrideAllowDecodeToYuv::kDeny);
+        ColorBehavior::Tag());
     sk_sp<SkImage> image = nullptr;
     // |decoder| is nullptr if |png_data| doesn't begin with the PNG signature.
     if (decoder)
       image = ImageBitmap::GetSkImageFromDecoder(std::move(decoder));
 
-    PostCrossThreadTask(
-        *task_runner, FROM_HERE,
-        CrossThreadBindOnce(&ClipboardImageWriter::Write,
-                            WrapCrossThreadPersistent(this), std::move(image)));
+    PostCrossThreadTask(*task_runner, FROM_HERE,
+                        CrossThreadBindOnce(&ClipboardImageWriter::Write,
+                                            WrapCrossThreadPersistent(writer),
+                                            std::move(image)));
   }
   void Write(sk_sp<SkImage> image) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -88,28 +90,30 @@ class ClipboardTextWriter final : public ClipboardWriter {
   ~ClipboardTextWriter() override = default;
 
  private:
-  void StartWrite(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                  DOMArrayBuffer* raw_data) override {
+  void StartWrite(
+      DOMArrayBuffer* raw_data,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     worker_pool::PostTask(
         FROM_HERE,
         CrossThreadBindOnce(&ClipboardTextWriter::DecodeOnBackgroundThread,
-                            WrapCrossThreadPersistent(this), task_runner,
-                            WrapCrossThreadPersistent(raw_data)));
+                            WrapCrossThreadPersistent(raw_data),
+                            WrapCrossThreadPersistent(this), task_runner));
   }
-  void DecodeOnBackgroundThread(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      DOMArrayBuffer* raw_data) override {
+  static void DecodeOnBackgroundThread(
+      DOMArrayBuffer* raw_data,
+      ClipboardTextWriter* writer,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
     DCHECK(!IsMainThread());
 
     String wtf_string =
         String::FromUTF8(reinterpret_cast<const LChar*>(raw_data->Data()),
-                         raw_data->ByteLengthAsSizeT());
+                         raw_data->ByteLength());
     DCHECK(wtf_string.IsSafeToSendToAnotherThread());
     PostCrossThreadTask(*task_runner, FROM_HERE,
                         CrossThreadBindOnce(&ClipboardTextWriter::Write,
-                                            WrapCrossThreadPersistent(this),
+                                            WrapCrossThreadPersistent(writer),
                                             std::move(wtf_string)));
   }
   void Write(const String& text) {
@@ -128,8 +132,9 @@ class ClipboardHtmlWriter final : public ClipboardWriter {
   ~ClipboardHtmlWriter() override = default;
 
  private:
-  void StartWrite(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                  DOMArrayBuffer* html_data) override {
+  void StartWrite(
+      DOMArrayBuffer* html_data,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     promise_->GetExecutionContext()->CountUse(
@@ -137,7 +142,7 @@ class ClipboardHtmlWriter final : public ClipboardWriter {
 
     String html_string =
         String::FromUTF8(reinterpret_cast<const LChar*>(html_data->Data()),
-                         html_data->ByteLengthAsSizeT());
+                         html_data->ByteLength());
 
     // Sanitizing on the main thread because HTML DOM nodes can only be used
     // on the main thread.
@@ -151,12 +156,6 @@ class ClipboardHtmlWriter final : public ClipboardWriter {
     String sanitized_html =
         CreateMarkup(fragment, kIncludeNode, kResolveAllURLs);
     Write(sanitized_html, url);
-  }
-
-  void DecodeOnBackgroundThread(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      DOMArrayBuffer* html_data) override {
-    NOTREACHED() << "HTML's serializers cannot be used on background threads.";
   }
 
   void Write(const String& sanitized_html, KURL url) {
@@ -176,13 +175,14 @@ class ClipboardSvgWriter final : public ClipboardWriter {
  private:
   // This must be called on the main thread because XML DOM nodes can
   // only be used on the main thread
-  void StartWrite(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                  DOMArrayBuffer* svg_data) override {
+  void StartWrite(
+      DOMArrayBuffer* svg_data,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     String svg_string =
         String::FromUTF8(reinterpret_cast<const LChar*>(svg_data->Data()),
-                         svg_data->ByteLengthAsSizeT());
+                         svg_data->ByteLength());
 
     // Now sanitize the SVG string.
     KURL url;
@@ -197,18 +197,13 @@ class ClipboardSvgWriter final : public ClipboardWriter {
     Write(sanitized_svg);
   }
 
-  void DecodeOnBackgroundThread(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      DOMArrayBuffer* html_data) override {
-    NOTREACHED() << "SVG's serializers cannot be used on background threads.";
-  }
-
   void Write(const String& svg_html) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     system_clipboard()->WriteSvg(svg_html);
     promise_->CompleteWriteRepresentation();
   }
 };
+
 // Writes a blob with arbitrary, unsanitized content to the System Clipboard.
 class ClipboardRawDataWriter final : public ClipboardWriter {
  public:
@@ -219,35 +214,19 @@ class ClipboardRawDataWriter final : public ClipboardWriter {
   ~ClipboardRawDataWriter() override = default;
 
  private:
-  void StartWrite(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                  DOMArrayBuffer* raw_data) override {
+  void StartWrite(
+      DOMArrayBuffer* raw_data,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-    worker_pool::PostTask(
-        FROM_HERE,
-        CrossThreadBindOnce(&ClipboardRawDataWriter::DecodeOnBackgroundThread,
-                            WrapCrossThreadPersistent(this), task_runner,
-                            WrapCrossThreadPersistent(raw_data)));
-  }
-
-  // Unfortunately, in order to use the same ClipboardWriter base,
-  // ClipboardRawDataWriter does need to have these extra 2 thread hops.
-  void DecodeOnBackgroundThread(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      DOMArrayBuffer* raw_data) override {
-    DCHECK(!IsMainThread());
-
-    PostCrossThreadTask(
-        *task_runner, FROM_HERE,
-        CrossThreadBindOnce(&ClipboardRawDataWriter::Write,
-                            WrapCrossThreadPersistent(this),
-                            WrapCrossThreadPersistent(raw_data)));
+    // Raw Data is written directly, and doesn't require decoding.
+    Write(raw_data);
   }
 
   void Write(DOMArrayBuffer* raw_data) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-    if (raw_data->ByteLengthAsSizeT() >=
+    if (raw_data->ByteLength() >=
         mojom::blink::RawClipboardHost::kMaxDataSize) {
       promise_->RejectFromReadOrDecodeFailure();
       return;
@@ -255,7 +234,7 @@ class ClipboardRawDataWriter final : public ClipboardWriter {
 
     uint8_t* raw_data_pointer = static_cast<uint8_t*>(raw_data->Data());
     mojo_base::BigBuffer buffer(std::vector<uint8_t>(
-        raw_data_pointer, raw_data_pointer + raw_data->ByteLengthAsSizeT()));
+        raw_data_pointer, raw_data_pointer + raw_data->ByteLength()));
 
     raw_system_clipboard()->Write(mime_type_, std::move(buffer));
 
@@ -358,7 +337,7 @@ void ClipboardWriter::DidFinishLoading() {
   file_reader_.reset();
   self_keep_alive_.Clear();
 
-  StartWrite(clipboard_task_runner_, array_buffer);
+  StartWrite(array_buffer, clipboard_task_runner_);
 }
 
 void ClipboardWriter::DidFail(FileErrorCode error_code) {

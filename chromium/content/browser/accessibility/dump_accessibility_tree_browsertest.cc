@@ -13,7 +13,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
@@ -43,7 +42,8 @@
 
 namespace content {
 
-typedef AccessibilityTreeFormatter::PropertyFilter PropertyFilter;
+using ui::AXPropertyFilter;
+using ui::AXTreeFormatter;
 
 // See content/test/data/accessibility/readme.md for an overview.
 //
@@ -60,11 +60,12 @@ typedef AccessibilityTreeFormatter::PropertyFilter PropertyFilter;
 class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
  public:
   void AddDefaultFilters(
-      std::vector<PropertyFilter>* property_filters) override;
-  void AddPropertyFilter(std::vector<PropertyFilter>* property_filters,
-                         const std::string& filter,
-                         PropertyFilter::Type type = PropertyFilter::ALLOW) {
-    property_filters->push_back(PropertyFilter(filter, type));
+      std::vector<AXPropertyFilter>* property_filters) override;
+  void AddPropertyFilter(
+      std::vector<AXPropertyFilter>* property_filters,
+      const std::string& filter,
+      AXPropertyFilter::Type type = AXPropertyFilter::ALLOW) {
+    property_filters->push_back(AXPropertyFilter(filter, type));
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -148,7 +149,7 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   }
 
   std::vector<std::string> Dump(std::vector<std::string>& unused) override {
-    std::unique_ptr<AccessibilityTreeFormatter> formatter(formatter_factory_());
+    std::unique_ptr<AXTreeFormatter> formatter(formatter_factory_());
     formatter->SetPropertyFilters(property_filters_);
     formatter->SetNodeFilters(node_filters_);
     std::string actual_contents;
@@ -203,27 +204,44 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
   }
 };
 
+// Subclass of DumpAccessibilityTreeTest that exposes ignored nodes.
+class DumpAccessibilityTreeTestWithIgnoredNodes
+    : public DumpAccessibilityTreeTest {
+ protected:
+  // Override from DumpAccessibilityTreeTest.
+  void ChooseFeatures(std::vector<base::Feature>* enabled_features,
+                      std::vector<base::Feature>* disabled_features) override {
+    // http://crbug.com/1063155 - temporary until this is enabled
+    // everywhere.
+    enabled_features->emplace_back(
+        features::kEnableAccessibilityExposeIgnoredNodes);
+    DumpAccessibilityTreeTest::ChooseFeatures(enabled_features,
+                                              disabled_features);
+  }
+};
+
 void DumpAccessibilityTreeTest::AddDefaultFilters(
-    std::vector<PropertyFilter>* property_filters) {
+    std::vector<AXPropertyFilter>* property_filters) {
   AddPropertyFilter(property_filters, "value='*'");
   // The value attribute on the document object contains the URL of the current
   // page which will not be the same every time the test is run.
-  AddPropertyFilter(property_filters, "value='http*'", PropertyFilter::DENY);
+  AddPropertyFilter(property_filters, "value='http*'", AXPropertyFilter::DENY);
   // Object attributes.value
-  AddPropertyFilter(property_filters, "layout-guess:*", PropertyFilter::ALLOW);
+  AddPropertyFilter(property_filters, "layout-guess:*",
+                    AXPropertyFilter::ALLOW);
 
   AddPropertyFilter(property_filters, "select*");
   AddPropertyFilter(property_filters, "selectedFromFocus=*",
-                    PropertyFilter::DENY);
+                    AXPropertyFilter::DENY);
   AddPropertyFilter(property_filters, "descript*");
   AddPropertyFilter(property_filters, "check*");
   AddPropertyFilter(property_filters, "horizontal");
   AddPropertyFilter(property_filters, "multiselectable");
 
   // Deny most empty values
-  AddPropertyFilter(property_filters, "*=''", PropertyFilter::DENY);
+  AddPropertyFilter(property_filters, "*=''", AXPropertyFilter::DENY);
   // After denying empty values, because we want to allow name=''
-  AddPropertyFilter(property_filters, "name=*", PropertyFilter::ALLOW_EMPTY);
+  AddPropertyFilter(property_filters, "name=*", AXPropertyFilter::ALLOW_EMPTY);
 }
 
 // Parameterize the tests so that each test-pass is run independently.
@@ -242,8 +260,20 @@ INSTANTIATE_TEST_SUITE_P(
                      AccessibilityTreeFormatter::GetTestPasses().size()),
     DumpAccessibilityTreeTestPassToString());
 
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DumpAccessibilityTreeTestWithIgnoredNodes,
+    ::testing::Range(size_t{0},
+                     AccessibilityTreeFormatter::GetTestPasses().size()),
+    DumpAccessibilityTreeTestPassToString());
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSColor) {
   RunCSSTest(FILE_PATH_LITERAL("color.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityCSSContentVisibilityAutoCrash) {
+  RunCSSTest(FILE_PATH_LITERAL("content-visibility-auto-crash.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSFontStyle) {
@@ -361,11 +391,6 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityActionVerbs) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityActions) {
   RunHtmlTest(FILE_PATH_LITERAL("actions.html"));
-}
-
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityAddClickListener) {
-  RunHtmlTest(FILE_PATH_LITERAL("add-click-listener.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAddress) {
@@ -528,47 +553,13 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 #define MAYBE_AccessibilityAriaCombobox AccessibilityAriaCombobox
 #endif
 
-// DISABLE A BUNCH OF TESTS FOR ANDROID
-// ------------------------------------
-// TODO(crbug.com/1137967): tests are flaky on android.
-#if defined(OS_ANDROID)
-#define MAYBE_AccessibilityAriaMenuItemRadio \
-  DISABLED_AccessibilityAriaMenuItemRadio
-#define MAYBE_AccessibilityAriaComboboxUneditable \
-  DISABLED_AccessibilityAriaComboboxUneditable
-#define MAYBE_AccessibilityAriaListBox DISABLED_AccessibilityAriaListBox
-#define MAYBE_AccessibilityAriaListBoxDisabled \
-  DISABLED_AccessibilityAriaListBoxDisabled
-#define MAYBE_AccessibilityAriaOption DISABLED_AccessibilityAriaOption
-#define MAYBE_AccessibilityAriaPosinset DISABLED_AccessibilityAriaPosinset
-#define MAYBE_AccessibilityAriaSelected DISABLED_AccessibilityAriaSelected
-#define MAYBE_AccessibilityAriaSetsize DISABLED_AccessibilityAriaSetsize
-#define MAYBE_AccessibilityAriaTree DISABLED_AccessibilityAriaTree
-#define MAYBE_AccessibilityButtonWithListboxPopup \
-  DISABLED_AccessibilityButtonWithListboxPopup
-#else
-#define MAYBE_AccessibilityAriaMenuItemRadio AccessibilityAriaMenuItemRadio
-#define MAYBE_AccessibilityAriaComboboxUneditable \
-  AccessibilityAriaComboboxUneditable
-#define MAYBE_AccessibilityAriaListBox AccessibilityAriaListBox
-#define MAYBE_AccessibilityAriaListBoxDisabled AccessibilityAriaListBoxDisabled
-#define MAYBE_AccessibilityAriaOption AccessibilityAriaOption
-#define MAYBE_AccessibilityAriaPosinset AccessibilityAriaPosinset
-#define MAYBE_AccessibilityAriaSelected AccessibilityAriaSelected
-#define MAYBE_AccessibilityAriaSetsize AccessibilityAriaSetsize
-#define MAYBE_AccessibilityAriaTree AccessibilityAriaTree
-#define MAYBE_AccessibilityButtonWithListboxPopup \
-  AccessibilityButtonWithListboxPopup
-#endif
-// ------------------------------------
-
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        MAYBE_AccessibilityAriaCombobox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-combobox.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaComboboxUneditable) {
+                       AccessibilityAriaComboboxUneditable) {
   RunAriaTest(FILE_PATH_LITERAL("aria-combobox-uneditable.html"));
 }
 
@@ -833,13 +824,12 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaList) {
   RunAriaTest(FILE_PATH_LITERAL("aria-list.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaListBox) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaListBox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-listbox.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaListBoxDisabled) {
+                       AccessibilityAriaListBoxDisabled) {
   RunAriaTest(FILE_PATH_LITERAL("aria-listbox-disabled.html"));
 }
 // TODO(crbug.com/983802): Flaky.
@@ -919,7 +909,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 // crbug.com/442278 will stop creating new text elements representing title.
 // Re-baseline after the Blink change goes in
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaMenuItemRadio) {
+                       AccessibilityAriaMenuItemRadio) {
   RunAriaTest(FILE_PATH_LITERAL("aria-menuitemradio.html"));
 }
 
@@ -982,6 +972,29 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaOwns) {
   RunAriaTest(FILE_PATH_LITERAL("aria-owns.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaOwnsCrash) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-owns-crash.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaOwnsCrash2) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-owns-crash-2.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaOwnsIgnored) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-owns-ignored.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaOwnsIncludedInTree) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-owns-included-in-tree.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityAriaOwnsFromDisplayNone) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-owns-from-display-none.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaOwnsList) {
   RunAriaTest(FILE_PATH_LITERAL("aria-owns-list.html"));
 }
@@ -994,8 +1007,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaNone) {
   RunAriaTest(FILE_PATH_LITERAL("aria-none.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaOption) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaOption) {
   RunAriaTest(FILE_PATH_LITERAL("aria-option.html"));
 }
 
@@ -1003,8 +1015,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaParagraph) {
   RunAriaTest(FILE_PATH_LITERAL("aria-paragraph.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaPosinset) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaPosinset) {
   RunAriaTest(FILE_PATH_LITERAL("aria-posinset.html"));
 }
 
@@ -1100,8 +1111,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunAriaTest(FILE_PATH_LITERAL("aria-searchbox-with-selection.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaSelected) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaSelected) {
   RunAriaTest(FILE_PATH_LITERAL("aria-selected.html"));
 }
 
@@ -1109,8 +1119,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaSeparator) {
   RunAriaTest(FILE_PATH_LITERAL("aria-separator.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityAriaSetsize) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaSetsize) {
   RunAriaTest(FILE_PATH_LITERAL("aria-setsize.html"));
 }
 
@@ -1223,7 +1232,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTooltip) {
   RunAriaTest(FILE_PATH_LITERAL("aria-tooltip.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, MAYBE_AccessibilityAriaTree) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTree) {
   RunAriaTest(FILE_PATH_LITERAL("aria-tree.html"));
 }
 
@@ -1515,6 +1524,10 @@ IN_PROC_BROWSER_TEST_P(
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityContenteditableWithNoDescendants) {
   RunHtmlTest(FILE_PATH_LITERAL("contenteditable-with-no-descendants.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCustomElement) {
+  RunHtmlTest(FILE_PATH_LITERAL("custom-element.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityEm) {
@@ -1853,7 +1866,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityInputRadio) {
   RunHtmlTest(FILE_PATH_LITERAL("input-radio.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTestWithIgnoredNodes,
                        AccessibilityInputRadioCheckboxLabel) {
   RunHtmlTest(FILE_PATH_LITERAL("input-radio-checkbox-label.html"));
 }
@@ -2525,7 +2538,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityNestedList) {
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       MAYBE_AccessibilityButtonWithListboxPopup) {
+                       AccessibilityButtonWithListboxPopup) {
   RunHtmlTest(FILE_PATH_LITERAL("button-with-listbox-popup.html"));
 }
 

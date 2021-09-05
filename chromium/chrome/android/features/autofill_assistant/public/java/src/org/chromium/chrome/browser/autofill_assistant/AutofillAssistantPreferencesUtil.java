@@ -4,11 +4,12 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /** Autofill Assistant related preferences util class. */
-class AutofillAssistantPreferencesUtil {
+public class AutofillAssistantPreferencesUtil {
     /**
      * If a user explicitly cancels a lite script >= this number, they will implicitly opt-out of
      * this experience and never see a lite script again. Note: this is only temporarily in place
@@ -25,6 +26,22 @@ class AutofillAssistantPreferencesUtil {
                 ChromePreferenceKeys.AUTOFILL_ASSISTANT_ENABLED, true);
     }
 
+    /** Checks whether the proactive help switch preference in settings is on. */
+    public static boolean isProactiveHelpSwitchOn() {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP)) {
+            return false;
+        }
+
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.AUTOFILL_ASSISTANT_PROACTIVE_HELP, true);
+    }
+
+    /** Enables or disables the proactive help setting. */
+    public static void setProactiveHelpSwitch(boolean enabled) {
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.AUTOFILL_ASSISTANT_PROACTIVE_HELP, enabled);
+    }
+
     /** Returns whether the user has seen a lite script before or not. */
     static boolean isAutofillAssistantFirstTimeLiteScriptUser() {
         return SharedPreferencesManager.getInstance().readBoolean(
@@ -32,7 +49,7 @@ class AutofillAssistantPreferencesUtil {
     }
 
     /** Marks a user as having seen a lite script at least once before. */
-    static void setAutofillAssistantReturningLiteScriptUser() {
+    public static void setAutofillAssistantReturningLiteScriptUser() {
         SharedPreferencesManager.getInstance().writeBoolean(
                 ChromePreferenceKeys.AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER, false);
     }
@@ -92,8 +109,10 @@ class AutofillAssistantPreferencesUtil {
      * @param accept Flag indicating whether the ToS have been accepted.
      */
     static void setInitialPreferences(boolean accept) {
-        SharedPreferencesManager.getInstance().writeBoolean(
-                ChromePreferenceKeys.AUTOFILL_ASSISTANT_ENABLED, accept);
+        if (accept) {
+            SharedPreferencesManager.getInstance().writeBoolean(
+                    ChromePreferenceKeys.AUTOFILL_ASSISTANT_ENABLED, accept);
+        }
         SharedPreferencesManager.getInstance().writeBoolean(
                 ChromePreferenceKeys.AUTOFILL_ASSISTANT_ONBOARDING_ACCEPTED, accept);
     }

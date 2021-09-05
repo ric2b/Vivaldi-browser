@@ -20,6 +20,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/defaults.h"
@@ -168,9 +169,6 @@ void ZoomMenuModel::Build() {
 // HelpMenuModel
 // Only used in branded builds.
 
-const base::Feature kIncludeBetaForumMenuItem{
-    "IncludeBetaForumMenuItem", base::FEATURE_DISABLED_BY_DEFAULT};
-
 class HelpMenuModel : public ui::SimpleMenuModel {
  public:
   HelpMenuModel(ui::SimpleMenuModel::Delegate* delegate, Browser* browser)
@@ -191,8 +189,6 @@ class HelpMenuModel : public ui::SimpleMenuModel {
     AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
 #endif
     AddItemWithStringId(IDC_HELP_PAGE_VIA_MENU, help_string_id);
-    if (base::FeatureList::IsEnabled(kIncludeBetaForumMenuItem))
-      AddItem(IDC_SHOW_BETA_FORUM, l10n_util::GetStringUTF16(IDS_BETA_FORUM));
     if (browser_defaults::kShowHelpMenuItemIcon) {
       ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
       SetIcon(GetIndexOfCommandId(IDC_HELP_PAGE_VIA_MENU),
@@ -339,7 +335,9 @@ ui::ImageModel AppMenuModel::GetIconForCommandId(int command_id) const {
   if (command_id == IDC_UPGRADE_DIALOG) {
     DCHECK(browser_defaults::kShowUpgradeMenuItem);
     DCHECK(app_menu_icon_controller_);
-    return app_menu_icon_controller_->GetIconImage(false);
+    return ui::ImageModel::FromVectorIcon(
+        kBrowserToolsUpdateIcon,
+        app_menu_icon_controller_->GetIconColor(base::nullopt));
   }
   return ui::ImageModel();
 }
@@ -783,7 +781,8 @@ void AppMenuModel::Build() {
                            sub_menus_.back().get());
   }
   AddItemWithStringId(IDC_SHOW_DOWNLOADS, IDS_SHOW_DOWNLOADS);
-  if (!browser_->profile()->IsGuestSession()) {
+  if (!browser_->profile()->IsGuestSession() &&
+      !browser_->profile()->IsEphemeralGuestProfile()) {
     bookmark_sub_menu_model_ =
         std::make_unique<BookmarkSubMenuModel>(this, browser_);
     AddSubMenuWithStringId(IDC_BOOKMARKS_MENU, IDS_BOOKMARKS_MENU,
@@ -944,7 +943,8 @@ void AppMenuModel::UpdateZoomControls() {
 }
 
 bool AppMenuModel::ShouldShowNewIncognitoWindowMenuItem() {
-  if (browser_->profile()->IsGuestSession())
+  if (browser_->profile()->IsGuestSession() ||
+      browser_->profile()->IsEphemeralGuestProfile())
     return false;
 
   return IncognitoModePrefs::GetAvailability(browser_->profile()->GetPrefs()) !=

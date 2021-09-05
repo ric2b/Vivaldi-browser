@@ -12,7 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -82,6 +82,8 @@ class BluetoothAdvertisementBlueZTest : public testing::Test {
         std::make_unique<BluetoothAdvertisement::UUIDList>());
     data->set_service_data(
         std::make_unique<BluetoothAdvertisement::ServiceData>());
+    data->set_scan_response_data(
+        std::make_unique<BluetoothAdvertisement::ScanResponseData>());
     return data;
   }
 

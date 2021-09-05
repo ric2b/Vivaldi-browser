@@ -31,7 +31,7 @@
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/process/process_metrics.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -85,6 +85,7 @@
 #include "content/browser/screenlock_monitor/screenlock_monitor_device_source.h"
 #include "content/browser/sms/sms_provider.h"
 #include "content/browser/speech/speech_recognition_manager_impl.h"
+#include "content/browser/speech/tts_controller_impl.h"
 #include "content/browser/startup_data_impl.h"
 #include "content/browser/startup_task_runner.h"
 #include "content/browser/tracing/background_tracing_manager_impl.h"
@@ -132,7 +133,6 @@
 #include "net/ssl/ssl_config_service.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/audio/service.h"
-#include "services/content/public/cpp/navigable_contents_view.h"
 #include "services/data_decoder/public/cpp/service_provider.h"
 #include "services/network/transitional_url_loader_factory_owner.h"
 #include "skia/ext/event_tracer_impl.h"
@@ -226,7 +226,6 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/x/x11_util.h"           // nogncheck
-#include "ui/gfx/x/x11_types.h"           // nogncheck
 #endif
 
 #if defined(USE_NSS_CERTS)
@@ -440,7 +439,7 @@ class GpuDataManagerVisualProxy : public GpuDataManagerObserver {
   explicit GpuDataManagerVisualProxy(GpuDataManagerImpl* gpu_data_manager)
       : gpu_data_manager_(gpu_data_manager) {
     if (!base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kHeadless))
-      scoped_observer_.Add(gpu_data_manager_);
+      data_manager_observation_.Observe(gpu_data_manager_);
   }
 
   ~GpuDataManagerVisualProxy() override = default;
@@ -451,7 +450,7 @@ class GpuDataManagerVisualProxy : public GpuDataManagerObserver {
  private:
   void OnUpdate() {
     gpu::GPUInfo gpu_info = gpu_data_manager_->GetGPUInfo();
-    gpu::GpuExtraInfo gpu_extra_info = gpu_data_manager_->GetGpuExtraInfo();
+    gfx::GpuExtraInfo gpu_extra_info = gpu_data_manager_->GetGpuExtraInfo();
     if (!ui::XVisualManager::GetInstance()->OnGPUInfoChanged(
             gpu_info.software_rendering ||
                 !gpu_data_manager_->GpuAccessAllowed(nullptr),
@@ -467,8 +466,8 @@ class GpuDataManagerVisualProxy : public GpuDataManagerObserver {
 
   GpuDataManagerImpl* gpu_data_manager_;
 
-  ScopedObserver<GpuDataManagerImpl, GpuDataManagerObserver> scoped_observer_{
-      this};
+  base::ScopedObservation<GpuDataManagerImpl, GpuDataManagerObserver>
+      data_manager_observation_{this};
 
   DISALLOW_COPY_AND_ASSIGN(GpuDataManagerVisualProxy);
 };
@@ -532,7 +531,8 @@ BrowserMainLoop::BrowserMainLoop(
   // that makes it the same as the current one.
   if (base::HangWatcher::IsUIThreadHangWatchingEnabled()) {
     unregister_thread_closure_ =
-        base::HangWatcher::GetInstance()->RegisterThread();
+        base::HangWatcher::GetInstance()->RegisterThread(
+            base::HangWatcher::ThreadType::kUIThread);
   }
 
   if (GetContentClient()->browser()->ShouldCreateThreadPool()) {
@@ -581,7 +581,7 @@ int BrowserMainLoop::EarlyInitialization() {
 
 #if defined(USE_X11)
   if (!features::IsUsingOzonePlatform() && UsingInProcessGpu() &&
-      !gfx::GetXDisplay()) {
+      !x11::Connection::Get()->Ready()) {
     LOG(ERROR) << "Failed to open an X11 connection.";
   }
 #endif
@@ -1063,10 +1063,14 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
     midi_service_->Shutdown();
   }
 
-  TRACE_EVENT0("shutdown",
-               "BrowserMainLoop::Subsystem:SpeechRecognitionManager");
-  io_thread_->task_runner()->DeleteSoon(FROM_HERE,
-                                        speech_recognition_manager_.release());
+  {
+    TRACE_EVENT0("shutdown",
+                 "BrowserMainLoop::Subsystem:SpeechRecognitionManager");
+    io_thread_->task_runner()->DeleteSoon(
+        FROM_HERE, speech_recognition_manager_.release());
+  }
+
+  TtsControllerImpl::GetInstance()->Shutdown();
 
   memory_pressure_monitor_.reset();
 
@@ -1430,7 +1434,7 @@ bool BrowserMainLoop::InitializeToolkit() {
 #if defined(USE_X11)
   if (!features::IsUsingOzonePlatform() &&
       !parsed_command_line_.HasSwitch(switches::kHeadless) &&
-      !gfx::GetXDisplay()) {
+      !x11::Connection::Get()->Ready()) {
     LOG(ERROR) << "Unable to open X display.";
     return false;
   }
@@ -1465,10 +1469,6 @@ void BrowserMainLoop::InitializeMojo() {
     // thread.
     mojo::SyncCallRestrictions::DisallowSyncCall();
   }
-
-  // Ensure that any NavigableContentsViews constructed in the browser process
-  // know they're running in the same process as the service.
-  content::NavigableContentsView::SetClientRunningInServiceProcess();
 
   // Start startup tracing through TracingController's interface. TraceLog has
   // been enabled in content_main_runner where threads are not available. Now We

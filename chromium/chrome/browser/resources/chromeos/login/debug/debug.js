@@ -181,38 +181,6 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'debugging',
       kind: ScreenKind.OTHER,
-      states: [
-        {
-          id: 'remove-protection',
-          trigger: (screen) => {
-            screen.updateState(1);
-          },
-        },
-        {
-          id: 'setup',
-          trigger: (screen) => {
-            screen.updateState(2);
-          },
-        },
-        {
-          id: 'wait',
-          trigger: (screen) => {
-            screen.updateState(3);
-          },
-        },
-        {
-          id: 'done',
-          trigger: (screen) => {
-            screen.updateState(4);
-          },
-        },
-        {
-          id: 'error',
-          trigger: (screen) => {
-            screen.updateState(-1);
-          },
-        },
-      ],
     },
     {
       id: 'demo-preferences',
@@ -322,6 +290,11 @@ cr.define('cr.ui.login.debug', function() {
       kind: ScreenKind.NORMAL,
     },
     {
+      id: 'offline-ad-login',
+      kind: ScreenKind.NORMAL,
+      suffix: 'E',
+    },
+    {
       id: 'enterprise-enrollment',
       kind: ScreenKind.NORMAL,
       defaultState: 'step-signin',
@@ -380,18 +353,13 @@ cr.define('cr.ui.login.debug', function() {
       id: 'update-required',
       kind: ScreenKind.OTHER,
       suffix: 'E',
+      handledSteps: 'update-required-message,update-process,eol',
       states: [
         {
           id: 'initial',
           trigger: (screen) => {
             screen.setUIState(0);
             screen.setEnterpriseAndDeviceName('example.com', 'Chromebook');
-          },
-        },
-        {
-          id: 'need-permission',
-          trigger: (screen) => {
-            screen.setUIState(2);
           },
         },
         {
@@ -416,29 +384,11 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
         {
-          id: 'completed-reboot',
-          trigger: (screen) => {
-            screen.setUIState(3);
-          },
-        },
-        {
           id: 'eol',
           trigger: (screen) => {
             screen.setUIState(5);
             screen.setEolMessage(
                 'Message from admin: please return device somewhere.');
-          },
-        },
-        {
-          id: 'no-network',
-          trigger: (screen) => {
-            screen.setUIState(6);
-          },
-        },
-        {
-          id: 'error',
-          trigger: (screen) => {
-            screen.setUIState(4);
           },
         },
       ],
@@ -468,6 +418,31 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'tpm-error-message',
       kind: ScreenKind.ERROR,
+    },
+    {
+      id: 'signin-fatal-error',
+      kind: ScreenKind.ERROR,
+      states: [
+        {
+          id: 'SCRAPED_PASSWORD_VERIFICATION_FAILURE',
+          data: {
+            errorState: 1,
+          },
+        },
+        {
+          id: 'INSECURE_CONTENT_BLOCKED',
+          data: {
+            errorState: 2,
+            url: 'http://example.url/',
+          },
+        },
+        {
+          id: 'MISSING_GAIA_INFO',
+          data: {
+            errorState: 3,
+          },
+        },
+      ]
     },
     {
       id: 'reset',
@@ -550,7 +525,7 @@ cr.define('cr.ui.login.debug', function() {
           trigger: (screen) => {
             screen.loadAuthExtension({
               screenMode: 1,  // Offline
-              enterpriseDisplayDomain: 'example.com',
+              enterpriseDomainManager: 'example.com',
             });
           },
         },
@@ -668,6 +643,7 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'encryption-migration',
       kind: ScreenKind.OTHER,
+      handledSteps: 'ready,migrating,not-enough-space',
       states: [
         {
           id: 'ready',
@@ -693,23 +669,12 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
         {
-          id: 'migration-failed',
-          trigger: (screen) => {
-            screen.setUIState(3);
-          },
-        },
-        {
           id: 'not-enough-space',
           trigger: (screen) => {
             screen.setUIState(4);
-            screen.setAvailableSpaceInString('1 GB');
-            screen.setNecessarySpaceInString('2 GB');
-          },
-        },
-        {
-          id: 'migrating-minimal',
-          trigger: (screen) => {
-            screen.setUIState(5);
+            screen.setSpaceInfoInString(
+                '1 GB' /* availableSpaceSize */,
+                '2 GB' /* necessarySpaceSize */);
           },
         },
       ],
@@ -906,6 +871,19 @@ cr.define('cr.ui.login.debug', function() {
       kind: ScreenKind.NORMAL,
     },
     {
+      id: 'parental-handoff',
+      kind: ScreenKind.NORMAL,
+      states: [{
+        id: 'parental-handoff',
+        data: {
+          title: 'Now it\'s Child 1\'s turn',
+          subtitle:
+              'You can hand this Chromebook to Child 1. Setup is almost done,' +
+              ' then it\'s time to explore.'
+        },
+      }],
+    },
+    {
       id: 'multidevice-setup',
       kind: ScreenKind.NORMAL,
     },
@@ -916,6 +894,20 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'marketing-opt-in',
       kind: ScreenKind.NORMAL,
+      states: [
+        {
+          id: 'WithOptionToSubscribe',
+          trigger: (screen) => {
+            screen.setOptInVisibility(true);
+          },
+        },
+        {
+          id: 'NoOptionToSubscribe',
+          trigger: (screen) => {
+            screen.setOptInVisibility(false);
+          },
+        },
+      ],
     },
   ];
 

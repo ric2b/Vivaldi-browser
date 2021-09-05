@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Không thể chia sẻ <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540">Đã hoán đổi <ph name="FIRST_ITEM_TITLE" /> cho <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Bạn đã tìm kiếm nội dung này trước đây. Việc xóa "<ph name="QUERY" />" khỏi lịch sử sẽ xóa vĩnh viễn cụm từ tìm kiếm này khỏi tài khoản của bạn trên tất cả các thiết bị.</translation>
+<translation id="1510238584712386396">Trình chạy</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 phút và }other{# phút và }}</translation>
 <translation id="1643823602425662293">Thông báo</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">Tệp <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Tra cứu “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3622035490309591977">Lịch sử lưu dữ liệu vào khay nhớ tạm</translation>
 <translation id="364720409959344976">Chọn thư mục để tải lên</translation>
 <translation id="3660179305079774227">Phím mũi tên Lên</translation>
 <translation id="3670030362669914947">Số</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Hoạt động hôm nay}=1{Hoạt động 1 ngày trước}other{Hoạt động # ngày trước}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 ngày và }other{# ngày và }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Hình ảnh.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{trong 1 năm}other{trong # năm}}</translation>
 <translation id="588258955323874662">Toàn màn hình</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Còn 1 giây}other{Còn # giây}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">nhấn</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Còn 1 giờ}other{Còn # giờ}}</translation>
 <translation id="688711909580084195">Trang web không có tiêu đề</translation>
+<translation id="6902419395050653510">Nội dung HTML.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/giây</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{Còn 1 năm}other{Còn # năm}}</translation>
 <translation id="6945221475159498467">Chọn</translation>

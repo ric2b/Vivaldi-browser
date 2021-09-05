@@ -65,6 +65,7 @@
 #include "content/public/common/url_constants.h"
 #include "net/base/escape.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/cookies/cookie_util.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/device_form_factor.h"
 #include "ui/base/window_open_disposition.h"
@@ -310,6 +311,15 @@ void AutocompleteControllerAndroid::OnSuggestionSelected(
 
   RecordClipboardMetrics(match.type);
 
+  // The following histogram should be recorded for both TYPED and pasted
+  // URLs, but should still exclude reloads.
+  if (ui::PageTransitionTypeIncludingQualifiersIs(match.transition,
+                                                  ui::PAGE_TRANSITION_TYPED) ||
+      ui::PageTransitionTypeIncludingQualifiersIs(match.transition,
+                                                  ui::PAGE_TRANSITION_LINK)) {
+    net::cookie_util::RecordCookiePortOmniboxHistograms(match.destination_url);
+  }
+
   AutocompleteMatch::LogSearchEngineUsed(
       match, TemplateURLServiceFactory::GetForProfile(profile_));
 
@@ -329,7 +339,7 @@ void AutocompleteControllerAndroid::OnSuggestionSelected(
       now - autocomplete_controller_->last_time_default_match_changed(),
       autocomplete_controller_->result());
   log.is_query_started_from_tile = is_query_started_from_tiles_;
-  autocomplete_controller_->AddProvidersInfo(&log.providers_info);
+  autocomplete_controller_->AddProviderAndTriggeringLogs(&log);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);
 

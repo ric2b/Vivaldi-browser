@@ -7,6 +7,7 @@
 #include "ash/public/cpp/window_properties.h"
 #include "base/bind.h"
 #include "chromeos/components/camera_app_ui/camera_app_helper_impl.h"
+#include "chromeos/components/camera_app_ui/camera_app_window_manager_factory.h"
 #include "chromeos/components/camera_app_ui/resources.h"
 #include "chromeos/components/camera_app_ui/url_constants.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
@@ -18,6 +19,7 @@
 #include "content/public/browser/video_capture_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "content/public/common/url_constants.h"
 #include "media/capture/video/chromeos/camera_app_device_provider_impl.h"
 #include "media/capture/video/chromeos/mojom/camera_app.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -58,8 +60,33 @@ content::WebUIDataSource* CreateCameraAppUIHTMLSource(
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::WorkerSrc,
       std::string("worker-src 'self';"));
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ChildSrc,
+      std::string("frame-src ") + kChromeUIUntrustedCameraAppURL + ";");
 
   return source;
+}
+
+content::WebUIDataSource* CreateUntrustedCameraAppUIHTMLSource() {
+  content::WebUIDataSource* untrusted_source =
+      content::WebUIDataSource::Create(kChromeUIUntrustedCameraAppURL);
+  for (size_t i = 0; i < kChromeosCameraAppResourcesSize; i++) {
+    untrusted_source->AddResourcePath(kChromeosCameraAppResources[i].name,
+                                      kChromeosCameraAppResources[i].value);
+  }
+  untrusted_source->AddFrameAncestor(GURL(kChromeUICameraAppURL));
+
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ConnectSrc,
+      std::string("connect-src http://www.google-analytics.com/ 'self';"));
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::WorkerSrc,
+      std::string("worker-src 'self';"));
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::TrustedTypes,
+      std::string("trusted-types ga-js-static mp4-js-static;"));
+
+  return untrusted_source;
 }
 
 // Translates the renderer-side source ID to video device id.
@@ -182,9 +209,13 @@ CameraAppUI::CameraAppUI(content::WebUI* web_ui,
   delegate_->SetLaunchDirectory();
 
   // Set up the data source.
-  content::WebUIDataSource* source =
-      CreateCameraAppUIHTMLSource(delegate_.get());
-  content::WebUIDataSource::Add(browser_context, source);
+  content::WebUIDataSource::Add(browser_context,
+                                CreateCameraAppUIHTMLSource(delegate_.get()));
+  content::WebUIDataSource::Add(browser_context,
+                                CreateUntrustedCameraAppUIHTMLSource());
+
+  // Add ability to request chrome-untrusted: URLs
+  web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
 }
 
 CameraAppUI::~CameraAppUI() = default;
@@ -206,6 +237,11 @@ void CameraAppUI::BindInterface(
 
 aura::Window* CameraAppUI::window() {
   return web_ui()->GetWebContents()->GetTopLevelNativeWindow();
+}
+
+CameraAppWindowManager* CameraAppUI::app_window_manager() {
+  return chromeos::CameraAppWindowManagerFactory::GetForBrowserContext(
+      web_ui()->GetWebContents()->GetBrowserContext());
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(CameraAppUI)

@@ -18,7 +18,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -35,6 +35,7 @@
 #include "components/password_manager/core/browser/leak_detection/leak_detection_delegate_interface.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "components/password_manager/core/browser/well_known_change_password_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
@@ -73,7 +74,6 @@ constexpr char kWeakPassword2[] = "111111";
 using api::passwords_private::CompromisedInfo;
 using api::passwords_private::InsecureCredential;
 using api::passwords_private::PasswordCheckStatus;
-using autofill::PasswordForm;
 using password_manager::BulkLeakCheckDelegateInterface;
 using password_manager::BulkLeakCheckService;
 using password_manager::CompromisedCredentials;
@@ -81,6 +81,8 @@ using password_manager::CompromiseType;
 using password_manager::InsecureCredentialTypeFlags;
 using password_manager::IsLeaked;
 using password_manager::LeakCheckCredential;
+using password_manager::PasswordForm;
+using password_manager::SavedPasswordsPresenter;
 using password_manager::TestPasswordStore;
 using password_manager::prefs::kLastTimePasswordCheckCompleted;
 using signin::IdentityTestEnvironment;
@@ -230,6 +232,7 @@ class PasswordCheckDelegateTest : public ::testing::Test {
  public:
   PasswordCheckDelegateTest() {
     prefs_.registry()->RegisterDoublePref(kLastTimePasswordCheckCompleted, 0.0);
+    presenter_.Init();
   }
 
   void RunUntilIdle() { task_env_.RunUntilIdle(); }
@@ -241,10 +244,11 @@ class PasswordCheckDelegateTest : public ::testing::Test {
   TestingProfile& profile() { return profile_; }
   TestPasswordStore& store() { return *store_; }
   BulkLeakCheckService* service() { return bulk_leak_check_service_; }
+  SavedPasswordsPresenter& presenter() { return presenter_; }
   PasswordCheckDelegate& delegate() { return delegate_; }
 
-  void EnableWellKnownChangePasswordFeatureFlag() {
-    scoped_feature_list_.InitAndEnableFeature(
+  void DisableWellKnownChangePasswordFeatureFlag() {
+    scoped_feature_list_.InitAndDisableFeature(
         password_manager::features::kWellKnownChangePassword);
   }
 
@@ -263,7 +267,8 @@ class PasswordCheckDelegateTest : public ::testing::Test {
   scoped_refptr<TestPasswordStore> store_ =
       CreateAndUseTestPasswordStore(&profile_);
   base::test::ScopedFeatureList scoped_feature_list_;
-  PasswordCheckDelegate delegate_{&profile_};
+  SavedPasswordsPresenter presenter_{store_};
+  PasswordCheckDelegate delegate_{&profile_, &presenter_};
 };
 
 }  // namespace
@@ -304,7 +309,7 @@ TEST_F(PasswordCheckDelegateTest, DisablePasswordsWeaknessCheck) {
 }
 
 // Verify that GetWeakCredentials() correctly represents weak credentials.
-TEST_F(PasswordCheckDelegateTest, GetWeakCredentialsFillsFielsCorrectly) {
+TEST_F(PasswordCheckDelegateTest, GetWeakCredentialsFillsFieldsCorrectly) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       password_manager::features::kPasswordsWeaknessCheck);
@@ -318,10 +323,12 @@ TEST_F(PasswordCheckDelegateTest, GetWeakCredentialsFillsFielsCorrectly) {
   EXPECT_THAT(
       delegate().GetWeakCredentials(),
       UnorderedElementsAre(
-          ExpectInsecureCredential("example.com", "https://example.com",
-                                   "https://example.com/", kUsername1),
-          ExpectInsecureCredential("Example App", "Example App",
-                                   "https://example.com/", kUsername2)));
+          ExpectInsecureCredential(
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername1),
+          ExpectInsecureCredential(
+              "Example App", "Example App",
+              "https://example.com/.well-known/change-password", kUsername2)));
 }
 
 // Verify that computation of weak credentials notifies observers.
@@ -352,10 +359,11 @@ TEST_F(PasswordCheckDelegateTest, WeakCheckWhenUserSignedOut) {
   delegate().StartPasswordCheck();
   RunUntilIdle();
 
-  EXPECT_THAT(delegate().GetWeakCredentials(),
-              ElementsAre(ExpectInsecureCredential(
-                  "example.com", "https://example.com", "https://example.com/",
-                  kUsername1)));
+  EXPECT_THAT(
+      delegate().GetWeakCredentials(),
+      ElementsAre(ExpectInsecureCredential(
+          "example.com", "https://example.com",
+          "https://example.com/.well-known/change-password", kUsername1)));
   EXPECT_EQ(api::passwords_private::PASSWORD_CHECK_STATE_SIGNED_OUT,
             delegate().GetPasswordCheckStatus().state);
 }
@@ -388,21 +396,23 @@ TEST_F(PasswordCheckDelegateTest, GetCompromisedCredentialsOrders) {
       delegate().GetCompromisedCredentials(),
       ElementsAre(
           ExpectCompromisedCredential(
-              "example.com", "https://example.com", "https://example.com/",
-              kUsername2, base::TimeDelta::FromMinutes(2), "2 minutes ago",
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername2,
+              base::TimeDelta::FromMinutes(2), "2 minutes ago",
               api::passwords_private::COMPROMISE_TYPE_PHISHED),
           ExpectCompromisedCredential(
               "example.org", "http://www.example.org",
-              "http://www.example.org/", kUsername1,
+              "http://www.example.org/.well-known/change-password", kUsername1,
               base::TimeDelta::FromMinutes(4), "4 minutes ago",
               api::passwords_private::COMPROMISE_TYPE_PHISHED),
           ExpectCompromisedCredential(
-              "example.com", "https://example.com", "https://example.com/",
-              kUsername1, base::TimeDelta::FromMinutes(1), "1 minute ago",
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername1,
+              base::TimeDelta::FromMinutes(1), "1 minute ago",
               api::passwords_private::COMPROMISE_TYPE_LEAKED),
           ExpectCompromisedCredential(
               "example.org", "http://www.example.org",
-              "http://www.example.org/", kUsername2,
+              "http://www.example.org/.well-known/change-password", kUsername2,
               base::TimeDelta::FromMinutes(3), "3 minutes ago",
               api::passwords_private::COMPROMISE_TYPE_LEAKED)));
 }
@@ -434,21 +444,23 @@ TEST_F(PasswordCheckDelegateTest, GetCompromisedCredentialsHandlesTimes) {
       delegate().GetCompromisedCredentials(),
       ElementsAre(
           ExpectCompromisedCredential(
-              "example.com", "https://example.com", "https://example.com/",
-              kUsername1, base::TimeDelta::FromSeconds(59), "Just now",
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername1,
+              base::TimeDelta::FromSeconds(59), "Just now",
               api::passwords_private::COMPROMISE_TYPE_LEAKED),
           ExpectCompromisedCredential(
-              "example.com", "https://example.com", "https://example.com/",
-              kUsername2, base::TimeDelta::FromSeconds(60), "1 minute ago",
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername2,
+              base::TimeDelta::FromSeconds(60), "1 minute ago",
               api::passwords_private::COMPROMISE_TYPE_LEAKED),
           ExpectCompromisedCredential(
               "example.org", "http://www.example.org",
-              "http://www.example.org/", kUsername1,
+              "http://www.example.org/.well-known/change-password", kUsername1,
               base::TimeDelta::FromDays(100), "3 months ago",
               api::passwords_private::COMPROMISE_TYPE_LEAKED),
           ExpectCompromisedCredential(
               "example.org", "http://www.example.org",
-              "http://www.example.org/", kUsername2,
+              "http://www.example.org/.well-known/change-password", kUsername2,
               base::TimeDelta::FromDays(800), "2 years ago",
               api::passwords_private::COMPROMISE_TYPE_LEAKED)));
 }
@@ -488,22 +500,24 @@ TEST_F(PasswordCheckDelegateTest,
       delegate().GetCompromisedCredentials(),
       ElementsAre(
           ExpectCompromisedCredential(
-              "example.com", "https://example.com", "https://example.com/",
-              kUsername1, base::TimeDelta::FromMinutes(1), "1 minute ago",
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername1,
+              base::TimeDelta::FromMinutes(1), "1 minute ago",
               api::passwords_private::COMPROMISE_TYPE_PHISHED_AND_LEAKED),
           ExpectCompromisedCredential(
               "example.org", "http://www.example.org",
-              "http://www.example.org/", kUsername1,
+              "http://www.example.org/.well-known/change-password", kUsername1,
               base::TimeDelta::FromMinutes(3), "3 minutes ago",
               api::passwords_private::COMPROMISE_TYPE_PHISHED),
           ExpectCompromisedCredential(
               "example.org", "http://www.example.org",
-              "http://www.example.org/", kUsername2,
+              "http://www.example.org/.well-known/change-password", kUsername2,
               base::TimeDelta::FromMinutes(4), "4 minutes ago",
               api::passwords_private::COMPROMISE_TYPE_PHISHED_AND_LEAKED),
           ExpectCompromisedCredential(
-              "example.com", "https://example.com", "https://example.com/",
-              kUsername2, base::TimeDelta::FromMinutes(2), "2 minutes ago",
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername2,
+              base::TimeDelta::FromMinutes(2), "2 minutes ago",
               api::passwords_private::COMPROMISE_TYPE_LEAKED)));
 }
 
@@ -530,7 +544,8 @@ TEST_F(PasswordCheckDelegateTest, GetCompromisedCredentialsInjectsAndroid) {
       delegate().GetCompromisedCredentials(),
       ElementsAre(
           ExpectCompromisedCredential(
-              "Example App", "Example App", "https://example.com/", kUsername2,
+              "Example App", "Example App",
+              "https://example.com/.well-known/change-password", kUsername2,
               base::TimeDelta::FromDays(3), "3 days ago",
               api::passwords_private::COMPROMISE_TYPE_PHISHED),
           ExpectCompromisedCredential(
@@ -538,8 +553,9 @@ TEST_F(PasswordCheckDelegateTest, GetCompromisedCredentialsInjectsAndroid) {
               kUsername1, base::TimeDelta::FromDays(4), "4 days ago",
               api::passwords_private::COMPROMISE_TYPE_PHISHED),
           ExpectCompromisedCredential(
-              "example.com", "https://example.com", "https://example.com/",
-              kUsername1, base::TimeDelta::FromMinutes(5), "5 minutes ago",
+              "example.com", "https://example.com",
+              "https://example.com/.well-known/change-password", kUsername1,
+              base::TimeDelta::FromMinutes(5), "5 minutes ago",
               api::passwords_private::COMPROMISE_TYPE_LEAKED)));
 }
 
@@ -1119,7 +1135,9 @@ TEST_F(PasswordCheckDelegateTest,
 
   // Use a local delegate instead of |delegate()| so that the Password Store can
   // be set-up prior to constructing the object.
-  PasswordCheckDelegate delegate(&profile());
+  SavedPasswordsPresenter new_presenter(&store());
+  PasswordCheckDelegate delegate(&profile(), &new_presenter);
+  new_presenter.Init();
   delegate.StartPasswordCheck(callback1.Get());
   delegate.StartPasswordCheck(callback2.Get());
   RunUntilIdle();
@@ -1127,8 +1145,6 @@ TEST_F(PasswordCheckDelegateTest,
 
 TEST_F(PasswordCheckDelegateTest,
        WellKnownChangePasswordUrlFeatureFlag_enabled) {
-  EnableWellKnownChangePasswordFeatureFlag();
-
   store().AddLogin(MakeSavedPassword(kExampleCom, kUsername1));
   store().AddCompromisedCredentials(
       MakeCompromised(kExampleCom, kUsername1, base::TimeDelta::FromMinutes(1),
@@ -1143,8 +1159,6 @@ TEST_F(PasswordCheckDelegateTest,
 
 TEST_F(PasswordCheckDelegateTest,
        WellKnownChangePasswordUrlFeatureFlagEnabled_androidrealm) {
-  EnableWellKnownChangePasswordFeatureFlag();
-
   store().AddLogin(
       MakeSavedAndroidPassword(kExampleApp, kUsername1, "", kExampleCom));
   store().AddCompromisedCredentials(
@@ -1168,6 +1182,8 @@ TEST_F(PasswordCheckDelegateTest,
 
 TEST_F(PasswordCheckDelegateTest,
        WellKnownChangePasswordUrlFeatureFlagDisabled_androidrealm) {
+  DisableWellKnownChangePasswordFeatureFlag();
+
   store().AddLogin(MakeSavedAndroidPassword(kExampleApp, kUsername2,
                                             "Example App", kExampleCom));
   store().AddCompromisedCredentials(
@@ -1181,6 +1197,8 @@ TEST_F(PasswordCheckDelegateTest,
 
 TEST_F(PasswordCheckDelegateTest,
        WellKnownChangePasswordUrlFeatureFlag_disabled) {
+  DisableWellKnownChangePasswordFeatureFlag();
+
   store().AddLogin(MakeSavedPassword(kExampleCom, kUsername1));
   store().AddCompromisedCredentials(
       MakeCompromised(kExampleCom, kUsername1, base::TimeDelta::FromMinutes(1),

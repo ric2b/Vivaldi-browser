@@ -272,9 +272,6 @@ bool IsLocaleAvailable(const std::string& locale) {
   // under a system locale Chrome is not localized to (e.g.Farsi on Linux),
   // but it'd slow down the start up time a little bit for locales Chrome is
   // localized to. So, we don't call it here.
-  if (!l10n_util::IsLocaleSupportedByOS(locale))
-    return false;
-
   return ui::ResourceBundle::LocaleDataPakExists(locale);
 }
 #endif
@@ -310,8 +307,6 @@ struct AvailableLocalesTraits
       // Filter out locales for which we have only partially populated data
       // and to which Chrome is not localized.
       if (IsLocalePartiallyPopulated(locale_name))
-        continue;
-      if (!l10n_util::IsLocaleSupportedByOS(locale_name))
         continue;
       // Normalize underscores to hyphens because that's what our locale files
       // use.
@@ -743,7 +738,7 @@ base::string16 GetStringFUTF16(int message_id,
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   const base::string16& format_string = rb.GetLocalizedString(message_id);
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   // Make sure every replacement string is being used, so we don't just
   // silently fail to insert one. If |offsets| is non-NULL, then don't do this
   // check as the code may simply want to find the placeholders rather than

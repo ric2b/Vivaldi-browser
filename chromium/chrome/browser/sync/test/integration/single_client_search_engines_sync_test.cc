@@ -15,8 +15,7 @@
 class SingleClientSearchEnginesSyncTest : public SyncTest {
  public:
   SingleClientSearchEnginesSyncTest() : SyncTest(SINGLE_CLIENT) {}
-
-  ~SingleClientSearchEnginesSyncTest() override {}
+  ~SingleClientSearchEnginesSyncTest() override = default;
 
   bool SetupClients() override {
     if (!SyncTest::SetupClients()) {
@@ -32,14 +31,17 @@ class SingleClientSearchEnginesSyncTest : public SyncTest {
     return true;
   }
 
- private:
-  DISALLOW_COPY_AND_ASSIGN(SingleClientSearchEnginesSyncTest);
+  bool UseVerifier() override {
+    // TODO(crbug.com/1137771): rewrite test to not use verifier.
+    return true;
+  }
 };
 
 IN_PROC_BROWSER_TEST_F(SingleClientSearchEnginesSyncTest, Sanity) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
   ASSERT_TRUE(search_engines_helper::ServiceMatchesVerifier(0));
-  search_engines_helper::AddSearchEngine(0, 0);
+  search_engines_helper::AddSearchEngine(/*profile_index=*/0,
+                                         /*keyword=*/"test0");
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   ASSERT_TRUE(search_engines_helper::ServiceMatchesVerifier(0));
 }

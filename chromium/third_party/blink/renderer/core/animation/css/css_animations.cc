@@ -432,11 +432,9 @@ AnimationTimeDelta IterationElapsedTime(const AnimationEffect& effect,
   return iteration_duration * (iteration_boundary - iteration_start);
 }
 
-CSSScrollTimeline* CreateCSSScrollTimeline(Element* element,
-                                           StyleRuleScrollTimeline* rule) {
-  if (!rule)
-    return nullptr;
-  CSSScrollTimeline::Options options(element, *rule);
+CSSScrollTimeline* CreateCSSScrollTimeline(
+    Element* element,
+    const CSSScrollTimeline::Options& options) {
   if (!options.IsValid())
     return nullptr;
   auto* scroll_timeline =
@@ -450,17 +448,45 @@ CSSScrollTimeline* CreateCSSScrollTimeline(Element* element,
   return scroll_timeline;
 }
 
+CSSScrollTimeline* FindMatchingCachedTimeline(
+    Document& document,
+    const AtomicString& name,
+    const CSSScrollTimeline::Options& options) {
+  auto* cached_timeline = DynamicTo<CSSScrollTimeline>(
+      document.GetDocumentAnimations().FindCachedCSSScrollTimeline(name));
+  if (cached_timeline && cached_timeline->Matches(options))
+    return cached_timeline;
+  return nullptr;
+}
+
 AnimationTimeline* ComputeTimeline(Element* element,
                                    const StyleNameOrKeyword& timeline_name,
-                                   StyleRuleScrollTimeline* rule) {
+                                   StyleRuleScrollTimeline* rule,
+                                   AnimationTimeline* existing_timeline) {
+  Document& document = element->GetDocument();
   if (timeline_name.IsKeyword()) {
     if (timeline_name.GetKeyword() == CSSValueID::kAuto)
-      return &element->GetDocument().Timeline();
+      return &document.Timeline();
     DCHECK_EQ(timeline_name.GetKeyword(), CSSValueID::kNone);
     return nullptr;
   }
   if (rule) {
-    if (auto* timeline = CreateCSSScrollTimeline(element, rule))
+    CSSScrollTimeline::Options options(element, *rule);
+
+    const AtomicString& name = timeline_name.GetName().GetValue();
+    // When multiple animations refer to the same @scroll-timeline, the same
+    // CSSScrollTimeline instance should be shared.
+    if (auto* timeline = FindMatchingCachedTimeline(document, name, options))
+      return timeline;
+    // When the incoming options match the existing timeline (associated with
+    // an existing animation), we can continue to use the existing timeline,
+    // since creating a new timeline from the options would just yield an
+    // identical timeline.
+    if (auto* timeline = DynamicTo<CSSScrollTimeline>(existing_timeline)) {
+      if (timeline->Matches(options))
+        return existing_timeline;
+    }
+    if (auto* timeline = CreateCSSScrollTimeline(element, options))
       return timeline;
   }
   return nullptr;
@@ -517,9 +543,12 @@ bool ComputedValuesEqual(const PropertyHandle& property,
         ComputedStyleUtils::ComputedPropertyValue(property.GetCSSProperty(), a);
     const CSSValue* b_val =
         ComputedStyleUtils::ComputedPropertyValue(property.GetCSSProperty(), b);
-    DCHECK(a_val);
-    DCHECK(b_val);
-    return *a_val == *b_val;
+    // Computed values can be null if not able to parse.
+    if (a_val && b_val)
+      return *a_val == *b_val;
+    // Fallback to the zoom-unaware comparator if either value could not be
+    // parsed.
+    return CSSPropertyEquality::PropertiesEqual(property, a, b);
   }
 }
 
@@ -713,22 +742,46 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
             toggle_pause_state = true;
         }
 
-        // TODO(crbug.com/1097053): Support updating timelines.
+        bool will_be_playing =
+            toggle_pause_state ? animation->Paused() : animation->Playing();
+
+        AnimationTimeline* timeline = existing_animation->Timeline();
+        if (!is_animation_style_change && !animation->GetIgnoreCSSTimeline()) {
+          timeline = ComputeTimeline(&element, timeline_name,
+                                     scroll_timeline_rule, timeline);
+        }
+
         if (keyframes_rule != existing_animation->style_rule ||
             keyframes_rule->Version() !=
                 existing_animation->style_rule_version ||
             existing_animation->specified_timing != specified_timing ||
-            is_paused != was_paused || logical_property_mapping_change) {
+            is_paused != was_paused || logical_property_mapping_change ||
+            timeline != existing_animation->Timeline()) {
           DCHECK(!is_animation_style_change);
+
+          base::Optional<TimelinePhase> inherited_phase;
+          base::Optional<double> inherited_time;
+
+          if (timeline) {
+            inherited_phase = base::make_optional(timeline->Phase());
+            inherited_time = animation->UnlimitedCurrentTime();
+
+            if (will_be_playing &&
+                ((timeline != existing_animation->Timeline()) ||
+                 animation->ResetsCurrentTimeOnResume())) {
+              if (!timeline->IsMonotonicallyIncreasing())
+                inherited_time = timeline->CurrentTimeSeconds();
+            }
+          }
+
           update.UpdateAnimation(
               existing_animation_index, animation,
               *MakeGarbageCollected<InertEffect>(
                   CreateKeyframeEffectModel(resolver, animating_element,
                                             element, &style, parent_style, name,
                                             keyframe_timing_function.get(), i),
-                  timing, is_paused, animation->UnlimitedCurrentTime(),
-                  base::nullopt),
-              specified_timing, keyframes_rule,
+                  timing, is_paused, inherited_time, inherited_phase),
+              specified_timing, keyframes_rule, timeline,
               animation_data->PlayStateList());
           if (toggle_pause_state)
             update.ToggleAnimationIndexPaused(existing_animation_index);
@@ -736,7 +789,8 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
       } else {
         DCHECK(!is_animation_style_change);
         AnimationTimeline* timeline =
-            ComputeTimeline(&element, timeline_name, scroll_timeline_rule);
+            ComputeTimeline(&element, timeline_name, scroll_timeline_rule,
+                            nullptr /* existing_timeline */);
         base::Optional<TimelinePhase> inherited_phase;
         base::Optional<double> inherited_time;
         if (timeline) {
@@ -868,6 +922,10 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
         effect->SetModel(entry.effect->Model());
       effect->UpdateSpecifiedTiming(entry.effect->SpecifiedTiming());
     }
+    if (entry.animation->timeline() != entry.timeline) {
+      entry.animation->setTimeline(entry.timeline);
+      To<CSSAnimation>(*entry.animation).ResetIgnoreCSSTimeline();
+    }
 
     running_animations_[entry.index]->Update(entry);
   }
@@ -927,7 +985,8 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
     // After cancellation, transitions must be downgraded or they'll fail
     // to be considered when retriggering themselves. This can happen if
     // the transition is captured through getAnimations then played.
-    if (auto* effect = DynamicTo<KeyframeEffect>(animation->effect()))
+    effect = DynamicTo<KeyframeEffect>(animation->effect());
+    if (effect)
       effect->DowngradeToNormal();
     animation->Update(kTimingUpdateOnDemand);
   }
@@ -980,7 +1039,8 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
 
     // Set the current time as the start time for retargeted transitions
     if (retargeted_compositor_transitions.Contains(property)) {
-      animation->setStartTime(element->GetDocument().Timeline().currentTime());
+      animation->setStartTime(
+          element->GetDocument().Timeline().CurrentTimeMilliseconds());
     }
     animation->Update(kTimingUpdateOnDemand);
     running_transition->animation = animation;

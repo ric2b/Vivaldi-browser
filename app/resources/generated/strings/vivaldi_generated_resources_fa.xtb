@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">فقط محتوای انتخاب شده</translation>
 <translation id="1244303850296295656">خطای افزونه</translation>
 <translation id="125220115284141797">پیش‌فرض</translation>
-<translation id="1274977772557788323">‏تنظیمات فضای ذخیره‌سازی Adobe Flash Player</translation>
 <translation id="1297175357211070620">مقصد</translation>
 <translation id="1303101771013849280">‏فایل HTML نشانک‌ها</translation>
 <translation id="1380436189840894976">در هر صورت حالت ناشناس را ترک می‌کنید؟</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">جای‌گذاری به‌عنوان نوشتار ساده</translation>
 <translation id="2249605167705922988">برای مثال 5-1، 8، 13-11</translation>
 <translation id="225240747099314620">اجازه به شناسه‌ها برای محتوای محافظت شده (ممکن است نیاز به راه‌اندازی مجدد رایانه باشد)</translation>
-<translation id="2263497240924215535">(غیرفعال شد)</translation>
 <translation id="2277255602909579701">همه کوکی‌ها و داده‌های سایت</translation>
 <translation id="2280486287150724112">حاشیه راست</translation>
 <translation id="2282146716419988068">‏پردازش GPU</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">فعال کردن مجدد</translation>
 <translation id="2721037002783622288">&amp;جستجوی <ph name="SEARCH_ENGINE" /> برای تصویر</translation>
+<translation id="2783321960289401138">ایجاد میان‌بر...</translation>
 <translation id="2785873697295365461">توصیف‌گرهای فایل</translation>
 <translation id="2809586584051668049">و <ph name="NUMBER_ADDITIONAL_DISABLED" /> مورد دیگر</translation>
 <translation id="2812989263793994277">تصویری نشان داده نشود</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">‏دستگاه‌های MIDI</translation>
 <translation id="3021678814754966447">&amp;مشاهده‌ی منبع قاب</translation>
 <translation id="3036546437875325427">‏فعال کردن Flash</translation>
-<translation id="3038675903128704560">به هیچ سایتی اجازه داده نشود تا برای دسترسی به رایانه‌تان از افزایه استفاده کند</translation>
 <translation id="3046910703532196514">صفحه وب، کامل</translation>
 <translation id="3067198360141518313">اجرای این پلاگین</translation>
 <translation id="3080207940057008665">یکی از نرم‌افزارهای رایانه‌ی شما، قالبی را اضافه نموده که ممکن است بر کارکرد ویوالدی تأثیر بگذارد.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">ممکن است این برنامه افزودنی خراب شده باشد.</translation>
 <translation id="3387614642886316601">استفاده از غلط‌گیر املایی بهبودیافته</translation>
 <translation id="3432227430032737297">حذف همه‌ی موارد نشان‌ داده شده</translation>
-<translation id="3440761377721825626">وقتی سایتی می‌خواهد از افزایه‌ای برای دسترسی به رایانه‌تان استفاده کند، سؤال شود</translation>
 <translation id="345693547134384690">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="3494769164076977169">هنگامی که سایتی پس از اولین فایل سعی در دانلود خودکار سایر فایل‌ها دارد، از کاربر سوال شود (توصیه می‌شود)</translation>
 <translation id="3505030558724226696">لغو دسترسی دستگاه</translation>
 <translation id="3511307672085573050">کپی آدر&amp;س پیوند</translation>
-<translation id="3523642406908660543">اگر سایتی می‌خواهد برای دسترسی به رایانه‌تان از افزایه‌ای استفاده کند، سؤال شود (توصیه می‌شود)</translation>
 <translation id="354068948465830244">می‌تواند داده‌های سایت را خوانده و تغییر دهد</translation>
 <translation id="3560034655160545939">&amp;غلط‌گیر املایی</translation>
 <translation id="3574917942258583917">در هر صورت از حالت ناشناس خارج می‌شوید؟</translation>
 <translation id="357886715122934472">‏&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; می‌خواهد چاپگر &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; را با گروهی که شما مالک آن هستید، به اشتراک بگذارد: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. اگر بپذیرید، تمام اعضای گروه می‌توانند با چاپگر چاپ کنند.</translation>
 <translation id="3587482841069643663">همه</translation>
 <translation id="3627588569887975815">گشودن پیوند در پنجره‌ی حالت &amp;ناشناس</translation>
+<translation id="3627879631695760395">نصب <ph name="APP" />…</translation>
 <translation id="3668823961463113931">کنترل‌کننده‌ها</translation>
 <translation id="3678156199662914018">برنامهٔ افزودنی: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">درخواست اشتراک‌گذاری صفحه <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">بازیابی تنظیمات</translation>
 <translation id="4434045419905280838">پنجره‌های بازشو و تغییر مسیرها</translation>
 <translation id="4478664379124702289">ذخیره‌ی &amp;پیوند به‌عنوان...</translation>
-<translation id="4552089082226364758">فلش</translation>
 <translation id="4579581181964204535">ارسال محتوای <ph name="HOST_NAME" /> امکان‌پذیر نیست.</translation>
 <translation id="4593021220803146968">&amp;رفتن به <ph name="URL" /></translation>
 <translation id="4595560905247879544">برنامه‌ها و افزونه‌ها فقط توسط مدیر (<ph name="CUSTODIAN_NAME" />) قابل تغییر هستند.</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">ناشناس</translation>
 <translation id="5860491529813859533">فعال‌سازی</translation>
 <translation id="5867841422488265304">نشانی وب را جستجو ویا تایپ کنید</translation>
-<translation id="5908769186679515905">‏اجرای Flash در سایت‌ها مسدود شود</translation>
 <translation id="5910363049092958439">ذ&amp;خیره‌ی فایل تصویری به‌عنوان...</translation>
 <translation id="5956585768868398362">آیا این همان صفحه جستجویی است که انتظار داشتید؟</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> اوج مصرف)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">دسترسی رد شد.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />×<ph name="VERTICAL_DPI" /> نقطه در اینچ</translation>
 <translation id="7309257895202129721">نمایش &amp;کنترل‌ها</translation>
-<translation id="7311079019872751559">دسترسی خارج از محیط امن به افزونه</translation>
 <translation id="7385854874724088939">هنگام چاپ، اشتباهی رخ داده است. لطفاً چاپگر خود را بررسی کنید و دوباره امتحان کنید.</translation>
 <translation id="7412226954991670867">حافظه‌ی واحد گرافیکی</translation>
 <translation id="7421925624202799674">&amp;مشاهده منبع صفحه</translation>
@@ -477,6 +471,7 @@
 <translation id="9027459031423301635">گشودن پیوند در &amp;زبانه‌ی جدید</translation>
 <translation id="9056810968620647706">مورد منطبقی یافت نشد.</translation>
 <translation id="9137916601698928395">گشودن پیوند به‌عنوان <ph name="USER" /></translation>
+<translation id="91568222606626347">ایجاد میان‌بر...</translation>
 <translation id="916607977885256133">تصویر در تصویر</translation>
 <translation id="9170848237812810038">&amp;واگرد</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" اضافه شد</translation>

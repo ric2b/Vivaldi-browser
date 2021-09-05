@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -482,15 +482,6 @@ void StoragePartitionImplMap::PostCreateInitialization(
   if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
     partition->GetCacheStorageContext()->SetBlobParametersForCache(
         ChromeBlobStorageContext::GetFor(browser_context_));
-
-    if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-      GetIOThreadTaskRunner({})->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              &ServiceWorkerContextWrapper::InitializeResourceContext,
-              partition->GetServiceWorkerContext(),
-              browser_context_->GetResourceContext()));
-    }
 
     // Use PostTask() instead of RunOrPostTaskOnThread() because not posting a
     // task causes it to run before the CacheStorageManager has been

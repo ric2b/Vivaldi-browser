@@ -629,7 +629,7 @@ TEST_F(ShellUtilShortcutTest, ClearShortcutArguments) {
   ASSERT_TRUE(base::PathExists(shortcut1_path));
   ShellUtil::ShortcutProperties expected_properties1(test_properties_);
 
-  // Shortcut 2: targets "chrome.exe"; has 1 whitelisted argument.
+  // Shortcut 2: targets "chrome.exe"; has 1 argument in the allow list.
   test_properties_.set_shortcut_name(L"Chrome 2");
   test_properties_.set_arguments(L"--profile-directory=\"Profile 2\"");
   ASSERT_TRUE(ShellUtil::CreateOrUpdateShortcut(
@@ -971,6 +971,57 @@ TEST_F(ShellUtilRegistryTest, DeleteFileAssociations) {
                                     L"Software\\Classes\\.test2", KEY_READ));
   EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
   EXPECT_EQ(L"SomeOtherApp", value);
+}
+
+TEST_F(ShellUtilRegistryTest, AddApplicationClass) {
+  // Add TestApp application class and verify registry entries.
+  EXPECT_TRUE(ShellUtil::AddApplicationClass(
+      base::string16(kTestProgid), OpenCommand(), kTestApplicationName,
+      kTestFileTypeName, base::FilePath(kTestIconPath)));
+
+  base::win::RegKey key;
+  std::wstring value;
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
+  EXPECT_EQ(L"Test File Type", value);
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.Open(HKEY_CURRENT_USER,
+                     L"Software\\Classes\\TestApp\\DefaultIcon", KEY_READ));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
+  EXPECT_EQ(L"D:\\test.ico,0", value);
+  ASSERT_EQ(
+      ERROR_SUCCESS,
+      key.Open(HKEY_CURRENT_USER,
+               L"Software\\Classes\\TestApp\\shell\\open\\command", KEY_READ));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"", &value));
+  EXPECT_EQ(L"\"C:\\test.exe\" --single-argument %1", value);
+
+  // The Application subkey and values are only required by Windows 8 and later.
+  if (base::win::GetVersion() >= base::win::Version::WIN8) {
+    ASSERT_EQ(ERROR_SUCCESS,
+              key.Open(HKEY_CURRENT_USER,
+                       L"Software\\Classes\\TestApp\\Application", KEY_READ));
+    EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"ApplicationName", &value));
+    EXPECT_EQ(L"Test Application", value);
+    EXPECT_EQ(ERROR_SUCCESS, key.ReadValue(L"ApplicationIcon", &value));
+    EXPECT_EQ(L"D:\\test.ico,0", value);
+  }
+}
+
+TEST_F(ShellUtilRegistryTest, DeleteApplicationClass) {
+  ASSERT_TRUE(ShellUtil::AddApplicationClass(
+      kTestProgid, OpenCommand(), kTestApplicationName, kTestFileTypeName,
+      base::FilePath(kTestIconPath)));
+
+  base::win::RegKey key;
+  std::wstring value;
+  ASSERT_EQ(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
+
+  EXPECT_TRUE(ShellUtil::DeleteApplicationClass(kTestProgid));
+  EXPECT_NE(ERROR_SUCCESS, key.Open(HKEY_CURRENT_USER,
+                                    L"Software\\Classes\\TestApp", KEY_READ));
 }
 
 TEST_F(ShellUtilRegistryTest, GetFileAssociationsAndAppName) {

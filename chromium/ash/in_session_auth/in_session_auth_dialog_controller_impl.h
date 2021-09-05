@@ -12,12 +12,18 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "ui/aura/window_tracker.h"
 
 class AccountId;
+
+namespace aura {
+class Window;
+}
 
 namespace ash {
 
 class InSessionAuthDialogClient;
+class WebAuthnRequestRegistrarImpl;
 
 // InSessionAuthDialogControllerImpl persists as long as UI is running.
 class InSessionAuthDialogControllerImpl : public InSessionAuthDialogController {
@@ -31,21 +37,28 @@ class InSessionAuthDialogControllerImpl : public InSessionAuthDialogController {
 
   // InSessionAuthDialogController overrides
   void SetClient(InSessionAuthDialogClient* client) override;
-  void ShowAuthenticationDialog(FinishCallback finish_callback) override;
+  void ShowAuthenticationDialog(aura::Window* source_window,
+                                const std::string& origin_name,
+                                FinishCallback finish_callback) override;
   void DestroyAuthenticationDialog() override;
-  void AuthenticateUserWithPasswordOrPin(
-      const std::string& password,
-      OnAuthenticateCallback callback) override;
+  void AuthenticateUserWithPin(const std::string& pin,
+                               OnAuthenticateCallback callback) override;
   void AuthenticateUserWithFingerprint(
       base::OnceCallback<void(bool, FingerprintState)> callback) override;
+  void OpenInSessionAuthHelpPage() override;
   void Cancel() override;
 
  private:
   bool IsFingerprintAvailable(const AccountId& account_id);
   void OnStartFingerprintAuthSession(AccountId account_id,
                                      uint32_t auth_methods,
+                                     aura::Window* source_window,
+                                     const std::string& origin_name,
                                      bool success);
-  void OnPinCanAuthenticate(uint32_t auth_methods, bool pin_auth_available);
+  void OnPinCanAuthenticate(uint32_t auth_methods,
+                            aura::Window* source_window,
+                            const std::string& origin_name,
+                            bool pin_auth_available);
 
   // Callback to execute when auth on ChromeOS side completes.
   void OnAuthenticateComplete(OnAuthenticateCallback callback, bool success);
@@ -55,6 +68,9 @@ class InSessionAuthDialogControllerImpl : public InSessionAuthDialogController {
       bool success,
       FingerprintState fingerprint_state);
 
+  // Called when auth succeeds to close the dialog and report success.
+  void OnAuthSuccess();
+
   InSessionAuthDialogClient* client_ = nullptr;
 
   // Callback to provide result of the entire authentication flow to
@@ -62,6 +78,10 @@ class InSessionAuthDialogControllerImpl : public InSessionAuthDialogController {
   FinishCallback finish_callback_;
 
   std::unique_ptr<InSessionAuthDialog> dialog_;
+
+  aura::WindowTracker source_window_tracker_;
+
+  std::unique_ptr<WebAuthnRequestRegistrarImpl> webauthn_request_registrar_;
 
   base::WeakPtrFactory<InSessionAuthDialogControllerImpl> weak_factory_{this};
 };

@@ -30,9 +30,7 @@
 #include "ui/base/x/x11_os_exchange_data_provider.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/events/event_utils.h"
-#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
-#include "ui/gfx/x/x11_types.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
@@ -487,7 +485,7 @@ class X11DragDropClientTest : public ViewsTestBase {
     set_native_widget_type(NativeWidgetType::kDesktop);
 
     ViewsTestBase::SetUp();
-    // TODO(msisov): rewrite these tests for ozone and non-ozone Linux.
+    // TODO(crbug.com/1096425): Once non-Ozone X11 is deprecated, re-work this.
     if (features::IsUsingOzonePlatform())
       GTEST_SKIP();
 

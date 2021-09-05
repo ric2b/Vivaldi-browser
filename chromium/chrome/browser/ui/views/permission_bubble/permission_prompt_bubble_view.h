@@ -7,20 +7,20 @@
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/ui/views/permission_bubble/permission_prompt_style.h"
 #include "components/permissions/permission_prompt.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-#include "ui/views/controls/button/button.h"
 
 class Browser;
 
 // Bubble that prompts the user to grant or deny a permission request from a
 // website.
-class PermissionPromptBubbleView : public views::ButtonListener,
-                                   public views::BubbleDialogDelegateView {
+class PermissionPromptBubbleView : public views::BubbleDialogDelegateView {
  public:
   PermissionPromptBubbleView(Browser* browser,
                              permissions::PermissionPrompt::Delegate* delegate,
-                             base::TimeTicks permission_requested_time);
+                             base::TimeTicks permission_requested_time,
+                             PermissionPromptStyle prompt_style);
   ~PermissionPromptBubbleView() override;
 
   void Show();
@@ -34,12 +34,9 @@ class PermissionPromptBubbleView : public views::ButtonListener,
   bool ShouldShowCloseButton() const override;
   base::string16 GetAccessibleWindowTitle() const override;
   base::string16 GetWindowTitle() const override;
-  gfx::Size CalculatePreferredSize() const override;
-
-  // Button Listener
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   void AcceptPermission();
+  void AcceptPermissionThisTime();
   void DenyPermission();
   void ClosingPermission();
 
@@ -64,6 +61,11 @@ class PermissionPromptBubbleView : public views::ButtonListener,
 
   // Record UMA Permissions.Prompt.TimeToDecision metric.
   void RecordDecision();
+
+  // Determines whether the current request should also display an
+  // "Allow only this time" option in addition to the "Allow on every visit"
+  // option.
+  bool ShouldShowAllowThisTimeButton() const;
 
   Browser* const browser_;
   permissions::PermissionPrompt::Delegate* const delegate_;

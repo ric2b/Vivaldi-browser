@@ -11,7 +11,6 @@
 
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
-#include "ash/public/cpp/window_state_type.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
 #include "base/compiler_specific.h"
 #include "base/optional.h"
@@ -22,6 +21,7 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom-forward.h"
 #include "chromeos/services/machine_learning/public/mojom/model.mojom.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -208,6 +208,17 @@ class AutotestPrivateGetVisibleNotificationsFunction
 
  private:
   ~AutotestPrivateGetVisibleNotificationsFunction() override;
+  ResponseAction Run() override;
+};
+
+class AutotestPrivateRemoveAllNotificationsFunction : public ExtensionFunction {
+ public:
+  AutotestPrivateRemoveAllNotificationsFunction();
+  DECLARE_EXTENSION_FUNCTION("autotestPrivate.removeAllNotifications",
+                             AUTOTESTPRIVATE_REMOVEALLNOTIFICATIONS)
+
+ private:
+  ~AutotestPrivateRemoveAllNotificationsFunction() override;
   ResponseAction Run() override;
 };
 
@@ -996,7 +1007,8 @@ class AutotestPrivateSetAppWindowStateFunction : public ExtensionFunction {
   ~AutotestPrivateSetAppWindowStateFunction() override;
   ResponseAction Run() override;
 
-  void WindowStateChanged(ash::WindowStateType expected_type, bool success);
+  void WindowStateChanged(chromeos::WindowStateType expected_type,
+                          bool success);
 
   std::unique_ptr<WindowStateChangeObserver> window_state_observer_;
 };
@@ -1092,6 +1104,21 @@ class AutotestPrivateRemoveActiveDeskFunction : public ExtensionFunction {
 
  private:
   ~AutotestPrivateRemoveActiveDeskFunction() override;
+  ResponseAction Run() override;
+
+  void OnAnimationComplete();
+};
+
+class AutotestPrivateActivateAdjacentDesksToTargetIndexFunction
+    : public ExtensionFunction {
+ public:
+  AutotestPrivateActivateAdjacentDesksToTargetIndexFunction();
+  DECLARE_EXTENSION_FUNCTION(
+      "autotestPrivate.activateAdjacentDesksToTargetIndex",
+      AUTOTESTPRIVATE_ACTIVATEADJACENTDESKSTOTARGETINDEX)
+
+ private:
+  ~AutotestPrivateActivateAdjacentDesksToTargetIndexFunction() override;
   ResponseAction Run() override;
 
   void OnAnimationComplete();
@@ -1275,7 +1302,7 @@ class AutotestPrivateStopSmoothnessTrackingFunction : public ExtensionFunction {
   ~AutotestPrivateStopSmoothnessTrackingFunction() override;
   ResponseAction Run() override;
 
-  void OnReportSmoothness(int smoothness);
+  void OnReportData(const cc::FrameSequenceMetrics::CustomReportData& data);
 };
 
 class AutotestPrivateWaitForAmbientPhotoAnimationFunction

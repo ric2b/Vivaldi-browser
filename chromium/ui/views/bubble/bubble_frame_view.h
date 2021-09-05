@@ -30,8 +30,7 @@ class FootnoteContainerView;
 class ImageView;
 
 // The non-client frame view of bubble-styled widgets.
-class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
-                                     public ButtonListener {
+class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView {
  public:
   enum class PreferredArrowAdjustment { kMirror, kOffset };
 
@@ -46,10 +45,12 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
       const base::string16& title_text);
 
   // Creates a close button used in the corner of the dialog.
-  static std::unique_ptr<Button> CreateCloseButton(ButtonListener* listener);
+  static std::unique_ptr<Button> CreateCloseButton(
+      Button::PressedCallback callback);
 
   // Creates a minimize button used in the corner of the dialog.
-  static std::unique_ptr<Button> CreateMinimizeButton(ButtonListener* listener);
+  static std::unique_ptr<Button> CreateMinimizeButton(
+      Button::PressedCallback callback);
 
   // NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -84,9 +85,6 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
       const ViewHierarchyChangedDetails& details) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
 
-  // ButtonListener:
-  void ButtonPressed(Button* sender, const ui::Event& event) override;
-
   // Use SetBubbleBorder() not SetBorder().
   void SetBubbleBorder(std::unique_ptr<BubbleBorder> border);
 
@@ -119,6 +117,9 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
     footnote_margins_ = footnote_margins;
   }
 
+  PreferredArrowAdjustment preferred_arrow_adjustment() const {
+    return preferred_arrow_adjustment_;
+  }
   void set_preferred_arrow_adjustment(PreferredArrowAdjustment adjustment) {
     preferred_arrow_adjustment_ = adjustment;
   }

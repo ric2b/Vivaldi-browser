@@ -7,7 +7,6 @@
 #include "base/memory/ptr_util.h"
 #include "chromeos/components/print_management/mojom/printing_manager.mojom.h"
 #include "chromeos/components/print_management/url_constants.h"
-#include "chromeos/components/web_applications/manifest_request_filter.h"
 #include "chromeos/grit/chromeos_print_management_resources.h"
 #include "chromeos/grit/chromeos_print_management_resources_map.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
@@ -16,6 +15,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/resources/grit/webui_generated_resources.h"
 #include "ui/resources/grit/webui_resources.h"
 
 namespace chromeos {
@@ -38,8 +38,8 @@ void SetUpWebUIDataSource(content::WebUIDataSource* source,
     source->AddResourcePath(path, resource.value);
   }
   source->SetDefaultResource(default_resource);
-  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
-  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
+  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
+  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
 }
 
 void AddPrintManagementStrings(content::WebUIDataSource* html_source) {
@@ -134,9 +134,6 @@ PrintManagementUI::PrintManagementUI(
                                IDR_PRINTING_MANAGER_MOJO_LITE_JS);
 
   AddPrintManagementStrings(html_source.get());
-  web_app::SetManifestRequestFilter(html_source.get(),
-                                    IDR_PRINT_MANAGEMENT_MANIFEST,
-                                    IDS_PRINT_MANAGEMENT_APP_NAME);
 
   content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
                                 html_source.release());

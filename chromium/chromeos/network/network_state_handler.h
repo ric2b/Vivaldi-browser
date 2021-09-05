@@ -340,12 +340,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // Sets the list of devices on which portal check is enabled.
   void SetCheckPortalList(const std::string& check_portal_list);
 
-  // Sets a provider id (e.g. extension id) for a hex encoded SSID. If
-  // |provider_id| is empty the entry will be erased.
-  void SetCaptivePortalProviderForHexSsid(const std::string& hex_ssid,
-                                          const std::string& provider_id,
-                                          const std::string& provider_name);
-
   // Sets the Manager.WakeOnLan property. Note: we do not track this state, we
   // only set it.
   void SetWakeOnLanEnabled(bool enabled);
@@ -514,10 +508,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // Ensure a valid GUID for NetworkState.
   void UpdateGuid(NetworkState* network);
 
-  // Look for a matching captive portal provider in
-  // |hex_ssid_to_captive_portal_provider_map_|.
-  void UpdateCaptivePortalProvider(NetworkState* network);
-
   // Update networkState properties from the associated DeviceState.
   void UpdateCellularStateFromDevice(NetworkState* network);
 
@@ -580,6 +570,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
 
   // Called to ask observers to scan for networks.
   void NotifyScanRequested(const NetworkTypePattern& type);
+
+  // Called whenever Device.Scanning state transitions to true.
+  void NotifyScanStarted(const DeviceState* device);
 
   // Called whenever Device.Scanning state transitions to false.
   void NotifyScanCompleted(const DeviceState* device);
@@ -671,17 +664,19 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkStateHandler
   // List of interfaces on which portal check is enabled.
   std::string check_portal_list_;
 
+  // Tracks the default network portal state for triggering PortalStateChanged.
+  NetworkState::PortalState default_network_portal_state_ =
+      NetworkState::PortalState::kUnknown;
+
+  // Tracks the default network proxy config for triggering PortalStateChanged.
+  base::Value default_network_proxy_config_;
+
   // DHCP Hostname.
   std::string hostname_;
 
   // Map of network specifiers to guids. Contains an entry for each
   // NetworkState that is not saved in a profile.
   SpecifierGuidMap specifier_guid_map_;
-
-  // Map of hex SSIDs to captive portal provider info.
-  // Used to set NetworkState::captive_portal_provider_.
-  std::map<std::string, NetworkState::CaptivePortalProviderInfo>
-      hex_ssid_to_captive_portal_provider_map_;
 
   // The state corresponding to the Tether device type. This value is managed by
   // the Tether component.

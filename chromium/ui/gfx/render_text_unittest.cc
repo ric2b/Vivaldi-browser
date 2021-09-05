@@ -21,7 +21,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_record.h"
@@ -1492,8 +1491,8 @@ TEST_P(RenderTextTestWithTextIndexConversionCase, TextIndexConversion) {
   U16_SET_CP_START(text.c_str(), 0, reveal_index);
 
   // Validate that codepoints still match.
-  base::i18n::UTF16CharIterator iter(&render_text->text());
-  while (!iter.end()) {
+  for (base::i18n::UTF16CharIterator iter(render_text->text()); !iter.end();
+       iter.Advance()) {
     size_t text_index = iter.array_pos();
     size_t display_index = test_api()->TextIndexToDisplayIndex(text_index);
     EXPECT_EQ(text_index, test_api()->DisplayIndexToTextIndex(display_index));
@@ -1503,8 +1502,6 @@ TEST_P(RenderTextTestWithTextIndexConversionCase, TextIndexConversion) {
     } else {
       EXPECT_EQ(display_text[display_index], text[text_index]);
     }
-
-    iter.Advance();
   }
 }
 
@@ -1894,19 +1891,26 @@ INSTANTIATE_TEST_SUITE_P(ItemizeTextToRunsEmoji,
                          ::testing::ValuesIn(kEmojiRunListCases),
                          RenderTextTestWithRunListCase::ParamInfoToString);
 
+struct ElideTextTestOptions {
+  const ElideBehavior elide_behavior;
+};
+
 struct ElideTextCase {
   const char* test_name;
   const wchar_t* text;
   const wchar_t* display_text;
+  int available_width_as_glyph_count = -1;
 };
+
+using ElideTextCaseParam = std::tuple<ElideTextTestOptions, ElideTextCase>;
 
 class RenderTextTestWithElideTextCase
     : public RenderTextTest,
-      public ::testing::WithParamInterface<ElideTextCase> {
+      public ::testing::WithParamInterface<ElideTextCaseParam> {
  public:
   static std::string ParamInfoToString(
-      ::testing::TestParamInfo<ElideTextCase> param_info) {
-    return param_info.param.test_name;
+      ::testing::TestParamInfo<ElideTextCaseParam> param_info) {
+    return std::get<1>(param_info.param).test_name;
   }
 };
 
@@ -1915,7 +1919,8 @@ TEST_P(RenderTextTestWithElideTextCase, ElideText) {
   constexpr int kGlyphWidth = 10;
   SetGlyphWidth(kGlyphWidth);
 
-  ElideTextCase param = GetParam();
+  const ElideTextTestOptions options = std::get<0>(GetParam());
+  const ElideTextCase param = std::get<1>(GetParam());
   const base::string16 text = WideToUTF16(param.text);
   const base::string16 display_text = WideToUTF16(param.display_text);
 
@@ -1926,16 +1931,70 @@ TEST_P(RenderTextTestWithElideTextCase, ElideText) {
 
   // Set the text and the eliding behavior.
   render_text->SetText(text);
-  render_text->SetDisplayRect(
-      Rect(0, 0, expected_width + kGlyphWidth / 2, 100));
-  render_text->SetElideBehavior(ELIDE_TAIL);
+  render_text->SetElideBehavior(options.elide_behavior);
   render_text->SetWhitespaceElision(false);
+
+  // Set the display width to trigger the eliding.
+  if (param.available_width_as_glyph_count >= 0) {
+    render_text->SetDisplayRect(Rect(
+        0, 0,
+        param.available_width_as_glyph_count * kGlyphWidth + kGlyphWidth / 2,
+        100));
+  } else {
+    render_text->SetDisplayRect(
+        Rect(0, 0, expected_width + kGlyphWidth / 2, 100));
+  }
+
   const int elided_width = render_text->GetContentWidth();
 
   EXPECT_EQ(text, render_text->text());
   EXPECT_EQ(display_text, render_text->GetDisplayText());
   EXPECT_EQ(elided_width, expected_width);
 }
+
+const ElideTextCase kElideHeadTextCases[] = {
+    {"empty", L"", L""},
+    {"letter_m_tail0", L"M", L""},
+    {"letter_m_tail1", L"M", L"M"},
+    {"no_eliding", L"012ab", L"012ab"},
+    {"ltr_3", L"abc", L"abc"},
+    {"ltr_2", L"abc", L"\u2026c"},
+    {"ltr_1", L"abc", L"\u2026"},
+    {"ltr_0", L"abc", L""},
+    {"rtl_3", L"\u05d0\u05d1\u05d2", L"\u05d0\u05d1\u05d2"},
+    {"rtl_2", L"\u05d0\u05d1\u05d2", L"\u2026\u05d2"},
+    {"rtl_1", L"\u05d0\u05d1\u05d2", L"\u2026"},
+    {"rtl_0", L"\u05d0\u05d1\u05d2", L""},
+    {"ltr_rtl_5", L"abc\u05d0\u05d1\u05d2", L"\u2026c\u05d0\u05d1\u05d2"},
+    {"ltr_rtl_4", L"abc\u05d0\u05d1\u05d2", L"\u2026\u05d0\u05d1\u05d2"},
+    {"ltr_rtl_3", L"abc\u05d0\u05d1\u05d2", L"\u2026\u05d1\u05d2"},
+    {"rtl_ltr_5", L"\u05d0\u05d1\u05d2abc", L"\u2026\u05d2abc"},
+    {"rtl_ltr_4", L"\u05d0\u05d1\u05d2abc", L"\u2026abc"},
+    {"rtl_ltr_3", L"\u05d0\u05d1\u05d2abc", L"\u2026bc"},
+    {"bidi_1", L"a\u05d1b\u05d1c012", L"\u2026b\u05d1c012"},
+    {"bidi_2", L"a\u05d1b\u05d1c012", L"\u2026\u05d1c012"},
+    {"bidi_3", L"a\u05d1b\u05d1c012", L"\u2026c012"},
+    // Test surrogate pairs. No surrogate pair should be partially elided.
+    {"surrogate1", L"abc\U0001D11E\U0001D122x", L"\u2026\U0001D11E\U0001D122x"},
+    {"surrogate2", L"abc\U0001D11E\U0001D122x", L"\u2026\U0001D122x"},
+    {"surrogate3", L"abc\U0001D11E\U0001D122x", L"\u2026x"},
+    // Test combining character sequences. U+0915 U+093F forms a compound
+    // glyph, as does U+0915 U+0942. No combining sequence should be partially
+    // elided.
+    {"combining1", L"0123\u0915\u093f\u0915\u0942456",
+     L"\u2026\u0915\u0942456"},
+    {"combining2", L"0123\u0915\u093f\u0915\u0942456", L"\u2026456"},
+    // 𝄞 (U+1D11E, MUSICAL SYMBOL G CLEF) should be fully elided.
+    {"emoji1", L"012\U0001D11Ex", L"\u2026\U0001D11Ex"},
+    {"emoji2", L"012\U0001D11Ex", L"\u2026x"},
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ElideHead,
+    RenderTextTestWithElideTextCase,
+    testing::Combine(testing::Values(ElideTextTestOptions{ELIDE_HEAD}),
+                     testing::ValuesIn(kElideHeadTextCases)),
+    RenderTextTestWithElideTextCase::ParamInfoToString);
 
 const ElideTextCase kElideTailTextCases[] = {
     {"empty", L"", L""},
@@ -1985,10 +2044,108 @@ const ElideTextCase kElideTailTextCases[] = {
     {"emoji", L"012\U0001D11Ex", L"012\u2026"},
 };
 
-INSTANTIATE_TEST_SUITE_P(ElideTail,
-                         RenderTextTestWithElideTextCase,
-                         ::testing::ValuesIn(kElideTailTextCases),
-                         RenderTextTestWithElideTextCase::ParamInfoToString);
+INSTANTIATE_TEST_SUITE_P(
+    ElideTail,
+    RenderTextTestWithElideTextCase,
+    testing::Combine(testing::Values(ElideTextTestOptions{ELIDE_TAIL}),
+                     testing::ValuesIn(kElideTailTextCases)),
+    RenderTextTestWithElideTextCase::ParamInfoToString);
+
+const ElideTextCase kElideTruncateTextCases[] = {
+    {"empty", L"", L""},
+    {"letter_m_tail0", L"M", L""},
+    {"letter_m_tail1", L"M", L"M"},
+    {"no_eliding", L"012ab", L"012ab"},
+    {"ltr_3", L"abc", L"abc"},
+    {"ltr_2", L"abc", L"ab"},
+    {"ltr_1", L"abc", L"a"},
+    {"ltr_0", L"abc", L""},
+    {"rtl_3", L"\u05d0\u05d1\u05d2", L"\u05d0\u05d1\u05d2"},
+    {"rtl_2", L"\u05d0\u05d1\u05d2", L"\u05d0\u05d1"},
+    {"rtl_1", L"\u05d0\u05d1\u05d2", L"\u05d0"},
+    {"rtl_0", L"\u05d0\u05d1\u05d2", L""},
+    {"ltr_rtl_5", L"abc\u05d0\u05d1\u05d2", L"abc\u05d0\u05d1"},
+    {"ltr_rtl_4", L"abc\u05d0\u05d1\u05d2", L"abc\u05d0"},
+    {"ltr_rtl_3", L"abc\u05d0\u05d1\u05d2", L"abc"},
+    {"ltr_rtl_2", L"abc\u05d0\u05d1\u05d2", L"ab"},
+    {"rtl_ltr_5", L"\u05d0\u05d1\u05d2abc", L"\u05d0\u05d1\u05d2ab"},
+    {"rtl_ltr_4", L"\u05d0\u05d1\u05d2abc", L"\u05d0\u05d1\u05d2a"},
+    {"rtl_ltr_3", L"\u05d0\u05d1\u05d2abc", L"\u05d0\u05d1\u05d2"},
+    {"rtl_ltr_2", L"\u05d0\u05d1\u05d2abc", L"\u05d0\u05d1"},
+    {"bidi_1", L"012a\u05d1b\u05d1c", L"012a\u05d1b\u05d1"},
+    {"bidi_2", L"012a\u05d1b\u05d1c", L"012a\u05d1b"},
+    {"bidi_3", L"012a\u05d1b\u05d1c", L"012a\u05d1"},
+    {"bidi_4", L"012a\u05d1b\u05d1c", L"012a\u05d1"},
+    // Test surrogate pairs. The first pair 𝄞 'MUSICAL SYMBOL G CLEF' U+1D11E
+    // should be kept, and the second pair 𝄢 'MUSICAL SYMBOL F CLEF' U+1D122
+    // should be removed. No surrogate pair should be partially elided.
+    {"surrogate1", L"0123\U0001D11E\U0001D122x", L"0123\U0001D11E\U0001D122"},
+    {"surrogate2", L"0123\U0001D11E\U0001D122x", L"0123\U0001D11E"},
+    {"surrogate3", L"0123\U0001D11E\U0001D122x", L"0123"},
+    // Test combining character sequences. U+0915 U+093F forms a compound
+    // glyph, as does U+0915 U+0942. The first should be kept; the second
+    // removed. No combining sequence should be partially elided.
+    {"combining", L"0123\u0915\u093f\u0915\u0942456", L"0123\u0915\u093f"},
+    // 𝄞 (U+1D11E, MUSICAL SYMBOL G CLEF) should be fully elided.
+    {"emoji1", L"012\U0001D11Ex", L"012\U0001D11E"},
+    {"emoji2", L"012\U0001D11Ex", L"012"},
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ElideTruncate,
+    RenderTextTestWithElideTextCase,
+    testing::Combine(testing::Values(ElideTextTestOptions{TRUNCATE}),
+                     testing::ValuesIn(kElideTruncateTextCases)),
+    RenderTextTestWithElideTextCase::ParamInfoToString);
+
+const ElideTextCase kElideEmailTextCases[] = {
+    // Invalid email text.
+    {"empty", L"", L""},
+    {"invalid_char1", L"x", L""},
+    {"invalid_char3", L"xyz", L"x\u2026"},
+    {"invalid_amp", L"@", L""},
+    {"invalid_no_prefix0", L"@y", L""},
+    {"invalid_no_prefix1", L"@y", L"\u2026"},
+    {"invalid_no_prefix2", L"@xyz", L"@x\u2026"},
+    {"invalid_no_suffix0", L"x@", L""},
+    {"invalid_no_suffix1", L"x@", L"\u2026"},
+    {"invalid_no_suffix2", L"xyz@", L"x\u2026@"},
+
+    {"at1", L"@", L"@"},
+    {"at2", L"@@", L"\u2026", 1},
+    {"at3", L"@@@", L"\u2026", 2},
+    {"at4", L"@@@@", L"@\u2026@", 3},
+
+    {"small1", L"a@b", L"\u2026", 1},
+    {"small2", L"a@b", L"\u2026", 2},
+    {"small3", L"a@b", L"a@b", 3},
+    {"small_username3", L"xyz@b", L"\u2026", 3},
+    {"small_username4", L"xyz@b", L"x\u2026@b", 4},
+    {"small_username5", L"xyz@b", L"xyz@b", 5},
+    {"small_domain3", L"a@xyz", L"\u2026", 3},
+    {"small_domain4", L"a@xyz", L"a@x\u2026", 4},
+    {"small_domain5", L"a@xyz", L"a@xyz", 5},
+
+    // Valid email.
+    {"email_small", L"a@b.com", L"\u2026"},
+    {"email_nobody3", L"nobody@gmail.com", L"\u2026", 3},
+    {"email_nobody4", L"nobody@gmail.com", L"\u2026", 4},
+    {"email_nobody5", L"nobody@gmail.com", L"n\u2026@g\u2026", 5},
+    {"email_nobody6", L"nobody@gmail.com", L"no\u2026@g\u2026", 6},
+    {"email_nobody7", L"nobody@gmail.com", L"no\u2026@g\u2026m", 7},
+    {"email_nobody8", L"nobody@gmail.com", L"nob\u2026@g\u2026m", 8},
+    {"email_nobody9", L"nobody@gmail.com", L"nob\u2026@gm\u2026m", 9},
+    {"email_nobody10", L"nobody@gmail.com", L"nobo\x2026@gm\u2026m", 10},
+    {"email_root", L"root@localhost", L"r\u2026@l\u2026", 5},
+    {"email_myself", L"myself@127.0.0.1", L"my\u2026@1\u2026", 6},
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ElideEmail,
+    RenderTextTestWithElideTextCase,
+    testing::Combine(testing::Values(ElideTextTestOptions{ELIDE_EMAIL}),
+                     testing::ValuesIn(kElideEmailTextCases)),
+    RenderTextTestWithElideTextCase::ParamInfoToString);
 
 TEST_F(RenderTextTest, ElidedText_NoTrimWhitespace) {
   // This test requires glyphs to be the same width.
@@ -7519,6 +7676,36 @@ TEST_F(RenderTextTest, LineEndSelections) {
   }
 }
 
+TEST_F(RenderTextTest, GetSubstringBounds) {
+  const float kGlyphWidth = 5;
+  SetGlyphWidth(kGlyphWidth);
+  RenderText* render_text = GetRenderText();
+  render_text->SetText(UTF8ToUTF16("abc"));
+  render_text->SetCursorEnabled(false);
+  render_text->SetElideBehavior(NO_ELIDE);
+
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(0, 1)).width(), kGlyphWidth);
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(1, 2)).width(), kGlyphWidth);
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(1, 3)).width(), 2 * kGlyphWidth);
+
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(0, 0)).width(), 0);
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(3, 3)).width(), 0);
+
+  // Apply eliding so display text has 2 visible character.
+  render_text->SetDisplayRect(Rect(0, 0, 2 * kGlyphWidth, 100));
+  render_text->SetElideBehavior(TRUNCATE);
+
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(0, 1)).width(), kGlyphWidth);
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(1, 2)).width(), kGlyphWidth);
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(1, 3)).width(), kGlyphWidth);
+  // Check a fully elided range.
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(2, 3)).width(), 0);
+
+  // Empty ranges result in empty rect.
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(0, 0)).width(), 0);
+  EXPECT_EQ(GetSubstringBoundsUnion(Range(3, 3)).width(), 0);
+}
+
 // Tests that GetSubstringBounds rounds outward when glyphs have floating-point
 // widths.
 TEST_F(RenderTextTest, GetSubstringBoundsFloatingPoint) {
@@ -7653,6 +7840,17 @@ TEST_F(RenderTextTest, MergeIntersectingRects) {
   test::RenderTextTestApi::MergeIntersectingRects(test_rects);
   ASSERT_EQ(1u, test_rects.size());
   EXPECT_EQ(Rect(0, 0, 17, 10), test_rects[0]);
+
+  // The first 3 rects are adjacent horizontally. The 4th rect is adjacent to
+  // the 3rd rect vertically, but is not merged. The last rect is adjacent to
+  // the 4th rect.
+  test_rects = std::vector<Rect>{Rect(0, 0, 10, 10), Rect(10, 0, 10, 10),
+                                 Rect(20, 0, 10, 10), Rect(20, 10, 10, 10),
+                                 Rect(30, 10, 10, 10)};
+  test::RenderTextTestApi::MergeIntersectingRects(test_rects);
+  ASSERT_EQ(2u, test_rects.size());
+  EXPECT_EQ(Rect(0, 0, 30, 10), test_rects[0]);
+  EXPECT_EQ(Rect(20, 10, 20, 10), test_rects[1]);
 }
 
 // Ensures that text is centered vertically and consistently when either the

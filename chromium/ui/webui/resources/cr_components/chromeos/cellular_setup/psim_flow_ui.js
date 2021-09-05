@@ -71,6 +71,18 @@ cr.define('cellularSetup', function() {
       delegate: Object,
 
       /**
+       * Carrier name; used in dialog title to show the current carrier
+       * name being setup
+       * @type {string}
+       */
+      nameOfCarrierPendingSetup: {
+        type: String,
+        notify: true,
+        computed: 'getCarrierText(' +
+            'selectedPSimPageName_, cellularMetadata_.*)',
+      },
+
+      /**
        * @type {!cellularSetup.PSimUIState}
        * @private
        */
@@ -112,25 +124,6 @@ cr.define('cellularSetup', function() {
         type: Object,
         value: null,
       },
-
-      /**
-       * Whether try again should be shown in the button bar.
-       * @private {boolean}
-       */
-      showTryAgainButton_: {type: Boolean, value: false},
-
-      /**
-       * Whether finish button should be shown in the button bar.
-       * @private {boolean}
-       */
-      showFinishButton_: {type: Boolean, value: false},
-
-      /**
-       * Whether cancel button should be shown in the button bar.
-       * @private {boolean}
-       */
-      showCancelButton_: {type: Boolean, value: false},
-
     },
 
     observers: [
@@ -142,9 +135,9 @@ cr.define('cellularSetup', function() {
 
     /**
      * Provides an interface to the CellularSetup Mojo service.
-     * @private {?cellular_setup.MojoInterfaceProvider}
+     * @private {?chromeos.cellularSetup.mojom.CellularSetupRemote}
      */
-    mojoInterfaceProvider_: null,
+    cellularSetupRemote_: null,
 
     /**
      * Delegate responsible for routing activation started/finished events.
@@ -168,8 +161,7 @@ cr.define('cellularSetup', function() {
 
     /** @override */
     created() {
-      this.mojoInterfaceProvider_ =
-          cellular_setup.MojoInterfaceProviderImpl.getInstance();
+      this.cellularSetupRemote_ = cellular_setup.getCellularSetupRemote();
     },
 
     /**
@@ -220,6 +212,7 @@ cr.define('cellularSetup', function() {
             done: cellularSetup.ButtonState.HIDDEN,
             next: cellularSetup.ButtonState.SHOWN_BUT_DISABLED,
             tryAgain: cellularSetup.ButtonState.HIDDEN,
+            skipDiscovery: cellularSetup.ButtonState.HIDDEN,
           };
           break;
         case PSimUIState.ACTIVATION_SUCCESS:
@@ -231,6 +224,7 @@ cr.define('cellularSetup', function() {
             done: cellularSetup.ButtonState.HIDDEN,
             next: cellularSetup.ButtonState.SHOWN_AND_ENABLED,
             tryAgain: cellularSetup.ButtonState.HIDDEN,
+            skipDiscovery: cellularSetup.ButtonState.HIDDEN,
           };
           break;
         case PSimUIState.WAITING_FOR_ACTIVATION_TO_FINISH:
@@ -241,6 +235,7 @@ cr.define('cellularSetup', function() {
             done: cellularSetup.ButtonState.SHOWN_AND_ENABLED,
             next: cellularSetup.ButtonState.HIDDEN,
             tryAgain: cellularSetup.ButtonState.HIDDEN,
+            skipDiscovery: cellularSetup.ButtonState.HIDDEN,
           };
           break;
         default:
@@ -271,6 +266,15 @@ cr.define('cellularSetup', function() {
         default:
           assertNotReached();
       }
+    },
+
+    /** @private */
+    getCarrierText() {
+      if (this.selectedPSimPageName_ === PSimPageName.PROVISIONING &&
+          this.cellularMetadata_) {
+        return this.cellularMetadata_.carrier;
+      }
+      return '';
     },
 
     /** @private */
@@ -364,7 +368,7 @@ cr.define('cellularSetup', function() {
                */
               (this));
 
-      this.mojoInterfaceProvider_.getMojoServiceRemote()
+      this.cellularSetupRemote_
           .startActivation(
               this.activationDelegateReceiver_.$.bindNewPipeAndPassRemote())
           .then(

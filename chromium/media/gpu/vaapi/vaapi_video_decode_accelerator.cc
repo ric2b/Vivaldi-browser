@@ -10,7 +10,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/cpu.h"
 #include "base/files/scoped_file.h"
 #include "base/json/json_writer.h"
@@ -205,8 +205,8 @@ bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
 
   vaapi_wrapper_ = VaapiWrapper::CreateForVideoCodec(
       VaapiWrapper::kDecode, profile,
-      base::Bind(&ReportVaapiErrorToUMA,
-                 "Media.VaapiVideoDecodeAccelerator.VAAPIError"));
+      base::BindRepeating(&ReportVaapiErrorToUMA,
+                          "Media.VaapiVideoDecodeAccelerator.VAAPIError"));
 
   UMA_HISTOGRAM_BOOLEAN("Media.VAVDA.VaapiWrapperCreationSuccess",
                         vaapi_wrapper_.get());
@@ -349,7 +349,7 @@ void VaapiVideoDecodeAccelerator::QueueInputBuffer(
     auto input_buffer = std::make_unique<InputBuffer>(
         bitstream_id, std::move(buffer),
         BindToCurrentLoop(
-            base::Bind(&Client::NotifyEndOfBitstreamBuffer, client_)));
+            base::BindOnce(&Client::NotifyEndOfBitstreamBuffer, client_)));
     input_buffers_.push(std::move(input_buffer));
   }
 
@@ -615,8 +615,8 @@ void VaapiVideoDecodeAccelerator::TryFinishSurfaceSetChange() {
     profile_ = new_profile;
     auto new_vaapi_wrapper = VaapiWrapper::CreateForVideoCodec(
         VaapiWrapper::kDecode, profile_,
-        base::Bind(&ReportVaapiErrorToUMA,
-                   "Media.VaapiVideoDecodeAccelerator.VAAPIError"));
+        base::BindRepeating(&ReportVaapiErrorToUMA,
+                            "Media.VaapiVideoDecodeAccelerator.VAAPIError"));
     RETURN_AND_NOTIFY_ON_FAILURE(new_vaapi_wrapper.get(),
                                  "Failed creating VaapiWrapper",
                                  INVALID_ARGUMENT, );
@@ -699,19 +699,19 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
   std::vector<VASurfaceID> va_surface_ids;
   scoped_refptr<VaapiWrapper> vaapi_wrapper_for_picture = vaapi_wrapper_;
 
-  // The X11/ANGLE implementation can use |vaapi_wrapper_| to copy from an
-  // internal libva buffer into an X Pixmap without having to use a processing
-  // wrapper.
-#if !defined(USE_X11)
-  // If we aren't in BufferAllocationMode::kNone, we have to allocate a
-  // |vpp_vaapi_wrapper_| for VaapiPicture to DownloadFromSurface() the VA's
-  // internal decoded frame.
-  if (buffer_allocation_mode_ != BufferAllocationMode::kNone) {
+  const bool requires_vpp =
+      vaapi_picture_factory_->NeedsProcessingPipelineForDownloading();
+  // If we aren't in BufferAllocationMode::kNone mode and the VaapiPicture
+  // implementation we get from |vaapi_picture_factory_| requires the video
+  // processing pipeline for downloading the decoded frame from the internal
+  // surface, we need to create a |vpp_vaapi_wrapper_|.
+  if (requires_vpp && buffer_allocation_mode_ != BufferAllocationMode::kNone) {
     if (!vpp_vaapi_wrapper_) {
       vpp_vaapi_wrapper_ = VaapiWrapper::Create(
           VaapiWrapper::kVideoProcess, VAProfileNone,
-          base::Bind(&ReportVaapiErrorToUMA,
-                     "Media.VaapiVideoDecodeAccelerator.Vpp.VAAPIError"));
+          base::BindRepeating(
+              &ReportVaapiErrorToUMA,
+              "Media.VaapiVideoDecodeAccelerator.Vpp.VAAPIError"));
       RETURN_AND_NOTIFY_ON_FAILURE(vpp_vaapi_wrapper_,
                                    "Failed to initialize VppVaapiWrapper",
                                    PLATFORM_FAILURE, );
@@ -722,8 +722,6 @@ void VaapiVideoDecodeAccelerator::AssignPictureBuffers(
     }
     vaapi_wrapper_for_picture = vpp_vaapi_wrapper_;
   }
-
-#endif  // !defined(USE_X11)
 
   for (size_t i = 0; i < buffers.size(); ++i) {
     // TODO(b/139460315): Create with buffers[i] once the AMD driver issue is
@@ -1195,9 +1193,12 @@ VaapiVideoDecodeAccelerator::GetSupportedProfiles(
     const gpu::GpuDriverBugWorkarounds& workarounds) {
   VideoDecodeAccelerator::SupportedProfiles profiles =
       VaapiWrapper::GetSupportedDecodeProfiles(workarounds);
-  // VaVDA never supported VP9 Profile 2, but VaapiWrapper does. Filter it out.
+  // VaVDA never supported VP9 Profile 2 and AV1, but VaapiWrapper does. Filter
+  // them out.
   base::EraseIf(profiles, [](const auto& profile) {
-    return profile.profile == VP9PROFILE_PROFILE2;
+    return profile.profile == VP9PROFILE_PROFILE2 ||
+           VideoCodecProfileToVideoCodec(profile.profile) ==
+               VideoCodec::kCodecAV1;
   });
   return profiles;
 }

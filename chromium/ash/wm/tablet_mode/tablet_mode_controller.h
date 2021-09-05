@@ -23,6 +23,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/dbus/power/power_manager_client.h"
+#include "chromeos/ui/base/tablet_state.h"
 #include "ui/aura/window_occlusion_tracker.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -345,10 +346,11 @@ class ASH_EXPORT TabletModeController
   // present, convertible device cannot see accelerometer data.
   bool have_seen_accelerometer_data_ = false;
 
-  // True if ChromeOS EC lid angle driver is present. In this case Chrome does
-  // not calculate lid angle itself, but will reply on the tablet-mode flag that
-  // EC sends to decide if the device should in tablet mode.
-  bool ec_lid_angle_driver_present_ = false;
+  // If ECLidAngleDriverStatus is supported, Chrome does not calculate lid angle
+  // itself, but will reply on the tablet-mode flag that EC sends to decide if
+  // the device should in tablet mode.
+  ECLidAngleDriverStatus ec_lid_angle_driver_status_ =
+      ECLidAngleDriverStatus::UNKNOWN;
 
   // Whether the lid angle can be detected by browser. If it's true, the device
   // is a convertible device (both screen acclerometer and keyboard acclerometer
@@ -430,7 +432,7 @@ class ASH_EXPORT TabletModeController
   gfx::Vector3dF base_smoothed_;
   gfx::Vector3dF lid_smoothed_;
 
-  State state_ = State::kInClamshellMode;
+  chromeos::TabletState tablet_state_;
 
   // Calls RecordLidAngle() periodically.
   base::RepeatingTimer record_lid_angle_timer_;

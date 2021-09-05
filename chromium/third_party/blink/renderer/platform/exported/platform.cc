@@ -38,6 +38,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
@@ -47,6 +49,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_cache_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/heap/gc_task_runner.h"
+#include "third_party/blink/renderer/platform/heap/process_heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/canvas_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters_memory_dump_provider.h"
 #include "third_party/blink/renderer/platform/instrumentation/memory_pressure_listener.h"
@@ -310,6 +313,20 @@ Platform::CreateSharedOffscreenGraphicsContext3DProvider() {
 std::unique_ptr<WebGraphicsContext3DProvider>
 Platform::CreateWebGPUGraphicsContext3DProvider(
     const WebURL& top_document_url) {
+  return nullptr;
+}
+
+scoped_refptr<viz::RasterContextProvider>
+Platform::SharedMainThreadContextProvider() {
+  return nullptr;
+}
+
+scoped_refptr<viz::RasterContextProvider>
+Platform::SharedCompositorWorkerContextProvider() {
+  return nullptr;
+}
+
+scoped_refptr<gpu::GpuChannelHost> Platform::EstablishGpuChannelSync() {
   return nullptr;
 }
 

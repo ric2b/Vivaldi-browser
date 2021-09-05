@@ -67,6 +67,7 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_menu_list_popup.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_range.h"
+#include "third_party/blink/renderer/modules/accessibility/ax_selection.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_sparse_attribute_setter.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/language.h"
@@ -157,6 +158,8 @@ const RoleEntry kRoles[] = {
     {"doc-noteref", ax::mojom::blink::Role::kDocNoteRef},
     {"doc-notice", ax::mojom::blink::Role::kDocNotice},
     {"doc-pagebreak", ax::mojom::blink::Role::kDocPageBreak},
+    {"doc-pagefooter", ax::mojom::blink::Role::kDocPageFooter},
+    {"doc-pageheader", ax::mojom::blink::Role::kDocPageHeader},
     {"doc-pagelist", ax::mojom::blink::Role::kDocPageList},
     {"doc-part", ax::mojom::blink::Role::kDocPart},
     {"doc-preface", ax::mojom::blink::Role::kDocPreface},
@@ -321,6 +324,8 @@ const InternalRoleEntry kInternalRoles[] = {
     {ax::mojom::blink::Role::kDocNoteRef, "DocNoteref"},
     {ax::mojom::blink::Role::kDocNotice, "DocNotice"},
     {ax::mojom::blink::Role::kDocPageBreak, "DocPagebreak"},
+    {ax::mojom::blink::Role::kDocPageFooter, "DocPageFooter"},
+    {ax::mojom::blink::Role::kDocPageHeader, "DocPageHeader"},
     {ax::mojom::blink::Role::kDocPageList, "DocPagelist"},
     {ax::mojom::blink::Role::kDocPart, "DocPart"},
     {ax::mojom::blink::Role::kDocPreface, "DocPreface"},
@@ -510,15 +515,47 @@ HTMLDialogElement* GetActiveDialogElement(Node* node) {
   return node->GetDocument().ActiveModalDialog();
 }
 
-bool HasUninheritedHiddenVisibility(const ComputedStyle* style, Node* node) {
-  // Is this the root of a visibility:hidden or visibility:collapsed subtree?
-  if (style->Visibility() == EVisibility::kVisible)
-    return false;
-  Node* parent = node->parentNode();
-  if (!parent)
-    return true;
-  return !parent->GetComputedStyle() ||
-         parent->GetComputedStyle()->Visibility() == EVisibility::kVisible;
+// TODO(dmazzoni): replace this with a call to RoleName().
+std::string GetEquivalentAriaRoleString(const ax::mojom::blink::Role role) {
+  switch (role) {
+    case ax::mojom::blink::Role::kArticle:
+      return "article";
+    case ax::mojom::blink::Role::kBanner:
+      return "banner";
+    case ax::mojom::blink::Role::kButton:
+      return "button";
+    case ax::mojom::blink::Role::kComplementary:
+      return "complementary";
+    case ax::mojom::blink::Role::kFigure:
+      return "figure";
+    case ax::mojom::blink::Role::kFooter:
+      return "contentinfo";
+    case ax::mojom::blink::Role::kHeader:
+      return "banner";
+    case ax::mojom::blink::Role::kHeading:
+      return "heading";
+    case ax::mojom::blink::Role::kImage:
+      return "img";
+    case ax::mojom::blink::Role::kMain:
+      return "main";
+    case ax::mojom::blink::Role::kNavigation:
+      return "navigation";
+    case ax::mojom::blink::Role::kRadioButton:
+      return "radio";
+    case ax::mojom::blink::Role::kRegion:
+      return "region";
+    case ax::mojom::blink::Role::kSection:
+      // A <section> element uses the 'region' ARIA role mapping.
+      return "region";
+    case ax::mojom::blink::Role::kSlider:
+      return "slider";
+    case ax::mojom::blink::Role::kTime:
+      return "time";
+    default:
+      break;
+  }
+
+  return std::string();
 }
 
 }  // namespace
@@ -697,13 +734,11 @@ void AXObject::GetSparseAXAttributes(
     AXSparseAttributeClient& sparse_attribute_client) const {
   AXSparseAttributeAOMPropertyClient property_client(*ax_object_cache_,
                                                      sparse_attribute_client);
-  HashSet<QualifiedName> shadowed_aria_attributes;
   AccessibleNode* accessible_node = GetAccessibleNode();
 
   // Virtual nodes for AOM are still tied to the AXTree.
   if (accessible_node && IsVirtualObject())
-    accessible_node->GetAllAOMProperties(&property_client,
-                                         shadowed_aria_attributes);
+    accessible_node->GetAllAOMProperties(&property_client);
 
   Element* element = GetElement();
   if (!element)
@@ -715,8 +750,6 @@ void AXObject::GetSparseAXAttributes(
   HashSet<QualifiedName> set_attributes;
   for (const Attribute& attr : attributes) {
     set_attributes.insert(attr.GetName());
-    if (shadowed_aria_attributes.Contains(attr.GetName()))
-      continue;
 
     AXSparseAttributeSetter* setter =
         ax_sparse_attribute_setter_map.at(attr.GetName());
@@ -892,7 +925,60 @@ void AXObject::Serialize(ui::AXNodeData* node_data,
                                   Url().GetString().Utf8());
   }
 
+  if (accessibility_mode.has_mode(ui::AXMode::kScreenReader)) {
+    SerializeStyleAttributes(node_data);
+  }
+
   SerializePartialSparseAttributes(node_data);
+
+  if (Element* element = this->GetElement()) {
+    if (const AtomicString& class_name = element->GetClassAttribute()) {
+      TruncateAndAddStringAttribute(
+          node_data, ax::mojom::blink::StringAttribute::kClassName,
+          class_name.Utf8());
+    }
+
+    if (const AtomicString& aria_role =
+            GetAOMPropertyOrARIAAttribute(AOMStringProperty::kRole)) {
+      TruncateAndAddStringAttribute(node_data,
+                                    ax::mojom::blink::StringAttribute::kRole,
+                                    aria_role.Utf8());
+    } else {
+      std::string role_str = GetEquivalentAriaRoleString(RoleValue());
+      if (!role_str.empty()) {
+        TruncateAndAddStringAttribute(node_data,
+                                      ax::mojom::blink::StringAttribute::kRole,
+                                      GetEquivalentAriaRoleString(RoleValue()));
+      }
+    }
+
+    if (IsEditable()) {
+      if (IsEditableRoot()) {
+        node_data->AddBoolAttribute(
+            ax::mojom::blink::BoolAttribute::kEditableRoot, true);
+      }
+
+      if (IsNativeTextControl()) {
+        // Selection offsets are only used for plain text controls, (input of a
+        // text field type, and textarea). Rich editable areas, such as
+        // contenteditables, use AXTreeData.
+        //
+        // TODO(nektar): Remove kTextSelStart and kTextSelEnd from the renderer.
+        const auto ax_selection =
+            AXSelection::FromCurrentSelection(ToTextControl(*element));
+        int start = ax_selection.Base().IsTextPosition()
+                        ? ax_selection.Base().TextOffset()
+                        : ax_selection.Base().ChildIndex();
+        int end = ax_selection.Extent().IsTextPosition()
+                      ? ax_selection.Extent().TextOffset()
+                      : ax_selection.Extent().ChildIndex();
+        node_data->AddIntAttribute(
+            ax::mojom::blink::IntAttribute::kTextSelStart, start);
+        node_data->AddIntAttribute(ax::mojom::blink::IntAttribute::kTextSelEnd,
+                                   end);
+      }
+    }
+  }
 }
 
 void AXObject::SerializeTableAttributes(ui::AXNodeData* node_data) {
@@ -950,12 +1036,99 @@ void AXObject::SerializeTableAttributes(ui::AXNodeData* node_data) {
   }
 }
 
+void AXObject::SerializeStyleAttributes(ui::AXNodeData* node_data) {
+  // Text attributes.
+  if (BackgroundColor()) {
+    node_data->AddIntAttribute(ax::mojom::blink::IntAttribute::kBackgroundColor,
+                               BackgroundColor());
+  }
+
+  if (GetColor()) {
+    node_data->AddIntAttribute(ax::mojom::blink::IntAttribute::kColor,
+                               GetColor());
+  }
+
+  AXObject* parent = ParentObjectUnignored();
+  if (FontFamily().length()) {
+    if (!parent || parent->FontFamily() != FontFamily()) {
+      TruncateAndAddStringAttribute(
+          node_data, ax::mojom::blink::StringAttribute::kFontFamily,
+          FontFamily().Utf8());
+    }
+  }
+
+  // Font size is in pixels.
+  if (FontSize()) {
+    node_data->AddFloatAttribute(ax::mojom::blink::FloatAttribute::kFontSize,
+                                 FontSize());
+  }
+
+  if (FontWeight()) {
+    node_data->AddFloatAttribute(ax::mojom::blink::FloatAttribute::kFontWeight,
+                                 FontWeight());
+  }
+
+  if (RoleValue() == ax::mojom::blink::Role::kListItem &&
+      GetListStyle() != ax::mojom::blink::ListStyle::kNone) {
+    node_data->SetListStyle(GetListStyle());
+  }
+
+  if (GetTextDirection() != ax::mojom::blink::WritingDirection::kNone) {
+    node_data->SetTextDirection(GetTextDirection());
+  }
+
+  if (GetTextPosition() != ax::mojom::blink::TextPosition::kNone) {
+    node_data->AddIntAttribute(ax::mojom::blink::IntAttribute::kTextPosition,
+                               static_cast<int32_t>(GetTextPosition()));
+  }
+
+  int32_t text_style = 0;
+  ax::mojom::blink::TextDecorationStyle text_overline_style;
+  ax::mojom::blink::TextDecorationStyle text_strikethrough_style;
+  ax::mojom::blink::TextDecorationStyle text_underline_style;
+  GetTextStyleAndTextDecorationStyle(&text_style, &text_overline_style,
+                                     &text_strikethrough_style,
+                                     &text_underline_style);
+  if (text_style) {
+    node_data->AddIntAttribute(ax::mojom::blink::IntAttribute::kTextStyle,
+                               text_style);
+  }
+
+  if (text_overline_style != ax::mojom::blink::TextDecorationStyle::kNone) {
+    node_data->AddIntAttribute(
+        ax::mojom::blink::IntAttribute::kTextOverlineStyle,
+        static_cast<int32_t>(text_overline_style));
+  }
+
+  if (text_strikethrough_style !=
+      ax::mojom::blink::TextDecorationStyle::kNone) {
+    node_data->AddIntAttribute(
+        ax::mojom::blink::IntAttribute::kTextStrikethroughStyle,
+        static_cast<int32_t>(text_strikethrough_style));
+  }
+
+  if (text_underline_style != ax::mojom::blink::TextDecorationStyle::kNone) {
+    node_data->AddIntAttribute(
+        ax::mojom::blink::IntAttribute::kTextUnderlineStyle,
+        static_cast<int32_t>(text_underline_style));
+  }
+}
+
 void AXObject::SerializePartialSparseAttributes(ui::AXNodeData* node_data) {
+  if (IsVirtualObject()) {
+    AccessibleNode* accessible_node = GetAccessibleNode();
+    if (accessible_node) {
+      AXNodeDataAOMPropertyClient property_client(*ax_object_cache_,
+                                                  *node_data);
+      accessible_node->GetAllAOMProperties(&property_client);
+    }
+  }
+
   Element* element = GetElement();
   if (!element)
     return;
 
-  TempSetterMap& setter_map = GetTempSetterMap(node_data);
+  TempSetterMap& setter_map = GetTempSetterMap();
   AttributeCollection attributes = element->AttributesWithoutUpdate();
   HashSet<QualifiedName> set_attributes;
   for (const Attribute& attr : attributes) {
@@ -963,7 +1136,7 @@ void AXObject::SerializePartialSparseAttributes(ui::AXNodeData* node_data) {
     AXSparseSetterFunc callback = setter_map.at(attr.GetName());
 
     if (callback)
-      callback.Run(node_data, attr.Value());
+      callback.Run(this, node_data, attr.Value());
   }
 
   if (!element->DidAttachInternals())
@@ -977,7 +1150,7 @@ void AXObject::SerializePartialSparseAttributes(ui::AXNodeData* node_data) {
     AXSparseSetterFunc callback = setter_map.at(attr);
 
     if (callback)
-      callback.Run(node_data, internals_attributes.at(attr));
+      callback.Run(this, node_data, internals_attributes.at(attr));
   }
 }
 
@@ -1356,19 +1529,12 @@ void AXObject::UpdateCachedAttributeValuesIfNeeded() const {
 
   last_modification_count_ = cache.ModificationCount();
 
-  if (GetElement() && !GetLayoutObject() &&
-      !DisplayLockUtilities::NearestLockedExclusiveAncestor(*GetNode())) {
-    // While it's safe to do so, ensure the computed style for display:none
-    // nodes, so that IsHiddenForTextAlternativeCalculation() can determine
-    // whether the node is directly styled as display:none vs hidden because
-    // of display:none on an ancestor.
-    // If there is no computed style, assume that it may be display:none,
-    // since we can't prove otherwise.
-    const ComputedStyle* style = GetElement()->GetComputedStyle();
-    if (!style || style->IsEnsuredInDisplayNone())
-      GetElement()->EnsureComputedStyle();
-  }
   cached_background_color_ = ComputeBackgroundColor();
+  // TODO(aleventhal) Temporary crash fix until CL:2485519 lands.
+  if (IsDetached())
+    return;
+
+  cached_is_hidden_via_style = ComputeIsHiddenViaStyle();
   cached_is_inert_or_aria_hidden_ = ComputeIsInertOrAriaHidden();
   cached_is_descendant_of_leaf_node_ = !!LeafNodeAncestor();
   cached_is_descendant_of_disabled_node_ = !!DisabledAncestor();
@@ -1668,6 +1834,15 @@ const AXObject* AXObject::DisabledAncestor() const {
 }
 
 bool AXObject::ComputeAccessibilityIsIgnoredButIncludedInTree() const {
+  if (RuntimeEnabledFeatures::AccessibilityExposeIgnoredNodesEnabled())
+    return true;
+
+  if (AXObjectCache().IsAriaOwned(this) || HasARIAOwns(GetElement())) {
+    // Always include an aria-owned object. It must be a child of the
+    // element with aria-owns.
+    return true;
+  }
+
   if (!GetNode())
     return false;
 
@@ -1723,6 +1898,10 @@ bool AXObject::ComputeAccessibilityIsIgnoredButIncludedInTree() const {
 
   // Preserve SVG grouping elements.
   if (GetNode() && IsA<SVGGElement>(GetNode()))
+    return true;
+
+  // Preserve nodes with language attributes.
+  if (HasAttribute(html_names::kLangAttr))
     return true;
 
   return false;
@@ -1926,7 +2105,7 @@ bool AXObject::CanSetFocusAttribute() const {
   // TODO(accessibility) Focusable: scrollable with the keyboard.
   // Keyboard-focusable scroll containers feature:
   // https://www.chromestatus.com/feature/5231964663578624
-  // When adding here, remove similar check from ::NameFromContents().
+  // When adding here, remove similar check from ::SupportsNameFromContents().
   // if (RuntimeEnabledFeatures::KeyboardFocusableScrollersEnabled() &&
   //     IsUserScrollable()) {
   //   return true;
@@ -2181,7 +2360,7 @@ String AXObject::RecursiveTextAlternative(
                                 name_from, nullptr, nullptr);
 }
 
-bool AXObject::IsHiddenViaStyle() const {
+bool AXObject::ComputeIsHiddenViaStyle() const {
   Node* node = GetNode();
   if (!node)
     return false;
@@ -2190,15 +2369,27 @@ bool AXObject::IsHiddenViaStyle() const {
   if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*node))
     return true;
 
+  // Style elements in SVG are not display: none, unlike HTML style elements,
+  // but they are still hidden and thus treated as hidden from style.
+  if (IsA<SVGStyleElement>(node))
+    return true;
+
+  // For elements with layout objects we can get their style directly.
   if (GetLayoutObject())
     return GetLayoutObject()->Style()->Visibility() != EVisibility::kVisible;
 
+  // No layout object: must ensure computed style.
   if (Element* element = DynamicTo<Element>(node)) {
-    const ComputedStyle* style = element->GetComputedStyle();
+    const ComputedStyle* style = element->EnsureComputedStyle();
     return !style || style->IsEnsuredInDisplayNone() ||
            style->Visibility() != EVisibility::kVisible;
   }
   return false;
+}
+
+bool AXObject::IsHiddenViaStyle() const {
+  UpdateCachedAttributeValuesIfNeeded();
+  return cached_is_hidden_via_style;
 }
 
 // Return true if this should be removed from accessible name computations,
@@ -2211,6 +2402,7 @@ bool AXObject::IsHiddenViaStyle() const {
 // hiding styles is problematic because it would prevent name contributions from
 // deeper nodes in hidden aria-labelledby subtrees.
 bool AXObject::IsHiddenForTextAlternativeCalculation() const {
+  // aria-hidden=false allows hidden contents to be used in name from contents.
   if (AOMPropertyOrARIAAttributeIsFalse(AOMBooleanProperty::kHidden))
     return false;
 
@@ -2226,37 +2418,18 @@ bool AXObject::IsHiddenForTextAlternativeCalculation() const {
   if (!document || !document->GetFrame())
     return false;
 
-  if (GetLayoutObject()) {
-    return HasUninheritedHiddenVisibility(GetLayoutObject()->Style(),
-                                          GetNode());
-  } else if (GetNode() && IsA<HTMLNoScriptElement>(GetNode())) {
+  // Do not contribute <noscript> to text alternative of an ancestor.
+  if (IsA<HTMLNoScriptElement>(node))
     return true;
-  }
 
-  // This is an important corner case: if a node has no LayoutObject, that means
-  // it's not rendered, but we still may be exploring it as part of a text
-  // alternative calculation, for example if it was explicitly referenced by
-  // aria-labelledby. So we need to explicitly call the style resolver to check
-  // whether it's invisible or display:none, rather than relying on the style
-  // cached in the LayoutObject.
-  auto* element = DynamicTo<Element>(node);
-  if (element && node->isConnected()) {
-    const ComputedStyle* style = element->GetComputedStyle();
-    if (!style)
-      return false;
+  // Always contribute SVG <title> despite it having a hidden style by default.
+  if (IsA<SVGTitleElement>(node))
+    return false;
 
-    if (style->Display() == EDisplay::kNone ||
-        HasUninheritedHiddenVisibility(style, GetNode())) {
-      return true;
-    }
-
-    // Style elements in SVG are not display: none, unlike HTML style elements,
-    // but they are still hidden from all users.
-    if (IsA<SVGElement>(element))
-      return IsA<SVGStyleElement>(element);
-  }
-
-  return false;
+  // If this is hidden but its parent isn't, then it appears the hiding style
+  // targeted this node directly. Do not recurse into it for name from contents.
+  return IsHiddenViaStyle() &&
+         (!ParentObject() || !ParentObject()->IsHiddenViaStyle());
 }
 
 String AXObject::AriaTextAlternative(bool recursive,
@@ -3367,72 +3540,42 @@ AtomicString AXObject::Language() const {
   if (!lang.IsEmpty())
     return lang;
 
-  AXObject* parent = ParentObject();
-  if (parent)
-    return parent->Language();
+  // Only fallback for the root node, propagating this value down the tree is
+  // handled browser side within AXNode::GetLanguage.
+  //
+  // TODO(chrishall): Consider moving this to AXNodeObject or AXLayoutObject as
+  // the kRootWebArea node is currently an AXLayoutObject.
+  if (RoleValue() == ax::mojom::blink::Role::kRootWebArea) {
+    const Document* document = GetDocument();
+    if (document) {
+      // Fall back to the first content language specified in the meta tag.
+      // This is not part of what the HTML5 Standard suggests but it still
+      // appears to be necessary.
+      if (document->ContentLanguage()) {
+        const String content_languages = document->ContentLanguage();
+        Vector<String> languages;
+        content_languages.Split(',', languages);
+        if (!languages.IsEmpty())
+          return AtomicString(languages[0].StripWhiteSpace());
+      }
 
-  const Document* document = GetDocument();
-  if (document) {
-    // Fall back to the first content language specified in the meta tag.
-    // This is not part of what the HTML5 Standard suggests but it still appears
-    // to be necessary.
-    if (document->ContentLanguage()) {
-      const String content_languages = document->ContentLanguage();
-      Vector<String> languages;
-      content_languages.Split(',', languages);
-      if (!languages.IsEmpty())
-        return AtomicString(languages[0].StripWhiteSpace());
+      if (document->GetPage()) {
+        // Use the first accept language preference if present.
+        const String accept_languages =
+            document->GetPage()->GetChromeClient().AcceptLanguages();
+        Vector<String> languages;
+        accept_languages.Split(',', languages);
+        if (!languages.IsEmpty())
+          return AtomicString(languages[0].StripWhiteSpace());
+      }
     }
 
-    if (document->GetPage()) {
-      // Use the first accept language preference if present.
-      const String accept_languages =
-          document->GetPage()->GetChromeClient().AcceptLanguages();
-      Vector<String> languages;
-      accept_languages.Split(',', languages);
-      if (!languages.IsEmpty())
-        return AtomicString(languages[0].StripWhiteSpace());
-    }
+    // As a last resort, return the default language of the browser's UI.
+    AtomicString default_language = DefaultLanguage();
+    return default_language;
   }
 
-  // As a last resort, return the default language of the browser's UI.
-  AtomicString default_language = DefaultLanguage();
-  return default_language;
-}
-
-bool AXObject::HasAttribute(const QualifiedName& attribute) const {
-  Element* element = GetElement();
-  if (!element)
-    return false;
-  if (element->FastHasAttribute(attribute))
-    return true;
-  return HasInternalsAttribute(*element, attribute);
-}
-
-const AtomicString& AXObject::GetAttribute(
-    const QualifiedName& attribute) const {
-  Element* element = GetElement();
-  if (!element)
-    return g_null_atom;
-  const AtomicString& value = element->FastGetAttribute(attribute);
-  if (!value.IsNull())
-    return value;
-  return GetInternalsAttribute(*element, attribute);
-}
-
-bool AXObject::HasInternalsAttribute(Element& element,
-                                     const QualifiedName& attribute) const {
-  if (!element.DidAttachInternals())
-    return false;
-  return element.EnsureElementInternals().HasAttribute(attribute);
-}
-
-const AtomicString& AXObject::GetInternalsAttribute(
-    Element& element,
-    const QualifiedName& attribute) const {
-  if (!element.DidAttachInternals())
-    return g_null_atom;
-  return element.EnsureElementInternals().FastGetAttribute(attribute);
+  return g_null_atom;
 }
 
 //
@@ -3459,7 +3602,7 @@ bool AXObject::IsUserScrollable() const {
   }
 
   return GetLayoutObject() && GetLayoutObject()->IsBox() &&
-         ToLayoutBox(GetLayoutObject())->CanBeScrolledAndHasScrollableArea();
+         To<LayoutBox>(GetLayoutObject())->CanBeScrolledAndHasScrollableArea();
 }
 
 IntPoint AXObject::GetScrollOffset() const {
@@ -3819,7 +3962,7 @@ void AXObject::GetRelativeBounds(AXObject** out_container,
   if (layout_object->IsBox() && layout_object->GetNode() &&
       layout_object->GetNode()->IsFrameOwnerElement()) {
     out_bounds_in_container =
-        FloatRect(ToLayoutBox(layout_object)->PhysicalContentBoxRect());
+        FloatRect(To<LayoutBox>(layout_object)->PhysicalContentBoxRect());
   }
 
   // If the container has a scroll offset, subtract that out because we want our
@@ -3830,7 +3973,7 @@ void AXObject::GetRelativeBounds(AXObject** out_container,
   // Compute the transform between the container's coordinate space and this
   // object.
   TransformationMatrix transform = layout_object->LocalToAncestorTransform(
-      ToLayoutBoxModelObject(container_layout_object));
+      To<LayoutBoxModelObject>(container_layout_object));
 
   // If the transform is just a simple translation, apply that to the
   // bounding box, but if it's a non-trivial transformation like a rotation,
@@ -4148,6 +4291,25 @@ bool AXObject::IsARIAInput(ax::mojom::blink::Role aria_role) {
          aria_role == ax::mojom::blink::Role::kTextFieldWithComboBox;
 }
 
+// static
+bool AXObject::HasARIAOwns(Element* element) {
+  if (!element)
+    return false;
+
+  // A LayoutObject is not required, because an invisible object can still
+  // use aria-owns to point to visible children.
+
+  const AtomicString& aria_owns =
+      element->FastGetAttribute(html_names::kAriaOwnsAttr);
+
+  // TODO: do we need to check !AriaOwnsElements.empty() ? Is that fundamentally
+  // different from HasExplicitlySetAttrAssociatedElements()? And is an element
+  // even necessary in the case of virtual nodes?
+  return !aria_owns.IsEmpty() ||
+         element->HasExplicitlySetAttrAssociatedElements(
+             html_names::kAriaOwnsAttr);
+}
+
 ax::mojom::blink::Role AXObject::AriaRoleToWebCoreRole(const String& value) {
   DCHECK(!value.IsEmpty());
 
@@ -4181,7 +4343,7 @@ bool AXObject::NameFromSelectedOption(bool recursive) const {
   }
 }
 
-bool AXObject::NameFromContents(bool recursive) const {
+bool AXObject::SupportsNameFromContents(bool recursive) const {
   // ARIA 1.1, section 5.2.7.5.
   bool result = false;
 
@@ -4250,6 +4412,8 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::blink::Role::kDocEndnote:
     case ax::mojom::blink::Role::kDocFootnote:
     case ax::mojom::blink::Role::kDocPageBreak:
+    case ax::mojom::blink::Role::kDocPageFooter:
+    case ax::mojom::blink::Role::kDocPageHeader:
     case ax::mojom::blink::Role::kDocAbstract:
     case ax::mojom::blink::Role::kDocAcknowledgments:
     case ax::mojom::blink::Role::kDocAfterword:
@@ -4555,6 +4719,32 @@ String AXObject::ToString(bool verbose) const {
       }
       string_builder = string_builder + ">";
     }
+
+    // Add properties of interest that often contribute to errors:
+    if (HasARIAOwns(GetElement()))
+      string_builder = string_builder + " @aria-owns";
+    if (GetAOMPropertyOrARIAAttribute(AOMRelationProperty::kActiveDescendant))
+      string_builder = string_builder + " @aria-activedescendant";
+    if (IsFocused())
+      string_builder = string_builder + " focused";
+    if (AXObjectCache().IsAriaOwned(this))
+      string_builder = string_builder + " isAriaOwned";
+    if (AccessibilityIsIgnored()) {
+      string_builder = string_builder + " isIgnored";
+      if (!AccessibilityIsIncludedInTree())
+        string_builder = string_builder + " isRemovedFromTree";
+    }
+    if (GetNode() &&
+        DisplayLockUtilities::ShouldIgnoreNodeDueToDisplayLock(
+            *GetNode(), DisplayLockActivationReason::kAccessibility)) {
+      string_builder = string_builder + " isDisplayLocked";
+    }
+    if (AriaHiddenRoot())
+      string_builder = string_builder + " isAriaHidden";
+    if (IsHiddenViaStyle())
+      string_builder = string_builder + " isHiddenViaCSS";
+    if (GetNode() && GetNode()->IsInert())
+      string_builder = string_builder + " isInert";
 
     string_builder = string_builder + " name=";
   } else {

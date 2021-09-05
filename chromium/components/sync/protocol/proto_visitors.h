@@ -257,18 +257,26 @@ VISIT_PROTO_FIELDS(const sync_pb::ChromiumExtensionsActivity& proto) {
   VISIT(bookmark_writes_since_last_commit);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::CustomNudgeDelay& proto) {
+  VISIT(datatype_id);
+  VISIT(delay_ms);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::ClientCommand& proto) {
   VISIT(set_sync_poll_interval);
   VISIT(max_commit_batch_size);
   VISIT(sessions_commit_delay_seconds);
   VISIT(throttle_delay_seconds);
   VISIT(client_invalidation_hint_buffer_size);
+  VISIT(gu_retry_delay_seconds);
+  VISIT_REP(custom_nudge_delays);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ClientConfigParams& proto) {
   VISIT_REP(enabled_type_ids);
   VISIT(tabs_datatype_enabled);
   VISIT(cookie_jar_mismatch);
+  VISIT(single_client);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ClientStatus& proto) {
@@ -301,7 +309,6 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientToServerResponse& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::ClientToServerResponse::Error& proto) {
   VISIT_ENUM(error_type);
   VISIT(error_description);
-  VISIT(url);
   VISIT_ENUM(action);
 }
 
@@ -342,23 +349,9 @@ VISIT_PROTO_FIELDS(const sync_pb::DataTypeProgressMarker& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::DatatypeAssociationStats& proto) {
   VISIT(data_type_id);
-  VISIT(num_local_items_before_association);
-  VISIT(num_sync_items_before_association);
-  VISIT(num_local_items_after_association);
-  VISIT(num_sync_items_after_association);
-  VISIT(num_local_items_added);
-  VISIT(num_local_items_deleted);
-  VISIT(num_local_items_modified);
-  VISIT(num_sync_items_added);
-  VISIT(num_sync_items_deleted);
-  VISIT(num_sync_items_modified);
-  VISIT(local_version_pre_association);
-  VISIT(sync_version_pre_association);
-  VISIT(had_error);
   VISIT(download_wait_time_us);
   VISIT(download_time_us);
   VISIT(association_wait_time_for_high_priority_us);
-  VISIT(association_wait_time_for_same_priority_us);
   VISIT_REP(high_priority_type_configured_before);
   VISIT_REP(same_priority_type_configured_before);
 }

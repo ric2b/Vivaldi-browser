@@ -24,15 +24,25 @@ const DELEGATE = {
   async showParentalControls() {
     await parentMessagePipe.sendMessage(Message.SHOW_PARENTAL_CONTROLS);
   },
-  // TODO(b/166047521): Complete the implementation of these.
-  async addOrUpdateSearchIndex() {
-    return;
+  /**
+   * @override
+   * @param {!Array<!helpApp.SearchableItem>} data
+   */
+  async addOrUpdateSearchIndex(data) {
+    await parentMessagePipe.sendMessage(
+        Message.ADD_OR_UPDATE_SEARCH_INDEX, data);
   },
   async clearSearchIndex() {
-    return;
+    await parentMessagePipe.sendMessage(Message.CLEAR_SEARCH_INDEX);
   },
-  async findInSearchIndex() {
-    return {results: null};
+  /**
+   * @override
+   * @param {string} query
+   * @return {!Promise<!helpApp.FindResponse>}
+   */
+  findInSearchIndex(query) {
+    return /** @type {!Promise<!helpApp.FindResponse>} */ (
+        parentMessagePipe.sendMessage(Message.FIND_IN_SEARCH_INDEX, {query}));
   },
 };
 

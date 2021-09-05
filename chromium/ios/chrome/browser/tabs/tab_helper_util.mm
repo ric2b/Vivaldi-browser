@@ -53,6 +53,7 @@
 #import "ios/chrome/browser/policy_url_blocking/policy_url_blocking_tab_helper.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/reading_list_web_state_observer.h"
+#import "ios/chrome/browser/safe_browsing/safe_browsing_query_manager.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_tab_helper.h"
 #import "ios/chrome/browser/safe_browsing/safe_browsing_unsafe_resource_container.h"
 #import "ios/chrome/browser/search_engines/search_engine_tab_helper.h"
@@ -138,12 +139,10 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     BreadcrumbManagerTabHelper::CreateForWebState(web_state);
   }
 
-  if (base::FeatureList::IsEnabled(
-          safe_browsing::kSafeBrowsingAvailableOnIOS)) {
-    SafeBrowsingTabHelper::CreateForWebState(web_state);
-    SafeBrowsingUrlAllowList::CreateForWebState(web_state);
-    SafeBrowsingUnsafeResourceContainer::CreateForWebState(web_state);
-  }
+  SafeBrowsingQueryManager::CreateForWebState(web_state);
+  SafeBrowsingTabHelper::CreateForWebState(web_state);
+  SafeBrowsingUrlAllowList::CreateForWebState(web_state);
+  SafeBrowsingUnsafeResourceContainer::CreateForWebState(web_state);
 
   if (IsURLBlocklistEnabled()) {
     PolicyUrlBlockingTabHelper::CreateForWebState(web_state);
@@ -188,8 +187,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   PageloadForegroundDurationTabHelper::CreateForWebState(web_state);
 
   if (base::FeatureList::IsEnabled(
-          web::features::kIOSLookalikeUrlNavigationSuggestionsUI) &&
-      base::FeatureList::IsEnabled(web::features::kSSLCommittedInterstitials)) {
+          web::features::kIOSLookalikeUrlNavigationSuggestionsUI)) {
     LookalikeUrlTabHelper::CreateForWebState(web_state);
     LookalikeUrlTabAllowList::CreateForWebState(web_state);
     LookalikeUrlContainer::CreateForWebState(web_state);

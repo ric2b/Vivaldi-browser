@@ -154,8 +154,7 @@ class ExtensionAppsBase : public apps::PublisherBase,
   // content_settings::Observer overrides.
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               const std::string& resource_identifier) override;
+                               ContentSettingsType content_type) override;
 
   // extensions::ExtensionPrefsObserver overrides.
   void OnExtensionLastLaunchTimeChanged(
@@ -188,7 +187,7 @@ class ExtensionAppsBase : public apps::PublisherBase,
   bool RunExtensionEnableFlow(const std::string& app_id,
                               base::OnceClosure callback);
 
-  content::WebContents* LaunchImpl(const AppLaunchParams& params);
+  content::WebContents* LaunchImpl(AppLaunchParams&& params);
 
   virtual bool ShouldShownInLauncher(
       const extensions::Extension* extension) = 0;

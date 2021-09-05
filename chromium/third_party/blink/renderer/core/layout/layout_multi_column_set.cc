@@ -227,7 +227,7 @@ LayoutMultiColumnSet* LayoutMultiColumnSet::NextSiblingMultiColumnSet() const {
   for (LayoutObject* sibling = NextSibling(); sibling;
        sibling = sibling->NextSibling()) {
     if (sibling->IsLayoutMultiColumnSet())
-      return ToLayoutMultiColumnSet(sibling);
+      return To<LayoutMultiColumnSet>(sibling);
   }
   return nullptr;
 }
@@ -238,7 +238,7 @@ LayoutMultiColumnSet* LayoutMultiColumnSet::PreviousSiblingMultiColumnSet()
   for (LayoutObject* sibling = PreviousSibling(); sibling;
        sibling = sibling->PreviousSibling()) {
     if (sibling->IsLayoutMultiColumnSet())
-      return ToLayoutMultiColumnSet(sibling);
+      return To<LayoutMultiColumnSet>(sibling);
   }
   return nullptr;
 }
@@ -720,12 +720,15 @@ PhysicalRect LayoutMultiColumnSet::LocalVisualRectIgnoringVisibility() const {
   return block_flow_bounds;
 }
 
-void LayoutMultiColumnSet::UpdateFromNG() {
+void LayoutMultiColumnSet::FinishLayoutFromNG() {
   NOT_DESTROYED();
-  DCHECK_EQ(fragmentainer_groups_.size(), 1U);
-  auto& group = fragmentainer_groups_[0];
-  group.UpdateFromNG(LogicalHeight());
-  ComputeLayoutOverflow(LogicalHeight());
+  // Calculate the block-size of all the fragmentainer groups combined.
+  LogicalExtentComputedValues computed_values;
+  ComputeLogicalHeight(/* logical_height */ LayoutUnit(),
+                       /* logical_top */ LayoutUnit(), computed_values);
+  SetLogicalHeight(computed_values.extent_);
+  ComputeLayoutOverflow(computed_values.extent_);
+  initial_height_calculated_ = false;
 }
 
 }  // namespace blink

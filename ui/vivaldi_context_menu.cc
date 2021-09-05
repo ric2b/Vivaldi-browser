@@ -9,9 +9,11 @@ namespace vivaldi {
 // static
 gfx::NativeView VivaldiMenu::GetActiveNativeViewFromWebContents(
     content::WebContents* web_contents) {
-  return web_contents->GetFullscreenRenderWidgetHostView()
-      ? web_contents->GetFullscreenRenderWidgetHostView()->GetNativeView()
-      : web_contents->GetNativeView();
+  // We used to test for a fullscreen view pre ch88, but that function got
+  // removed (WebContents::GetFullscreenRenderWidgetHostView()) with 88. Seems
+  // it is no longer required but keeping this wrapper function for a while in
+  // case that turns out to be wrong.
+  return web_contents->GetNativeView();
 }
 
 // static

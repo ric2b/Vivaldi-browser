@@ -90,6 +90,11 @@ void BrowserAccessibilityManagerAuraLinux::FireExpandedEvent(
       is_expanded);
 }
 
+void BrowserAccessibilityManagerAuraLinux::FireInvalidStatusChangedEvent(
+    BrowserAccessibility* node) {
+  ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnInvalidStatusChanged();
+}
+
 void BrowserAccessibilityManagerAuraLinux::FireEvent(BrowserAccessibility* node,
                                                      ax::mojom::Event event) {
   ToBrowserAccessibilityAuraLinux(node)->GetNode()->NotifyAccessibilityEvent(
@@ -120,6 +125,11 @@ void BrowserAccessibilityManagerAuraLinux::FireDescriptionChangedEvent(
   ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnDescriptionChanged();
 }
 
+void BrowserAccessibilityManagerAuraLinux::FireParentChangedEvent(
+    BrowserAccessibility* node) {
+  ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnParentChanged();
+}
+
 void BrowserAccessibilityManagerAuraLinux::FireSortDirectionChangedEvent(
     BrowserAccessibility* node) {
   ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnSortDirectionChanged();
@@ -146,15 +156,11 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
   BrowserAccessibilityManager::FireGeneratedEvent(event_type, node);
 
   switch (event_type) {
-    case ui::AXEventGenerator::Event::DOCUMENT_SELECTION_CHANGED: {
-      int32_t focus_id = ax_tree()->GetUnignoredSelection().focus_object_id;
-      BrowserAccessibility* focus_object = GetFromID(focus_id);
-      if (focus_object)
-        FireEvent(focus_object, ax::mojom::Event::kTextSelectionChanged);
-      break;
-    }
     case ui::AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED:
       FireEvent(node, ax::mojom::Event::kActiveDescendantChanged);
+      break;
+    case ui::AXEventGenerator::Event::ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED:
+      FireTextAttributesChangedEvent(node);
       break;
     case ui::AXEventGenerator::Event::CHECKED_STATE_CHANGED:
       FireEvent(node, ax::mojom::Event::kCheckedStateChanged);
@@ -162,6 +168,17 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::COLLAPSED:
       FireExpandedEvent(node, false);
       break;
+    case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
+      FireDescriptionChangedEvent(node);
+      break;
+    case ui::AXEventGenerator::Event::DOCUMENT_SELECTION_CHANGED: {
+      ui::AXNode::AXID focus_id =
+          ax_tree()->GetUnignoredSelection().focus_object_id;
+      BrowserAccessibility* focus_object = GetFromID(focus_id);
+      if (focus_object)
+        FireEvent(focus_object, ax::mojom::Event::kTextSelectionChanged);
+      break;
+    }
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
       FireEvent(node, ax::mojom::Event::kDocumentTitleChanged);
       break;
@@ -171,6 +188,9 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::EXPANDED:
       FireExpandedEvent(node, true);
       break;
+    case ui::AXEventGenerator::Event::INVALID_STATUS_CHANGED:
+      FireInvalidStatusChangedEvent(node);
+      break;
     case ui::AXEventGenerator::Event::LOAD_COMPLETE:
       FireLoadingEvent(node, false);
       FireEvent(node, ax::mojom::Event::kLoadComplete);
@@ -178,12 +198,28 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::LOAD_START:
       FireLoadingEvent(node, true);
       break;
+    case ui::AXEventGenerator::Event::MENU_ITEM_SELECTED:
+      FireSelectedEvent(node);
+      break;
+    case ui::AXEventGenerator::Event::NAME_CHANGED:
+      FireNameChangedEvent(node);
+      break;
+    case ui::AXEventGenerator::Event::PARENT_CHANGED:
+      FireParentChangedEvent(node);
+      break;
+    case ui::AXEventGenerator::Event::RANGE_VALUE_CHANGED:
+      DCHECK(node->GetData().IsRangeValueSupported());
+      FireEvent(node, ax::mojom::Event::kValueChanged);
+      break;
     case ui::AXEventGenerator::Event::SELECTED_CHILDREN_CHANGED:
       FireEvent(node, ax::mojom::Event::kSelectedChildrenChanged);
       break;
-    case ui::AXEventGenerator::Event::MENU_ITEM_SELECTED:
     case ui::AXEventGenerator::Event::SELECTED_CHANGED:
       FireSelectedEvent(node);
+      break;
+    case ui::AXEventGenerator::Event::SELECTED_VALUE_CHANGED:
+      DCHECK(ui::IsSelectElement(node->GetRole()));
+      FireEvent(node, ax::mojom::Event::kValueChanged);
       break;
     case ui::AXEventGenerator::Event::SORT_CHANGED:
       FireSortDirectionChangedEvent(node);
@@ -191,22 +227,15 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::SUBTREE_CREATED:
       FireSubtreeCreatedEvent(node);
       break;
-    case ui::AXEventGenerator::Event::VALUE_CHANGED:
-      FireEvent(node, ax::mojom::Event::kValueChanged);
-      break;
-    case ui::AXEventGenerator::Event::NAME_CHANGED:
-      FireNameChangedEvent(node);
-      break;
-    case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
-      FireDescriptionChangedEvent(node);
-      break;
-    case ui::AXEventGenerator::Event::INVALID_STATUS_CHANGED:
-      FireEvent(node, ax::mojom::Event::kInvalidStatusChanged);
-      break;
-    case ui::AXEventGenerator::Event::ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED:
     case ui::AXEventGenerator::Event::TEXT_ATTRIBUTE_CHANGED:
       FireTextAttributesChangedEvent(node);
       break;
+    case ui::AXEventGenerator::Event::VALUE_IN_TEXT_FIELD_CHANGED:
+      DCHECK(node->IsTextField());
+      FireEvent(node, ax::mojom::Event::kValueChanged);
+      break;
+
+    // Currently unused events on this platform.
     case ui::AXEventGenerator::Event::ACCESS_KEY_CHANGED:
     case ui::AXEventGenerator::Event::ALERT:
     case ui::AXEventGenerator::Event::ATOMIC_CHANGED:
@@ -217,6 +246,7 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::CLASS_NAME_CHANGED:
     case ui::AXEventGenerator::Event::DESCRIBED_BY_CHANGED:
     case ui::AXEventGenerator::Event::DROPEFFECT_CHANGED:
+    case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
     case ui::AXEventGenerator::Event::FOCUS_CHANGED:
     case ui::AXEventGenerator::Event::FLOW_FROM_CHANGED:
     case ui::AXEventGenerator::Event::FLOW_TO_CHANGED:
@@ -241,6 +271,9 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::PLACEHOLDER_CHANGED:
     case ui::AXEventGenerator::Event::PORTAL_ACTIVATED:
     case ui::AXEventGenerator::Event::POSITION_IN_SET_CHANGED:
+    case ui::AXEventGenerator::Event::RANGE_VALUE_MAX_CHANGED:
+    case ui::AXEventGenerator::Event::RANGE_VALUE_MIN_CHANGED:
+    case ui::AXEventGenerator::Event::RANGE_VALUE_STEP_CHANGED:
     case ui::AXEventGenerator::Event::READONLY_CHANGED:
     case ui::AXEventGenerator::Event::RELATED_NODE_CHANGED:
     case ui::AXEventGenerator::Event::REQUIRED_STATE_CHANGED:
@@ -248,13 +281,10 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::ROW_COUNT_CHANGED:
     case ui::AXEventGenerator::Event::SCROLL_HORIZONTAL_POSITION_CHANGED:
     case ui::AXEventGenerator::Event::SCROLL_VERTICAL_POSITION_CHANGED:
+    case ui::AXEventGenerator::Event::SELECTION_IN_TEXT_FIELD_CHANGED:
     case ui::AXEventGenerator::Event::SET_SIZE_CHANGED:
     case ui::AXEventGenerator::Event::STATE_CHANGED:
-    case ui::AXEventGenerator::Event::VALUE_MAX_CHANGED:
-    case ui::AXEventGenerator::Event::VALUE_MIN_CHANGED:
-    case ui::AXEventGenerator::Event::VALUE_STEP_CHANGED:
     case ui::AXEventGenerator::Event::WIN_IACCESSIBLE_STATE_CHANGED:
-      // Need to implement.
       break;
   }
 }

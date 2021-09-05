@@ -207,9 +207,7 @@ class MediaStreamManagerTest : public ::testing::Test {
             }));
   }
 
-  ~MediaStreamManagerTest() override {
-    audio_manager_->Shutdown();
-  }
+  ~MediaStreamManagerTest() override { audio_manager_->Shutdown(); }
 
   MOCK_METHOD1(Response, void(int index));
   void ResponseCallback(int index,
@@ -262,6 +260,8 @@ class MediaStreamManagerTest : public ::testing::Test {
                        true /* request_video */, &audio_device, &video_device);
     MediaStreamManager::DeviceStoppedCallback stopped_callback;
     MediaStreamManager::DeviceChangedCallback changed_callback;
+    MediaStreamManager::DeviceRequestStateChangeCallback
+        request_state_change_callback;
 
     std::vector<blink::mojom::MediaStreamType> expected_types;
     expected_types.push_back(
@@ -287,7 +287,7 @@ class MediaStreamManagerTest : public ::testing::Test {
             blink::mojom::StreamSelectionStrategy::SEARCH_BY_DEVICE_ID,
             base::nullopt),
         std::move(generate_stream_callback), std::move(stopped_callback),
-        std::move(changed_callback));
+        std::move(changed_callback), std::move(request_state_change_callback));
     run_loop_.Run();
 
     EXPECT_EQ(blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
@@ -362,6 +362,8 @@ class MediaStreamManagerTest : public ::testing::Test {
                        &audio_device, nullptr);
     MediaStreamManager::DeviceStoppedCallback stopped_callback;
     MediaStreamManager::DeviceChangedCallback changed_callback;
+    MediaStreamManager::DeviceRequestStateChangeCallback
+        request_state_change_callback;
 
     StreamSelectionInfoPtr info =
         StreamSelectionInfo::New(strategy, session_id);
@@ -369,7 +371,8 @@ class MediaStreamManagerTest : public ::testing::Test {
         render_process_id, render_frame_id, requester_id, page_request_id,
         controls, MediaDeviceSaltAndOrigin(), false /* user_gesture */,
         std::move(info), std::move(generate_stream_callback),
-        std::move(stopped_callback), std::move(changed_callback));
+        std::move(stopped_callback), std::move(changed_callback),
+        std::move(request_state_change_callback));
     run_loop.Run();
 
     return audio_device;
@@ -440,6 +443,11 @@ TEST_F(MediaStreamManagerTest, MakeAndCancelMediaAccessRequest) {
       OnMediaRequestStateChanged(
           _, _, _, _, blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
           MEDIA_REQUEST_STATE_CLOSING));
+  EXPECT_CALL(*media_observer_,
+              OnMediaRequestStateChanged(
+                  _, _, _, _,
+                  blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB,
+                  MEDIA_REQUEST_STATE_CLOSING));
   EXPECT_CALL(
       *media_observer_,
       OnMediaRequestStateChanged(
@@ -514,6 +522,11 @@ TEST_F(MediaStreamManagerTest, MakeAndCancelMultipleRequests) {
       OnMediaRequestStateChanged(
           _, _, _, _, blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
           MEDIA_REQUEST_STATE_CLOSING));
+  EXPECT_CALL(*media_observer_,
+              OnMediaRequestStateChanged(
+                  _, _, _, _,
+                  blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB,
+                  MEDIA_REQUEST_STATE_CLOSING));
   EXPECT_CALL(
       *media_observer_,
       OnMediaRequestStateChanged(
@@ -717,7 +730,8 @@ TEST_F(MediaStreamManagerTest, GetDisplayMediaRequestCallsUIProxy) {
           base::nullopt),
       std::move(generate_stream_callback),
       MediaStreamManager::DeviceStoppedCallback(),
-      MediaStreamManager::DeviceChangedCallback());
+      MediaStreamManager::DeviceChangedCallback(),
+      MediaStreamManager::DeviceRequestStateChangeCallback());
   run_loop_.Run();
 
   EXPECT_CALL(*media_observer_, OnMediaRequestStateChanged(_, _, _, _, _, _))
@@ -756,6 +770,8 @@ TEST_F(MediaStreamManagerTest, DesktopCaptureDeviceStopped) {
   MediaStreamManager::DeviceChangedCallback changed_callback;
   EXPECT_CALL(*media_observer_, OnMediaRequestStateChanged(_, _, _, _, _, _))
       .Times(testing::AtLeast(1));
+  MediaStreamManager::DeviceRequestStateChangeCallback
+      request_state_change_callback;
 
   media_stream_manager_->GenerateStream(
       render_process_id, render_frame_id, requester_id, page_request_id,
@@ -764,7 +780,7 @@ TEST_F(MediaStreamManagerTest, DesktopCaptureDeviceStopped) {
           blink::mojom::StreamSelectionStrategy::SEARCH_BY_DEVICE_ID,
           base::nullopt),
       std::move(generate_stream_callback), std::move(stopped_callback),
-      std::move(changed_callback));
+      std::move(changed_callback), std::move(request_state_change_callback));
   run_loop_.Run();
   EXPECT_EQ(controls.video.stream_type, video_device.type);
   EXPECT_NE(DesktopMediaID::TYPE_NONE,
@@ -818,6 +834,8 @@ TEST_F(MediaStreamManagerTest, DesktopCaptureDeviceChanged) {
           &video_device);
   EXPECT_CALL(*media_observer_, OnMediaRequestStateChanged(_, _, _, _, _, _))
       .Times(testing::AtLeast(1));
+  MediaStreamManager::DeviceRequestStateChangeCallback
+      request_state_change_callback;
 
   media_stream_manager_->GenerateStream(
       render_process_id, render_frame_id, requester_id, page_request_id,
@@ -826,7 +844,7 @@ TEST_F(MediaStreamManagerTest, DesktopCaptureDeviceChanged) {
           blink::mojom::StreamSelectionStrategy::SEARCH_BY_DEVICE_ID,
           base::nullopt),
       std::move(generate_stream_callback), std::move(stopped_callback),
-      std::move(changed_callback));
+      std::move(changed_callback), std::move(request_state_change_callback));
   run_loop_.Run();
   EXPECT_EQ(controls.video.stream_type, video_device.type);
   EXPECT_NE(DesktopMediaID::TYPE_NONE,

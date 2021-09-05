@@ -147,7 +147,7 @@ class APIPermission {
     kMDns = 103,
     kMusicManagerPrivate = 104,
     kNativeMessaging = 105,
-    kNetworkingConfig = 106,
+    kDeleted_NetworkingConfig = 106,
     kNetworkingPrivate = 107,
     kDeleted_NotificationProvider = 108,
     kNotifications = 109,
@@ -270,6 +270,8 @@ class APIPermission {
     kAutofillAssistantPrivate = 226,
     kEnterpriseNetworkingAttributes = 227,
     kSearch = 228,
+    kTabGroups = 229,
+    kScripting = 230,
 
     // vivaldi permissions
 

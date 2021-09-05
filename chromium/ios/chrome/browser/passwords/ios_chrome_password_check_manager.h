@@ -9,6 +9,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/scoped_observer.h"
 #include "components/password_manager/core/browser/ui/bulk_leak_check_service_adapter.h"
 #include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
@@ -66,22 +67,27 @@ class IOSChromePasswordCheckManager
   GetCompromisedCredentials() const;
 
   password_manager::SavedPasswordsPresenter::SavedPasswordsView
+  GetAllCredentials() const;
+
+  password_manager::SavedPasswordsPresenter::SavedPasswordsView
   GetSavedPasswordsFor(
       const password_manager::CredentialWithPassword& credential) const;
 
-  // Edits password for |form|.
-  void EditPasswordForm(const autofill::PasswordForm& form,
-                        base::StringPiece password);
+  // Edits |username| and |password| for |form| and its duplicates.
+  bool EditPasswordForm(const password_manager::PasswordForm& form,
+                        base::StringPiece new_username,
+                        base::StringPiece new_password);
 
   // Edits password form using |insecure_credentials_manager_|.
-  void EditCompromisedPasswordForm(const autofill::PasswordForm& form,
+  void EditCompromisedPasswordForm(const password_manager::PasswordForm& form,
                                    base::StringPiece password);
 
   // Deletes |form| and its duplicates.
-  void DeletePasswordForm(const autofill::PasswordForm& form);
+  void DeletePasswordForm(const password_manager::PasswordForm& form);
 
   // Deletes compromised credentials which are related to |form|.
-  void DeleteCompromisedPasswordForm(const autofill::PasswordForm& form);
+  void DeleteCompromisedPasswordForm(
+      const password_manager::PasswordForm& form);
 
   void AddObserver(Observer* observer) { observers_.AddObserver(observer); }
   void RemoveObserver(Observer* observer) {

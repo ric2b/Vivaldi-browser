@@ -35,8 +35,6 @@
 #include "content/common/content_navigation_policy.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_iterator.h"
@@ -286,30 +284,26 @@ class RenderDocumentFeatureTest : public testing::Test {
                                        GetRenderDocumentLevelName(level));
   }
 
+  void DisableRenderDocument() {
+    feature_list_.InitAndDisableFeature(features::kRenderDocument);
+  }
+
  private:
   base::test::ScopedFeatureList feature_list_;
 };
 
 TEST_F(RenderDocumentFeatureTest, FeatureDisabled) {
-  EXPECT_FALSE(ShouldCreateNewHostForCrashedFrame());
-  EXPECT_FALSE(ShouldCreateNewHostForSameSiteSubframe());
-}
-
-TEST_F(RenderDocumentFeatureTest, LevelDisabled) {
-  SetLevel(RenderDocumentLevel::kDisabled);
-  EXPECT_FALSE(ShouldCreateNewHostForCrashedFrame());
+  DisableRenderDocument();
   EXPECT_FALSE(ShouldCreateNewHostForSameSiteSubframe());
 }
 
 TEST_F(RenderDocumentFeatureTest, LevelCrashed) {
   SetLevel(RenderDocumentLevel::kCrashedFrame);
-  EXPECT_TRUE(ShouldCreateNewHostForCrashedFrame());
   EXPECT_FALSE(ShouldCreateNewHostForSameSiteSubframe());
 }
 
 TEST_F(RenderDocumentFeatureTest, LevelSub) {
   SetLevel(RenderDocumentLevel::kSubframe);
-  EXPECT_TRUE(ShouldCreateNewHostForCrashedFrame());
   EXPECT_TRUE(ShouldCreateNewHostForSameSiteSubframe());
 }
 
@@ -1868,9 +1862,9 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation, DetachPendingChild) {
   EXPECT_EQ(host1, GetPendingFrameHost(iframe1));
   EXPECT_EQ(host2, GetPendingFrameHost(iframe2));
   EXPECT_EQ(GetPendingFrameHost(iframe1)->lifecycle_state(),
-            RenderFrameHostImpl::LifecycleState::kActive);
+            RenderFrameHostImpl::LifecycleState::kSpeculative);
   EXPECT_EQ(GetPendingFrameHost(iframe2)->lifecycle_state(),
-            RenderFrameHostImpl::LifecycleState::kActive);
+            RenderFrameHostImpl::LifecycleState::kSpeculative);
   EXPECT_NE(GetPendingFrameHost(iframe1), GetPendingFrameHost(iframe2));
   EXPECT_EQ(GetPendingFrameHost(iframe1)->GetSiteInstance(),
             GetPendingFrameHost(iframe2)->GetSiteInstance());
@@ -1974,8 +1968,7 @@ TEST_P(RenderFrameHostManagerTestWithSiteIsolation,
   EXPECT_TRUE(contents1->GetMainFrame()->IsRenderFrameLive());
   EXPECT_FALSE(contents2->GetMainFrame()->IsRenderFrameLive());
   EXPECT_EQ(contents1->GetSiteInstance(), contents2->GetSiteInstance());
-  EXPECT_EQ((bool)contents1->GetMainFrame()->GetView(),
-            ShouldCreateNewHostForCrashedFrame());
+  EXPECT_TRUE(contents1->GetMainFrame()->GetView());
   EXPECT_FALSE(contents2->GetMainFrame()->GetView());
 
   // |contents1| creates an out of process iframe.

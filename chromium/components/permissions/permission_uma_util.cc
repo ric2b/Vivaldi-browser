@@ -110,13 +110,13 @@ void RecordEngagementMetric(const std::vector<PermissionRequest*>& requests,
     type = PermissionRequestType::MULTIPLE;
 
   DCHECK(action == "Accepted" || action == "Denied" || action == "Dismissed" ||
-         action == "Ignored");
+         action == "Ignored" || action == "AcceptedOnce");
   std::string name = "Permissions.Engagement." + action + '.' +
                      GetPermissionRequestString(type);
 
   double engagement_score = PermissionsClient::Get()->GetSiteEngagementScore(
       web_contents->GetBrowserContext(), requests[0]->GetOrigin());
-  base::UmaHistogramPercentage(name, engagement_score);
+  base::UmaHistogramPercentageObsoleteDoNotUse(name, engagement_score);
 }
 
 void RecordPermissionActionUkm(
@@ -127,8 +127,11 @@ void RecordPermissionActionUkm(
     int ignore_count,
     PermissionSourceUI source_ui,
     PermissionPromptDisposition ui_disposition,
+    base::Optional<PermissionPromptDispositionReason> ui_reason,
     base::Optional<bool> has_three_consecutive_denies,
     base::Optional<bool> has_previously_revoked_permission,
+    base::Optional<PermissionUmaUtil::PredictionGrantLikelihood>
+        predicted_grant_likelihood,
     base::Optional<ukm::SourceId> source_id) {
   // Only record the permission change if the origin is in the history.
   if (!source_id.has_value())
@@ -145,6 +148,14 @@ void RecordPermissionActionUkm(
       .SetPriorIgnores(std::min(kPriorCountCap, ignore_count))
       .SetSource(static_cast<int64_t>(source_ui))
       .SetPromptDisposition(static_cast<int64_t>(ui_disposition));
+
+  if (ui_reason.has_value())
+    builder.SetPromptDispositionReason(static_cast<int64_t>(ui_reason.value()));
+
+  if (predicted_grant_likelihood.has_value()) {
+    builder.SetPredictionsApiResponse_GrantLikelihood(
+        static_cast<int64_t>(predicted_grant_likelihood.value()));
+  }
 
   if (has_three_consecutive_denies.has_value()) {
     int64_t satisfied_adaptive_triggers = 0;
@@ -171,6 +182,8 @@ std::string GetPromptDispositionString(
   switch (ui_disposition) {
     case PermissionPromptDisposition::ANCHORED_BUBBLE:
       return "AnchoredBubble";
+    case PermissionPromptDisposition::CUSTOM_MODAL_DIALOG:
+      return "CustomModalDialog";
     case PermissionPromptDisposition::LOCATION_BAR_LEFT_CHIP:
       return "LocationBarLeftChip";
     case PermissionPromptDisposition::LOCATION_BAR_RIGHT_ANIMATED_ICON:
@@ -238,6 +251,12 @@ const char PermissionUmaUtil::kPermissionsPromptAcceptedGesture[] =
     "Permissions.Prompt.Accepted.Gesture";
 const char PermissionUmaUtil::kPermissionsPromptAcceptedNoGesture[] =
     "Permissions.Prompt.Accepted.NoGesture";
+const char PermissionUmaUtil::kPermissionsPromptAcceptedOnce[] =
+    "Permissions.Prompt.AcceptedOnce";
+const char PermissionUmaUtil::kPermissionsPromptAcceptedOnceGesture[] =
+    "Permissions.Prompt.AcceptedOnce.Gesture";
+const char PermissionUmaUtil::kPermissionsPromptAcceptedOnceNoGesture[] =
+    "Permissions.Prompt.AcceptedOnce.NoGesture";
 const char PermissionUmaUtil::kPermissionsPromptDenied[] =
     "Permissions.Prompt.Denied";
 const char PermissionUmaUtil::kPermissionsPromptDeniedGesture[] =
@@ -284,8 +303,9 @@ void PermissionUmaUtil::PermissionRevoked(
     RecordPermissionAction(permission, PermissionAction::REVOKED, source_ui,
                            PermissionRequestGestureType::UNKNOWN,
                            PermissionPromptDisposition::NOT_APPLICABLE,
-                           revoked_origin,
-                           /*web_contents=*/nullptr, browser_context);
+                           base::nullopt /* ui_reason */, revoked_origin,
+                           nullptr /* web_contents */, browser_context,
+                           base::nullopt /* predicted_grant_likelihood */);
   }
 }
 
@@ -349,16 +369,18 @@ void PermissionUmaUtil::PermissionPromptResolved(
     const std::vector<PermissionRequest*>& requests,
     content::WebContents* web_contents,
     PermissionAction permission_action,
-    PermissionPromptDisposition ui_disposition) {
+    PermissionPromptDisposition ui_disposition,
+    base::Optional<PermissionPromptDispositionReason> ui_reason,
+    base::Optional<PredictionGrantLikelihood> predicted_grant_likelihood) {
   std::string action_string;
 
   switch (permission_action) {
     case PermissionAction::GRANTED:
-      RecordPromptDecided(requests, /*accepted=*/true);
+      RecordPromptDecided(requests, /*accepted=*/true, /*is_one_time=*/false);
       action_string = "Accepted";
       break;
     case PermissionAction::DENIED:
-      RecordPromptDecided(requests, /*accepted=*/false);
+      RecordPromptDecided(requests, /*accepted=*/false, /*is_one_time*/ false);
       action_string = "Denied";
       break;
     case PermissionAction::DISMISSED:
@@ -367,10 +389,15 @@ void PermissionUmaUtil::PermissionPromptResolved(
     case PermissionAction::IGNORED:
       action_string = "Ignored";
       break;
+    case PermissionAction::GRANTED_ONCE:
+      RecordPromptDecided(requests, /*accepted=*/true, /*is_one_time*/ true);
+      action_string = "AcceptedOnce";
+      break;
     default:
       NOTREACHED();
       break;
   }
+
   RecordEngagementMetric(requests, web_contents, action_string);
 
   PermissionDecisionAutoBlocker* autoblocker =
@@ -388,10 +415,10 @@ void PermissionUmaUtil::PermissionPromptResolved(
     PermissionRequestGestureType gesture_type = request->GetGestureType();
     const GURL& requesting_origin = request->GetOrigin();
 
-    RecordPermissionAction(permission, permission_action,
-                           PermissionSourceUI::PROMPT, gesture_type,
-                           ui_disposition, requesting_origin, web_contents,
-                           web_contents->GetBrowserContext());
+    RecordPermissionAction(
+        permission, permission_action, PermissionSourceUI::PROMPT, gesture_type,
+        ui_disposition, ui_reason, requesting_origin, web_contents,
+        web_contents->GetBrowserContext(), predicted_grant_likelihood);
 
     std::string priorDismissPrefix =
         "Permissions.Prompt." + action_string + ".PriorDismissCount2.";
@@ -499,11 +526,11 @@ PermissionUmaUtil::ScopedRevocationReporter::ScopedRevocationReporter(
   HostContentSettingsMap* settings_map =
       PermissionsClient::Get()->GetSettingsMap(browser_context_);
   ContentSetting initial_content_setting = settings_map->GetContentSetting(
-      primary_url_, secondary_url_, content_type_, std::string());
+      primary_url_, secondary_url_, content_type_);
   is_initially_allowed_ = initial_content_setting == CONTENT_SETTING_ALLOW;
   content_settings::SettingInfo setting_info;
   settings_map->GetWebsiteSetting(primary_url, secondary_url, content_type_,
-                                  std::string(), &setting_info);
+                                  &setting_info);
   last_modified_date_ = settings_map->GetSettingLastModifiedDate(
       setting_info.primary_pattern, setting_info.secondary_pattern,
       content_type);
@@ -530,7 +557,7 @@ PermissionUmaUtil::ScopedRevocationReporter::~ScopedRevocationReporter() {
   HostContentSettingsMap* settings_map =
       PermissionsClient::Get()->GetSettingsMap(browser_context_);
   ContentSetting final_content_setting = settings_map->GetContentSetting(
-      primary_url_, secondary_url_, content_type_, std::string());
+      primary_url_, secondary_url_, content_type_);
   if (final_content_setting != CONTENT_SETTING_ALLOW) {
     // PermissionUmaUtil takes origins, even though they're typed as GURL.
     GURL requesting_origin = primary_url_.GetOrigin();
@@ -552,9 +579,11 @@ void PermissionUmaUtil::RecordPermissionAction(
     PermissionSourceUI source_ui,
     PermissionRequestGestureType gesture_type,
     PermissionPromptDisposition ui_disposition,
+    base::Optional<PermissionPromptDispositionReason> ui_reason,
     const GURL& requesting_origin,
     const content::WebContents* web_contents,
-    content::BrowserContext* browser_context) {
+    content::BrowserContext* browser_context,
+    base::Optional<PredictionGrantLikelihood> predicted_grant_likelihood) {
   PermissionDecisionAutoBlocker* autoblocker =
       PermissionsClient::Get()->GetPermissionDecisionAutoBlocker(
           browser_context);
@@ -566,14 +595,15 @@ void PermissionUmaUtil::RecordPermissionAction(
       browser_context, web_contents, requesting_origin,
       base::BindOnce(
           &RecordPermissionActionUkm, action, gesture_type, permission,
-          dismiss_count, ignore_count, source_ui, ui_disposition,
+          dismiss_count, ignore_count, source_ui, ui_disposition, ui_reason,
           permission == ContentSettingsType::NOTIFICATIONS
               ? PermissionsClient::Get()
                     ->HadThreeConsecutiveNotificationPermissionDenies(
                         browser_context)
               : base::nullopt,
           PermissionsClient::Get()->HasPreviouslyAutoRevokedPermission(
-              browser_context, requesting_origin, permission)));
+              browser_context, requesting_origin, permission),
+          predicted_grant_likelihood));
 
   switch (permission) {
     case ContentSettingsType::GEOLOCATION:
@@ -656,7 +686,8 @@ void PermissionUmaUtil::RecordPermissionAction(
 // static
 void PermissionUmaUtil::RecordPromptDecided(
     const std::vector<PermissionRequest*>& requests,
-    bool accepted) {
+    bool accepted,
+    bool is_one_time) {
   DCHECK(!requests.empty());
 
   PermissionRequestType request_type = PermissionRequestType::MULTIPLE;
@@ -668,10 +699,17 @@ void PermissionUmaUtil::RecordPromptDecided(
   }
 
   if (accepted) {
-    PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptAccepted, request_type);
-    PERMISSION_BUBBLE_GESTURE_TYPE_UMA(kPermissionsPromptAcceptedGesture,
-                                       kPermissionsPromptAcceptedNoGesture,
-                                       gesture_type, request_type);
+    if (is_one_time) {
+      PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptAcceptedOnce, request_type);
+      PERMISSION_BUBBLE_GESTURE_TYPE_UMA(
+          kPermissionsPromptAcceptedOnceGesture,
+          kPermissionsPromptAcceptedOnceNoGesture, gesture_type, request_type);
+    } else {
+      PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptAccepted, request_type);
+      PERMISSION_BUBBLE_GESTURE_TYPE_UMA(kPermissionsPromptAcceptedGesture,
+                                         kPermissionsPromptAcceptedNoGesture,
+                                         gesture_type, request_type);
+    }
   } else {
     PERMISSION_BUBBLE_TYPE_UMA(kPermissionsPromptDenied, request_type);
     PERMISSION_BUBBLE_GESTURE_TYPE_UMA(kPermissionsPromptDeniedGesture,

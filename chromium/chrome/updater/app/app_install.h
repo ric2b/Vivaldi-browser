@@ -16,11 +16,13 @@
 
 namespace base {
 class TaskRunner;
+class Version;
 }
 
 namespace updater {
 
 struct RegistrationResponse;
+class UpdateService;
 
 // This class defines an interface for installing an application. The interface
 // is intended to be implemented for scenerios where UI and RPC calls to
@@ -54,15 +56,23 @@ class AppInstall : public App {
   void Initialize() override;
   void FirstTaskRun() override;
 
+  // Called after the version of the active updater has been retrieved.
+  void GetVersionDone(scoped_refptr<UpdateService>,
+                      const base::Version& version);
+
   void InstallCandidateDone(int result);
+
+  void WakeCandidate();
+
+  void WakeCandidateDone();
 
   void RegisterUpdater();
 
   void RegisterUpdaterDone(const RegistrationResponse& response);
 
-  // Handles the --app-id command line argument, and triggers installing of the
-  // corresponding app-id if the argument is present.
-  void HandleAppId();
+  // Handles the --tag and --app-id command line arguments, and triggers
+  // installing of the corresponding application if either argument is present.
+  void MaybeInstallApp();
 
   // Bound to the main sequence.
   SEQUENCE_CHECKER(sequence_checker_);

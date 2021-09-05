@@ -75,6 +75,9 @@ class PreviewModeClient : public PDFEngine::Client {
   bool IsPrintPreview() override;
   float GetToolbarHeightInScreenCoords() override;
   uint32_t GetBackgroundColor() override;
+  void SetSelectedText(const std::string& selected_text) override;
+  void SetLinkUnderCursor(const std::string& link_under_cursor) override;
+  bool IsValidLink(const std::string& url) override;
 
  private:
   Client* const client_;

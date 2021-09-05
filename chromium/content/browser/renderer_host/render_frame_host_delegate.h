@@ -72,6 +72,7 @@ namespace blink {
 namespace mojom {
 class FullscreenOptions;
 }
+class PageState;
 namespace web_pref {
 struct WebPreferences;
 }
@@ -84,8 +85,8 @@ class ClipboardFormatType;
 namespace content {
 class AgentSchedulingGroupHost;
 class FrameTreeNode;
-class PageState;
 class RenderFrameHostImpl;
+class RenderWidgetHostImpl;
 class SessionStorageNamespace;
 class WebContents;
 struct AXEventNotificationDetails;
@@ -149,6 +150,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // A message was added to to the console.
   virtual bool DidAddMessageToConsole(
+      RenderFrameHost* source_frame,
       blink::mojom::ConsoleMessageLevel log_level,
       const base::string16& message,
       int32_t line_no,
@@ -220,7 +222,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // The state for the page changed and should be updated in session history.
   virtual void UpdateStateForFrame(RenderFrameHost* render_frame_host,
-                                   const PageState& page_state) {}
+                                   const blink::PageState& page_state) {}
 
   // The page's title was changed and should be updated. Only called for the
   // top-level frame.
@@ -509,7 +511,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void RegisterProtocolHandler(RenderFrameHostImpl* host,
                                        const std::string& scheme,
                                        const GURL& url,
-                                       const base::string16& title,
                                        bool user_gesture) {}
 
   // Unregisters a given URL handler for the given protocol.
@@ -572,20 +573,14 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // widget should be created associated with the given
   // |agent_scheduling_group|, but it should not be shown yet. That should
   // happen in response to ShowCreatedWidget.
-  virtual void CreateNewWidget(
+  virtual RenderWidgetHostImpl* CreateNewPopupWidget(
       AgentSchedulingGroupHost& agent_scheduling_group,
       int32_t route_id,
+      mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
+          blink_popup_widget_host,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
-      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
-
-  // Creates a full screen RenderWidget. Similar to above.
-  virtual void CreateNewFullscreenWidget(
-      AgentSchedulingGroupHost& agent_scheduling_group,
-      int32_t route_id,
-      mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
-          blink_widget_host,
-      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
+      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget);
 
   // Return true if the popup is shown through WebContentsObserver.
   // BrowserPluginGuest for the guest WebContents will show the popup on Mac,
@@ -635,6 +630,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       RenderFrameHost* host,
       RenderFrameHostImpl::LifecycleState old_state,
       RenderFrameHostImpl::LifecycleState new_state) {}
+
+  // The page is trying to move the main frame's representation in the client.
+  virtual void SetWindowRect(const gfx::Rect& new_bounds) {}
 
  protected:
   virtual ~RenderFrameHostDelegate() = default;

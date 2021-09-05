@@ -59,11 +59,6 @@ constexpr char kInDevModeKey[] = "inDevMode";
 constexpr char kShowActivityLogKey[] = "showActivityLog";
 constexpr char kLoadTimeClassesKey[] = "loadTimeClasses";
 
-#if !BUILDFLAG(OPTIMIZE_WEBUI)
-constexpr char kGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/extensions/";
-#endif
-
 std::string GetLoadTimeClasses(bool in_dev_mode) {
   return in_dev_mode ? "in-dev-mode" : std::string();
 }
@@ -72,18 +67,9 @@ content::WebUIDataSource* CreateMdExtensionsSource(Profile* profile,
                                                    bool in_dev_mode) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIExtensionsHost);
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  webui::SetupBundledWebUIDataSource(source, "extensions.js",
-                                     IDR_EXTENSIONS_EXTENSIONS_ROLLUP_JS,
-                                     IDR_EXTENSIONS_EXTENSIONS_HTML);
-  source->AddResourcePath("checkup_image.svg", IDR_EXTENSIONS_CHECKUP_IMAGE);
-  source->AddResourcePath("checkup_image_dark.svg",
-                          IDR_EXTENSIONS_CHECKUP_IMAGE_DARK);
-#else
   webui::SetupWebUIDataSource(
       source, base::make_span(kExtensionsResources, kExtensionsResourcesSize),
-      kGeneratedPath, IDR_EXTENSIONS_EXTENSIONS_HTML);
-#endif
+      "", IDR_EXTENSIONS_EXTENSIONS_HTML);
 
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     // Add common strings.
@@ -250,6 +236,7 @@ content::WebUIDataSource* CreateMdExtensionsSource(Profile* profile,
     {"shortcutIncludeStartModifier", IDS_EXTENSIONS_INCLUDE_START_MODIFIER},
     {"shortcutTooManyModifiers", IDS_EXTENSIONS_TOO_MANY_MODIFIERS},
     {"shortcutNeedCharacter", IDS_EXTENSIONS_NEED_CHARACTER},
+    {"subpageArrowRoleDescription", IDS_EXTENSIONS_SUBPAGE_BUTTON},
     {"toolbarDevMode", IDS_EXTENSIONS_DEVELOPER_MODE},
     {"toolbarLoadUnpacked", IDS_EXTENSIONS_TOOLBAR_LOAD_UNPACKED},
     {"toolbarPack", IDS_EXTENSIONS_TOOLBAR_PACK},
@@ -363,14 +350,14 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui)
     : WebContentsObserver(web_ui->GetWebContents()),
       WebUIController(web_ui),
       webui_load_timer_(web_ui->GetWebContents(),
-                        "Extensions.WebUi.DocumentLoadedInMainFrameTime.MD",
-                        "Extensions.WebUi.LoadCompletedInMainFrame.MD") {
+                        "Extensions.WebUi.DocumentLoadedInMainFrameTime",
+                        "Extensions.WebUi.LoadCompletedInMainFrame") {
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource* source = nullptr;
 
-  in_dev_mode_.Init(
-      prefs::kExtensionsUIDeveloperMode, profile->GetPrefs(),
-      base::Bind(&ExtensionsUI::OnDevModeChanged, base::Unretained(this)));
+  in_dev_mode_.Init(prefs::kExtensionsUIDeveloperMode, profile->GetPrefs(),
+                    base::BindRepeating(&ExtensionsUI::OnDevModeChanged,
+                                        base::Unretained(this)));
 
   source = CreateMdExtensionsSource(profile, *in_dev_mode_);
   ManagedUIHandler::Initialize(web_ui, source);

@@ -12,8 +12,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -781,8 +781,12 @@ class SessionManagerClientImpl : public SessionManagerClient {
     writer.AppendArrayOfBytes(
         reinterpret_cast<const uint8_t*>(policy_blob.data()),
         policy_blob.size());
+    // TODO(crbug/1155533) On grunt devices, initially storing device policy may
+    // take about 45s, which is longer than the default timeout for dbus calls.
+    // We need to investiage why this is happening. In the meantime, increase
+    // the timeout to make sure enrollment does not fail.
     session_manager_proxy_->CallMethod(
-        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        &method_call, /*timeout_ms=*/90000,
         base::BindOnce(&SessionManagerClientImpl::OnVoidMethod,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
@@ -1062,7 +1066,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
   dbus::ObjectProxy* session_manager_proxy_ = nullptr;
   std::unique_ptr<BlockingMethodCaller> blocking_method_caller_;
   base::ObserverList<Observer>::Unchecked observers_{
-      base::ObserverListPolicy::EXISTING_ONLY};
+      SessionManagerClient::kObserverListPolicy};
 
   // Most recent screen-lock state received from session_manager.
   bool screen_is_locked_ = false;

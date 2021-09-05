@@ -14,6 +14,7 @@
 #include "net/dns/host_resolver.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_challenge_tokenizer.h"
+#include "net/http/http_auth_preferences.h"
 #include "net/http/http_auth_scheme.h"
 
 namespace net {
@@ -84,7 +85,9 @@ int HttpAuthHandlerBasic::GenerateAuthTokenImpl(
     CompletionOnceCallback callback,
     std::string* auth_token) {
   DCHECK(credentials);
-  // TODO(eroman): is this the right encoding of username/password?
+  // Firefox, Safari and Chromium all use UTF-8 encoding; IE uses iso-8859-1.
+  // RFC7617 does not specify a default encoding, but UTF-8 is the only allowed
+  // value for the optional charset parameter on the challenge.
   std::string base64_username_password;
   base::Base64Encode(base::UTF16ToUTF8(credentials->username()) + ":" +
                          base::UTF16ToUTF8(credentials->password()),
@@ -120,6 +123,11 @@ int HttpAuthHandlerBasic::Factory::CreateAuthHandler(
     const NetLogWithSource& net_log,
     HostResolver* host_resolver,
     std::unique_ptr<HttpAuthHandler>* handler) {
+  if (http_auth_preferences() &&
+      !http_auth_preferences()->basic_over_http_enabled() &&
+      origin.SchemeIs(url::kHttpScheme)) {
+    return ERR_UNSUPPORTED_AUTH_SCHEME;
+  }
   // TODO(cbentzel): Move towards model of parsing in the factory
   //                 method and only constructing when valid.
   std::unique_ptr<HttpAuthHandler> tmp_handler(new HttpAuthHandlerBasic());

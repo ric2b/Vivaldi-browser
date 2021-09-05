@@ -17,11 +17,11 @@
 <translation id="1369915414381695676"><ph name="SITE_NAME" /> എന്ന സൈറ്റ് ചേർത്തൂ</translation>
 <translation id="1383876407941801731">Search</translation>
 <translation id="1384959399684842514">ഡൗൺലോഡ് താൽക്കാലികമായി നിർത്തി</translation>
+<translation id="1415402041810619267">URL ചുരുക്കി</translation>
 <translation id="1431402976894535801">നിങ്ങളുടെ സാന്നിധ്യം അറിയുന്നതിൽ നിന്ന് സൈറ്റുകളെ ബ്ലോക്ക് ചെയ്യുക</translation>
 <translation id="1446450296470737166">MIDI ഉപകരണങ്ങളുടെ പൂർണ്ണ നിയന്ത്രണം അനുവദിക്കുക</translation>
 <translation id="1509960214886564027">നിരവധി സൈറ്റുകളിലെ ഫീച്ചറുകൾക്ക് പ്രവർത്തനം നടത്താനായേക്കില്ല</translation>
 <translation id="1620510694547887537">ക്യാമറ</translation>
-<translation id="1647391597548383849">നിങ്ങളുടെ ക്യാമറ ആക്‌സസ് ചെയ്യുക</translation>
 <translation id="1660204651932907780">ശബ്‌ദം പ്ലേ ചെയ്യാൻ സൈറ്റുകളെ അനുവദിക്കുക (ശുപാർശ ചെയ്യുന്നു)</translation>
 <translation id="1677097821151855053">നിങ്ങളുടെ വിവരങ്ങൾ ഓർക്കാൻ കുക്കികളും മറ്റ് സൈറ്റ് ഡാറ്റയും ഉപയോഗിച്ചിരിക്കുന്നു, ഉദാഹരണത്തിന് നിങ്ങളെ സൈൻ ഇൻ ചെയ്യിക്കാൻ അല്ലെങ്കിൽ പരസ്യങ്ങൾ വ്യക്തിപരമാക്കാൻ. എല്ലാ സൈറ്റുകൾക്കുമുള്ള കുക്കികൾ മാനേജ് ചെയ്യാൻ, <ph name="BEGIN_LINK" />ക്രമീകരണം<ph name="END_LINK" /> കാണുക.</translation>
 <translation id="1688867105868176567">സൈറ്റ് ഡാറ്റ മായ്‌ക്കണോ?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">സൈറ്റ് URL</translation>
 <translation id="2025115093177348061">അനുബന്ധയാഥാർത്ഥ്യം</translation>
 <translation id="2030769033451695672"><ph name="URL_OF_THE_CURRENT_TAB" /> എന്നതിലേക്ക് മടങ്ങാൻ ടാപ്പ് ചെയ്യുക</translation>
+<translation id="2054665754582400095">നിങ്ങളുടെ സാന്നിധ്യം</translation>
 <translation id="2079545284768500474">പഴയപടിയാക്കുക</translation>
 <translation id="2091887806945687916">ശബ്‌ദം</translation>
 <translation id="2107397443965016585">പരിരക്ഷിത ഉള്ളടക്കം പ്ലേ ചെയ്യാൻ സൈറ്റുകളെ അനുവദിക്കുന്നതിന് മുമ്പ് ചോദിക്കുക (ശുപാർശചെയ്‌തത്)</translation>
 <translation id="2146738493024040262">ഇൻസ്റ്റന്‍റ് ആപ്പ് തുറക്കുക</translation>
 <translation id="2148716181193084225">ഇന്ന്</translation>
 <translation id="2182457891543959921">നിങ്ങളുടെ ചുറ്റുപാടുകളുടെ 3D മാപ്പ് സൃഷ്ടിക്കുന്നതിനോ ക്യാമറയുടെ സ്ഥാനം ട്രാക്ക് ചെയ്യുന്നതിനോ സൈറ്റുകളെ അനുവദിക്കുന്നതിന് മുമ്പ് ചോദിക്കുക (ശുപാർശ ചെയ്യുന്നത്)</translation>
-<translation id="2187243482123994665">ഉപയോക്തൃ സാന്നിധ്യം</translation>
 <translation id="2212565012507486665">കുക്കികൾ അനുവദിക്കുക</translation>
 <translation id="2228071138934252756"><ph name="APP_NAME" /> ആപ്പിനെ നിങ്ങളുടെ ക്യാമറ ആക്‌സസ് ചെയ്യാൻ അനുവദിക്കുന്നതിന്, <ph name="BEGIN_LINK" />Android ക്രമീകരണത്തിലും<ph name="END_LINK" /> ക്യാമറ ഓണാക്കുക.</translation>
 <translation id="2241634353105152135">ഒരിക്കൽ മാത്രം</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> എന്നിവയും മറ്റ് <ph name="NUM_MORE" /> എണ്ണവും അനുവദിച്ചു}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> എന്നിവയും മറ്റ് <ph name="NUM_MORE" /> എണ്ണവും അനുവദിച്ചു}}</translation>
 <translation id="2434158240863470628">ഡൗൺലോഡ് പൂർത്തിയായി <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">ലൊക്കേഷൻ ആക്‌സസ്</translation>
 <translation id="2482878487686419369">അറിയിപ്പുകൾ</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" /> ആണ് മാനേജ് ചെയ്യുന്നത്</translation>
 <translation id="2498359688066513246">സഹായവും ഫീഡ്ബാക്കും</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">മൈക്രോഫോൺ</translation>
 <translation id="3277252321222022663">സെൻസറുകൾ ആക്‌സസ് ചെയ്യാൻ സൈറ്റുകളെ അനുവദിക്കുക (ശുപാർശ ചെയ്യുന്നത്)</translation>
 <translation id="3295602654194328831">വിവരങ്ങൾ മറയ്‌ക്കുക</translation>
+<translation id="3328801116991980348">സൈറ്റ് വിവരങ്ങള്‍</translation>
 <translation id="3333961966071413176">എല്ലാ കോൺടാക്റ്റുകളും</translation>
 <translation id="3386292677130313581">നിങ്ങളുടെ ലൊക്കേഷൻ അറിയാൻ സൈറ്റുകളെ അനുവദിക്കുന്നതിന് മുമ്പ് ചോദിക്കുക (ശുപാർശചെയ്‌തിരിക്കുന്നു)</translation>
 <translation id="3538390592868664640">നിങ്ങളുടെ ചുറ്റുപാടുകളുടെ 3D മാപ്പ് സൃഷ്ടിക്കുന്നതിൽ നിന്നോ ക്യാമറയുടെ സ്ഥാനം ട്രാക്ക് ചെയ്യുന്നതിൽ നിന്നോ സൈറ്റുകളെ ബ്ലോക്ക് ചെയ്യുക</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">പരിരക്ഷിത ഉള്ളടക്കം പ്ലേ ചെയ്യാൻ സൈറ്റുകളെ അനുവദിക്കുക</translation>
 <translation id="4468959413250150279">ഒരു പ്രത്യേക സൈറ്റിനായി ശബ്‌ദം മ്യൂട്ട് ചെയ്യുക.</translation>
 <translation id="4479647676395637221">നിങ്ങളുടെ ക്യാമറ ഉപയോഗിക്കാൻ സൈറ്റുകളെ അനുവദിക്കുന്നതിന് മുമ്പ് ആദ്യം ചോദിക്കുക (ശുപാർശചെയ്‌തിരിക്കുന്നു)</translation>
+<translation id="4505788138578415521">URL വികസിപ്പിച്ചു</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" /> ആപ്പിനെ നിങ്ങളുടെ മൈക്രോഫോൺ ആക്‌സസ് ചെയ്യാൻ അനുവദിക്കുന്നതിന്, <ph name="BEGIN_LINK" />Android ക്രമീകരണത്തിലും<ph name="END_LINK" /> മൈക്രോഫോൺ ഓണാക്കുക.</translation>
 <translation id="4570913071927164677">വിശദാംശങ്ങൾ</translation>
 <translation id="4645575059429386691">നിങ്ങളുടെ രക്ഷിതാവ് നിയന്ത്രിക്കുന്നു</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> എന്നിവയും മറ്റ് <ph name="NUM_MORE" /> എണ്ണവും}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> എന്നിവയും മറ്റ് <ph name="NUM_MORE" /> എണ്ണവും}}</translation>
 <translation id="913657688200966289"><ph name="BEGIN_LINK" />Android ക്രമീകരണത്തിൽ<ph name="END_LINK" /> <ph name="APP_NAME" /> ആപ്പിനായി അനുമതികൾ ഓണാക്കുക.</translation>
-<translation id="945632385593298557">നിങ്ങളുടെ മൈക്രോഫോൺ ആക്‌സസ് ചെയ്യുക</translation>
 <translation id="965817943346481315">സൈറ്റ്, അനാവശ്യമോ തെറ്റിദ്ധരിപ്പിക്കുന്നതോ ആയ പരസ്യങ്ങള്‍ കാണിക്കുന്നുണ്ടെങ്കില്‍ ബ്ലോക്ക് ചെയ്യുക (ശുപാര്‍ശ ചെയ്യുന്നു)</translation>
 <translation id="967624055006145463">ഡാറ്റ സംഭരിച്ചു</translation>
 </translationbundle>

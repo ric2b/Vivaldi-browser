@@ -136,31 +136,14 @@
   "clipboard.setImageData": {
     "dependencies": ["permission:clipboardWrite"]
   },
-  "crashReportPrivate": [{
-    "dependencies": ["permission:crashReportPrivate"],
-    "contexts": ["blessed_extension"],
-    "default_parent": true
-  },
-  {
-    "channel": "stable",
-    "contexts": [
-      "webui"
-    ],
-    "matches": [
-      "chrome://media-app/*"
-    ]
-  },
-  {
-    "channel": "stable",
-    "contexts": ["webui_untrusted"],
-    "matches": [
-      "chrome-untrusted://help-app/*",
-      "chrome-untrusted://media-app/*"
-    ]
-  }],
   "declarativeNetRequest": {
     "dependencies": ["permission:declarativeNetRequest"],
     "contexts": ["blessed_extension"]
+  },
+  "declarativeNetRequest.getAvailableStaticRuleCount": {
+    // TODO(crbug.com/983299): Enable on stable once the global rules limit
+    // feature is enabled by default.
+    "channel": "trunk"
   },
   "declarativeNetRequest.onRuleMatchedDebug": {
     "dependencies": ["permission:declarativeNetRequest", "permission:declarativeNetRequestFeedback"],
@@ -387,10 +370,6 @@
     "location": "policy",
     "platforms": ["chromeos"]
   }],
-  "networking.config": {
-    "dependencies": ["permission:networking.config"],
-    "contexts": ["blessed_extension"]
-  },
   "networking.onc": {
     "dependencies": ["permission:networking.onc"],
     "contexts": ["blessed_extension"],

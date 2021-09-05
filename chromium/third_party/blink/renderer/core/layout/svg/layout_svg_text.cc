@@ -40,7 +40,6 @@
 #include "third_party/blink/renderer/core/layout/svg/line/svg_root_inline_box.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
-#include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_text_layout_attributes_builder.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
 #include "third_party/blink/renderer/core/paint/svg_text_painter.h"
@@ -56,7 +55,7 @@ const LayoutSVGText* FindTextRoot(const LayoutObject* start) {
   DCHECK(start);
   for (; start; start = start->Parent()) {
     if (start->IsSVGText())
-      return ToLayoutSVGText(start);
+      return To<LayoutSVGText>(start);
   }
   return nullptr;
 }
@@ -109,7 +108,7 @@ static inline void CollectDescendantTextNodes(
   for (LayoutObject* descendant = text_root.FirstChild(); descendant;
        descendant = descendant->NextInPreOrder(&text_root)) {
     if (descendant->IsSVGInlineText())
-      descendant_text_nodes.push_back(ToLayoutSVGInlineText(descendant));
+      descendant_text_nodes.push_back(To<LayoutSVGInlineText>(descendant));
   }
 }
 
@@ -146,7 +145,7 @@ static inline void UpdateFontAndMetrics(LayoutSVGText& text_root) {
        descendant = descendant->NextInPreOrder(&text_root)) {
     if (!descendant->IsSVGInlineText())
       continue;
-    LayoutSVGInlineText& text = ToLayoutSVGInlineText(*descendant);
+    auto& text = To<LayoutSVGInlineText>(*descendant);
     text.UpdateScaledFont();
     text.UpdateMetricsList(last_character_was_white_space);
   }
@@ -160,6 +159,24 @@ static inline void CheckDescendantTextNodeConsistency(
   CollectDescendantTextNodes(text, new_descendant_text_nodes);
   DCHECK(new_descendant_text_nodes == expected_descendant_text_nodes);
 #endif
+}
+
+void LayoutSVGText::UpdateTransformAffectsVectorEffect() {
+  if (StyleRef().SvgStyle().VectorEffect() == VE_NON_SCALING_STROKE) {
+    SetTransformAffectsVectorEffect(true);
+    return;
+  }
+
+  SetTransformAffectsVectorEffect(false);
+  for (LayoutObject* descendant = FirstChild(); descendant;
+       descendant = descendant->NextInPreOrder(this)) {
+    if (descendant->IsSVGInline() &&
+        descendant->StyleRef().SvgStyle().VectorEffect() ==
+            VE_NON_SCALING_STROKE) {
+      SetTransformAffectsVectorEffect(true);
+      break;
+    }
+  }
 }
 
 void LayoutSVGText::UpdateLayout() {
@@ -254,21 +271,24 @@ void LayoutSVGText::UpdateLayout() {
   needs_reordering_ = false;
 
   const bool bounds_changed = old_boundaries != ObjectBoundingBox();
-  if (bounds_changed)
+  if (bounds_changed) {
+    // Invalidate all resources of this client if our reference box changed.
+    SVGResourceInvalidator resource_invalidator(*this);
+    resource_invalidator.InvalidateEffects();
+    resource_invalidator.InvalidatePaints();
     update_parent_boundaries = true;
+  }
 
   if (UpdateTransformAfterLayout(bounds_changed))
     update_parent_boundaries = true;
 
   ClearLayoutOverflow();
 
-  // Invalidate all resources of this client if our layout changed.
-  if (EverHadLayout() && SelfNeedsLayout())
-    SVGResourcesCache::ClientLayoutChanged(*this);
-
   // If our bounds changed, notify the parents.
   if (update_parent_boundaries)
     LayoutSVGBlock::SetNeedsBoundariesUpdate();
+
+  UpdateTransformAffectsVectorEffect();
 
   DCHECK(!needs_reordering_);
   DCHECK(!needs_transform_update_);
@@ -402,16 +422,12 @@ bool LayoutSVGText::IsObjectBoundingBoxValid() const {
 void LayoutSVGText::AddChild(LayoutObject* child, LayoutObject* before_child) {
   NOT_DESTROYED();
   LayoutSVGBlock::AddChild(child, before_child);
-
-  SVGResourcesCache::ClientWasAddedToTree(*child);
   SubtreeStructureChanged(layout_invalidation_reason::kChildChanged);
 }
 
 void LayoutSVGText::RemoveChild(LayoutObject* child) {
   NOT_DESTROYED();
-  SVGResourcesCache::ClientWillBeRemovedFromTree(*child);
   SubtreeStructureChanged(layout_invalidation_reason::kChildChanged);
-
   LayoutSVGBlock::RemoveChild(child);
 }
 

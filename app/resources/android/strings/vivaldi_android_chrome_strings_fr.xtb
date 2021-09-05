@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="fr">
+<translation id="1397811292916898096">Rechercher avec <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Basculer entre les onglets privés et normaux</translation>
+<translation id="1644574205037202324">Historique</translation>
+<translation id="17513872634828108">Onglets ouverts</translation>
+<translation id="1829244130665387512">Rechercher sur la page</translation>
+<translation id="2038563949887743358">Activer la requête pour la « version ordinateur »</translation>
+<translation id="2433507940547922241">Apparence</translation>
+<translation id="2501278716633472235">Revenir à la page précédente</translation>
+<translation id="2633278372998075009">Onglets privés</translation>
+<translation id="3076631378407175873">Copyright Vivaldi Inc. <ph name="YEAR" />. Tous droits réservés.</translation>
+<translation id="3234355010754616171">Nouvel onglet privé</translation>
+<translation id="3518985090088779359">Accepter et continuer</translation>
+<translation id="3700829948786686853">Bienvenue dans Vivaldi</translation>
+<translation id="3719826155360621982">Page d’accueil</translation>
+<translation id="385051799172605136">Retour</translation>
+<translation id="4121750346708795461">En utilisant cette application, vous acceptez les <ph name="BEGIN_LINK1" />conditions d’utilisation<ph name="END_LINK1" /> et la <ph name="BEGIN_LINK2" />charte de confidentialité<ph name="END_LINK2" /> de Vivaldi.</translation>
+<translation id="4243710787042215766">Ouvrir dans un onglet privé</translation>
+<translation id="4526803704855831732">Onglets privés</translation>
+<translation id="4759238208242260848">Téléchargements</translation>
+<translation id="4883379392681899581">Quitter le mode navigation privée</translation>
+<translation id="4943872375798546930">Aucun résultat</translation>
+<translation id="49576331685473090">Bloqueur de contenus</translation>
+<translation id="5118676864324397542">Stockage <ph name="APP_NAME" /></translation>
+<translation id="5186185447130319458">Mode privé</translation>
+<translation id="5233638681132016545">Nouvel onglet</translation>
+<translation id="572328651809341494">Onglets récents</translation>
+<translation id="5840488417521835756">Découvrez les thèmes abordés sur les sites Web sans quitter la page. La fonctionnalité « Appuyer pour rechercher » n’est disponible que lorsque Google est défini comme moteur de recherche par défaut dans Vivaldi et transmet un mot et son contexte à la recherche Google, qui renvoie à son tour des définitions, des images, des résultats de recherche et d’autres informations.
+
+Pour modifier le terme de recherche, appuyez dessus de manière prolongée afin de le sélectionner. Pour affiner la recherche, faites glisser le panneau jusqu'en haut et appuyez sur le champ de recherche.</translation>
+<translation id="6336451774241870485">Nouvel onglet privé</translation>
+<translation id="6593061639179217415">Version pour ordinateur</translation>
+<translation id="6610147964972079463">Fermer les onglets privés</translation>
+<translation id="706339621163631076">Politique de confidentialité de Vivaldi</translation>
+<translation id="7427132068601343474">À propos de Vivaldi</translation>
+<translation id="7465104139234185284">Fermer tous les onglets privés</translation>
+<translation id="7519434535192513364">La fonctionnalité « Appuyer pour rechercher » transmet le mot sélectionné et la page actuelle en tant que contexte à la recherche Google. Vous pouvez la désactiver dans les <ph name="BEGIN_LINK" />paramètres<ph name="END_LINK" />.</translation>
+<translation id="804786196054284061">Conditions d’utilisation de Vivaldi</translation>
+<translation id="85991616550051997">Aller à la page d’accueil</translation>
+<translation id="8820817407110198400">Signets</translation>
+<translation id="9063523880881406963">Désactiver la requête pour la « version ordinateur »</translation>
+<translation id="9080642952018487277">Passer en mode de navigation privée</translation>
+</translationbundle>

@@ -20,8 +20,9 @@ class VulkanSurfaceX11::ExposeEventForwarder : public ui::XEventDispatcher {
   explicit ExposeEventForwarder(VulkanSurfaceX11* surface) : surface_(surface) {
     if (auto* event_source = ui::X11EventSource::GetInstance()) {
       x11::Connection::Get()->ChangeWindowAttributes(
-          {.window = static_cast<x11::Window>(surface_->window_),
-           .event_mask = x11::EventMask::Exposure});
+          x11::ChangeWindowAttributesRequest{
+              .window = static_cast<x11::Window>(surface_->window_),
+              .event_mask = x11::EventMask::Exposure});
       event_source->AddXEventDispatcher(this);
     }
   }
@@ -57,7 +58,7 @@ std::unique_ptr<VulkanSurfaceX11> VulkanSurfaceX11::Create(
   }
 
   auto window = connection->GenerateId<x11::Window>();
-  connection->CreateWindow({
+  connection->CreateWindow(x11::CreateWindowRequest{
       .wid = window,
       .parent = parent_window,
       .width = geometry->width,
@@ -68,16 +69,20 @@ std::unique_ptr<VulkanSurfaceX11> VulkanSurfaceX11::Create(
     LOG(ERROR) << "Failed to create or map window.";
     return nullptr;
   }
+  // Flush the connection, otherwise other Vulkan WSI calls may fail with some
+  // drivers.
+  connection->Flush();
 
   VkSurfaceKHR vk_surface;
-  VkXlibSurfaceCreateInfoKHR surface_create_info = {
-      VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR};
-  surface_create_info.dpy = connection->display();
-  surface_create_info.window = static_cast<uint32_t>(window);
-  VkResult result = vkCreateXlibSurfaceKHR(vk_instance, &surface_create_info,
-                                           nullptr, &vk_surface);
+  const VkXcbSurfaceCreateInfoKHR surface_create_info = {
+      .sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
+      .connection = connection->XcbConnection(),
+      .window = static_cast<xcb_window_t>(window),
+  };
+  VkResult result = vkCreateXcbSurfaceKHR(vk_instance, &surface_create_info,
+                                          nullptr, &vk_surface);
   if (VK_SUCCESS != result) {
-    DLOG(ERROR) << "vkCreateXlibSurfaceKHR() failed: " << result;
+    DLOG(ERROR) << "vkCreateXcbSurfaceKHR() failed: " << result;
     return nullptr;
   }
   return std::make_unique<VulkanSurfaceX11>(vk_instance, vk_surface,
@@ -114,8 +119,8 @@ bool VulkanSurfaceX11::Reshape(const gfx::Size& size,
   DCHECK_EQ(pre_transform, gfx::OVERLAY_TRANSFORM_NONE);
 
   auto* connection = x11::Connection::Get();
-  connection->ConfigureWindow(
-      {.window = window_, .width = size.width(), .height = size.height()});
+  connection->ConfigureWindow(x11::ConfigureWindowRequest{
+      .window = window_, .width = size.width(), .height = size.height()});
   connection->Flush();
   return VulkanSurface::Reshape(size, pre_transform);
 }

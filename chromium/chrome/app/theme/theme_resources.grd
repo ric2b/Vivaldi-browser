@@ -256,10 +256,8 @@
       </if>
       <structure type="chrome_scaled_image" name="IDR_RESTORE_BUTTON_MASK" file="common/restore_button_mask.png" />
       <if expr="not is_android">
-        <structure type="chrome_scaled_image" name="IDR_SAFETY_TIP_LOOKALIKE_ILLUSTRATION_DARK" file="common/safety_tip_lookalike_illustration_dark.png" />
-        <structure type="chrome_scaled_image" name="IDR_SAFETY_TIP_LOOKALIKE_ILLUSTRATION_LIGHT" file="common/safety_tip_lookalike_illustration_light.png" />
-        <structure type="chrome_scaled_image" name="IDR_SAFETY_TIP_SUSPICIOUS_ILLUSTRATION_DARK" file="common/safety_tip_suspicious_illustration_dark.png" />
-        <structure type="chrome_scaled_image" name="IDR_SAFETY_TIP_SUSPICIOUS_ILLUSTRATION_LIGHT" file="common/safety_tip_suspicious_illustration_light.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAFETY_TIP_ILLUSTRATION_DARK" file="common/safety_tip_illustration_dark.png" />
+        <structure type="chrome_scaled_image" name="IDR_SAFETY_TIP_ILLUSTRATION_LIGHT" file="common/safety_tip_illustration_light.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVED_PASSWORDS_NEUTRAL_STATE" file="common/passwords_neutral_state.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVED_PASSWORDS_NEUTRAL_STATE_DARK" file="common/passwords_neutral_state_dark.png" />
         <structure type="chrome_scaled_image" name="IDR_SAVED_PASSWORDS_SAFE_STATE" file="common/passwords_safe_state.png" />
@@ -279,6 +277,7 @@
         <structure type="chrome_scaled_image" name="IDR_SETTINGS_FAVICON" file="common/favicon_settings.png" />
       </if>
       <if expr="chromeos">
+        <structure type="chrome_scaled_image" name="IDR_SHARESHEET_EMPTY" file="cros/sharesheet_empty.png" />
         <structure type="chrome_scaled_image" name="IDR_SMB_ICON" file="cros/smb_icon.png" />
         <structure type="chrome_scaled_image" name="IDR_LOGO_AVATAR_CIRCLE_BLUE_COLOR" file="cros/logo_avatar_circle_blue_color.png" />
         <structure type="chrome_scaled_image" name="IDR_LOGO_GOOGLE_COLOR_90" file="cros/logo_google_color_90.png" />

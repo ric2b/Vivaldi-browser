@@ -124,8 +124,10 @@ TimestampMap BuildTimestampMap(base::FilePath cros_dir,
                                   base::FileEnumerator::FILES);
   for (base::FilePath cros_path = enumerator.Next(); !cros_path.empty();
        cros_path = enumerator.Next()) {
-    if (timestamp_map.size() >= kMaxTimestampMapSize)
+    if (timestamp_map.size() >= kMaxTimestampMapSize) {
+      LOG(WARNING) << "The timestamp map size exceeds max limit";
       break;
+    }
     // Skip non-media files for efficiency.
     if (!HasAndroidSupportedMediaExtension(cros_path))
       continue;
@@ -182,7 +184,8 @@ class ArcFileSystemWatcherServiceFactory
 // directory.
 class ArcFileSystemWatcherService::FileSystemWatcher {
  public:
-  using Callback = base::Callback<void(const std::vector<std::string>& paths)>;
+  using Callback =
+      base::RepeatingCallback<void(const std::vector<std::string>& paths)>;
 
   FileSystemWatcher(const Callback& callback,
                     const base::FilePath& cros_dir,
@@ -255,8 +258,8 @@ void ArcFileSystemWatcherService::FileSystemWatcher::Start() {
   watcher_ = std::make_unique<base::FilePathWatcher>();
   // On Linux, base::FilePathWatcher::Watch() always returns true.
   watcher_->Watch(cros_dir_, true,
-                  base::Bind(&FileSystemWatcher::OnFilePathChanged,
-                             weak_ptr_factory_.GetWeakPtr()));
+                  base::BindRepeating(&FileSystemWatcher::OnFilePathChanged,
+                                      weak_ptr_factory_.GetWeakPtr()));
 }
 
 void ArcFileSystemWatcherService::FileSystemWatcher::OnFilePathChanged(

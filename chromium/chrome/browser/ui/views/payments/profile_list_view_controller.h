@@ -51,9 +51,6 @@ class ProfileListViewController : public PaymentRequestSheetController {
       base::WeakPtr<PaymentRequestState> state,
       base::WeakPtr<PaymentRequestDialogView> dialog);
 
-  // PaymentRequestSheetController:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // Returns a representation of the given profile appropriate for display
   // in this context. Populates |accessible_string|, which shouldn't be null,
   // with the screen reader string representing the returned label.
@@ -93,6 +90,8 @@ class ProfileListViewController : public PaymentRequestSheetController {
   void PopulateList();
 
   // PaymentRequestSheetController:
+  bool ShouldShowPrimaryButton() override;
+  views::Button::PressedCallback GetSecondaryButtonCallback() override;
   void FillContentView(views::View* content_view) override;
 
  private:

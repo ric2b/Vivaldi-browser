@@ -5,11 +5,11 @@
 #include <memory>
 
 #include "base/barrier_closure.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -17,8 +17,9 @@
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/web_apps/web_app_uninstall_dialog_view.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -41,7 +42,16 @@ AppId InstallTestWebApp(Profile* profile) {
 
 }  // namespace
 
-using WebAppUninstallDialogViewBrowserTest = InProcessBrowserTest;
+class WebAppUninstallDialogViewBrowserTest : public InProcessBrowserTest {
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+    os_hooks_suppress_ =
+        web_app::OsIntegrationManager::ScopedSuppressOsHooksForTesting();
+  }
+
+ private:
+  web_app::ScopedOsHooksSuppress os_hooks_suppress_;
+};
 
 // Test that WebAppUninstallDialog cancels the uninstall if the Window
 // which is passed to WebAppUninstallDialog::Create() is destroyed before

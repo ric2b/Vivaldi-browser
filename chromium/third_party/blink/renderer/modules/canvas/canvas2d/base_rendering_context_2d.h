@@ -263,6 +263,13 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   String textBaseline() const;
   void setTextBaseline(const String&);
 
+  double textLetterSpacing() const;
+  double textWordSpacing() const;
+  String textRendering() const;
+
+  String fontKerning() const;
+  String fontVariantCaps() const;
+
   void Trace(Visitor*) const override;
 
   enum DrawCallType {
@@ -378,9 +385,22 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   static const char kInheritDirectionString[];
   static const char kRtlDirectionString[];
   static const char kLtrDirectionString[];
+  static const char kAutoKerningString[];
+  static const char kNormalKerningString[];
+  static const char kNoneKerningString[];
+  static const char kNormalVariantString[];
+  static const char kSmallCapsVariantString[];
+  static const char kAllSmallCapsVariantString[];
+  static const char kPetiteVariantString[];
+  static const char kAllPetiteVariantString[];
+  static const char kUnicaseVariantString[];
+  static const char kTitlingCapsVariantString[];
+  static const char kAutoRendering[];
+  static const char kOptimizeSpeedRendering[];
+  static const char kOptimizeLegibilityRendering[];
+  static const char kGeometricPrecisionRendering[];
   // Canvas is device independent
   static const double kCDeviceScaleFactor;
-
   virtual void DisableAcceleration() {}
 
   virtual bool IsPaint2D() const { return false; }

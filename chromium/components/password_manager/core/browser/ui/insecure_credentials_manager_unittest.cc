@@ -8,8 +8,10 @@
 #include "base/strings/string_piece_forward.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/timer/elapsed_timer.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/test_password_store.h"
@@ -508,6 +510,13 @@ TEST_F(InsecureCredentialsManagerTest, MapCompromisedPasswordsToPasswords) {
               ElementsAreArray(store().stored_passwords().at(kExampleOrg)));
 }
 
+TEST_F(InsecureCredentialsManagerTest, StartWeakCheckNotifiesOnCompletion) {
+  base::MockOnceClosure closure;
+  provider().StartWeakCheck(closure.Get());
+  EXPECT_CALL(closure, Run);
+  RunUntilIdle();
+}
+
 TEST_F(InsecureCredentialsManagerTest, StartWeakCheckOnEmptyPasswordsList) {
   EXPECT_THAT(
       histogram_tester().GetTotalCountsForPrefix("PasswordManager.WeakCheck"),
@@ -778,7 +787,11 @@ TEST_F(InsecureCredentialsManagerTest, UpdateCompromisedPassword) {
 
   RunUntilIdle();
   CredentialWithPassword expected =
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+      MakeWeakAndCompromisedCredential(password_form, credential);
+#else
       MakeCompromisedCredential(password_form, credential);
+#endif
 
   EXPECT_TRUE(provider().UpdateCredential(expected, kPassword2));
   RunUntilIdle();
@@ -807,6 +820,30 @@ TEST_F(InsecureCredentialsManagerTest, UpdateWeakPassword) {
   EXPECT_EQ(GetSavedPasswordForUsername(kExampleCom, kUsername1),
             kStrongPassword1);
 }
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// Test verifies that editing a weak credential to another weak credential
+// continues to be treated weak.
+TEST_F(InsecureCredentialsManagerTest, UpdatedWeakPasswordRemainsWeak) {
+  PasswordForm password_form =
+      MakeSavedPassword(kExampleCom, kUsername1, kWeakPassword1);
+
+  store().AddLogin(password_form);
+  RunUntilIdle();
+
+  provider().StartWeakCheck();
+  RunUntilIdle();
+
+  CredentialWithPassword expected = MakeWeakCredential(password_form);
+  EXPECT_THAT(provider().GetWeakCredentials(), ElementsAre(expected));
+
+  EXPECT_TRUE(provider().UpdateCredential(expected, kWeakPassword2));
+  RunUntilIdle();
+
+  expected.password = base::ASCIIToUTF16(kWeakPassword2);
+  EXPECT_THAT(provider().GetWeakCredentials(), ElementsAre(expected));
+}
+#endif
 
 // Test verifies that editing credential that is weak and compromised via
 // provider change the saved password.

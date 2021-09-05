@@ -14,6 +14,7 @@
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
+#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/buildflags/buildflags.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
@@ -84,8 +85,7 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
         prefs->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled)) {
       web_prefs->context_menu_on_mouse_up = true;
     }
-    if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
-                                                      "double_click_menu") &&
+    if (vivaldi_runtime_feature::IsEnabled(profile, "double_click_menu") &&
         prefs->GetBoolean(vivaldiprefs::kMouseGesturesDoubleClickMenuEnabled)) {
       web_prefs->vivaldi_show_context_menu_on_double_click = true;
     }
@@ -96,7 +96,7 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       // this method is only called on renderer initialization so this will only
       // work when the game is started in a new tab.
       web_prefs->autoplay_policy =
-          blink::web_pref::AutoplayPolicy::kNoUserGestureRequired;
+          blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
     }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

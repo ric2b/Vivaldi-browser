@@ -17,9 +17,11 @@
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_impl.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_pref_util.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/common/pref_names.h"
 #include "components/policy/core/common/policy_map.h"
@@ -34,19 +36,24 @@ namespace chromeos {
 namespace platform_keys {
 
 KeyPermissionsServiceImpl::KeyPermissionsServiceImpl(
+    bool is_regular_user_profile,
     bool profile_is_managed,
     PrefService* profile_prefs,
     policy::PolicyService* profile_policies,
     extensions::StateStore* extensions_state_store,
-    PlatformKeysService* platform_keys_service)
-    : profile_is_managed_(profile_is_managed),
+    PlatformKeysService* platform_keys_service,
+    KeyPermissionsManager* profile_key_permissions_manager)
+    : is_regular_user_profile_(is_regular_user_profile),
+      profile_is_managed_(profile_is_managed),
       profile_prefs_(profile_prefs),
       profile_policies_(profile_policies),
       extensions_state_store_(extensions_state_store),
-      platform_keys_service_(platform_keys_service) {
+      platform_keys_service_(platform_keys_service),
+      profile_key_permissions_manager_(profile_key_permissions_manager) {
   DCHECK(profile_prefs_);
   DCHECK(extensions_state_store_);
   DCHECK(platform_keys_service_);
+  DCHECK(profile_key_permissions_manager || !is_regular_user_profile);
   DCHECK(!profile_is_managed_ || profile_policies_);
 }
 
@@ -129,6 +136,8 @@ void KeyPermissionsServiceImpl::IsCorporateKeyWithLocations(
   for (const auto key_location : key_locations) {
     switch (key_location) {
       case TokenId::kUser:
+        DCHECK(is_regular_user_profile_);
+
         if (internal::IsUserKeyMarkedCorporateInPref(public_key_spki_der,
                                                      profile_prefs_)) {
           std::move(callback).Run(/*corporate=*/true);
@@ -157,7 +166,7 @@ void KeyPermissionsServiceImpl::SetCorporateKeyWithLocations(
     const std::string& public_key_spki_der,
     SetCorporateKeyCallback callback,
     const std::vector<TokenId>& key_locations,
-    Status key_locations_retrieval_status) const {
+    Status key_locations_retrieval_status) {
   if (key_locations_retrieval_status != Status::kSuccess) {
     std::move(callback).Run(key_locations_retrieval_status);
     return;
@@ -174,13 +183,17 @@ void KeyPermissionsServiceImpl::SetCorporateKeyWithLocations(
 
   switch (key_locations[0]) {
     case TokenId::kSystem:
-      // Nothing to do - all system-token keys are currently implicitly
-      // corporate.
-      std::move(callback).Run(Status::kSuccess);
+      KeyPermissionsManagerImpl::GetSystemTokenKeyPermissionsManager()
+          ->AllowKeyForUsage(std::move(callback), KeyUsage::kCorporate,
+                             public_key_spki_der);
       return;
     case TokenId::kUser: {
+      DCHECK(is_regular_user_profile_);
+
       internal::MarkUserKeyCorporateInPref(public_key_spki_der, profile_prefs_);
-      std::move(callback).Run(Status::kSuccess);
+
+      profile_key_permissions_manager_->AllowKeyForUsage(
+          std::move(callback), KeyUsage::kCorporate, public_key_spki_der);
       return;
     }
   }

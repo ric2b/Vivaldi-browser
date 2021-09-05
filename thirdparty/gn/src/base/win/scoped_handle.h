@@ -5,7 +5,7 @@
 #ifndef BASE_WIN_SCOPED_HANDLE_H_
 #define BASE_WIN_SCOPED_HANDLE_H_
 
-#include "base/win/windows_types.h"
+#include <windows.h>
 
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"

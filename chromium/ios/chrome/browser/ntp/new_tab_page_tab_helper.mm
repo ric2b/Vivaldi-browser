@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
@@ -134,16 +134,6 @@ void NewTabPageTabHelper::DidFinishNavigation(
   UpdateItem(web_state_->GetNavigationManager()->GetLastCommittedItem());
   DisableIgnoreLoadRequests();
   SetActive(IsNTPURL(web_state->GetLastCommittedURL()));
-}
-
-void NewTabPageTabHelper::DidChangeVisibleSecurityState(
-    web::WebState* web_state) {
-  if (base::FeatureList::IsEnabled(web::features::kSSLCommittedInterstitials))
-    return;
-  // This is the only callback we receive when loading a bad ssl page.
-  if (!IsNTPURL(web_state->GetVisibleURL())) {
-    SetActive(false);
-  }
 }
 
 void NewTabPageTabHelper::DidStartLoading(web::WebState* web_state) {

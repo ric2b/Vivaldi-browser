@@ -8,7 +8,15 @@
 namespace policy {
 
 // Shows a notification that printing is not allowed due to DLP rules.
-void ShowDlpPrintDisabledToast();
+void ShowDlpPrintDisabledNotification();
+
+// Shows/hides a notification that screen capture was paused because
+// confidential content appeared in the captured area, or resumed when it left
+// the captured area.
+void HideDlpScreenCapturePausedNotification();
+void ShowDlpScreenCapturePausedNotification();
+void HideDlpScreenCaptureResumedNotification();
+void ShowDlpScreenCaptureResumedNotification();
 
 }  // namespace policy
 

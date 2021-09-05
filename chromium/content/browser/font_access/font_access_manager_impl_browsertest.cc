@@ -108,6 +108,32 @@ IN_PROC_BROWSER_TEST_F(FontAccessManagerImplBrowserTest, EnumerationTest) {
   ASSERT_GT(result, 0) << "Expected at least one font. Got: " << result;
 }
 
+#if defined(OS_WIN)
+IN_PROC_BROWSER_TEST_F(FontAccessManagerImplBrowserTest, LocaleTest) {
+  ASSERT_TRUE(NavigateToURL(shell(), GetTestUrl(nullptr, "simple_page.html")));
+  font_access_manager()->SkipPrivacyChecksForTesting(true);
+
+  OverrideFontAccessLocale("zh-cn");
+
+  std::string result =
+      EvalJs(shell(),
+             "(async () => {"
+             "  let fullName = '';"
+             "  for await (const item of navigator.fonts.query()) {"
+             "    if (item.postscriptName == 'MicrosoftYaHei') {"
+             "      fullName = item.fullName;"
+             "      break;"
+             "    }"
+             "  }"
+             "  return fullName;"
+             "})()")
+          .ExtractString();
+  std::string ms_yahei_utf8 = "微软雅黑";
+  ASSERT_EQ(result, ms_yahei_utf8)
+      << "Expected:" << ms_yahei_utf8 << " Got:" << result;
+}
+#endif
+
 #endif
 
 }  // namespace content

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/performance_manager/chrome_browser_main_extra_parts_performance_manager.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/performance_manager/metrics/memory_pressure_metrics.h"
 #include "chrome/browser/performance_manager/observers/isolation_context_metrics.h"
 #include "chrome/browser/performance_manager/observers/metrics_collector.h"
+#include "chrome/browser/performance_manager/observers/page_load_metrics_observer.h"
 #include "chrome/browser/performance_manager/policies/background_tab_loading_policy.h"
 #include "chrome/browser/performance_manager/policies/high_pmf_discard_policy.h"
 #include "chrome/browser/performance_manager/policies/policy_features.h"
@@ -178,6 +180,8 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
 
   g_browser_process->profile_manager()->AddObserver(this);
 
+  page_load_metrics_observer_ =
+      std::make_unique<performance_manager::PageLoadMetricsObserver>();
   page_live_state_data_helper_ =
       std::make_unique<performance_manager::PageLiveStateDecoratorHelper>();
   page_load_tracker_decorator_helper_ =
@@ -191,10 +195,11 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostMainMessageLoopRun() {
   browser_child_process_watcher_.reset();
 
   g_browser_process->profile_manager()->RemoveObserver(this);
-  observed_profiles_.RemoveAll();
+  profile_observations_.RemoveAllObservations();
 
   page_load_tracker_decorator_helper_.reset();
   page_live_state_data_helper_.reset();
+  page_load_metrics_observer_.reset();
 
   // There may still be worker hosts, WebContents and RenderProcessHosts with
   // attached user data, retaining WorkerNodes, PageNodes, FrameNodes and
@@ -209,7 +214,7 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostMainMessageLoopRun() {
 
 void ChromeBrowserMainExtraPartsPerformanceManager::OnProfileAdded(
     Profile* profile) {
-  observed_profiles_.Add(profile);
+  profile_observations_.AddObservation(profile);
   registry_->NotifyBrowserContextAdded(profile);
 }
 
@@ -220,6 +225,6 @@ void ChromeBrowserMainExtraPartsPerformanceManager::
 
 void ChromeBrowserMainExtraPartsPerformanceManager::OnProfileWillBeDestroyed(
     Profile* profile) {
-  observed_profiles_.Remove(profile);
+  profile_observations_.RemoveObservation(profile);
   registry_->NotifyBrowserContextRemoved(profile);
 }

@@ -12,8 +12,6 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.image_editor.ImageEditorDialogCoordinator;
 import org.chromium.chrome.browser.modules.ModuleInstallUi;
-import org.chromium.chrome.browser.screenshot.EditorScreenshotSource;
-import org.chromium.chrome.browser.screenshot.EditorScreenshotTask;
 import org.chromium.chrome.browser.share.share_sheet.ChromeOptionShareCallback;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.modules.image_editor.ImageEditorModuleProvider;
@@ -33,6 +31,7 @@ public class ScreenshotCoordinator {
     private final ScreenshotShareSheetDialog mDialog;
     private final ChromeOptionShareCallback mChromeOptionShareCallback;
     private final BottomSheetController mBottomSheetController;
+    private final ImageEditorModuleProvider mImageEditorModuleProvider;
 
     private EditorScreenshotSource mScreenshotSource;
     private Bitmap mScreenshot;
@@ -44,12 +43,15 @@ public class ScreenshotCoordinator {
      * @param tab The Tab which contains the content to share.
      * @param screenshotSource The Source interface to use to take a screenshot.
      * @param chromeOptionShareCallback An interface to share sheet APIs.
+     * @param imageEditorModuleProvider An interface to install and/or instantiate the image editor.
      */
     public ScreenshotCoordinator(Activity activity, Tab tab,
             ChromeOptionShareCallback chromeOptionShareCallback,
-            BottomSheetController sheetController) {
+            BottomSheetController sheetController,
+            ImageEditorModuleProvider imageEditorModuleProvider) {
         this(activity, tab, new EditorScreenshotTask(activity, sheetController),
-                new ScreenshotShareSheetDialog(), chromeOptionShareCallback, sheetController);
+                new ScreenshotShareSheetDialog(), chromeOptionShareCallback, sheetController,
+                imageEditorModuleProvider);
     }
 
     /**
@@ -66,13 +68,15 @@ public class ScreenshotCoordinator {
     public ScreenshotCoordinator(Activity activity, Tab tab,
             EditorScreenshotSource screenshotSource, ScreenshotShareSheetDialog dialog,
             ChromeOptionShareCallback chromeOptionShareCallback,
-            BottomSheetController sheetController) {
+            BottomSheetController sheetController,
+            ImageEditorModuleProvider imageEditorModuleProvider) {
         mActivity = activity;
         mTab = tab;
         mDialog = dialog;
         mChromeOptionShareCallback = chromeOptionShareCallback;
         mScreenshotSource = screenshotSource;
         mBottomSheetController = sheetController;
+        mImageEditorModuleProvider = imageEditorModuleProvider;
     }
 
     /**
@@ -95,11 +99,15 @@ public class ScreenshotCoordinator {
      * directly opens the screenshot sharesheet instead.
      */
     private void handleScreenshot() {
-        if (ImageEditorModuleProvider.get().isModuleInstalled()) {
-            launchEditor();
-        } else if (sInstallAttempts < MAX_INSTALL_ATTEMPTS) {
-            sInstallAttempts++;
-            installEditor(true, /* onSuccessRunnable= */ null);
+        if (mImageEditorModuleProvider != null) {
+            if (mImageEditorModuleProvider.isModuleInstalled()) {
+                launchEditor();
+            } else if (sInstallAttempts < MAX_INSTALL_ATTEMPTS) {
+                sInstallAttempts++;
+                installEditor(true, /* onSuccessRunnable= */ null);
+            } else {
+                launchSharesheet();
+            }
         } else {
             launchSharesheet();
         }
@@ -109,9 +117,9 @@ public class ScreenshotCoordinator {
      * Launches the screenshot image editor.
      */
     private void launchEditor() {
-        ImageEditorDialogCoordinator editor = ImageEditorModuleProvider.get()
-                                                      .getImageEditorProvider()
-                                                      .getImageEditorDialogCoordinator();
+        assert mImageEditorModuleProvider != null;
+        ImageEditorDialogCoordinator editor =
+                mImageEditorModuleProvider.getImageEditorDialogCoordinator();
         editor.launchEditor(mActivity, mScreenshot, mTab, mChromeOptionShareCallback);
         mScreenshot = null;
     }
@@ -132,6 +140,10 @@ public class ScreenshotCoordinator {
      * @param onSuccess. Runnable to run on success.
      */
     protected void retryInstallEditor(Runnable onSuccess) {
+        if (mImageEditorModuleProvider == null) {
+            // If the module does not exist, nothing to do.
+            return;
+        }
         installEditor(false, onSuccess);
     }
 
@@ -142,6 +154,7 @@ public class ScreenshotCoordinator {
      * @param onSuccessRunnable the runnable to run on a succesfful install.
      */
     private void installEditor(boolean showFallback, Runnable onSuccessRunnable) {
+        assert mImageEditorModuleProvider != null;
         final ModuleInstallUi ui = new ModuleInstallUi(
                 mTab, R.string.image_editor_module_title, new ModuleInstallUi.FailureUiListener() {
                     @Override
@@ -157,7 +170,7 @@ public class ScreenshotCoordinator {
                 });
         ui.showInstallStartUi();
 
-        ImageEditorModuleProvider.get().maybeInstallModule((success) -> {
+        mImageEditorModuleProvider.maybeInstallModule((success) -> {
             if (success) {
                 ui.showInstallSuccessUi();
                 if (onSuccessRunnable != null) {

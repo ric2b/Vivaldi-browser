@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">A(z) <ph name="SITE_NAME" /> webhely hozzáadva</translation>
 <translation id="1383876407941801731">Keresés</translation>
 <translation id="1384959399684842514">A letöltés szünetel</translation>
+<translation id="1415402041810619267">URL csonkolva</translation>
 <translation id="1431402976894535801">A webhelyek nem kaphatnak információt arról, hogy Ön mikor van jelen</translation>
 <translation id="1446450296470737166">MIDI-eszközök teljes vezérlése</translation>
 <translation id="1509960214886564027">Számos webhelyen nem működnek a funkciók</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1647391597548383849">Hozzáférés a fényképezőgéphez</translation>
 <translation id="1660204651932907780">A webhelyek lejátszhatnak hangokat (ajánlott)</translation>
 <translation id="1677097821151855053">A cookie-k és az egyéb webhelyadatok arra szolgálnak, hogy a webhelyek emlékezzenek Önre, és így például bejelentkeztetik, vagy személyre szabják a hirdetéseket. A <ph name="BEGIN_LINK" />Beállításokban<ph name="END_LINK" /> kezelheti a webhelyek cookie-jait.</translation>
 <translation id="1688867105868176567">Törli a webhelyadatokat?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">Webhely URL-je</translation>
 <translation id="2025115093177348061">Kiterjesztett valóság</translation>
 <translation id="2030769033451695672">Koppintson, hogy visszatérjen ide: <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">Felhasználói jelenlét</translation>
 <translation id="2079545284768500474">Visszavonás</translation>
 <translation id="2091887806945687916">Hang</translation>
 <translation id="2107397443965016585">Kérdezzen rá, mielőtt engedélyezné a webhelyek számára védett tartalmak lejátszását (ajánlott)</translation>
 <translation id="2146738493024040262">Azonnali alkalmazás megnyitása</translation>
 <translation id="2148716181193084225">Ma</translation>
 <translation id="2182457891543959921">Kérdezzen rá, mielőtt engedélyezi a webhelyek számára 3D-s térkép létrehozását az Ön környezetéről, valamint a kamera pozíciójának követését (ajánlott)</translation>
-<translation id="2187243482123994665">Felhasználói jelenlét</translation>
 <translation id="2212565012507486665">Cookie-k engedélyezése</translation>
 <translation id="2228071138934252756">Ahhoz, hogy a(z) <ph name="APP_NAME" /> hozzáférhessen a kamerához, a kamerát az <ph name="BEGIN_LINK" />Android-beállítások<ph name="END_LINK" /> között is be kell kapcsolni.</translation>
 <translation id="2241634353105152135">Csak egyszer</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> és további <ph name="NUM_MORE" /> engedélyezve}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> és további <ph name="NUM_MORE" /> engedélyezve}}</translation>
 <translation id="2434158240863470628">Letöltés befejezve <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Helyhozzáférés</translation>
 <translation id="2482878487686419369">Értesítések</translation>
 <translation id="2490684707762498678">Kezelő: <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Súgó és visszajelzés</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3277252321222022663">Az érzékelőkhöz való hozzáférés engedélyezése a webhelyek számára (ajánlott)</translation>
 <translation id="3295602654194328831">Információk elrejtése…</translation>
+<translation id="3328801116991980348">Webhelyadatok</translation>
 <translation id="3333961966071413176">Összes névjegy</translation>
 <translation id="3386292677130313581">Kérdezzen rá, mielőtt engedélyezné a webhelyek számára a tartózkodási helyhez való hozzáférést (ajánlott)</translation>
 <translation id="3538390592868664640">Az Ön környezetéről készített 3D-s térkép létrehozásának, valamint a kamerapozíció követésének letiltása a webhelyek számára</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Védett tartalmak lejátszásának engedélyezése a webhelyek számára</translation>
 <translation id="4468959413250150279">Egy adott webhely hangjának némítása.</translation>
 <translation id="4479647676395637221">Kérdezzen rá, mielőtt engedélyezné a webhelyek számára a kamera használatát (ajánlott)</translation>
+<translation id="4505788138578415521">URL kibontva</translation>
 <translation id="4534723447064627427">Ahhoz, hogy a(z) <ph name="APP_NAME" /> hozzáférhessen a mikrofonhoz, a mikrofont az <ph name="BEGIN_LINK" />Android-beállítások<ph name="END_LINK" /> között is be kell kapcsolni.</translation>
 <translation id="4570913071927164677">Részletek</translation>
 <translation id="4645575059429386691">A szülő kezeli</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> és további <ph name="NUM_MORE" />}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> és további <ph name="NUM_MORE" />}}</translation>
 <translation id="913657688200966289">A(z) <ph name="APP_NAME" /> alkalmazásra vonatkozó engedélyeket az <ph name="BEGIN_LINK" />Android-beállítások<ph name="END_LINK" /> között lehet aktiválni.</translation>
-<translation id="945632385593298557">Hozzáférés a mikrofonhoz</translation>
 <translation id="965817943346481315">Letiltás, ha a webhely tolakodó vagy félrevezető hirdetéseket jelenít meg (ajánlott)</translation>
 <translation id="967624055006145463">Tárolt adatok</translation>
 </translationbundle>

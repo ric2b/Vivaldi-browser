@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">El lloc <ph name="SITE_NAME" /> s'ha afegit</translation>
 <translation id="1383876407941801731">Cerca</translation>
 <translation id="1384959399684842514">La baixada s'ha posat en pausa</translation>
+<translation id="1415402041810619267">L'URL s'ha truncat</translation>
 <translation id="1431402976894535801">Bloqueja els llocs web perquè no sàpiguen quan estàs present</translation>
 <translation id="1446450296470737166">Permet control total disp. MIDI</translation>
 <translation id="1509960214886564027">Pot ser que les funcions de molts llocs web no funcionin</translation>
 <translation id="1620510694547887537">Càmera</translation>
-<translation id="1647391597548383849">Accés a la càmera</translation>
 <translation id="1660204651932907780">Permet que els llocs web reprodueixin so (opció recomanada)</translation>
 <translation id="1677097821151855053">Les galetes i altres dades dels llocs web s'utilitzen per recordar-te amb finalitats com ara iniciar la teva sessió o personalitzar anuncis. Per gestionar les galetes de tots els llocs web, consulta <ph name="BEGIN_LINK" />Configuració<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Vols esborrar les dades del lloc web?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">URL del lloc web</translation>
 <translation id="2025115093177348061">Realitat augmentada</translation>
 <translation id="2030769033451695672">Toca per tornar a <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">La teva presència</translation>
 <translation id="2079545284768500474">Desfés</translation>
 <translation id="2091887806945687916">So</translation>
 <translation id="2107397443965016585">Pregunta abans de permetre que els llocs web reprodueixin contingut protegit (opció recomanada)</translation>
 <translation id="2146738493024040262">Obre l'aplicació instantània</translation>
 <translation id="2148716181193084225">Avui</translation>
 <translation id="2182457891543959921">Pregunta abans de permetre que els llocs web creïn un mapa en 3D del teu entorn o facin un seguiment de la posició de la càmera (opció recomanada)</translation>
-<translation id="2187243482123994665">Presència de l'usuari</translation>
 <translation id="2212565012507486665">Permet les galetes</translation>
 <translation id="2228071138934252756">Perquè <ph name="APP_NAME" /> pugui accedir a la càmera, també has d'activar-la a la <ph name="BEGIN_LINK" />configuració d'Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Només una vegada</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{S'han permès <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> i <ph name="NUM_MORE" /> més}other{S'han permès <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> i <ph name="NUM_MORE" /> més}}</translation>
 <translation id="2434158240863470628">S'ha completat la baixada <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Accés a la ubicació</translation>
 <translation id="2482878487686419369">Notificacions</translation>
 <translation id="2490684707762498678">Gestionades per <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Ajuda i suggeriments </translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Micròfon</translation>
 <translation id="3277252321222022663">Permet que els llocs web accedeixin als sensors (opció recomanada)</translation>
 <translation id="3295602654194328831">Amaga la informació</translation>
+<translation id="3328801116991980348">Informació del lloc web</translation>
 <translation id="3333961966071413176">Tots els contactes</translation>
 <translation id="3386292677130313581">Pregunta abans de permetre que els llocs web sàpiguen la teva ubicació (opció recomanada)</translation>
 <translation id="3538390592868664640">Impedeix que els llocs web creïn un mapa en 3D del teu entorn o que facin un seguiment de la posició de la càmera</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Permet que els llocs web reprodueixin contingut protegit</translation>
 <translation id="4468959413250150279">Silencia el so d'un lloc web concret.</translation>
 <translation id="4479647676395637221">Pregunta abans de permetre que els llocs web utilitzin la càmera (opció recomanada)</translation>
+<translation id="4505788138578415521">L'URL s'ha ampliat</translation>
 <translation id="4534723447064627427">Perquè <ph name="APP_NAME" /> pugui accedir al micròfon, també has d'activar-lo a la <ph name="BEGIN_LINK" />configuració d'Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Detalls</translation>
 <translation id="4645575059429386691">Gestionat pels pares</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> i <ph name="NUM_MORE" /> més}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> i <ph name="NUM_MORE" /> més}}</translation>
 <translation id="913657688200966289">Activa els permisos per a <ph name="APP_NAME" /> a la <ph name="BEGIN_LINK" />configuració d'Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Accés al micròfon</translation>
 <translation id="965817943346481315">Bloqueja els anuncis si el lloc web mostra publicitat intrusiva o enganyosa (opció recomanada)</translation>
 <translation id="967624055006145463">Dades emmagatzemades</translation>
 </translationbundle>

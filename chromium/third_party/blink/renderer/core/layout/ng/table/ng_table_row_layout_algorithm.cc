@@ -16,10 +16,7 @@ namespace blink {
 
 NGTableRowLayoutAlgorithm::NGTableRowLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
-    : NGLayoutAlgorithm(params) {
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-}
+    : NGLayoutAlgorithm(params) {}
 
 MinMaxSizesResult NGTableRowLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesInput&) const {
@@ -36,9 +33,10 @@ scoped_refptr<const NGLayoutResult> NGTableRowLayoutAlgorithm::Layout() {
                                        base::Optional<LayoutUnit> row_baseline,
                                        bool row_is_collapsed,
                                        wtf_size_t* cell_location_start_column) {
-    wtf_size_t start_column = table_data.cells[cell_index].start_column;
-    wtf_size_t end_column = std::min(start_column + cell.TableCellColspan() - 1,
-                                     table_data.column_locations.size() - 1);
+    const wtf_size_t start_column = table_data.cells[cell_index].start_column;
+    const wtf_size_t end_column =
+        std::min(start_column + cell.TableCellColspan() - 1,
+                 table_data.column_locations.size() - 1);
     *cell_location_start_column = start_column;
     // When columns spanned by the cell are collapsed, cell geometry is defined
     // by:
@@ -59,52 +57,28 @@ scoped_refptr<const NGLayoutResult> NGTableRowLayoutAlgorithm::Layout() {
 
     const NGTableConstraintSpaceData::Cell& cell_data =
         table_data.cells[cell_index];
-    LayoutUnit cell_inline_size =
+    const LayoutUnit cell_inline_size =
         table_data.column_locations[cell_location_end_column].offset +
         table_data.column_locations[cell_location_end_column].inline_size -
         table_data.column_locations[*cell_location_start_column].offset;
-    LayoutUnit cell_block_size =
+    const LayoutUnit cell_block_size =
         row_is_collapsed ? LayoutUnit() : cell_data.block_size;
 
-    NGConstraintSpaceBuilder builder(
-        table_data.table_writing_direction.GetWritingMode(),
-        cell.Style().GetWritingMode(), /* is_new_fc */ true);
-    builder.SetAvailableSize({cell_inline_size, cell_block_size});
-    builder.SetIsFixedInlineSize(true);
-    builder.SetIsFixedBlockSize(true);
-    builder.SetTextDirection(Style().Direction());
+    // Percentage block resolution size is only valid if cell block-size is
+    // specified, or the table block-size is specified.
+    const bool is_fixed_block_size_indefinite =
+        !cell_data.is_constrained && !table_data.is_table_block_size_specified;
 
-    PhysicalSize icb_size = Node().InitialContainingBlockSize();
-    builder.SetOrthogonalFallbackInlineSize(
-        IsHorizontalWritingMode(
-            table_data.table_writing_direction.GetWritingMode())
-            ? icb_size.height
-            : icb_size.width);
-
-    builder.SetPercentageResolutionSize(
-        LogicalSize(container_builder_.InlineSize(), kIndefiniteSize));
-
-    // Percentage block resolution size is only valid if
-    // cell height is specified, or table height is specified.
-    bool is_block_size_indefinite =
-        !cell_data.is_constrained &&
-        !table_data.treat_table_block_size_as_constrained;
-    if (is_block_size_indefinite)
-      builder.SetIsFixedBlockSizeIndefinite(true);
-    builder.SetIsTableCell(/* is_table_cell */ true,
-                           /* is_legacy_table_cell */ false);
-    builder.SetTableCellBorders(cell_data.border_box_borders);
-    builder.SetTableCellAlignmentBaseline(row_baseline);
-    builder.SetTableCellColumnIndex(start_column);
-    builder.SetNeedsBaseline(true);
-    builder.SetIsTableCellHiddenForPaint(
+    const bool is_hidden_for_paint =
         table_data.column_locations[*cell_location_start_column].is_collapsed &&
-        *cell_location_start_column == cell_location_end_column);
-    builder.SetHideTableCellIfEmpty(!table_data.has_collapsed_borders &&
-                                    cell.Style().EmptyCells() ==
-                                        EEmptyCells::kHide);
+        *cell_location_start_column == cell_location_end_column;
 
-    return builder.ToConstraintSpace();
+    return NGTableAlgorithmUtils::CreateTableCellConstraintSpace(
+        table_data.table_writing_direction, cell, cell_data.border_box_borders,
+        {cell_inline_size, cell_block_size}, container_builder_.InlineSize(),
+        row_baseline, start_column, is_fixed_block_size_indefinite,
+        table_data.is_table_block_size_specified, is_hidden_for_paint,
+        table_data.has_collapsed_borders, NGCacheSlot::kLayout);
   };
 
   const NGTableConstraintSpaceData::Row& row = table_data.rows[row_index];
@@ -116,32 +90,33 @@ scoped_refptr<const NGLayoutResult> NGTableRowLayoutAlgorithm::Layout() {
   LayoutUnit row_baseline = row.baseline;
   wtf_size_t cell_index = row.start_cell_index;
   if (row.has_baseline_aligned_percentage_block_size_descendants) {
+    NGRowBaselineTabulator row_baseline_tabulator;
     for (NGBlockNode cell = To<NGBlockNode>(Node().FirstChild()); cell;
          cell = To<NGBlockNode>(cell.NextSibling()), ++cell_index) {
       bool is_parallel = IsParallelWritingMode(table_writing_mode,
                                                cell.Style().GetWritingMode());
-      if (!NGTableAlgorithmUtils::IsBaseline(cell.Style().VerticalAlign()) ||
-          !is_parallel)
-        continue;
       wtf_size_t cell_location_start_column;
+
       NGConstraintSpace cell_constraint_space = CreateCellConstraintSpace(
           cell, cell_index, base::nullopt, row.is_collapsed,
           &cell_location_start_column);
       scoped_refptr<const NGLayoutResult> layout_result =
           cell.Layout(cell_constraint_space);
-      const NGBoxFragment fragment(
-          table_data.table_writing_direction.GetWritingMode(),
-          table_data.table_writing_direction.Direction(),
+      NGBoxFragment fragment(
+          table_data.table_writing_direction,
           To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment()));
-
-      LayoutUnit baseline = fragment.FirstBaselineOrSynthesize();
-      row_baseline = std::max(row_baseline, baseline);
+      row_baseline_tabulator.ProcessCell(
+          fragment, row.block_size,
+          NGTableAlgorithmUtils::IsBaseline(cell.Style().VerticalAlign()),
+          is_parallel,
+          layout_result->HasDescendantThatDependsOnPercentageBlockSize());
     }
+    row_baseline = row_baseline_tabulator.ComputeBaseline(row.block_size);
   }
 
   // Generate cell fragments.
-  base::Optional<LayoutUnit> reported_row_baseline;
   cell_index = row.start_cell_index;
+  NGRowBaselineTabulator row_baseline_tabulator;
   for (NGBlockNode cell = To<NGBlockNode>(Node().FirstChild()); cell;
        cell = To<NGBlockNode>(cell.NextSibling()), ++cell_index) {
     wtf_size_t cell_location_start_column;
@@ -155,22 +130,23 @@ scoped_refptr<const NGLayoutResult> NGTableRowLayoutAlgorithm::Layout() {
             table_data.table_border_spacing.inline_size,
         LayoutUnit());
     container_builder_.AddResult(*cell_result, cell_offset);
-
-    if (NGTableAlgorithmUtils::IsBaseline(cell.Style().VerticalAlign())) {
-      const NGBoxFragment fragment(
-          table_data.table_writing_direction.GetWritingMode(),
-          table_data.table_writing_direction.Direction(),
-          To<NGPhysicalBoxFragment>(cell_result->PhysicalFragment()));
-      reported_row_baseline =
-          std::max(reported_row_baseline.value_or(LayoutUnit::Min()),
-                   fragment.FirstBaselineOrSynthesize());
-    }
+    NGBoxFragment fragment(
+        table_data.table_writing_direction,
+        To<NGPhysicalBoxFragment>(cell_result->PhysicalFragment()));
+    bool is_parallel = IsParallelWritingMode(table_writing_mode,
+                                             cell.Style().GetWritingMode());
+    row_baseline_tabulator.ProcessCell(
+        fragment, row.block_size,
+        NGTableAlgorithmUtils::IsBaseline(cell.Style().VerticalAlign()),
+        is_parallel,
+        cell_result->HasDescendantThatDependsOnPercentageBlockSize());
   }
   container_builder_.SetFragmentBlockSize(row.block_size);
   container_builder_.SetBaseline(
-      reported_row_baseline.value_or(row.block_size));
+      row_baseline_tabulator.ComputeBaseline(row.block_size));
   if (row.is_collapsed)
     container_builder_.SetIsHiddenForPaint(true);
+  container_builder_.SetIsTableNGPart();
   NGOutOfFlowLayoutPart(Node(), ConstraintSpace(), &container_builder_).Run();
   return container_builder_.ToBoxFragment();
 }

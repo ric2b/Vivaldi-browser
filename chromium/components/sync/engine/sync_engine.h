@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
@@ -24,15 +23,18 @@
 #include "components/sync/engine/cycle/sync_cycle_snapshot.h"
 #include "components/sync/engine/model_type_configurer.h"
 #include "components/sync/engine/shutdown_reason.h"
-#include "components/sync/engine/sync_backend_registrar.h"
 #include "components/sync/engine/sync_credentials.h"
+#include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/engine/sync_manager_factory.h"
 #include "url/gurl.h"
 
 namespace syncer {
 
+class EngineComponentsFactory;
 class HttpPostProviderFactory;
+class JsEventHandler;
 class SyncEngineHost;
+struct SyncStatus;
 
 // The interface into the sync engine, which is the part of sync that performs
 // communication between model types and the sync server. In prod the engine
@@ -51,9 +53,7 @@ class SyncEngine : public ModelTypeConfigurer {
     InitParams(InitParams&& other);
     ~InitParams();
 
-    scoped_refptr<base::SequencedTaskRunner> sync_task_runner;
     SyncEngineHost* host = nullptr;
-    std::unique_ptr<SyncBackendRegistrar> registrar;
     std::unique_ptr<SyncEncryptionHandler::Observer> encryption_observer_proxy;
     scoped_refptr<ExtensionsActivity> extensions_activity;
     WeakHandle<JsEventHandler> event_handler;
@@ -145,9 +145,6 @@ class SyncEngine : public ModelTypeConfigurer {
   // Must be called *after* StopSyncingForShutdown.
   virtual void Shutdown(ShutdownReason reason) = 0;
 
-  // Turns on encryption of all present and future sync data.
-  virtual void EnableEncryptEverything() = 0;
-
   // Returns current detailed status information.
   virtual const SyncStatus& GetDetailedStatus() const = 0;
 
@@ -158,8 +155,6 @@ class SyncEngine : public ModelTypeConfigurer {
       base::OnceCallback<void(bool)> cb) const = 0;
 
 
-  virtual void GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const = 0;
-
   // Requests that the backend forward to the fronent any protocol events in
   // its buffer and begin forwarding automatically from now on.  Repeated calls
   // to this function may result in the same events being emitted several
@@ -168,14 +163,6 @@ class SyncEngine : public ModelTypeConfigurer {
 
   // Disables protocol event forwarding.
   virtual void DisableProtocolEventForwarding() = 0;
-
-  // Enables the sending of directory type debug counters.  Also, for every
-  // time it is called, it makes an explicit request that updates to an update
-  // for all counters be emitted.
-  virtual void EnableDirectoryTypeDebugInfoForwarding() = 0;
-
-  // Disables the sending of directory type debug counters.
-  virtual void DisableDirectoryTypeDebugInfoForwarding() = 0;
 
   // Notify the syncer that the cookie jar has changed.
   // See SyncManager::OnCookieJarChanged.

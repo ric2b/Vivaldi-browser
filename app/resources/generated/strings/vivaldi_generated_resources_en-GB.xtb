@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Selection only</translation>
 <translation id="1244303850296295656">Extension error</translation>
 <translation id="125220115284141797">Default</translation>
-<translation id="1274977772557788323">Adobe Flash Player Storage settings</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Bookmarks HTML File</translation>
 <translation id="1380436189840894976">Quit incognito mode anyway?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Paste as plain text</translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Allow identifiers for protected content (computer restart may be required)</translation>
-<translation id="2263497240924215535">(Disabled)</translation>
 <translation id="2277255602909579701">All cookies and site data</translation>
 <translation id="2280486287150724112">Right margin</translation>
 <translation id="2282146716419988068">GPU Process</translation>
@@ -125,7 +123,6 @@
 <translation id="3013291976881901233">MIDI devices</translation>
 <translation id="3021678814754966447">&amp;View Frame Source</translation>
 <translation id="3036546437875325427">Enable Flash</translation>
-<translation id="3038675903128704560">Do not allow any site to use a plug-in to access your computer</translation>
 <translation id="3046910703532196514">Webpage, Complete</translation>
 <translation id="3067198360141518313">Run this plugin</translation>
 <translation id="3080207940057008665">Another programme on your computer added a theme that may change the way Vivaldi works.</translation>
@@ -154,12 +151,10 @@
 <translation id="3378572629723696641">This extension may have been corrupted.</translation>
 <translation id="3387614642886316601">Use enhanced spell check</translation>
 <translation id="3432227430032737297">Remove all shown</translation>
-<translation id="3440761377721825626">Ask when a site wants to use a plug-in to access your computer</translation>
 <translation id="345693547134384690">Open &amp;image in new tab</translation>
 <translation id="3494769164076977169">Ask when a site tries to download files automatically after the first file (recommended)</translation>
 <translation id="3505030558724226696">Revoke device access</translation>
 <translation id="3511307672085573050">Copy Link Addr&amp;ess</translation>
-<translation id="3523642406908660543">Ask when a site wants to use a plug-in to access your computer (recommended)</translation>
 <translation id="354068948465830244">This can read and change site data</translation>
 <translation id="3560034655160545939">&amp;Spell check</translation>
 <translation id="3574917942258583917">Exit incognito mode anyway?</translation>
@@ -218,7 +213,6 @@
 <translation id="4423376891418188461">Restore Settings</translation>
 <translation id="4434045419905280838">Pop-ups and redirects</translation>
 <translation id="4478664379124702289">Save Lin&amp;k As...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Unable to cast <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Go to <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps and extensions can only be modified by the manager (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -299,7 +293,6 @@
 <translation id="583281660410589416">Unknown</translation>
 <translation id="5860491529813859533">Turn on</translation>
 <translation id="5867841422488265304">Search or type web address</translation>
-<translation id="5908769186679515905">Block sites from running Flash</translation>
 <translation id="5910363049092958439">Sa&amp;ve Image As...</translation>
 <translation id="5956585768868398362">Is this the search page that you were expecting?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
@@ -372,7 +365,6 @@
 <translation id="7287143125007575591">Access denied.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Show &amp;controls</translation>
-<translation id="7311079019872751559">Unsandboxed plugin access</translation>
 <translation id="7385854874724088939">Something went wrong when trying to print. Please check your printer and try again.</translation>
 <translation id="7412226954991670867">GPU Memory</translation>
 <translation id="7421925624202799674">&amp;View Page Source</translation>

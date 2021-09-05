@@ -36,14 +36,15 @@
     <overview-card id="overviewCard"></overview-card>
   </div>
   <div class="diagonstics-cards-container">
-    <battery-status-card id="batteryStatusCard"></battery-status-card>
+    <template is="dom-if" if="[[showBatteryStatusCard_]]" restamp>
+      <battery-status-card id="batteryStatusCard"></battery-status-card>
+    </template>
     <cpu-card id="cpuCard"></cpu-card>
     <memory-card id="memoryCard"></memory-card>
   </div>
   <div class="session-log-container">
-    <!-- TODO(michaelcheco): Localize string -->
     <cr-button class="session-log-button">
-      Session log
+      [[i18n('sessionLog')]]
     </cr-button>
   </div>
 </div>

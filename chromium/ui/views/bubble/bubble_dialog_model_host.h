@@ -14,7 +14,9 @@
 #include "ui/views/controls/button/button.h"
 
 namespace views {
-class GridLayout;
+
+class Label;
+class StyledLabel;
 
 // BubbleDialogModelHost is a views implementation of ui::DialogModelHost which
 // hosts a ui::DialogModel as a BubbleDialogDelegateView. This exposes such as
@@ -46,7 +48,6 @@ class VIEWS_EXPORT BubbleDialogModelHost : public BubbleDialogDelegateView,
   // GetInitiallyFocusedView().
   View* GetInitiallyFocusedView() override;
   void OnDialogInitialized() override;
-  gfx::Size CalculatePreferredSize() const override;
 
   // ui::DialogModelHost:
   void Close() override;
@@ -54,30 +55,87 @@ class VIEWS_EXPORT BubbleDialogModelHost : public BubbleDialogDelegateView,
   void OnFieldAdded(ui::DialogModelField* field) override;
 
  private:
+  // TODO(pbos): Consider externalizing this functionality into a different
+  // format that could feasibly be adopted by LayoutManagers. This is used for
+  // BoxLayouts (but could be others) to agree on columns' preferred width as a
+  // replacement for using GridLayout.
+  class LayoutConsensusView;
+  class LayoutConsensusGroup {
+   public:
+    LayoutConsensusGroup();
+    ~LayoutConsensusGroup();
+
+    void AddView(LayoutConsensusView* view);
+    void RemoveView(LayoutConsensusView* view);
+
+    void InvalidateChildren();
+
+    // Get the union of all preferred sizes within the group.
+    gfx::Size GetMaxPreferredSize() const;
+
+    // Get the union of all minimum sizes within the group.
+    gfx::Size GetMaxMinimumSize() const;
+
+   private:
+    base::flat_set<View*> children_;
+  };
+
+  struct DialogModelHostField {
+    ui::DialogModelField* dialog_model_field;
+
+    // View representing the entire field.
+    View* field_view;
+
+    // Child view to |field_view|, if any, that's used for focus. For instance,
+    // a textfield row would be a container that contains both a
+    // views::Textfield and a descriptive label. In this case |focusable_view|
+    // would refer to the views::Textfield which is also what would gain focus.
+    View* focusable_view;
+  };
+
   void OnWindowClosing();
 
-  GridLayout* GetGridLayout();
-  void ConfigureGridLayout();
-
   void AddInitialFields();
-  View* AddOrUpdateBodyText(ui::DialogModelBodyText* field);
-  View* AddOrUpdateCheckbox(ui::DialogModelCheckbox* field);
-  View* AddOrUpdateCombobox(ui::DialogModelCombobox* field);
-  View* AddOrUpdateTextfield(ui::DialogModelTextfield* field);
-  void AddLabelAndField(const base::string16& label_text,
-                        std::unique_ptr<views::View> field,
-                        const gfx::FontList& field_font);
+  void AddOrUpdateBodyText(ui::DialogModelBodyText* model_field);
+  void AddOrUpdateCheckbox(ui::DialogModelCheckbox* model_field);
+  void AddOrUpdateCombobox(ui::DialogModelCombobox* model_field);
+  void AddOrUpdateTextfield(ui::DialogModelTextfield* model_field);
 
+  void UpdateSpacingAndMargins();
+
+  void AddViewForLabelAndField(ui::DialogModelField* model_field,
+                               const base::string16& label_text,
+                               std::unique_ptr<views::View> field,
+                               const gfx::FontList& field_font);
+
+  static bool DialogModelLabelRequiresStyledLabel(
+      const ui::DialogModelLabel& dialog_label);
   std::unique_ptr<View> CreateViewForLabel(
       const ui::DialogModelLabel& dialog_label);
+  std::unique_ptr<StyledLabel> CreateStyledLabelForDialogModelLabel(
+      const ui::DialogModelLabel& dialog_label);
+  std::unique_ptr<Label> CreateLabelForDialogModelLabel(
+      const ui::DialogModelLabel& dialog_label);
 
-  void OnViewCreatedForField(View* view, ui::DialogModelField* field);
+  void AddDialogModelHostField(std::unique_ptr<View> view,
+                               const DialogModelHostField& field_view_info);
+  void AddDialogModelHostFieldForExistingView(
+      const DialogModelHostField& field_view_info);
 
-  View* FieldToView(ui::DialogModelField* field);
+  DialogModelHostField FindDialogModelHostField(
+      ui::DialogModelField* model_field);
+  DialogModelHostField FindDialogModelHostField(View* view);
+
+  static View* GetTargetView(const DialogModelHostField& field_view_info);
+
+  bool IsModalDialog() const;
 
   std::unique_ptr<ui::DialogModel> model_;
-  base::flat_map<ui::DialogModelField*, View*> field_to_view_;
+  std::vector<DialogModelHostField> fields_;
   std::vector<PropertyChangedSubscription> property_changed_subscriptions_;
+
+  LayoutConsensusGroup textfield_first_column_group_;
+  LayoutConsensusGroup textfield_second_column_group_;
 };
 
 }  // namespace views

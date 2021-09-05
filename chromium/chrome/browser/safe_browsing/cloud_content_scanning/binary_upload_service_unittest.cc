@@ -8,18 +8,18 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_forward.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/time/time.h"
 #include "build/branding_buildflags.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_fcm_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/multipart_uploader.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
-#include "components/safe_browsing/core/proto/webprotect.pb.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -485,7 +485,9 @@ TEST_F(BinaryUploadServiceTest, ReturnsAsynchronouslyWithNoFCM) {
 TEST_F(BinaryUploadServiceTest, IsAuthorizedValidTimer) {
   // The 24 hours timer should be started on the first IsAuthorized call.
   ValidateAuthorizationTimerIdle();
-  service_->IsAuthorized(GURL(), base::DoNothing());
+  service_->IsAuthorized(
+      GURL(), base::DoNothing(),
+      enterprise_connectors::AnalysisConnector::ANALYSIS_CONNECTOR_UNSPECIFIED);
   ValidateAuthorizationTimerStarted();
 }
 
@@ -638,22 +640,15 @@ TEST_F(BinaryUploadServiceTest, UrlOverride) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitchASCII("binary-upload-service-url",
                                   "https://test.com/scan");
+  policy::ChromeBrowserPolicyConnector::EnableCommandLineSupportForTesting();
 
-  // The flag should only work on Chromium builds.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  ASSERT_EQ(GURL("https://safebrowsing.google.com/safebrowsing/uploads/"
-                 "scan?device_token=fake_token&connector=OnFileAttached&tag="
-                 "dlp&tag=malware"),
-            request.GetUrlWithParams());
-#else
   ASSERT_EQ(GURL("https://test.com/scan?device_token=fake_token&connector="
                  "OnFileAttached&tag=dlp&tag=malware"),
             request.GetUrlWithParams());
-#endif
 
   command_line->RemoveSwitch("binary-upload-service-url");
 
-  // The flag being empty should not affect the URL at all, on either builds.
+  // The flag being empty should not affect the URL at all.
   ASSERT_EQ(GURL("https://safebrowsing.google.com/safebrowsing/uploads/"
                  "scan?device_token=fake_token&connector=OnFileAttached&tag="
                  "dlp&tag=malware"),

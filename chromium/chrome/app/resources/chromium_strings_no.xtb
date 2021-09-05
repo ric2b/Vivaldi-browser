@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="no">
-<translation id="1060499346270045814">{NUM_HOURS,plural, =1{Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket for en time siden.}other{Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket for {NUM_HOURS} timer siden.}}</translation>
 <translation id="1065672644894730302">Kan ikke lese innstillingene. Enkelte funksjoner kan være utilgjengelige, og endringer av innstillingene blir ikke lagret.</translation>
 <translation id="107513968719897256">For å skille mellom personlig surfing og <ph name="NEW_USER" />-surfing, opprett en ny profil i Chromium</translation>
 <translation id="1098170124587656448">Chromium kan beskytte deg mot databrudd, ondsinnede utvidelser med mer</translation>
@@ -10,6 +9,7 @@
 <translation id="1131805035311359397">For å sjekke om passordene dine er trygge mot databrudd og andre sikkerhetsproblemer, <ph name="BEGIN_LINK" />logg på Chromium<ph name="END_LINK" />.</translation>
 <translation id="1185134272377778587">Om Chromium</translation>
 <translation id="1315551408014407711">Konfigurer den nye Chromium-profilen din</translation>
+<translation id="1357932062193643861">Spør når Chromium åpnes</translation>
 <translation id="1396446129537741364">Chromium prøver å vise passord.</translation>
 <translation id="1414495520565016063">Du er logget på Chromium.</translation>
 <translation id="1414973082589232775">For å bruke Rosetta til å spille av beskyttede medier må du starte Chromium på nytt.</translation>
@@ -46,10 +46,8 @@
 <translation id="2711502716910134313">Chromium-fane</translation>
 <translation id="2718390899429598676">Chromium krypterer dataene dine for å øke sikkerheten.</translation>
 <translation id="2770231113462710648">Endre standardnettleser til:</translation>
-<translation id="2797461000988640326">{NUM_MINS,plural, =1{Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket for ett minutt siden.}other{Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket for {NUM_MINS} minutter siden.}}</translation>
 <translation id="2799223571221894425">Start på nytt</translation>
 <translation id="2847479871509788944">Fjern fra Chromium</translation>
-<translation id="2853765747879685679">Spør når jeg åpner Chromium</translation>
 <translation id="2885378588091291677">Oppgavebehandling</translation>
 <translation id="2910007522516064972">Om &amp;Chromium</translation>
 <translation id="2977470724722393594">Chromium er oppdatert</translation>
@@ -57,7 +55,6 @@
 <translation id="3032706164202344641">Chromium kan ikke sjekke passordene dine. Prøv igjen senere.</translation>
 <translation id="3032787606318309379">Legger til i Chromium …</translation>
 <translation id="3068515742935458733">Bidra til å gjøre Chromium bedre ved å sende programstopprapporter og <ph name="UMA_LINK" /> til Google</translation>
-<translation id="3086207596048762442">Chromium sjekker om du har uønsket programvare, én gang i uken</translation>
 <translation id="3103660991484857065">Installasjonsprogrammet kunne ikke dekomprimere arkivet. Last ned Chromium på nytt.</translation>
 <translation id="3130323860337406239">Chromium bruker mikrofonen din.</translation>
 <translation id="3155163173539279776">Start Chromium på nytt</translation>
@@ -179,7 +176,6 @@ Det er mulig at enkelte funksjoner ikke er tilgjengelige. Angi en annen profilka
 <translation id="6847869444787758381">Med Chromium får du beskjed hvis passordene dine noensinne utsettes for sikkerhetsbrudd</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
 <translation id="6863361426438995919">Google Pay (kopiert til Chromium)</translation>
-<translation id="6863846675160669383">{NUM_DAYS,plural, =1{Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket for en dag siden.}other{Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket for {NUM_DAYS} dager siden.}}</translation>
 <translation id="6893813176749746474">Chromium har blitt oppdatert, men du har ikke brukt den på minst 30 dager.</translation>
 <translation id="6897548120660295439">Rosetta gjør Chromium i stand til å spille av de beskyttede mediene på denne siden.</translation>
 <translation id="6964305034639999644">Åpne linken i et inko&amp;gnitovindu i Chromium</translation>
@@ -213,7 +209,6 @@ Chromium kan ikke gjenopprette innstillingen dine.</translation>
     innstillingene for Chromium OS<ph name="LINK_END" /></translation>
 <translation id="761356813943268536">Chromium bruker kameraet og mikrofonen din.</translation>
 <translation id="7617377681829253106">Nå er Chromium blitt enda bedre</translation>
-<translation id="7628001322379820951">Chromium fant skadelig programvare på datamaskinen</translation>
 <translation id="7686590090926151193">Chromium er ikke standardnettleseren din</translation>
 <translation id="7689606757190482937">Synkroniser og gi Chromium et personlig preg på alle enhetene dine</translation>
 <translation id="7729447699958282447">Chromium kunne ikke synkronisere dataene dine. Dette skyldes at synkronisering ikke er tilgjengelig for domenet ditt.</translation>
@@ -246,7 +241,6 @@ Chromium kan ikke gjenopprette innstillingen dine.</translation>
 <translation id="8621669128220841554">Installeringen mislyktes på grunn av en uspesifisert feil. Last ned Chromium på nytt.</translation>
 <translation id="8697124171261953979">Den styrer også hvilken side som vises når du starter Chromium eller søker fra multifunksjonsfeltet.</translation>
 <translation id="8704119203788522458">Dette er din Chromium</translation>
-<translation id="8705191560707593947">Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket i går.</translation>
 <translation id="8796602469536043152">Chromium trenger tilgang til kameraet ditt og mikrofonen din for dette nettstedet</translation>
 <translation id="8803635938069941624">Vilkår for Chromium OS</translation>
 <translation id="8821041990367117597">Chromium kunne ikke synkronisere dataene dine. Dette skyldes at påloggingsopplysningene for kontoen din er foreldede.</translation>
@@ -262,7 +256,6 @@ Chromium kan ikke gjenopprette innstillingen dine.</translation>
 <translation id="91086099826398415">Åpne linken i en ny &amp;fane i Chromium</translation>
 <translation id="911206726377975832">Vil du slette all nettleserdata også?</translation>
 <translation id="9158494823179993217">Systemadministratoren din har konfigurert Chromium til å åpne en annen nettleser når du går til <ph name="TARGET_URL_HOSTNAME" />.</translation>
-<translation id="9164845895615421500">Chromium sjekker én gang i uken om du har uønsket programvare. Sist sjekket for et øyeblikk siden.</translation>
 <translation id="9190841055450128916">Chromium (mDNS-Inn)</translation>
 <translation id="93478295209880648">Chromium fungerer kanskje ikke riktig fordi den ikke lenger støttes på Windows XP eller Windows Vista</translation>
 <translation id="95514773681268843"><ph name="DOMAIN" /> krever at du leser og godtar følgende vilkår før du bruker denne enheten. Disse vilkårene utvider, endrer eller begrenser ikke Chromium OS-vilkårene.</translation>

@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
 #include "chromeos/dbus/constants/attestation_constants.h"
 #include "url/gurl.h"
 
@@ -23,17 +24,13 @@ namespace content {
 class WebContents;
 }
 
-namespace cryptohome {
-class AsyncMethodCaller;
-}
-
 namespace user_manager {
 class User;
 }
 
 namespace chromeos {
 
-class CryptohomeClient;
+class AttestationClient;
 
 namespace attestation {
 
@@ -128,8 +125,7 @@ class PlatformVerificationFlow
   // An alternate constructor which specifies dependent objects explicitly.
   // This is useful in testing.  The caller retains ownership of all pointers.
   PlatformVerificationFlow(AttestationFlow* attestation_flow,
-                           cryptohome::AsyncMethodCaller* async_caller,
-                           CryptohomeClient* cryptohome_client,
+                           AttestationClient* attestation_client,
                            Delegate* delegate);
 
   // Invokes an asynchronous operation to challenge a platform key.  Any user
@@ -174,10 +170,10 @@ class PlatformVerificationFlow
   ~PlatformVerificationFlow();
 
   // Callback for attestation preparation. The arguments to ChallengePlatformKey
-  // are in |context|, and |attestation_prepared| specifies whether attestation
-  // has been prepared on this device.
-  void OnAttestationPrepared(ChallengeContext context,
-                             bool attestation_prepared);
+  // are in |context|, and |reply| is the result of |GetEnrollmentPreparations|.
+  void OnAttestationPrepared(
+      ChallengeContext context,
+      const ::attestation::GetEnrollmentPreparationsReply& reply);
 
   // Initiates the flow to get a platform key certificate.  The arguments to
   // ChallengePlatformKey are in |context|.  |account_id| identifies the user
@@ -193,11 +189,11 @@ class PlatformVerificationFlow
   // completes.  The arguments to ChallengePlatformKey are in |context|.
   // |account_id| identifies the user for which the certificate was requested.
   // |operation_success| is true iff the certificate request operation
-  // succeeded.  |certificate_chain| holds the certificate for the platform key
-  // on success.  If the certificate request was successful, this method invokes
-  // a request to sign the challenge.  If the operation timed out prior to this
-  // method being called, this method does nothing - notably, the callback is
-  // not invoked.
+  // succeeded.  |certificate_chain| holds the certificate for the platform
+  // key on success.  If the certificate request was successful, this method
+  // invokes a request to sign the challenge.  If the operation timed out
+  // prior to this method being called, this method does nothing - notably,
+  // the callback is not invoked.
   void OnCertificateReady(
       scoped_refptr<base::RefCountedData<ChallengeContext>> context,
       const AccountId& account_id,
@@ -212,20 +208,18 @@ class PlatformVerificationFlow
       scoped_refptr<base::RefCountedData<ChallengeContext>> context);
 
   // A callback called when a challenge signing request has completed.  The
-  // |certificate_chain| is the platform certificate chain for the key which
-  // signed the |challenge|.  The arguments to ChallengePlatformKey are in
-  // |context|. |account_id| identifies the user for which the certificate was
-  // requested. |is_expiring_soon| will be set iff a certificate in the
-  // |certificate_chain| is expiring soon. |operation_success| is true iff the
-  // challenge signing operation was successful.  If it was successful,
-  // |response_data| holds the challenge response and the method will invoke
-  // |context.callback|.
+  // `certificate_chain` is the platform certificate chain for the key which
+  // signed the `challenge`.  The arguments to ChallengePlatformKey are in
+  // `context`. `account_id` identifies the user for which the certificate was
+  // requested. `is_expiring_soon` will be set iff a certificate in the
+  // `certificate_chain` is expiring soon. `reply` is returned from
+  // `AttestationClient`. Upon success, the method will invoke
+  // `context.callback`.
   void OnChallengeReady(ChallengeContext context,
                         const AccountId& account_id,
                         const std::string& certificate_chain,
                         bool is_expiring_soon,
-                        bool operation_success,
-                        const std::string& response_data);
+                        const ::attestation::SignSimpleChallengeReply& reply);
 
   // Checks whether attestation for content protection is allowed by policy.
   bool IsAttestationAllowedByPolicy();
@@ -242,8 +236,7 @@ class PlatformVerificationFlow
 
   AttestationFlow* attestation_flow_;
   std::unique_ptr<AttestationFlow> default_attestation_flow_;
-  cryptohome::AsyncMethodCaller* async_caller_;
-  CryptohomeClient* cryptohome_client_;
+  AttestationClient* const attestation_client_;
   Delegate* delegate_;
   std::unique_ptr<Delegate> default_delegate_;
   base::TimeDelta timeout_delay_;

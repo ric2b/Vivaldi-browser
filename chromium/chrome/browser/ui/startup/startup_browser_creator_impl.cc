@@ -15,9 +15,9 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/values.h"
-#include "base/version.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/platform_apps/install_chrome_app.h"
@@ -59,7 +59,6 @@
 #include "chrome/common/url_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
-#include "components/version_info/version_info.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -74,23 +73,19 @@
 #include "chrome/browser/ui/startup/mac_system_infobar_delegate.h"
 #endif
 
-#if defined(OS_WIN)
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/browser/win/conflicts/incompatible_applications_updater.h"
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#include "chrome/browser/notifications/notification_platform_bridge_win.h"
-#include "chrome/browser/shell_integration_win.h"
-#include "chrome/browser/ui/startup/credential_provider_signin_dialog_win.h"
-#include "chrome/credential_provider/common/gcp_strings.h"
-#endif  // defined(OS_WIN)
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-#include "chrome/browser/plugins/flash_deprecation_infobar_delegate.h"
 #endif
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/google/core/common/google_util.h"
 #include "components/rlz/rlz_tracker.h"  // nogncheck
+#endif
+
+#if BUILDFLAG(IS_LACROS)
+#include "chrome/grit/generated_resources.h"
+#include "components/infobars/core/simple_alert_infobar_delegate.h"
+#include "ui/base/l10n/l10n_util.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -204,12 +199,8 @@ StartupBrowserCreatorImpl::StartupBrowserCreatorImpl(
     chrome::startup::IsFirstRun is_first_run)
     : cur_dir_(cur_dir),
       command_line_(command_line),
-      profile_(nullptr),
       browser_creator_(browser_creator),
       is_first_run_(is_first_run == chrome::startup::IS_FIRST_RUN) {}
-
-StartupBrowserCreatorImpl::~StartupBrowserCreatorImpl() {
-}
 
 bool StartupBrowserCreatorImpl::Launch(
     Profile* profile,
@@ -218,40 +209,6 @@ bool StartupBrowserCreatorImpl::Launch(
     std::unique_ptr<LaunchModeRecorder> launch_mode_recorder) {
   DCHECK(profile);
   profile_ = profile;
-
-#if defined(OS_WIN)
-  // If the command line has the kNotificationLaunchId switch, then this
-  // Launch() call is from notification_helper.exe to process toast activation.
-  // Delegate to the notification system; do not open a browser window here.
-  if (command_line_.HasSwitch(switches::kNotificationLaunchId)) {
-    if (NotificationPlatformBridgeWin::HandleActivation(command_line_)) {
-      if (launch_mode_recorder) {
-        launch_mode_recorder->SetLaunchMode(
-            LaunchMode::kWinPlatformNotification);
-      }
-      return true;
-    }
-    return false;
-  }
-  // If being started for credential provider logon purpose, only show the
-  // signin page.
-  if (command_line_.HasSwitch(credential_provider::kGcpwSigninSwitch)) {
-    DCHECK(profile_->IsIncognitoProfile());
-    // NOTE: All launch urls are ignored when running with --gcpw-signin since
-    // this mode only loads Google's sign in page.
-
-    // If GCPW signin dialog fails, returning false here will allow Chrome to
-    // exit gracefully during the launch.
-    if (!StartGCPWSignin(command_line_, profile_))
-      return false;
-
-    if (launch_mode_recorder) {
-      launch_mode_recorder->SetLaunchMode(
-          LaunchMode::kCredentialProviderSignIn);
-    }
-    return true;
-  }
-#endif  // defined(OS_WIN)
 
   // NOTE(pettern@vivaldi.com): If the app_id argument points to our app id,
   // ignore it and start Vivaldi as normal.
@@ -312,32 +269,6 @@ bool StartupBrowserCreatorImpl::Launch(
       MaybeToggleFullscreen(browser);
   }
 
-#if defined(OS_WIN)
-  if (process_startup) {
-    // Update this number when users should go through a taskbar shortcut
-    // migration again. The last reason to do this was crrev.com/2285399 @
-    // 86.0.4231.0.
-    //
-    // Note: If shortcut updates need to be done once after a future OS upgrade,
-    // that should be done by re-versioning Active Setup (see //chrome/installer
-    // and http://crbug.com/577697 for details).
-    const base::Version kLastVersionNeedingMigration({86U, 0U, 4231U, 0U});
-
-    PrefService* local_state = g_browser_process->local_state();
-    if (local_state) {
-      const base::Version last_version_migrated(
-          local_state->GetString(prefs::kShortcutMigrationVersion));
-      if (!last_version_migrated.IsValid() ||
-          last_version_migrated < kLastVersionNeedingMigration) {
-        shell_integration::win::MigrateTaskbarPins(base::BindOnce(
-            &PrefService::SetString, base::Unretained(local_state),
-            prefs::kShortcutMigrationVersion,
-            version_info::GetVersionNumber()));
-      }
-    }
-  }
-#endif  // defined(OS_WIN)
-
   return true;
 }
 
@@ -368,7 +299,7 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(Browser* browser,
     // incomplete check on whether a user gesture created a window which looked
     // at the state of the MessageLoop.
     Browser::CreateParams params = Browser::CreateParams(profile_, false);
-    browser = new Browser(params);
+    browser = Browser::Create(params);
   }
 
   bool first_tab = true;
@@ -469,7 +400,7 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(Browser* browser,
 }
 
 bool StartupBrowserCreatorImpl::IsAppLaunch(std::string* app_url,
-                                            std::string* app_id) {
+                                            std::string* app_id) const {
   if (command_line_.HasSwitch(switches::kApp)) {
     if (app_url)
       *app_url = command_line_.GetSwitchValueASCII(switches::kApp);
@@ -863,6 +794,19 @@ void StartupBrowserCreatorImpl::AddInfoBarsIfNecessary(
 
     InfoBarService* infobar_service =
         InfoBarService::FromWebContents(web_contents);
+
+#if BUILDFLAG(IS_LACROS)
+    // Show the experimental lacros info bar. auto_expire must be set to false,
+    // since otherwise an automated navigation [which can happen at launch] will
+    // cause the info bar to disappear.
+    SimpleAlertInfoBarDelegate::Create(
+        infobar_service,
+        infobars::InfoBarDelegate::EXPERIMENTAL_INFOBAR_DELEGATE_LACROS,
+        /*vector_icon=*/nullptr,
+        l10n_util::GetStringUTF16(IDS_EXPERIMENTAL_LACROS_WARNING_MESSAGE),
+        /*auto_expire=*/false, /*should_animate=*/false);
+#endif
+
     if (!google_apis::HasAPIKeyConfigured())
       GoogleApiKeysInfoBarDelegate::Create(infobar_service);
 
@@ -886,15 +830,6 @@ void StartupBrowserCreatorImpl::AddInfoBarsIfNecessary(
     }
 #endif
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-    auto* host_content_settings_map =
-        HostContentSettingsMapFactory::GetForProfile(profile_);
-    if (FlashDeprecationInfoBarDelegate::ShouldDisplayFlashDeprecation(
-            host_content_settings_map)) {
-      FlashDeprecationInfoBarDelegate::Create(infobar_service,
-                                              host_content_settings_map);
-    }
-#endif
   }
 }
 

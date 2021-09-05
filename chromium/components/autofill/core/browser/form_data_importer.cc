@@ -19,6 +19,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "components/autofill/core/browser/address_profiles/address_profile_save_manager.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -102,16 +103,13 @@ bool IsMinimumAddress(const AutofillProfile& profile,
                        << "Country entry in form." << CTag{};
   }
 
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillUseVariationCountryCode)) {
-    // As a fallback, use the finch state to get a country code.
-    if (country_code.empty() && !variation_country_code.empty()) {
-      country_code = variation_country_code;
-      if (import_log_buffer && !country_code.empty()) {
-        *import_log_buffer
-            << LogMessage::kImportAddressProfileFromFormCountrySource
-            << "Variations service." << CTag{};
-      }
+  // As a fallback, use the finch state to get a country code.
+  if (country_code.empty() && !variation_country_code.empty()) {
+    country_code = variation_country_code;
+    if (import_log_buffer && !country_code.empty()) {
+      *import_log_buffer
+          << LogMessage::kImportAddressProfileFromFormCountrySource
+          << "Variations service." << CTag{};
     }
   }
 
@@ -230,6 +228,8 @@ FormDataImporter::FormDataImporter(AutofillClient* client,
                                                   payments_client,
                                                   app_locale,
                                                   personal_data_manager)),
+      address_profile_save_manager_(
+          std::make_unique<AddressProfileSaveManager>(personal_data_manager)),
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
       local_card_migration_manager_(
           std::make_unique<LocalCardMigrationManager>(client,
@@ -470,15 +470,12 @@ bool FormDataImporter::ImportAddressProfiles(const FormStructure& form) {
       // And close the div of the section import log.
       import_log_buffer << CTag{"div"};
     }
-    // TODO(crbug.com/1097125): Remove feature test.
     // Run the import on the union of the section if the import was not
     // successful and if there is more than one section.
     if (num_saved_profiles > 0) {
       AutofillMetrics::LogAddressFormImportStatustMetric(
           AutofillMetrics::AddressProfileImportStatusMetric::REGULAR_IMPORT);
-    } else if (base::FeatureList::IsEnabled(
-                   features::kAutofillProfileImportFromUnifiedSection) &&
-               sections.size() > 1) {
+    } else if (sections.size() > 1) {
       // Try to import by combining all sections.
       if (ImportAddressProfileForSection(form, "", &import_log_buffer)) {
         num_saved_profiles++;
@@ -542,14 +539,8 @@ bool FormDataImporter::ImportAddressProfileForSection(
     base::TrimWhitespace(field->value, base::TRIM_ALL, &value);
 
     // If we don't know the type of the field, or the user hasn't entered any
-    // information into the field, or the field is non-focusable (hidden), then
-    // skip it.
-    // TODO(crbug.com/1101280): Remove |skip_unfocussable_field|
-    bool skip_unfocussable_field =
-        !field->is_focusable &&
-        !base::FeatureList::IsEnabled(
-            features::kAutofillProfileImportFromUnfocusableFields);
-    if (!field->IsFieldFillable() || skip_unfocussable_field || value.empty())
+    // information into the field, then skip it.
+    if (!field->IsFieldFillable() || value.empty())
       continue;
 
     AutofillType field_type = field->Type();
@@ -591,24 +582,20 @@ bool FormDataImporter::ImportAddressProfileForSection(
     // Reject profiles with invalid country information.
     if (server_field_type == ADDRESS_HOME_COUNTRY &&
         candidate_profile.GetRawInfo(ADDRESS_HOME_COUNTRY).empty()) {
-      // TODO(crbug.com/1075604): Remove branch with disabled feature.
-      if (base::FeatureList::IsEnabled(
-              features::kAutofillUsePageLanguageToTranslateCountryNames)) {
-        // The country code was not successfully determined from the value in
-        // the country field. This can be caused by a localization that does not
-        // match the |app_locale|. Try setting the value again using the
-        // language of the page. Note, there should be a locale associated with
-        // every language code.
-        std::string page_language;
-        const translate::LanguageState* language_state =
-            client_->GetLanguageState();
-        if (language_state)
-          page_language = language_state->original_language();
-        // Retry to set the country of there is known page language.
-        if (!page_language.empty()) {
-          candidate_profile.SetInfoWithVerificationStatus(
-              field_type, value, page_language, VerificationStatus::kObserved);
-        }
+      // The country code was not successfully determined from the value in
+      // the country field. This can be caused by a localization that does not
+      // match the |app_locale|. Try setting the value again using the
+      // language of the page. Note, there should be a locale associated with
+      // every language code.
+      std::string page_language;
+      const translate::LanguageState* language_state =
+          client_->GetLanguageState();
+      if (language_state)
+        page_language = language_state->original_language();
+      // Retry to set the country of there is known page language.
+      if (!page_language.empty()) {
+        candidate_profile.SetInfoWithVerificationStatus(
+            field_type, value, page_language, VerificationStatus::kObserved);
       }
       // Check if the country code was still not determined correctly.
       if (candidate_profile.GetRawInfo(ADDRESS_HOME_COUNTRY).empty()) {
@@ -687,7 +674,7 @@ bool FormDataImporter::ImportAddressProfileForSection(
     return false;
 
   std::string guid =
-      personal_data_manager_->SaveImportedProfile(candidate_profile);
+      address_profile_save_manager_->SaveProfile(candidate_profile);
 
   return !guid.empty();
 }

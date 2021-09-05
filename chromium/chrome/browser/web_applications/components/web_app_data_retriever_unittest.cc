@@ -12,13 +12,14 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/installable/fake_installable_manager.h"
 #include "chrome/browser/installable/installable_data.h"
 #include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/installable/installable_metrics.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_render_frame.mojom-test-utils.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/common/web_page_metadata.mojom.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/browser/navigation_entry.h"
@@ -73,8 +74,19 @@ class FakeChromeRenderFrame
     web_app_info_ = web_app_info;
   }
 
-  void GetWebApplicationInfo(GetWebApplicationInfoCallback callback) override {
-    std::move(callback).Run(web_app_info_);
+  void GetWebPageMetadata(GetWebPageMetadataCallback callback) override {
+    chrome::mojom::WebPageMetadataPtr web_page_metadata(
+        chrome::mojom::WebPageMetadata::New());
+    web_page_metadata->application_name = web_app_info_.title;
+    web_page_metadata->description = web_app_info_.description;
+    web_page_metadata->application_url = web_app_info_.start_url;
+
+    // Convert more fields as needed.
+    DCHECK(web_app_info_.icon_infos.empty());
+    DCHECK(web_app_info_.mobile_capable ==
+           WebApplicationInfo::MOBILE_CAPABLE_UNSPECIFIED);
+
+    std::move(callback).Run(std::move(web_page_metadata));
   }
 
  private:
@@ -86,6 +98,8 @@ class FakeChromeRenderFrame
 class WebAppDataRetrieverTest : public ChromeRenderViewHostTestHarness {
  public:
   WebAppDataRetrieverTest() = default;
+  WebAppDataRetrieverTest(const WebAppDataRetrieverTest&) = delete;
+  WebAppDataRetrieverTest& operator=(const WebAppDataRetrieverTest&) = delete;
   ~WebAppDataRetrieverTest() override = default;
 
   // Set fake ChromeRenderFrame to avoid mojo connection errors.
@@ -160,7 +174,6 @@ class WebAppDataRetrieverTest : public ChromeRenderViewHostTestHarness {
   base::Optional<std::unique_ptr<WebApplicationInfo>> web_app_info_;
   std::vector<WebApplicationIconInfo> icons_;
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppDataRetrieverTest);
 };
 
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_NoEntry) {

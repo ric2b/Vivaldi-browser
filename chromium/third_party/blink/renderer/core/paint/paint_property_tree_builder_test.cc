@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/layout/layout_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
+#include "third_party/blink/renderer/core/layout/layout_multi_column_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/layout_table_section.h"
 #include "third_party/blink/renderer/core/layout/layout_tree_as_text.h"
@@ -136,7 +137,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FixedPosition) {
   transformed_scroll->setScrollTop(5);
 
   LocalFrameView* frame_view = GetDocument().View();
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
 
   // target1 is a fixed-position element inside an absolute-position scrolling
   // element.  It should be attached under the viewport to skip scrolling and
@@ -198,7 +199,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PositionAndScroll) {
   Element* scroller = GetDocument().getElementById("scroller");
   scroller->scrollTo(0, 100);
   LocalFrameView* frame_view = GetDocument().View();
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
   const ObjectPaintProperties* scroller_properties =
       scroller->GetLayoutObject()->FirstFragment().PaintProperties();
   EXPECT_EQ(FloatSize(0, -100),
@@ -280,8 +281,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowScrollExcludeScrollbars) {
   EXPECT_EQ(FloatRoundedRect(10, 10, 100, 100),
             overflow_clip->UnsnappedClipRect());
 
-  PaintLayer* paint_layer =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("scroller"))->Layer();
+  PaintLayer* paint_layer = GetPaintLayerByElementId("scroller");
   EXPECT_TRUE(paint_layer->GetScrollableArea()
                   ->VerticalScrollbar()
                   ->IsOverlayScrollbar());
@@ -339,7 +339,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowScrollExcludeScrollbarsSubpixel) {
   EXPECT_EQ(FloatRoundedRect(10, 10, 101, 100),
             overflow_clip->PixelSnappedClipRect());
 
-  EXPECT_TRUE(ToLayoutBox(scroller)
+  EXPECT_TRUE(To<LayoutBox>(scroller)
                   ->GetScrollableArea()
                   ->VerticalScrollbar()
                   ->IsOverlayScrollbar());
@@ -379,7 +379,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowScrollVerticalRL) {
     </div>
   )HTML");
 
-  const auto* scroller = ToLayoutBox(GetLayoutObjectByElementId("scroller"));
+  const auto* scroller = GetLayoutBoxByElementId("scroller");
   const auto* content = GetLayoutObjectByElementId("content");
   const auto* properties = scroller->FirstFragment().PaintProperties();
   const auto* overflow_clip = properties->OverflowClip();
@@ -433,7 +433,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowScrollRTL) {
     </div>
   )HTML");
 
-  const auto* scroller = ToLayoutBox(GetLayoutObjectByElementId("scroller"));
+  const auto* scroller = GetLayoutBoxByElementId("scroller");
   const auto* content = GetLayoutObjectByElementId("content");
   const auto* properties = scroller->FirstFragment().PaintProperties();
   const auto* overflow_clip = properties->OverflowClip();
@@ -516,7 +516,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowScrollVerticalRLMulticol) {
   check_fragments();
 
   // Fragment geometries are not affected by parent scrolling.
-  ToLayoutBox(GetLayoutObjectByElementId("scroller"))
+  GetLayoutBoxByElementId("scroller")
       ->GetScrollableArea()
       ->ScrollBy(ScrollOffset(-100, 200), mojom::blink::ScrollType::kUser);
   UpdateAllLifecyclePhasesForTest();
@@ -529,7 +529,7 @@ TEST_P(PaintPropertyTreeBuilderTest, DocScrollingTraditional) {
   GetDocument().domWindow()->scrollTo(0, 100);
 
   LocalFrameView* frame_view = GetDocument().View();
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
   EXPECT_TRUE(DocPreTranslation()->IsIdentity());
   EXPECT_EQ(
       GetDocument().GetPage()->GetVisualViewport().GetScrollTranslationNode(),
@@ -1827,7 +1827,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes) {
   )HTML");
 
   LocalFrameView* frame_view = GetDocument().View();
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
 
   LayoutObject* div_with_transform =
       GetLayoutObjectByElementId("divWithTransform");
@@ -1902,7 +1902,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FramesEstablishIsolation) {
   )HTML");
 
   LocalFrameView* frame_view = GetDocument().View();
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
 
   LayoutObject* frame = ChildFrame().View()->GetLayoutView();
   const auto& frame_contents_properties =
@@ -1962,7 +1962,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FramesEstablishIsolation) {
   // However, isolation stops this recursion.
   GetDocument().getElementById("parent")->setAttribute(html_names::kClassAttr,
                                                        "transformed");
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
 
   // Verify that our clobbered state is still clobbered.
   EXPECT_EQ(FloatSize(123, 321),
@@ -2000,7 +2000,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesInTransformedSubframes) {
     <div id='transform'></div>
   )HTML");
   LocalFrameView* frame_view = GetDocument().View();
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
 
   // Assert that we have the following tree structure:
   // ...
@@ -3534,7 +3534,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowClipContentsTreeState) {
   )HTML");
 
   LayoutBoxModelObject* clipper =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("clipper"));
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("clipper"));
   const ObjectPaintProperties* clip_properties =
       clipper->FirstFragment().PaintProperties();
   LayoutObject* child = GetLayoutObjectByElementId("child");
@@ -3573,7 +3573,7 @@ TEST_P(PaintPropertyTreeBuilderTest, ReplacedSvgContentWithIsolation) {
   )HTML");
 
   LayoutBoxModelObject* svg =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("replacedsvg"));
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("replacedsvg"));
   const ObjectPaintProperties* svg_properties =
       svg->FirstFragment().PaintProperties();
 
@@ -3593,7 +3593,7 @@ TEST_P(PaintPropertyTreeBuilderTest, ReplacedContentTransformFlattening) {
     </svg>
   )HTML");
 
-  const auto* svg = ToLayoutBoxModelObject(GetLayoutObjectByElementId("svg"));
+  const auto* svg = To<LayoutBoxModelObject>(GetLayoutObjectByElementId("svg"));
   const auto* svg_properties = svg->FirstFragment().PaintProperties();
 
   const auto* replaced_transform = svg_properties->ReplacedContentTransform();
@@ -3615,8 +3615,8 @@ TEST_P(PaintPropertyTreeBuilderTest, ContainPaintOrStyleLayoutTreeState) {
     )HTML",
                                     containment));
 
-    LayoutBoxModelObject* clipper =
-        ToLayoutBoxModelObject(GetLayoutObjectByElementId("clipper"));
+    auto* clipper =
+        To<LayoutBoxModelObject>(GetLayoutObjectByElementId("clipper"));
     const ObjectPaintProperties* clip_properties =
         clipper->FirstFragment().PaintProperties();
     LayoutObject* child = GetLayoutObjectByElementId("child");
@@ -3721,8 +3721,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowScrollContentsTreeState) {
   Element* clipper_element = GetDocument().getElementById("clipper");
   clipper_element->scrollTo(1, 2);
 
-  LayoutBoxModelObject* clipper =
-      ToLayoutBoxModelObject(clipper_element->GetLayoutObject());
+  auto* clipper = To<LayoutBoxModelObject>(clipper_element->GetLayoutObject());
   const ObjectPaintProperties* clip_properties =
       clipper->FirstFragment().PaintProperties();
   LayoutObject* child = GetLayoutObjectByElementId("child");
@@ -3809,8 +3808,8 @@ TEST_P(PaintPropertyTreeBuilderTest, CssClipContentsTreeState) {
     </div>
   )HTML");
 
-  LayoutBoxModelObject* clipper =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("clipper"));
+  auto* clipper =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("clipper"));
   const ObjectPaintProperties* clip_properties =
       clipper->FirstFragment().PaintProperties();
   LayoutObject* child = GetLayoutObjectByElementId("child");
@@ -4246,9 +4245,9 @@ TEST_P(PaintPropertyTreeBuilderTest, PaintOffsetsUnderMultiColumnScrolled) {
     </div>
   )HTML");
 
-  LayoutObject* scroller = GetLayoutObjectByElementId("scroller");
-  ToLayoutBox(scroller)->GetScrollableArea()->ScrollBy(
-      ScrollOffset(0, 300), mojom::blink::ScrollType::kUser);
+  LayoutBox* scroller = GetLayoutBoxByElementId("scroller");
+  scroller->GetScrollableArea()->ScrollBy(ScrollOffset(0, 300),
+                                          mojom::blink::ScrollType::kUser);
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_EQ(FloatSize(8, 8), scroller->FirstFragment()
@@ -5031,8 +5030,8 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowClipSubpixelPosition) {
     </div>
   )HTML");
 
-  LayoutBoxModelObject* clipper =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("clipper"));
+  auto* clipper =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("clipper"));
   const ObjectPaintProperties* clip_properties =
       clipper->FirstFragment().PaintProperties();
 
@@ -5607,14 +5606,13 @@ TEST_P(PaintPropertyTreeBuilderTest,
   Element* opacity_element = GetDocument().getElementById("opacity");
   const auto* target = GetLayoutObjectByElementId("target");
 
-  EXPECT_FALSE(ToLayoutBoxModelObject(target)->Layer()->SelfNeedsRepaint());
+  EXPECT_FALSE(To<LayoutBoxModelObject>(target)->Layer()->SelfNeedsRepaint());
 
   opacity_element->setAttribute(html_names::kStyleAttr, "opacity: 0.5");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(opacity_element->GetLayoutBox()->Layer()->SelfNeedsRepaint());
-  EXPECT_FALSE(ToLayoutBoxModelObject(target)->Layer()->SelfNeedsRepaint());
+  EXPECT_FALSE(To<LayoutBoxModelObject>(target)->Layer()->SelfNeedsRepaint());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, SVGRootWithMask) {
@@ -5631,8 +5629,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGRootWithMask) {
     </svg>
   )HTML");
 
-  const LayoutSVGRoot& root =
-      *ToLayoutSVGRoot(GetLayoutObjectByElementId("svg"));
+  const auto& root = *To<LayoutSVGRoot>(GetLayoutObjectByElementId("svg"));
   EXPECT_TRUE(root.FirstFragment().PaintProperties()->Mask());
 }
 
@@ -5642,8 +5639,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGRootWithCSSMask) {
     </svg>
   )HTML");
 
-  const LayoutSVGRoot& root =
-      *ToLayoutSVGRoot(GetLayoutObjectByElementId("svg"));
+  const auto& root = *To<LayoutSVGRoot>(GetLayoutObjectByElementId("svg"));
   EXPECT_TRUE(root.FirstFragment().PaintProperties()->Mask());
 }
 
@@ -5667,8 +5663,7 @@ TEST_P(PaintPropertyTreeBuilderTest, ClearClipPathEffectNode) {
   Element* clip = GetDocument().getElementById("clip");
   ASSERT_TRUE(clip);
   clip->remove();
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   {
     const auto* rect = GetLayoutObjectByElementId("rect");
@@ -5689,8 +5684,7 @@ TEST_P(PaintPropertyTreeBuilderTest, RootHasCompositedScrolling) {
   // Remove scrolling from the root.
   Element* force_scroll_element = GetDocument().getElementById("forceScroll");
   force_scroll_element->setAttribute(html_names::kStyleAttr, "");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
   // Always create scroll translation for layout view even the document does
   // not scroll (not enough content).
   EXPECT_TRUE(DocScrollTranslation());
@@ -5790,12 +5784,11 @@ TEST_P(PaintPropertyTreeBuilderTest, ClipHitTestChangeDoesNotCauseFullRepaint) {
   CHECK(GetDocument().GetPage()->GetScrollbarTheme().UsesOverlayScrollbars());
   UpdateAllLifecyclePhasesForTest();
 
-  auto* child_layer = ToLayoutBox(GetLayoutObjectByElementId("child"))->Layer();
+  auto* child_layer = GetPaintLayerByElementId("child");
   EXPECT_FALSE(child_layer->SelfNeedsRepaint());
 
   GetDocument().body()->setAttribute(html_names::kClassAttr, "noscrollbars");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_FALSE(child_layer->SelfNeedsRepaint());
 }
 
@@ -5809,7 +5802,7 @@ TEST_P(PaintPropertyTreeBuilderTest, ClipPathInheritanceWithoutMutation) {
     </div>
   )HTML");
 
-  auto* child = ToLayoutBox(GetLayoutObjectByElementId("child"));
+  auto* child = GetLayoutBoxByElementId("child");
   const auto& old_clip_state =
       child->FirstFragment().LocalBorderBoxProperties().Clip();
 
@@ -6162,7 +6155,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PaintOffsetForTextareaWithResizer) {
     <textarea id="target"></textarea>
   )HTML");
 
-  const auto* box = ToLayoutBox(GetLayoutObjectByElementId("target"));
+  const auto* box = GetLayoutBoxByElementId("target");
   const auto& fragment = box->FirstFragment();
   ASSERT_TRUE(fragment.PaintProperties());
   EXPECT_NE(fragment.PaintProperties()->PaintOffsetTranslation(), nullptr);
@@ -6233,8 +6226,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SkipEmptyClipFragments) {
                                 .getElementById("container")
                                 ->GetLayoutObject()
                                 ->SlowFirstChild();
-  EXPECT_TRUE(flow_thread->IsLayoutFlowThread());
-  EXPECT_TRUE(ToLayoutFlowThread(flow_thread)->IsLayoutMultiColumnFlowThread());
+  EXPECT_TRUE(IsA<LayoutMultiColumnFlowThread>(flow_thread));
 
   // FragmentainerIterator would return 3 things:
   // 1. A fragment that contains "lorem" and is interrupted by the first h4,
@@ -6368,10 +6360,9 @@ TEST_P(PaintPropertyTreeBuilderTest, WillChangeOpacityInducesAnEffectNode) {
 
   auto* div = GetDocument().getElementById("div");
   div->setAttribute(html_names::kClassAttr, "transluscent");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_FALSE(
-      ToLayoutBox(div->GetLayoutObject())->Layer()->SelfNeedsRepaint());
+      To<LayoutBox>(div->GetLayoutObject())->Layer()->SelfNeedsRepaint());
 
   ASSERT_TRUE(properties->Effect());
   EXPECT_FLOAT_EQ(properties->Effect()->Opacity(), 0.5f);
@@ -6441,7 +6432,6 @@ TEST_P(PaintPropertyTreeBuilderTest, TableColOpacity) {
 // Test the WebView API that allows rendering the whole page. In this case, we
 // shouldn't create a clip node for the main frame.
 TEST_P(PaintPropertyTreeBuilderTest, MainFrameDoesntClipContent) {
-  GetPage().GetSettings().SetMainFrameClipsContent(false);
   SetBodyInnerHTML(R"HTML(
     <!DOCTYPE html>
     <style>
@@ -6453,11 +6443,18 @@ TEST_P(PaintPropertyTreeBuilderTest, MainFrameDoesntClipContent) {
     </style>
   )HTML");
 
-  EXPECT_FALSE(GetDocument()
-                   .GetLayoutView()
-                   ->FirstFragment()
-                   .PaintProperties()
-                   ->OverflowClip());
+  EXPECT_TRUE(
+      GetLayoutView().FirstFragment().PaintProperties()->OverflowClip());
+
+  GetPage().GetSettings().SetMainFrameClipsContent(false);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(
+      GetLayoutView().FirstFragment().PaintProperties()->OverflowClip());
+
+  GetPage().GetSettings().SetMainFrameClipsContent(true);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(
+      GetLayoutView().FirstFragment().PaintProperties()->OverflowClip());
 }
 
 TEST_P(PaintPropertyTreeBuilderTest, SVGRootCompositedClipPath) {
@@ -6540,8 +6537,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SimpleOpacityChangeDoesNotCausePacUpdate) {
   Element* element = GetDocument().getElementById("element");
   element->setAttribute(html_names::kStyleAttr, "opacity: 0.9");
 
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_FLOAT_EQ(properties->Effect()->Opacity(), 0.9f);
   EXPECT_FLOAT_EQ(cc_effect->opacity, 0.9f);
   EXPECT_TRUE(cc_effect->effect_changed);
@@ -6605,8 +6601,7 @@ TEST_P(PaintPropertyTreeBuilderTest, SimpleScrollChangeDoesNotCausePacUpdate) {
   EXPECT_FLOAT_EQ(current_scroll_offset.y(), 0);
 
   GetDocument().getElementById("element")->setScrollTop(10.);
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_FLOAT_SIZE_EQ(FloatSize(0, -10),
                        properties->ScrollTranslation()->Translation2D());
@@ -6649,8 +6644,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
 
   Element* outer = GetDocument().getElementById("outer");
   outer->setAttribute(html_names::kStyleAttr, "transform: translateY(10px)");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(
       GetDocument().View()->GetPaintArtifactCompositor()->NeedsUpdate());
@@ -6697,7 +6691,7 @@ TEST_P(PaintPropertyTreeBuilderTest, VideoClipRect) {
   video_element->SetInlineStyleProperty(CSSPropertyID::kTop, "0.1px");
   video_element->SetInlineStyleProperty(CSSPropertyID::kLeft, "0.1px");
   LocalFrameView* frame_view = GetDocument().View();
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
   const ObjectPaintProperties* video_element_properties =
       video_element->GetLayoutObject()->FirstFragment().PaintProperties();
   // |video_element| is now sub-pixel positioned, at 0.1,0.1 320.2x240. With or
@@ -6710,7 +6704,7 @@ TEST_P(PaintPropertyTreeBuilderTest, VideoClipRect) {
   // 321x240. With proper pixel snapping, the clip will be at 10,10,320,240.
   video_element->SetInlineStyleProperty(CSSPropertyID::kTop, "10.4px");
   video_element->SetInlineStyleProperty(CSSPropertyID::kLeft, "10.4px");
-  frame_view->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  frame_view->UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(FloatRoundedRect(10, 10, 320, 240),
             video_element_properties->OverflowClip()->UnsnappedClipRect());
 }
@@ -6978,7 +6972,8 @@ TEST_P(PaintPropertyTreeBuilderTest, SVGChildBackdropFilter) {
   auto* svg_properties = PaintPropertiesForElement("svg");
   ASSERT_TRUE(svg_properties);
   ASSERT_TRUE(svg_properties->PaintOffsetTranslation());
-  EXPECT_TRUE(
+  EXPECT_EQ(
+      !RuntimeEnabledFeatures::CompositeAfterPaintEnabled(),
       svg_properties->PaintOffsetTranslation()->HasDirectCompositingReasons());
 
   auto* svg_text_properties = PaintPropertiesForElement("text");

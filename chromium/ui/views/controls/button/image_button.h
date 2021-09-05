@@ -16,10 +16,6 @@
 
 namespace views {
 
-// An image button.
-// Note that this type of button is not focusable by default and will not be
-// part of the focus chain, unless in accessibility mode. Call
-// SetFocusForPlatform() to make it part of the focus chain.
 class VIEWS_EXPORT ImageButton : public Button {
  public:
   METADATA_HEADER(ImageButton);
@@ -31,7 +27,6 @@ class VIEWS_EXPORT ImageButton : public Button {
   enum VerticalAlignment { ALIGN_TOP = 0, ALIGN_MIDDLE, ALIGN_BOTTOM };
 
   explicit ImageButton(PressedCallback callback = PressedCallback());
-  explicit ImageButton(ButtonListener* listener);
   ~ImageButton() override;
 
   // Returns the image for a given |state|.
@@ -118,7 +113,7 @@ VIEW_BUILDER_PROPERTY(ImageButton::HorizontalAlignment,
                       ImageHorizontalAlignment)
 VIEW_BUILDER_PROPERTY(ImageButton::VerticalAlignment, ImageVerticalAlignment)
 VIEW_BUILDER_PROPERTY(gfx::Size, MinimumImageSize)
-END_VIEW_BUILDER(VIEWS_EXPORT, ImageButton)
+END_VIEW_BUILDER
 
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -132,7 +127,6 @@ class VIEWS_EXPORT ToggleImageButton : public ImageButton {
   METADATA_HEADER(ToggleImageButton);
 
   explicit ToggleImageButton(PressedCallback callback = PressedCallback());
-  explicit ToggleImageButton(ButtonListener* listener);
   ~ToggleImageButton() override;
 
   // Change the toggled state.
@@ -184,8 +178,11 @@ BEGIN_VIEW_BUILDER(VIEWS_EXPORT, ToggleImageButton, ImageButton)
 VIEW_BUILDER_PROPERTY(bool, Toggled)
 VIEW_BUILDER_PROPERTY(base::string16, ToggledTooltipText)
 VIEW_BUILDER_PROPERTY(base::string16, ToggledAccessibleName)
-END_VIEW_BUILDER(VIEWS_EXPORT, ToggleImageButton)
+END_VIEW_BUILDER
 
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, ImageButton)
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, ToggleImageButton)
 
 #endif  // UI_VIEWS_CONTROLS_BUTTON_IMAGE_BUTTON_H_

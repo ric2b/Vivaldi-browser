@@ -6,6 +6,7 @@ package org.chromium.ui;
 
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Typeface;
@@ -27,6 +28,8 @@ import android.widget.ListAdapter;
 import androidx.annotation.ColorRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StyleableRes;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.appcompat.content.res.AppCompatResources;
@@ -60,14 +63,14 @@ public class UiUtils {
      * supported. If there is no entry, it means the manufacturer supports theming at the same
      * version Android did.
      */
-    private static final Map<String, Integer> sAndroidUiThemeBlacklist = new HashMap<>();
+    private static final Map<String, Integer> sAndroidUiThemeBlocklist = new HashMap<>();
     static {
         // Xiaomi doesn't support SYSTEM_UI_FLAG_LIGHT_STATUS_BAR until Android N; more info at
         // https://crbug.com/823264.
-        sAndroidUiThemeBlacklist.put("xiaomi", Build.VERSION_CODES.N);
+        sAndroidUiThemeBlocklist.put("xiaomi", Build.VERSION_CODES.N);
         // HTC doesn't respect theming flags on activity restart until Android O; this affects both
         // the system nav and status bar. More info at https://crbug.com/831737.
-        sAndroidUiThemeBlacklist.put("htc", Build.VERSION_CODES.O);
+        sAndroidUiThemeBlocklist.put("htc", Build.VERSION_CODES.O);
     }
 
     /** Whether theming the Android system UI has been disabled. */
@@ -347,6 +350,24 @@ public class UiUtils {
     }
 
     /**
+     * Loads a {@link Drawable} from an attribute.  Uses {@link AppCompatResources} to support all
+     * modern {@link Drawable} types.
+     * @param context The associated context.
+     * @param attrs The attributes from which to load the drawable resource.
+     * @param attrId The attribute id that holds the drawable resource.
+     * @return A new {@link Drawable} or {@code null} if the attribute wasn't set.
+     */
+    public static @Nullable Drawable getDrawable(
+            Context context, @Nullable TypedArray attrs, @StyleableRes int attrId) {
+        if (attrs == null) return null;
+
+        @DrawableRes
+        int resId = attrs.getResourceId(attrId, -1);
+        if (resId == -1) return null;
+        return AppCompatResources.getDrawable(context, resId);
+    }
+
+    /**
      * Gets a drawable from the resources and applies the specified tint to it. Uses Support Library
      * for vector drawables and tinting on older Android versions.
      * @param drawableId The resource id for the drawable.
@@ -369,9 +390,9 @@ public class UiUtils {
     public static boolean isSystemUiThemingDisabled() {
         if (sSystemUiThemingDisabled == null) {
             sSystemUiThemingDisabled = false;
-            if (sAndroidUiThemeBlacklist.containsKey(Build.MANUFACTURER.toLowerCase(Locale.US))) {
+            if (sAndroidUiThemeBlocklist.containsKey(Build.MANUFACTURER.toLowerCase(Locale.US))) {
                 sSystemUiThemingDisabled = Build.VERSION.SDK_INT
-                        < sAndroidUiThemeBlacklist.get(Build.MANUFACTURER.toLowerCase(Locale.US));
+                        < sAndroidUiThemeBlocklist.get(Build.MANUFACTURER.toLowerCase(Locale.US));
             }
         }
         return sSystemUiThemingDisabled;

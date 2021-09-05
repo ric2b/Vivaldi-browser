@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -22,6 +22,7 @@
 #include "media/base/video_frame.h"
 #include "media/video/mock_gpu_memory_buffer_video_frame_pool.h"
 #include "media/video/mock_gpu_video_accelerator_factories.h"
+#include "third_party/blink/public/common/media/display_type.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
 #include "third_party/blink/public/platform/web_media_player.h"
@@ -131,6 +132,10 @@ class FakeWebMediaPlayerDelegate
   }
 
   void DidBufferUnderflow(int delegate_id) override {
+    EXPECT_EQ(delegate_id_, delegate_id);
+  }
+
+  void DidSeek(int delegate_id) override {
     EXPECT_EQ(delegate_id_, delegate_id);
   }
 
@@ -653,7 +658,7 @@ class WebMediaPlayerMSTest
   MOCK_METHOD1(DoNetworkStateChanged, void(WebMediaPlayer::NetworkState));
   MOCK_METHOD1(DoReadyStateChanged, void(WebMediaPlayer::ReadyState));
   MOCK_METHOD1(CheckSizeChanged, void(gfx::Size));
-  MOCK_CONST_METHOD0(DisplayType, WebMediaPlayer::DisplayType());
+  MOCK_CONST_METHOD0(GetDisplayType, DisplayType());
   MOCK_CONST_METHOD0(CouldPlayIfEnoughData, bool());
   MOCK_METHOD0(OnRequestVideoFrameCallback, void());
 

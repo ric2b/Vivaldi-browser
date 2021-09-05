@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/check.h"
 #include "base/containers/flat_map.h"
 #include "base/logging.h"
@@ -22,9 +21,10 @@
 #include "chrome/browser/chromeos/scanning/zeroconf_scanner_detector.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/lorgnette/lorgnette_service.pb.h"
-#include "chromeos/dbus/lorgnette_manager_client.h"
+#include "chromeos/dbus/lorgnette_manager/lorgnette_manager_client.h"
 #include "chromeos/scanning/scanner.h"
 #include "net/base/ip_address.h"
+#include "third_party/re2/src/re2/re2.h"
 
 namespace chromeos {
 
@@ -42,6 +42,26 @@ constexpr std::array<ScanProtocol, 4> kPrioritizedProtocols = {
 LorgnetteManagerClient* GetLorgnetteManagerClient() {
   DCHECK(DBusThreadManager::IsInitialized());
   return DBusThreadManager::Get()->GetLorgnetteManagerClient();
+}
+
+// Creates a base name by concatenating the manufacturer and model, if the
+// model doesn't already include the manufacturer. Appends "(USB)" for USB
+// scanners.
+std::string CreateBaseName(const lorgnette::ScannerInfo& lorgnette_scanner,
+                           const bool is_usb_scanner) {
+  const std::string model = lorgnette_scanner.model();
+  const std::string manufacturer = lorgnette_scanner.manufacturer();
+
+  // It's assumed that, if present, the manufacturer would be the first word in
+  // the model.
+  const std::string maybe_manufacturer =
+      RE2::PartialMatch(model.c_str(), base::StringPrintf("(?i)\\A%s\\b",
+                                                          manufacturer.c_str()))
+          ? ""
+          : manufacturer + " ";
+
+  return base::StringPrintf("%s%s%s", maybe_manufacturer.c_str(), model.c_str(),
+                            is_usb_scanner ? " (USB)" : "");
 }
 
 class LorgnetteScannerManagerImpl final : public LorgnetteScannerManager {
@@ -90,18 +110,24 @@ class LorgnetteScannerManagerImpl final : public LorgnetteScannerManager {
   // LorgnetteScannerManager:
   void Scan(const std::string& scanner_name,
             const lorgnette::ScanSettings& settings,
+            ProgressCallback progress_callback,
             PageCallback page_callback,
-            ScanCallback callback) override {
+            CompletionCallback completion_callback) override {
     std::string device_name;
     ScanProtocol protocol;  // Unused.
     if (!GetUsableDeviceNameAndProtocol(scanner_name, device_name, protocol)) {
-      std::move(callback).Run(false);
+      std::move(completion_callback).Run(false);
       return;
     }
 
     GetLorgnetteManagerClient()->StartScan(
-        device_name, settings, std::move(callback), std::move(page_callback),
-        base::NullCallback());
+        device_name, settings, std::move(completion_callback),
+        std::move(page_callback), std::move(progress_callback));
+  }
+
+  // LorgnetteScannerManager:
+  void CancelScan(CancelCallback cancel_callback) override {
+    GetLorgnetteManagerClient()->CancelScan(std::move(cancel_callback));
   }
 
  private:
@@ -178,9 +204,8 @@ class LorgnetteScannerManagerImpl final : public LorgnetteScannerManager {
       }
 
       const bool is_usb_scanner = protocol == ScanProtocol::kLegacyUsb;
-      const std::string base_name = base::StringPrintf(
-          "%s %s%s", lorgnette_scanner.manufacturer().c_str(),
-          lorgnette_scanner.model().c_str(), is_usb_scanner ? " (USB)" : "");
+      const std::string base_name =
+          CreateBaseName(lorgnette_scanner, is_usb_scanner);
       const std::string display_name = CreateUniqueDisplayName(base_name);
 
       Scanner scanner;

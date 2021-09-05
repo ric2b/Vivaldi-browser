@@ -16,9 +16,7 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
-#include "content/common/page_messages.h"
 #include "content/common/unfreezable_frame_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/impression.h"
@@ -27,7 +25,6 @@
 #include "content/renderer/agent_scheduling_group.h"
 #include "content/renderer/child_frame_compositing_helper.h"
 #include "content/renderer/impression_conversions.h"
-#include "content/renderer/loader/web_url_request_util.h"
 #include "content/renderer/mojo/blink_interface_registry_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
@@ -43,6 +40,7 @@
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url_request_util.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -424,16 +422,6 @@ std::string RenderFrameProxy::unique_name() const {
 }
 
 bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
-  // Page IPCs are routed via the main frame (both local and remote) and then
-  // forwarded to the RenderView. See comment in
-  // RenderFrameHostManager::SendPageMessage() for more information.
-  if ((IPC_MESSAGE_CLASS(msg) == PageMsgStart)) {
-    if (render_view())
-      return render_view()->OnMessageReceived(msg);
-
-    return false;
-  }
-
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderFrameProxy, msg)
     IPC_MESSAGE_HANDLER(UnfreezableFrameMsg_DeleteProxy, OnDeleteProxy)
@@ -643,9 +631,10 @@ void RenderFrameProxy::Navigate(
   auto params = mojom::OpenURLParams::New();
   params->url = request.Url();
   params->initiator_origin = request.RequestorOrigin();
-  params->post_body = GetRequestBodyForWebURLRequest(request);
+  params->post_body = blink::GetRequestBodyForWebURLRequest(request);
   DCHECK_EQ(!!params->post_body, request.HttpMethod().Utf8() == "POST");
-  params->extra_headers = GetWebURLRequestHeadersAsString(request);
+  params->extra_headers =
+      blink::GetWebURLRequestHeadersAsString(request).Latin1();
   params->referrer = blink::mojom::Referrer::New(
       blink::WebStringToGURL(request.ReferrerString()),
       request.GetReferrerPolicy());
@@ -698,20 +687,6 @@ void RenderFrameProxy::FrameRectsChanged(
   SynchronizeVisualProperties();
 }
 
-void RenderFrameProxy::UpdateRemoteViewportIntersection(
-    const blink::ViewportIntersectionState& intersection_state) {
-  DCHECK(ancestor_render_widget_);
-  // TODO(szager): compositor_viewport is propagated twice, via
-  // ViewportIntersectionState and also via FrameVisualProperties. It should
-  // only go through FrameVisualProperties.
-  if (pending_visual_properties_.compositor_viewport !=
-      gfx::Rect(intersection_state.compositor_visible_rect)) {
-    SynchronizeVisualProperties();
-  }
-  Send(new FrameHostMsg_UpdateViewportIntersection(routing_id_,
-                                                   intersection_state));
-}
-
 base::UnguessableToken RenderFrameProxy::GetDevToolsFrameToken() {
   return devtools_frame_token_;
 }
@@ -762,7 +737,9 @@ RenderFrameProxy::GetRemoteAssociatedInterfaces() {
         routing_id_, remote_interfaces.InitWithNewEndpointAndPassReceiver());
     remote_associated_interfaces_ =
         std::make_unique<blink::AssociatedInterfaceProvider>(
-            std::move(remote_interfaces));
+            std::move(remote_interfaces),
+            agent_scheduling_group_.agent_group_scheduler()
+                .DefaultTaskRunner());
   }
   return remote_associated_interfaces_.get();
 }

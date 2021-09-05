@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/webui/tab_search/tab_search_page_handler.h"
 
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/timer/mock_timer.h"
 #include "build/build_config.h"
@@ -49,6 +49,7 @@ class MockPage : public tab_search::mojom::Page {
 
   MOCK_METHOD0(TabsChanged, void());
   MOCK_METHOD1(TabUpdated, void(tab_search::mojom::TabPtr));
+  MOCK_METHOD1(TabsRemoved, void(const std::vector<int32_t>& tab_ids));
 };
 
 void ExpectNewTab(const tab_search::mojom::Tab* tab,
@@ -82,12 +83,12 @@ class TestTabSearchPageHandler : public TabSearchPageHandler {
  public:
   TestTabSearchPageHandler(mojo::PendingRemote<tab_search::mojom::Page> page,
                            content::WebUI* web_ui,
-                           TabSearchPageHandler::Delegate* delegate)
+                           ui::MojoBubbleWebUIController* webui_controller)
       : TabSearchPageHandler(
             mojo::PendingReceiver<tab_search::mojom::PageHandler>(),
             std::move(page),
             web_ui,
-            delegate) {
+            webui_controller) {
     mock_debounce_timer_ = new base::MockRetainingOneShotTimer();
     SetTimerForTesting(base::WrapUnique(mock_debounce_timer_));
   }
@@ -97,15 +98,6 @@ class TestTabSearchPageHandler : public TabSearchPageHandler {
 
  private:
   base::MockRetainingOneShotTimer* mock_debounce_timer_;
-};
-
-class MockTabSearchPageHandlerDelegate : public TabSearchPageHandler::Delegate {
- public:
-  MockTabSearchPageHandlerDelegate() = default;
-  virtual ~MockTabSearchPageHandlerDelegate() = default;
-
-  MOCK_METHOD(void, ShowUI, (), (override));
-  MOCK_METHOD(void, CloseUI, (), (override));
 };
 
 class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
@@ -120,9 +112,10 @@ class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
         CreateTestBrowser(browser()->profile()->GetPrimaryOTRProfile(), false);
     browser4_ = CreateTestBrowser(profile2(), false);
     BrowserList::SetLastActive(browser1());
-    handler_delegate_ = std::make_unique<MockTabSearchPageHandlerDelegate>();
+    webui_controller_ =
+        std::make_unique<ui::MojoBubbleWebUIController>(web_ui());
     handler_ = std::make_unique<TestTabSearchPageHandler>(
-        page_.BindAndGetRemote(), web_ui(), handler_delegate_.get());
+        page_.BindAndGetRemote(), web_ui(), webui_controller_.get());
   }
 
   void TearDown() override {
@@ -153,9 +146,6 @@ class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
   Browser* browser4() { return browser4_.get(); }
 
   TestTabSearchPageHandler* handler() { return handler_.get(); }
-  MockTabSearchPageHandlerDelegate* handler_delegate() {
-    return handler_delegate_.get();
-  }
   void FireTimer() { handler_->mock_debounce_timer()->Fire(); }
   bool IsTimerRunning() { return handler_->mock_debounce_timer()->IsRunning(); }
 
@@ -188,7 +178,7 @@ class TabSearchPageHandlerTest : public BrowserWithTestWindowTest {
   std::unique_ptr<Browser> browser3_;
   std::unique_ptr<Browser> browser4_;
   std::unique_ptr<TestTabSearchPageHandler> handler_;
-  std::unique_ptr<MockTabSearchPageHandlerDelegate> handler_delegate_;
+  std::unique_ptr<ui::MojoBubbleWebUIController> webui_controller_;
 };
 
 TEST_F(TabSearchPageHandlerTest, GetTabs) {
@@ -202,6 +192,7 @@ TEST_F(TabSearchPageHandlerTest, GetTabs) {
 
   EXPECT_CALL(page_, TabsChanged()).Times(1);
   EXPECT_CALL(page_, TabUpdated(_)).Times(2);
+  EXPECT_CALL(page_, TabsRemoved(_)).Times(2);
   handler()->mock_debounce_timer()->Fire();
 
   int32_t tab_id2 = 0;
@@ -268,8 +259,9 @@ TEST_F(TabSearchPageHandlerTest, GetTabs) {
 // TabsChanged() and TabsChanged() is only called when the page handler's
 // timer fires.
 TEST_F(TabSearchPageHandlerTest, TabsChanged) {
-  EXPECT_CALL(page_, TabsChanged()).Times(4);
+  EXPECT_CALL(page_, TabsChanged()).Times(3);
   EXPECT_CALL(page_, TabUpdated(_)).Times(1);
+  EXPECT_CALL(page_, TabsRemoved(_)).Times(3);
   FireTimer();  // Will call TabsChanged().
 
   // Add 2 tabs in browser1.
@@ -292,8 +284,7 @@ TEST_F(TabSearchPageHandlerTest, TabsChanged) {
   ASSERT_FALSE(IsTimerRunning());
   browser1()->tab_strip_model()->CloseWebContentsAt(
       0, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
-  ASSERT_TRUE(IsTimerRunning());
-  FireTimer();  // Will call TabsChanged().
+  ASSERT_FALSE(IsTimerRunning());
 }
 
 // Ensure that tab model changes in a browser with a different profile
@@ -320,6 +311,7 @@ bool VerifyTabUpdated(const tab_search::mojom::TabPtr& tab) {
 TEST_F(TabSearchPageHandlerTest, TabUpdated) {
   EXPECT_CALL(page_, TabsChanged()).Times(1);
   EXPECT_CALL(page_, TabUpdated(Truly(VerifyTabUpdated))).Times(1);
+  EXPECT_CALL(page_, TabsRemoved(_)).Times(1);
   AddTabWithTitle(browser1(), GURL(kTabUrl1), kTabName1);
   // Adding the following tab will trigger TabUpdated() to the first tab
   // since the tab index will change from 0 to 1
@@ -338,6 +330,7 @@ TEST_F(TabSearchPageHandlerTest, CloseTab) {
       browser2()->tab_strip_model()->GetWebContentsAt(0));
   EXPECT_CALL(page_, TabsChanged()).Times(1);
   EXPECT_CALL(page_, TabUpdated(_)).Times(1);
+  EXPECT_CALL(page_, TabsRemoved(_)).Times(3);
   handler()->CloseTab(tab_id);
   ASSERT_EQ(1, browser1()->tab_strip_model()->count());
   ASSERT_EQ(1, browser2()->tab_strip_model()->count());
@@ -353,18 +346,6 @@ TEST_F(TabSearchPageHandlerTest, MAYBE_ShowFeedbackPage) {
   base::HistogramTester histogram_tester;
   handler()->ShowFeedbackPage();
   histogram_tester.ExpectTotalCount("Feedback.RequestSource", 1);
-}
-
-// Make sure the delegate receives the ShowUI() call.
-TEST_F(TabSearchPageHandlerTest, ShowUITest) {
-  EXPECT_CALL(*handler_delegate(), ShowUI()).Times(1);
-  handler()->ShowUI();
-}
-
-// Make sure the delegate receives the closeUI() call.
-TEST_F(TabSearchPageHandlerTest, CloseUITest) {
-  EXPECT_CALL(*handler_delegate(), CloseUI()).Times(1);
-  handler()->CloseUI();
 }
 
 }  // namespace

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {assert} from 'chrome://resources/js/assert.m.js';
+import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
 import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
@@ -62,9 +63,18 @@ function createToken() {
       .join('');
 }
 
-/** @abstract */
+/** @interface */
 export class ContentController {
   constructor() {}
+
+  /** @return {!EventTarget} */
+  getEventTarget() {}
+
+  /** @return {boolean} */
+  get isActive() {}
+
+  /** @param {boolean} isActive */
+  set isActive(isActive) {}
 
   beforeZoom() {}
 
@@ -72,22 +82,14 @@ export class ContentController {
 
   viewportChanged() {}
 
-  /** @abstract */
   rotateClockwise() {}
 
-  /** @abstract */
   rotateCounterclockwise() {}
 
-  /**
-   * @param {boolean} displayAnnotations
-   * @abstract
-   */
+  /** @param {boolean} displayAnnotations */
   setDisplayAnnotations(displayAnnotations) {}
 
-  /**
-   * @param {boolean} enableTwoUpView
-   * @abstract
-   */
+  /** @param {boolean} enableTwoUpView */
   setTwoUpView(enableTwoUpView) {}
 
   /** Triggers printing of the current document. */
@@ -104,8 +106,7 @@ export class ContentController {
    * @param {!SaveRequestType} requestType The type of save request. If
    *     ANNOTATION, a response is required, otherwise the controller may save
    *     the document to disk internally.
-   * @return {Promise<{fileName: string, dataToSave: ArrayBuffer}>}
-   * @abstract
+   * @return {!Promise<!{fileName: string, dataToSave: !ArrayBuffer}>}
    */
   save(requestType) {}
 
@@ -121,30 +122,45 @@ export class ContentController {
    * Loads PDF document from `data` activates UI.
    * @param {string} fileName
    * @param {!ArrayBuffer} data
-   * @return {Promise<void>}
-   * @abstract
+   * @return {!Promise<void>}
    */
   load(fileName, data) {}
 
-  /**
-   * Unloads the current document and removes the UI.
-   * @abstract
-   */
+  /** Unloads the current document and removes the UI. */
   unload() {}
 }
 
-// PDF plugin controller, responsible for communicating with the embedded plugin
-// element. Dispatches a 'plugin-message' event containing the message from the
-// plugin, if a message type not handled by this controller is received.
-export class PluginController extends ContentController {
+/**
+ * Event types dispatched by the plugin controller.
+ * @enum {string}
+ */
+export const PluginControllerEventType = {
+  IS_ACTIVE_CHANGED: 'PluginControllerEventType.IS_ACTIVE_CHANGED',
+  PLUGIN_MESSAGE: 'PluginControllerEventType.PLUGIN_MESSAGE',
+};
+
+/**
+ * PDF plugin controller singleton, responsible for communicating with the
+ * embedded plugin element. Dispatches a
+ * `PluginControllerEventType.PLUGIN_MESSAGE` event containing the message from
+ * the plugin, if a message type not handled by this controller is received.
+ * @implements {ContentController}
+ */
+export class PluginController {
+  constructor() {
+    /** @private {!EventTarget} */
+    this.eventTarget_ = new EventTarget();
+  }
+
   /**
    * @param {!HTMLEmbedElement} plugin
    * @param {!Viewport} viewport
    * @param {function():boolean} getIsUserInitiatedCallback
    * @param {function():?Promise} getLoadedCallback
    */
-  constructor(plugin, viewport, getIsUserInitiatedCallback, getLoadedCallback) {
-    super();
+  init(plugin, viewport, getIsUserInitiatedCallback, getLoadedCallback) {
+    /** @private {boolean} */
+    this.isActive_ = false;
 
     /** @private {!HTMLEmbedElement} */
     this.plugin_ = plugin;
@@ -163,9 +179,6 @@ export class PluginController extends ContentController {
     this.plugin_.addEventListener(
         'message', e => this.handlePluginMessage_(e), false);
 
-    /** @private {!EventTarget} */
-    this.eventTarget_ = new EventTarget();
-
     /**
      * Counter for use with createUid
      * @private {number}
@@ -177,6 +190,30 @@ export class PluginController extends ContentController {
   }
 
   /**
+   * @return {boolean}
+   * @override
+   */
+  get isActive() {
+    // Check whether `plugin_` is defined as a signal that `init()` was called.
+    return !!this.plugin_ && this.isActive_;
+  }
+
+  /**
+   * @param {boolean} isActive
+   * @override
+   */
+  set isActive(isActive) {
+    const wasActive = this.isActive;
+    this.isActive_ = isActive;
+    if (this.isActive === wasActive) {
+      return;
+    }
+
+    this.eventTarget_.dispatchEvent(new CustomEvent(
+        PluginControllerEventType.IS_ACTIVE_CHANGED, {detail: this.isActive}));
+  }
+
+  /**
    * @return {number} A new unique ID.
    * @private
    */
@@ -184,7 +221,10 @@ export class PluginController extends ContentController {
     return this.uidCounter_++;
   }
 
-  /** @return {!EventTarget} */
+  /**
+   * @return {!EventTarget}
+   * @override
+   */
   getEventTarget() {
     return this.eventTarget_;
   }
@@ -196,6 +236,12 @@ export class PluginController extends ContentController {
   updateScroll(x, y) {
     this.postMessage_({type: 'updateScroll', x, y});
   }
+
+  viewportChanged() {}
+
+  redo() {}
+
+  undo() {}
 
   /**
    * Notify the plugin to stop reacting to scroll events while zoom is taking
@@ -407,6 +453,7 @@ export class PluginController extends ContentController {
     this.plugin_.style.display = 'block';
     try {
       await this.getLoadedCallback_();
+      this.isActive = true;
     } finally {
       URL.revokeObjectURL(url);
     }
@@ -415,6 +462,7 @@ export class PluginController extends ContentController {
   /** @override */
   unload() {
     this.plugin_.style.display = 'none';
+    this.isActive = false;
   }
 
   /**
@@ -458,8 +506,8 @@ export class PluginController extends ContentController {
         resolver.resolve(null);
         break;
       default:
-        this.eventTarget_.dispatchEvent(
-            new CustomEvent('plugin-message', {detail: messageData}));
+        this.eventTarget_.dispatchEvent(new CustomEvent(
+            PluginControllerEventType.PLUGIN_MESSAGE, {detail: messageData}));
     }
   }
 
@@ -502,3 +550,5 @@ export class PluginController extends ContentController {
     resolver.resolve(messageData);
   }
 }
+
+addSingletonGetter(PluginController);

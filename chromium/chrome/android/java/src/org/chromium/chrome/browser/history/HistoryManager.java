@@ -44,7 +44,6 @@ import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
-import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
@@ -54,6 +53,7 @@ import org.chromium.components.browser_ui.widget.selectable_list.SelectableListL
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.SearchDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
+import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.PageTransition;
@@ -127,10 +127,12 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
                 || ChromeAccessibilityUtil.isHardwareKeyboardAttached(
                         mActivity.getResources().getConfiguration());
 
-        Profile profile = Profile.getLastUsedRegularProfile();
-        if (isIncognito) profile = profile.getOffTheRecordProfile();
         mSelectionDelegate = new SelectionDelegate<>();
         mSelectionDelegate.addObserver(this);
+
+        // History service is not keyed for Incognito profiles and {@link HistoryServiceFactory}
+        // explicitly redirects to use regular profile for Incognito case.
+        Profile profile = Profile.getLastUsedRegularProfile();
         mHistoryAdapter = new HistoryAdapter(mSelectionDelegate, this,
                 sProviderForTests != null ? sProviderForTests : new BrowsingHistoryBridge(profile));
 

@@ -2,107 +2,157 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {BatteryChargeStatus, BatteryHealth, CpuUsage, ExternalPowerSource, MemoryUsage, SystemInfo} from './diagnostics_types.js'
+import {BatteryChargeStatus, BatteryHealth, CpuUsage, ExternalPowerSource, MemoryUsage, RoutineName, StandardRoutineResult, SystemInfo} from './diagnostics_types.js'
+import {stringToMojoString16} from './mojo_utils.js';
 
 /* @type {!Array<!BatteryChargeStatus>} */
 export const fakeBatteryChargeStatus = [
   {
-    charge_full_now_milliamp_hours: 5700,
-    charge_now_milliamp_hours: 4200,
-    current_now_milliamps: 1123,
-    power_adapter_status: ExternalPowerSource.kAc,
-    power_time: '3h 15m',
+    chargeFullNowMilliampHours: 5700,
+    chargeNowMilliampHours: 4200,
+    currentNowMilliamps: 1123,
+    powerAdapterStatus: chromeos.diagnostics.mojom.ExternalPowerSource.kAc,
+    powerTime: stringToMojoString16('3h 15m'),
   },
   {
-    charge_full_now_milliamp_hours: 5700,
-    charge_now_milliamp_hours: 4500,
-    current_now_milliamps: 1123,
-    power_adapter_status: ExternalPowerSource.kAc,
-    power_time: '3h 01m',
+    chargeFullNowMilliampHours: 5700,
+    chargeNowMilliampHours: 4500,
+    currentNowMilliamps: 1123,
+    powerAdapterStatus: chromeos.diagnostics.mojom.ExternalPowerSource.kAc,
+    powerTime: stringToMojoString16('3h 01m'),
   },
   {
-    charge_full_now_milliamp_hours: 5700,
-    charge_now_milliamp_hours: 4800,
-    current_now_milliamps: 1123,
-    power_adapter_status: ExternalPowerSource.kAc,
-    power_time: '2h 45m',
+    chargeFullNowMilliampHours: 5700,
+    chargeNowMilliampHours: 4800,
+    currentNowMilliamps: 1123,
+    powerAdapterStatus: chromeos.diagnostics.mojom.ExternalPowerSource.kAc,
+    powerTime: stringToMojoString16('2h 45m'),
   }
 ];
 
 /* @type {!Array<!BatteryHealth>} */
-export const fakeBatteryHealth = [{
-  battery_wear_percentage: 7,
-  charge_full_design_milliamp_hours: 6000,
-  charge_full_now_milliamp_hours: 5700,
-  cycle_count: 73,
-}];
+export const fakeBatteryHealth = [
+  {
+    batteryWearPercentage: 7,
+    chargeFullDesignMilliampHours: 6000,
+    chargeFullNowMilliampHours: 5700,
+    cycleCount: 73,
+  },
+  {
+    battery_weabatteryWearPercentager_percentage: 8,
+    chargeFullDesignMilliampHours: 6000,
+    chargeFullNowMilliampHours: 5699,
+    cycleCount: 73,
+  }
+];
 
 /* @type {!BatteryInfo} */
 export const fakeBatteryInfo = {
-  charge_full_design_milliamp_hours: 6000,
+  chargeFullDesignMilliampHours: 6000,
   manufacturer: 'BatterCorp USA',
 };
 
 /* @type {!BatteryInfo} */
 export const fakeBatteryInfo2 = {
-  charge_full_design_milliamp_hours: 9000,
+  chargeFullDesignMilliampHours: 9000,
   manufacturer: 'PowerPod 9000',
 };
 
 /* @type {!Array<!CpuUsage>} */
 export const fakeCpuUsage = [
   {
-    cpu_temp_degrees_celcius: 107,
-    percent_usage_system: 15,
-    percent_usage_user: 20,
+    averageCpuTempCelsius: 107,
+    percentUsageSystem: 15,
+    percentUsageUser: 20,
   },
   {
-    cpu_temp_degrees_celcius: 106,
-    percent_usage_system: 30,
-    percent_usage_user: 40,
+    averageCpuTempCelsius: 106,
+    percentUsageSystem: 30,
+    percentUsageUser: 40,
   },
   {
-    cpu_temp_degrees_celcius: 107,
-    percent_usage_system: 31,
-    percent_usage_user: 45,
+    averageCpuTempCelsius: 107,
+    percentUsageSystem: 31,
+    percentUsageUser: 45,
   },
   {
-    cpu_temp_degrees_celcius: 109,
-    percent_usage_system: 55,
-    percent_usage_user: 24,
-  }
+    averageCpuTempCelsius: 109,
+    percentUsageSystem: 55,
+    percentUsageUser: 24,
+  },
+  {
+    averageCpuTempCelsius: 109,
+    percentUsageSystem: 49,
+    percentUsageUser: 10,
+  },
+  {
+    averageCpuTempCelsius: 161,
+    percentUsageSystem: 1,
+    percentUsageUser: 99,
+  },
+  {
+    averageCpuTempCelsius: 118,
+    percentUsageSystem: 35,
+    percentUsageUser: 37,
+  },
+  {
+    averageCpuTempCelsius: 110,
+    percentUsageSystem: 26,
+    percentUsageUser: 30,
+  },
 ];
 
 /* @type {!Array<!MemoryUsage>} */
 export const fakeMemoryUsage = [
   {
-    available_memory_kib: 57000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 57000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   },
   {
-    available_memory_kib: 52000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 52000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   },
   {
-    available_memory_kib: 53000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 53000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   },
   {
-    available_memory_kib: 65000,
-    free_memory_kib: 15000,
-    total_memory_kib: 128000,
+    availableMemoryKib: 65000,
+    freeMemoryKib: 15000,
+    totalMemoryKib: 128000,
   }
 ];
 
 /* @type {!SystemInfo} */
 export const fakeSystemInfo = {
-  board_name: 'CrOS Board',
-  cpu_model_name: 'BestCpu SoFast 1000',
-  cpu_threads_count: 8,
-  device_capabilities: {has_battery: true},
-  total_memory_kib: 128000,
-  version: {milestone_version: 'M99'},
+  boardName: 'CrOS Board',
+  cpuModelName: 'BestCpu SoFast 1000',
+  cpuThreadsCount: 8,
+  deviceCapabilities: {hasBattery: true},
+  marketingName: 'Coolest Chromebook',
+  totalMemoryKib: 128000,
+  versionInfo: {milestoneVersion: 'M99'},
 };
+
+/* @type {!SystemInfo} */
+export const fakeSystemInfoWithoutBattery = {
+  boardName: 'CrOS Board',
+  cpuModelName: 'BestCpu SoFast 1000',
+  cpuThreadsCount: 8,
+  deviceCapabilities: {hasBattery: false},
+  marketingName: 'Coolest Chromebook',
+  totalMemoryKib: 128000,
+  versionInfo: {milestoneVersion: 'M99'},
+};
+
+/* @type {!Map<RoutineName, StandardRoutineResult} */
+export const fakeRoutineResults = new Map([
+  [RoutineName.kCpuStress, StandardRoutineResult.kTestPassed],
+  [RoutineName.kCpuCache, StandardRoutineResult.kTestPassed],
+  [RoutineName.kFloatingPoint, StandardRoutineResult.kTestFailed],
+  [RoutineName.kPrimeSearch, StandardRoutineResult.kErrorExecuting],
+  [RoutineName.kMemory, StandardRoutineResult.kTestPassed],
+]);

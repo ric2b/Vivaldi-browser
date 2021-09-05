@@ -3,9 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/storage_partition_impl.h"
@@ -425,6 +426,46 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, SyncCookieGetOnCrash) {
   // If the renderer is hung the test will hang.
 }
 
+int64_t GetPreloadedFirstPartySetCountFromNetworkService() {
+  DCHECK(!content::IsInProcessNetworkService());
+
+  mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
+  content::GetNetworkService()->BindTestInterface(
+      network_service_test.BindNewPipeAndPassReceiver());
+  network_service_test.FlushForTesting();
+
+  mojo::ScopedAllowSyncCallForTesting allow_sync_call;
+
+  int64_t count = 0;
+  EXPECT_TRUE(
+      network_service_test->GetPreloadedFirstPartySetEntriesCount(&count));
+
+  return count;
+}
+
+class NetworkServiceWithFirstPartySetBrowserTest
+    : public NetworkServiceBrowserTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    NetworkServiceBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(
+        network::switches::kUseFirstPartySet,
+        "https://example.com,https://member1.com,https://member2.com");
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(NetworkServiceWithFirstPartySetBrowserTest,
+                       GetsUseFirstPartySetSwitch) {
+  if (IsInProcessNetworkService())
+    return;
+
+  EXPECT_EQ(GetPreloadedFirstPartySetCountFromNetworkService(), 2);
+
+  SimulateNetworkServiceCrash();
+
+  EXPECT_EQ(GetPreloadedFirstPartySetCountFromNetworkService(), 2);
+}
+
 // Tests that CORS is performed by the network service when |factory_override|
 // is used.
 IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, FactoryOverride) {
@@ -624,6 +665,8 @@ class NetworkServiceWithUDPSocketLimit : public NetworkServiceBrowserTest {
     mojo::Remote<network::mojom::NetworkContext> network_context;
     network::mojom::NetworkContextParamsPtr context_params =
         network::mojom::NetworkContextParams::New();
+    context_params->cert_verifier_params = GetCertVerifierParams(
+        network::mojom::CertVerifierCreationParams::New());
     GetNetworkService()->CreateNetworkContext(
         network_context.BindNewPipeAndPassReceiver(),
         std::move(context_params));

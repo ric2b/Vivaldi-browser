@@ -17,6 +17,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuClickHandler;
 import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
 import org.chromium.components.browser_ui.widget.text.TextViewWithCompoundDrawables;
 import org.chromium.ui.widget.ChromeImageView;
 
@@ -46,24 +47,31 @@ class IncognitoMenuItemViewBinder implements CustomViewBinder {
         IncognitoMenuItemViewHolder holder;
         if (convertView == null || !(convertView.getTag() instanceof IncognitoMenuItemViewHolder)) {
             holder = new IncognitoMenuItemViewHolder();
-            convertView = inflater.inflate(R.layout.incognito_menu_item, parent, false);
-            holder.title = convertView.findViewById(R.id.menu_item_text);
-            holder.image = convertView.findViewById(R.id.management_icon);
+            convertView = inflater.inflate(R.layout.custom_view_menu_item, parent, false);
+            holder.title = convertView.findViewById(R.id.title);
+            holder.image = convertView.findViewById(R.id.trailing_icon);
             convertView.setTag(holder);
         } else {
             holder = (IncognitoMenuItemViewHolder) convertView.getTag();
         }
 
         holder.title.setCompoundDrawablesRelative(item.getIcon(), null, null, null);
+        holder.title.setText(item.getTitle());
         holder.title.setEnabled(item.isEnabled());
         // Setting |holder.title| to non-focusable will allow TalkBack highlighting the whole view
         // of the menu item, not just title text.
         holder.title.setFocusable(false);
         convertView.setFocusable(item.isEnabled());
         if (IncognitoUtils.isIncognitoModeManaged()) {
+            holder.image.setImageResource(R.drawable.ic_business);
             holder.image.setVisibility(View.VISIBLE);
         }
         convertView.setOnClickListener(v -> appMenuClickHandler.onItemClick(item));
+        if (highlightedItemId != null && item.getItemId() == highlightedItemId) {
+            ViewHighlighter.turnOnRectangularHighlight(convertView);
+        } else {
+            ViewHighlighter.turnOffHighlight(convertView);
+        }
 
         return convertView;
     }

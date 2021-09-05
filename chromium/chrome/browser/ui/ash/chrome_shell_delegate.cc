@@ -170,12 +170,6 @@ void ChromeShellDelegate::BindFingerprint(
   content::GetDeviceService().BindFingerprint(std::move(receiver));
 }
 
-void ChromeShellDelegate::BindNavigableContentsFactory(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {
-  ProfileManager::GetActiveUserProfile()->BindNavigableContentsFactory(
-      std::move(receiver));
-}
-
 void ChromeShellDelegate::BindMultiDeviceSetup(
     mojo::PendingReceiver<chromeos::multidevice_setup::mojom::MultiDeviceSetup>
         receiver) {
@@ -186,7 +180,7 @@ void ChromeShellDelegate::BindMultiDeviceSetup(
     service->BindMultiDeviceSetup(std::move(receiver));
 }
 
-media_session::mojom::MediaSessionService*
+media_session::MediaSessionService*
 ChromeShellDelegate::GetMediaSessionService() {
   return &content::GetMediaSessionService();
 }

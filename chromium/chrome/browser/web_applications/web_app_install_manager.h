@@ -12,7 +12,6 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/queue.h"
 #include "base/containers/unique_ptr_adapters.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
@@ -35,6 +34,8 @@ class WebAppInstallManager final : public InstallManager,
                                    public SyncInstallDelegate {
  public:
   explicit WebAppInstallManager(Profile* profile);
+  WebAppInstallManager(const WebAppInstallManager&) = delete;
+  WebAppInstallManager& operator=(const WebAppInstallManager&) = delete;
   ~WebAppInstallManager() override;
 
   void Start();
@@ -142,16 +143,6 @@ class WebAppInstallManager final : public InstallManager,
       InstallResultCode code);
 
   content::WebContents* EnsureWebContentsCreated();
-  void OnWebContentsReady(WebAppUrlLoader::Result result);
-
-  DataRetrieverFactory data_retriever_factory_;
-
-  std::unique_ptr<WebAppUrlLoader> url_loader_;
-
-  // All owned tasks.
-  using Tasks = base::flat_set<std::unique_ptr<WebAppInstallTask>,
-                               base::UniquePtrComparator>;
-  Tasks tasks_;
 
   // Tasks can be queued for sequential completion (to be run one at a time).
   // FIFO. This is a subset of |tasks_|.
@@ -163,6 +154,19 @@ class WebAppInstallManager final : public InstallManager,
     const WebAppInstallTask* task = nullptr;
     base::OnceClosure start;
   };
+
+  void OnWebContentsReadyRunTask(PendingTask pending_task,
+                                 WebAppUrlLoader::Result result);
+
+  DataRetrieverFactory data_retriever_factory_;
+
+  std::unique_ptr<WebAppUrlLoader> url_loader_;
+
+  // All owned tasks.
+  using Tasks = base::flat_set<std::unique_ptr<WebAppInstallTask>,
+                               base::UniquePtrComparator>;
+  Tasks tasks_;
+
   using TaskQueue = base::queue<PendingTask>;
   TaskQueue task_queue_;
   const WebAppInstallTask* current_queued_task_ = nullptr;
@@ -180,13 +184,11 @@ class WebAppInstallManager final : public InstallManager,
 
   // A single WebContents, shared between tasks in |task_queue_|.
   std::unique_ptr<content::WebContents> web_contents_;
-  bool web_contents_ready_ = false;
 
   bool started_ = false;
 
   base::WeakPtrFactory<WebAppInstallManager> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppInstallManager);
 };
 
 }  // namespace web_app

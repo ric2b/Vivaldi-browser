@@ -23,7 +23,6 @@
 #include "cc/paint/paint_canvas.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
-#include "content/public/renderer/render_frame_observer.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/web_test/common/web_test_constants.h"
 #include "content/web_test/common/web_test_string_util.h"
@@ -197,21 +196,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   blink::WebLocalFrame* GetWebFrame() { return frame_->GetWebFrame(); }
 
  private:
-  // Watches for the RenderFrame that the TestRunnerBindings is attached to
-  // being destroyed.
-  class TestRunnerBindingsRenderFrameObserver : public RenderFrameObserver {
-   public:
-    TestRunnerBindingsRenderFrameObserver(TestRunnerBindings* bindings,
-                                          RenderFrame* frame)
-        : RenderFrameObserver(frame), bindings_(bindings) {}
-
-    // RenderFrameObserver implementation.
-    void OnDestruct() override { bindings_->OnFrameDestroyed(); }
-
-   private:
-    TestRunnerBindings* const bindings_;
-  };
-
   explicit TestRunnerBindings(TestRunner* test_runner,
                               WebFrameTestProxy* frame,
                               SpellCheckClient* spell_check);
@@ -226,19 +210,18 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                                      const std::string& destination_host,
                                      bool allow_destination_subdomains);
   void AddWebPageOverlay();
+  void AllowPointerLock();
   void SetHighlightAds();
   void CapturePrintingPixelsThen(v8::Local<v8::Function> callback);
   void CheckForLeakedWindows();
   void ClearAllDatabases();
   void ClearTrustTokenState(v8::Local<v8::Function> callback);
   void CopyImageThen(int x, int y, v8::Local<v8::Function> callback);
-  void DidAcquirePointerLock();
-  void DidLosePointerLock();
-  void DidNotAcquirePointerLock();
   void DisableMockScreenOrientation();
   void DispatchBeforeInstallPromptEvent(
       const std::vector<std::string>& event_platforms,
       v8::Local<v8::Function> callback);
+  void DropPointerLock();
   void DumpAsMarkup();
   void DumpAsText();
   void DumpAsTextWithPixelResults();
@@ -325,7 +308,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                      const std::string& embedding_origin);
   void SetPluginsAllowed(bool allowed);
   void SetPluginsEnabled(bool enabled);
-  void SetPointerLockWillFailSynchronously();
+  void SetPointerLockWillFail();
   void SetPointerLockWillRespondAsynchronously();
   void SetPopupBlockingEnabled(bool block_popups);
   void SetPrinting();
@@ -385,11 +368,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   // TestRunningBindings should not do anything thereafter.
   void OnFrameDestroyed() {
     invalid_ = true;
-    weak_ptr_factory_.InvalidateWeakPtrs();
   }
-
-  // Observer for the |frame_| the TestRunningBindings is bound to.
-  TestRunnerBindingsRenderFrameObserver frame_observer_;
 
   // Becomes true when the underlying frame is destroyed. Then the class should
   // stop doing anything.
@@ -488,10 +467,7 @@ void TestRunnerBindings::Install(TestRunner* test_runner,
 TestRunnerBindings::TestRunnerBindings(TestRunner* runner,
                                        WebFrameTestProxy* frame,
                                        SpellCheckClient* spell_check)
-    : frame_observer_(this, frame),
-      runner_(runner),
-      frame_(frame),
-      spell_check_(spell_check) {}
+    : runner_(runner), frame_(frame), spell_check_(spell_check) {}
 
 TestRunnerBindings::~TestRunnerBindings() = default;
 
@@ -521,6 +497,20 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("clearTrustTokenState",
                  &TestRunnerBindings::ClearTrustTokenState)
       .SetMethod("copyImageThen", &TestRunnerBindings::CopyImageThen)
+      // While holding a pointer lock, this breaks the lock. Or if
+      // setPointerLockWillRespondAsynchronously() was called, and a lock is
+      // pending it rejects the lock request.
+      .SetMethod("dropPointerLock", &TestRunnerBindings::DropPointerLock)
+      // When setPointerLockWillRespondAsynchronously() was called, this is used
+      // to respond to the async pointer request.
+      .SetMethod("allowPointerLock", &TestRunnerBindings::AllowPointerLock)
+      // Causes the next pointer lock request to fail in the renderer.
+      .SetMethod("setPointerLockWillFail",
+                 &TestRunnerBindings::SetPointerLockWillFail)
+      // Causes the next pointer lock request to delay until the test calls
+      // either allowPointerLock() or dropPointerLock().
+      .SetMethod("setPointerLockWillRespondAsynchronously",
+                 &TestRunnerBindings::SetPointerLockWillRespondAsynchronously)
       .SetMethod("disableAutoResizeMode",
                  &TestRunnerBindings::DisableAutoResizeMode)
       .SetMethod("disableMockScreenOrientation",
@@ -885,13 +875,13 @@ void TestRunnerBindings::QueueReload() {
 void TestRunnerBindings::QueueLoadingScript(const std::string& script) {
   if (invalid_)
     return;
-  runner_->QueueLoadingScript(script, weak_ptr_factory_.GetWeakPtr());
+  runner_->QueueLoadingScript(script);
 }
 
 void TestRunnerBindings::QueueNonLoadingScript(const std::string& script) {
   if (invalid_)
     return;
-  runner_->QueueNonLoadingScript(script, weak_ptr_factory_.GetWeakPtr());
+  runner_->QueueNonLoadingScript(script);
 }
 
 void TestRunnerBindings::QueueLoad(gin::Arguments* args) {
@@ -1839,22 +1829,17 @@ void TestRunnerBindings::RemoveWebPageOverlay() {
 void TestRunnerBindings::UpdateAllLifecyclePhasesAndComposite() {
   if (invalid_)
     return;
-  frame_->GetLocalRootRenderWidget()->RequestPresentation(base::DoNothing());
-}
-
-static void UpdateAllLifecyclePhasesAndCompositeThenReply(
-    base::OnceClosure callback,
-    const gfx::PresentationFeedback& feedback) {
-  std::move(callback).Run();
+  static_cast<WebWidgetTestProxy*>(frame_->GetLocalRootRenderWidget())
+      ->UpdateAllLifecyclePhasesAndComposite(base::DoNothing());
 }
 
 void TestRunnerBindings::UpdateAllLifecyclePhasesAndCompositeThen(
     v8::Local<v8::Function> v8_callback) {
   if (invalid_)
     return;
-  frame_->GetLocalRootRenderWidget()->RequestPresentation(
-      base::BindOnce(&UpdateAllLifecyclePhasesAndCompositeThenReply,
-                     WrapV8Closure(std::move(v8_callback))));
+  static_cast<WebWidgetTestProxy*>(frame_->GetLocalRootRenderWidget())
+      ->UpdateAllLifecyclePhasesAndComposite(
+          WrapV8Closure(std::move(v8_callback)));
 }
 
 void TestRunnerBindings::SetAnimationRequiresRaster(bool do_raster) {
@@ -1932,6 +1917,31 @@ void TestRunnerBindings::CopyImageThen(int x,
 
   WrapV8Callback(std::move(v8_callback))
       .Run(ConvertBitmapToV8(context_scope, std::move(bitmap)));
+}
+
+void TestRunnerBindings::DropPointerLock() {
+  if (invalid_)
+    return;
+  runner_->GetWebTestControlHostRemote()->DropPointerLock();
+}
+
+void TestRunnerBindings::SetPointerLockWillFail() {
+  if (invalid_)
+    return;
+  runner_->GetWebTestControlHostRemote()->SetPointerLockWillFail();
+}
+
+void TestRunnerBindings::SetPointerLockWillRespondAsynchronously() {
+  if (invalid_)
+    return;
+  runner_->GetWebTestControlHostRemote()
+      ->SetPointerLockWillRespondAsynchronously();
+}
+
+void TestRunnerBindings::AllowPointerLock() {
+  if (invalid_)
+    return;
+  runner_->GetWebTestControlHostRemote()->AllowPointerLock();
 }
 
 void TestRunnerBindings::SetCustomTextOutput(const std::string& output) {
@@ -2130,64 +2140,100 @@ void TestRunnerBindings::NotImplemented(const gin::Arguments& args) {}
 TestRunner::WorkQueue::WorkQueue(TestRunner* controller)
     : controller_(controller) {}
 
-TestRunner::WorkQueue::~WorkQueue() {
-  Reset();
-}
-
-void TestRunner::WorkQueue::ProcessWorkSoon() {
-  // We delay processing queued work to avoid recursion problems, and to avoid
-  // running tasks in the middle of a navigation call stack, where blink and
-  // content may have inconsistent states halfway through being updated.
-  blink::scheduler::GetSingleThreadTaskRunnerForTesting()->PostTask(
-      FROM_HERE, base::BindOnce(&TestRunner::WorkQueue::ProcessWork,
-                                weak_factory_.GetWeakPtr()));
-}
-
 void TestRunner::WorkQueue::Reset() {
-  frozen_ = false;
-  finished_loading_ = false;
-  while (!queue_.empty()) {
-    delete queue_.front();
-    queue_.pop_front();
-  }
+  // Set values in a TrackedDictionary |states_| to avoid accessing missing
+  // values.
+  set_frozen(false);
+  set_has_items(false);
+  states_.ResetChangeTracking();
+  set_loading(true);
 }
 
-void TestRunner::WorkQueue::AddWork(WorkItem* work) {
-  if (frozen_) {
-    delete work;
+void TestRunner::WorkQueue::AddWork(mojom::WorkItemPtr work_item) {
+  if (is_frozen())
+    return;
+  controller_->GetWebTestControlHostRemote()->WorkItemAdded(
+      std::move(work_item));
+  set_has_items(true);
+  OnStatesChanged();
+}
+
+void TestRunner::WorkQueue::RequestWork() {
+  controller_->GetWebTestControlHostRemote()->RequestWorkItem();
+}
+
+void TestRunner::WorkQueue::ProcessWorkItem(mojom::WorkItemPtr work_item) {
+  // Watch for loading finishing inside ProcessWorkItemInternal().
+  set_loading(true);
+  bool started_load = ProcessWorkItemInternal(std::move(work_item));
+  if (started_load) {
+    // If a load started, and didn't complete inside of
+    // ProcessWorkItemInternal(), then mark the load as running.
+    if (loading_)
+      controller_->frame_will_start_load_ = true;
+
+    // Wait for an ongoing load to complete before requesting the next WorkItem.
     return;
   }
-  queue_.push_back(work);
+  RequestWork();
 }
 
-void TestRunner::WorkQueue::ProcessWork() {
-  while (!queue_.empty()) {
-    finished_loading_ = false;  // Watch for loading finishing inside Run().
-    bool started_load = queue_.front()->Run(controller_);
-    delete queue_.front();
-    queue_.pop_front();
-
-    if (started_load) {
-      // If a load started, and didn't complete inside of Run(), then mark
-      // the load as running.
-      if (!finished_loading_)
-        controller_->frame_will_start_load_ = true;
-
-      // Quit doing work once a load is in progress.
-      //
-      // TODO(danakj): We could avoid the post-task of ProcessWork() by not
-      // early-outting here if |finished_loading_|. Since load finished we
-      // could keep running work. And in RemoveLoadingFrame() instead of
-      // calling ProcessWorkSoon() unconditionally, only call it if we're not
-      // already inside ProcessWork().
-      return;
+bool TestRunner::WorkQueue::ProcessWorkItemInternal(
+    mojom::WorkItemPtr work_item) {
+  switch (work_item->which()) {
+    case mojom::WorkItem::Tag::BACK_FORWARD: {
+      mojom::WorkItemBackForwardPtr& item_back_forward =
+          work_item->get_back_forward();
+      controller_->GoToOffset(item_back_forward->distance);
+      return true;  // TODO(danakj): Did it really start a navigation?
     }
+    case mojom::WorkItem::Tag::LOADING_SCRIPT: {
+      mojom::WorkItemLoadingScriptPtr& item_loading_script =
+          work_item->get_loading_script();
+      WebFrameTestProxy* main_frame =
+          controller_->FindInProcessMainWindowMainFrame();
+      DCHECK(main_frame);
+      main_frame->GetWebFrame()->ExecuteScript(blink::WebScriptSource(
+          blink::WebString::FromUTF8(item_loading_script->script)));
+      return true;  // TODO(danakj): Did it really start a navigation?
+    }
+    case mojom::WorkItem::Tag::NON_LOADING_SCRIPT: {
+      mojom::WorkItemNonLoadingScriptPtr& item_non_loading_script =
+          work_item->get_non_loading_script();
+      WebFrameTestProxy* main_frame =
+          controller_->FindInProcessMainWindowMainFrame();
+      DCHECK(main_frame);
+      main_frame->GetWebFrame()->ExecuteScript(blink::WebScriptSource(
+          blink::WebString::FromUTF8(item_non_loading_script->script)));
+      return false;
+    }
+    case mojom::WorkItem::Tag::LOAD: {
+      mojom::WorkItemLoadPtr& item_load = work_item->get_load();
+      controller_->LoadURLForFrame(GURL(item_load->url), item_load->target);
+      return true;  // TODO(danakj): Did it really start a navigation?
+    }
+    case mojom::WorkItem::Tag::RELOAD:
+      controller_->Reload();
+      return true;
   }
+  NOTREACHED();
+  return false;
+}
 
-  // If there was no navigation stated, there may be no more tasks in the
-  // system. We can safely finish the test here as we're not in the middle
-  // of a navigation call stack, and ProcessWork() was a posted task.
-  controller_->FinishTestIfReady();
+void TestRunner::WorkQueue::ReplicateStates(
+    const base::DictionaryValue& values) {
+  states_.ApplyUntrackedChanges(values);
+  if (!has_items())
+    controller_->FinishTestIfReady();
+}
+
+void TestRunner::WorkQueue::OnStatesChanged() {
+  if (states_.changed_values().empty())
+    return;
+
+  controller_->GetWebTestControlHostRemote()->WorkQueueStatesChanged(
+      states_.changed_values().Clone());
+  states_.ResetChangeTracking();
 }
 
 TestRunner::TestRunner()
@@ -2270,6 +2316,7 @@ void TestRunner::ResetWebWidget(WebWidgetTestProxy* web_widget_test_proxy) {
       web_widget_test_proxy->GetWebFrameWidget();
 
   web_widget->SetDeviceScaleFactorForTesting(0);
+  web_widget->ReleaseMouseLockAndPointerCaptureForTesting();
 
   // These things are only modified/valid for the main frame's widget.
   if (web_widget_test_proxy->delegate()) {
@@ -2504,15 +2551,56 @@ void TestRunner::RemoveLoadingFrame(blink::WebFrame* frame) {
 
   // No more new work after the first complete load.
   work_queue_.set_frozen(true);
+  work_queue_.OnStatesChanged();
+
   // Inform the work queue that any load it started is done, in case it is
-  // still inside ProcessWork().
-  work_queue_.set_finished_loading();
+  // still inside ProcessWorkItem().
+  work_queue_.set_loading(false);
 
   // testRunner.waitUntilDone() will pause the work queue if it is being used by
   // the test, until testRunner.notifyDone() is called. However this can only be
   // done once.
   if (!web_test_runtime_flags_.wait_until_done() || did_notify_done_)
-    work_queue_.ProcessWorkSoon();
+    work_queue_.RequestWork();
+}
+
+void TestRunner::OnFrameDeactivated(WebFrameTestProxy* frame) {
+  if (!test_is_running_)
+    return;
+
+  DCHECK(frame->IsMainFrame());
+  RemoveMainFrame(frame);
+  RemoveRenderView(frame->GetWebViewTestProxy());
+
+  if (frame->GetWebFrame()->IsLoading())
+    RemoveLoadingFrame(frame->GetWebFrame());
+}
+
+void TestRunner::OnFrameReactivated(WebFrameTestProxy* frame) {
+  if (!test_is_running_)
+    return;
+
+  DCHECK(frame->IsMainFrame());
+
+  if (frame->GetWebFrame()->IsLoading()) {
+    AddLoadingFrame(frame->GetWebFrame());
+  }
+
+  // A WorkQueueItem that navigates reports that it will start a load, but when
+  // a frame comes from the back/forward cache, it is already loaded so
+  // AddLoadingFrame() will not occur. This informs the system that the load is
+  // complete, or will in fact not start so that the TestRunner does not wait
+  // for this frame to end the test. At this point the frame has already had a
+  // chance to run script and insert further WorkQueueItems or other state that
+  // would delay ending the test, if it wished to.
+  frame_will_start_load_ = false;
+
+  AddMainFrame(frame);
+  WebViewTestProxy* view_proxy = frame->GetWebViewTestProxy();
+  AddRenderView(view_proxy);
+  if (view_proxy->is_main_window()) {
+    work_queue_.RequestWork();
+  }
 }
 
 void TestRunner::FinishTestIfReady() {
@@ -2536,7 +2624,7 @@ void TestRunner::FinishTestIfReady() {
 
   // If there are tasks in the queue still, we must wait for them before
   // finishing the test.
-  if (!work_queue_.is_empty())
+  if (work_queue_.has_items())
     return;
 
   // If waiting for testRunner.notifyDone() then we can not end the test.
@@ -2634,19 +2722,6 @@ bool TestRunner::ShouldDumpNavigationPolicy() const {
   return web_test_runtime_flags_.dump_navigation_policy();
 }
 
-class WorkItemBackForward : public TestRunner::WorkItem {
- public:
-  explicit WorkItemBackForward(int distance) : distance_(distance) {}
-
-  bool Run(TestRunner* test_runner) override {
-    test_runner->GoToOffset(distance_);
-    return true;  // FIXME: Did it really start a navigation?
-  }
-
- private:
-  int distance_;
-};
-
 WebFrameTestProxy* TestRunner::FindInProcessMainWindowMainFrame() {
   for (WebFrameTestProxy* main_frame : main_frames_) {
     WebViewTestProxy* view = main_frame->GetWebViewTestProxy();
@@ -2675,96 +2750,45 @@ void TestRunner::NotifyDone() {
 }
 
 void TestRunner::QueueBackNavigation(int how_far_back) {
-  work_queue_.AddWork(new WorkItemBackForward(-how_far_back));
+  work_queue_.AddWork(mojom::WorkItem::NewBackForward(
+      mojom::WorkItemBackForward::New(-how_far_back)));
 }
 
 void TestRunner::QueueForwardNavigation(int how_far_forward) {
-  work_queue_.AddWork(new WorkItemBackForward(how_far_forward));
+  work_queue_.AddWork(mojom::WorkItem::NewBackForward(
+      mojom::WorkItemBackForward::New(how_far_forward)));
 }
-
-class WorkItemReload : public TestRunner::WorkItem {
- public:
-  bool Run(TestRunner* test_runner) override {
-    test_runner->Reload();
-    return true;
-  }
-};
 
 void TestRunner::QueueReload() {
-  work_queue_.AddWork(new WorkItemReload());
+  work_queue_.AddWork(mojom::WorkItem::NewReload(mojom::WorkItemReload::New()));
 }
 
-class WorkItemLoadingScript : public TestRunner::WorkItem {
- public:
-  explicit WorkItemLoadingScript(const std::string& script,
-                                 base::WeakPtr<TestRunnerBindings> bindings)
-      : script_(script), bindings_(std::move(bindings)) {}
-
-  bool Run(TestRunner*) override {
-    if (!bindings_)
-      return false;
-    bindings_->GetWebFrame()->ExecuteScript(
-        blink::WebScriptSource(blink::WebString::FromUTF8(script_)));
-    return true;  // FIXME: Did it really start a navigation?
-  }
-
- private:
-  std::string script_;
-  base::WeakPtr<TestRunnerBindings> bindings_;
-};
-
-void TestRunner::QueueLoadingScript(
-    const std::string& script,
-    base::WeakPtr<TestRunnerBindings> bindings) {
-  work_queue_.AddWork(new WorkItemLoadingScript(script, std::move(bindings)));
+void TestRunner::QueueLoadingScript(const std::string& script) {
+  work_queue_.AddWork(mojom::WorkItem::NewLoadingScript(
+      mojom::WorkItemLoadingScript::New(script)));
 }
 
-class WorkItemNonLoadingScript : public TestRunner::WorkItem {
- public:
-  explicit WorkItemNonLoadingScript(const std::string& script,
-                                    base::WeakPtr<TestRunnerBindings> bindings)
-      : script_(script), bindings_(std::move(bindings)) {}
-
-  bool Run(TestRunner*) override {
-    if (!bindings_)
-      return false;
-    bindings_->GetWebFrame()->ExecuteScript(
-        blink::WebScriptSource(blink::WebString::FromUTF8(script_)));
-    return false;
-  }
-
- private:
-  std::string script_;
-  base::WeakPtr<TestRunnerBindings> bindings_;
-};
-
-void TestRunner::QueueNonLoadingScript(
-    const std::string& script,
-    base::WeakPtr<TestRunnerBindings> bindings) {
-  work_queue_.AddWork(
-      new WorkItemNonLoadingScript(script, std::move(bindings)));
+void TestRunner::QueueNonLoadingScript(const std::string& script) {
+  work_queue_.AddWork(mojom::WorkItem::NewNonLoadingScript(
+      mojom::WorkItemNonLoadingScript::New(script)));
 }
-
-class WorkItemLoad : public TestRunner::WorkItem {
- public:
-  WorkItemLoad(const GURL& url, const std::string& target)
-      : url_(url), target_(target) {}
-
-  bool Run(TestRunner* test_runner) override {
-    test_runner->LoadURLForFrame(url_, target_);
-    return true;  // FIXME: Did it really start a navigation?
-  }
-
- private:
-  GURL url_;
-  std::string target_;
-};
 
 void TestRunner::QueueLoad(const GURL& current_url,
                            const std::string& relative_url,
                            const std::string& target) {
   GURL full_url = current_url.Resolve(relative_url);
-  work_queue_.AddWork(new WorkItemLoad(full_url, target));
+  work_queue_.AddWork(mojom::WorkItem::NewLoad(
+      mojom::WorkItemLoad::New(full_url.spec(), target)));
+}
+
+void TestRunner::ProcessWorkItem(mojom::WorkItemPtr work_item) {
+  work_queue_.ProcessWorkItem(std::move(work_item));
+}
+
+void TestRunner::ReplicateWorkQueueStates(const base::DictionaryValue& values) {
+  if (!test_is_running_)
+    return;
+  work_queue_.ReplicateStates(values);
 }
 
 void TestRunner::OnTestPreferencesChanged(const TestPreferences& test_prefs,
@@ -3117,7 +3141,11 @@ void TestRunner::FocusWindow(RenderFrame* main_frame, bool focus) {
     // This path simulates losing focus on the window, without moving it to
     // another window.
     if (widget->GetWebWidget()->HasFocus()) {
-      widget->SetActive(false);
+      auto* view_proxy = frame_proxy->GetWebViewTestProxy();
+      // TODO(dtapuska): We should call the exact IPC the browser
+      // calls. ie. WebFrameWidgetBase::SetActive but that isn't
+      // exposed outside of blink.
+      view_proxy->GetWebView()->SetIsActive(false);
       widget->GetWebWidget()->SetFocus(false);
     }
     return;
@@ -3128,7 +3156,11 @@ void TestRunner::FocusWindow(RenderFrame* main_frame, bool focus) {
     if (other_main_frame != main_frame) {
       RenderWidget* other_widget = other_main_frame->GetLocalRootRenderWidget();
       if (other_widget->GetWebWidget()->HasFocus()) {
-        other_widget->SetActive(false);
+        auto* other_view_proxy = other_main_frame->GetWebViewTestProxy();
+        // TODO(dtapuska): We should call the exact IPC the browser
+        // calls. ie. WebFrameWidgetBase::SetActive but that isn't
+        // exposed outside of blink.
+        other_view_proxy->GetWebView()->SetIsActive(false);
         other_widget->GetWebWidget()->SetFocus(false);
       }
     }
@@ -3136,7 +3168,6 @@ void TestRunner::FocusWindow(RenderFrame* main_frame, bool focus) {
 
   if (!widget->GetWebWidget()->HasFocus()) {
     widget->GetWebWidget()->SetFocus(true);
-    widget->SetActive(true);
   }
 }
 

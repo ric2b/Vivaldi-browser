@@ -30,6 +30,7 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "components/permissions/features.h"
 #include "components/permissions/notification_permission_ui_selector.h"
 #include "components/permissions/permission_request.h"
@@ -37,7 +38,6 @@
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "components/permissions/test/mock_permission_request.h"
-#include "components/prerender/browser/prerender_manager.h"
 #include "content/public/browser/cookie_access_details.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -511,7 +511,7 @@ TEST_F(ContentSettingImageModelTest, SensorAccessPermissionsChanged) {
                                            CONTENT_SETTING_BLOCK);
     settings_map->SetContentSettingDefaultScope(
         web_contents()->GetURL(), web_contents()->GetURL(),
-        ContentSettingsType::SENSORS, std::string(), CONTENT_SETTING_ALLOW);
+        ContentSettingsType::SENSORS, CONTENT_SETTING_ALLOW);
     content_settings->OnContentAllowed(ContentSettingsType::SENSORS);
     content_setting_image_model->Update(web_contents());
 
@@ -534,7 +534,7 @@ TEST_F(ContentSettingImageModelTest, SensorAccessPermissionsChanged) {
                                            CONTENT_SETTING_ALLOW);
     settings_map->SetContentSettingDefaultScope(
         web_contents()->GetURL(), web_contents()->GetURL(),
-        ContentSettingsType::SENSORS, std::string(), CONTENT_SETTING_BLOCK);
+        ContentSettingsType::SENSORS, CONTENT_SETTING_BLOCK);
     content_settings->OnContentBlocked(ContentSettingsType::SENSORS);
     content_setting_image_model->Update(web_contents());
 

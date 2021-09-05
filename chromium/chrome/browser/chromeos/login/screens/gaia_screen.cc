@@ -4,7 +4,7 @@
 
 #include "chrome/browser/chromeos/login/screens/gaia_screen.h"
 
-#include "chrome/browser/chromeos/login/screen_manager.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_context.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "components/account_id/account_id.h"
@@ -32,11 +32,6 @@ GaiaScreen::GaiaScreen(const ScreenExitCallback& exit_callback)
 GaiaScreen::~GaiaScreen() {
   if (view_)
     view_->Unbind();
-}
-
-// static
-GaiaScreen* GaiaScreen::Get(ScreenManager* manager) {
-  return static_cast<GaiaScreen*>(manager->GetScreen(GaiaView::kScreenId));
 }
 
 void GaiaScreen::SetView(GaiaView* view) {
@@ -83,7 +78,7 @@ void GaiaScreen::OnUserAction(const std::string& action_id) {
   if (action_id == kUserActionCancel) {
     if (context()->is_user_creation_enabled) {
       exit_callback_.Run(Result::BACK);
-    } else if (context()->device_has_users) {
+    } else if (LoginDisplayHost::default_host()->HasUserPods()) {
       exit_callback_.Run(Result::CLOSE_DIALOG);
     } else {
       LoadOnline(EmptyAccountId());

@@ -46,7 +46,7 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kSecurityAndSignInSubpagePath,
       chromeos::settings::mojom::kFingerprintSubpagePath,
       chromeos::settings::mojom::kManageOtherPeopleSubpagePath,
-      chromeos::settings::mojom::kKerberosSubpagePath,
+      chromeos::settings::mojom::kKerberosAccountsSubpagePath,
 
       // Device section.
       chromeos::settings::mojom::kDeviceSectionPath,
@@ -122,6 +122,10 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kAboutChromeOsSectionPath,
       chromeos::settings::mojom::kAboutChromeOsDetailsSubpagePath,
       chromeos::settings::mojom::kDetailedBuildInfoSubpagePath,
+
+      // Kerberos section.
+      chromeos::settings::mojom::kKerberosSectionPath,
+      chromeos::settings::mojom::kKerberosAccountsV2SubpagePath,
   };
 
   // Sub-pages may have query parameters, e.g. networkDetail?guid=123456.

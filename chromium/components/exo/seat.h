@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_EXO_SEAT_H_
 #define COMPONENTS_EXO_SEAT_H_
 
+#include "base/check.h"
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -30,14 +31,15 @@ class KeyEvent;
 
 namespace exo {
 class DragDropOperation;
+class FileHelper;
 class ScopedDataSource;
 class SeatObserver;
 class Surface;
 class XkbTracker;
 
 // The maximum number of different data types that we will write to the
-// clipboard (plain text, RTF, HTML, image)
-constexpr int kMaxClipboardDataTypes = 4;
+// clipboard (plain text, RTF, HTML, image, text/uri-list)
+constexpr int kMaxClipboardDataTypes = 5;
 
 // Seat object represent a group of input devices such as keyboard, pointer and
 // touch devices and keeps track of input focus.
@@ -79,7 +81,8 @@ class Seat : public aura::client::FocusChangeObserver,
   // Sets clipboard data from |source|.
   void SetSelection(DataSource* source);
 
-  void StartDrag(DataSource* source,
+  void StartDrag(FileHelper* file_helper,
+                 DataSource* source,
                  Surface* origin,
                  Surface* icon,
                  ui::mojom::DragEventSource event_source);
@@ -151,6 +154,10 @@ class Seat : public aura::client::FocusChangeObserver,
                       scoped_refptr<RefCountedScopedClipboardWriter> writer,
                       const SkBitmap& bitmap);
 #endif  // defined(OS_CHROMEOS)
+  void OnFilenamesRead(scoped_refptr<RefCountedScopedClipboardWriter> writer,
+                       base::OnceClosure callback,
+                       const std::string& mime_type,
+                       const std::vector<uint8_t>& data);
 
   void OnAllReadsFinished(
       scoped_refptr<RefCountedScopedClipboardWriter> writer);

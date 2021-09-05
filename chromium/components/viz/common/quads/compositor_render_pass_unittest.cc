@@ -85,7 +85,7 @@ TEST(CompositorRenderPassTest,
   // Stick a quad in the pass, this should not get copied.
   SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(gfx::Transform(), gfx::Rect(), gfx::Rect(),
-                       gfx::RRectF(), gfx::Rect(), false, false, 1,
+                       gfx::MaskFilterInfo(), gfx::Rect(), false, false, 1,
                        SkBlendMode::kSrcOver, 0);
 
   auto* color_quad = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -144,7 +144,7 @@ TEST(CompositorRenderPassTest, CopyAllShouldBeIdentical) {
   // Two quads using one shared state.
   SharedQuadState* shared_state1 = pass->CreateAndAppendSharedQuadState();
   shared_state1->SetAll(gfx::Transform(), gfx::Rect(0, 0, 1, 1), gfx::Rect(),
-                        gfx::RRectF(), gfx::Rect(), false, false, 1,
+                        gfx::MaskFilterInfo(), gfx::Rect(), false, false, 1,
                         SkBlendMode::kSrcOver, 0);
 
   auto* color_quad1 = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -160,7 +160,7 @@ TEST(CompositorRenderPassTest, CopyAllShouldBeIdentical) {
   // And two quads using another shared state.
   SharedQuadState* shared_state2 = pass->CreateAndAppendSharedQuadState();
   shared_state2->SetAll(gfx::Transform(), gfx::Rect(0, 0, 2, 2), gfx::Rect(),
-                        gfx::RRectF(), gfx::Rect(), false, false, 1,
+                        gfx::MaskFilterInfo(), gfx::Rect(), false, false, 1,
                         SkBlendMode::kSrcOver, 0);
 
   auto* color_quad3 = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -201,8 +201,8 @@ TEST(CompositorRenderPassTest, CopyAllShouldBeIdentical) {
   SharedQuadState* contrib_shared_state =
       contrib->CreateAndAppendSharedQuadState();
   contrib_shared_state->SetAll(gfx::Transform(), gfx::Rect(0, 0, 2, 2),
-                               gfx::Rect(), gfx::RRectF(), gfx::Rect(), false,
-                               false, 1, SkBlendMode::kSrcOver, 0);
+                               gfx::Rect(), gfx::MaskFilterInfo(), gfx::Rect(),
+                               false, false, 1, SkBlendMode::kSrcOver, 0);
 
   auto* contrib_quad = contrib->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
   contrib_quad->SetNew(contrib->shared_quad_state_list.back(),
@@ -254,7 +254,7 @@ TEST(CompositorRenderPassTest, CopyAllWithCulledQuads) {
   // A shared state with a quad.
   SharedQuadState* shared_state1 = pass->CreateAndAppendSharedQuadState();
   shared_state1->SetAll(gfx::Transform(), gfx::Rect(0, 0, 1, 1), gfx::Rect(),
-                        gfx::RRectF(), gfx::Rect(), false, false, 1,
+                        gfx::MaskFilterInfo(), gfx::Rect(), false, false, 1,
                         SkBlendMode::kSrcOver, 0);
 
   auto* color_quad1 = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -265,19 +265,19 @@ TEST(CompositorRenderPassTest, CopyAllWithCulledQuads) {
   // A shared state with no quads, they were culled.
   SharedQuadState* shared_state2 = pass->CreateAndAppendSharedQuadState();
   shared_state2->SetAll(gfx::Transform(), gfx::Rect(0, 0, 2, 2), gfx::Rect(),
-                        gfx::RRectF(), gfx::Rect(), false, false, 1,
+                        gfx::MaskFilterInfo(), gfx::Rect(), false, false, 1,
                         SkBlendMode::kSrcOver, 0);
 
   // A second shared state with no quads.
   SharedQuadState* shared_state3 = pass->CreateAndAppendSharedQuadState();
   shared_state3->SetAll(gfx::Transform(), gfx::Rect(0, 0, 2, 2), gfx::Rect(),
-                        gfx::RRectF(), gfx::Rect(), false, false, 1,
+                        gfx::MaskFilterInfo(), gfx::Rect(), false, false, 1,
                         SkBlendMode::kSrcOver, 0);
 
   // A last shared state with a quad again.
   SharedQuadState* shared_state4 = pass->CreateAndAppendSharedQuadState();
   shared_state4->SetAll(gfx::Transform(), gfx::Rect(0, 0, 2, 2), gfx::Rect(),
-                        gfx::RRectF(), gfx::Rect(), false, false, 1,
+                        gfx::MaskFilterInfo(), gfx::Rect(), false, false, 1,
                         SkBlendMode::kSrcOver, 0);
 
   auto* color_quad2 = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -295,14 +295,25 @@ TEST(CompositorRenderPassTest, CopyAllWithCulledQuads) {
 }
 
 TEST(CompositorRenderPassTest, ReplacedQuadsShouldntMove) {
-  auto quad_state = std::make_unique<SharedQuadState>();
-  QuadList quad_list;
-  auto* quad = quad_list.AllocateAndConstruct<SolidColorDrawQuad>();
+  auto pass = CompositorRenderPass::Create();
+  SharedQuadState* quad_state = pass->CreateAndAppendSharedQuadState();
+  auto* quad = pass->quad_list.AllocateAndConstruct<SolidColorDrawQuad>();
   gfx::Rect quad_rect(1, 2, 3, 4);
-  quad->SetNew(quad_state.get(), quad_rect, quad_rect, SkColor(), false);
-  quad_list.ReplaceExistingQuadWithOpaqueTransparentSolidColor(
-      quad_list.begin());
-  EXPECT_EQ(quad_list.begin()->rect, quad_rect);
+  quad->SetNew(quad_state, quad_rect, quad_rect, SkColor(), false);
+  pass->ReplaceExistingQuadWithOpaqueTransparentSolidColor(
+      pass->quad_list.begin());
+  EXPECT_EQ(pass->quad_list.begin()->rect, quad_rect);
+}
+
+TEST(CompositorRenderPassTest, ReplacedQuadsShouldntBeOpaque) {
+  auto pass = CompositorRenderPass::Create();
+  SharedQuadState* quad_state = pass->CreateAndAppendSharedQuadState();
+  auto* quad = pass->quad_list.AllocateAndConstruct<SolidColorDrawQuad>();
+  gfx::Rect quad_rect(1, 2, 3, 4);
+  quad->SetNew(quad_state, quad_rect, quad_rect, SkColor(), false);
+  pass->ReplaceExistingQuadWithOpaqueTransparentSolidColor(
+      pass->quad_list.begin());
+  EXPECT_FALSE(pass->quad_list.begin()->shared_quad_state->are_contents_opaque);
 }
 
 }  // namespace

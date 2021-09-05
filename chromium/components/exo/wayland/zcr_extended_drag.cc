@@ -48,12 +48,12 @@ class ZcrExtendedDragSourceDelegate : public ExtendedDragSource::Delegate {
     return settings_ & ZCR_EXTENDED_DRAG_V1_OPTIONS_LOCK_CURSOR;
   }
 
-  void OnSwallowed(std::string mime_type) override {
+  void OnSwallowed(const std::string& mime_type) override {
     zcr_extended_drag_source_v1_send_swallow(resource_, mime_type.c_str());
     wl_client_flush(wl_resource_get_client(resource_));
   }
 
-  void OnUnswallowed(std::string mime_type,
+  void OnUnswallowed(const std::string& mime_type,
                      const gfx::Vector2d& offset) override {
     zcr_extended_drag_source_v1_send_unswallow(resource_, mime_type.c_str(),
                                                offset.x(), offset.y());
@@ -143,7 +143,6 @@ void extended_drag_get_extended_drag_source(wl_client* client,
                                             uint32_t id,
                                             wl_resource* data_source_resource,
                                             uint32_t settings) {
-  Display* display = GetUserDataAs<Display>(resource);
   DataSource* source = GetUserDataAs<DataSource>(data_source_resource);
 
   wl_resource* extended_drag_source_resource =
@@ -153,9 +152,8 @@ void extended_drag_get_extended_drag_source(wl_client* client,
   SetImplementation(extended_drag_source_resource,
                     &extended_drag_source_implementation,
                     std::make_unique<ExtendedDragSource>(
-                        source, display->seat(),
-                        new ZcrExtendedDragSourceDelegate(
-                            extended_drag_source_resource, settings)));
+                        source, new ZcrExtendedDragSourceDelegate(
+                                    extended_drag_source_resource, settings)));
 }
 
 void extended_drag_get_extended_drag_offer(wl_client* client,

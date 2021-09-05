@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/startup_data.h"
 #include "content/public/browser/content_browser_client.h"
@@ -27,11 +28,13 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 
 class ChromeContentBrowserClientParts;
 class PrefRegistrySimple;
+class ScopedKeepAlive;
 
 namespace base {
 class CommandLine;
@@ -111,7 +114,7 @@ blink::UserAgentBrandList GenerateBrandVersionList(
 
 class ChromeContentBrowserClient : public content::ContentBrowserClient {
  public:
-  explicit ChromeContentBrowserClient(StartupData* startup_data = nullptr);
+  ChromeContentBrowserClient();
   ~ChromeContentBrowserClient() override;
 
   // TODO(https://crbug.com/787567): This file is about calls from content/ out
@@ -162,8 +165,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                        const GURL& site_url) override;
   bool DoesSiteRequireDedicatedProcess(content::BrowserContext* browser_context,
                                        const GURL& effective_site_url) override;
-  bool ShouldLockProcess(content::BrowserContext* browser_context,
-                         const GURL& effective_site_url) override;
+  bool ShouldLockProcessToSite(content::BrowserContext* browser_context,
+                               const GURL& effective_site_url) override;
   bool DoesWebUISchemeRequireProcessLock(base::StringPiece scheme) override;
   bool ShouldTreatURLSchemeAsFirstPartyWhenTopLevel(
       base::StringPiece scheme,
@@ -186,6 +189,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool LogWebUIUrl(const GURL& web_ui_url) override;
   bool IsWebUIAllowedToMakeNetworkRequests(const url::Origin& origin) override;
   bool IsHandledURL(const GURL& url) override;
+  bool HasCustomSchemeHandler(content::BrowserContext* browser_context,
+                              const std::string& scheme) override;
   bool CanCommitURL(content::RenderProcessHost* process_host,
                     const GURL& url) override;
   void OverrideNavigationParams(
@@ -234,19 +239,13 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool IsDataSaverEnabled(content::BrowserContext* context) override;
   void UpdateRendererPreferencesForWorker(
       content::BrowserContext* browser_context,
-      blink::mojom::RendererPreferences* out_prefs) override;
+      blink::RendererPreferences* out_prefs) override;
   bool AllowAppCache(const GURL& manifest_url,
 
                      const GURL& site_for_cookies,
                      const base::Optional<url::Origin>& top_frame_origin,
                      content::BrowserContext* context) override;
-  content::AllowServiceWorkerResult AllowServiceWorkerOnIO(
-      const GURL& scope,
-      const GURL& site_for_cookies,
-      const base::Optional<url::Origin>& top_frame_origin,
-      const GURL& script_url,
-      content::ResourceContext* context) override;
-  content::AllowServiceWorkerResult AllowServiceWorkerOnUI(
+  content::AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
       const GURL& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin,
@@ -466,8 +465,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       int frame_tree_node_id) override;
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
-      base::UkmSourceId ukm_source_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
+      ukm::SourceIdObj ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories) override;
   void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
       content::BrowserContext* browser_context,
@@ -478,7 +476,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories) override;
   bool WillCreateURLLoaderFactory(
       content::BrowserContext* browser_context,
@@ -487,7 +484,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -642,7 +639,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                               const url::Origin& requesting_origin,
                               const url::Origin& embedding_origin) override;
 
-  bool ShouldLoadExtraIcuDataFile() override;
+  bool ShouldLoadExtraIcuDataFile(std::string* split_name) override;
 
   bool ArePersistentMediaDeviceIDsAllowed(
       content::BrowserContext* browser_context,
@@ -703,11 +700,20 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const GURL& url) override;
   ukm::UkmService* GetUkmService() override;
 
+  void OnKeepaliveRequestStarted() override;
+  void OnKeepaliveRequestFinished() override;
+
 #if defined(OS_MAC)
   bool SetupEmbedderSandboxParameters(
       sandbox::policy::SandboxType sandbox_type,
       sandbox::SeatbeltExecClient* client) override;
 #endif  // defined(OS_MAC)
+
+  void GetHyphenationDictionary(
+      base::OnceCallback<void(const base::FilePath&)>) override;
+  bool HasErrorPage(int http_status_code) override;
+
+  StartupData* startup_data() { return &startup_data_; }
 
  protected:
   static bool HandleWebUI(GURL* url, content::BrowserContext* browser_context);
@@ -768,6 +774,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       bool is_enterprise_lookup_enabled,
       bool is_consumer_lookup_enabled);
 
+  void OnKeepaliveTimerFired(
+      std::unique_ptr<ScopedKeepAlive> keep_alive_handle);
+
   // Vector of additional ChromeContentBrowserClientParts.
   // Parts are deleted in the reverse order they are added.
   std::vector<ChromeContentBrowserClientParts*> extra_parts_;
@@ -776,7 +785,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   scoped_refptr<safe_browsing::UrlCheckerDelegate>
       safe_browsing_url_checker_delegate_;
 
-  StartupData* startup_data_;
+  StartupData startup_data_;
 
 #if !defined(OS_ANDROID)
   std::unique_ptr<ChromeSerialDelegate> serial_delegate_;
@@ -791,6 +800,12 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   // Returned from GetNetworkContextsParentDirectory() but created on the UI
   // thread because it needs to access the Local State prefs.
   std::vector<base::FilePath> network_contexts_parent_directory_;
+
+#if !defined(OS_ANDROID)
+  uint64_t num_keepalive_requests_ = 0;
+  base::OneShotTimer keepalive_timer_;
+  base::TimeTicks last_keepalive_request_time_;
+#endif
 
   base::WeakPtrFactory<ChromeContentBrowserClient> weak_factory_{this};
 

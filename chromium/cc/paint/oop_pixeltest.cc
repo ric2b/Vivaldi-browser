@@ -35,12 +35,12 @@
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
-#include "third_party/skia/include/core/SkFontLCDConfig.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/core/SkYUVAInfo.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
-#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/GrYUVABackendTextures.h"
 #include "ui/gfx/geometry/axis_transform2d.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/skia_util.h"
@@ -48,18 +48,6 @@
 
 namespace cc {
 namespace {
-class ScopedEnableLCDText {
- public:
-  ScopedEnableLCDText() {
-    order_ = SkFontLCDConfig::GetSubpixelOrder();
-    SkFontLCDConfig::SetSubpixelOrder(SkFontLCDConfig::kRGB_LCDOrder);
-  }
-  ~ScopedEnableLCDText() { SkFontLCDConfig::SetSubpixelOrder(order_); }
-
- private:
-  SkFontLCDConfig::LCDOrder order_;
-};
-
 scoped_refptr<DisplayItemList> MakeNoopDisplayItemList() {
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
@@ -90,7 +78,7 @@ class OopPixelTest : public testing::Test,
     gpu_image_cache_.reset(new GpuImageDecodeCache(
         gles2_context_provider_.get(), false, kRGBA_8888_SkColorType,
         kWorkingSetSize, gles2_max_texture_size,
-        PaintImage::kDefaultGeneratorClientId));
+        PaintImage::kDefaultGeneratorClientId, nullptr));
 
     const int raster_max_texture_size =
         raster_context_provider_->ContextCapabilities().max_texture_size;
@@ -117,7 +105,7 @@ class OopPixelTest : public testing::Test,
     oop_image_cache_.reset(new GpuImageDecodeCache(
         raster_context_provider_.get(), true, kRGBA_8888_SkColorType,
         kWorkingSetSize, raster_max_texture_size,
-        PaintImage::kDefaultGeneratorClientId));
+        PaintImage::kDefaultGeneratorClientId, nullptr));
   }
 
   class RasterOptions {
@@ -311,7 +299,7 @@ class OopPixelTest : public testing::Test,
     // that the preamble setup in RasterSource::PlaybackToCanvas matches
     // the same setup done in GLES2Implementation::RasterCHROMIUM.
     RecordingSource recording;
-    recording.UpdateDisplayItemList(display_item_list, 0u, 1.f);
+    recording.UpdateDisplayItemList(display_item_list, 1.f);
     recording.SetBackgroundColor(options.background_color);
     Region fake_invalidation;
     gfx::Rect layer_rect(gfx::Size(options.full_raster_rect.right(),
@@ -335,8 +323,7 @@ class OopPixelTest : public testing::Test,
     uint32_t flags = 0;
     SkSurfaceProps surface_props(flags, kUnknown_SkPixelGeometry);
     if (options.use_lcd_text) {
-      surface_props =
-          SkSurfaceProps(flags, SkSurfaceProps::kLegacyFontHost_InitType);
+      surface_props = SkSurfaceProps(flags, kRGB_H_SkPixelGeometry);
     }
     SkImageInfo image_info = SkImageInfo::MakeN32Premul(
         options.resource_size.width(), options.resource_size.height(),
@@ -519,7 +506,7 @@ TEST_P(OopImagePixelTest, DrawImage) {
       SkImageInfo::MakeN32Premul(image_size.width(), image_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -558,7 +545,7 @@ TEST_P(OopImagePixelTest, DrawImageScaled) {
       SkImageInfo::MakeN32Premul(image_size.width(), image_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -595,7 +582,7 @@ TEST_P(OopImagePixelTest, DrawImageShaderScaled) {
       SkImageInfo::MakeN32Premul(image_size.width(), image_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -635,7 +622,7 @@ TEST_P(OopImagePixelTest, DrawRecordShaderWithImageScaled) {
       SkImageInfo::MakeN32Premul(image_size.width(), image_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -727,7 +714,7 @@ TEST_P(OopImagePixelTest, DrawImageWithTargetColorSpace) {
       SkImageInfo::MakeN32Premul(image_size.width(), image_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -772,7 +759,7 @@ TEST_P(OopImagePixelTest, DrawImageWithSourceColorSpace) {
                                  color_space),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -817,7 +804,7 @@ TEST_P(OopImagePixelTest, DrawImageWithSourceAndTargetColorSpace) {
                                  color_space),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -858,7 +845,7 @@ TEST_P(OopImagePixelTest, DrawImageWithSetMatrix) {
       SkImageInfo::MakeN32Premul(image_size.width(), image_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -920,7 +907,7 @@ TEST_F(OopPixelTest, DrawMailboxBackedImage) {
   SkBitmap expected_bitmap;
   expected_bitmap.allocPixels(backing_info);
 
-  SkCanvas canvas(expected_bitmap);
+  SkCanvas canvas(expected_bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -1014,7 +1001,7 @@ TEST_P(OopClearPixelTest, ClearingOpaqueCorner) {
                                  options.resource_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
   SkPaint green;
   green.setColor(options.background_color);
@@ -1065,7 +1052,7 @@ TEST_F(OopPixelTest, ClearingOpaqueCornerExactEdge) {
       SkBitmap::kZeroPixels_AllocFlag);
 
   // Expect a one pixel border on the bottom/right edge.
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
   SkPaint green;
   green.setColor(options.background_color);
@@ -1110,7 +1097,7 @@ TEST_F(OopPixelTest, ClearingOpaqueCornerPartialRaster) {
       SkBitmap::kZeroPixels_AllocFlag);
 
   // Expect no clearing here because the playback rect is internal.
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
 
   ExpectEquals(oop_result, bitmap, "oop");
@@ -1156,7 +1143,7 @@ TEST_P(OopClearPixelTest, ClearingOpaqueLeftEdge) {
                                  options.resource_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
   SkPaint green;
   green.setColor(options.background_color);
@@ -1213,7 +1200,7 @@ TEST_P(OopClearPixelTest, ClearingOpaqueRightEdge) {
                                  options.resource_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
   SkPaint green;
   green.setColor(options.background_color);
@@ -1269,7 +1256,7 @@ TEST_P(OopClearPixelTest, ClearingOpaqueTopEdge) {
                                  options.resource_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
   SkPaint green;
   green.setColor(options.background_color);
@@ -1327,7 +1314,7 @@ TEST_P(OopClearPixelTest, ClearingOpaqueBottomEdge) {
                                  options.resource_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
   SkPaint green;
   green.setColor(options.background_color);
@@ -1377,7 +1364,7 @@ TEST_F(OopPixelTest, ClearingOpaqueInternal) {
 
   // Expect no clears here, as this tile does not intersect the edge of the
   // tile.
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
 
   ExpectEquals(oop_result, bitmap, "oop");
@@ -1413,7 +1400,7 @@ TEST_F(OopPixelTest, ClearingTransparentCorner) {
                                  options.resource_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorTRANSPARENT);
 
   ExpectEquals(oop_result, bitmap, "oop");
@@ -1453,7 +1440,7 @@ TEST_F(OopPixelTest, ClearingTransparentInternalTile) {
                                  options.resource_size.height()),
       SkBitmap::kZeroPixels_AllocFlag);
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorTRANSPARENT);
 
   ExpectEquals(oop_result, bitmap, "oop");
@@ -1490,7 +1477,7 @@ TEST_F(OopPixelTest, ClearingTransparentCornerPartialRaster) {
 
   // Result should be a red background with a cleared hole where the
   // playback_rect is.
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.drawColor(options.preclear_color);
   canvas.translate(-arbitrary_offset.x(), -arbitrary_offset.y());
   canvas.clipRect(gfx::RectToSkRect(options.playback_rect));
@@ -1709,8 +1696,6 @@ class OopRecordShaderPixelTest : public OopPixelTest,
  public:
   bool UseLcdText() const { return GetParam(); }
   void RunTest() {
-    ScopedEnableLCDText enable_lcd;
-
     RasterOptions options;
     options.resource_size = gfx::Size(100, 100);
     options.content_size = options.resource_size;
@@ -1753,8 +1738,6 @@ class OopRecordFilterPixelTest : public OopPixelTest,
  public:
   bool UseLcdText() const { return GetParam(); }
   void RunTest(const SkMatrix& mat) {
-    ScopedEnableLCDText enable_lcd;
-
     RasterOptions options;
     options.resource_size = gfx::Size(100, 100);
     options.content_size = options.resource_size;
@@ -1965,17 +1948,14 @@ TEST_F(OopPixelTest, ConvertYUVToRGB) {
   backend_textures[2] = MakeBackendTexture(
       gl, v_mailbox, uv_options.resource_size, GL_LUMINANCE8_EXT);
 
-  SkYUVAIndex yuva_indices[4];
-  yuva_indices[SkYUVAIndex::kY_Index] = {0, SkColorChannel::kR};
-  yuva_indices[SkYUVAIndex::kU_Index] = {1, SkColorChannel::kR};
-  yuva_indices[SkYUVAIndex::kV_Index] = {2, SkColorChannel::kR};
-  yuva_indices[SkYUVAIndex::kA_Index] = {-1, SkColorChannel::kA};
+  SkYUVAInfo yuva_info(
+      {options.resource_size.width(), options.resource_size.height()},
+      SkYUVAInfo::PlanarConfig::kY_U_V_420, kJPEG_Full_SkYUVColorSpace);
+  GrYUVABackendTextures yuva_textures(yuva_info, backend_textures,
+                                      kTopLeft_GrSurfaceOrigin);
 
   auto expected_image = SkImage::MakeFromYUVATextures(
-      gles2_context_provider_->GrContext(), kJPEG_SkYUVColorSpace,
-      backend_textures, yuva_indices,
-      {options.resource_size.width(), options.resource_size.height()},
-      kTopLeft_GrSurfaceOrigin, nullptr);
+      gles2_context_provider_->GrContext(), yuva_textures);
 
   SkBitmap expected_bitmap;
   expected_bitmap.allocN32Pixels(options.resource_size.width(),
@@ -2006,7 +1986,7 @@ TEST_F(OopPixelTest, ReadbackImagePixels) {
   SkBitmap expected_bitmap;
   expected_bitmap.allocPixels(dest_info);
 
-  SkCanvas canvas(expected_bitmap);
+  SkCanvas canvas(expected_bitmap, SkSurfaceProps{});
   canvas.drawColor(SK_ColorMAGENTA);
   SkPaint green;
   green.setColor(SK_ColorGREEN);
@@ -2086,17 +2066,13 @@ TEST_F(OopPixelTest, ConvertNV12ToRGB) {
   backend_textures[1] =
       MakeBackendTexture(gl, uv_mailbox, uv_options.resource_size, GL_RG8);
 
-  SkYUVAIndex yuva_indices[4];
-  yuva_indices[SkYUVAIndex::kY_Index] = {0, SkColorChannel::kR};
-  yuva_indices[SkYUVAIndex::kU_Index] = {1, SkColorChannel::kR};
-  yuva_indices[SkYUVAIndex::kV_Index] = {1, SkColorChannel::kG};
-  yuva_indices[SkYUVAIndex::kA_Index] = {-1, SkColorChannel::kA};
-
-  auto expected_image = SkImage::MakeFromYUVATextures(
-      gles2_context_provider_->GrContext(), kJPEG_SkYUVColorSpace,
-      backend_textures, yuva_indices,
+  SkYUVAInfo yuva_info(
       {options.resource_size.width(), options.resource_size.height()},
-      kTopLeft_GrSurfaceOrigin, nullptr);
+      SkYUVAInfo::PlanarConfig::kY_UV_420, kJPEG_Full_SkYUVColorSpace);
+  GrYUVABackendTextures yuva_textures(yuva_info, backend_textures,
+                                      kTopLeft_GrSurfaceOrigin);
+  auto expected_image = SkImage::MakeFromYUVATextures(
+      gles2_context_provider_->GrContext(), yuva_textures);
 
   SkBitmap expected_bitmap;
   expected_bitmap.allocN32Pixels(options.resource_size.width(),

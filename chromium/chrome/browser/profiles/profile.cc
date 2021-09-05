@@ -19,6 +19,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/buildflags.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -118,6 +119,8 @@ class ChromeVariationsClient : public variations::VariationsClient {
 };
 
 const char kDevToolsOTRProfileIDPrefix[] = "Devtools::BrowserContext";
+const char kMediaRouterOTRProfileIDPrefix[] = "MediaRouter::Presentation";
+
 }  // namespace
 
 Profile::OTRProfileID::OTRProfileID(const std::string& profile_id)
@@ -125,9 +128,12 @@ Profile::OTRProfileID::OTRProfileID(const std::string& profile_id)
 
 bool Profile::OTRProfileID::AllowsBrowserWindows() const {
   // Non-Primary OTR profiles are not supposed to create Browser windows.
-  // DevTools::BrowserContext is an exception to this ban.
+  // DevTools::BrowserContext and MediaRouter::Presentation are an
+  // exception to this ban.
   return *this == PrimaryID() ||
          base::StartsWith(profile_id_, kDevToolsOTRProfileIDPrefix,
+                          base::CompareCase::SENSITIVE) ||
+         base::StartsWith(profile_id_, kMediaRouterOTRProfileIDPrefix,
                           base::CompareCase::SENSITIVE);
 }
 
@@ -149,6 +155,11 @@ Profile::OTRProfileID Profile::OTRProfileID::CreateUnique(
 // static
 Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForDevTools() {
   return CreateUnique(kDevToolsOTRProfileIDPrefix);
+}
+
+// static
+Profile::OTRProfileID Profile::OTRProfileID::CreateUniqueForMediaRouter() {
+  return CreateUnique(kMediaRouterOTRProfileIDPrefix);
 }
 
 const std::string& Profile::OTRProfileID::ToString() const {
@@ -371,7 +382,18 @@ bool Profile::IsRegularProfile() const {
 }
 
 bool Profile::IsIncognitoProfile() const {
-  return IsPrimaryOTRProfile() && !IsGuestSession();
+  return IsPrimaryOTRProfile() && !IsGuestSession() && !IsSystemProfile();
+}
+
+// static
+bool Profile::IsEphemeralGuestProfileEnabled() {
+#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || \
+    defined(OS_MAC)
+  return base::FeatureList::IsEnabled(
+      features::kEnableEphemeralGuestProfilesOnDesktop);
+#else
+  return false;
+#endif
 }
 
 bool Profile::IsGuestSession() const {
@@ -390,8 +412,12 @@ bool Profile::IsGuestSession() const {
                ->session_type == crosapi::mojom::SessionType::kGuestSession;
   }
 #endif  // BUILDFLAG(IS_LACROS)
-  return is_guest_profile_;
+  return is_guest_profile_ && !IsEphemeralGuestProfileEnabled();
 #endif  // defined(OS_CHROMEOS)
+}
+
+bool Profile::IsEphemeralGuestProfile() const {
+  return is_guest_profile_ && IsEphemeralGuestProfileEnabled();
 }
 
 bool Profile::IsSystemProfile() const {

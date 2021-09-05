@@ -395,7 +395,7 @@ class ComputedStyle : public ComputedStyleBase,
   }
   void SetStyleType(PseudoId style_type) { SetStyleTypeInternal(style_type); }
 
-  const ComputedStyle* GetCachedPseudoElementStyle(PseudoId) const;
+  CORE_EXPORT const ComputedStyle* GetCachedPseudoElementStyle(PseudoId) const;
   const ComputedStyle* AddCachedPseudoElementStyle(
       scoped_refptr<const ComputedStyle>) const;
   void ClearCachedPseudoElementStyles() const {
@@ -1514,34 +1514,38 @@ class ComputedStyle : public ComputedStyleBase,
   // Margin utility functions.
   void SetMarginTop(const Length& v) {
     if (MarginTop() != v) {
-      if (!v.IsZero())
+      if (!v.IsZero() || v.IsAuto())
         SetMayHaveMargin();
       MutableMarginTopInternal() = v;
     }
   }
   void SetMarginRight(const Length& v) {
     if (MarginRight() != v) {
-      if (!v.IsZero())
+      if (!v.IsZero() || v.IsAuto())
         SetMayHaveMargin();
       MutableMarginRightInternal() = v;
     }
   }
   void SetMarginBottom(const Length& v) {
     if (MarginBottom() != v) {
-      if (!v.IsZero())
+      if (!v.IsZero() || v.IsAuto())
         SetMayHaveMargin();
       MutableMarginBottomInternal() = v;
     }
   }
   void SetMarginLeft(const Length& v) {
     if (MarginLeft() != v) {
-      if (!v.IsZero())
+      if (!v.IsZero() || v.IsAuto())
         SetMayHaveMargin();
       MutableMarginLeftInternal() = v;
     }
   }
-  bool HasMarginBeforeQuirk() const { return MarginBefore().Quirk(); }
-  bool HasMarginAfterQuirk() const { return MarginAfter().Quirk(); }
+  bool HasMarginBeforeQuirk() const {
+    return MayHaveMargin() && MarginBefore().Quirk();
+  }
+  bool HasMarginAfterQuirk() const {
+    return MayHaveMargin() && MarginAfter().Quirk();
+  }
   const Length& MarginBefore() const { return MarginBeforeUsing(*this); }
   const Length& MarginAfter() const { return MarginAfterUsing(*this); }
   const Length& MarginStart() const { return MarginStartUsing(*this); }
@@ -2064,6 +2068,7 @@ class ComputedStyle : public ComputedStyleBase,
     return IsDisplayBlockContainer(Display());
   }
   bool IsDisplayTableBox() const { return IsDisplayTableBox(Display()); }
+  bool IsDisplayFlexibleBox() const { return IsDisplayFlexibleBox(Display()); }
   bool IsDisplayFlexibleOrGridBox() const {
     return IsDisplayFlexibleBox(Display()) || IsDisplayGridBox(Display());
   }
@@ -2231,6 +2236,13 @@ class ComputedStyle : public ComputedStyleBase,
     return TableLayout() == ETableLayout::kFixed && !LogicalWidth().IsAuto();
   }
 
+  LogicalSize TableBorderSpacing() const {
+    if (BorderCollapse() == EBorderCollapse::kCollapse)
+      return LogicalSize();
+    return LogicalSize(LayoutUnit(HorizontalBorderSpacing()),
+                       LayoutUnit(VerticalBorderSpacing()));
+  }
+
   // Returns true if the computed style contains a 3D transform operation. This
   // can be individual operations from the transform property, or individual
   // values from translate/rotate/scale properties. Perspective is omitted since
@@ -2364,16 +2376,9 @@ class ComputedStyle : public ComputedStyleBase,
   // Grouping requires creating a flattened representation of the descendant
   // elements before they can be applied, and therefore force the element to
   // have a used style of flat for preserve-3d.
-  // Until |RuntimeEnabledFeatures::TransformInteropEnabled()| launches, the
-  // approach is different from the spec to maintain backwards compatibility.
-  // TODO(chrishtr): replace this with |HasGroupingProperty()|.
   CORE_EXPORT bool HasGroupingPropertyForUsedTransformStyle3D() const {
-    if (RuntimeEnabledFeatures::TransformInteropEnabled()) {
-      return HasGroupingProperty(BoxReflect()) ||
-             !IsOverflowVisibleAlongBothAxes();
-    }
-    return !IsOverflowVisibleAlongBothAxes() || HasFilterInducingProperty() ||
-           HasNonInitialOpacity();
+    return HasGroupingProperty(BoxReflect()) ||
+           !IsOverflowVisibleAlongBothAxes();
   }
 
   // Return true if any transform related property (currently
@@ -2589,17 +2594,18 @@ class ComputedStyle : public ComputedStyleBase,
   // Load the images of CSS properties that were deferred by LazyLoad.
   void LoadDeferredImages(Document&) const;
 
-  enum ColorScheme ComputedColorScheme() const {
-    return DarkColorScheme() ? ColorScheme::kDark : ColorScheme::kLight;
+  mojom::blink::ColorScheme ComputedColorScheme() const {
+    return DarkColorScheme() ? mojom::blink::ColorScheme::kDark
+                             : mojom::blink::ColorScheme::kLight;
   }
 
-  enum ColorScheme UsedColorScheme() const {
+  mojom::blink::ColorScheme UsedColorScheme() const {
     return RuntimeEnabledFeatures::CSSColorSchemeUARenderingEnabled()
                ? ComputedColorScheme()
-               : ColorScheme::kLight;
+               : mojom::blink::ColorScheme::kLight;
   }
 
-  enum ColorScheme UsedColorSchemeForInitialColors() const {
+  mojom::blink::ColorScheme UsedColorSchemeForInitialColors() const {
     return ComputedColorScheme();
   }
 
@@ -2876,39 +2882,39 @@ class ComputedStyle : public ComputedStyleBase,
 
   PhysicalToLogical<const Length&> PhysicalMarginToLogical(
       const ComputedStyle& other) const {
-    return PhysicalToLogical<const Length&>(
-        other.GetWritingMode(), other.Direction(), MarginTop(), MarginRight(),
-        MarginBottom(), MarginLeft());
+    return PhysicalToLogical<const Length&>(other.GetWritingDirection(),
+                                            MarginTop(), MarginRight(),
+                                            MarginBottom(), MarginLeft());
   }
 
   PhysicalToLogical<const Length&> PhysicalPaddingToLogical() const {
-    return PhysicalToLogical<const Length&>(GetWritingMode(), Direction(),
-                                            PaddingTop(), PaddingRight(),
-                                            PaddingBottom(), PaddingLeft());
+    return PhysicalToLogical<const Length&>(GetWritingDirection(), PaddingTop(),
+                                            PaddingRight(), PaddingBottom(),
+                                            PaddingLeft());
   }
 
   PhysicalToLogical<BorderValue> PhysicalBorderToLogical(
       const ComputedStyle& other) const {
-    return PhysicalToLogical<BorderValue>(
-        other.GetWritingMode(), other.Direction(), BorderTop(), BorderRight(),
-        BorderBottom(), BorderLeft());
+    return PhysicalToLogical<BorderValue>(other.GetWritingDirection(),
+                                          BorderTop(), BorderRight(),
+                                          BorderBottom(), BorderLeft());
   }
 
   PhysicalToLogical<float> PhysicalBorderWidthToLogical() const {
-    return PhysicalToLogical<float>(GetWritingMode(), Direction(),
-                                    BorderTopWidth(), BorderRightWidth(),
-                                    BorderBottomWidth(), BorderLeftWidth());
+    return PhysicalToLogical<float>(GetWritingDirection(), BorderTopWidth(),
+                                    BorderRightWidth(), BorderBottomWidth(),
+                                    BorderLeftWidth());
   }
 
   PhysicalToLogical<EBorderStyle> PhysicalBorderStyleToLogical() const {
     return PhysicalToLogical<EBorderStyle>(
-        GetWritingMode(), Direction(), BorderTopStyle(), BorderRightStyle(),
+        GetWritingDirection(), BorderTopStyle(), BorderRightStyle(),
         BorderBottomStyle(), BorderLeftStyle());
   }
 
   PhysicalToLogical<const Length&> PhysicalBoundsToLogical() const {
-    return PhysicalToLogical<const Length&>(GetWritingMode(), Direction(),
-                                            Top(), Right(), Bottom(), Left());
+    return PhysicalToLogical<const Length&>(GetWritingDirection(), Top(),
+                                            Right(), Bottom(), Left());
   }
 
   static Difference ComputeDifferenceIgnoringInheritedFirstLineStyle(
@@ -2977,8 +2983,8 @@ inline void ComputedStyle::SetHasPseudoElementStyle(PseudoId pseudo) {
   DCHECK(pseudo >= kFirstPublicPseudoId);
   DCHECK(pseudo < kFirstInternalPseudoId);
   // TODO: Fix up this code. It is hard to understand.
-  SetPseudoBitsInternal(static_cast<PseudoId>(
-      PseudoBitsInternal() | 1 << (pseudo - kFirstPublicPseudoId)));
+  SetPseudoBitsInternal(PseudoBitsInternal() |
+                        1 << (pseudo - kFirstPublicPseudoId));
 }
 
 }  // namespace blink

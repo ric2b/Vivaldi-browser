@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/debug/stack_trace.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/content_browser_client.h"
@@ -183,22 +183,25 @@ void HidService::OnPermissionRevoked(const url::Origin& requesting_origin,
   WebContents* web_contents =
       WebContents::FromRenderFrameHost(render_frame_host());
 
-  base::EraseIf(watcher_ids_, [&](const auto& watcher_entry) {
-    const auto* device_info =
-        delegate->GetDeviceInfo(web_contents, watcher_entry.first);
-    if (!device_info)
-      return true;
+  size_t watchers_removed =
+      base::EraseIf(watcher_ids_, [&](const auto& watcher_entry) {
+        const auto* device_info =
+            delegate->GetDeviceInfo(web_contents, watcher_entry.first);
+        if (!device_info)
+          return true;
 
-    if (delegate->HasDevicePermission(web_contents, origin(), *device_info)) {
-      return false;
-    }
+        if (delegate->HasDevicePermission(web_contents, origin(),
+                                          *device_info)) {
+          return false;
+        }
 
-    watchers_.Remove(watcher_entry.second);
-    return true;
-  });
+        watchers_.Remove(watcher_entry.second);
+        return true;
+      });
 
   // If needed decrement the active frame count.
-  OnWatcherRemoved(false /* cleanup_watcher_ids */);
+  if (watchers_removed)
+    OnWatcherRemoved(/*cleanup_watcher_ids=*/false);
 }
 
 void HidService::FinishGetDevices(

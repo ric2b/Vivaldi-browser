@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/guid.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/histogram_macros.h"
@@ -83,7 +83,7 @@ ShortcutsBackend::ShortcutsBackend(
   if (!suppress_db)
     db_ = new ShortcutsDatabase(database_path);
   if (history_service)
-    history_service_observer_.Add(history_service);
+    history_service_observation_.Observe(history_service);
 }
 
 bool ShortcutsBackend::Init() {
@@ -190,7 +190,8 @@ ShortcutsDatabase::Shortcut::MatchCore ShortcutsBackend::MatchToMatchCore(
 }
 
 void ShortcutsBackend::ShutdownOnUIThread() {
-  history_service_observer_.RemoveAll();
+  if (history_service_observation_.IsObserving())
+    history_service_observation_.RemoveObservation();
 }
 
 void ShortcutsBackend::OnURLsDeleted(

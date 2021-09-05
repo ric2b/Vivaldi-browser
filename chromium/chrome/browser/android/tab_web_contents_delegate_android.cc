@@ -37,12 +37,10 @@
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
-#include "chrome/browser/ui/android/device_dialog/bluetooth_chooser_android.h"
-#include "chrome/browser/ui/android/device_dialog/bluetooth_scanning_prompt_android.h"
 #include "chrome/browser/ui/android/infobars/chrome_confirm_infobar.h"
 #include "chrome/browser/ui/android/infobars/framebust_block_infobar.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
@@ -66,8 +64,8 @@
 #include "components/javascript_dialogs/app_modal_dialog_manager.h"
 #include "components/javascript_dialogs/tab_modal_dialog_manager.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "components/paint_preview/buildflags/buildflags.h"
-#include "components/prerender/browser/prerender_manager.h"
 #include "components/security_state/content/content_utils.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/navigation_entry.h"
@@ -96,7 +94,6 @@ using base::android::JavaParamRef;
 using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 using blink::mojom::FileChooserParams;
-using content::BluetoothChooser;
 using content::WebContents;
 
 namespace {
@@ -194,18 +191,6 @@ void TabWebContentsDelegateAndroid::RunFileChooser(
                                    params);
 }
 
-std::unique_ptr<BluetoothChooser>
-TabWebContentsDelegateAndroid::RunBluetoothChooser(
-    content::RenderFrameHost* frame,
-    const BluetoothChooser::EventHandler& event_handler) {
-  if (vr::VrTabHelper::IsUiSuppressedInVr(
-          WebContents::FromRenderFrameHost(frame),
-          vr::UiSuppressedElement::kBluetoothChooser)) {
-    return nullptr;
-  }
-  return std::make_unique<BluetoothChooserAndroid>(frame, event_handler);
-}
-
 void TabWebContentsDelegateAndroid::CreateSmsPrompt(
     content::RenderFrameHost* host,
     const url::Origin& origin,
@@ -217,13 +202,6 @@ void TabWebContentsDelegateAndroid::CreateSmsPrompt(
       web_contents, InfoBarService::FromWebContents(web_contents),
       ChromeConfirmInfoBar::GetResourceIdMapper(), origin, one_time_code,
       std::move(on_confirm), std::move(on_cancel));
-}
-
-std::unique_ptr<content::BluetoothScanningPrompt>
-TabWebContentsDelegateAndroid::ShowBluetoothScanningPrompt(
-    content::RenderFrameHost* frame,
-    const content::BluetoothScanningPrompt::EventHandler& event_handler) {
-  return std::make_unique<BluetoothScanningPromptAndroid>(frame, event_handler);
 }
 
 bool TabWebContentsDelegateAndroid::ShouldFocusLocationBarByDefault(

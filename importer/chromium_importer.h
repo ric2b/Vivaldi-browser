@@ -9,7 +9,7 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/importer/importer_url_row.h"
 #include "chrome/utility/importer/importer.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 
 class ImportedNoteEntry;
 
@@ -32,7 +32,7 @@ class ChromiumImporter : public Importer {
   void ImportBookMarks();
   void ImportHistory();
   bool ReadAndParseSignons(const base::FilePath& sqlite_file,
-                           std::vector<autofill::PasswordForm>* forms);
+                           std::vector<importer::ImportedPasswordForm>* forms);
 
   bool ReadAndParseHistory(const base::FilePath& sqlite_file,
                            std::vector<ImporterURLRow>* forms);

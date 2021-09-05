@@ -62,7 +62,10 @@ source_set("common") {
     "//third_party/blink/public/common",
   ]
 
-  configs += [ ":blink_common_implementation" ]
+  configs += [
+    ":blink_common_implementation",
+    "//build/config/compiler:noshadowing",
+  ]
 
   sources = [
     # NOTE: Please do not add public headers that need to be referenced from
@@ -119,6 +122,8 @@ source_set("common") {
     "manifest/manifest.cc",
     "manifest/manifest_icon_selector.cc",
     "manifest/manifest_util.cc",
+    "media/watch_time_component.cc",
+    "media/watch_time_reporter.cc",
     "mediastream/media_devices.cc",
     "mediastream/media_devices_mojom_traits.cc",
     "mediastream/media_stream_controls.cc",
@@ -134,6 +139,7 @@ source_set("common") {
     "messaging/transferable_message_mojom_traits.cc",
     "messaging/web_message_port.cc",
     "mime_util/mime_util.cc",
+    "mobile_metrics/mobile_friendliness.cc",
     "notifications/notification_mojom_traits.cc",
     "notifications/notification_resources.cc",
     "notifications/platform_notification_data.cc",
@@ -142,16 +148,19 @@ source_set("common") {
     "page/content_to_visible_time_reporter.cc",
     "page/drag_mojom_traits.cc",
     "page/page_zoom.cc",
+    "page_state/page_state.cc",
+    "page_state/page_state_serialization.cc",
     "peerconnection/peer_connection_tracker_mojom_traits.cc",
     "peerconnection/webrtc_ip_handling_policy.cc",
     "permissions/permission_utils.cc",
+    "renderer_preferences/renderer_preferences.cc",
+    "renderer_preferences/renderer_preferences_mojom_traits.cc",
     "scheduler/web_scheduler_tracked_feature.cc",
     "service_worker/service_worker_scope_match.cc",
     "service_worker/service_worker_status_code.cc",
     "service_worker/service_worker_type_converters.cc",
     "switches.cc",
     "thread_safe_browser_interface_broker_proxy.cc",
-    "tokens/tokens_mojom_traits.cc",
     "unique_name/unique_name_helper.cc",
     "user_agent/user_agent_metadata.cc",
     "web_package/signed_exchange_consts.cc",
@@ -170,11 +179,13 @@ source_set("common") {
     ":make_generated_document_policy_features",
     ":make_generated_feature_policy_features",
     "//third_party/blink/common/privacy_budget:privacy_budget",
+    "//third_party/blink/public/common:common_export",
     "//third_party/blink/public/common:headers",
   ]
 
   deps = [
     "//base",
+    "//build:chromeos_buildflags",
     "//media/capture:capture_base",
     "//media/capture/mojom:video_capture_mojom_support",
     "//mojo/public/cpp/system",
@@ -184,6 +195,7 @@ source_set("common") {
     "//services/metrics/public/mojom:mojom",
     "//services/network/public/cpp:cpp",
     "//ui/base:base",
+    "//ui/display",
     "//ui/events:events_base",
     "//ui/latency/mojom:shared_mojom_traits",
   ]
@@ -226,6 +238,7 @@ test("blink_common_unittests") {
       "//media/base/android:media_java",
     ]
   }
+  data_deps = [ ":common_unittests_data" ]
 }
 
 source_set("common_unittests_sources") {
@@ -249,6 +262,7 @@ source_set("common_unittests_sources") {
     "loader/throttling_url_loader_unittest.cc",
     "manifest/manifest_icon_selector_unittest.cc",
     "manifest/manifest_util_unittest.cc",
+    "media/watch_time_component_unittest.cc",
     "mediastream/media_devices_unittest.cc",
     "messaging/message_port_descriptor_unittest.cc",
     "mime_util/mime_util_unittest.cc",
@@ -256,10 +270,12 @@ source_set("common_unittests_sources") {
     "origin_trials/trial_token_unittest.cc",
     "origin_trials/trial_token_validator_unittest.cc",
     "page/content_to_visible_time_reporter_unittest.cc",
+    "page_state/page_state_serialization_unittest.cc",
     "service_worker/service_worker_scope_match_unittest.cc",
     "test/run_all_unittests.cc",
     "tokens/multi_token_unittest.cc",
     "tokens/tokens_mojom_traits_unittest.cc",
+    "unique_name/unique_name_helper_unittest.cc",
     "user_agent/user_agent_metadata_unittest.cc",
     "web_package/web_package_request_matcher_unittest.cc",
   ]
@@ -279,6 +295,7 @@ source_set("common_unittests_sources") {
     "//testing/gtest",
     "//third_party/blink/public/common:headers",
     "//third_party/blink/public/mojom/frame:frame_blink_headers",
+    "//third_party/blink/public/mojom/tokens:tokens_traits_headers",
     "//third_party/boringssl",
     "//url/mojom:url_mojom_gurl",
     "//v8",
@@ -301,4 +318,8 @@ source_set("common_unittests_sources") {
       "font_unique_name_lookup/icu_fold_case_util_unittest.cc",
     ]
   }
+}
+
+group("common_unittests_data") {
+  data = [ "page_state/test_data/" ]
 }

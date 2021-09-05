@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/threading/sequence_bound.h"
 #include "content/browser/service_worker/service_worker_database.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_storage.h"
@@ -47,6 +48,8 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   using FindRegistrationCallback = base::OnceCallback<void(
       blink::ServiceWorkerStatusCode status,
       scoped_refptr<ServiceWorkerRegistration> registration)>;
+  using GetRegisteredOriginsCallback =
+      storage::mojom::ServiceWorkerStorageControl::GetRegisteredOriginsCallback;
   using GetRegistrationsCallback = base::OnceCallback<void(
       blink::ServiceWorkerStatusCode status,
       const std::vector<scoped_refptr<ServiceWorkerRegistration>>&
@@ -82,8 +85,6 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
                         ServiceWorkerRegistry* old_registry);
 
   ~ServiceWorkerRegistry();
-
-  ServiceWorkerStorage* storage() const;
 
   // Creates a new in-memory representation of registration. Can be null when
   // storage is disabled. This method must be called after storage is
@@ -231,18 +232,18 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   void GetUserDataForAllRegistrationsByKeyPrefix(
       const std::string& key_prefix,
       GetUserDataForAllRegistrationsCallback callback);
-
-  mojo::Remote<storage::mojom::ServiceWorkerStorageControl>&
-  GetRemoteStorageControl();
-
+  void GetRegisteredOrigins(GetRegisteredOriginsCallback callback);
+  void PerformStorageCleanup(base::OnceClosure callback);
   // Disables the internal storage to prepare for error recovery.
   void PrepareForDeleteAndStarOver();
-
   // Deletes this registry and internal storage, then starts over for error
   // recovery.
   void DeleteAndStartOver(StatusCallback callback);
 
-  void DisableDeleteAndStartOverForTesting();
+  mojo::Remote<storage::mojom::ServiceWorkerStorageControl>&
+  GetRemoteStorageControl();
+
+  void SimulateStorageRestartForTesting();
 
  private:
   friend class ServiceWorkerRegistryTest;
@@ -297,6 +298,10 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
       GetRegistrationsInfosCallback callback,
       storage::mojom::ServiceWorkerDatabaseStatus database_status,
       RegistrationList registration_data_list);
+  void DidGetStorageUsageForOrigin(
+      GetStorageUsageForOriginCallback callback,
+      storage::mojom::ServiceWorkerDatabaseStatus database_status,
+      int64_t usage);
 
   void DidStoreRegistration(
       int64_t stored_registration_id,
@@ -359,6 +364,10 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   void OnStoragePolicyChanged();
   bool ShouldPurgeOnShutdown(const url::Origin& origin);
 
+  void OnRemoteStorageDisconnected();
+
+  void DidRecover();
+
   // The ServiceWorkerContextCore object must outlive this.
   ServiceWorkerContextCore* const context_;
 
@@ -368,6 +377,10 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   // called via |remote_storage_control_|. An instance of this impl should live
   // in the storage service.
   std::unique_ptr<ServiceWorkerStorageControlImpl> storage_control_;
+
+  const base::FilePath user_data_directory_;
+  scoped_refptr<base::SequencedTaskRunner> database_task_runner_;
+  scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;
 
   bool is_storage_disabled_ = false;
 
@@ -392,6 +405,13 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
 
   // Indicates whether recovery process should be scheduled.
   bool should_schedule_delete_and_start_over_ = true;
+
+  enum class ConnectionState {
+    kNormal,
+    kRecovering,
+  };
+  ConnectionState connection_state_ = ConnectionState::kNormal;
+  size_t recovery_retry_counts_ = 0;
 
   base::WeakPtrFactory<ServiceWorkerRegistry> weak_factory_{this};
 };

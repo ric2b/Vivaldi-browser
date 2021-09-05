@@ -38,16 +38,18 @@ namespace {
 
 class StubWebThemeEngine : public WebThemeEngine {
  public:
-  StubWebThemeEngine() { painted_color_scheme_.fill(ColorScheme::kLight); }
+  StubWebThemeEngine() {
+    painted_color_scheme_.fill(mojom::blink::ColorScheme::kLight);
+  }
 
-  WebSize GetSize(Part part) override {
+  gfx::Size GetSize(Part part) override {
     switch (part) {
       case kPartScrollbarHorizontalThumb:
-        return blink::WebSize(kMinimumHorizontalLength, 15);
+        return gfx::Size(kMinimumHorizontalLength, 15);
       case kPartScrollbarVerticalThumb:
-        return blink::WebSize(15, kMinimumVerticalLength);
+        return gfx::Size(15, kMinimumVerticalLength);
       default:
-        return WebSize();
+        return gfx::Size();
     }
   }
   void GetOverlayScrollbarStyle(ScrollbarStyle* style) override {
@@ -63,20 +65,21 @@ class StubWebThemeEngine : public WebThemeEngine {
   void Paint(cc::PaintCanvas*,
              Part part,
              State,
-             const WebRect&,
+             const gfx::Rect&,
              const ExtraParams*,
-             blink::ColorScheme color_scheme) override {
+             mojom::blink::ColorScheme color_scheme) override {
     // Make  sure we don't overflow the array.
     DCHECK(part <= kPartProgressBar);
     painted_color_scheme_[part] = color_scheme;
   }
 
-  ColorScheme GetPaintedPartColorScheme(Part part) const {
+  mojom::blink::ColorScheme GetPaintedPartColorScheme(Part part) const {
     return painted_color_scheme_[part];
   }
 
  private:
-  std::array<ColorScheme, kPartProgressBar + 1> painted_color_scheme_;
+  std::array<mojom::blink::ColorScheme, kPartProgressBar + 1>
+      painted_color_scheme_;
 };
 
 constexpr int StubWebThemeEngine::kMinimumHorizontalLength;
@@ -118,7 +121,8 @@ class ScrollbarsTest : public SimTest {
   }
 
   HitTestResult HitTest(int x, int y) {
-    return WebView().CoreHitTestResultAt(gfx::PointF(x, y));
+    return WebView().MainFrameViewWidget()->CoreHitTestResultAt(
+        gfx::PointF(x, y));
   }
 
   EventHandler& GetEventHandler() {
@@ -217,6 +221,10 @@ class ScrollbarsTest : public SimTest {
     return GetDocument().GetPage()->GetScrollbarTheme();
   }
 
+  PaintLayerScrollableArea* GetScrollableArea(const Element& element) const {
+    return element.GetLayoutBox()->GetScrollableArea();
+  }
+
  protected:
   WebCoalescedInputEvent GenerateGestureEvent(WebInputEvent::Type type,
                                               WebGestureDevice device,
@@ -291,7 +299,7 @@ class ScrollbarsTestWithVirtualTimer : public ScrollbarsTest {
 
 TEST_F(ScrollbarsTest, DocumentStyleRecalcPreservesScrollbars) {
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -324,8 +332,8 @@ TEST(ScrollbarsTestWithOwnWebViewHelper, ScrollbarSizeForUseZoomDSF) {
 
   WebViewImpl* web_view_impl = web_view_helper.Initialize();
 
-  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(1.f);
-  web_view_impl->MainFrameWidget()->Resize(IntSize(800, 600));
+  web_view_impl->MainFrameViewWidget()->SetDeviceScaleFactorForTesting(1.f);
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   WebURL base_url = url_test_helpers::ToKURL("http://example.com/");
   frame_test_helpers::LoadHTMLString(web_view_impl->MainFrameImpl(),
@@ -339,7 +347,7 @@ TEST(ScrollbarsTestWithOwnWebViewHelper, ScrollbarSizeForUseZoomDSF) {
                                      "<body>"
                                      "</body>",
                                      base_url);
-  web_view_impl->MainFrameWidget()->UpdateAllLifecyclePhases(
+  web_view_impl->MainFrameViewWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
   Document* document =
@@ -352,17 +360,17 @@ TEST(ScrollbarsTestWithOwnWebViewHelper, ScrollbarSizeForUseZoomDSF) {
       visual_viewport.LayerForVerticalScrollbar()->bounds().width();
 
   const float device_scale = 3.5f;
-  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(
+  web_view_impl->MainFrameViewWidget()->SetDeviceScaleFactorForTesting(
       device_scale);
-  web_view_impl->MainFrameWidget()->Resize(IntSize(400, 300));
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(400, 300));
 
   EXPECT_EQ(clampTo<int>(std::floor(horizontal_scrollbar * device_scale)),
             visual_viewport.LayerForHorizontalScrollbar()->bounds().height());
   EXPECT_EQ(clampTo<int>(std::floor(vertical_scrollbar * device_scale)),
             visual_viewport.LayerForVerticalScrollbar()->bounds().width());
 
-  web_view_impl->MainFrameWidget()->SetDeviceScaleFactorForTesting(1.f);
-  web_view_impl->MainFrameWidget()->Resize(IntSize(800, 600));
+  web_view_impl->MainFrameViewWidget()->SetDeviceScaleFactorForTesting(1.f);
+  web_view_impl->MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   EXPECT_EQ(horizontal_scrollbar,
             visual_viewport.LayerForHorizontalScrollbar()->bounds().height());
@@ -380,7 +388,7 @@ TEST_F(ScrollbarsTest, CustomScrollbarsCauseLayoutOnExistenceChange) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -431,7 +439,7 @@ TEST_F(ScrollbarsTest, TransparentBackgroundUsesDarkOverlayColorTheme) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   WebView().SetBaseBackgroundColorOverride(SK_ColorTRANSPARENT);
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -457,7 +465,7 @@ TEST_F(ScrollbarsTest, BodyBackgroundChangesOverlayColorTheme) {
   ENABLE_OVERLAY_SCROLLBARS(true);
 
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -485,7 +493,7 @@ TEST_F(ScrollbarsTest, OverlayScrollbarChangeToDisplayNoneDynamically) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -509,8 +517,7 @@ TEST_F(ScrollbarsTest, OverlayScrollbarChangeToDisplayNoneDynamically) {
   Element* div = document.getElementById("div");
 
   // Ensure we have overlay scrollbar for div and root.
-  ScrollableArea* scrollable_div =
-      ToLayoutBox(div->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_div = GetScrollableArea(*div);
 
   ScrollableArea* scrollable_root = GetDocument().View()->LayoutViewport();
 
@@ -555,7 +562,7 @@ TEST_F(ScrollbarsTest, OverlayScrolblarNotCreatedInUnscrollableAxis) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -588,7 +595,7 @@ TEST_F(ScrollbarsTest, OverlayScrolblarNotCreatedInUnscrollableAxis) {
 }
 
 TEST_F(ScrollbarsTest, scrollbarIsNotHandlingTouchpadScroll) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -606,8 +613,7 @@ TEST_F(ScrollbarsTest, scrollbarIsNotHandlingTouchpadScroll) {
   Document& document = GetDocument();
   Element* scrollable = document.getElementById("scrollable");
 
-  ScrollableArea* scrollable_area =
-      ToLayoutBox(scrollable->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_area = GetScrollableArea(*scrollable);
   DCHECK(scrollable_area->VerticalScrollbar());
   WebGestureEvent scroll_begin(
       WebInputEvent::Type::kGestureScrollBegin, WebInputEvent::kNoModifiers,
@@ -633,7 +639,7 @@ TEST_F(ScrollbarsTest, HidingScrollbarsOnScrollableAreaDisablesScrollbars) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -652,8 +658,7 @@ TEST_F(ScrollbarsTest, HidingScrollbarsOnScrollableAreaDisablesScrollbars) {
   Document& document = GetDocument();
   LocalFrameView* frame_view = WebView().MainFrameImpl()->GetFrameView();
   Element* scroller = document.getElementById("scroller");
-  ScrollableArea* scroller_area =
-      ToLayoutBox(scroller->GetLayoutObject())->GetScrollableArea();
+  auto* scroller_area = GetScrollableArea(*scroller);
   ScrollableArea* frame_scroller_area = frame_view->LayoutViewport();
 
   // Scrollbars are hidden at start.
@@ -705,7 +710,7 @@ TEST_F(ScrollbarsTest, MouseOverScrollbarInCustomCursorElement) {
   if (!WebView().GetPage()->GetScrollbarTheme().AllowsHitTest())
     return;
 
-  WebView().MainFrameWidget()->Resize(WebSize(250, 250));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(250, 250));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -753,7 +758,7 @@ TEST_F(ScrollbarsTest, MouseOverCustomScrollbarInCustomCursorElement) {
   if (!WebView().GetPage()->GetScrollbarTheme().AllowsHitTest())
     return;
 
-  WebView().MainFrameWidget()->Resize(WebSize(250, 250));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(250, 250));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -813,7 +818,7 @@ TEST_F(ScrollbarsTest, MouseOverLinkAndOverlayScrollbar) {
   if (!WebView().GetPage()->GetScrollbarTheme().AllowsHitTest())
     return;
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -897,7 +902,7 @@ TEST_F(ScrollbarsTest, MouseOverLinkAndOverlayScrollbar) {
 // Makes sure that mouse hover over an custom scrollbar doesn't change the
 // activate elements.
 TEST_F(ScrollbarsTest, MouseOverCustomScrollbar) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -971,7 +976,7 @@ TEST_F(ScrollbarsTest, MouseOverScrollbarAndIFrame) {
   if (!WebView().GetPage()->GetScrollbarTheme().AllowsHitTest())
     return;
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest main_resource("https://example.com/", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
@@ -1057,7 +1062,7 @@ TEST_F(ScrollbarsTest, MouseOverScrollbarAndParentElement) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1089,8 +1094,7 @@ TEST_F(ScrollbarsTest, MouseOverScrollbarAndParentElement) {
   EXPECT_TRUE(parent_div);
   EXPECT_TRUE(child_div);
 
-  ScrollableArea* scrollable_area =
-      ToLayoutBox(parent_div->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_area = GetScrollableArea(*parent_div);
 
   EXPECT_TRUE(scrollable_area->VerticalScrollbar());
   EXPECT_FALSE(scrollable_area->VerticalScrollbar()->IsOverlayScrollbar());
@@ -1146,7 +1150,7 @@ TEST_F(ScrollbarsTest, MouseOverRootScrollbar) {
   if (!WebView().GetPage()->GetScrollbarTheme().AllowsHitTest())
     return;
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1178,7 +1182,7 @@ TEST_F(ScrollbarsTest, MouseOverRootScrollbar) {
 }
 
 TEST_F(ScrollbarsTest, MouseReleaseUpdatesScrollbarHoveredPart) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1213,8 +1217,7 @@ TEST_F(ScrollbarsTest, MouseReleaseUpdatesScrollbarHoveredPart) {
   Element* scrollbar_div = document.getElementById("scrollbar");
   EXPECT_TRUE(scrollbar_div);
 
-  ScrollableArea* scrollable_area =
-      ToLayoutBox(scrollbar_div->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_area = GetScrollableArea(*scrollbar_div);
 
   EXPECT_TRUE(scrollable_area->VerticalScrollbar());
   Scrollbar* scrollbar = scrollable_area->VerticalScrollbar();
@@ -1243,7 +1246,7 @@ TEST_F(ScrollbarsTest, MouseReleaseUpdatesScrollbarHoveredPart) {
 }
 
 TEST_F(ScrollbarsTest, ContextMenuUpdatesScrollbarPressedPart) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1270,8 +1273,7 @@ TEST_F(ScrollbarsTest, ContextMenuUpdatesScrollbarPressedPart) {
   Element* scrollbar_div = document.getElementById("scroller");
   EXPECT_TRUE(scrollbar_div);
 
-  ScrollableArea* scrollable_area =
-      ToLayoutBox(scrollbar_div->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_area = GetScrollableArea(*scrollbar_div);
 
   EXPECT_TRUE(scrollable_area->VerticalScrollbar());
   Scrollbar* scrollbar = scrollable_area->VerticalScrollbar();
@@ -1296,7 +1298,7 @@ TEST_F(ScrollbarsTest, ContextMenuUpdatesScrollbarPressedPart) {
 
 TEST_F(ScrollbarsTest,
        CustomScrollbarInOverlayScrollbarThemeWillNotCauseDCHECKFails) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1324,7 +1326,7 @@ TEST_F(ScrollbarsTest,
 // Make sure root custom scrollbar can change by Emulator but div custom
 // scrollbar not.
 TEST_F(ScrollbarsTest, CustomScrollbarChangeToMobileByEmulator) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1360,8 +1362,7 @@ TEST_F(ScrollbarsTest, CustomScrollbarChangeToMobileByEmulator) {
 
   Element* div = document.getElementById("d1");
 
-  ScrollableArea* div_scrollable =
-      ToLayoutBox(div->GetLayoutObject())->GetScrollableArea();
+  auto* div_scrollable = GetScrollableArea(*div);
 
   VisualViewport& viewport = WebView().GetPage()->GetVisualViewport();
 
@@ -1407,7 +1408,7 @@ TEST_F(ScrollbarsTest, CustomScrollbarChangeToMobileByEmulator) {
 
 // Ensure custom scrollbar recreate when style owner change,
 TEST_F(ScrollbarsTest, CustomScrollbarWhenStyleOwnerChange) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1440,8 +1441,7 @@ TEST_F(ScrollbarsTest, CustomScrollbarWhenStyleOwnerChange) {
 
   Element* div = document.getElementById("d1");
 
-  ScrollableArea* div_scrollable =
-      ToLayoutBox(div->GetLayoutObject())->GetScrollableArea();
+  auto* div_scrollable = GetScrollableArea(*div);
 
   DCHECK(div_scrollable->VerticalScrollbar());
   DCHECK(div_scrollable->VerticalScrollbar()->IsCustomScrollbar());
@@ -1482,7 +1482,7 @@ TEST_F(ScrollbarsTestWithVirtualTimer, TestNonCompositedOverlayScrollbarsFade) {
       static_cast<ScrollbarThemeOverlayMock&>(theme);
   mock_overlay_theme.SetOverlayScrollbarFadeOutDelay(kMockOverlayFadeOutDelay);
 
-  WebView().MainFrameWidget()->Resize(WebSize(640, 480));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(640, 480));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   RunTasksForPeriod(kMockOverlayFadeOutDelay);
@@ -1511,8 +1511,7 @@ TEST_F(ScrollbarsTestWithVirtualTimer, TestNonCompositedOverlayScrollbarsFade) {
 
   Document& document = GetDocument();
   Element* container = document.getElementById("container");
-  ScrollableArea* scrollable_area =
-      ToLayoutBox(container->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_area = GetScrollableArea(*container);
 
   DCHECK(!scrollable_area->UsesCompositedScrolling());
 
@@ -1561,7 +1560,7 @@ TEST_F(ScrollbarsTestWithVirtualTimer, TestNonCompositedOverlayScrollbarsFade) {
 TEST_F(ScrollbarsTestWithVirtualTimer, TestCompositedOverlayScrollbarsNoFade) {
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(640, 480));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(640, 480));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
 
@@ -1589,8 +1588,7 @@ TEST_F(ScrollbarsTestWithVirtualTimer, TestCompositedOverlayScrollbarsNoFade) {
 
   Document& document = GetDocument();
   Element* container = document.getElementById("container");
-  ScrollableArea* scrollable_area =
-      ToLayoutBox(container->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_area = GetScrollableArea(*container);
 
   DCHECK(scrollable_area->UsesCompositedScrolling());
   EXPECT_TRUE(scrollable_area->HasOverlayScrollbars());
@@ -1629,7 +1627,7 @@ TEST_P(ScrollbarAppearanceTest, NativeScrollbarChangeToMobileByEmulator) {
   bool use_overlay_scrollbar = GetParam();
   ENABLE_OVERLAY_SCROLLBARS(use_overlay_scrollbar);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -1665,8 +1663,7 @@ TEST_P(ScrollbarAppearanceTest, NativeScrollbarChangeToMobileByEmulator) {
 
   Element* div = document.getElementById("d1");
 
-  ScrollableArea* div_scrollable =
-      ToLayoutBox(div->GetLayoutObject())->GetScrollableArea();
+  auto* div_scrollable = GetScrollableArea(*div);
 
   VisualViewport& viewport = WebView().GetPage()->GetVisualViewport();
 
@@ -1724,7 +1721,7 @@ TEST_P(ScrollbarAppearanceTest, ThemeEngineDefinesMinimumThumbLength) {
   ENABLE_OVERLAY_SCROLLBARS(GetParam());
 
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1750,7 +1747,7 @@ TEST_P(ScrollbarAppearanceTest, HugeScrollingThumbPosition) {
   ENABLE_OVERLAY_SCROLLBARS(GetParam());
 
   v8::HandleScope handle_scope(v8::Isolate::GetCurrent());
-  WebView().MainFrameWidget()->Resize(WebSize(1000, 1000));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(1000, 1000));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1771,7 +1768,7 @@ TEST_P(ScrollbarAppearanceTest, HugeScrollingThumbPosition) {
   Scrollbar* scrollbar = scrollable_area->VerticalScrollbar();
   ASSERT_TRUE(scrollbar);
 
-  int max_thumb_position = WebView().MainFrameWidget()->Size().height -
+  int max_thumb_position = WebView().MainFrameViewWidget()->Size().height() -
                            StubWebThemeEngine::kMinimumVerticalLength;
   max_thumb_position -=
       scrollbar->GetTheme().ScrollbarMargin(scrollbar->ScaleFromDIP()) * 2;
@@ -1786,7 +1783,7 @@ TEST_F(ScrollbarsTest, WideBodyShouldNotHaveScrollbars) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1810,7 +1807,7 @@ TEST_F(ScrollbarsTest, TallBodyShouldNotHaveScrollbars) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1835,7 +1832,7 @@ TEST_F(ScrollbarsTest, TallAndWideBodyShouldNotHaveScrollbars) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1860,7 +1857,7 @@ TEST_F(ScrollbarsTest, BodySizeEqualWindowSizeShouldNotHaveScrollbars) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1885,7 +1882,7 @@ TEST_F(ScrollbarsTest, WidePercentageBodyShouldHaveScrollbar) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1911,7 +1908,7 @@ TEST_F(ScrollbarsTest, WidePercentageAndTallBodyShouldHaveScrollbar) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1937,7 +1934,7 @@ TEST_F(ScrollbarsTest, TallPercentageBodyShouldHaveScrollbar) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1963,7 +1960,7 @@ TEST_F(ScrollbarsTest, TallPercentageAndWideBodyShouldHaveScrollbar) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -1989,7 +1986,7 @@ TEST_F(ScrollbarsTest, TallAndWidePercentageBodyShouldHaveScrollbars) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2013,7 +2010,7 @@ TEST_F(ScrollbarsTest, MouseOverIFrameScrollbar) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
 
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
@@ -2065,7 +2062,7 @@ TEST_F(ScrollbarsTest, AutosizeTest) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(0, 0));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(0, 0));
   SimRequest resource("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   resource.Complete(R"HTML(
@@ -2171,7 +2168,7 @@ TEST_F(ScrollbarsTest,
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2190,8 +2187,7 @@ TEST_F(ScrollbarsTest,
 
   Document& document = GetDocument();
   Element* div = document.getElementById("div");
-  PaintLayerScrollableArea* scrollable_div =
-      ToLayoutBox(div->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_div = GetScrollableArea(*div);
 
   scrollable_div->SetScrollbarsHiddenForTesting(false);
   ASSERT_TRUE(scrollable_div);
@@ -2214,7 +2210,7 @@ TEST_F(ScrollbarsTest,
 TEST_F(ScrollbarsTest, PLSADisposeShouldClearPointerInLayers) {
   GetDocument().GetFrame()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
       true);
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2236,8 +2232,7 @@ TEST_F(ScrollbarsTest, PLSADisposeShouldClearPointerInLayers) {
 
   Document& document = GetDocument();
   Element* div = document.getElementById("div");
-  PaintLayerScrollableArea* scrollable_div =
-      ToLayoutBox(div->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_div = GetScrollableArea(*div);
 
   ASSERT_TRUE(scrollable_div);
 
@@ -2261,7 +2256,7 @@ TEST_F(ScrollbarsTest, OverlayScrollbarHitTest) {
   if (!WebView().GetPage()->GetScrollbarTheme().AllowsHitTest())
     return;
 
-  WebView().MainFrameWidget()->Resize(WebSize(300, 300));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(300, 300));
 
   SimRequest main_resource("https://example.com/", "text/html");
   SimRequest frame_resource("https://example.com/iframe.html", "text/html");
@@ -2318,7 +2313,7 @@ TEST_F(ScrollbarsTest, AllowMiddleButtonPressOnScrollbar) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2352,7 +2347,7 @@ TEST_F(ScrollbarsTest, MiddleDownShouldNotAffectScrollbarPress) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2406,7 +2401,7 @@ TEST_F(ScrollbarsTest, UseCounterNegativeWhenThumbIsNotScrolledWithMouse) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2430,13 +2425,13 @@ TEST_F(ScrollbarsTest, UseCounterNegativeWhenThumbIsNotScrolledWithMouse) {
   EXPECT_EQ(horizontal_scrollbar->PressedPart(), ScrollbarPart::kNoPart);
 
   // Scrolling the page with a mouse wheel won't trigger the UseCounter.
-  WebView().MainFrameWidget()->HandleInputEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(
       GenerateWheelGestureEvent(WebInputEvent::Type::kGestureScrollBegin,
                                 IntPoint(100, 100), ScrollOffset(0, -100)));
-  WebView().MainFrameWidget()->HandleInputEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(
       GenerateWheelGestureEvent(WebInputEvent::Type::kGestureScrollUpdate,
                                 IntPoint(100, 100), ScrollOffset(0, -100)));
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateWheelGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateWheelGestureEvent(
       WebInputEvent::Type::kGestureScrollEnd, IntPoint(100, 100)));
   EXPECT_FALSE(GetDocument().IsUseCounted(
       WebFeature::kVerticalScrollbarThumbScrollingWithMouse));
@@ -2488,7 +2483,7 @@ TEST_F(ScrollbarsTest, UseCounterPositiveWhenThumbIsScrolledWithMouse) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2530,7 +2525,7 @@ TEST_F(ScrollbarsTest, UseCounterNegativeWhenThumbIsNotScrolledWithTouch) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2554,39 +2549,39 @@ TEST_F(ScrollbarsTest, UseCounterNegativeWhenThumbIsNotScrolledWithTouch) {
   EXPECT_EQ(horizontal_scrollbar->PressedPart(), ScrollbarPart::kNoPart);
 
   // Tapping on the vertical scrollbar won't trigger the UseCounter.
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapDown, IntPoint(195, 175)));
   EXPECT_EQ(vertical_scrollbar->PressedPart(),
             ScrollbarPart::kForwardTrackPart);
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapCancel, IntPoint(195, 175)));
   EXPECT_FALSE(GetDocument().IsUseCounted(
       WebFeature::kVerticalScrollbarThumbScrollingWithTouch));
 
   // Tapping on the horizontal scrollbar won't trigger the UseCounter.
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapDown, IntPoint(175, 195)));
   EXPECT_EQ(horizontal_scrollbar->PressedPart(),
             ScrollbarPart::kForwardTrackPart);
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapCancel, IntPoint(175, 195)));
   EXPECT_FALSE(GetDocument().IsUseCounted(
       WebFeature::kHorizontalScrollbarThumbScrollingWithTouch));
 
   // Tapping outside the scrollbar and then releasing over the thumb of the
   // vertical scrollbar won't trigger the UseCounter.
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapDown, IntPoint(50, 50)));
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapCancel, IntPoint(195, 5)));
   EXPECT_FALSE(GetDocument().IsUseCounted(
       WebFeature::kVerticalScrollbarThumbScrollingWithTouch));
 
   // Tapping outside the scrollbar and then releasing over the thumb of the
   // horizontal scrollbar won't trigger the UseCounter.
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapDown, IntPoint(50, 50)));
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapCancel, IntPoint(5, 195)));
   EXPECT_FALSE(GetDocument().IsUseCounted(
       WebFeature::kHorizontalScrollbarThumbScrollingWithTouch));
@@ -2596,7 +2591,7 @@ TEST_F(ScrollbarsTest, UseCounterPositiveWhenThumbIsScrolledWithTouch) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2620,26 +2615,26 @@ TEST_F(ScrollbarsTest, UseCounterPositiveWhenThumbIsScrolledWithTouch) {
   EXPECT_EQ(horizontal_scrollbar->PressedPart(), ScrollbarPart::kNoPart);
 
   // Clicking the thumb on the vertical scrollbar will trigger the UseCounter.
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapDown, IntPoint(195, 5)));
   EXPECT_EQ(vertical_scrollbar->PressedPart(), ScrollbarPart::kThumbPart);
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapCancel, IntPoint(195, 5)));
   EXPECT_TRUE(GetDocument().IsUseCounted(
       WebFeature::kVerticalScrollbarThumbScrollingWithTouch));
 
   // Clicking the thumb on the horizontal scrollbar will trigger the UseCounter.
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapDown, IntPoint(5, 195)));
   EXPECT_EQ(horizontal_scrollbar->PressedPart(), ScrollbarPart::kThumbPart);
-  WebView().MainFrameWidget()->HandleInputEvent(GenerateTouchGestureEvent(
+  WebView().MainFrameViewWidget()->HandleInputEvent(GenerateTouchGestureEvent(
       WebInputEvent::Type::kGestureTapCancel, IntPoint(5, 195)));
   EXPECT_TRUE(GetDocument().IsUseCounted(
       WebFeature::kHorizontalScrollbarThumbScrollingWithTouch));
 }
 
 TEST_F(ScrollbarsTest, UseCounterCustomScrollbarPercentSize) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2685,7 +2680,7 @@ TEST_F(ScrollbarsTest, CheckScrollCornerIfThereIsNoScrollbar) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -2717,8 +2712,7 @@ TEST_F(ScrollbarsTest, CheckScrollCornerIfThereIsNoScrollbar) {
   Compositor().BeginFrame();
 
   auto* element = GetDocument().getElementById("container");
-  PaintLayerScrollableArea* scrollable_container =
-      ToLayoutBox(element->GetLayoutObject())->GetScrollableArea();
+  auto* scrollable_container = GetScrollableArea(*element);
 
   // There should initially be a scrollbar and a scroll corner.
   EXPECT_TRUE(scrollable_container->HasScrollbar());
@@ -2733,7 +2727,7 @@ TEST_F(ScrollbarsTest, CheckScrollCornerIfThereIsNoScrollbar) {
 }
 
 TEST_F(ScrollbarsTest, NoNeedsBeginFrameForCustomScrollbarAfterBeginFrame) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -2760,7 +2754,7 @@ TEST_F(ScrollbarsTest, NoNeedsBeginFrameForCustomScrollbarAfterBeginFrame) {
   EXPECT_FALSE(thumb->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(Compositor().NeedsBeginFrame());
 
-  WebView().MainFrameWidget()->UpdateAllLifecyclePhases(
+  WebView().MainFrameViewWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
   EXPECT_FALSE(thumb->ShouldCheckForPaintInvalidation());
   EXPECT_FALSE(Compositor().NeedsBeginFrame());
@@ -2774,7 +2768,7 @@ TEST_F(ScrollbarsTest, NoNeedsBeginFrameForCustomScrollbarAfterBeginFrame) {
 }
 
 TEST_F(ScrollbarsTest, CustomScrollbarHypotheticalThickness) {
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -2819,7 +2813,7 @@ TEST_F(ScrollbarsTestWithVirtualTimer,
 #endif
   TimeAdvance();
   GetDocument().GetFrame()->GetSettings()->SetScrollAnimatorEnabled(false);
-  WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -2890,7 +2884,7 @@ TEST_F(ScrollbarsTestWithVirtualTimer,
 class ScrollbarTrackMarginsTest : public ScrollbarsTest {
  public:
   void PrepareTest(const String& track_style) {
-    WebView().MainFrameWidget()->Resize(WebSize(200, 200));
+    WebView().MainFrameViewWidget()->Resize(gfx::Size(200, 200));
 
     SimRequest request("https://example.com/test.html", "text/html");
     LoadURL("https://example.com/test.html");
@@ -2920,8 +2914,7 @@ class ScrollbarTrackMarginsTest : public ScrollbarsTest {
     Element* div = GetDocument().getElementById("d1");
     ASSERT_TRUE(div);
 
-    ScrollableArea* div_scrollable =
-        ToLayoutBox(div->GetLayoutObject())->GetScrollableArea();
+    auto* div_scrollable = GetScrollableArea(*div);
 
     ASSERT_TRUE(div_scrollable->HorizontalScrollbar());
     CustomScrollbar* horizontal_scrollbar =
@@ -2990,10 +2983,9 @@ INSTANTIATE_TEST_SUITE_P(NonOverlay,
 
 TEST_P(ScrollbarColorSchemeTest, MAYBE_ThemeEnginePaint) {
   ScopedTestingPlatformSupport<ScrollbarTestingPlatformSupport> platform;
-  ScopedCSSColorSchemeForTest color_scheme_scope(true);
   ScopedCSSColorSchemeUARenderingForTest color_scheme_ua_scope(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -3016,20 +3008,22 @@ TEST_P(ScrollbarColorSchemeTest, MAYBE_ThemeEnginePaint) {
   )HTML");
 
   ColorSchemeHelper color_scheme_helper(GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
 
   Compositor().BeginFrame();
 
   auto* theme_engine =
       static_cast<StubWebThemeEngine*>(Platform::Current()->ThemeEngine());
-  EXPECT_EQ(ColorScheme::kDark,
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark,
             theme_engine->GetPaintedPartColorScheme(
                 WebThemeEngine::kPartScrollbarHorizontalThumb));
-  EXPECT_EQ(ColorScheme::kDark,
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark,
             theme_engine->GetPaintedPartColorScheme(
                 WebThemeEngine::kPartScrollbarVerticalThumb));
-  EXPECT_EQ(ColorScheme::kDark, theme_engine->GetPaintedPartColorScheme(
-                                    WebThemeEngine::kPartScrollbarCorner));
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark,
+            theme_engine->GetPaintedPartColorScheme(
+                WebThemeEngine::kPartScrollbarCorner));
 }
 
 // Test scrollbar-gutter values with classic scrollbars and horizontal-tb text.
@@ -3037,7 +3031,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndClassicScrollbars) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -3093,7 +3087,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndClassicScrollbars) {
   )HTML");
   Compositor().BeginFrame();
   auto* auto_ = GetDocument().getElementById("auto");
-  LayoutBox* box_auto = ToLayoutBox(auto_->GetLayoutObject());
+  auto* box_auto = auto_->GetLayoutBox();
   EXPECT_EQ(box_auto->OffsetWidth(), 100);
   EXPECT_EQ(box_auto->ClientWidth(), 100);
   NGPhysicalBoxStrut box_auto_scrollbars = box_auto->ComputeScrollbars();
@@ -3103,7 +3097,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndClassicScrollbars) {
   EXPECT_EQ(box_auto_scrollbars.right, 0);
 
   auto* stable = GetDocument().getElementById("stable");
-  LayoutBox* box_stable = ToLayoutBox(stable->GetLayoutObject());
+  auto* box_stable = stable->GetLayoutBox();
   EXPECT_EQ(box_stable->OffsetWidth(), 100);
   EXPECT_EQ(box_stable->ClientWidth(), 85);
   NGPhysicalBoxStrut box_stable_scrollbars = box_stable->ComputeScrollbars();
@@ -3113,7 +3107,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndClassicScrollbars) {
   EXPECT_EQ(box_stable_scrollbars.right, 15);
 
   auto* stable_both = GetDocument().getElementById("stable_both");
-  LayoutBox* box_stable_both = ToLayoutBox(stable_both->GetLayoutObject());
+  auto* box_stable_both = stable_both->GetLayoutBox();
   EXPECT_EQ(box_stable_both->OffsetWidth(), 100);
   EXPECT_EQ(box_stable_both->ClientWidth(), 70);
   NGPhysicalBoxStrut box_stable_both_scrollbars =
@@ -3124,7 +3118,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndClassicScrollbars) {
   EXPECT_EQ(box_stable_both_scrollbars.right, 15);
 
   auto* always = GetDocument().getElementById("always");
-  LayoutBox* box_always = ToLayoutBox(always->GetLayoutObject());
+  auto* box_always = always->GetLayoutBox();
   EXPECT_EQ(box_always->OffsetWidth(), 100);
   EXPECT_EQ(box_always->ClientWidth(), 85);
   NGPhysicalBoxStrut box_always_scrollbars = box_always->ComputeScrollbars();
@@ -3134,7 +3128,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndClassicScrollbars) {
   EXPECT_EQ(box_always_scrollbars.right, 15);
 
   auto* always_both = GetDocument().getElementById("always_both");
-  LayoutBox* box_always_both = ToLayoutBox(always_both->GetLayoutObject());
+  auto* box_always_both = always_both->GetLayoutBox();
   EXPECT_EQ(box_always_both->OffsetWidth(), 100);
   EXPECT_EQ(box_always_both->ClientWidth(), 70);
   NGPhysicalBoxStrut box_always_both_scrollbars =
@@ -3145,28 +3139,26 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndClassicScrollbars) {
   EXPECT_EQ(box_always_both_scrollbars.right, 15);
 
   auto* stable_force = GetDocument().getElementById("stable_force");
-  LayoutBox* box_stable_force = ToLayoutBox(stable_force->GetLayoutObject());
+  auto* box_stable_force = stable_force->GetLayoutBox();
   EXPECT_EQ(box_stable_force->OffsetWidth(), 100);
   EXPECT_EQ(box_stable_force->ClientWidth(), 85);
   EXPECT_EQ(box_stable_force->ComputeScrollbars(), box_stable_scrollbars);
 
   auto* stable_both_force = GetDocument().getElementById("stable_both_force");
-  LayoutBox* box_stable_both_force =
-      ToLayoutBox(stable_both_force->GetLayoutObject());
+  auto* box_stable_both_force = stable_both_force->GetLayoutBox();
   EXPECT_EQ(box_stable_both_force->OffsetWidth(), 100);
   EXPECT_EQ(box_stable_both_force->ClientWidth(), 70);
   EXPECT_EQ(box_stable_both_force->ComputeScrollbars(),
             box_stable_both_scrollbars);
 
   auto* always_force = GetDocument().getElementById("always_force");
-  LayoutBox* box_always_force = ToLayoutBox(always_force->GetLayoutObject());
+  auto* box_always_force = always_force->GetLayoutBox();
   EXPECT_EQ(box_always_force->OffsetWidth(), 100);
   EXPECT_EQ(box_always_force->ClientWidth(), 85);
   EXPECT_EQ(box_always_force->ComputeScrollbars(), box_always_scrollbars);
 
   auto* always_both_force = GetDocument().getElementById("always_both_force");
-  LayoutBox* box_always_both_force =
-      ToLayoutBox(always_both_force->GetLayoutObject());
+  auto* box_always_both_force = always_both_force->GetLayoutBox();
   EXPECT_EQ(box_always_both_force->OffsetWidth(), 100);
   EXPECT_EQ(box_always_both_force->ClientWidth(), 70);
   EXPECT_EQ(box_always_both_force->ComputeScrollbars(),
@@ -3178,7 +3170,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndClassicScrollbars) {
   // This test requires that scrollbars take up space.
   ENABLE_OVERLAY_SCROLLBARS(false);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -3234,7 +3226,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndClassicScrollbars) {
   )HTML");
   Compositor().BeginFrame();
   auto* auto_ = GetDocument().getElementById("auto");
-  LayoutBox* box_auto = ToLayoutBox(auto_->GetLayoutObject());
+  auto* box_auto = auto_->GetLayoutBox();
   EXPECT_EQ(box_auto->OffsetHeight(), 100);
   EXPECT_EQ(box_auto->ClientHeight(), 100);
   NGPhysicalBoxStrut box_auto_scrollbars = box_auto->ComputeScrollbars();
@@ -3244,7 +3236,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndClassicScrollbars) {
   EXPECT_EQ(box_auto_scrollbars.right, 0);
 
   auto* stable = GetDocument().getElementById("stable");
-  LayoutBox* box_stable = ToLayoutBox(stable->GetLayoutObject());
+  auto* box_stable = stable->GetLayoutBox();
   EXPECT_EQ(box_stable->OffsetHeight(), 100);
   EXPECT_EQ(box_stable->ClientHeight(), 85);
   NGPhysicalBoxStrut box_stable_scrollbars = box_stable->ComputeScrollbars();
@@ -3254,7 +3246,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndClassicScrollbars) {
   EXPECT_EQ(box_stable_scrollbars.right, 0);
 
   auto* stable_both = GetDocument().getElementById("stable_both");
-  LayoutBox* box_stable_both = ToLayoutBox(stable_both->GetLayoutObject());
+  auto* box_stable_both = stable_both->GetLayoutBox();
   EXPECT_EQ(box_stable_both->OffsetHeight(), 100);
   EXPECT_EQ(box_stable_both->ClientHeight(), 70);
   NGPhysicalBoxStrut box_stable_both_scrollbars =
@@ -3265,7 +3257,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndClassicScrollbars) {
   EXPECT_EQ(box_stable_both_scrollbars.right, 0);
 
   auto* always = GetDocument().getElementById("always");
-  LayoutBox* box_always = ToLayoutBox(always->GetLayoutObject());
+  auto* box_always = always->GetLayoutBox();
   EXPECT_EQ(box_always->OffsetHeight(), 100);
   EXPECT_EQ(box_always->ClientHeight(), 85);
   NGPhysicalBoxStrut box_always_scrollbars = box_always->ComputeScrollbars();
@@ -3275,7 +3267,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndClassicScrollbars) {
   EXPECT_EQ(box_always_scrollbars.right, 0);
 
   auto* always_both = GetDocument().getElementById("always_both");
-  LayoutBox* box_always_both = ToLayoutBox(always_both->GetLayoutObject());
+  auto* box_always_both = always_both->GetLayoutBox();
   EXPECT_EQ(box_always_both->OffsetHeight(), 100);
   EXPECT_EQ(box_always_both->ClientHeight(), 70);
   NGPhysicalBoxStrut box_always_both_scrollbars =
@@ -3286,28 +3278,26 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndClassicScrollbars) {
   EXPECT_EQ(box_always_both_scrollbars.right, 0);
 
   auto* stable_force = GetDocument().getElementById("stable_force");
-  LayoutBox* box_stable_force = ToLayoutBox(stable_force->GetLayoutObject());
+  auto* box_stable_force = stable_force->GetLayoutBox();
   EXPECT_EQ(box_stable_force->OffsetHeight(), 100);
   EXPECT_EQ(box_stable_force->ClientHeight(), 85);
   EXPECT_EQ(box_stable_force->ComputeScrollbars(), box_stable_scrollbars);
 
   auto* stable_both_force = GetDocument().getElementById("stable_both_force");
-  LayoutBox* box_stable_both_force =
-      ToLayoutBox(stable_both_force->GetLayoutObject());
+  auto* box_stable_both_force = stable_both_force->GetLayoutBox();
   EXPECT_EQ(box_stable_both_force->OffsetHeight(), 100);
   EXPECT_EQ(box_stable_both_force->ClientHeight(), 70);
   EXPECT_EQ(box_stable_both_force->ComputeScrollbars(),
             box_stable_both_scrollbars);
 
   auto* always_force = GetDocument().getElementById("always_force");
-  LayoutBox* box_always_force = ToLayoutBox(always_force->GetLayoutObject());
+  auto* box_always_force = always_force->GetLayoutBox();
   EXPECT_EQ(box_always_force->OffsetHeight(), 100);
   EXPECT_EQ(box_always_force->ClientHeight(), 85);
   EXPECT_EQ(box_always_force->ComputeScrollbars(), box_always_scrollbars);
 
   auto* always_both_force = GetDocument().getElementById("always_both_force");
-  LayoutBox* box_always_both_force =
-      ToLayoutBox(always_both_force->GetLayoutObject());
+  auto* box_always_both_force = always_both_force->GetLayoutBox();
   EXPECT_EQ(box_always_both_force->OffsetHeight(), 100);
   EXPECT_EQ(box_always_both_force->ClientHeight(), 70);
   EXPECT_EQ(box_always_both_force->ComputeScrollbars(),
@@ -3320,7 +3310,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndOverlayScrollbars) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -3376,7 +3366,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndOverlayScrollbars) {
   )HTML");
   Compositor().BeginFrame();
   auto* auto_ = GetDocument().getElementById("auto");
-  LayoutBox* box_auto = ToLayoutBox(auto_->GetLayoutObject());
+  auto* box_auto = auto_->GetLayoutBox();
   EXPECT_EQ(box_auto->OffsetWidth(), 100);
   EXPECT_EQ(box_auto->ClientWidth(), 100);
   NGPhysicalBoxStrut box_auto_scrollbars = box_auto->ComputeScrollbars();
@@ -3386,7 +3376,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndOverlayScrollbars) {
   EXPECT_EQ(box_auto_scrollbars.right, 0);
 
   auto* stable = GetDocument().getElementById("stable");
-  LayoutBox* box_stable = ToLayoutBox(stable->GetLayoutObject());
+  auto* box_stable = stable->GetLayoutBox();
   EXPECT_EQ(box_stable->OffsetWidth(), 100);
   EXPECT_EQ(box_stable->ClientWidth(), 100);
   NGPhysicalBoxStrut box_stable_scrollbars = box_stable->ComputeScrollbars();
@@ -3396,7 +3386,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndOverlayScrollbars) {
   EXPECT_EQ(box_stable_scrollbars.right, 0);
 
   auto* stable_both = GetDocument().getElementById("stable_both");
-  LayoutBox* box_stable_both = ToLayoutBox(stable_both->GetLayoutObject());
+  auto* box_stable_both = stable_both->GetLayoutBox();
   EXPECT_EQ(box_stable_both->OffsetWidth(), 100);
   EXPECT_EQ(box_stable_both->ClientWidth(), 100);
   NGPhysicalBoxStrut box_stable_both_scrollbars =
@@ -3410,7 +3400,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndOverlayScrollbars) {
   // which is why we use these relative comparisons.
 
   auto* always = GetDocument().getElementById("always");
-  LayoutBox* box_always = ToLayoutBox(always->GetLayoutObject());
+  auto* box_always = always->GetLayoutBox();
   EXPECT_EQ(box_always->OffsetWidth(), 100);
   EXPECT_LT(box_always->ClientWidth(), box_auto->ClientWidth());
   NGPhysicalBoxStrut box_always_scrollbars = box_always->ComputeScrollbars();
@@ -3421,7 +3411,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndOverlayScrollbars) {
   EXPECT_GT(box_always_scrollbars.right, 0);
 
   auto* always_both = GetDocument().getElementById("always_both");
-  LayoutBox* box_always_both = ToLayoutBox(always_both->GetLayoutObject());
+  auto* box_always_both = always_both->GetLayoutBox();
   EXPECT_EQ(box_always_both->OffsetWidth(), 100);
   EXPECT_LT(box_always_both->ClientWidth(), box_always->ClientWidth());
   NGPhysicalBoxStrut box_always_both_scrollbars =
@@ -3433,28 +3423,26 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithHorizontalTextAndOverlayScrollbars) {
   EXPECT_GT(box_always_both_scrollbars.right, 0);
 
   auto* stable_force = GetDocument().getElementById("stable_force");
-  LayoutBox* box_stable_force = ToLayoutBox(stable_force->GetLayoutObject());
+  auto* box_stable_force = stable_force->GetLayoutBox();
   EXPECT_EQ(box_stable_force->OffsetWidth(), 100);
   EXPECT_EQ(box_stable_force->ClientWidth(), 100);
   EXPECT_EQ(box_stable_force->ComputeScrollbars(), box_stable_scrollbars);
 
   auto* stable_both_force = GetDocument().getElementById("stable_both_force");
-  LayoutBox* box_stable_both_force =
-      ToLayoutBox(stable_both_force->GetLayoutObject());
+  auto* box_stable_both_force = stable_both_force->GetLayoutBox();
   EXPECT_EQ(box_stable_both_force->OffsetWidth(), 100);
   EXPECT_EQ(box_stable_both_force->ClientWidth(), 100);
   EXPECT_EQ(box_stable_both_force->ComputeScrollbars(),
             box_stable_both_scrollbars);
 
   auto* always_force = GetDocument().getElementById("always_force");
-  LayoutBox* box_always_force = ToLayoutBox(always_force->GetLayoutObject());
+  auto* box_always_force = always_force->GetLayoutBox();
   EXPECT_EQ(box_always_force->OffsetWidth(), 100);
   EXPECT_LT(box_always_force->ClientWidth(), box_auto->ClientWidth());
   EXPECT_EQ(box_always_force->ComputeScrollbars(), box_always_scrollbars);
 
   auto* always_both_force = GetDocument().getElementById("always_both_force");
-  LayoutBox* box_always_both_force =
-      ToLayoutBox(always_both_force->GetLayoutObject());
+  auto* box_always_both_force = always_both_force->GetLayoutBox();
   EXPECT_EQ(box_always_both_force->OffsetWidth(), 100);
   EXPECT_LT(box_always_both_force->ClientWidth(),
             box_always_force->ClientWidth());
@@ -3468,7 +3456,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
   // are enabled.
   ENABLE_OVERLAY_SCROLLBARS(true);
 
-  WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
   request.Complete(R"HTML(
@@ -3524,7 +3512,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
   )HTML");
   Compositor().BeginFrame();
   auto* auto_ = GetDocument().getElementById("auto");
-  LayoutBox* box_auto = ToLayoutBox(auto_->GetLayoutObject());
+  auto* box_auto = auto_->GetLayoutBox();
   EXPECT_EQ(box_auto->OffsetHeight(), 100);
   EXPECT_EQ(box_auto->ClientHeight(), 100);
   NGPhysicalBoxStrut box_auto_scrollbars = box_auto->ComputeScrollbars();
@@ -3534,7 +3522,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
   EXPECT_EQ(box_auto_scrollbars.right, 0);
 
   auto* stable = GetDocument().getElementById("stable");
-  LayoutBox* box_stable = ToLayoutBox(stable->GetLayoutObject());
+  auto* box_stable = stable->GetLayoutBox();
   EXPECT_EQ(box_stable->OffsetHeight(), 100);
   EXPECT_EQ(box_stable->ClientHeight(), 100);
   NGPhysicalBoxStrut box_stable_scrollbars = box_stable->ComputeScrollbars();
@@ -3544,7 +3532,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
   EXPECT_EQ(box_stable_scrollbars.right, 0);
 
   auto* stable_both = GetDocument().getElementById("stable_both");
-  LayoutBox* box_stable_both = ToLayoutBox(stable_both->GetLayoutObject());
+  auto* box_stable_both = stable_both->GetLayoutBox();
   EXPECT_EQ(box_stable_both->OffsetHeight(), 100);
   EXPECT_EQ(box_stable_both->ClientHeight(), 100);
   NGPhysicalBoxStrut box_stable_both_scrollbars =
@@ -3555,7 +3543,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
   EXPECT_EQ(box_stable_both_scrollbars.right, 0);
 
   auto* always = GetDocument().getElementById("always");
-  LayoutBox* box_always = ToLayoutBox(always->GetLayoutObject());
+  auto* box_always = always->GetLayoutBox();
   EXPECT_EQ(box_always->OffsetHeight(), 100);
   EXPECT_LT(box_always->ClientHeight(), box_auto->ClientHeight());
   NGPhysicalBoxStrut box_always_scrollbars = box_always->ComputeScrollbars();
@@ -3566,7 +3554,7 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
   EXPECT_EQ(box_always_scrollbars.right, 0);
 
   auto* always_both = GetDocument().getElementById("always_both");
-  LayoutBox* box_always_both = ToLayoutBox(always_both->GetLayoutObject());
+  auto* box_always_both = always_both->GetLayoutBox();
   EXPECT_EQ(box_always_both->OffsetHeight(), 100);
   EXPECT_LT(box_always_both->ClientHeight(), box_always->ClientHeight());
   NGPhysicalBoxStrut box_always_both_scrollbars =
@@ -3578,14 +3566,13 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
   EXPECT_EQ(box_always_both_scrollbars.right, 0);
 
   auto* stable_force = GetDocument().getElementById("stable_force");
-  LayoutBox* box_stable_force = ToLayoutBox(stable_force->GetLayoutObject());
+  auto* box_stable_force = stable_force->GetLayoutBox();
   EXPECT_EQ(box_stable_force->OffsetHeight(), 100);
   EXPECT_EQ(box_stable_force->ClientHeight(), 100);
   EXPECT_EQ(box_stable_force->ComputeScrollbars(), box_stable_scrollbars);
 
   auto* stable_both_force = GetDocument().getElementById("stable_both_force");
-  LayoutBox* box_stable_both_force =
-      ToLayoutBox(stable_both_force->GetLayoutObject());
+  auto* box_stable_both_force = stable_both_force->GetLayoutBox();
   EXPECT_EQ(box_stable_both_force->OffsetHeight(), 100);
   EXPECT_EQ(box_stable_both_force->ClientHeight(), 100);
   EXPECT_EQ(box_stable_both_force->ComputeScrollbars(),
@@ -3593,14 +3580,13 @@ TEST_F(ScrollbarsTest, ScrollbarGutterWithVerticalTextAndOverlayScrollbars) {
 
   // TODO this fails because overflow is "visible"
   auto* always_force = GetDocument().getElementById("always_force");
-  LayoutBox* box_always_force = ToLayoutBox(always_force->GetLayoutObject());
+  auto* box_always_force = always_force->GetLayoutBox();
   EXPECT_EQ(box_always_force->OffsetHeight(), 100);
   EXPECT_LT(box_always_force->ClientHeight(), box_auto->ClientHeight());
   EXPECT_EQ(box_always_force->ComputeScrollbars(), box_always_scrollbars);
 
   auto* always_both_force = GetDocument().getElementById("always_both_force");
-  LayoutBox* box_always_both_force =
-      ToLayoutBox(always_both_force->GetLayoutObject());
+  auto* box_always_both_force = always_both_force->GetLayoutBox();
   EXPECT_EQ(box_always_both_force->OffsetHeight(), 100);
   EXPECT_LT(box_always_both_force->ClientHeight(),
             box_always_force->ClientHeight());

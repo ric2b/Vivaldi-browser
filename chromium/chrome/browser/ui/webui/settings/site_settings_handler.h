@@ -76,8 +76,7 @@ class SiteSettingsHandler
   // content_settings::Observer:
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               const std::string& resource_identifier) override;
+                               ContentSettingsType content_type) override;
 
   // ProfileObserver:
   void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
@@ -207,10 +206,6 @@ class SiteSettingsHandler
   // '*CategoryPermissionForPattern' equivalents below with these methods.
   void HandleGetOriginPermissions(const base::ListValue* args);
   void HandleSetOriginPermissions(const base::ListValue* args);
-
-  // Clears the Flash data setting used to remember if the user has changed the
-  // Flash permission for an origin.
-  void HandleClearFlashPref(const base::ListValue* args);
 
   // Handles setting and resetting an origin permission.
   void HandleResetCategoryPermissionForPattern(const base::ListValue* args);

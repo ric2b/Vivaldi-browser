@@ -259,18 +259,13 @@ ScriptPromise SerialPort::open(ScriptState* script_state,
   mojo_options->cts_flow_control = options->flowControl() == "hardware";
 
   mojo::PendingRemote<device::mojom::blink::SerialPortClient> client;
-  parent_->GetPort(
-      info_->token,
-      port_.BindNewPipeAndPassReceiver(
-          GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI)));
-  port_.set_disconnect_handler(
-      WTF::Bind(&SerialPort::OnConnectionError, WrapWeakPersistent(this)));
-
   open_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   auto callback = WTF::Bind(&SerialPort::OnOpen, WrapPersistent(this),
                             client.InitWithNewPipeAndPassReceiver());
 
-  port_->Open(std::move(mojo_options), std::move(client), std::move(callback));
+  parent_->OpenPort(info_->token, std::move(mojo_options), std::move(client),
+                    std::move(callback));
+
   return open_resolver_->Promise();
 }
 
@@ -433,21 +428,33 @@ ScriptPromise SerialPort::close(ScriptState* script_state,
 
 ScriptPromise SerialPort::ContinueClose(ScriptState* script_state) {
   DCHECK(closing_);
-  DCHECK(!readable_);
-  DCHECK(!writable_);
   DCHECK(!close_resolver_);
 
   if (!port_.is_bound())
     return ScriptPromise::CastUndefined(script_state);
 
   close_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  port_->Close(WTF::Bind(&SerialPort::OnClose, WrapPersistent(this)));
+
+  // readable.cancel() and writable.abort() can resolve before |readable_| or
+  // |writable_| are set to null if the streams were already erroring. Wait
+  // until UnderlyingSourceClosed() and UnderlyingSinkClosed() have been called
+  // before continuing.
+  if (!readable_ && !writable_) {
+    StreamsClosed();
+  }
+
   return close_resolver_->Promise();
 }
 
 void SerialPort::AbortClose() {
   DCHECK(closing_);
   closing_ = false;
+}
+
+void SerialPort::StreamsClosed() {
+  DCHECK(!readable_);
+  DCHECK(!writable_);
+  port_->Close(WTF::Bind(&SerialPort::OnClose, WrapPersistent(this)));
 }
 
 void SerialPort::Flush(
@@ -467,12 +474,20 @@ void SerialPort::UnderlyingSourceClosed() {
   DCHECK(readable_);
   readable_ = nullptr;
   underlying_source_ = nullptr;
+
+  if (close_resolver_ && !writable_) {
+    StreamsClosed();
+  }
 }
 
 void SerialPort::UnderlyingSinkClosed() {
   DCHECK(writable_);
   writable_ = nullptr;
   underlying_sink_ = nullptr;
+
+  if (close_resolver_ && !readable_) {
+    StreamsClosed();
+  }
 }
 
 void SerialPort::ContextDestroyed() {
@@ -579,12 +594,12 @@ void SerialPort::OnConnectionError() {
 void SerialPort::OnOpen(
     mojo::PendingReceiver<device::mojom::blink::SerialPortClient>
         client_receiver,
-    bool success) {
+    mojo::PendingRemote<device::mojom::blink::SerialPort> port) {
   ScriptState* script_state = open_resolver_->GetScriptState();
   if (!script_state->ContextIsValid())
     return;
 
-  if (!success) {
+  if (!port) {
     ScriptPromiseResolver* resolver = open_resolver_;
     open_resolver_ = nullptr;
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -592,9 +607,14 @@ void SerialPort::OnOpen(
     return;
   }
 
+  port_.Bind(std::move(port),
+             GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI));
+  port_.set_disconnect_handler(
+      WTF::Bind(&SerialPort::OnConnectionError, WrapWeakPersistent(this)));
   client_receiver_.Bind(
       std::move(client_receiver),
       GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI));
+
   open_resolver_->Resolve();
   open_resolver_ = nullptr;
 }

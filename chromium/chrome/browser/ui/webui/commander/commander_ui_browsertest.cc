@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/commander/commander_ui.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/commander/commander_view_model.h"
@@ -38,7 +39,7 @@ class CommanderUITest : public InProcessBrowserTest,
         ui::PAGE_TRANSITION_AUTO_TOPLEVEL, std::string());
     CommanderUI* controller =
         static_cast<CommanderUI*>(contents_->GetWebUI()->GetController());
-    controller->handler()->set_delegate(this);
+    controller->handler()->PrepareToShow(this);
 
     ASSERT_TRUE(content::WaitForLoadStop(contents_.get()));
     EXPECT_EQ(contents_->GetLastCommittedURL().host(),
@@ -64,6 +65,10 @@ class CommanderUITest : public InProcessBrowserTest,
     option_selected_invocations_.emplace_back(option_index, result_set_id);
   }
 
+  void OnCompositeCommandCancelled() override {
+    composite_command_cancelled_invocation_count_++;
+  }
+
   void OnDismiss() override { dismiss_invocation_count_++; }
 
   void OnHeightChanged(int new_height) override {
@@ -81,20 +86,24 @@ class CommanderUITest : public InProcessBrowserTest,
     return height_changed_invocations_;
   }
 
-  size_t dismiss_invocation_count() { return dismiss_invocation_count_; }
+  int composite_command_cancelled_invocation_count() {
+    return composite_command_cancelled_invocation_count_;
+  }
+  int dismiss_invocation_count() { return dismiss_invocation_count_; }
 
  private:
   std::unique_ptr<content::WebContents> contents_;
-  size_t dismiss_invocation_count_ = 0;
+  int dismiss_invocation_count_ = 0;
+  int composite_command_cancelled_invocation_count_ = 0;
   std::vector<base::string16> text_changed_invocations_;
   std::vector<std::pair<size_t, int>> option_selected_invocations_;
   std::vector<int> height_changed_invocations_;
 };
 
 IN_PROC_BROWSER_TEST_F(CommanderUITest, Dismiss) {
-  EXPECT_EQ(dismiss_invocation_count(), 0u);
+  EXPECT_EQ(dismiss_invocation_count(), 0);
   ExecuteJS("chrome.send('dismiss')");
-  EXPECT_EQ(dismiss_invocation_count(), 1u);
+  EXPECT_EQ(dismiss_invocation_count(), 1);
 }
 
 IN_PROC_BROWSER_TEST_F(CommanderUITest, HeightChanged) {
@@ -119,19 +128,77 @@ IN_PROC_BROWSER_TEST_F(CommanderUITest, OptionSelected) {
   ASSERT_EQ(option_selected_invocations().back(), expected);
 }
 
-TEST(CommanderHandlerTest, ViewModelPassed) {
+IN_PROC_BROWSER_TEST_F(CommanderUITest, CompositeCommandCancelled) {
+  EXPECT_EQ(composite_command_cancelled_invocation_count(), 0);
+  ExecuteJS("chrome.send('compositeCommandCancelled')");
+  EXPECT_EQ(composite_command_cancelled_invocation_count(), 1);
+}
+
+TEST(CommanderHandlerTest, DisplayResultsViewModelPassed) {
   content::TestWebUI test_web_ui;
   auto handler = std::make_unique<TestCommanderHandler>(&test_web_ui);
+
   commander::CommanderViewModel vm;
   vm.action = commander::CommanderViewModel::Action::kDisplayResults;
   base::string16 item_title = base::ASCIIToUTF16("Test item");
-  std::vector<gfx::Range> item_ranges;
+  std::vector<gfx::Range> item_ranges = {gfx::Range(0, 4)};
   vm.items.emplace_back(item_title, item_ranges);
+  vm.result_set_id = 42;
+
   handler->AllowJavascriptForTesting();
   handler->ViewModelUpdated(std::move(vm));
   const content::TestWebUI::CallData& call_data =
       *test_web_ui.call_data().back();
   EXPECT_EQ("cr.webUIListenerCallback", call_data.function_name());
   EXPECT_EQ("view-model-updated", call_data.arg1()->GetString());
-  EXPECT_EQ("Test item", call_data.arg2()->GetList()[0].GetString());
+
+  const base::Value* arg = call_data.arg2();
+  EXPECT_EQ(
+      "Test item",
+      arg->FindPath("options")->GetList()[0].FindPath("title")->GetString());
+  EXPECT_EQ(0, arg->FindPath("options")
+                   ->GetList()[0]
+                   .FindPath("matchedRanges")
+                   ->GetList()[0]
+                   .GetList()[0]
+                   .GetInt());
+  EXPECT_EQ(4, arg->FindPath("options")
+                   ->GetList()[0]
+                   .FindPath("matchedRanges")
+                   ->GetList()[0]
+                   .GetList()[1]
+                   .GetInt());
+  EXPECT_EQ(42, arg->FindPath("resultSetId")->GetInt());
+}
+
+TEST(CommanderHandlerTest, PromptViewModelPassed) {
+  content::TestWebUI test_web_ui;
+  auto handler = std::make_unique<TestCommanderHandler>(&test_web_ui);
+
+  commander::CommanderViewModel vm;
+  vm.action = commander::CommanderViewModel::Action::kPrompt;
+  vm.result_set_id = 42;
+  vm.prompt_text = base::ASCIIToUTF16("Select fruit");
+
+  handler->AllowJavascriptForTesting();
+  handler->ViewModelUpdated(std::move(vm));
+  const content::TestWebUI::CallData& call_data =
+      *test_web_ui.call_data().back();
+  EXPECT_EQ("cr.webUIListenerCallback", call_data.function_name());
+  EXPECT_EQ("view-model-updated", call_data.arg1()->GetString());
+
+  const base::Value* arg = call_data.arg2();
+  EXPECT_EQ("Select fruit", arg->FindPath("promptText")->GetString());
+  EXPECT_EQ(42, arg->FindPath("resultSetId")->GetInt());
+}
+
+TEST(CommanderHandlerTest, Initialize) {
+  content::TestWebUI test_web_ui;
+  auto handler = std::make_unique<TestCommanderHandler>(&test_web_ui);
+  handler->AllowJavascriptForTesting();
+  handler->PrepareToShow(nullptr);
+  const content::TestWebUI::CallData& call_data =
+      *test_web_ui.call_data().back();
+  EXPECT_EQ("cr.webUIListenerCallback", call_data.function_name());
+  EXPECT_EQ("initialize", call_data.arg1()->GetString());
 }

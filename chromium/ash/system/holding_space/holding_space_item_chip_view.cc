@@ -9,7 +9,6 @@
 #include "ash/public/cpp/rounded_image_view.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/holding_space/holding_space_item_view.h"
-#include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -29,16 +28,17 @@ HoldingSpaceItemChipView::HoldingSpaceItemChipView(
 
   SetPreferredSize(gfx::Size(kHoldingSpaceChipWidth, kHoldingSpaceChipHeight));
 
-  image_ = AddChildView(
-      std::make_unique<RoundedImageView>(kHoldingSpaceChipIconSize / 2));
+  image_ = AddChildView(std::make_unique<RoundedImageView>(
+      kHoldingSpaceChipIconSize / 2, RoundedImageView::Alignment::kLeading));
 
   label_ = AddChildView(std::make_unique<views::Label>(item->text()));
   label_->SetElideBehavior(gfx::ELIDE_MIDDLE);
   label_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
+  TrayPopupUtils::SetLabelFontList(
+      label_, TrayPopupUtils::FontStyle::kDetailedViewLabel);
   layout->SetFlexForView(label_, 1);
-
-  TrayPopupItemStyle(TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL)
-      .SetupLabel(label_);
 
   // Subscribe to be notified of changes to `item_`'s image.
   image_subscription_ =

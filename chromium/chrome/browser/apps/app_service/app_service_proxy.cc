@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/location.h"
@@ -16,6 +16,7 @@
 #include "chrome/browser/apps/app_service/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/chromeos/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/common/chrome_features.h"
@@ -167,6 +168,11 @@ void AppServiceProxy::Initialize() {
       built_in_chrome_os_apps_ =
           std::make_unique<BuiltInChromeOsApps>(app_service_, profile_);
     }
+    // TODO(b/170591339): Allow borealis to provide apps for the non-primary
+    // profile.
+    if (guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile_)) {
+      borealis_apps_ = std::make_unique<BorealisApps>(app_service_, profile_);
+    }
     crostini_apps_ = std::make_unique<CrostiniApps>(app_service_, profile_);
     extension_apps_ = std::make_unique<ExtensionAppsChromeOs>(
         app_service_, profile_, apps::mojom::AppType::kExtension,
@@ -183,22 +189,10 @@ void AppServiceProxy::Initialize() {
         lacros_apps_ = std::make_unique<LacrosApps>(app_service_);
       }
     }
-    if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
-      web_apps_ = std::make_unique<WebAppsChromeOs>(app_service_, profile_,
-                                                    &instance_registry_);
-    } else {
-      extension_web_apps_ = std::make_unique<ExtensionAppsChromeOs>(
-          app_service_, profile_, apps::mojom::AppType::kWeb,
-          &instance_registry_);
-    }
-    borealis_apps_ = std::make_unique<BorealisApps>(app_service_, profile_);
+    web_apps_ = std::make_unique<WebAppsChromeOs>(app_service_, profile_,
+                                                  &instance_registry_);
 #else
-    if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
-      web_apps_ = std::make_unique<WebApps>(app_service_, profile_);
-    } else {
-      extension_web_apps_ = std::make_unique<ExtensionApps>(
-          app_service_, profile_, apps::mojom::AppType::kWeb);
-    }
+    web_apps_ = std::make_unique<WebApps>(app_service_, profile_);
     extension_apps_ = std::make_unique<ExtensionApps>(
         app_service_, profile_, apps::mojom::AppType::kExtension);
 #endif
@@ -372,12 +366,7 @@ void AppServiceProxy::Uninstall(const std::string& app_id,
   // On non-ChromeOS, publishers run the remove dialog.
   apps::mojom::AppType app_type = cache_.GetAppType(app_id);
   if (app_type == apps::mojom::AppType::kWeb) {
-    if (!base::FeatureList::IsEnabled(
-            features::kDesktopPWAsWithoutExtensions)) {
-      ExtensionApps::UninstallImpl(profile_, app_id, parent_window);
-    } else {
-      WebApps::UninstallImpl(profile_, app_id, parent_window);
-    }
+    WebApps::UninstallImpl(profile_, app_id, parent_window);
   }
 #endif
 }
@@ -465,6 +454,19 @@ void AppServiceProxy::GetMenuModel(
                              std::move(callback));
 }
 
+void AppServiceProxy::ExecuteContextMenuCommand(const std::string& app_id,
+                                                int command_id,
+                                                const std::string& shortcut_id,
+                                                int64_t display_id) {
+  if (!app_service_.is_connected()) {
+    return;
+  }
+
+  apps::mojom::AppType app_type = cache_.GetAppType(app_id);
+  app_service_->ExecuteContextMenuCommand(app_type, app_id, command_id,
+                                          shortcut_id, display_id);
+}
+
 void AppServiceProxy::OpenNativeSettings(const std::string& app_id) {
   if (app_service_.is_connected()) {
     cache_.ForOneApp(app_id, [this](const apps::AppUpdate& update) {
@@ -487,8 +489,6 @@ void AppServiceProxy::FlushMojoCallsForTesting() {
   }
   if (web_apps_) {
     web_apps_->FlushMojoCallsForTesting();
-  } else {
-    extension_web_apps_->FlushMojoCallsForTesting();
   }
   if (borealis_apps_) {
     borealis_apps_->FlushMojoCallsForTesting();
@@ -598,8 +598,6 @@ void AppServiceProxy::SetArcIsRegistered() {
   extension_apps_->ObserveArc();
   if (web_apps_) {
     web_apps_->ObserveArc();
-  } else {
-    extension_web_apps_->ObserveArc();
   }
 #endif
 }
@@ -644,10 +642,9 @@ void AppServiceProxy::Shutdown() {
     extension_apps_->Shutdown();
     if (web_apps_) {
       web_apps_->Shutdown();
-    } else {
-      extension_web_apps_->Shutdown();
     }
   }
+  borealis_apps_.reset();
 #endif
 }
 

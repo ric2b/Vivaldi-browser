@@ -13,7 +13,7 @@
 #include "base/allocator/allocator_extension.h"
 #include "base/at_exit.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
@@ -61,7 +61,6 @@
 #include "content/common/buildflags.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
@@ -80,7 +79,6 @@
 #include "content/renderer/media/gpu/gpu_video_accelerator_factories_impl.h"
 #include "content/renderer/media/render_media_client.h"
 #include "content/renderer/net_info_helper.h"
-#include "content/renderer/render_frame_metadata_observer_impl.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_process_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -147,7 +145,6 @@
 
 #if defined(OS_ANDROID)
 #include <cpu-features.h>
-#include "content/renderer/android/synchronous_layer_tree_frame_sink_impl.h"
 #include "content/renderer/media/android/stream_texture_factory.h"
 #include "media/base/android/media_codec_util.h"
 #endif
@@ -200,11 +197,6 @@ using ::blink::WebSecurityPolicy;
 using ::blink::WebString;
 using ::blink::WebView;
 using ::util::PassKey;
-
-#if defined(OS_ANDROID)
-// Unique identifier for each output surface created.
-uint32_t g_next_layer_tree_frame_sink_id = 1;
-#endif
 
 // An implementation of mojom::RenderMessageFilter which can be mocked out
 // for tests which may indirectly send messages over this interface.
@@ -638,8 +630,6 @@ void RenderThreadImpl::Init() {
           URLLoaderThrottleProviderType::kFrame);
 
   GetAssociatedInterfaceRegistry()->AddInterface(base::BindRepeating(
-      &RenderThreadImpl::OnRouteProviderReceiver, base::Unretained(this)));
-  GetAssociatedInterfaceRegistry()->AddInterface(base::BindRepeating(
       &RenderThreadImpl::OnRendererInterfaceReceiver, base::Unretained(this)));
 
   const base::CommandLine& command_line =
@@ -783,10 +773,6 @@ void RenderThreadImpl::Init() {
 #endif
 
   process_foregrounded_count_ = 0;
-  needs_to_record_first_active_paint_ = false;
-  was_backgrounded_time_ = base::TimeTicks::Min();
-
-  BindHostReceiver(frame_sink_provider_.BindNewPipeAndPassReceiver());
 
   if (!is_gpu_compositing_disabled_) {
     BindHostReceiver(compositing_mode_reporter_.BindNewPipeAndPassReceiver());
@@ -942,6 +928,14 @@ int RenderThreadImpl::GenerateRoutingID() {
   return routing_id;
 }
 
+bool RenderThreadImpl::GenerateFrameRoutingID(
+    int32_t& routing_id,
+    base::UnguessableToken& frame_token,
+    base::UnguessableToken& devtools_frame_token) {
+  return render_message_filter()->GenerateFrameRoutingID(
+      &routing_id, &frame_token, &devtools_frame_token);
+}
+
 void RenderThreadImpl::AddFilter(IPC::MessageFilter* filter) {
   channel()->AddFilter(filter);
 }
@@ -989,16 +983,6 @@ RenderThreadImpl::CreateVideoFrameCompositorTaskRunner() {
   }
 
   return video_frame_compositor_task_runner_;
-}
-
-mojom::RouteProvider* RenderThreadImpl::GetRemoteRouteProvider(
-    util::PassKey<AgentSchedulingGroup>) {
-  if (!remote_route_provider_) {
-    DCHECK(GetChannel());
-    GetChannel()->GetRemoteAssociatedInterface(&remote_route_provider_);
-  }
-
-  return remote_route_provider_.get();
 }
 
 void RenderThreadImpl::InitializeWebKit(mojo::BinderMap* binders) {
@@ -1074,6 +1058,8 @@ void RenderThreadImpl::RegisterSchemes() {
       chrome_untrusted_scheme);
   WebSecurityPolicy::RegisterURLSchemeAsSupportingFetchAPI(
       chrome_untrusted_scheme);
+  WebSecurityPolicy::RegisterURLSchemeAsAllowingWasmEvalCSP(
+      chrome_untrusted_scheme);
 
   // devtools:
   WebString devtools_scheme(WebString::FromASCII(kChromeDevToolsScheme));
@@ -1109,13 +1095,6 @@ void RenderThreadImpl::RegisterExtension(
 int RenderThreadImpl::PostTaskToAllWebWorkers(base::RepeatingClosure closure) {
   return WorkerThreadRegistry::Instance()->PostTaskToAllThreads(
       std::move(closure));
-}
-
-bool RenderThreadImpl::ResolveProxy(const GURL& url, std::string* proxy_list) {
-  base::Optional<std::string> result;
-  GetRendererHost()->ResolveProxy(url, &result);
-  *proxy_list = result.value_or(std::string());
-  return result.has_value();
 }
 
 media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
@@ -1416,6 +1395,12 @@ bool RenderThreadImpl::IsScrollAnimatorEnabled() {
   return is_scroll_animator_enabled_;
 }
 
+void RenderThreadImpl::SetScrollAnimatorEnabled(
+    bool enable_scroll_animator,
+    util::PassKey<AgentSchedulingGroup>) {
+  is_scroll_animator_enabled_ = enable_scroll_animator;
+}
+
 std::unique_ptr<cc::UkmRecorderFactory>
 RenderThreadImpl::CreateUkmRecorderFactory() {
   return std::make_unique<UkmRecorderFactoryImpl>(child_process_host());
@@ -1646,8 +1631,6 @@ void RenderThreadImpl::OnRecordMetricsForBackgroundedRendererPurgeTimerExpired(
 }
 
 void RenderThreadImpl::RecordMetricsForBackgroundedRendererPurge() {
-  needs_to_record_first_active_paint_ = true;
-
   RendererMemoryMetrics memory_metrics;
   if (!GetRendererMemoryMetrics(&memory_metrics))
     return;
@@ -1691,172 +1674,6 @@ scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync() {
   return gpu_channel;
 }
 
-void RenderThreadImpl::RequestNewLayerTreeFrameSink(
-    RenderWidget* render_widget,
-    const GURL& url,
-    LayerTreeFrameSinkCallback callback,
-    const char* client_name) {
-  const bool for_web_tests = blink::WebTestMode();
-  // Misconfigured bots (eg. crbug.com/780757) could run web tests on a
-  // machine where gpu compositing doesn't work. Don't crash in that case.
-  if (for_web_tests && is_gpu_compositing_disabled_) {
-    LOG(FATAL) << "Web tests require gpu compositing, but it is disabled.";
-    return;
-  }
-
-  // TODO(jonross): Have this generated by the LayerTreeFrameSink itself, which
-  // would then handle binding.
-  mojo::PendingRemote<cc::mojom::RenderFrameMetadataObserver>
-      render_frame_metadata_observer_remote;
-  mojo::PendingRemote<cc::mojom::RenderFrameMetadataObserverClient>
-      render_frame_metadata_client_remote;
-  mojo::PendingReceiver<cc::mojom::RenderFrameMetadataObserverClient>
-      render_frame_metadata_observer_client_receiver =
-          render_frame_metadata_client_remote.InitWithNewPipeAndPassReceiver();
-  auto render_frame_metadata_observer =
-      std::make_unique<RenderFrameMetadataObserverImpl>(
-          render_frame_metadata_observer_remote
-              .InitWithNewPipeAndPassReceiver(),
-          std::move(render_frame_metadata_client_remote));
-
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams params;
-  params.compositor_task_runner = compositor_task_runner_;
-  if (for_web_tests && !compositor_task_runner_) {
-    // The frame sink provider expects a compositor task runner, but we might
-    // not have that if we're running web tests in single threaded mode.
-    // Set it to be our thread's task runner instead.
-    params.compositor_task_runner = main_thread_compositor_task_runner_;
-  }
-
-  // The renderer runs animations and layout for animate_only BeginFrames.
-  params.wants_animate_only_begin_frames = true;
-
-  // In disable frame rate limit mode, also let the renderer tick as fast as it
-  // can. The top level begin frame source will also be running as a back to
-  // back begin frame source, but using a synthetic begin frame source here
-  // reduces latency when in this mode (at least for frames starting--it
-  // potentially increases it for input on the other hand.)
-  if (command_line.HasSwitch(switches::kDisableFrameRateLimit))
-    params.synthetic_begin_frame_source = CreateSyntheticBeginFrameSource();
-
-  params.client_name = client_name;
-
-  mojo::PendingReceiver<viz::mojom::CompositorFrameSink>
-      compositor_frame_sink_receiver = params.pipes.compositor_frame_sink_remote
-                                           .InitWithNewPipeAndPassReceiver();
-  mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient>
-      compositor_frame_sink_client;
-  params.pipes.client_receiver =
-      compositor_frame_sink_client.InitWithNewPipeAndPassReceiver();
-
-  if (is_gpu_compositing_disabled_) {
-    DCHECK(!for_web_tests);
-    frame_sink_provider_->CreateForWidget(
-        render_widget->routing_id(), std::move(compositor_frame_sink_receiver),
-        std::move(compositor_frame_sink_client));
-    frame_sink_provider_->RegisterRenderFrameMetadataObserver(
-        render_widget->routing_id(),
-        std::move(render_frame_metadata_observer_client_receiver),
-        std::move(render_frame_metadata_observer_remote));
-    std::move(callback).Run(
-        std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
-            nullptr, nullptr, &params),
-        std::move(render_frame_metadata_observer));
-    return;
-  }
-
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host =
-      EstablishGpuChannelSync();
-  if (!gpu_channel_host) {
-    // Wait and try again. We may hear that the compositing mode has switched
-    // to software in the meantime.
-    std::move(callback).Run(nullptr, nullptr);
-    return;
-  }
-
-  scoped_refptr<viz::RasterContextProvider> worker_context_provider =
-      SharedCompositorWorkerContextProvider(/*try_gpu_rasterization=*/true);
-  if (!worker_context_provider) {
-    // Cause the compositor to wait and try again.
-    std::move(callback).Run(nullptr, nullptr);
-    return;
-  }
-
-  // The renderer compositor context doesn't do a lot of stuff, so we don't
-  // expect it to need a lot of space for commands or transfer. Raster and
-  // uploads happen on the worker context instead.
-  gpu::SharedMemoryLimits limits = gpu::SharedMemoryLimits::ForMailboxContext();
-
-  // This is for an offscreen context for the compositor. So the default
-  // framebuffer doesn't need alpha, depth, stencil, antialiasing.
-  gpu::ContextCreationAttribs attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
-  attributes.bind_generates_resource = false;
-  attributes.lose_context_when_out_of_memory = true;
-  attributes.enable_gles2_interface = true;
-  attributes.enable_raster_interface = false;
-  attributes.enable_oop_rasterization = false;
-
-  constexpr bool automatic_flushes = false;
-  constexpr bool support_locking = false;
-  constexpr bool support_grcontext = true;
-
-  scoped_refptr<viz::ContextProviderCommandBuffer> context_provider(
-      new viz::ContextProviderCommandBuffer(
-          gpu_channel_host, GetGpuMemoryBufferManager(), kGpuStreamIdDefault,
-          kGpuStreamPriorityDefault, gpu::kNullSurfaceHandle, url,
-          automatic_flushes, support_locking, support_grcontext, limits,
-          attributes,
-          viz::command_buffer_metrics::ContextType::RENDER_COMPOSITOR));
-
-#if defined(OS_ANDROID)
-  if (GetContentClient()->UsingSynchronousCompositing()) {
-    // TODO(ericrk): Collapse with non-webview registration below.
-    if (features::IsUsingVizFrameSubmissionForWebView()) {
-      frame_sink_provider_->CreateForWidget(
-          render_widget->routing_id(),
-          std::move(compositor_frame_sink_receiver),
-          std::move(compositor_frame_sink_client));
-    }
-    frame_sink_provider_->RegisterRenderFrameMetadataObserver(
-        render_widget->routing_id(),
-        std::move(render_frame_metadata_observer_client_receiver),
-        std::move(render_frame_metadata_observer_remote));
-
-    std::move(callback).Run(
-        std::make_unique<SynchronousLayerTreeFrameSinkImpl>(
-            std::move(context_provider), std::move(worker_context_provider),
-            compositor_task_runner_, GetGpuMemoryBufferManager(),
-            sync_message_filter(), g_next_layer_tree_frame_sink_id++,
-            std::move(params.synthetic_begin_frame_source),
-            render_widget->GetWebWidget()->GetSynchronousCompositorRegistry(),
-            std::move(params.pipes.compositor_frame_sink_remote),
-            std::move(params.pipes.client_receiver)),
-        std::move(render_frame_metadata_observer));
-    return;
-  }
-#endif
-  frame_sink_provider_->CreateForWidget(
-      render_widget->routing_id(), std::move(compositor_frame_sink_receiver),
-      std::move(compositor_frame_sink_client));
-  frame_sink_provider_->RegisterRenderFrameMetadataObserver(
-      render_widget->routing_id(),
-      std::move(render_frame_metadata_observer_client_receiver),
-      std::move(render_frame_metadata_observer_remote));
-  params.gpu_memory_buffer_manager = GetGpuMemoryBufferManager();
-  std::move(callback).Run(
-      std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
-          std::move(context_provider), std::move(worker_context_provider),
-          &params),
-      std::move(render_frame_metadata_observer));
-}
-
 blink::AssociatedInterfaceRegistry*
 RenderThreadImpl::GetAssociatedInterfaceRegistry() {
   return &associated_interfaces_;
@@ -1870,64 +1687,6 @@ mojom::RenderMessageFilter* RenderThreadImpl::render_message_filter() {
 
 gpu::GpuChannelHost* RenderThreadImpl::GetGpuChannel() {
   return gpu_->GetGpuChannel().get();
-}
-
-void RenderThreadImpl::CreateView(mojom::CreateViewParamsPtr params,
-                                  PassKey<AgentSchedulingGroup>) {
-  CompositorDependencies* compositor_deps = this;
-  is_scroll_animator_enabled_ = params->web_preferences.enable_scroll_animator;
-  // TODO(crbug.com/1111231): For as long as views are created via the
-  // `Renderer` interface (as opposed to `AgentSchedulingGroup`), we will always
-  // have *exactly one* `AgentSchedulingGroup` in the process.
-  DCHECK_EQ(agent_scheduling_groups_.size(), 1ul);
-  AgentSchedulingGroup& agent_scheduling_group =
-      *agent_scheduling_groups_.begin()->get();
-
-  RenderViewImpl::Create(agent_scheduling_group, compositor_deps,
-                         std::move(params), RenderWidget::ShowCallback(),
-                         GetWebMainThreadScheduler()->DefaultTaskRunner());
-}
-
-void RenderThreadImpl::DestroyView(int32_t view_id,
-                                   PassKey<AgentSchedulingGroup>) {
-  RenderViewImpl* view = RenderViewImpl::FromRoutingID(view_id);
-  DCHECK(view);
-
-  // This IPC can be called from re-entrant contexts. We can't destroy a
-  // RenderViewImpl while references still exist on the stack, so we dispatch a
-  // non-nestable task. This method is called exactly once by the browser
-  // process, and is used to release ownership of the corresponding
-  // RenderViewImpl instance. https://crbug.com/1000035.
-  base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
-      FROM_HERE,
-      base::BindOnce(&RenderViewImpl::Destroy, base::Unretained(view)));
-}
-
-void RenderThreadImpl::CreateFrame(mojom::CreateFrameParamsPtr params,
-                                   PassKey<AgentSchedulingGroup>) {
-  CompositorDependencies* compositor_deps = this;
-  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
-      interface_provider(
-          std::move(params->interface_bundle->interface_provider));
-  mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
-      browser_interface_broker(
-          std::move(params->interface_bundle->browser_interface_broker));
-  // TODO(crbug.com/1111231): For as long as frames are created via the
-  // `Renderer` interface (as opposed to `AgentSchedulingGroup`), we will always
-  // have *exactly one* `AgentSchedulingGroup` in the process.
-  DCHECK_EQ(agent_scheduling_groups_.size(), 1ul);
-  AgentSchedulingGroup& agent_scheduling_group =
-      *agent_scheduling_groups_.begin()->get();
-
-  RenderFrameImpl::CreateFrame(
-      agent_scheduling_group, params->routing_id, std::move(interface_provider),
-      std::move(browser_interface_broker), params->previous_routing_id,
-      params->opener_frame_token, params->parent_routing_id,
-      params->previous_sibling_routing_id, params->frame_token,
-      params->devtools_frame_token, params->replication_state, compositor_deps,
-      std::move(params->widget_params),
-      std::move(params->frame_owner_properties),
-      params->has_committed_real_load);
 }
 
 void RenderThreadImpl::CreateAgentSchedulingGroup(
@@ -1947,28 +1706,6 @@ void RenderThreadImpl::CreateAssociatedAgentSchedulingGroup(
   agent_scheduling_groups_.emplace(std::make_unique<AgentSchedulingGroup>(
       *this, std::move(agent_scheduling_group_host),
       std::move(agent_scheduling_group)));
-}
-
-void RenderThreadImpl::CreateFrameProxy(
-    int32_t routing_id,
-    int32_t render_view_routing_id,
-    const base::Optional<base::UnguessableToken>& opener_frame_token,
-    int32_t parent_routing_id,
-    const FrameReplicationState& replicated_state,
-    const base::UnguessableToken& frame_token,
-    const base::UnguessableToken& devtools_frame_token,
-    PassKey<AgentSchedulingGroup>) {
-  // TODO(crbug.com/1111231): For as long as frame proxies are created via the
-  // `Renderer` interface (as opposed to `AgentSchedulingGroup`), we will always
-  // have *exactly one* `AgentSchedulingGroup` in the process.
-  DCHECK_EQ(agent_scheduling_groups_.size(), 1ul);
-  AgentSchedulingGroup& agent_scheduling_group =
-      *agent_scheduling_groups_.begin()->get();
-
-  RenderFrameProxy::CreateFrameProxy(agent_scheduling_group, routing_id,
-                                     render_view_routing_id, opener_frame_token,
-                                     parent_routing_id, replicated_state,
-                                     frame_token, devtools_frame_token);
 }
 
 void RenderThreadImpl::OnNetworkConnectionChanged(
@@ -2088,26 +1825,6 @@ void RenderThreadImpl::OnMemoryPressure(
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
     ReleaseFreeMemory();
   }
-}
-
-void RenderThreadImpl::GetRoute(
-    int32_t routing_id,
-    mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
-        receiver) {
-  associated_interface_provider_receivers_.Add(this, std::move(receiver),
-                                               routing_id);
-}
-
-void RenderThreadImpl::GetAssociatedInterface(
-    const std::string& name,
-    mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
-        receiver) {
-  int32_t routing_id =
-      associated_interface_provider_receivers_.current_context();
-  // We delegate to ChildThreadImpl when we actually need to communicate with
-  // IPC::Listeners, since it owns the router.
-  ChildThreadImpl::GetAssociatedInterface(routing_id, name,
-                                          std::move(receiver));
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -2235,7 +1952,6 @@ bool RenderThreadImpl::RendererIsBackgrounded() const {
 
 void RenderThreadImpl::OnRendererBackgrounded() {
   main_thread_scheduler_->SetRendererBackgrounded(true);
-  needs_to_record_first_active_paint_ = false;
   discardable_memory_allocator_->OnBackgrounded();
   GetWebMainThreadScheduler()->DefaultTaskRunner()->PostDelayedTask(
       FROM_HERE,
@@ -2255,7 +1971,6 @@ void RenderThreadImpl::OnRendererBackgrounded() {
                      base::Unretained(this), "15min",
                      process_foregrounded_count_),
       base::TimeDelta::FromMinutes(15));
-  was_backgrounded_time_ = base::TimeTicks::Now();
 }
 
 void RenderThreadImpl::OnRendererForegrounded() {
@@ -2299,31 +2014,12 @@ void RenderThreadImpl::OnSyncMemoryPressure(
       v8_memory_pressure_level);
 }
 
-void RenderThreadImpl::OnRouteProviderReceiver(
-    mojo::PendingAssociatedReceiver<mojom::RouteProvider> receiver) {
-  DCHECK(!route_provider_receiver_.is_bound());
-  route_provider_receiver_.Bind(
-      std::move(receiver),
-      GetWebMainThreadScheduler()->DeprecatedDefaultTaskRunner());
-}
-
 void RenderThreadImpl::OnRendererInterfaceReceiver(
     mojo::PendingAssociatedReceiver<mojom::Renderer> receiver) {
   DCHECK(!renderer_receiver_.is_bound());
   renderer_receiver_.Bind(
       std::move(receiver),
       GetWebMainThreadScheduler()->DeprecatedDefaultTaskRunner());
-}
-
-bool RenderThreadImpl::NeedsToRecordFirstActivePaint(
-    int ttfap_metric_type) const {
-  if (ttfap_metric_type == RenderWidget::TTFAP_AFTER_PURGED)
-    return needs_to_record_first_active_paint_;
-
-  if (was_backgrounded_time_.is_min())
-    return false;
-  base::TimeDelta passed = base::TimeTicks::Now() - was_backgrounded_time_;
-  return passed.InMinutes() >= 5;
 }
 
 void RenderThreadImpl::SetRenderingColorSpace(
@@ -2344,8 +2040,7 @@ RenderThreadImpl::UnfreezableMessageFilter::UnfreezableMessageFilter(
 // Called on the I/O thread.
 bool RenderThreadImpl::UnfreezableMessageFilter::OnMessageReceived(
     const IPC::Message& message) {
-  if ((IPC_MESSAGE_CLASS(message) == UnfreezableFrameMsgStart) ||
-      (IPC_MESSAGE_CLASS(message) == PageMsgStart)) {
+  if ((IPC_MESSAGE_CLASS(message) == UnfreezableFrameMsgStart)) {
     auto task_runner = GetUnfreezableTaskRunner(message.routing_id());
     if (task_runner) {
       return task_runner->PostTask(

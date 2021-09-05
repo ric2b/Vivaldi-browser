@@ -5,5 +5,4 @@
       version='@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@'
       type='win32'/>
   <file name='vivaldi_elf.dll'/>
-  <file name='WinSparkle.dll'/>
 </assembly>

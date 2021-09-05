@@ -22,11 +22,13 @@
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "chrome/common/extensions/command.h"
+#include "components/javascript_dialogs/app_modal_dialog_controller.h"
 #include "components/permissions/permission_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/session_tab_helper.h"
@@ -80,28 +82,44 @@ const int& VivaldiPrivateTabObserver::kUserDataKey =
 
 namespace tabs_private = vivaldi::tabs_private;
 
-TabsPrivateAPI::TabsPrivateAPI(content::BrowserContext* context) {}
+namespace {
 
-TabsPrivateAPI::~TabsPrivateAPI() {}
+class JSDialogObserver: public javascript_dialogs::AppModalDialogObserver {
+  public:
+  JSDialogObserver() = default;
 
-// static
-TabsPrivateAPI* TabsPrivateAPI::FromBrowserContext(
-    content::BrowserContext* browser_context) {
-  TabsPrivateAPI* api = GetFactoryInstance()->Get(browser_context);
-  DCHECK(api);
-  return api;
-}
+  // This is never called
+  ~JSDialogObserver() override = default;
 
-void TabsPrivateAPI::Shutdown() {}
+  static void Init() {
+    // There could be at max one AppModalDialogObserver, so use a static
+    // singleton for the implementation.
+    static base::NoDestructor<JSDialogObserver> instance;
+  }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<TabsPrivateAPI>>::
-    DestructorAtExit g_factory_tabs = LAZY_INSTANCE_INITIALIZER;
+  // javascript_dialogs::AppModalDialogObserver implementation
+  void Notify(javascript_dialogs::AppModalDialogController* dialog) override {
+    if (!dialog->is_before_unload_dialog())
+      return;
 
-// static
-BrowserContextKeyedAPIFactory<TabsPrivateAPI>*
-TabsPrivateAPI::GetFactoryInstance() {
-  return g_factory_tabs.Pointer();
-}
+    // We notify the UI which tab opened a beforeunload dialog so
+    // it can make the tab active.
+    int id = sessions::SessionTabHelper::IdForTab(dialog->web_contents()).id();
+    Browser* browser =
+        ::vivaldi::FindBrowserWithWebContents(dialog->web_contents());
+    int window_id = 0;
+    if (browser) {
+      window_id = browser->session_id().id();
+    }
+    ::vivaldi::BroadcastEvent(
+        vivaldi::window_private::OnBeforeUnloadDialogOpened::kEventName,
+        vivaldi::window_private::OnBeforeUnloadDialogOpened::Create(window_id,
+                                                                    id),
+        dialog->web_contents()->GetBrowserContext());
+  }
+};
+
+}  // namespace
 
 namespace {
 
@@ -159,9 +177,15 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
 
 }  // namespace
 
-void TabsPrivateAPI::TabChangedAt(content::WebContents* web_contents,
-                                  int index,
-                                  TabChangeType change_type) {
+/* static */
+void TabsPrivateAPI::Init() {
+  JSDialogObserver::Init();
+}
+
+/* static */
+void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents,
+                                     int index,
+                                     TabChangeType change_type) {
   if (!web_contents || !static_cast<content::WebContentsImpl*>(web_contents)
                             ->GetMainFrame()
                             ->GetProcess())
@@ -174,30 +198,9 @@ void TabsPrivateAPI::TabChangedAt(content::WebContents* web_contents,
   int windowId = extensions::ExtensionTabUtil::GetWindowIdOfTab(web_contents);
 
   ::vivaldi::BroadcastEvent(
-    tabs_private::OnMediaStateChanged::kEventName,
-    tabs_private::OnMediaStateChanged::Create(
-      tabId, windowId, states),
-    web_contents->GetBrowserContext());
-}
-
-void TabsPrivateAPI::Notify(
-    javascript_dialogs::AppModalDialogController* dialog) {
-  if (dialog->is_before_unload_dialog()) {
-    // We notify the UI which tab opened a beforeunload dialog so
-    // it can make the tab active.
-    int id = sessions::SessionTabHelper::IdForTab(dialog->web_contents()).id();
-    Browser* browser =
-        ::vivaldi::FindBrowserWithWebContents(dialog->web_contents());
-    int window_id = 0;
-    if (browser) {
-      window_id = browser->session_id().id();
-    }
-    ::vivaldi::BroadcastEvent(
-        vivaldi::window_private::OnBeforeUnloadDialogOpened::kEventName,
-        vivaldi::window_private::OnBeforeUnloadDialogOpened::Create(window_id,
-                                                                    id),
-        dialog->web_contents()->GetBrowserContext());
-  }
+      tabs_private::OnMediaStateChanged::kEventName,
+      tabs_private::OnMediaStateChanged::Create(tabId, windowId, states),
+      web_contents->GetBrowserContext());
 }
 
 VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
@@ -358,7 +361,7 @@ void VivaldiPrivateTabObserver::RenderViewHostChanged(
 }
 
 void VivaldiPrivateTabObserver::UpdateAllowTabCycleIntoUI() {
-  blink::mojom::RendererPreferences* render_prefs =
+  blink::RendererPreferences* render_prefs =
       web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   Profile* profile =
@@ -368,7 +371,7 @@ void VivaldiPrivateTabObserver::UpdateAllowTabCycleIntoUI() {
 }
 
 void VivaldiPrivateTabObserver::UpdateAllowAccessKeys() {
-  blink::mojom::RendererPreferences* render_prefs =
+  blink::RendererPreferences* render_prefs =
       web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   Profile* profile =
@@ -380,7 +383,7 @@ void VivaldiPrivateTabObserver::UpdateAllowAccessKeys() {
 void VivaldiPrivateTabObserver::SetShowImages(bool show_images) {
   show_images_ = show_images;
 
-  blink::mojom::RendererPreferences* render_prefs =
+  blink::RendererPreferences* render_prefs =
       web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   render_prefs->should_show_images = show_images;
@@ -390,7 +393,7 @@ void VivaldiPrivateTabObserver::SetLoadFromCacheOnly(
     bool load_from_cache_only) {
   load_from_cache_only_ = load_from_cache_only;
 
-  blink::mojom::RendererPreferences* render_prefs =
+  blink::RendererPreferences* render_prefs =
       web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   render_prefs->serve_resources_only_from_cache = load_from_cache_only;
@@ -398,7 +401,7 @@ void VivaldiPrivateTabObserver::SetLoadFromCacheOnly(
 
 void VivaldiPrivateTabObserver::SetEnablePlugins(bool enable_plugins) {
   enable_plugins_ = enable_plugins;
-  blink::mojom::RendererPreferences* render_prefs =
+  blink::RendererPreferences* render_prefs =
       web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
   render_prefs->should_enable_plugin_content = enable_plugins;
@@ -427,7 +430,7 @@ void VivaldiPrivateTabObserver::SetMuted(bool mute) {
 }
 
 void VivaldiPrivateTabObserver::CommitSettings() {
-  blink::mojom::RendererPreferences* render_prefs =
+  blink::RendererPreferences* render_prefs =
       web_contents()->GetMutableRendererPrefs();
   DCHECK(render_prefs);
 
@@ -485,7 +488,9 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
   }
 }
 
-bool VivaldiPrivateTabObserver::OnMessageReceived(const IPC::Message& message) {
+bool VivaldiPrivateTabObserver::OnMessageReceived(
+    const IPC::Message& message,
+    content::RenderFrameHost* render_frame_host) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(VivaldiPrivateTabObserver, message)
     IPC_MESSAGE_HANDLER(VivaldiViewHostMsg_GetAccessKeysForPage_ACK,
@@ -508,8 +513,8 @@ void VivaldiPrivateTabObserver::DidFinishLoad(
 
 void VivaldiPrivateTabObserver::GetAccessKeys(AccessKeysCallback callback) {
   access_keys_callback_ = std::move(callback);
-  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
-  rvh->Send(new VivaldiViewMsg_GetAccessKeysForPage(rvh->GetRoutingID()));
+  content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
+  rfh->Send(new VivaldiViewMsg_GetAccessKeysForPage(rfh->GetRoutingID()));
 }
 
 void VivaldiPrivateTabObserver::OnGetAccessKeysForPageResponse(
@@ -522,8 +527,8 @@ void VivaldiPrivateTabObserver::OnGetAccessKeysForPageResponse(
 void VivaldiPrivateTabObserver::GetScrollPosition(
     GetScrollPositionCallback callback) {
   scroll_position_callback_ = std::move(callback);
-  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
-  rvh->Send(new VivaldiViewMsg_GetScrollPosition(rvh->GetRoutingID()));
+  content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
+  rfh->Send(new VivaldiViewMsg_GetScrollPosition(rfh->GetRoutingID()));
 }
 
 void VivaldiPrivateTabObserver::OnGetScrollPositionResponse(int x, int y) {
@@ -533,16 +538,16 @@ void VivaldiPrivateTabObserver::OnGetScrollPositionResponse(int x, int y) {
 }
 
 void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
-  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
-  rvh->Send(
-      new VivaldiViewMsg_AccessKeyAction(rvh->GetRoutingID(), access_key));
+  content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
+  rfh->Send(
+      new VivaldiViewMsg_AccessKeyAction(rfh->GetRoutingID(), access_key));
 }
 
 void VivaldiPrivateTabObserver::GetSpatialNavigationRects(
     GetSpatialNavigationRectsCallback callback) {
   spatnav_callback_ = std::move(callback);
-  content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
-  rvh->Send(new VivaldiViewMsg_GetSpatialNavigationRects(rvh->GetRoutingID()));
+  content::RenderFrameHost* rfh = web_contents()->GetMainFrame();
+  rfh->Send(new VivaldiViewMsg_GetSpatialNavigationRects(rfh->GetRoutingID()));
 }
 
 void VivaldiPrivateTabObserver::OnGetSpatialNavigationRectsResponse(
@@ -646,7 +651,7 @@ VivaldiPrivateTabObserver* VivaldiPrivateTabObserver::FromTabId(
 
 namespace {
 
-content::RenderViewHost* GetFocusedRenderViewHost(ExtensionFunction* function,
+content::RenderFrameHost* GetFocusedRenderFrameHost(ExtensionFunction* function,
                                                   int tab_id,
                                                   std::string* error) {
   content::WebContents* tabstrip_contents =
@@ -661,13 +666,7 @@ content::RenderViewHost* GetFocusedRenderViewHost(ExtensionFunction* function,
     *error = "GetFocusedFrame() is null";
     return nullptr;
   }
-
-  content::RenderViewHost* rvh = tabstrip_contents->GetRenderViewHost();
-  if (!rvh) {
-    *error = "GetRenderViewHost() is null";
-    return nullptr;
-  }
-  return rvh;
+  return focused_frame;
 }
 
 }  // namespace
@@ -731,13 +730,13 @@ ExtensionFunction::ResponseAction TabsPrivateInsertTextFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
-  content::RenderViewHost* rvh =
-      GetFocusedRenderViewHost(this, params->tab_id, &error);
-  if (!rvh)
+  content::RenderFrameHost* rfh =
+      GetFocusedRenderFrameHost(this, params->tab_id, &error);
+  if (!rfh)
     return RespondNow(Error(error));
 
   base::string16 text = base::UTF8ToUTF16(params->text);
-  rvh->Send(new VivaldiMsg_InsertText(rvh->GetRoutingID(), text));
+  rfh->Send(new VivaldiMsg_InsertText(rfh->GetRoutingID(), text));
 
   return RespondNow(NoArguments());
 }
@@ -825,14 +824,14 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::string error;
-  content::RenderViewHost* rvh =
-      GetFocusedRenderViewHost(this, params->tab_id, &error);
-  if (!rvh)
+  content::RenderFrameHost* rfh =
+    GetFocusedRenderFrameHost(this, params->tab_id, &error);
+  if (!rfh)
     return RespondNow(Error(error));
 
   std::string scroll_type = params->scroll_type;
   int scroll_amount = (params->scroll_amount) ? *(params->scroll_amount): 0;
-  rvh->Send(new VivaldiViewMsg_ScrollPage(rvh->GetRoutingID(), scroll_type,
+  rfh->Send(new VivaldiViewMsg_ScrollPage(rfh->GetRoutingID(), scroll_type,
                                           scroll_amount));
 
   return RespondNow(ArgumentList(Results::Create()));
@@ -918,12 +917,12 @@ TabsPrivateActivateElementFromPointFunction::Run() {
   int modifiers = params->modifiers;
 
   std::string error;
-  content::RenderViewHost* rvh =
-      GetFocusedRenderViewHost(this, params->tab_id, &error);
-  if (!rvh)
+  content::RenderFrameHost* rfh =
+    GetFocusedRenderFrameHost(this, params->tab_id, &error);
+  if (!rfh)
     return RespondNow(Error(error));
 
-  rvh->Send(new VivaldiViewMsg_ActivateElementFromPoint(rvh->GetRoutingID(),
+  rfh->Send(new VivaldiViewMsg_ActivateElementFromPoint(rfh->GetRoutingID(),
                                                         x, y, modifiers));
 
   return RespondNow(NoArguments());

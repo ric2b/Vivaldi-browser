@@ -86,14 +86,16 @@ bool RecordingSource::UpdateAndExpandInvalidation(
 
 void RecordingSource::UpdateDisplayItemList(
     const scoped_refptr<DisplayItemList>& display_list,
-    const size_t& painter_reported_memory_usage,
     float recording_scale_factor) {
   recording_scale_factor_ = recording_scale_factor;
 
-  display_list_ = display_list;
-  painter_reported_memory_usage_ = painter_reported_memory_usage;
-
-  FinishDisplayItemListUpdate();
+  if (display_list_ != display_list) {
+    display_list_ = display_list;
+    // Do the following only if the display list changes. Though we use
+    // recording_scale_factor in DetermineIfSolidColor(), change of it doesn't
+    // affect whether the same display list is solid or not.
+    FinishDisplayItemListUpdate();
+  }
 }
 
 gfx::Size RecordingSource::GetSize() const {
@@ -106,7 +108,6 @@ void RecordingSource::SetEmptyBounds() {
 
   recorded_viewport_ = gfx::Rect();
   display_list_ = nullptr;
-  painter_reported_memory_usage_ = 0;
 }
 
 void RecordingSource::SetSlowdownRasterScaleFactor(int factor) {

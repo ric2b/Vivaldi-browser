@@ -8,7 +8,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/web_applications/system_web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chromeos/components/file_manager/url_constants.h"
 #include "chromeos/grit/chromeos_file_manager_resources.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -20,7 +20,7 @@ std::unique_ptr<WebApplicationInfo> CreateWebAppInfoForFileManager() {
   // TODO(majewski): Fetch from a resource.
   info->title = base::UTF8ToUTF16("File Manager");
   web_app::CreateIconInfoForSystemWebApp(
-      info->start_url, {{"icon192.png", 192, IDR_FILE_MANAGER_ICON_192}},
+      info->start_url, {{"icon192.png", 192, IDR_FILE_MANAGER_SWA_ICON_192}},
       *info);
   info->theme_color = 0xFF4285F4;
   info->background_color = 0xFFFFFFFF;

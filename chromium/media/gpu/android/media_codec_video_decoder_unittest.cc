@@ -6,7 +6,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -963,7 +963,7 @@ TEST_P(MediaCodecVideoDecoderVp9Test, ColorSpaceIsIncludedInCodecConfig) {
 
 TEST_P(MediaCodecVideoDecoderVp9Test, HdrMetadataIsIncludedInCodecConfig) {
   VideoDecoderConfig config = TestVideoConfig::Normal(kCodecVP9);
-  gl::HDRMetadata hdr_metadata;
+  gfx::HDRMetadata hdr_metadata;
   hdr_metadata.max_frame_average_light_level = 123;
   hdr_metadata.max_content_light_level = 456;
   hdr_metadata.mastering_metadata.primary_r.set_x(0.1f);

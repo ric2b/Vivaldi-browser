@@ -116,6 +116,7 @@ public class ChromeProvidedSharingOptionsProviderTest {
 
         assertCorrectModelsAreInTheRightOrder(propertyModels,
                 ImmutableList.of(mActivity.getResources().getString(R.string.sharing_screenshot),
+                        mActivity.getResources().getString(R.string.sharing_copy_url),
                         mActivity.getResources().getString(
                                 R.string.send_tab_to_self_share_activity_title),
                         mActivity.getResources().getString(R.string.qr_code_share_icon_label)));
@@ -133,8 +134,9 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES, /*isMultiWindow=*/false);
 
         assertCorrectModelsAreInTheRightOrder(propertyModels,
-                ImmutableList.of(mActivity.getResources().getString(
-                        R.string.send_tab_to_self_share_activity_title)));
+                ImmutableList.of(mActivity.getResources().getString(R.string.sharing_copy_url),
+                        mActivity.getResources().getString(
+                                R.string.send_tab_to_self_share_activity_title)));
     }
 
     @Test
@@ -149,8 +151,9 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES, /*isMultiWindow=*/false);
 
         assertCorrectModelsAreInTheRightOrder(propertyModels,
-                ImmutableList.of(mActivity.getResources().getString(
-                                         R.string.send_tab_to_self_share_activity_title),
+                ImmutableList.of(mActivity.getResources().getString(R.string.sharing_copy_url),
+                        mActivity.getResources().getString(
+                                R.string.send_tab_to_self_share_activity_title),
                         mActivity.getResources().getString(R.string.print_share_activity_title)));
     }
 
@@ -248,8 +251,9 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES, /*isMultiWindow=*/true);
 
         assertCorrectModelsAreInTheRightOrder(propertyModels,
-                ImmutableList.of(mActivity.getResources().getString(
-                        R.string.send_tab_to_self_share_activity_title)));
+                ImmutableList.of(mActivity.getResources().getString(R.string.sharing_copy_url),
+                        mActivity.getResources().getString(
+                                R.string.send_tab_to_self_share_activity_title)));
     }
 
     @Test
@@ -295,9 +299,11 @@ public class ChromeProvidedSharingOptionsProviderTest {
 
     @Test
     @MediumTest
-    @Features.DisableFeatures({ChromeFeatureList.CHROME_SHARING_HUB_V15})
+    @Features.DisableFeatures(
+            {ChromeFeatureList.CHROME_SHARING_HUB_V15, ChromeFeatureList.CHROME_SHARE_SCREENSHOT})
     @Features.EnableFeatures({ChromeFeatureList.CHROME_SHARE_HIGHLIGHTS_ANDROID})
-    public void getPropertyModels_sharingHub15Disabled_noHighlights() {
+    public void
+    getPropertyModels_sharingHub15Disabled_noHighlights() {
         setUpChromeProvidedSharingOptionsProviderTest(/*printingEnabled=*/false);
         List<PropertyModel> propertyModels =
                 mChromeProvidedSharingOptionsProvider.getPropertyModels(
@@ -310,6 +316,7 @@ public class ChromeProvidedSharingOptionsProviderTest {
     @MediumTest
     @Features.EnableFeatures({ChromeFeatureList.CHROME_SHARING_HUB_V15,
             ChromeFeatureList.CHROME_SHARE_HIGHLIGHTS_ANDROID})
+    @Features.DisableFeatures({ChromeFeatureList.CHROME_SHARE_SCREENSHOT})
     public void
     getPropertyModels_sharingHub15HighlightsEnabled() {
         setUpChromeProvidedSharingOptionsProviderTest(/*printingEnabled=*/false);
@@ -375,7 +382,8 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         /*TabPrinterDelegate=*/null,
                         /*settingsLauncher=*/null,
                         /*syncState=*/false,
-                        /*shareStartTime=*/0, mShareSheetCoordinator);
+                        /*shareStartTime=*/0, mShareSheetCoordinator,
+                        /*imageEditorModuleProvider*/ null);
     }
 
     private void assertCorrectModelsAreInTheRightOrder(

@@ -9,13 +9,17 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "content/common/content_export.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/virtual_fido_device.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 #include "third_party/blink/public/mojom/webauthn/virtual_authenticator.mojom.h"
 
 namespace content {
@@ -33,7 +37,8 @@ class CONTENT_EXPORT VirtualAuthenticator
                        device::FidoTransportProtocol transport,
                        device::AuthenticatorAttachment attachment,
                        bool has_resident_key,
-                       bool has_user_verification);
+                       bool has_user_verification,
+                       bool has_large_blob);
   ~VirtualAuthenticator() override;
 
   void AddReceiver(
@@ -48,14 +53,14 @@ class CONTENT_EXPORT VirtualAuthenticator
   // false otherwise.
   bool AddRegistration(std::vector<uint8_t> key_handle,
                        const std::string& rp_id,
-                       const std::vector<uint8_t>& private_key,
+                       base::span<const uint8_t> private_key,
                        int32_t counter);
 
   // Register a new resident credential. Returns true if the registration was
   // successful, false otherwise.
   bool AddResidentRegistration(std::vector<uint8_t> key_handle,
                                std::string rp_id,
-                               const std::vector<uint8_t>& private_key,
+                               base::span<const uint8_t> private_key,
                                int32_t counter,
                                std::vector<uint8_t> user_handle);
 
@@ -94,6 +99,13 @@ class CONTENT_EXPORT VirtualAuthenticator
   // this method can be called any number of times.
   std::unique_ptr<device::FidoDevice> ConstructDevice();
 
+  // blink::test::mojom::VirtualAuthenticator:
+  void GetLargeBlob(const std::vector<uint8_t>& key_handle,
+                    GetLargeBlobCallback callback) override;
+  void SetLargeBlob(const std::vector<uint8_t>& key_handle,
+                    const std::vector<uint8_t>& blob,
+                    SetLargeBlobCallback callback) override;
+
  protected:
   // blink::test::mojom::VirtualAuthenticator:
   void GetUniqueId(GetUniqueIdCallback callback) override;
@@ -109,16 +121,28 @@ class CONTENT_EXPORT VirtualAuthenticator
                        SetUserVerifiedCallback callback) override;
 
  private:
+  void OnLargeBlobUncompressed(
+      GetLargeBlobCallback callback,
+      data_decoder::DataDecoder::ResultOrError<mojo_base::BigBuffer> result);
+  void OnLargeBlobCompressed(
+      base::span<const uint8_t> key_handle,
+      SetLargeBlobCallback callback,
+      data_decoder::DataDecoder::ResultOrError<mojo_base::BigBuffer> result);
+
   const device::ProtocolVersion protocol_;
   const device::Ctap2Version ctap2_version_;
   const device::AuthenticatorAttachment attachment_;
   const bool has_resident_key_;
   const bool has_user_verification_;
+  const bool has_large_blob_;
   bool is_user_verified_ = true;
   const std::string unique_id_;
   bool is_user_present_;
+  data_decoder::DataDecoder data_decoder_;
   scoped_refptr<device::VirtualFidoDevice::State> state_;
   mojo::ReceiverSet<blink::test::mojom::VirtualAuthenticator> receiver_set_;
+
+  base::WeakPtrFactory<VirtualAuthenticator> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(VirtualAuthenticator);
 };

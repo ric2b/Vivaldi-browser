@@ -14,7 +14,6 @@
 #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
-#include "chrome/browser/ui/views/profiles/badged_profile_photo.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -22,9 +21,13 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/favicon_size.h"
+#include "ui/gfx/image/canvas_image_source.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
+#include "ui/gfx/vector_icon_types.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/controls/color_tracking_icon_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/layout_provider.h"
@@ -33,54 +36,63 @@
 
 namespace {
 
-// The space between the right/bottom edge of the badge and the
-// right/bottom edge of the main icon.
-constexpr int kBadgeSpacing = 4;
-constexpr int kBadgeBorderWidth = 2;
-constexpr int kImageSize = BadgedProfilePhoto::kImageSize;
-// Width and Height of the badged icon.
-constexpr int kBadgedProfilePhotoSize = kImageSize + kBadgeSpacing;
+constexpr int kImageSize = 48;
 
-// An images view with an empty space for the badge.
-class ImageViewWithPlaceForBadge : public views::ImageView {
-  // views::ImageView
-  void OnPaint(gfx::Canvas* canvas) override {
-    const int kBadgeIconSize = gfx::kFaviconSize;
-    // Remove the part of the ImageView that contains the badge.
-    SkPath mask;
-    mask.addCircle(
-        /*x=*/GetMirroredXInView(kBadgedProfilePhotoSize - kBadgeIconSize / 2),
-        /*y=*/kBadgedProfilePhotoSize - kBadgeIconSize / 2,
-        /*radius=*/kBadgeIconSize / 2 + kBadgeBorderWidth);
-    mask.toggleInverseFillType();
-    canvas->ClipPath(mask, true);
-    ImageView::OnPaint(canvas);
-  }
-};
-
-// An image view that shows a vector icon and tracks changes in the theme.
-class VectorIconView : public ImageViewWithPlaceForBadge {
+// An image source that adds a circular border and an optional circular
+// background to the given image.
+class BackgroundBorderAdderImageSource : public gfx::CanvasImageSource {
  public:
-  explicit VectorIconView(const gfx::VectorIcon& icon, int size)
-      : icon_(icon), size_(size) {}
+  BackgroundBorderAdderImageSource(const gfx::ImageSkia& image,
+                                   bool add_background,
+                                   base::Optional<SkColor> background_color,
+                                   SkColor border_color,
+                                   int radius)
+      : gfx::CanvasImageSource(gfx::Size(radius, radius)),
+        image_(image),
+        add_background_(add_background),
+        background_color_(background_color),
+        border_color_(border_color) {}
+  ~BackgroundBorderAdderImageSource() override = default;
 
-  // views::ImageView
-  void OnThemeChanged() override {
-    ImageView::OnThemeChanged();
-    const SkColor color = GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_DefaultIconColor);
-    SetImage(gfx::CreateVectorIcon(icon_, size_, color));
-    SizeToPreferredSize();
-  }
+  void Draw(gfx::Canvas* canvas) override;
 
  private:
-  const gfx::VectorIcon& icon_;
-  const int size_;
+  const gfx::ImageSkia image_;
+  const bool add_background_;
+  const base::Optional<SkColor> background_color_;
+  const SkColor border_color_;
 };
+
+void BackgroundBorderAdderImageSource::Draw(gfx::Canvas* canvas) {
+  constexpr int kBorderThickness = 1;
+  float radius = size().width() / 2.0f;
+  float half_thickness = kBorderThickness / 2.0f;
+  gfx::SizeF size_f(size());
+  gfx::RectF bounds(size_f);
+  bounds.Inset(half_thickness, half_thickness);
+  // Draw the background
+  if (add_background_) {
+    DCHECK(background_color_);
+    cc::PaintFlags background_flags;
+    background_flags.setStyle(cc::PaintFlags::kFill_Style);
+    background_flags.setAntiAlias(true);
+    background_flags.setColor(background_color_.value());
+    canvas->DrawRoundRect(bounds, radius, background_flags);
+  }
+  // Draw the image
+  canvas->DrawImageInt(image_, (size().width() - image_.width()) / 2,
+                       (size().height() - image_.height()) / 2);
+  // Draw the border
+  cc::PaintFlags border_flags;
+  border_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  border_flags.setAntiAlias(true);
+  border_flags.setColor(border_color_);
+  canvas->DrawRoundRect(bounds, radius, border_flags);
+}
 
 // A class represting an image with a badge. By default, the image is the globe
 // icon. However, badge could be updated via the UpdateBadge() method.
-class ImageWithBadge : public views::View {
+class ImageWithBadge : public views::ImageView {
  public:
   // Constructs a View hierarchy with the a badge positioned in the bottom-right
   // corner of |main_image|. In RTL mode the badge is positioned in the
@@ -89,52 +101,83 @@ class ImageWithBadge : public views::View {
   explicit ImageWithBadge(const gfx::VectorIcon& main_image);
   ~ImageWithBadge() override = default;
 
+  // views::ImageView:
+  void OnThemeChanged() override;
+
   void UpdateBadge(const gfx::ImageSkia& badge_image);
 
  private:
-  // Adds a default badge of "globe" icon.
-  void AddDefaultBadge();
+  gfx::ImageSkia GetMainImage();
+  gfx::ImageSkia GetBadge();
+  void Render();
 
-  views::ImageView* badge_view_;
+  const gfx::VectorIcon* main_vector_icon_ = nullptr;
+  base::Optional<gfx::ImageSkia> main_image_skia_;
+  base::Optional<gfx::ImageSkia> badge_image_skia_;
 };
 
-ImageWithBadge::ImageWithBadge(const gfx::ImageSkia& main_image) {
-  SetCanProcessEventsWithinSubtree(false);
-  auto main_view = std::make_unique<ImageViewWithPlaceForBadge>();
-  main_view->SetImage(main_image);
-  main_view->SizeToPreferredSize();
-  AddChildView(std::move(main_view));
-  AddDefaultBadge();
-}
+ImageWithBadge::ImageWithBadge(const gfx::ImageSkia& main_image)
+    : main_image_skia_(main_image) {}
 
-ImageWithBadge::ImageWithBadge(const gfx::VectorIcon& main_image) {
-  SetCanProcessEventsWithinSubtree(false);
-  auto main_view = std::make_unique<VectorIconView>(main_image, kImageSize);
-  main_view->SizeToPreferredSize();
-  AddChildView(std::move(main_view));
-  AddDefaultBadge();
-}
+ImageWithBadge::ImageWithBadge(const gfx::VectorIcon& main_image)
+    : main_vector_icon_(&main_image) {}
 
-void ImageWithBadge::AddDefaultBadge() {
-  const int kBadgeIconSize = gfx::kFaviconSize;
-  // Use a Globe icon as the default badge.
-  auto badge_view =
-      std::make_unique<VectorIconView>(kGlobeIcon, kBadgeIconSize);
-  badge_view->SetPosition(gfx::Point(kBadgedProfilePhotoSize - kBadgeIconSize,
-                                     kBadgedProfilePhotoSize - kBadgeIconSize));
-  badge_view->SizeToPreferredSize();
-  badge_view_ = AddChildView(std::move(badge_view));
-
-  SetPreferredSize(gfx::Size(kBadgedProfilePhotoSize, kBadgedProfilePhotoSize));
+void ImageWithBadge::OnThemeChanged() {
+  ImageView::OnThemeChanged();
+  Render();
 }
 
 void ImageWithBadge::UpdateBadge(const gfx::ImageSkia& badge_image) {
+  badge_image_skia_ = badge_image;
+  Render();
+}
+
+gfx::ImageSkia ImageWithBadge::GetMainImage() {
+  if (main_image_skia_)
+    return main_image_skia_.value();
+  DCHECK(main_vector_icon_);
+  const SkColor color = GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_DefaultIconColor);
+  return gfx::CreateVectorIcon(*main_vector_icon_, kImageSize, color);
+}
+
+gfx::ImageSkia ImageWithBadge::GetBadge() {
+  if (badge_image_skia_)
+    return badge_image_skia_.value();
+  // If there is no badge set, fallback to the default globe icon.
+  const SkColor color = GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_DefaultIconColor);
+  return gfx::CreateVectorIcon(kGlobeIcon, gfx::kFaviconSize, color);
+}
+
+void ImageWithBadge::Render() {
+  constexpr int kBadgePadding = 6;
+  const SkColor kBackgroundColor = GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_BubbleBackground);
+  // Make the border color a softer version of the icon color.
+  const SkColor kBorderColor =
+      SkColorSetA(GetNativeTheme()->GetSystemColor(
+                      ui::NativeTheme::kColorId_DefaultIconColor),
+                  96);
+
   gfx::Image rounded_badge = profiles::GetSizedAvatarIcon(
-      gfx::Image(badge_image),
+      gfx::Image(GetBadge()),
       /*is_rectangle=*/true, /*width=*/gfx::kFaviconSize,
       /*height=*/gfx::kFaviconSize, profiles::SHAPE_CIRCLE);
-  badge_view_->SetImage(rounded_badge.ToImageSkia());
-  badge_view_->SizeToPreferredSize();
+
+  gfx::ImageSkia rounded_badge_with_background_and_border =
+      gfx::CanvasImageSource::MakeImageSkia<BackgroundBorderAdderImageSource>(
+          *rounded_badge.ToImageSkia(), /*add_background=*/true,
+          kBackgroundColor, kBorderColor, gfx::kFaviconSize + kBadgePadding);
+
+  gfx::ImageSkia main_image_with_border =
+      gfx::CanvasImageSource::MakeImageSkia<BackgroundBorderAdderImageSource>(
+          GetMainImage(), /*add_background=*/false,
+          /*background_color=*/base::nullopt, kBorderColor, kImageSize);
+
+  gfx::ImageSkia badged_image = gfx::ImageSkiaOperations::CreateIconWithBadge(
+      main_image_with_border, rounded_badge_with_background_and_border);
+  SetImage(badged_image);
 }
 
 std::unique_ptr<views::View> CreateHeaderImage(int image_id) {
@@ -146,7 +189,7 @@ std::unique_ptr<views::View> CreateHeaderImage(int image_id) {
     preferred_size = gfx::ScaleToRoundedSize(
         preferred_size,
         static_cast<float>(ChromeLayoutProvider::Get()->GetDistanceMetric(
-            DISTANCE_BUBBLE_PREFERRED_WIDTH)) /
+            views::DISTANCE_BUBBLE_PREFERRED_WIDTH)) /
             preferred_size.width());
     image_view->SetImageSize(preferred_size);
   }
@@ -186,13 +229,19 @@ MoveToAccountStoreBubbleView::MovingBannerView::MovingBannerView(
   SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetMainAxisAlignment(views::LayoutAlignment::kCenter)
-      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
+      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
+      .SetDefault(
+          views::kMarginsKey,
+          gfx::Insets(
+              /*vertical=*/0,
+              /*horizontal=*/ChromeLayoutProvider::Get()->GetDistanceMetric(
+                  views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
 
   from_view = AddChildView(std::move(from_image));
 
-  auto arrow_view = std::make_unique<VectorIconView>(
-      kBookmarkbarTouchOverflowIcon, kImageSize);
-  arrow_view->EnableCanvasFlippingForRTLUI(true);
+  auto arrow_view = std::make_unique<views::ColorTrackingIconView>(
+      kChevronRightIcon, gfx::kFaviconSize);
+  arrow_view->SetFlipCanvasOnPaintForRTLUI(true);
   AddChildView(std::move(arrow_view));
 
   to_view = AddChildView(std::move(to_image));
@@ -234,7 +283,7 @@ MoveToAccountStoreBubbleView::MoveToAccountStoreBubbleView(
   AddChildView(CreateDescription());
 
   auto computer_view =
-      std::make_unique<ImageWithBadge>(kComputerWithCircleBackgroundIcon);
+      std::make_unique<ImageWithBadge>(kHardwareComputerSmallIcon);
   auto avatar_view = std::make_unique<ImageWithBadge>(
       *controller_.GetProfileIcon(kImageSize).ToImageSkia());
 
@@ -275,17 +324,6 @@ void MoveToAccountStoreBubbleView::OnThemeChanged() {
       color_utils::IsDark(GetBubbleFrameView()->GetBackgroundColor())
           ? IDR_SAVE_PASSWORD_MULTI_DEVICE_DARK
           : IDR_SAVE_PASSWORD_MULTI_DEVICE));
-}
-
-gfx::Size MoveToAccountStoreBubbleView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
-bool MoveToAccountStoreBubbleView::ShouldShowCloseButton() const {
-  return true;
 }
 
 MoveToAccountStoreBubbleController*

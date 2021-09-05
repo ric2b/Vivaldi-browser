@@ -9,7 +9,7 @@
 
 #include "base/atomicops.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/cancelable_callback.h"
 #include "base/debug/debugger.h"
 #include "base/run_loop.h"
@@ -19,7 +19,7 @@
 #include "base/task/sequence_manager/time_domain.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/mock_log.h"

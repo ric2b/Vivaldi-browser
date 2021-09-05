@@ -8,24 +8,23 @@
 #include "base/feature_list.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
-#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
-#include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/subresource_filter/subresource_filter_test_harness.h"
-#include "chrome/browser/subresource_filter/test_ruleset_publisher.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
+#include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
+#include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
+#include "components/subresource_filter/content/browser/test_ruleset_publisher.h"
 #include "components/subresource_filter/core/common/activation_decision.h"
 #include "components/subresource_filter/core/common/activation_list.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
@@ -99,7 +98,8 @@ void SubresourceFilterTestHarness::SetUp() {
        subresource_filter::testing::CreateAllowlistSuffixRule(
            kDefaultAllowedSuffix)},
       &test_ruleset_pair);
-  subresource_filter::testing::TestRulesetPublisher test_ruleset_publisher;
+  subresource_filter::testing::TestRulesetPublisher test_ruleset_publisher(
+      g_browser_process->subresource_filter_ruleset_service());
   ASSERT_NO_FATAL_FAILURE(
       test_ruleset_publisher.SetRuleset(test_ruleset_pair.unindexed));
 
@@ -109,7 +109,8 @@ void SubresourceFilterTestHarness::SetUp() {
       web_contents(),
       std::make_unique<chrome::PageSpecificContentSettingsDelegate>(
           web_contents()));
-  ChromeSubresourceFilterClient::CreateForWebContents(web_contents());
+  ChromeSubresourceFilterClient::CreateThrottleManagerWithClientForWebContents(
+      web_contents());
 
   base::RunLoop().RunUntilIdle();
 }
@@ -166,7 +167,7 @@ void SubresourceFilterTestHarness::RemoveURLFromBlocklist(const GURL& url) {
   fake_safe_browsing_database_->RemoveBlocklistedUrl(url);
 }
 
-SubresourceFilterContentSettingsManager*
+subresource_filter::SubresourceFilterContentSettingsManager*
 SubresourceFilterTestHarness::GetSettingsManager() {
   return SubresourceFilterProfileContextFactory::GetForProfile(
              static_cast<Profile*>(profile()))

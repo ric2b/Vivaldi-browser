@@ -7,10 +7,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "chrome/browser/video_tutorials/internal/config.h"
 #include "chrome/browser/video_tutorials/internal/proto_conversions.h"
 #include "chrome/browser/video_tutorials/prefs.h"
+#include "chrome/browser/video_tutorials/switches.h"
 
 namespace video_tutorials {
 
@@ -20,7 +22,9 @@ TutorialServiceImpl::TutorialServiceImpl(
     PrefService* pref_service)
     : tutorial_manager_(std::move(tutorial_manager)),
       tutorial_fetcher_(std::move(tutorial_fetcher)),
-      pref_service_(pref_service) {}
+      pref_service_(pref_service) {
+  StartFetchIfNecessary();
+}
 
 TutorialServiceImpl::~TutorialServiceImpl() = default;
 
@@ -51,6 +55,8 @@ void TutorialServiceImpl::OnGetTutorials(SingleItemCallback callback,
 void TutorialServiceImpl::StartFetchIfNecessary() {
   base::Time last_update_time = pref_service_->GetTime(kLastUpdatedTimeKey);
   bool needs_update =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kVideoTutorialsInstantFetch) ||
       ((base::Time::Now() - last_update_time) > Config::GetFetchFrequency());
   if (needs_update) {
     tutorial_fetcher_->StartFetchForTutorials(base::BindOnce(
@@ -61,7 +67,8 @@ void TutorialServiceImpl::StartFetchIfNecessary() {
 void TutorialServiceImpl::OnFetchFinished(
     bool success,
     std::unique_ptr<std::string> response_body) {
-  // TODO(shaktisahu): Save tutorials to the database.
+  pref_service_->SetTime(kLastUpdatedTimeKey, base::Time::Now());
+
   if (!success || !response_body)
     return;
 
@@ -73,16 +80,14 @@ void TutorialServiceImpl::OnFetchFinished(
   auto tutorial_groups = std::make_unique<std::vector<TutorialGroup>>();
   TutorialGroupsFromServerResponseProto(&response_proto, tutorial_groups.get());
 
-  auto lambda = [](bool success) {};
-  tutorial_manager_->SaveGroups(std::move(tutorial_groups),
-                                base::BindOnce(std::move(lambda)));
+  tutorial_manager_->SaveGroups(std::move(tutorial_groups));
 }
 
-const std::vector<Language>& TutorialServiceImpl::GetSupportedLanguages() {
+const std::vector<std::string>& TutorialServiceImpl::GetSupportedLanguages() {
   return tutorial_manager_->GetSupportedLanguages();
 }
 
-std::string TutorialServiceImpl::GetPreferredLocale() {
+base::Optional<std::string> TutorialServiceImpl::GetPreferredLocale() {
   return tutorial_manager_->GetPreferredLocale();
 }
 

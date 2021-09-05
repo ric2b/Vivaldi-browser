@@ -34,8 +34,7 @@ class RegionComboboxModel : public ui::ComboboxModel {
   ~RegionComboboxModel() override;
 
   void LoadRegionData(const std::string& country_code,
-                      RegionDataLoader* region_data_loader,
-                      int64_t timeout_ms);
+                      RegionDataLoader* region_data_loader);
 
   bool IsPendingRegionDataLoad() const {
     return region_data_loader_ != nullptr;
@@ -71,6 +70,9 @@ class RegionComboboxModel : public ui::ComboboxModel {
 
   // To be called when the data for the given country code was loaded.
   base::ObserverList<ui::ComboboxModelObserver> observers_;
+
+  // Weak pointer factory.
+  base::WeakPtrFactory<RegionComboboxModel> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(RegionComboboxModel);
 };

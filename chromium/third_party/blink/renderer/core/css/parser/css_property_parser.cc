@@ -20,7 +20,6 @@
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/properties/shorthand.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 
 namespace blink {
@@ -47,7 +46,7 @@ const CSSValue* MaybeConsumeCSSWideKeyword(CSSParserTokenRange& range) {
     value = CSSInheritedValue::Create();
   if (id == CSSValueID::kUnset)
     value = cssvalue::CSSUnsetValue::Create();
-  if (RuntimeEnabledFeatures::CSSRevertEnabled() && id == CSSValueID::kRevert)
+  if (id == CSSValueID::kRevert)
     value = cssvalue::CSSRevertValue::Create();
 
   if (value)
@@ -154,8 +153,9 @@ bool CSSPropertyParser::ParseValueStart(CSSPropertyID unresolved_property,
   if (CSSVariableParser::ContainsValidVariableReferences(original_range)) {
     bool is_animation_tainted = false;
     auto* variable = MakeGarbageCollected<CSSVariableReferenceValue>(
-        CSSVariableData::Create(original_range, is_animation_tainted, true,
-                                context_->BaseURL(), context_->Charset()),
+        CSSVariableData::Create({original_range, StringView()},
+                                is_animation_tainted, true, context_->BaseURL(),
+                                context_->Charset()),
         *context_);
 
     if (is_shorthand) {

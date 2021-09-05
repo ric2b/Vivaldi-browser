@@ -5,7 +5,7 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host_common.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -148,7 +148,7 @@ void LoginDisplayHostCommon::StartKiosk(const KioskAppId& kiosk_app_id,
           << static_cast<int>(kiosk_app_id.type);
   SetStatusAreaVisible(false);
 
-  // Wait for the |CrosSettings| to become either trusted or permanently
+  // Wait for the `CrosSettings` to become either trusted or permanently
   // untrusted.
   const CrosSettingsProvider::TrustedStatus status =
       CrosSettings::Get()->PrepareTrustedValues(base::BindOnce(
@@ -158,7 +158,7 @@ void LoginDisplayHostCommon::StartKiosk(const KioskAppId& kiosk_app_id,
     return;
 
   if (status == CrosSettingsProvider::PERMANENTLY_UNTRUSTED) {
-    // If the |CrosSettings| are permanently untrusted, refuse to launch a
+    // If the `CrosSettings` are permanently untrusted, refuse to launch a
     // single-app kiosk mode session.
     LOG(ERROR) << "Login >> Refusing to launch single-app kiosk mode.";
     SetStatusAreaVisible(true);
@@ -195,8 +195,12 @@ void LoginDisplayHostCommon::StartKiosk(const KioskAppId& kiosk_app_id,
 }
 
 void LoginDisplayHostCommon::CompleteLogin(const UserContext& user_context) {
-  if (GetExistingUserController())
+  if (GetExistingUserController()) {
     GetExistingUserController()->CompleteLogin(user_context);
+  } else {
+    LOG(WARNING) << "LoginDisplayHostCommon::CompleteLogin - Failure : "
+                 << "ExistingUserController not available.";
+  }
 }
 
 void LoginDisplayHostCommon::OnGaiaScreenReady() {
@@ -320,8 +324,7 @@ void LoginDisplayHostCommon::ShowGaiaDialogCommon(
   }
 
   DCHECK(GetWizardController());
-  GaiaScreen* gaia_screen =
-      GaiaScreen::Get(GetWizardController()->screen_manager());
+  GaiaScreen* gaia_screen = GetWizardController()->GetScreen<GaiaScreen>();
   gaia_screen->LoadOnline(prefilled_account);
 
   if (chromeos::features::IsChildSpecificSigninEnabled() &&

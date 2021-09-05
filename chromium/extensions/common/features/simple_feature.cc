@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "app/vivaldi_apptools.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"

@@ -1,0 +1,34 @@
+# Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+source_set("page_actions") {
+  sources = [
+    "page_actions_directory_watcher.h",
+    "page_actions_directory_watcher.cc",
+    "page_actions_service_factory.cc",
+    "page_actions_service_factory.h",
+    "page_actions_service.cc",
+    "page_actions_service.h",
+    "page_actions_service_impl.cc",
+    "page_actions_service_impl.h",
+    "page_actions_tab_helper.cc",
+    "page_actions_tab_helper.h",
+    "page_actions_types.cc",
+    "page_actions_types.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//vivaldi/components/content_injection",
+  ]
+
+  if (is_android) {
+    sources += [
+      "page_actions_service_android.cc",
+      "page_actions_service_android.h",
+    ]
+
+    deps += [
+      "//chrome/android:jni_headers",
+    ]
+  }
+}

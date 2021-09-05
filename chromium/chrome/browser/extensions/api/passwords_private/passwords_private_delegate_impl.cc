@@ -15,14 +15,18 @@
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
+#include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/common/extensions/api/passwords_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_list_sorter.h"
 #include "components/password_manager/core/browser/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
@@ -145,6 +149,12 @@ PasswordsPrivateDelegateImpl::PasswordsPrivateDelegateImpl(Profile* profile)
     : profile_(profile),
       password_manager_presenter_(
           std::make_unique<PasswordManagerPresenter>(this)),
+      saved_passwords_presenter_(PasswordStoreFactory::GetForProfile(
+                                     profile,
+                                     ServiceAccessType::EXPLICIT_ACCESS),
+                                 AccountPasswordStoreFactory::GetForProfile(
+                                     profile,
+                                     ServiceAccessType::EXPLICIT_ACCESS)),
       password_manager_porter_(std::make_unique<PasswordManagerPorter>(
           password_manager_presenter_.get(),
           base::BindRepeating(
@@ -161,13 +171,14 @@ PasswordsPrivateDelegateImpl::PasswordsPrivateDelegateImpl(Profile* profile)
               base::BindRepeating(&PasswordsPrivateDelegateImpl::
                                       OnAccountStorageOptInStateChanged,
                                   base::Unretained(this)))),
-      password_check_delegate_(profile),
+      password_check_delegate_(profile, &saved_passwords_presenter_),
       current_entries_initialized_(false),
       current_exceptions_initialized_(false),
       is_initialized_(false),
       web_contents_(nullptr) {
   password_manager_presenter_->Initialize();
   password_manager_presenter_->UpdatePasswordLists();
+  saved_passwords_presenter_.Init();
 }
 
 PasswordsPrivateDelegateImpl::~PasswordsPrivateDelegateImpl() {}
@@ -209,9 +220,22 @@ bool PasswordsPrivateDelegateImpl::ChangeSavedPassword(
   const std::vector<std::string> sort_keys =
       GetSortKeys(password_id_generator_, ids);
 
-  return !ids.empty() && sort_keys.size() == ids.size() &&
-         password_manager_presenter_->ChangeSavedPassword(
-             sort_keys, new_username, new_password);
+  DCHECK(!sort_keys.empty());
+  if (ids.empty() || sort_keys.size() != ids.size())
+    return false;
+
+  std::vector<password_manager::PasswordForm> forms_to_change;
+
+  for (const auto& key : sort_keys) {
+    auto forms_for_key = password_manager_presenter_->GetPasswordsForKey(key);
+    if (forms_for_key.empty())
+      return false;
+    for (const auto& form : forms_for_key)
+      forms_to_change.push_back(*form);
+  }
+
+  return saved_passwords_presenter_.EditSavedPasswords(
+      forms_to_change, new_username, new_password);
 }
 
 void PasswordsPrivateDelegateImpl::RemoveSavedPasswords(
@@ -336,7 +360,8 @@ Profile* PasswordsPrivateDelegateImpl::GetProfile() {
 }
 
 void PasswordsPrivateDelegateImpl::SetPasswordList(
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list) {
+    const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
+        password_list) {
   // Create a list of PasswordUiEntry objects to send to observers.
   current_entries_.clear();
 
@@ -374,7 +399,7 @@ void PasswordsPrivateDelegateImpl::SetPasswordList(
 }
 
 void PasswordsPrivateDelegateImpl::SetPasswordExceptionList(
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+    const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
         password_exception_list) {
   // Creates a list of exceptions to send to observers.
   current_exceptions_.clear();
@@ -406,13 +431,17 @@ void PasswordsPrivateDelegateImpl::SetPasswordExceptionList(
   get_password_exception_list_callbacks_.clear();
 }
 
-void PasswordsPrivateDelegateImpl::MovePasswordToAccount(
-    int id,
+void PasswordsPrivateDelegateImpl::MovePasswordsToAccount(
+    const std::vector<int>& ids,
     content::WebContents* web_contents) {
   auto* client = ChromePasswordManagerClient::FromWebContents(web_contents);
   DCHECK(client);
-  if (const std::string* sort_key = password_id_generator_.TryGetKey(id))
-    password_manager_presenter_->MovePasswordToAccountStore(*sort_key, client);
+  std::vector<std::string> sort_keys;
+  for (int id : ids) {
+    if (const std::string* sort_key = password_id_generator_.TryGetKey(id))
+      sort_keys.push_back(*sort_key);
+  }
+  password_manager_presenter_->MovePasswordsToAccountStore(sort_keys, client);
 }
 
 void PasswordsPrivateDelegateImpl::ImportPasswords(

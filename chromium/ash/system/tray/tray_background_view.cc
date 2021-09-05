@@ -18,8 +18,6 @@
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/style/default_color_constants.h"
-#include "ash/style/default_colors.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_delegate.h"
@@ -30,7 +28,6 @@
 #include "ash/window_factory.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/scoped_observer.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
@@ -162,15 +159,16 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
   DCHECK(shelf_);
   SetNotifyEnterExitOnChild(true);
 
-  SetInkDropBaseColor(DeprecatedGetInkDropBaseColor(kDefaultShelfInkDropColor));
-  SetInkDropVisibleOpacity(
-      DeprecatedGetInkDropOpacity(kDefaultShelfInkDropOpacity));
+  auto ripple_attributes = AshColorProvider::Get()->GetRippleAttributes();
+  SetInkDropBaseColor(ripple_attributes.base_color);
+  SetInkDropVisibleOpacity(ripple_attributes.inkdrop_opacity);
 
   SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetInstallFocusRingOnFocus(true);
 
-  focus_ring()->SetColor(ShelfConfig::Get()->shelf_focus_border_color());
+  focus_ring()->SetColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
   focus_ring()->SetPathGenerator(std::make_unique<HighlightPathGenerator>(
       this, kTrayBackgroundFocusPadding));
   SetFocusPainter(nullptr);
@@ -371,12 +369,18 @@ void TrayBackgroundView::UpdateAfterStatusAreaCollapseChange() {
   views::View::SetVisible(GetEffectiveVisibility());
 }
 
-void TrayBackgroundView::UpdateAfterColorModeChange() {
-  UpdateBackground();
-  SchedulePaint();
-}
-
 void TrayBackgroundView::BubbleResized(const TrayBubbleView* bubble_view) {}
+
+void TrayBackgroundView::UpdateBackground() {
+  const int radius = ShelfConfig::Get()->control_border_radius();
+  gfx::RoundedCornersF rounded_corners = {radius, radius, radius, radius};
+  layer()->SetRoundedCornerRadius(rounded_corners);
+  layer()->SetIsFastRoundedCorner(true);
+  layer()->SetBackgroundBlur(
+      ShelfConfig::Get()->GetShelfControlButtonBlurRadius());
+  layer()->SetColor(ShelfConfig::Get()->GetShelfControlButtonColor());
+  layer()->SetClipRect(GetBackgroundBounds());
+}
 
 void TrayBackgroundView::OnImplicitAnimationsCompleted() {
   // If there is another animation in the queue, the reverse animation was
@@ -490,25 +494,12 @@ gfx::Insets TrayBackgroundView::GetBackgroundInsets() const {
   MirrorInsetsIfNecessary(&local_contents_insets);
   insets += local_contents_insets;
 
-  if (chromeos::switches::ShouldShowShelfHotseat() &&
-      Shell::Get()->tablet_mode_controller()->InTabletMode() &&
-      ShelfConfig::Get()->is_in_app()) {
+  if (Shell::Get()->IsInTabletMode() && ShelfConfig::Get()->is_in_app()) {
     insets += gfx::Insets(
         ShelfConfig::Get()->in_app_control_button_height_inset(), 0);
   }
 
   return insets;
-}
-
-void TrayBackgroundView::UpdateBackground() {
-  const int radius = ShelfConfig::Get()->control_border_radius();
-  gfx::RoundedCornersF rounded_corners = {radius, radius, radius, radius};
-  layer()->SetRoundedCornerRadius(rounded_corners);
-  layer()->SetIsFastRoundedCorner(true);
-  layer()->SetBackgroundBlur(
-      ShelfConfig::Get()->GetShelfControlButtonBlurRadius());
-  layer()->SetColor(ShelfConfig::Get()->GetShelfControlButtonColor());
-  layer()->SetClipRect(GetBackgroundBounds());
 }
 
 bool TrayBackgroundView::GetEffectiveVisibility() {

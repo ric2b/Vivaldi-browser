@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
@@ -15,6 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
+
+import org.vivaldi.browser.speeddial.SpeedDialUtils;
 
 /**
  * A class that encapsulates {@link BookmarkBridge} and provides extra features such as undo, large
@@ -120,6 +123,22 @@ public class BookmarkModel extends BookmarkBridge {
     }
 
     /**
+     * @param bookmarkId The {@link BookmarkId} for the reading list folder.
+     * @return The total number of unread reading list articles.
+     */
+    public int getUnreadCount(@NonNull BookmarkId bookmarkId) {
+        assert bookmarkId.getType() == BookmarkType.READING_LIST;
+        List<BookmarkId> children = getChildIDs(bookmarkId);
+        int unreadCount = 0;
+        for (BookmarkId child : children) {
+            BookmarkItem childItem = getBookmarkById(child);
+            if (!childItem.isRead()) unreadCount++;
+        }
+
+        return unreadCount;
+    }
+
+    /**
      * @return The id of the default folder to add bookmarks/folders to.
      */
     public BookmarkId getDefaultFolder() {
@@ -141,7 +160,10 @@ public class BookmarkModel extends BookmarkBridge {
         BookmarkId parentId = item.getParentId();
         while (parentId != null) {
             BookmarkItem parent = getBookmarkById(parentId);
-            if (parent == null || parent.isSpeeddial()) return true;
+            if (parent != null && parent.isSpeeddial()) {
+                return true;
+            } else if (parent == null)
+                return false;
             parentId = parent.getParentId();
         }
         return false;
@@ -158,15 +180,20 @@ public class BookmarkModel extends BookmarkBridge {
         List<String> titles = new ArrayList<>();
         BookmarkId trashFolderId = getTrashFolderId();
         int appendIndex = getChildCount(trashFolderId);
+        List<String> filesToDelete = new ArrayList<>();
         for (BookmarkId bookmarkId : bookmarks) {
             BookmarkItem bookmarkItem = getBookmarkById(bookmarkId);
             if (bookmarkItem == null) continue;
             titles.add(bookmarkItem.getTitle());
-            if (bookmarkItem.getParentId().equals(trashFolderId))
+            if (bookmarkItem.getParentId().equals(trashFolderId)) {
+                if (SpeedDialUtils.thumbnailsEnabled()) filesToDelete.add(bookmarkItem.getGUID());
                 deleteBookmark(bookmarkId);
-            else
+            } else
                 moveBookmark(bookmarkId, trashFolderId, appendIndex++);
         }
+
+        if (SpeedDialUtils.thumbnailsEnabled() && !filesToDelete.isEmpty())
+            SpeedDialUtils.deleteThumbnailFiles(filesToDelete);
 
         for (BookmarkDeleteObserver observer : mDeleteObservers) {
             observer.onDeleteBookmarks(titles.toArray(new String[titles.size()]), false);

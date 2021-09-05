@@ -112,19 +112,17 @@ class VIZ_CLIENT_EXPORT ClientResourceProvider {
 
   class VIZ_CLIENT_EXPORT ScopedSkSurface {
    public:
-    ScopedSkSurface(GrContext* gr_context,
+    ScopedSkSurface(GrDirectContext* gr_context,
                     sk_sp<SkColorSpace> color_space,
                     GLuint texture_id,
                     GLenum texture_target,
                     const gfx::Size& size,
                     ResourceFormat format,
-                    bool can_use_lcd_text,
+                    SkSurfaceProps surface_props,
                     int msaa_sample_count);
     ~ScopedSkSurface();
 
     SkSurface* surface() const { return surface_.get(); }
-
-    static SkSurfaceProps ComputeSurfaceProps(bool can_use_lcd_text);
 
    private:
     sk_sp<SkSurface> surface_;

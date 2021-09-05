@@ -16,6 +16,8 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -27,8 +29,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.signin.MockChangeEventChecker;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
@@ -49,14 +50,14 @@ public class SyncTest {
     @Feature({"Sync"})
     @DisabledTest(message = "crbug.com/1144221")
     public void testSignInAndOut() {
-        Account account = mSyncTestRule.setUpAccountAndSignInForTesting();
+        CoreAccountInfo accountInfo = mSyncTestRule.setUpAccountAndEnableSyncForTesting();
 
         // Signing out should disable sync.
         mSyncTestRule.signOut();
         Assert.assertFalse(SyncTestUtil.isSyncRequested());
 
         // Signing back in should re-enable sync.
-        mSyncTestRule.signinAndEnableSync(account);
+        mSyncTestRule.signinAndEnableSync(accountInfo);
         Assert.assertTrue("Sync should be re-enabled.", SyncTestUtil.isSyncActive());
     }
 
@@ -64,7 +65,7 @@ public class SyncTest {
     @LargeTest
     @Feature({"Sync"})
     public void testStopAndClear() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         CriteriaHelper.pollUiThread(
                 ()
                         -> IdentityServicesProvider.get()
@@ -96,8 +97,10 @@ public class SyncTest {
     @DisabledTest(message = "crbug.com/588050,crbug.com/595893")
     public void testRename() {
         // The two accounts object that would represent the account rename.
-        final Account oldAccount = mSyncTestRule.setUpAccountAndSignInForTesting();
-        final Account newAccount = mSyncTestRule.addAccount("test2@gmail.com");
+        final Account oldAccount = CoreAccountInfo.getAndroidAccountFrom(
+                mSyncTestRule.setUpAccountAndEnableSyncForTesting());
+        final Account newAccount =
+                CoreAccountInfo.getAndroidAccountFrom(mSyncTestRule.addAccount("test2@gmail.com"));
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             // First, we force a call to updateAccountRenameData. In the real world,
@@ -125,7 +128,8 @@ public class SyncTest {
         });
 
         CriteriaHelper.pollInstrumentationThread(() -> {
-            Criteria.checkThat(mSyncTestRule.getCurrentSignedInAccount(), Matchers.is(newAccount));
+            Criteria.checkThat(mSyncTestRule.getCurrentSignedInAccount().getEmail(),
+                    Matchers.is(newAccount.name));
         });
         SyncTestUtil.waitForSyncActive();
     }
@@ -134,10 +138,10 @@ public class SyncTest {
     @LargeTest
     @Feature({"Sync"})
     public void testStopAndStartSync() {
-        Account account = mSyncTestRule.setUpAccountAndSignInForTesting();
+        CoreAccountInfo accountInfo = mSyncTestRule.setUpAccountAndEnableSyncForTesting();
 
         mSyncTestRule.stopSync();
-        Assert.assertEquals(account, mSyncTestRule.getCurrentSignedInAccount());
+        Assert.assertEquals(accountInfo, mSyncTestRule.getCurrentSignedInAccount());
         Assert.assertFalse(SyncTestUtil.isSyncRequested());
 
         mSyncTestRule.startSyncAndWait();
@@ -147,7 +151,8 @@ public class SyncTest {
     @LargeTest
     @Feature({"Sync"})
     public void testStopAndStartSyncThroughAndroidChromeSync() {
-        Account account = mSyncTestRule.setUpAccountAndSignInForTesting();
+        Account account = CoreAccountInfo.getAndroidAccountFrom(
+                mSyncTestRule.setUpAccountAndEnableSyncForTesting());
         String authority = AndroidSyncSettings.getContractAuthority();
 
         Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
@@ -168,7 +173,7 @@ public class SyncTest {
     @Feature({"Sync"})
     @DisabledTest(message = "crbug.com/1103515")
     public void testStopAndStartSyncThroughAndroidMasterSync() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
 
         Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
         Assert.assertTrue(SyncTestUtil.isSyncRequested());
@@ -188,7 +193,8 @@ public class SyncTest {
     @Features.DisableFeatures(ChromeFeatureList.DECOUPLE_SYNC_FROM_ANDROID_MASTER_SYNC)
     @DisabledTest(message = "Test is flaky crbug.com/1100890")
     public void testReenableMasterSyncFirst() {
-        Account account = mSyncTestRule.setUpAccountAndSignInForTesting();
+        Account account = CoreAccountInfo.getAndroidAccountFrom(
+                mSyncTestRule.setUpAccountAndEnableSyncForTesting());
         String authority = AndroidSyncSettings.getContractAuthority();
 
         Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
@@ -221,7 +227,8 @@ public class SyncTest {
     @Features.DisableFeatures(ChromeFeatureList.DECOUPLE_SYNC_FROM_ANDROID_MASTER_SYNC)
     @Feature({"Sync"})
     public void testReenableChromeSyncFirst() {
-        Account account = mSyncTestRule.setUpAccountAndSignInForTesting();
+        Account account = CoreAccountInfo.getAndroidAccountFrom(
+                mSyncTestRule.setUpAccountAndEnableSyncForTesting());
         String authority = AndroidSyncSettings.getContractAuthority();
 
         Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
@@ -254,7 +261,7 @@ public class SyncTest {
     @Features.DisableFeatures(ChromeFeatureList.DECOUPLE_SYNC_FROM_ANDROID_MASTER_SYNC)
     @Feature({"Sync"})
     public void testMasterSyncBlocksSyncStart() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.stopSync();
         Assert.assertFalse(SyncTestUtil.isSyncRequested());
 

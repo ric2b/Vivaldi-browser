@@ -529,10 +529,9 @@ void CalendarEventCreateFunction::CreateEventComplete(
   if (!results->success) {
     Respond(Error("Error creating event. " + results->message));
   } else {
-    std::unique_ptr<CalendarEvent> ev =
-        CreateVivaldiEvent(results->createdEvent);
+    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
     Respond(ArgumentList(
-        extensions::vivaldi::calendar::EventCreate::Results::Create(*ev)));
+        extensions::vivaldi::calendar::EventCreate::Results::Create(*event)));
   }
 }
 
@@ -781,11 +780,13 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
 }
 
 void CalendarUpdateEventFunction::UpdateEventComplete(
-    std::shared_ptr<calendar::UpdateEventResult> results) {
+    std::shared_ptr<calendar::EventResultCB> results) {
   if (!results->success) {
     Respond(Error("Error updating event"));
   } else {
-    Respond(NoArguments());
+    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    Respond(ArgumentList(
+        extensions::vivaldi::calendar::UpdateEvent::Results::Create(*event)));
   }
 }
 
@@ -1301,11 +1302,10 @@ void CalendarCreateEventExceptionFunction::CreateEventExceptionComplete(
   if (!results->success) {
     Respond(Error("Error creating event exception"));
   } else {
-    std::unique_ptr<CalendarEvent> ev =
-        CreateVivaldiEvent(results->createdEvent);
+    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::CreateEventException::Results::Create(
-            *ev)));
+            *event)));
   }
 }
 

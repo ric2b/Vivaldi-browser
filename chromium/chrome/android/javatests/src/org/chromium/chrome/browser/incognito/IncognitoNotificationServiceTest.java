@@ -4,15 +4,15 @@
 
 package org.chromium.chrome.browser.incognito;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
-import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
 import android.content.Context;
 import android.os.Build;
+import android.service.notification.StatusBarNotification;
 import android.support.test.InstrumentationRegistry;
 import android.util.Pair;
 
@@ -27,8 +27,11 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -39,8 +42,6 @@ import org.chromium.chrome.browser.tabpersistence.TabStateDirectory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.io.File;
@@ -64,7 +65,7 @@ public class IncognitoNotificationServiceTest {
 
     private void sendClearIncognitoIntent() throws CanceledException {
         PendingIntent clearIntent =
-                IncognitoNotificationService
+                IncognitoNotificationServiceImpl
                         .getRemoveAllIncognitoTabsIntent(InstrumentationRegistry.getTargetContext())
                         .getPendingIntent();
         clearIntent.send();
@@ -97,8 +98,8 @@ public class IncognitoNotificationServiceTest {
                     }
                 });
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertTrue(incognitoProfile.isOffTheRecord());
-            Assert.assertTrue(incognitoProfile.isNativeInitialized());
+            assertTrue(incognitoProfile.isOffTheRecord());
+            assertTrue(incognitoProfile.isNativeInitialized());
         });
 
         sendClearIncognitoIntent();
@@ -190,22 +191,26 @@ public class IncognitoNotificationServiceTest {
     @MediumTest
     @Feature("Incognito")
     @TargetApi(Build.VERSION_CODES.M)
-    @SuppressLint("NewApi")
+    @MinAndroidSdkLevel(Build.VERSION_CODES.M)
     public void testCloseAllIncognitoNotificationIsDisplayed() {
         mActivityTestRule.startMainActivityOnBlankPage();
-
         createTabOnUiThread();
-        createTabOnUiThread();
-
         CriteriaHelper.pollUiThread(() -> {
             Criteria.checkThat(
                     mActivityTestRule.getActivity().getTabModelSelector().getModel(true).getCount(),
-                    Matchers.is(2));
+                    Matchers.is(1));
         });
 
         Context context = ContextUtils.getApplicationContext();
         NotificationManager nm =
                 (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        assertEquals(1, nm.getActiveNotifications().length);
+        boolean isIncognitoNotificationDisplayed = false;
+        for (StatusBarNotification statusBarNotification : nm.getActiveNotifications()) {
+            if (IncognitoNotificationManager.INCOGNITO_TABS_OPEN_TAG.equals(
+                        statusBarNotification.getTag())) {
+                isIncognitoNotificationDisplayed = true;
+            }
+        }
+        assertTrue(isIncognitoNotificationDisplayed);
     }
 }

@@ -6,6 +6,7 @@
 #include <string>
 
 #include "base/files/file_path_watcher.h"
+#include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -124,8 +125,6 @@ class PasswordManagerSyncTest : public SyncTest {
         {password_manager::features::kEnablePasswordsAccountStorage,
          password_manager::features::kFillOnAccountSelect},
         {});
-
-    DisableVerifier();
   }
 
   ~PasswordManagerSyncTest() override = default;
@@ -233,15 +232,17 @@ class PasswordManagerSyncTest : public SyncTest {
   }
 
   // Returns a credential for the origin returned by GetWWWOrigin().
-  autofill::PasswordForm CreateTestPasswordForm(const std::string& username,
-                                                const std::string& password) {
+  password_manager::PasswordForm CreateTestPasswordForm(
+      const std::string& username,
+      const std::string& password) {
     return CreateTestPasswordForm(username, password, GetWWWOrigin());
   }
 
-  autofill::PasswordForm CreateTestPasswordForm(const std::string& username,
-                                                const std::string& password,
-                                                const GURL& origin) {
-    autofill::PasswordForm form;
+  password_manager::PasswordForm CreateTestPasswordForm(
+      const std::string& username,
+      const std::string& password,
+      const GURL& origin) {
+    password_manager::PasswordForm form;
     form.signon_realm = origin.spec();
     form.url = origin;
     form.username_value = base::UTF8ToUTF16(username);
@@ -251,7 +252,7 @@ class PasswordManagerSyncTest : public SyncTest {
   }
 
   // Returns a credential for the origin returned by GetPSLOrigin().
-  autofill::PasswordForm CreateTestPSLPasswordForm(
+  password_manager::PasswordForm CreateTestPSLPasswordForm(
       const std::string& username,
       const std::string& password) {
     return CreateTestPasswordForm(username, password, GetPSLOrigin());
@@ -265,7 +266,7 @@ class PasswordManagerSyncTest : public SyncTest {
   }
 
   // Adds a credential to the Sync fake server.
-  void AddCredentialToFakeServer(const autofill::PasswordForm& form) {
+  void AddCredentialToFakeServer(const password_manager::PasswordForm& form) {
     passwords_helper::InjectKeystoreEncryptedServerPassword(form,
                                                             GetFakeServer());
   }
@@ -278,7 +279,7 @@ class PasswordManagerSyncTest : public SyncTest {
   }
 
   // Adds a credential to the local store.
-  void AddLocalCredential(const autofill::PasswordForm& form) {
+  void AddLocalCredential(const password_manager::PasswordForm& form) {
     scoped_refptr<password_manager::PasswordStore> password_store =
         passwords_helper::GetPasswordStore(0);
     password_store->AddLogin(form);
@@ -289,7 +290,7 @@ class PasswordManagerSyncTest : public SyncTest {
 
   // Synchronously reads all credentials from the profile password store and
   // returns them.
-  std::vector<std::unique_ptr<autofill::PasswordForm>>
+  std::vector<std::unique_ptr<password_manager::PasswordForm>>
   GetAllLoginsFromProfilePasswordStore() {
     scoped_refptr<password_manager::PasswordStore> password_store =
         passwords_helper::GetPasswordStore(0);
@@ -300,7 +301,7 @@ class PasswordManagerSyncTest : public SyncTest {
 
   // Synchronously reads all credentials from the account password store and
   // returns them.
-  std::vector<std::unique_ptr<autofill::PasswordForm>>
+  std::vector<std::unique_ptr<password_manager::PasswordForm>>
   GetAllLoginsFromAccountPasswordStore() {
     scoped_refptr<password_manager::PasswordStore> password_store =
         passwords_helper::GetAccountPasswordStore(0);
@@ -388,8 +389,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, ChooseDestinationStore) {
     ASSERT_TRUE(bubble_observer.IsSavePromptShownAutomatically());
     bubble_observer.AcceptSavePrompt();
 
-    std::vector<std::unique_ptr<autofill::PasswordForm>> account_credentials =
-        GetAllLoginsFromAccountPasswordStore();
+    std::vector<std::unique_ptr<password_manager::PasswordForm>>
+        account_credentials = GetAllLoginsFromAccountPasswordStore();
     EXPECT_THAT(account_credentials,
                 ElementsAre(MatchesLogin("accountuser", "accountpass")));
   }
@@ -398,7 +399,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, ChooseDestinationStore) {
   // should end up in the profile store.
   password_manager::features_util::SetDefaultPasswordStore(
       GetProfile(0)->GetPrefs(), GetSyncService(0),
-      autofill::PasswordForm::Store::kProfileStore);
+      password_manager::PasswordForm::Store::kProfileStore);
   {
     // Navigate to a page with a password form, fill it out, and submit it.
     // TODO(crbug.com/1058339): If we use the same URL as in part 1 here, then
@@ -421,8 +422,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, ChooseDestinationStore) {
     ASSERT_TRUE(bubble_observer.IsSavePromptShownAutomatically());
     bubble_observer.AcceptSavePrompt();
 
-    std::vector<std::unique_ptr<autofill::PasswordForm>> profile_credentials =
-        GetAllLoginsFromProfilePasswordStore();
+    std::vector<std::unique_ptr<password_manager::PasswordForm>>
+        profile_credentials = GetAllLoginsFromProfilePasswordStore();
     EXPECT_THAT(profile_credentials,
                 ElementsAre(MatchesLogin("localuser", "localpass")));
   }
@@ -810,8 +811,8 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   // Save the password in the account store.
   BubbleObserver bubble_observer(web_contents);
   bubble_observer.AcceptSavePrompt();
-  std::vector<std::unique_ptr<autofill::PasswordForm>> account_credentials =
-      GetAllLoginsFromAccountPasswordStore();
+  std::vector<std::unique_ptr<password_manager::PasswordForm>>
+      account_credentials = GetAllLoginsFromAccountPasswordStore();
   ASSERT_THAT(account_credentials,
               ElementsAre(MatchesLogin("accountuser", "accountpass")));
 

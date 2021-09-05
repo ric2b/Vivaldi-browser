@@ -599,7 +599,7 @@
                 "type": "integer"
               },
               "end": {
-                "description": "The ending index of the composing range, in bytes.",
+                "description": "The ending index of the composing range, in bytes. The order of the start and end index does not matter.",
                 "type": "integer"
               },
               "segments": {
@@ -636,7 +636,7 @@
       }, {
         "name": "getAutocorrectRange",
         "type": "function",
-        "description": "Get the autocorrected word's bounds.",
+        "description": "Get the autocorrected word's bounds. Returns an empty range if there is no autocorrected word.",
         "parameters": [
           {
             "name": "parameters",
@@ -755,7 +755,35 @@
         "type": "function",
         "description": "Resets the current engine to its initial state. Fires an OnReset event.",
         "parameters": []
-      }
+      },
+      {
+        "name": "onAutocorrect",
+        "type": "function",
+        "description": "Called after a word has been autocorrected to show some UI for autocorrect.",
+        "platforms": ["chromeos"],
+      "parameters": [{
+            "name": "parameters",
+            "type": "object",
+            "properties": {
+                "contextID": {
+                    "description": "ID of the context where the autocorrect occurred.",
+                    "type": "integer"
+                },
+                "typedWord": {
+                    "type": "string",
+                    "description": "Corrected word will be replaced by this when clicking undo"
+                },
+                "correctedWord": {
+                    "type": "string",
+                    "description": "Needed to know the length of the autocorrected text to show the correct length of underline."
+                },
+                "startIndex": {
+                    "type": "integer",
+                    "description": "Offset index (in code units) in surroundingInfo (see onSurroundingTextChanged) for the start of the autocorrected text"
+                }
+            }
+        }]
+    }
     ],
     "events": [
       {

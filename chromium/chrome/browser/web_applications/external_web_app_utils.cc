@@ -11,15 +11,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/apps/user_type_filter.h"
-#include "chrome/browser/web_applications/components/external_app_install_features.h"
 #include "chrome/browser/web_applications/file_utils_wrapper.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
 #include "ui/gfx/codec/png_codec.h"
-
-#if defined(OS_CHROMEOS)
-#include "chromeos/constants/chromeos_switches.h"
-#include "components/arc/arc_util.h"
-#endif  // defined(OS_CHROMEOS)
 
 namespace web_app {
 
@@ -36,6 +30,16 @@ constexpr char kAppUrl[] = "app_url";
 // on Chrome OS.
 constexpr char kHideFromUser[] = "hide_from_user";
 
+// kOnlyForNewUsers is an optional boolean. If set and true we will not install
+// the app for users that have already run Chrome before.
+constexpr char kOnlyForNewUsers[] = "only_for_new_users";
+
+// kUserType is an allowlist of user types to install this app for. This must be
+// populated otherwise the app won't ever be installed.
+// Example: "user_type": ["unmanaged", "managed", "child"]
+// See apps::DetermineUserType() for relevant string constants.
+constexpr char kUserType[] = "user_type";
+
 // kCreateShortcuts is an optional boolean which controls whether OS
 // level shortcuts are created. On Chrome OS this controls whether the app is
 // pinned to the shelf.
@@ -50,8 +54,6 @@ constexpr char kCreateShortcuts[] = "create_shortcuts";
 //  - if the feature is not enabled, the app will be removed.
 constexpr char kFeatureName[] = "feature_name";
 
-#if defined(OS_CHROMEOS)
-
 // kDisableIfArcSupported is an optional bool which specifies whether to skip
 // install of the app if the device supports Arc (Chrome OS only).
 // Defaults to false.
@@ -63,8 +65,6 @@ constexpr char kDisableIfArcSupported[] = "disable_if_arc_supported";
 // Defaults to false.
 constexpr char kDisableIfTabletFormFactor[] = "disable_if_tablet_form_factor";
 
-#endif  // defined(OS_CHROMEOS)
-
 // kLaunchContainer is a required string which can be "window" or "tab"
 // and controls what sort of container the web app is launched in.
 constexpr char kLaunchContainer[] = "launch_container";
@@ -72,7 +72,12 @@ constexpr char kLaunchContainerTab[] = "tab";
 constexpr char kLaunchContainerWindow[] = "window";
 
 // kLaunchQueryParams is an optional string which specifies query parameters to
-// add to the start_url when launching the app.
+// add to the start_url when launching the app. If the provided params are a
+// substring of start_url's existing params then it will not be added a second
+// time.
+// Note that substring matches include "param=a" matching in "some_param=abc".
+// Extend the implementation in AppRegistrar::GetAppLaunchUrl() if this edge
+// case needs to be handled differently.
 constexpr char kLaunchQueryParams[] = "launch_query_params";
 
 // kLoadAndAwaitServiceWorkerRegistration is an optional bool that specifies
@@ -144,75 +149,63 @@ constexpr char kOfflineManifestThemeColorArgbHex[] = "theme_color_argb_hex";
 
 }  // namespace
 
-ExternalConfigParseResult ExternalConfigParseResult::Enabled(
-    ExternalInstallOptions options) {
-  return ExternalConfigParseResult(kEnabled, std::move(options));
-}
-
-ExternalConfigParseResult ExternalConfigParseResult::Disabled() {
-  return ExternalConfigParseResult(kDisabled, base::nullopt);
-}
-
-ExternalConfigParseResult ExternalConfigParseResult::Error() {
-  return ExternalConfigParseResult(kError, base::nullopt);
-}
-
-ExternalConfigParseResult::~ExternalConfigParseResult() = default;
-ExternalConfigParseResult::ExternalConfigParseResult(
-    ExternalConfigParseResult&&) = default;
-ExternalConfigParseResult::ExternalConfigParseResult(
-    Type type,
-    base::Optional<ExternalInstallOptions> options)
-    : type(type), options(std::move(options)) {
-  DCHECK_EQ(options.has_value(), type == kEnabled);
-}
-
-ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
-                                      const base::FilePath& dir,
-                                      const base::FilePath& file,
-                                      const std::string& user_type,
-                                      const base::Value& app_config) {
-  using Result = ExternalConfigParseResult;
+base::Optional<ExternalInstallOptions> ParseConfig(
+    FileUtilsWrapper& file_utils,
+    const base::FilePath& dir,
+    const base::FilePath& file,
+    const base::Value& app_config) {
   ExternalInstallOptions options(GURL(), DisplayMode::kStandalone,
                                  ExternalInstallSource::kExternalDefault);
   options.require_manifest = true;
 
   if (app_config.type() != base::Value::Type::DICTIONARY) {
     LOG(ERROR) << file << " was not a dictionary as the top level";
-    return Result::Error();
+    return base::nullopt;
   }
 
-  if (!apps::UserTypeMatchesJsonUserType(
-          user_type, /*app_id=*/file.MaybeAsASCII(), &app_config,
-          /*default_user_types=*/nullptr)) {
-    // Already logged.
-    return Result::Disabled();
+  // user_type
+  const base::Value* value = app_config.FindListKey(kUserType);
+  if (!value) {
+    VLOG(1) << file << " missing " << kUserType;
+    return base::nullopt;
+  }
+  for (const auto& item : value->GetList()) {
+    if (!item.is_string()) {
+      VLOG(1) << file << " has invalid " << kUserType << item;
+      return base::nullopt;
+    }
+    options.user_type_allowlist.push_back(item.GetString());
+  }
+  if (options.user_type_allowlist.empty()) {
+    VLOG(1) << file << " has empty " << kUserType;
+    return base::nullopt;
   }
 
   // feature_name
-  const base::Value* value =
-      app_config.FindKeyOfType(kFeatureName, base::Value::Type::STRING);
-  if (value) {
-    // TODO(crbug.com/1104696): Add metrics for whether the app was
-    // enabled/disabled by the feature.
-    const std::string& feature_name = value->GetString();
-    VLOG(1) << file << " checking feature " << feature_name;
-    if (!IsExternalAppInstallFeatureEnabled(feature_name)) {
-      VLOG(1) << file << " feature not enabled";
-      return Result::Disabled();
-    }
-  }
+  const std::string* feature_name = app_config.FindStringKey(kFeatureName);
+  if (feature_name)
+    options.gate_on_feature = *feature_name;
 
   // app_url
   value = app_config.FindKeyOfType(kAppUrl, base::Value::Type::STRING);
   if (!value) {
     LOG(ERROR) << file << " had a missing " << kAppUrl;
-    return Result::Error();
+    return base::nullopt;
   }
   options.install_url = GURL(value->GetString());
   if (!options.install_url.is_valid()) {
     LOG(ERROR) << file << " had an invalid " << kAppUrl;
-    return Result::Error();
+    return base::nullopt;
+  }
+
+  // only_for_new_users
+  value = app_config.FindKey(kOnlyForNewUsers);
+  if (value) {
+    if (!value->is_bool()) {
+      LOG(ERROR) << file << " had an invalid " << kOnlyForNewUsers;
+      return base::nullopt;
+    }
+    options.only_for_new_users = value->GetBool();
   }
 
   // hide_from_user
@@ -221,7 +214,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   if (value) {
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid " << kHideFromUser;
-      return Result::Error();
+      return base::nullopt;
     }
     hide_from_user = value->GetBool();
   }
@@ -235,7 +228,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   if (value) {
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid " << kCreateShortcuts;
-      return Result::Error();
+      return base::nullopt;
     }
     create_shortcuts = value->GetBool();
   }
@@ -245,16 +238,14 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   // It doesn't make sense to hide the app and also create shortcuts for it.
   DCHECK(!(hide_from_user && create_shortcuts));
 
-#if defined(OS_CHROMEOS)
   // disable_if_arc_supported
   value = app_config.FindKey(kDisableIfArcSupported);
   if (value) {
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid " << kDisableIfArcSupported;
-      return Result::Error();
+      return base::nullopt;
     }
-    if (value->GetBool() && arc::IsArcAvailable())
-      return Result::Disabled();
+    options.disable_if_arc_supported = value->GetBool();
   }
 
   // disable_if_tablet_form_factor
@@ -262,18 +253,16 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   if (value) {
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid " << kDisableIfTabletFormFactor;
-      return Result::Error();
+      return base::nullopt;
     }
-    if (value->GetBool() && chromeos::switches::IsTabletFormFactor())
-      return Result::Disabled();
+    options.disable_if_tablet_form_factor = value->GetBool();
   }
-#endif  // defined(OS_CHROMEOS)
 
   // launch_container
   value = app_config.FindKeyOfType(kLaunchContainer, base::Value::Type::STRING);
   if (!value) {
     LOG(ERROR) << file << " had an invalid " << kLaunchContainer;
-    return Result::Error();
+    return base::nullopt;
   }
   std::string launch_container_str = value->GetString();
   if (launch_container_str == kLaunchContainerTab) {
@@ -282,7 +271,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
     options.user_display_mode = DisplayMode::kStandalone;
   } else {
     LOG(ERROR) << file << " had an invalid " << kLaunchContainer;
-    return Result::Error();
+    return base::nullopt;
   }
 
   // launch_query_params
@@ -290,7 +279,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   if (value) {
     if (!value->is_string()) {
       LOG(ERROR) << file << " had an invalid " << kLaunchQueryParams;
-      return Result::Error();
+      return base::nullopt;
     }
     options.launch_query_params = value->GetString();
   }
@@ -301,7 +290,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid "
                  << kLoadAndAwaitServiceWorkerRegistration;
-      return Result::Error();
+      return base::nullopt;
     }
     options.load_and_await_service_worker_registration = value->GetBool();
   }
@@ -316,12 +305,12 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
     }
     if (!value->is_string()) {
       LOG(ERROR) << file << " had an invalid " << kServiceWorkerRegistrationUrl;
-      return Result::Error();
+      return base::nullopt;
     }
     options.service_worker_registration_url.emplace(value->GetString());
     if (!options.service_worker_registration_url->is_valid()) {
       LOG(ERROR) << file << " had an invalid " << kServiceWorkerRegistrationUrl;
-      return Result::Error();
+      return base::nullopt;
     }
   }
 
@@ -330,7 +319,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   if (value) {
     if (!value->is_list()) {
       LOG(ERROR) << file << " had an invalid " << kUninstallAndReplace;
-      return Result::Error();
+      return base::nullopt;
     }
     base::Value::ConstListView uninstall_and_replace_values = value->GetList();
 
@@ -345,7 +334,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
       options.uninstall_and_replace.push_back(app_id_value.GetString());
     }
     if (had_error)
-      return Result::Error();
+      return base::nullopt;
   }
 
   // only_use_offline_manifest
@@ -353,7 +342,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   if (value) {
     if (!value->is_bool()) {
       LOG(ERROR) << file << " had an invalid " << kOnlyUseOfflineManifest;
-      return Result::Error();
+      return base::nullopt;
     }
     options.only_use_app_info_factory = value->GetBool();
   }
@@ -365,7 +354,7 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
         ParseOfflineManifest(file_utils, dir, file, *value);
     if (!offline_manifest_result.has_value()) {
       // Error already logged by |ParseOfflineManifest|.
-      return Result::Error();
+      return base::nullopt;
     }
     options.app_info_factory = std::move(offline_manifest_result.value());
   }
@@ -373,10 +362,10 @@ ExternalConfigParseResult ParseConfig(FileUtilsWrapper& file_utils,
   if (options.only_use_app_info_factory && !options.app_info_factory) {
     LOG(ERROR) << file << kOnlyUseOfflineManifest << " set with no "
                << kOfflineManifest << " available";
-    return Result::Error();
+    return base::nullopt;
   }
 
-  return Result::Enabled(std::move(options));
+  return options;
 }
 
 base::Optional<WebApplicationInfoFactory> ParseOfflineManifest(

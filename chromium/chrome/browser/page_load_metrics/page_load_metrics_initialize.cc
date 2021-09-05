@@ -19,7 +19,6 @@
 #include "chrome/browser/page_load_metrics/observers/foreground_duration_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/isolated_prerender_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/javascript_frameworks_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/live_tab_count_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/loading_predictor_page_load_metrics_observer.h"
@@ -29,10 +28,10 @@
 #include "chrome/browser/page_load_metrics/observers/omnibox_suggestion_used_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/optimization_guide_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/portal_page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/observers/prefetch_proxy_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/previews_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/previews_ukm_observer.h"
 #include "chrome/browser/page_load_metrics/observers/protocol_page_load_metrics_observer.h"
-#include "chrome/browser/page_load_metrics/observers/resource_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/scheme_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/security_state_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/service_worker_page_load_metrics_observer.h"
@@ -40,13 +39,13 @@
 #include "chrome/browser/page_load_metrics/observers/tab_restore_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/third_party_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/translate_page_load_metrics_observer.h"
-#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
+#include "chrome/browser/prefetch/no_state_prefetch/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
+#include "components/no_state_prefetch/browser/prerender_contents.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/page_load_metrics/browser/page_load_metrics_embedder_base.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
-#include "components/prerender/browser/prerender_contents.h"
 #include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
@@ -105,7 +104,7 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
     tracker->AddObserver(
         std::make_unique<DocumentWritePageLoadMetricsObserver>());
     tracker->AddObserver(
-        std::make_unique<IsolatedPrerenderPageLoadMetricsObserver>());
+        std::make_unique<PrefetchProxyPageLoadMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<LiveTabCountPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<MediaPageLoadMetricsObserver>());
@@ -116,7 +115,6 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
     tracker->AddObserver(
         std::make_unique<previews::PreviewsPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<previews::PreviewsUKMObserver>());
-    tracker->AddObserver(std::make_unique<ResourceMetricsObserver>());
     tracker->AddObserver(
         std::make_unique<ServiceWorkerPageLoadMetricsObserver>());
     tracker->AddObserver(
@@ -167,8 +165,9 @@ void PageLoadMetricsEmbedder::RegisterEmbedderObservers(
           web_contents()->GetBrowserContext()));
   tracker->AddObserver(std::make_unique<DataUseMetricsObserver>());
   std::unique_ptr<TranslatePageLoadMetricsObserver> translate_observer =
-      TranslatePageLoadMetricsObserver::CreateIfNeeded();
-  if (translate_observer != nullptr)
+      TranslatePageLoadMetricsObserver::CreateIfNeeded(
+          tracker->GetWebContents());
+  if (translate_observer)
     tracker->AddObserver(std::move(translate_observer));
 }
 

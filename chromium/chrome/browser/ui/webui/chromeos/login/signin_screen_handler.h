@@ -22,6 +22,7 @@
 #include "chrome/browser/chromeos/login/signin_specifics.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_webui_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
@@ -83,7 +84,7 @@ class LoginDisplayWebUIHandler {
 class SigninScreenHandlerDelegate {
  public:
   // --------------- Sign in/out methods.
-  // Sign in using username and password specified as a part of |user_context|.
+  // Sign in using username and password specified as a part of `user_context`.
   // Used for both known and new users.
   virtual void Login(const UserContext& user_context,
                      const SigninSpecifics& specifics) = 0;
@@ -191,7 +192,7 @@ class SigninScreenHandler
   // configurations like MSAN, where it otherwise triggers on every run.
   void SetOfflineTimeoutForTesting(base::TimeDelta offline_timeout);
 
-  // Gets the keyboard remapped pref value for |pref_name| key. Returns true if
+  // Gets the keyboard remapped pref value for `pref_name` key. Returns true if
   // successful, otherwise returns false.
   bool GetKeyboardRemappedPrefValue(const std::string& pref_name, int* value);
 
@@ -208,7 +209,7 @@ class SigninScreenHandler
 
   void ShowImpl();
 
-  // Updates current UI of the signin screen according to |ui_state|
+  // Updates current UI of the signin screen according to `ui_state`
   // argument.
   void UpdateUIState(UIState ui_state);
 
@@ -262,7 +263,7 @@ class SigninScreenHandler
   // Enable or disable the pin keyboard for the given account.
   void UpdatePinKeyboardState(const AccountId& account_id);
   void SetPinEnabledForUser(const AccountId& account_id, bool is_enabled);
-  // Callback run by PinBackend. If |should_preload| is true the PIN keyboard is
+  // Callback run by PinBackend. If `should_preload` is true the PIN keyboard is
   // preloaded.
   void PreloadPinKeyboard(bool should_preload);
 
@@ -312,8 +313,8 @@ class SigninScreenHandler
                                 const std::string& password,
                                 bool authenticated_by_pin);
 
-  // Sends the list of |keyboard_layouts| available for the |locale| that is
-  // currently selected for the public session identified by |user_id|.
+  // Sends the list of `keyboard_layouts` available for the `locale` that is
+  // currently selected for the public session identified by `user_id`.
   void SendPublicSessionKeyboardLayouts(
       const AccountId& account_id,
       const std::string& locale,
@@ -368,7 +369,7 @@ class SigninScreenHandler
   // Network state informer used to keep signin screen up.
   scoped_refptr<NetworkStateInformer> network_state_informer_;
 
-  // Set to true once |LOGIN_WEBUI_VISIBLE| notification is observed.
+  // Set to true once `LOGIN_WEBUI_VISIBLE` notification is observed.
   bool webui_visible_ = false;
   bool preferences_changed_delayed_ = false;
 
@@ -420,6 +421,8 @@ class SigninScreenHandler
   std::unique_ptr<LoginFeedback> login_feedback_;
 
   std::unique_ptr<AccountId> focused_pod_account_id_;
+  base::Optional<system::SystemClock::ScopedHourClockType>
+      focused_user_clock_type_;
 
   base::WeakPtrFactory<SigninScreenHandler> weak_factory_{this};
 

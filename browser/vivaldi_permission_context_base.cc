@@ -29,18 +29,4 @@ int PermissionContextBase::RemoveBridgeID(int bridge_id) {
   return request_id;
 }
 
-void PermissionContextBase::OnPermissionRequestResponse(
-    const permissions::PermissionRequestID& id,
-    const GURL& requesting_origin,
-    const GURL& embedding_origin,
-    bool user_gesture,
-    BrowserPermissionCallback callback,
-    bool allowed,
-    const std::string& user_input) {
-  RemoveBridgeID(id.request_id());
-  PermissionDecided(id, requesting_origin, embedding_origin,
-                    std::move(callback),
-                    allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
-}
-
 }  // namespace permissions

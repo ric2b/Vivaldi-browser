@@ -13,26 +13,22 @@ namespace {
 TEST(VideoTutorialsProtoConversionsTest, FeatureConversion) {
   Tutorial expected, actual;
   TutorialProto intermediate;
-  FeatureType features[] = {FeatureType::kTest, FeatureType::kInvalid,
-                            FeatureType::kDebug, FeatureType::kDownload,
-                            FeatureType::kSearch};
+  FeatureType features[] = {FeatureType::kTest,       FeatureType::kInvalid,
+                            FeatureType::kSummary,    FeatureType::kChromeIntro,
+                            FeatureType::kDownload,   FeatureType::kSearch,
+                            FeatureType::kVoiceSearch};
   for (FeatureType feature : features) {
     expected.feature = feature;
     TutorialToProto(&expected, &intermediate);
     TutorialFromProto(&intermediate, &actual);
     EXPECT_EQ(expected, actual);
   }
-}
 
-// Verify round-way conversion of Language struct.
-TEST(VideoTutorialsProtoConversionsTest, LanguageConversion) {
-  Language expected, actual;
-  expected.locale = "jp";
-  expected.name = "Japanese";
-  expected.native_name = "Japanese-Native";
-  LanguageProto intermediate;
-  LanguageToProto(&expected, &intermediate);
-  LanguageFromProto(&intermediate, &actual);
+  // Test an unknown feature.
+  FeatureType unknown = static_cast<FeatureType>(80);
+  expected.feature = unknown;
+  TutorialToProto(&expected, &intermediate);
+  TutorialFromProto(&intermediate, &actual);
   EXPECT_EQ(expected, actual);
 }
 

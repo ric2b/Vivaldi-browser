@@ -13,14 +13,22 @@
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/x/event.h"
 #include "ui/gfx/x/extension_manager.h"
+#include "ui/gfx/x/xlib_support.h"
 #include "ui/gfx/x/xproto.h"
 
+typedef struct xcb_connection_t xcb_connection_t;
+
 namespace x11 {
+
+class KeyboardState;
 
 // Represents a socket to the X11 server.
 class COMPONENT_EXPORT(X11) Connection : public XProto,
                                          public ExtensionManager {
  public:
+  using ErrorHandler = base::RepeatingCallback<void(const Error*, const char*)>;
+  using IOErrorHandler = base::OnceClosure;
+
   class Delegate {
    public:
     virtual bool ShouldContinueStream() const = 0;
@@ -47,11 +55,15 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
   Connection(const Connection&) = delete;
   Connection(Connection&&) = delete;
 
-  XDisplay* display() const {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return display_;
-  }
   xcb_connection_t* XcbConnection();
+
+  // Obtain an Xlib display that's connected to the same server as |this|.  This
+  // is meant to be used only for compatibility with components like GLX,
+  // Vulkan, and VAAPI.  The underlying socket is not shared, so synchronization
+  // with |this| may be necessary.  The |type| parameter can be used to achieve
+  // synchronization.  The returned wrapper should not be saved.
+  XlibDisplayWrapper GetXlibDisplay(
+      XlibDisplayType type = XlibDisplayType::kNormal);
 
   uint32_t extended_max_request_length() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -85,12 +97,14 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
 
   const std::string& DisplayString() const;
 
+  std::string GetConnectionHostname() const;
+
   int DefaultScreenId() const;
 
   template <typename T>
   T GenerateId() {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return static_cast<T>(xcb_generate_id(XcbConnection()));
+    return static_cast<T>(GenerateIdImpl());
   }
 
   // Is the connection up and error-free?
@@ -113,18 +127,23 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
   Event WaitForNextEvent();
 
   // Are there any events, errors, or replies already buffered?
-  bool HasPendingResponses() const;
+  bool HasPendingResponses();
 
   // Dispatch any buffered events, errors, or replies.
   void Dispatch(Delegate* delegate);
+
+  // Returns the old error handler.
+  ErrorHandler SetErrorHandler(ErrorHandler new_handler);
+
+  void SetIOErrorHandler(IOErrorHandler new_handler);
 
   // Returns the visual data for |id|, or nullptr if the visual with that ID
   // doesn't exist or only exists on a non-default screen.
   const VisualInfo* GetVisualInfoFromId(VisualId id) const;
 
-  KeyCode KeysymToKeycode(KeySym keysym);
+  KeyCode KeysymToKeycode(uint32_t keysym) const;
 
-  KeySym KeycodeToKeysym(uint32_t keycode, unsigned int modifiers);
+  uint32_t KeycodeToKeysym(KeyCode keycode, uint32_t modifiers) const;
 
   // Access the event buffer.  Clients can add, delete, or modify events.
   std::list<Event>& events() {
@@ -153,25 +172,30 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
 
     const unsigned int sequence;
     FutureBase::ResponseCallback callback;
+    bool have_response = false;
+    FutureBase::RawReply reply;
+    FutureBase::RawError error;
   };
 
   void InitRootDepthAndVisual();
 
   void AddRequest(unsigned int sequence, FutureBase::ResponseCallback callback);
 
-  bool HasNextResponse() const;
+  bool HasNextResponse();
 
   void PreDispatchEvent(const Event& event);
 
   int ScreenIndexFromRootWindow(x11::Window root) const;
 
-  void ResetKeyboardState();
+  // This function is implemented in the generated read_error.cc.
+  void InitErrorParsers();
 
-  KeySym KeyCodetoKeySym(KeyCode keycode, int column) const;
+  std::unique_ptr<Error> ParseError(FutureBase::RawError error_bytes);
 
-  KeySym TranslateKey(uint32_t keycode, unsigned int modifiers) const;
+  uint32_t GenerateIdImpl();
 
-  XDisplay* const display_;
+  xcb_connection_t* connection_ = nullptr;
+  std::unique_ptr<XlibDisplay> xlib_display_;
 
   bool synchronous_ = false;
   bool syncing_ = false;
@@ -187,16 +211,18 @@ class COMPONENT_EXPORT(X11) Connection : public XProto,
 
   std::unordered_map<VisualId, VisualInfo> default_screen_visuals_;
 
-  // Keyboard state.
-  GetKeyboardMappingReply keyboard_mapping_;
-  GetModifierMappingReply modifier_mapping_;
-  uint16_t lock_meaning_ = 0;
-  uint8_t mode_switch_ = 0;
-  uint8_t num_lock_ = 0;
+  std::unique_ptr<KeyboardState> keyboard_state_;
 
   std::list<Event> events_;
 
   std::queue<Request> requests_;
+
+  using ErrorParser =
+      std::unique_ptr<Error> (*)(FutureBase::RawError error_bytes);
+  std::array<ErrorParser, 256> error_parsers_{};
+
+  ErrorHandler error_handler_;
+  IOErrorHandler io_error_handler_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

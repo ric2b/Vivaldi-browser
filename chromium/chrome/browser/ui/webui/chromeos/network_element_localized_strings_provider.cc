@@ -158,7 +158,11 @@ void AddOncLocalizedStrings(content::WebUIDataSource* html_source) {
       {"OncMacAddress", IDS_ONC_MAC_ADDRESS},
       {"OncName", IDS_ONC_NAME},
       {"OncNotConnected", IDS_ONC_NOT_CONNECTED},
-      {"OncRestrictedConnectivity", IDS_ONC_RESTRICTED_CONNECTIVITY},
+      {"OncPortalState", IDS_ONC_PORTAL_STATE},
+      {"OncPortalState_NoInternet", IDS_ONC_PORTAL_STATE_NO_INTERNET},
+      {"OncPortalState_Portal", IDS_ONC_PORTAL_STATE_PORTAL},
+      {"OncPortalState_PortalSuspected", IDS_ONC_PORTAL_STATE_PORTAL_SUSPECTED},
+      {"OncPortalState_ProxyAuthRequired", IDS_ONC_PORTAL_STATE_PROXY_AUTH},
       {"OncTether-BatteryPercentage", IDS_ONC_TETHER_BATTERY_PERCENTAGE},
       {"OncTether-BatteryPercentage_Value",
        IDS_ONC_TETHER_BATTERY_PERCENTAGE_VALUE},
@@ -201,7 +205,8 @@ void AddOncLocalizedStrings(content::WebUIDataSource* html_source) {
       {"OncWiFi-SignalStrength", IDS_ONC_WIFI_SIGNAL_STRENGTH},
       {"Oncipv4-Gateway", IDS_ONC_IPV4_GATEWAY},
       {"Oncipv4-IPAddress", IDS_ONC_IPV4_ADDRESS},
-      {"Oncipv4-RoutingPrefix", IDS_ONC_IPV4_ROUTING_PREFIX},
+      // We use 'Netmask' in the UI instead of RoutingPrefix.
+      {"Oncipv4-Netmask", IDS_ONC_IPV4_NETMASK},
       {"Oncipv6-IPAddress", IDS_ONC_IPV6_ADDRESS},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);

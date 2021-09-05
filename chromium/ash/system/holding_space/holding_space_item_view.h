@@ -20,7 +20,8 @@ namespace ash {
 class HoldingSpaceItem;
 class HoldingSpaceItemViewDelegate;
 
-// Base class for HoldingSpaceItemChipView and HoldingSpaceItemScreenshotView.
+// Base class for HoldingSpaceItemChipView and
+// HoldingSpaceItemScreenCaptureView.
 class ASH_EXPORT HoldingSpaceItemView : public views::InkDropHostView {
  public:
   METADATA_HEADER(HoldingSpaceItemView);
@@ -49,13 +50,19 @@ class ASH_EXPORT HoldingSpaceItemView : public views::InkDropHostView {
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
 
+  // Starts a drag from this view at the location specified by the given `event`
+  // and with the specified `source`. Note that this method copies the logic of
+  // `views::View::DoDrag()` as a workaround to that API being private.
+  void StartDrag(const ui::LocatedEvent& event,
+                 ui::mojom::DragEventSource source);
+
   const HoldingSpaceItem* item() const { return item_; }
 
   void SetSelected(bool selected);
   bool selected() const { return selected_; }
 
  protected:
-  void AddPin(views::View* parent);
+  views::ToggleImageButton* AddPin(views::View* parent);
 
  private:
   void OnPaintFocus(gfx::Canvas* canvas, gfx::Size size);

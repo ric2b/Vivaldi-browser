@@ -45,6 +45,7 @@ void RemoteObjectGatewayImpl::InjectNamed(const WTF::String& object_name,
 
   global->Set(context, V8AtomicString(isolate, object_name), controller.ToV8())
       .Check();
+  object_host_->AcquireObject(object_id);
 }
 
 // static
@@ -112,12 +113,6 @@ void RemoteObjectGatewayImpl::BindRemoteObjectReceiver(
 
 void RemoteObjectGatewayImpl::ReleaseObject(int32_t object_id) {
   object_host_->ReleaseObject(object_id);
-  for (const auto& pair : named_objects_) {
-    if (pair.value == object_id) {
-      named_objects_.erase(pair.key);
-      break;
-    }
-  }
 }
 
 // static

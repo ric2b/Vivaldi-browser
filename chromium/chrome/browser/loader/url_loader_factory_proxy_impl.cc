@@ -9,6 +9,7 @@
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 // static
 void UrlLoaderFactoryProxyImpl::Create(
@@ -43,9 +44,9 @@ void UrlLoaderFactoryProxyImpl::GetProxiedURLLoaderFactory(
       browser_context, frame_host, process->GetID(),
       content::ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
       /*navigation_id=*/base::nullopt,
-      base::UkmSourceId::FromInt64(frame_host->GetPageUkmSourceId()),
+      ukm::SourceIdObj::FromInt64(frame_host->GetPageUkmSourceId()),
       &proxied_factory,
-      /*headber_client=*/nullptr);
+      /*header_client=*/nullptr);
 
   mojo::FusePipes(std::move(proxied_factory), std::move(original_factory));
 }

@@ -18,7 +18,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_constants.h"
@@ -121,16 +120,6 @@ void TestRenderFrameHost::ReportHeavyAdIssue(
   RenderFrameHostImpl::ReportHeavyAdIssue(resolution, reason);
 }
 
-void TestRenderFrameHost::AddUniqueMessageToConsole(
-    blink::mojom::ConsoleMessageLevel level,
-    const std::string& message) {
-  if (std::find(console_messages_.begin(), console_messages_.end(), message) ==
-      console_messages_.end()) {
-    console_messages_.push_back(message);
-  }
-  RenderFrameHostImpl::AddUniqueMessageToConsole(level, message);
-}
-
 bool TestRenderFrameHost::IsTestRenderFrameHost() const {
   return true;
 }
@@ -229,7 +218,8 @@ void TestRenderFrameHost::SimulateNavigationCommit(const GURL& url) {
        url.ReplaceComponents(replacements) ==
            GetLastCommittedURL().ReplaceComponents(replacements));
 
-  params.page_state = PageState::CreateForTesting(url, false, nullptr, nullptr);
+  params.page_state =
+      blink::PageState::CreateForTesting(url, false, nullptr, nullptr);
   if (!was_within_same_document)
     params.embedding_token = base::UnguessableToken::Create();
 
@@ -560,6 +550,7 @@ void TestRenderFrameHost::SendCommitNavigation(
     blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info,
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         prefetch_loader_factory,
+    blink::mojom::PolicyContainerPtr policy_container,
     const base::UnguessableToken& devtools_navigation_token) {
   CHECK(navigation_client);
   commit_callback_[navigation_request] =
@@ -633,7 +624,7 @@ TestRenderFrameHost::BuildDidCommitParams(int nav_entry_id,
   url::Origin origin = url::Origin::Create(url);
   params->origin = origin;
 
-  params->page_state = PageState::CreateForTestingWithSequenceNumbers(
+  params->page_state = blink::PageState::CreateForTestingWithSequenceNumbers(
       url, params->item_sequence_number, params->document_sequence_number);
 
   return params;

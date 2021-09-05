@@ -11,8 +11,8 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/usb_internals_resources.h"
+#include "chrome/grit/usb_internals_resources_map.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "services/network/public/mojom/content_security_policy.mojom.h"
 
 UsbInternalsUI::UsbInternalsUI(content::WebUI* web_ui)
     : ui::MojoWebUIController(web_ui) {
@@ -21,26 +21,21 @@ UsbInternalsUI::UsbInternalsUI(content::WebUI* web_ui)
       content::WebUIDataSource::Create(chrome::kChromeUIUsbInternalsHost);
 
   static constexpr webui::ResourcePath kPaths[] = {
-      {"usb_internals.css", IDR_USB_INTERNALS_CSS},
-      {"usb_internals.js", IDR_USB_INTERNALS_JS},
-      {"usb_internals.mojom-lite.js", IDR_USB_INTERNALS_MOJOM_LITE_JS},
-      {"descriptor_panel.js", IDR_USB_INTERNALS_DESCRIPTOR_PANEL_JS},
-      {"devices_page.js", IDR_USB_INTERNALS_DEVICES_PAGE_JS},
-      {"usb_device.mojom-lite.js", IDR_USB_DEVICE_MOJOM_LITE_JS},
-      {"usb_enumeration_options.mojom-lite.js",
-       IDR_USB_ENUMERATION_OPTIONS_MOJOM_LITE_JS},
-      {"usb_manager.mojom-lite.js", IDR_USB_DEVICE_MANAGER_MOJOM_LITE_JS},
-      {"usb_manager_client.mojom-lite.js",
-       IDR_USB_DEVICE_MANAGER_CLIENT_MOJOM_LITE_JS},
-      {"usb_manager_test.mojom-lite.js",
-       IDR_USB_DEVICE_MANAGER_TEST_MOJOM_LITE_JS},
+      {"usb_device.mojom-webui.js", IDR_USB_DEVICE_MOJOM_WEBUI_JS},
+      {"usb_enumeration_options.mojom-webui.js",
+       IDR_USB_ENUMERATION_OPTIONS_MOJOM_WEBUI_JS},
+      {"usb_manager.mojom-webui.js", IDR_USB_DEVICE_MANAGER_MOJOM_WEBUI_JS},
+      {"usb_manager_client.mojom-webui.js",
+       IDR_USB_DEVICE_MANAGER_CLIENT_MOJOM_WEBUI_JS},
+      {"usb_manager_test.mojom-webui.js",
+       IDR_USB_DEVICE_MANAGER_TEST_MOJOM_WEBUI_JS},
   };
   webui::AddResourcePathsBulk(source, kPaths);
 
-  source->SetDefaultResource(IDR_USB_INTERNALS_HTML);
-  source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::TrustedTypes,
-      "trusted-types cr-ui-tree-js-static;");
+  webui::SetupWebUIDataSource(
+      source,
+      base::make_span(kUsbInternalsResources, kUsbInternalsResourcesSize), "",
+      IDR_USB_INTERNALS_HTML);
 
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
 }

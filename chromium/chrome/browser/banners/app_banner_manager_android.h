@@ -97,8 +97,9 @@ class AppBannerManagerAndroid
   void MaybeShowAmbientBadge() override;
   base::WeakPtr<AppBannerManager> GetWeakPtr() override;
   void InvalidateWeakPtrs() override;
-  bool IsSupportedAppPlatform(const base::string16& platform) const override;
-  bool IsRelatedAppInstalled(
+  bool IsSupportedNonWebAppPlatform(
+      const base::string16& platform) const override;
+  bool IsRelatedNonWebAppInstalled(
       const blink::Manifest::RelatedApplication& related_app) const override;
 
  private:
@@ -131,6 +132,11 @@ class AppBannerManagerAndroid
 
   // Returns the appropriate app name based on whether we have a native/web app.
   base::string16 GetAppName() const override;
+
+  // Shows the in-product help if possible and returns true when a request to
+  // show it was made, but false if conditions (e.g. engagement score) for
+  // showing where not deemed adequate.
+  bool MaybeShowInProductHelp() const;
 
   // Hides the ambient badge if it is showing.
   void HideAmbientBadge();

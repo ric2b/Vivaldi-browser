@@ -1,7 +1,6 @@
 <link rel="import" href="../../../html/polymer.html">
 
-<link rel="import" href="chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.html">
-<link rel="import" href="chrome://resources/mojo/chromeos/services/network_health/public/mojom/network_diagnostics.mojom.html">
+<link rel="import" href="chrome://resources/cr_components/chromeos/network_health/network_diagnostics_mojo.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner-lite.html">
 <link rel="import" href="../../../cr_elements/cr_button/cr_button.html">
 <link rel="import" href="../../../html/i18n_behavior.html">
@@ -9,82 +8,43 @@
 <dom-module id="network-diagnostics">
   <template>
     <style>
-      .button-group > * {
-        margin-inline-start: 10px;
-      }
-
-      .routine-group {
-        display: inline-flex;
-        flex-wrap: wrap;
-      }
-
       .routine-container {
-        border: 2px solid rgb(150, 150, 150);
-        height: 50px;
+        align-items: center;
+        border: 2px solid rgb(175, 175, 175);
+        display: flex;
+        height: 30px;
         margin: 10px;
         padding: 5px;
-        width: 400px;
       }
 
-      .run-btn {
-        background-color: white;
+      .routine-icon {
+        height: 25px;
+        padding-inline-end: 10px;
+        width: auto;
       }
 
       .routine-name {
-        font-size: 1rem;
-        font-weight: bold;
-      }
-
-      .routine-content {
-        display: flex;
-      }
-
-      .routine-result {
         flex: 1;
-      }
-
-      .result-passed {
-        background-color: rgb(217, 234, 211);
-      }
-
-      .result-error {
-        background-color: rgb(244, 204, 204);
-      }
-
-      .result-not-run {
-        background-color: rgb(255, 242, 204);
+        font-size: 1rem;
       }
     </style>
-    <div class="button-group">
-      <cr-button on-click="onRunAllRoutinesClick_">
-        [[i18n('NetworkDiagnosticsRunAll')]]
-      </cr-button>
-      <cr-button on-click="onSendFeedbackReportClick_">
-        [[i18n('NetworkDiagnosticsSendFeedback')]]
-      </cr-button>
-    </div>
-    <div class="routine-group">
-      <template is="dom-repeat" items="[[routines_]]" as="routine">
-        <div class="routine-container">
-          <div class="routine-name">[[i18n(routine.name)]]</div>
-          <div class="routine-content">
-            <div class="routine-result">
-              <span class="routine-verdict">[[routine.verdict]]</span>
-              <span hidden="[[!routine.errorMsg]]">: </span>
-              <span class="routine-errormsg">[[routine.errorMsg]]</span>
-            </div>
-
-            <template is="dom-if" if="[[routine.running]]">
-              <paper-spinner-lite active></paper-spinner-lite>
-            </template>
-
-            <cr-button class="run-btn" hidden="[[routine.running]]" on-click="onRunRoutineClick_">
-              [[i18n('NetworkDiagnosticsRun')]]
-            </cr-button>
-          </div>
+    <template is="dom-repeat" items="[[routines_]]" as="routine">
+      <div class="routine-container" aria-label="[[i18n(routine.name)]]"
+           aria-description="[[routine.ariaDescription]]">
+        <img class="routine-icon" src="[[getRoutineIcon_(routine.result)]]">
+        <div aria-hidden="true" class="routine-name">
+          [[i18n(routine.name)]]
         </div>
-      </template>
-    </div>
+        <div aria-hidden="true" class="routine-result"
+             hidden="[[!routine.resultMsg]]">
+          [[routine.resultMsg]]
+        </div>
+
+        <template is="dom-if" if="[[routine.running]]">
+          <paper-spinner-lite active></paper-spinner-lite>
+        </template>
+      </div>
+    </template>
   </template>
   <script src="network_diagnostics.js"></script>
 </dom-module>

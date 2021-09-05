@@ -17,10 +17,10 @@
 #include "ash/shelf/shelf_metrics.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/wallpaper/wallpaper_constants.h"
 #include "ash/wallpaper/wallpaper_view.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/mru_window_tracker.h"
-#include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
@@ -553,13 +553,11 @@ TEST_F(DragWindowFromShelfControllerTest, WallpaperBlurDuringDragging) {
       RootWindowController::ForWindow(window->GetRootWindow())
           ->wallpaper_widget_controller()
           ->wallpaper_view();
-  EXPECT_EQ(wallpaper_view->property().blur_sigma,
-            overview_constants::kBlurSigma);
+  EXPECT_EQ(wallpaper_view->blur_sigma(), wallpaper_constants::kOverviewBlur);
 
   EndDrag(shelf_bounds.CenterPoint(),
           /*velocity_y=*/base::nullopt);
-  EXPECT_EQ(wallpaper_view->property().blur_sigma,
-            wallpaper_constants::kClear.blur_sigma);
+  EXPECT_EQ(wallpaper_view->blur_sigma(), wallpaper_constants::kClear);
 }
 
 // Test overview is hidden during dragging and shown when drag slows down or
@@ -1148,6 +1146,45 @@ TEST_F(DragWindowFromShelfControllerTest, DropsIntoOverviewAtCorrectPosition) {
                         ->item_widget()
                         ->GetNativeWindow(),
                     parent));
+}
+
+// Test that when the dragged window is returned to maximized state, the
+// overview grid does not animate as it can be jarring and use up unneeded
+// resources. Regression test for http://crbug.com/1049206.
+TEST_F(DragWindowFromShelfControllerTest, NoAnimationWhenReturnToMaximize) {
+  std::unique_ptr<aura::Window> window1 = CreateTestWindow();
+  std::unique_ptr<aura::Window> window2 = CreateTestWindow();
+
+  // Drag |window1| so that overview is shown.
+  const gfx::Point shelf_centerpoint =
+      Shelf::ForWindow(Shell::GetPrimaryRootWindow())
+          ->GetIdealBounds()
+          .CenterPoint();
+  StartDrag(window1.get(), shelf_centerpoint);
+  Drag(gfx::Point(200, 200), 1.f, 1.f);
+  DragWindowFromShelfControllerTestApi().WaitUntilOverviewIsShown(
+      window_drag_controller());
+
+  // Get the bounds and transform of the item associated with |item2|.
+  OverviewController* overview_controller = Shell::Get()->overview_controller();
+  ASSERT_TRUE(overview_controller->InOverviewSession());
+  OverviewItem* item = GetOverviewItemForWindow(window2.get());
+  ASSERT_TRUE(item);
+  aura::Window* item_window = item->item_widget()->GetNativeWindow();
+  const gfx::Rect pre_exit_bounds = item_window->bounds();
+  const gfx::Transform pre_exit_transform = item_window->transform();
+
+  // Drag back to the shelf, |window2|'s overview item should not move.
+  ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  EndDrag(shelf_centerpoint, base::nullopt);
+  EXPECT_EQ(pre_exit_bounds, item_window->bounds());
+  EXPECT_EQ(pre_exit_transform, item_window->layer()->GetTargetTransform());
+
+  // Tests that the end drag actually exited and remaximized |window1|.
+  ShellTestApi().WaitForOverviewAnimationState(
+      OverviewAnimationState::kExitAnimationComplete);
+  EXPECT_TRUE(WindowState::Get(window1.get())->IsMaximized());
 }
 
 // Tests that when dragging a snapped window is cancelled, the window

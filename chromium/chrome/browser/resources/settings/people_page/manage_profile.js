@@ -78,12 +78,12 @@ Polymer({
     isProfileShortcutSettingVisible_: Boolean,
 
     /**
-     * True if the customize themes feature is enabled.
+     * True if the 'kNewProfilePicker' feature is enabled.
      * @private
      */
-    isCustomizeThemesVisible_: {
+    isNewProfilePicker_: {
       type: Boolean,
-      value: () => loadTimeData.getBoolean('profileThemeSelectorEnabled')
+      value: () => loadTimeData.getBoolean('newProfilePicker')
     },
 
     /**
@@ -121,7 +121,11 @@ Polymer({
   currentRouteChanged() {
     if (Router.getInstance().getCurrentRoute() === routes.MANAGE_PROFILE) {
       if (this.profileName) {
-        this.$.name.value = this.profileName;
+        const profileNameInput =
+            /** @type {CrInputElement} */ (this.$$('#name'));
+        if (profileNameInput) {
+          profileNameInput.value = this.profileName;
+        }
       }
       if (loadTimeData.getBoolean('profileShortcutsEnabled')) {
         this.browserProxy_.getProfileShortcutStatus().then(status => {
@@ -172,7 +176,8 @@ Polymer({
     if (this.profileAvatar_.isGaiaAvatar) {
       this.browserProxy_.setProfileIconToGaiaAvatar();
     } else {
-      this.browserProxy_.setProfileIconToDefaultAvatar(this.profileAvatar_.url);
+      this.browserProxy_.setProfileIconToDefaultAvatar(
+          this.profileAvatar_.index);
     }
   },
 

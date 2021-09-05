@@ -536,8 +536,8 @@ views::Button* OpaqueBrowserFrameView::CreateFrameCaptionButton(
     views::CaptionButtonIcon icon_type,
     int ht_component,
     const gfx::VectorIcon& icon_image) {
-  views::FrameCaptionButton* button =
-      new views::FrameCaptionButton(nullptr, icon_type, ht_component);
+  views::FrameCaptionButton* button = new views::FrameCaptionButton(
+      views::Button::PressedCallback(), icon_type, ht_component);
   button->SetImage(button->icon(), views::FrameCaptionButton::ANIMATE_NO,
                    icon_image);
   return button;
@@ -548,7 +548,8 @@ views::Button* OpaqueBrowserFrameView::CreateImageButton(int normal_image_id,
                                                          int pushed_image_id,
                                                          int mask_image_id,
                                                          ViewID view_id) {
-  views::ImageButton* button = new views::ImageButton(nullptr);
+  views::ImageButton* button =
+      new views::ImageButton(views::Button::PressedCallback());
   const ui::ThemeProvider* tp = frame()->GetThemeProvider();
   button->SetImage(views::Button::STATE_NORMAL,
                    tp->GetImageSkiaNamed(normal_image_id));
@@ -556,6 +557,7 @@ views::Button* OpaqueBrowserFrameView::CreateImageButton(int normal_image_id,
                    tp->GetImageSkiaNamed(hot_image_id));
   button->SetImage(views::Button::STATE_PRESSED,
                    tp->GetImageSkiaNamed(pushed_image_id));
+  button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   if (browser_view()->IsBrowserTypeNormal()) {
     // Get a custom processed version of the theme's background image so
     // that it appears to draw contiguously across all of the caption
@@ -580,7 +582,7 @@ void OpaqueBrowserFrameView::InitWindowCaptionButton(
     views::Button::PressedCallback callback,
     int accessibility_string_id,
     ViewID view_id) {
-  button->set_callback(std::move(callback));
+  button->SetCallback(std::move(callback));
   button->SetAccessibleName(l10n_util::GetStringUTF16(accessibility_string_id));
   button->SetID(view_id);
   AddChildView(button);

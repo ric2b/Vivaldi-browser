@@ -17,6 +17,7 @@
 #include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/overlay_transform.h"
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_surface.h"
 
@@ -31,6 +32,13 @@
 namespace viz {
 
 namespace {
+
+// Helper function for moving a GpuFence from a vector to a unique_ptr.
+std::unique_ptr<gfx::GpuFence> TakeGpuFence(std::vector<gfx::GpuFence> fences) {
+  DCHECK(fences.empty() || fences.size() == 1u);
+  return fences.empty() ? nullptr
+                        : std::make_unique<gfx::GpuFence>(std::move(fences[0]));
+}
 
 class PresenterImageGL : public OutputPresenter::Image {
  public:
@@ -135,8 +143,9 @@ int PresenterImageGL::present_count() const {
 gl::GLImage* PresenterImageGL::GetGLImage(
     std::unique_ptr<gfx::GpuFence>* fence) {
   if (scoped_overlay_read_access_) {
-    if (fence)
-      *fence = scoped_overlay_read_access_->TakeFence();
+    if (fence) {
+      *fence = TakeGpuFence(scoped_overlay_read_access_->TakeAcquireFences());
+    }
     return scoped_overlay_read_access_->gl_image();
   }
 
@@ -282,6 +291,20 @@ OutputPresenterGL::AllocateImages(gfx::ColorSpace color_space,
   return images;
 }
 
+std::unique_ptr<OutputPresenter::Image>
+OutputPresenterGL::AllocateBackgroundImage(gfx::ColorSpace color_space,
+                                           gfx::Size image_size) {
+  auto image = std::make_unique<PresenterImageGL>();
+  if (!image->Initialize(shared_image_factory_,
+                         shared_image_representation_factory_, image_size,
+                         color_space, image_format_, dependency_,
+                         shared_image_usage_)) {
+    DLOG(ERROR) << "Failed to initialize image.";
+    return nullptr;
+  }
+  return image;
+}
+
 void OutputPresenterGL::SwapBuffers(
     SwapCompletionCallback completion_callback,
     BufferPresentedCallback presentation_callback) {
@@ -329,6 +352,22 @@ void OutputPresenterGL::SchedulePrimaryPlane(
                                     plane.enable_blending, std::move(fence));
 }
 
+void OutputPresenterGL::ScheduleBackground(Image* image) {
+  // Background is not seen by user, and is created before buffer queue buffers.
+  // So fence is not needed.
+  auto* gl_image =
+      reinterpret_cast<PresenterImageGL*>(image)->GetGLImage(nullptr);
+
+  // Background is also z-order 0.
+  constexpr int kPlaneZOrder = INT32_MIN;
+  // Background always uses the full texture.
+  constexpr gfx::RectF kUVRect(0.f, 0.f, 1.0f, 1.0f);
+  gl_surface_->ScheduleOverlayPlane(
+      kPlaneZOrder, gfx::OVERLAY_TRANSFORM_NONE, gl_image, gfx::Rect(),
+      /*crop_rect=*/kUVRect,
+      /*enable_blend=*/false, /*gpu_fence=*/nullptr);
+}
+
 void OutputPresenterGL::CommitOverlayPlanes(
     SwapCompletionCallback completion_callback,
     BufferPresentedCallback presentation_callback) {
@@ -360,7 +399,7 @@ void OutputPresenterGL::ScheduleOverlays(
       gl_surface_->ScheduleOverlayPlane(
           overlay.plane_z_order, overlay.transform, gl_image,
           ToNearestRect(overlay.display_rect), overlay.uv_rect,
-          !overlay.is_opaque, accesses[i]->TakeFence());
+          !overlay.is_opaque, TakeGpuFence(accesses[i]->TakeAcquireFences()));
     }
 #elif defined(OS_APPLE)
     gl_surface_->ScheduleCALayer(ui::CARendererLayerParams(
@@ -368,11 +407,10 @@ void OutputPresenterGL::ScheduleOverlays(
         gfx::ToEnclosingRect(overlay.shared_state->clip_rect),
         overlay.shared_state->rounded_corner_bounds,
         overlay.shared_state->sorting_context_id,
-        gfx::Transform(overlay.transform ? *overlay.transform
-                                         : overlay.shared_state->transform),
-        gl_image, overlay.contents_rect,
-        gfx::ToEnclosingRect(overlay.bounds_rect), overlay.background_color,
-        overlay.edge_aa_mask, overlay.shared_state->opacity, overlay.filter));
+        gfx::Transform(overlay.shared_state->transform), gl_image,
+        overlay.contents_rect, gfx::ToEnclosingRect(overlay.bounds_rect),
+        overlay.background_color, overlay.edge_aa_mask,
+        overlay.shared_state->opacity, overlay.filter));
 #endif
   }
 #endif  //  defined(OS_ANDROID) || defined(OS_APPLE) || defined(USE_OZONE)

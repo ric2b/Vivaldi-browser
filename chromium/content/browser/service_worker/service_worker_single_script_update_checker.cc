@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/trace_event/trace_event.h"
-#include "content/browser/appcache/appcache_disk_cache_ops.h"
 #include "content/browser/loader/browser_initiated_resource_request.h"
 #include "content/browser/service_worker/service_worker_cache_writer.h"
 #include "content/browser/service_worker/service_worker_consts.h"
@@ -158,7 +157,7 @@ ServiceWorkerSingleScriptUpdateChecker::ServiceWorkerSingleScriptUpdateChecker(
   // shared network resources like the http cache.
   resource_request.trusted_params = network::ResourceRequest::TrustedParams();
   resource_request.trusted_params->isolation_info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
+      net::IsolationInfo::RequestType::kOther, origin, origin,
       net::SiteForCookies::FromOrigin(origin));
 
   if (is_main_script_) {

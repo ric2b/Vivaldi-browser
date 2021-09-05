@@ -14,8 +14,10 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
@@ -33,7 +35,6 @@
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/core/features.h"
 #include "components/sessions/core/session_id_generator.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/ukm/ukm_service.h"
@@ -49,6 +50,7 @@
 #include "ios/chrome/browser/component_updater/ios_component_updater_configurator.h"
 #import "ios/chrome/browser/crash_report/breadcrumbs/application_breadcrumbs_logger.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager.h"
+#include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_manager.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
 #include "ios/chrome/browser/gcm/ios_chrome_gcm_profile_service_factory.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
@@ -82,6 +84,25 @@
 
 namespace {
 
+// If enabled local state file will have NSURLFileProtectionNone protection
+// level set for NSURLFileProtectionKey key. The purpose of this feature is to
+// understand if file protection interferes with "clean exit beacon" pref.
+const base::Feature kRemoveProtectionFromPrefFile{
+    "RemoveProtectionFromPrefFile", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Sets |level| value for NSURLFileProtectionKey key for the URL with given
+// |local_state_path|.
+void SetProtectionLevel(const base::FilePath& file_path, id level) {
+  NSString* file_path_string = base::SysUTF8ToNSString(file_path.value());
+  NSURL* file_path_url = [NSURL fileURLWithPath:file_path_string
+                                    isDirectory:NO];
+  NSError* error = nil;
+  BOOL protection_set = [file_path_url setResourceValue:level
+                                                 forKey:NSURLFileProtectionKey
+                                                  error:&error];
+  DCHECK(protection_set) << base::SysNSStringToUTF8(error.localizedDescription);
+}
+
 // Requests a network::mojom::ProxyResolvingSocketFactory on the UI thread.
 // Note that this cannot be called on a thread that is not the UI thread.
 void RequestProxyResolvingSocketFactoryOnUIThread(
@@ -108,6 +129,17 @@ void BindNetworkChangeManagerReceiver(
     network::NetworkChangeManager* network_change_manager,
     mojo::PendingReceiver<network::mojom::NetworkChangeManager> receiver) {
   network_change_manager->AddReceiver(std::move(receiver));
+}
+
+// Used to enable the workaround for a local state not persisting sometimes.
+NSString* const kLastSessionExitedCleanly = @"LastSessionExitedCleanly";
+
+// Set both local_state and user defaults kLastSessionExitedCleanly to |clean|.
+void SetLastSessionExitedCleanly(PrefService* local_state, bool clean) {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setBool:clean forKey:kLastSessionExitedCleanly];
+  [defaults synchronize];
+  local_state->SetBoolean(prefs::kLastSessionExitedCleanly, clean);
 }
 
 }  // namespace
@@ -154,6 +186,23 @@ void ApplicationContextImpl::PreMainMessageLoopRun() {
     browser_policy_connector->Init(GetLocalState(),
                                    GetSharedURLLoaderFactory());
   }
+
+  if (base::FeatureList::IsEnabled(kLogBreadcrumbs)) {
+    breadcrumb_manager_ = std::make_unique<BreadcrumbManager>();
+    application_breadcrumbs_logger_ =
+        std::make_unique<ApplicationBreadcrumbsLogger>(
+            breadcrumb_manager_.get());
+
+    base::FilePath storage_dir;
+    bool result = base::PathService::Get(ios::DIR_USER_DATA, &storage_dir);
+    DCHECK(result);
+
+    auto breadcrumb_persistent_storage_manager =
+        std::make_unique<BreadcrumbPersistentStorageManager>(storage_dir);
+
+    application_breadcrumbs_logger_->SetPersistentStorageManager(
+        std::move(breadcrumb_persistent_storage_manager));
+  }
 }
 
 void ApplicationContextImpl::StartTearDown() {
@@ -190,6 +239,12 @@ void ApplicationContextImpl::StartTearDown() {
     sessions::SessionIdGenerator::GetInstance()->Shutdown();
   }
 
+  // The ApplicationBreadcrumbsLogger tries to log event via a task when it
+  // is destroyed, so it needs to be notified of the app tear down now when
+  // the task tracker is still valid (will be destroyed after StartTearDown
+  // returns).
+  application_breadcrumbs_logger_.reset();
+
   ios_chrome_io_thread_->NetworkTearDown();
 }
 
@@ -209,7 +264,7 @@ void ApplicationContextImpl::OnAppEnterForeground() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   PrefService* local_state = GetLocalState();
-  local_state->SetBoolean(prefs::kLastSessionExitedCleanly, false);
+  SetLastSessionExitedCleanly(local_state, false);
 
   // Tell the metrics services that the application resumes.
   metrics::MetricsService* metrics_service = GetMetricsService();
@@ -223,13 +278,6 @@ void ApplicationContextImpl::OnAppEnterForeground() {
   ukm::UkmService* ukm_service = GetMetricsServicesManager()->GetUkmService();
   if (ukm_service)
     ukm_service->OnAppEnterForeground();
-
-  if (base::FeatureList::IsEnabled(kLogBreadcrumbs) && !breadcrumb_manager_) {
-    breadcrumb_manager_ = std::make_unique<BreadcrumbManager>();
-    application_breadcrumbs_logger_ =
-        std::make_unique<ApplicationBreadcrumbsLogger>(
-            breadcrumb_manager_.get());
-  }
 }
 
 void ApplicationContextImpl::OnAppEnterBackground() {
@@ -250,7 +298,7 @@ void ApplicationContextImpl::OnAppEnterBackground() {
   }
 
   PrefService* local_state = GetLocalState();
-  local_state->SetBoolean(prefs::kLastSessionExitedCleanly, true);
+  SetLastSessionExitedCleanly(local_state, true);
 
   // Tell the metrics services they were cleanly shutdown.
   metrics::MetricsService* metrics_service = GetMetricsService();
@@ -395,9 +443,7 @@ ApplicationContextImpl::GetComponentUpdateService() {
 
 SafeBrowsingService* ApplicationContextImpl::GetSafeBrowsingService() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (base::FeatureList::IsEnabled(
-          safe_browsing::kSafeBrowsingAvailableOnIOS) &&
-      !safe_browsing_service_) {
+  if (!safe_browsing_service_) {
     safe_browsing_service_ = base::MakeRefCounted<SafeBrowsingServiceImpl>();
   }
   return safe_browsing_service_.get();
@@ -441,8 +487,8 @@ BrowserPolicyConnectorIOS* ApplicationContextImpl::GetBrowserPolicyConnector() {
           (channel != version_info::Channel::STABLE &&
            channel != version_info::Channel::BETA);
       browser_policy_connector_ = std::make_unique<BrowserPolicyConnectorIOS>(
-          base::Bind(&BuildPolicyHandlerList,
-                     enable_future_policies_without_allowlist));
+          base::BindRepeating(&BuildPolicyHandlerList,
+                              enable_future_policies_without_allowlist));
 
       // Install a mock platform policy provider, if running under EG2 and one
       // is supplied.
@@ -453,6 +499,14 @@ BrowserPolicyConnectorIOS* ApplicationContextImpl::GetBrowserPolicyConnector() {
     }
   }
   return browser_policy_connector_.get();
+}
+
+BreadcrumbPersistentStorageManager*
+ApplicationContextImpl::GetBreadcrumbPersistentStorageManager() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return application_breadcrumbs_logger_
+             ? application_breadcrumbs_logger_->GetPersistentStorageManager()
+             : nullptr;
 }
 
 void ApplicationContextImpl::SetApplicationLocale(const std::string& locale) {
@@ -468,6 +522,24 @@ void ApplicationContextImpl::CreateLocalState() {
 
   base::FilePath local_state_path;
   CHECK(base::PathService::Get(ios::FILE_LOCAL_STATE, &local_state_path));
+
+  NSString* const kRemoveProtectionFromPrefFileKey =
+      @"RemoveProtectionFromPrefKey";
+  if (base::FeatureList::IsEnabled(kRemoveProtectionFromPrefFile)) {
+    SetProtectionLevel(local_state_path, NSURLFileProtectionNone);
+    [NSUserDefaults.standardUserDefaults
+        setBool:YES
+         forKey:kRemoveProtectionFromPrefFileKey];
+  } else if ([NSUserDefaults.standardUserDefaults
+                 boolForKey:kRemoveProtectionFromPrefFileKey]) {
+    // Restore default protection level when user is no longer in the
+    // experimental group.
+    SetProtectionLevel(local_state_path,
+                       NSFileProtectionCompleteUntilFirstUserAuthentication);
+    [NSUserDefaults.standardUserDefaults
+        removeObjectForKey:kRemoveProtectionFromPrefFileKey];
+  }
+
   scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple);
 
   // Register local state preferences.
@@ -496,6 +568,37 @@ void ApplicationContextImpl::CreateLocalState() {
     was_last_shutdown_clean_ =
         local_state_->GetBoolean(prefs::kLastSessionExitedCleanly);
   }
+
+  // The logic below mirrors clean_exit_beacon.  For historical reasons ios/
+  // does not use this beacon directly.  This code should be merged with clean
+  // exit beacon (as long as the user default workaround can also go into the
+  // clean exit beacon).
+
+  // An enumeration of all possible permutations of the the beacon state in the
+  // registry and in Local State.
+  enum {
+    DIRTY_DIRTY,
+    DIRTY_CLEAN,
+    CLEAN_DIRTY,
+    CLEAN_CLEAN,
+    MISSING_DIRTY,
+    MISSING_CLEAN,
+    NUM_CONSISTENCY_ENUMS
+  } consistency = DIRTY_DIRTY;
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  if ([defaults objectForKey:kLastSessionExitedCleanly] != nil) {
+    bool user_defaults_was_last_shutdown_clean_ =
+        [defaults boolForKey:kLastSessionExitedCleanly];
+    if (user_defaults_was_last_shutdown_clean_) {
+      consistency = was_last_shutdown_clean_ ? CLEAN_CLEAN : CLEAN_DIRTY;
+    } else {
+      consistency = was_last_shutdown_clean_ ? DIRTY_CLEAN : DIRTY_DIRTY;
+    }
+  } else {
+    consistency = was_last_shutdown_clean_ ? MISSING_CLEAN : MISSING_DIRTY;
+  }
+  base::UmaHistogramEnumeration("UMA.CleanExitBeaconConsistency", consistency,
+                                NUM_CONSISTENCY_ENUMS);
 }
 
 void ApplicationContextImpl::CreateGCMDriver() {

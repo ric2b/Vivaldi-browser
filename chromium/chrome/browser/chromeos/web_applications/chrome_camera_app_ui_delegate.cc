@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/web_applications/chrome_camera_app_ui_delegate.h"
 
+#include <vector>
+
 #include "base/files/file_path.h"
 #include "base/system/sys_info.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -24,6 +26,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/gfx/native_widget_types.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -36,15 +39,15 @@ constexpr int kDefaultWindowHeight = 486;
 void ChromeCameraAppUIDelegate::CameraAppDialog::ShowIntent(
     const std::string& queries,
     gfx::NativeWindow parent) {
-  CameraAppDialog* dialog =
-      new CameraAppDialog(chromeos::kChromeUICameraAppMainURL + queries);
+  std::string url = chromeos::kChromeUICameraAppMainURL + queries;
+  CameraAppDialog* dialog = new CameraAppDialog(url);
   dialog->ShowSystemDialog(parent);
 }
 
 ChromeCameraAppUIDelegate::CameraAppDialog::CameraAppDialog(
     const std::string& url)
-    : chromeos::SystemWebDialogDelegate(GURL(url), /*title=*/base::string16()) {
-}
+    : chromeos::SystemWebDialogDelegate(GURL(url),
+                                        /*title=*/base::string16()) {}
 
 ChromeCameraAppUIDelegate::CameraAppDialog::~CameraAppDialog() {}
 
@@ -89,11 +92,11 @@ void ChromeCameraAppUIDelegate::SetLaunchDirectory() {
   // path in it.
   base::FilePath empty_file_path("/dev/null");
 
-  auto downloads_folder_path =
-      file_manager::util::GetDownloadsFolderForProfile(profile);
+  auto my_files_folder_path =
+      file_manager::util::GetMyFilesFolderForProfile(profile);
 
   web_launch::WebLaunchFilesHelper::SetLaunchDirectoryAndLaunchPaths(
-      web_contents, web_contents->GetURL(), downloads_folder_path,
+      web_contents, web_contents->GetURL(), my_files_folder_path,
       std::vector<base::FilePath>{empty_file_path});
   web_app::WebAppTabHelper::CreateForWebContents(web_contents);
 }
@@ -119,9 +122,9 @@ void ChromeCameraAppUIDelegate::OpenFileInGallery(const std::string& name) {
 
   Profile* profile = Profile::FromWebUI(web_ui_);
 
-  base::FilePath path =
-      file_manager::util::GetDownloadsFolderForProfile(profile).Append(
-          name_component);
+  base::FilePath path = file_manager::util::GetMyFilesFolderForProfile(profile)
+                            .Append("Camera")
+                            .Append(name_component);
   auto&& file_paths = std::vector<base::FilePath>({path});
   apps::mojom::FilePathsPtr launch_files =
       apps::mojom::FilePaths::New(file_paths);

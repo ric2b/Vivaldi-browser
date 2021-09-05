@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="ca">
+<translation id="1397811292916898096">Cerca amb <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Canvia entre pestanyes normals/discretes</translation>
+<translation id="1644574205037202324">Historial</translation>
+<translation id="17513872634828108">Pestanyes obertes</translation>
+<translation id="1829244130665387512">Cerca a la pàgina</translation>
+<translation id="2038563949887743358">Activa la petició de vista d'escriptori</translation>
+<translation id="2433507940547922241">Aparença</translation>
+<translation id="2633278372998075009">Pestanyes discretes</translation>
+<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tots els drets reservats.</translation>
+<translation id="3234355010754616171">Nova pestanya discreta</translation>
+<translation id="3518985090088779359">Accepta i continua</translation>
+<translation id="3700829948786686853">Benvingut a Vivaldi</translation>
+<translation id="4121750346708795461">Al fer servir aquesta aplicació, accepteu les <ph name="BEGIN_LINK1" />COndicions de servei<ph name="END_LINK1" /> i la <ph name="BEGIN_LINK2" />Política de seguretat<ph name="END_LINK2" />.</translation>
+<translation id="4243710787042215766">Obre un una pestanya discreta</translation>
+<translation id="4526803704855831732">Pestanyes discretes</translation>
+<translation id="4759238208242260848">Baixades</translation>
+<translation id="4883379392681899581">Sortir del mode discret</translation>
+<translation id="4943872375798546930">No hi ha cap resultat</translation>
+<translation id="5118676864324397542">Emmagatzematge de Vivaldi <ph name="APP_NAME" /></translation>
+<translation id="5186185447130319458">Discret</translation>
+<translation id="5233638681132016545">Pestanya nova</translation>
+<translation id="572328651809341494">Pestanyes recents</translation>
+<translation id="5840488417521835756">Obtén informació sobre temes dels llocs web sense sortir de la pàgina. Toca per a Cercar és una funció que només està disponible quan Google està establert com a cercador per defecte de Vivaldi. Envia una paraula i el seu context al cercador de Google, retornant definicions, imatges, resultats de la cerca i altres detalls.
+
+Per ajustar el terme de cerca, mantén-lo premut per seleccionar-lo. Per definir millor la cerca, fes lliscar el tauler cap amunt tot el que puguis i toca el quadre de cerca.</translation>
+<translation id="6336451774241870485">Nova pestanya discreta</translation>
+<translation id="6593061639179217415">Versió per a escriptori</translation>
+<translation id="6610147964972079463">Tanqueu les pestanyes discretes</translation>
+<translation id="706339621163631076">Política de privadesa de Vivaldi</translation>
+<translation id="7427132068601343474">Sobre Vivaldi</translation>
+<translation id="7465104139234185284">Tanqueu totes les pestanyes discretes</translation>
+<translation id="7519434535192513364">La funció "Toca per a Cercar" només està disponible quan Google és el cercador per defecte a Vivaldi. Envia la paraula seleccionada i la pàgina actual com a context al cercador de Google. La pots desactivar a <ph name="BEGIN_LINK" />Ajustaments<ph name="END_LINK" />.</translation>
+<translation id="804786196054284061">Condicions de servei de Vivaldi</translation>
+<translation id="8820817407110198400">Adreces d'interès</translation>
+<translation id="9063523880881406963">Desactiva la petició de vista d'escriptori</translation>
+<translation id="9080642952018487277">Entreu el mode discret</translation>
+</translationbundle>

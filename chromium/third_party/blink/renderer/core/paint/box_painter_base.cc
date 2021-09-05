@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/paint/box_painter_base.h"
 
 #include "base/optional.h"
+#include "third_party/blink/renderer/core/css/native_paint_image_generator.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -81,7 +82,7 @@ void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
   const ShadowList* shadow_list = style.BoxShadow();
   for (wtf_size_t i = shadow_list->Shadows().size(); i--;) {
     const ShadowData& shadow = shadow_list->Shadows()[i];
-    if (shadow.Style() != kNormal)
+    if (shadow.Style() != ShadowStyle::kNormal)
       continue;
 
     FloatSize shadow_offset(shadow.X(), shadow.Y());
@@ -191,7 +192,7 @@ void BoxPainterBase::PaintInsetBoxShadow(const PaintInfo& info,
   const ShadowList* shadow_list = style.BoxShadow();
   for (wtf_size_t i = shadow_list->Shadows().size(); i--;) {
     const ShadowData& shadow = shadow_list->Shadows()[i];
-    if (shadow.Style() != kInset)
+    if (shadow.Style() != ShadowStyle::kInset)
       continue;
 
     FloatSize shadow_offset(shadow.X(), shadow.Y());
@@ -264,7 +265,7 @@ bool BoxPainterBase::CalculateFillLayerOcclusionCulling(
 BoxPainterBase::FillLayerInfo::FillLayerInfo(
     const Document& doc,
     const ComputedStyle& style,
-    bool has_overflow_clip,
+    bool is_scroll_container,
     Color bg_color,
     const FillLayer& layer,
     BackgroundBleedAvoidance bleed_avoidance,
@@ -278,8 +279,9 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
       sides_to_include(sides_to_include),
       is_bottom_layer(!layer.Next()),
       is_border_fill(layer.Clip() == EFillBox::kBorder),
-      is_clipped_with_local_scrolling(
-          has_overflow_clip && layer.Attachment() == EFillAttachment::kLocal) {
+      is_clipped_with_local_scrolling(is_scroll_container &&
+                                      layer.Attachment() ==
+                                          EFillAttachment::kLocal) {
   // When printing backgrounds is disabled or using economy mode,
   // change existing background colors and images to a solid white background.
   // If there's no bg color or image, leave it untouched to avoid affecting
@@ -317,6 +319,9 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
   should_paint_color =
       is_bottom_layer && color.Alpha() &&
       (!should_paint_image || !layer.ImageOccludesNextLayers(doc, style));
+  should_paint_color_with_paint_worklet_image =
+      should_paint_color &&
+      RuntimeEnabledFeatures::CompositeBGColorAnimationEnabled();
 }
 
 namespace {
@@ -406,6 +411,13 @@ void DrawTiledBackground(GraphicsContext& context,
   // Use the intrinsic size of the image if it has one, otherwise force the
   // generated image to be the tile size.
   FloatSize intrinsic_tile_size(image->Size());
+  // image-resolution information is baked into the given parameters, but we
+  // need oriented size. That requires explicitly applying orientation here.
+  if (respect_orientation &&
+      image->CurrentFrameOrientation().UsesWidthAsHeight()) {
+    intrinsic_tile_size = intrinsic_tile_size.TransposedSize();
+  }
+
   FloatSize scale(1, 1);
   if (!image->HasIntrinsicSize() ||
       // TODO(crbug.com/1042783): This is not checking for real empty image
@@ -451,7 +463,7 @@ void DrawTiledBackground(GraphicsContext& context,
   }
 
   // At this point we have decided to tile the image to fill the dest rect.
-  // Note that this tile rect the image's pre-scaled size.
+  // Note that this tile rect uses the image's pre-scaled size.
   FloatRect tile_rect(FloatPoint(), intrinsic_tile_size);
 
   // Farther down the pipeline we will use the scaled tile size to determine
@@ -475,6 +487,21 @@ void DrawTiledBackground(GraphicsContext& context,
   context.DrawImageTiled(image, snapped_paint_rect, tile_rect, scale,
                          one_tile_rect.Location(), repeat_spacing, op,
                          respect_orientation);
+}
+
+void FillRectWithPaintWorklet(const BoxPainterBase::FillLayerInfo& info,
+                              Node* node,
+                              const FloatRoundedRect& dest_rect,
+                              GraphicsContext& context) {
+  FloatRect src_rect = dest_rect.Rect();
+  std::unique_ptr<NativePaintImageGenerator> generator =
+      NativePaintImageGenerator::Create();
+  scoped_refptr<Image> paint_worklet_image =
+      generator->Paint(src_rect.Size(), SkColor(info.color));
+  context.DrawImageRRect(
+      paint_worklet_image.get(), Image::kSyncDecode, dest_rect, src_rect,
+      node && node->ComputedStyleRef().HasFilterInducingProperty(),
+      SkBlendMode::kSrcOver, info.respect_image_orientation);
 }
 
 inline bool PaintFastBottomLayer(Node* node,
@@ -562,8 +589,13 @@ inline bool PaintFastBottomLayer(Node* node,
   }
 
   // Paint the color if needed.
-  if (info.should_paint_color)
-    context.FillRoundedRect(color_border, info.color);
+  if (info.should_paint_color) {
+    if (info.should_paint_color_with_paint_worklet_image) {
+      FillRectWithPaintWorklet(info, node, color_border, context);
+    } else {
+      context.FillRoundedRect(color_border, info.color);
+    }
+  }
 
   // Paint the image if needed.
   if (!info.should_paint_image || !image || image_tile.IsEmpty())
@@ -736,7 +768,12 @@ void PaintFillLayerBackground(GraphicsContext& context,
   // painting area.
   if (info.is_bottom_layer && info.color.Alpha() && info.should_paint_color) {
     IntRect background_rect(PixelSnappedIntRect(scrolled_paint_rect));
-    context.FillRect(background_rect, info.color);
+    if (info.should_paint_color_with_paint_worklet_image) {
+      FillRectWithPaintWorklet(info, node, FloatRoundedRect(background_rect),
+                               context);
+    } else {
+      context.FillRect(background_rect, info.color);
+    }
   }
 
   // No progressive loading of the background image.
@@ -999,7 +1036,7 @@ bool BoxPainterBase::ShouldSkipPaintUnderInvalidationChecking(
   // We paint an indeterminate progress based on the position calculated from
   // the animation progress. Harmless under-invalidatoin may happen during a
   // paint that is not scheduled for animation.
-  if (box.IsProgress() && !ToLayoutProgress(box).IsDeterminate())
+  if (box.IsProgress() && !To<LayoutProgress>(box).IsDeterminate())
     return true;
 
   return false;

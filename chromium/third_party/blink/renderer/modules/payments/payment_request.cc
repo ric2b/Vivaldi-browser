@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -598,7 +599,8 @@ void ValidateAndConvertPaymentDetailsUpdate(const PaymentDetailsUpdate* input,
   if (exception_state.HadException())
     return;
   if (input->hasTotal()) {
-    DCHECK(!RuntimeEnabledFeatures::DigitalGoodsEnabled() || !ignore_total);
+    DCHECK(!RuntimeEnabledFeatures::DigitalGoodsEnabled(&execution_context) ||
+           !ignore_total);
     if (ignore_total) {
       output->total =
           CreateTotalPlaceHolderForAppStoreBilling(execution_context);
@@ -808,7 +810,8 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
 
   // TODO(crbug.com/825270): Reject with SecurityError DOMException if triggered
   // without user activation.
-  bool is_user_gesture = LocalFrame::HasTransientUserActivation(GetFrame());
+  bool is_user_gesture =
+      LocalFrame::HasTransientUserActivation(DomWindow()->GetFrame());
   if (!is_user_gesture) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kPaymentRequestShowWithoutGesture);
@@ -825,11 +828,13 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
 
   // TODO(crbug.com/779126): add support for handling payment requests in
   // immersive mode.
-  if (GetFrame()->GetDocument()->GetSettings()->GetImmersiveModeEnabled()) {
+  if (DomWindow()->GetFrame()->GetSettings()->GetImmersiveModeEnabled()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Page popups are suppressed");
     return ScriptPromise();
   }
+
+  VLOG(2) << "Renderer: PaymentRequest (" << id_.Utf8() << "): show()";
 
   UseCounter::Count(GetExecutionContext(), WebFeature::kPaymentRequestShow);
 
@@ -876,6 +881,8 @@ ScriptPromise PaymentRequest::abort(ScriptState* script_state,
     return ScriptPromise();
   }
 
+  VLOG(2) << "Renderer: PaymentRequest (" << id_.Utf8() << "): abort()";
+
   abort_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   payment_provider_->Abort();
   return abort_resolver_->Promise();
@@ -894,6 +901,9 @@ ScriptPromise PaymentRequest::canMakePayment(ScriptState* script_state,
                                       "Cannot query payment request");
     return ScriptPromise();
   }
+
+  VLOG(2) << "Renderer: PaymentRequest (" << id_.Utf8()
+          << "): canMakePayment()";
 
   payment_provider_->CanMakePayment();
 
@@ -916,6 +926,9 @@ ScriptPromise PaymentRequest::hasEnrolledInstrument(
                                       "Cannot query payment request");
     return ScriptPromise();
   }
+
+  VLOG(2) << "Renderer: PaymentRequest (" << id_.Utf8()
+          << "): hasEnrolledInstrument()";
 
   payment_provider_->HasEnrolledInstrument();
 
@@ -1222,6 +1235,8 @@ PaymentRequest::PaymentRequest(
   validated_details->id = id_ =
       details->hasId() ? details->id() : WTF::CreateCanonicalUUIDString();
 
+  VLOG(2) << "Renderer: New PaymentRequest (" << id_.Utf8() << ")";
+
   // This flag is set to true by ValidateAndConvertPaymentMethodData() if this
   // request is eligible for the Skip-to-GPay experimental flow and the GPay
   // payment method data has been patched to delegate shipping and contact
@@ -1235,8 +1250,9 @@ PaymentRequest::PaymentRequest(
   if (exception_state.HadException())
     return;
 
-  ignore_total_ = RuntimeEnabledFeatures::DigitalGoodsEnabled() &&
-                  RequestingOnlyAppStoreBillingMethods(validated_method_data);
+  ignore_total_ =
+      RuntimeEnabledFeatures::DigitalGoodsEnabled(GetExecutionContext()) &&
+      RequestingOnlyAppStoreBillingMethods(validated_method_data);
   ValidateAndConvertPaymentDetailsInit(details, options_, validated_details,
                                        shipping_option_, ignore_total_,
                                        *GetExecutionContext(), exception_state);
@@ -1286,7 +1302,7 @@ PaymentRequest::PaymentRequest(
         std::move(mock_payment_provider),
         execution_context->GetTaskRunner(TaskType::kMiscPlatformAPI));
   } else {
-    GetFrame()->GetBrowserInterfaceBroker().GetInterface(
+    DomWindow()->GetBrowserInterfaceBroker().GetInterface(
         payment_provider_.BindNewPipeAndPassReceiver(task_runner));
   }
   payment_provider_.set_disconnect_handler(

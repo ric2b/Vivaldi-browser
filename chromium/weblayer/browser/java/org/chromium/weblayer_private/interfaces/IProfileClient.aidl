@@ -4,7 +4,7 @@
 
 package org.chromium.weblayer_private.interfaces;
 
-// Added in Version 87.
+// Added in Version 88.
 interface IProfileClient {
   void onProfileDestroyed() = 0;
 }

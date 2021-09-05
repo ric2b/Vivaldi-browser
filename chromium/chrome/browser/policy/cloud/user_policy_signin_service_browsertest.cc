@@ -16,6 +16,8 @@
 #include "chrome/browser/ui/webui/signin/dice_turn_sync_on_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/policy/core/common/management/management_service.h"
+#include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/core/common/policy_test_utils.h"
@@ -63,6 +65,9 @@ class TestDiceTurnSyncOnHelperDelegate : public DiceTurnSyncOnHelper::Delegate {
       const std::string& email,
       DiceTurnSyncOnHelper::SigninChoiceCallback callback) override;
   void ShowSyncConfirmation(
+      base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
+          callback) override {}
+  void ShowSyncDisabledConfirmation(
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) override;
   void ShowSyncSettings() override;
@@ -163,7 +168,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     std::move(callback).Run(DiceTurnSyncOnHelper::SIGNIN_CHOICE_CONTINUE);
   }
 
-  void OnShowSyncConfirmation(
+  void OnShowSyncDisabledConfirmation(
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) {
     sync_confirmation_callback_ = std::move(callback);
@@ -299,6 +304,22 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
   bool policy_hanging_ = false;
   int dice_helper_created_count_ = 0;
   int dice_helper_deleted_count_ = 0;
+
+  // The sync service and waits for policies to load before starting for
+  // enterprise users, managed devices and browsers. This means that services
+  // depending on it might have to wait too. By setting the management
+  // authorities to none by default, we assume that the default test is on an
+  // unmanaged device and browser thus we avoid unnecessarily waiting for
+  // policies to load. Tests expecting either an enterprise user, a managed
+  // device or browser should add the appropriate management authorities.
+  policy::ScopedManagementServiceOverrideForTesting browser_management_ =
+      policy::ScopedManagementServiceOverrideForTesting(
+          policy::ManagementTarget::BROWSER,
+          base::flat_set<policy::EnterpriseManagementAuthority>());
+  policy::ScopedManagementServiceOverrideForTesting platform_management_ =
+      policy::ScopedManagementServiceOverrideForTesting(
+          policy::ManagementTarget::PLATFORM,
+          base::flat_set<policy::EnterpriseManagementAuthority>());
 };
 
 TestDiceTurnSyncOnHelperDelegate::TestDiceTurnSyncOnHelperDelegate(
@@ -329,10 +350,10 @@ void TestDiceTurnSyncOnHelperDelegate::ShowEnterpriseAccountConfirmation(
                                                      std::move(callback));
 }
 
-void TestDiceTurnSyncOnHelperDelegate::ShowSyncConfirmation(
+void TestDiceTurnSyncOnHelperDelegate::ShowSyncDisabledConfirmation(
     base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
         callback) {
-  test_fixture_->OnShowSyncConfirmation(std::move(callback));
+  test_fixture_->OnShowSyncDisabledConfirmation(std::move(callback));
 }
 
 void TestDiceTurnSyncOnHelperDelegate::ShowSyncSettings() {

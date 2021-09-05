@@ -18,6 +18,7 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.ConfigurationChangedObserver;
+import org.chromium.chrome.browser.share.ShareDelegateImpl.ShareOrigin;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
@@ -68,11 +69,14 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
      * @param activityLifecycleDispatcher Dispatcher for activity lifecycle events, e.g.
      * configuration changes.
      * @param modalDialogManager dispatcher for modal lifecycles events
+     * @param onShareRunnable A {@link Runnable} to execute when a share event occurs. This object
+     *                        does not actually handle sharing, but can provide supplemental
+     *                        functionality when the share button is pressed.
      */
     public ShareButtonController(Context context, ActivityTabProvider tabProvider,
             ObservableSupplier<ShareDelegate> shareDelegateSupplier, ShareUtils shareUtils,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
-            ModalDialogManager modalDialogManager) {
+            ModalDialogManager modalDialogManager, Runnable onShareRunnable) {
         mContext = context;
 
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
@@ -89,8 +93,9 @@ public class ShareButtonController implements ButtonDataProvider, ConfigurationC
             Tab tab = mTabProvider.get();
             assert tab != null : "Tab became null after share button was displayed";
             if (tab == null) return;
+            if (onShareRunnable != null) onShareRunnable.run();
             RecordUserAction.record("MobileTopToolbarShareButton");
-            shareDelegate.share(tab, /*shareDirectly=*/false);
+            shareDelegate.share(tab, /*shareDirectly=*/false, ShareOrigin.TOP_TOOLBAR);
         });
 
         mModalDialogManagerObserver = new ModalDialogManagerObserver() {

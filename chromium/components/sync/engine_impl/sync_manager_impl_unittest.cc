@@ -21,18 +21,17 @@
 #include "base/test/task_environment.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
-#include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/model_type_test_util.h"
 #include "components/sync/engine/engine_util.h"
 #include "components/sync/engine/events/protocol_event.h"
-#include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/net/http_post_provider_interface.h"
 #include "components/sync/engine/polling_constants.h"
 #include "components/sync/engine/test_engine_components_factory.h"
+#include "components/sync/engine_impl/cancelation_signal.h"
 #include "components/sync/engine_impl/cycle/sync_cycle.h"
 #include "components/sync/engine_impl/sync_scheduler.h"
 #include "components/sync/js/js_event_handler.h"
@@ -45,7 +44,6 @@
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/test/callback_counter.h"
-#include "components/sync/test/engine/fake_model_worker.h"
 #include "components/sync/test/engine/fake_sync_scheduler.h"
 #include "components/sync/test/fake_sync_encryption_handler.h"
 #include "services/network/test/test_network_connection_tracker.h"
@@ -69,10 +67,8 @@ namespace {
 
 class TestHttpPostProviderInterface : public HttpPostProviderInterface {
  public:
-  ~TestHttpPostProviderInterface() override {}
-
   void SetExtraRequestHeaders(const char* headers) override {}
-  void SetURL(const char* url, int port) override {}
+  void SetURL(const GURL& url) override {}
   void SetPostPayload(const char* content_type,
                       int content_length,
                       const char* content) override {}
@@ -87,62 +83,80 @@ class TestHttpPostProviderInterface : public HttpPostProviderInterface {
     return std::string();
   }
   void Abort() override {}
+
+ private:
+  ~TestHttpPostProviderInterface() override = default;
 };
 
 class TestHttpPostProviderFactory : public HttpPostProviderFactory {
  public:
-  ~TestHttpPostProviderFactory() override {}
-  HttpPostProviderInterface* Create() override {
+  ~TestHttpPostProviderFactory() override = default;
+  scoped_refptr<HttpPostProviderInterface> Create() override {
     return new TestHttpPostProviderInterface();
-  }
-  void Destroy(HttpPostProviderInterface* http) override {
-    delete static_cast<TestHttpPostProviderInterface*>(http);
   }
 };
 
 class SyncManagerObserverMock : public SyncManager::Observer {
  public:
-  MOCK_METHOD1(OnSyncCycleCompleted, void(const SyncCycleSnapshot&));  // NOLINT
-  MOCK_METHOD3(OnInitializationComplete,
-               void(const WeakHandle<JsBackend>&,
-                    const WeakHandle<DataTypeDebugInfoListener>&,
-                    bool));                                         // NOLINT
-  MOCK_METHOD1(OnConnectionStatusChange, void(ConnectionStatus));   // NOLINT
-  MOCK_METHOD1(OnUpdatedToken, void(const std::string&));           // NOLINT
-  MOCK_METHOD1(OnActionableError, void(const SyncProtocolError&));  // NOLINT
-  MOCK_METHOD1(OnMigrationRequested, void(ModelTypeSet));           // NOLINT
-  MOCK_METHOD1(OnProtocolEvent, void(const ProtocolEvent&));        // NOLINT
+  MOCK_METHOD(void,
+              OnSyncCycleCompleted,
+              (const SyncCycleSnapshot&),
+              (override));
+  // NOLINT
+  MOCK_METHOD(void,
+              OnInitializationComplete,
+              (const WeakHandle<JsBackend>&,
+               const WeakHandle<DataTypeDebugInfoListener>&,
+               bool),
+              (override));
+  // NOLINT
+  MOCK_METHOD(void, OnConnectionStatusChange, (ConnectionStatus), (override));
+  // NOLINT
+  MOCK_METHOD(void, OnActionableError, (const SyncProtocolError&), (override));
+  // NOLINT
+  MOCK_METHOD(void, OnMigrationRequested, (ModelTypeSet), (override));
+  // NOLINT
+  MOCK_METHOD(void, OnProtocolEvent, (const ProtocolEvent&), (override));
+  // NOLINT
 };
 
 class SyncEncryptionHandlerObserverMock
     : public SyncEncryptionHandler::Observer {
  public:
-  MOCK_METHOD3(OnPassphraseRequired,
-               void(PassphraseRequiredReason,
-                    const KeyDerivationParams&,
-                    const sync_pb::EncryptedData&));  // NOLINT
-  MOCK_METHOD0(OnPassphraseAccepted, void());         // NOLINT
-  MOCK_METHOD0(OnTrustedVaultKeyRequired, void());    // NOLINT
-  MOCK_METHOD0(OnTrustedVaultKeyAccepted, void());    // NOLINT
-  MOCK_METHOD2(OnBootstrapTokenUpdated,
-               void(const std::string&, BootstrapTokenType type));  // NOLINT
-  MOCK_METHOD2(OnEncryptedTypesChanged, void(ModelTypeSet, bool));  // NOLINT
-  MOCK_METHOD0(OnEncryptionComplete, void());                       // NOLINT
-  MOCK_METHOD2(OnCryptographerStateChanged,
-               void(Cryptographer*, bool));  // NOLINT
-  MOCK_METHOD2(OnPassphraseTypeChanged,
-               void(PassphraseType,
-                    base::Time));  // NOLINT
+  MOCK_METHOD(void,
+              OnPassphraseRequired,
+              (const KeyDerivationParams&, const sync_pb::EncryptedData&),
+              (override));
+  // NOLINT
+  MOCK_METHOD(void, OnPassphraseAccepted, (), (override));
+  // NOLINT
+  MOCK_METHOD(void, OnTrustedVaultKeyRequired, (), (override));
+  // NOLINT
+  MOCK_METHOD(void, OnTrustedVaultKeyAccepted, (), (override));
+  // NOLINT
+  MOCK_METHOD(void,
+              OnBootstrapTokenUpdated,
+              (const std::string&, BootstrapTokenType type),
+              (override));
+  // NOLINT
+  MOCK_METHOD(void, OnEncryptedTypesChanged, (ModelTypeSet, bool), (override));
+  // NOLINT
+  MOCK_METHOD(void,
+              OnCryptographerStateChanged,
+              (Cryptographer*, bool),
+              (override));
+  // NOLINT
+  MOCK_METHOD(void,
+              OnPassphraseTypeChanged,
+              (PassphraseType, base::Time),
+              (override));
+  // NOLINT
 };
 
 }  // namespace
 
 class SyncManagerTest : public testing::Test {
  protected:
-  enum NigoriStatus { DONT_WRITE_NIGORI, WRITE_TO_NIGORI };
-
-  enum EncryptionStatus { UNINITIALIZED, DEFAULT_ENCRYPTION, FULL_ENCRYPTION };
-
   SyncManagerTest()
       : sync_manager_("Test sync manager",
                       network::TestNetworkConnectionTracker::GetInstance()) {
@@ -162,14 +176,6 @@ class SyncManagerTest : public testing::Test {
 
     EXPECT_FALSE(js_backend_.IsInitialized());
 
-    std::vector<scoped_refptr<ModelSafeWorker>> workers;
-
-    // This works only because all routing info types are GROUP_PASSIVE.
-    // If we had types in other groups, we would need additional workers
-    // to support them.
-    scoped_refptr<ModelSafeWorker> worker = new FakeModelWorker(GROUP_PASSIVE);
-    workers.push_back(worker);
-
     auto encryption_observer =
         std::make_unique<StrictMock<SyncEncryptionHandlerObserverMock>>();
     encryption_observer_ = encryption_observer.get();
@@ -177,7 +183,6 @@ class SyncManagerTest : public testing::Test {
     SyncManager::InitArgs args;
     args.service_url = GURL("https://example.com/");
     args.post_factory = std::make_unique<TestHttpPostProviderFactory>();
-    args.workers = workers;
     args.encryption_observer_proxy = std::move(encryption_observer);
     args.extensions_activity = extensions_activity_.get();
     if (!enable_local_sync_backend)
@@ -256,14 +261,13 @@ class SyncManagerWithLocalBackendTest : public SyncManagerTest {
 
 class MockSyncScheduler : public FakeSyncScheduler {
  public:
-  MockSyncScheduler() : FakeSyncScheduler() {}
-  ~MockSyncScheduler() override {}
-
-  MOCK_METHOD2(Start, void(SyncScheduler::Mode, base::Time));
+  MockSyncScheduler() = default;
+  ~MockSyncScheduler() override = default;
+  MOCK_METHOD(void, Start, (SyncScheduler::Mode, base::Time), (override));
   void ScheduleConfiguration(ConfigurationParams params) override {
     ScheduleConfiguration_(params);
   }
-  MOCK_METHOD1(ScheduleConfiguration_, void(ConfigurationParams&));
+  MOCK_METHOD(void, ScheduleConfiguration_, (ConfigurationParams&), ());
 };
 
 class ComponentsFactory : public TestEngineComponentsFactory {

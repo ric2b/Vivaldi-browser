@@ -70,6 +70,8 @@
 #include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
 #include "third_party/cros_system_api/constants/cryptohome.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/clipboard_non_backed.h"
 
 using chromeos::disks::DiskMountManager;
 using content::BrowserThread;
@@ -442,7 +444,8 @@ void FileWatchFunctionBase::RespondWith(bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto result_value = std::make_unique<base::Value>(success);
   if (success) {
-    Respond(OneArgument(std::move(result_value)));
+    Respond(
+        OneArgument(base::Value::FromUniquePtrValue(std::move(result_value))));
   } else {
     Respond(Error(""));
   }
@@ -639,7 +642,7 @@ void FileManagerPrivateGetSizeStatsFunction::OnGetSizeStats(
   sizes->SetDouble("totalSize", static_cast<double>(*total_size));
   sizes->SetDouble("remainingSize", static_cast<double>(*remaining_size));
 
-  Respond(OneArgument(std::move(sizes)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(sizes))));
 }
 
 ExtensionFunction::ResponseAction
@@ -671,8 +674,7 @@ FileManagerPrivateInternalValidatePathNameLengthFunction::Run() {
 
 void FileManagerPrivateInternalValidatePathNameLengthFunction::
     OnFilePathLimitRetrieved(size_t current_length, size_t max_length) {
-  Respond(
-      OneArgument(std::make_unique<base::Value>(current_length <= max_length)));
+  Respond(OneArgument(base::Value(current_length <= max_length)));
 }
 
 ExtensionFunction::ResponseAction
@@ -727,8 +729,7 @@ FileManagerPrivateSinglePartitionFormatFunction::Run() {
     return RespondNow(Error("Device not found"));
   }
 
-  if (!device_disk->on_removable_device() || device_disk->on_boot_device() ||
-      device_disk->is_read_only()) {
+  if (device_disk->is_read_only()) {
     return RespondNow(Error("Invalid device"));
   }
 
@@ -937,7 +938,7 @@ void FileManagerPrivateInternalStartCopyFunction::RunAfterStartCopy(
     int operation_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  Respond(OneArgument(std::make_unique<base::Value>(operation_id)));
+  Respond(OneArgument(base::Value(operation_id)));
 }
 
 FileManagerPrivateInternalCopyImageToClipboardFunction::
@@ -971,6 +972,9 @@ FileManagerPrivateInternalCopyImageToClipboardFunction::Run() {
     return RespondNow(Error("Image file URL was invalid"));
   }
 
+  clipboard_sequence_ =
+      ui::ClipboardNonBacked::GetForCurrentThread()->GetSequenceNumber(
+          ui::ClipboardBuffer::kCopyPaste);
   std::unique_ptr<storage::FileStreamReader> reader =
       file_system_context->CreateFileStreamReader(
           file_system_url, 0, storage::kMaximumLength, base::Time());
@@ -980,7 +984,7 @@ FileManagerPrivateInternalCopyImageToClipboardFunction::Run() {
           &CopyImageRespondOnUIThread,
           base::BindOnce(
               &FileManagerPrivateInternalCopyImageToClipboardFunction::
-                  RespondWith,
+                  MoveBytesToClipboard,
               this));
 
   content::GetIOThreadTaskRunner({})->PostTask(
@@ -993,12 +997,22 @@ FileManagerPrivateInternalCopyImageToClipboardFunction::Run() {
   return RespondLater();
 }
 
-void FileManagerPrivateInternalCopyImageToClipboardFunction::RespondWith(
-    scoped_refptr<base::RefCountedString> bytes) {
+void FileManagerPrivateInternalCopyImageToClipboardFunction::
+    MoveBytesToClipboard(scoped_refptr<base::RefCountedString> bytes) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  clipboard_util::DecodeImageFileAndCopyToClipboard(std::move(bytes));
-  // Copy image to clipboard is async, this responds before copy is finished.
-  Respond(NoArguments());
+
+  clipboard_util::DecodeImageFileAndCopyToClipboard(
+      clipboard_sequence_, /*maintain_clipboard=*/true,
+      /*png_data=*/std::move(bytes),
+      base::BindOnce(
+          &FileManagerPrivateInternalCopyImageToClipboardFunction::RespondWith,
+          this));
+}
+
+void FileManagerPrivateInternalCopyImageToClipboardFunction::RespondWith(
+    bool is_on_clipboard) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  Respond(OneArgument(base::Value(is_on_clipboard)));
 }
 
 ExtensionFunction::ResponseAction FileManagerPrivateCancelCopyFunction::Run() {
@@ -1139,7 +1153,7 @@ FileManagerPrivateInternalComputeChecksumFunction::Run() {
 void FileManagerPrivateInternalComputeChecksumFunction::RespondWith(
     std::string hash) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  Respond(OneArgument(std::make_unique<base::Value>(std::move(hash))));
+  Respond(OneArgument(base::Value(std::move(hash))));
 }
 
 FileManagerPrivateSearchFilesByHashesFunction::
@@ -1250,7 +1264,7 @@ void FileManagerPrivateSearchFilesByHashesFunction::OnSearchByHashes(
     result->GetListWithoutPathExpansion(hashAndPath.hash, &list);
     list->AppendString(hashAndPath.path.value());
   }
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 FileManagerPrivateSearchFilesFunction::FileManagerPrivateSearchFilesFunction()
@@ -1312,7 +1326,7 @@ void FileManagerPrivateSearchFilesFunction::OnSearchByPattern(
 
   auto result = std::make_unique<base::DictionaryValue>();
   result->SetKey("entries", std::move(*entries));
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 ExtensionFunction::ResponseAction
@@ -1359,8 +1373,7 @@ FileManagerPrivateInternalGetDirectorySizeFunction::Run() {
 
 void FileManagerPrivateInternalGetDirectorySizeFunction::
     OnDirectorySizeRetrieved(int64_t size) {
-  Respond(
-      OneArgument(std::make_unique<base::Value>(static_cast<double>(size))));
+  Respond(OneArgument(base::Value(static_cast<double>(size))));
 }
 
 }  // namespace extensions

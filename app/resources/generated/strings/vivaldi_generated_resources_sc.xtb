@@ -11,7 +11,6 @@
 <translation id="1221825588892235038">Sa seberada ebbia</translation>
 <translation id="1244303850296295656">B'at una faddina de s'estensione</translation>
 <translation id="125220115284141797">Predefinidu</translation>
-<translation id="1274977772557788323">Assetios de ammentu de Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destinatzione</translation>
 <translation id="1430915738399379752">Imprenta</translation>
 <translation id="1433811987160647649">Pregunta-mi primu de bintrare</translation>
@@ -73,7 +72,6 @@
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3013291976881901233">Dispositivos MIDI</translation>
 <translation id="3036546437875325427">Ativa Flash</translation>
-<translation id="3038675903128704560">No permites a zassu web perunu de impreare unu plugin pro bintrare in s'elaboradore</translation>
 <translation id="3080207940057008665">B'at aterun'aplicu in su'elaboradore chi at agiuntu unu tema chi podet mudare su comportamentu de Vivaldi.</translation>
 <translation id="3084548735795614657">Tratze-lu pro l'assetare</translation>
 <translation id="3122464029669770682">CPU</translation>
@@ -92,10 +90,8 @@
 <translation id="3360297538363969800">B'at istadu una faddina imprentande. Pro piaghere cuntrolla s'imprentadora tua e prova-bi ateruna borta.</translation>
 <translation id="3378572629723696641">Cust'estensione podet èssere currumpida.</translation>
 <translation id="3432227430032737297">Lea-nde totu su chi est ammustradu</translation>
-<translation id="3440761377721825626">Pregunta-mi cando unu giassu web cheret impreare unu plugin pro bintrare in s'elaboradore meu</translation>
 <translation id="3494769164076977169">Pregunta-mi cando unu giassu web provat a iscarrigare files a sa sola pustis de su primu file (cunsigiadu)</translation>
 <translation id="3505030558724226696">No permites a s'aplicu de impreare sos dispositivos</translation>
-<translation id="3523642406908660543">Pregunta-mi cando unu giassu web cheret impreare unu plugin pro bintrare in s'elaboradore meu (cunsigiadu)</translation>
 <translation id="3560034655160545939">Cuntrollu de sa sillabatzione</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; cheret cumpartzire un'imprentadora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; cun d-una truma chi t'apartenet: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si as a atzetare totus sos membros de sa truma ant a podere impreare s'imprentadora.</translation>
 <translation id="3587482841069643663">Totu</translation>
@@ -135,7 +131,6 @@
 <translation id="4394049700291259645">Disativadu</translation>
 <translation id="4409697491990005945">Oros</translation>
 <translation id="4434045419905280838">Pop-up e reindiritzadas</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4593021220803146968">Bae ae <ph name="URL" /></translation>
 <translation id="4595560905247879544">Sos aplicos e sas estensiones podent èssere mudados dae su manager ebbia  (<ph name="CUSTODIAN_NAME" /> 1).</translation>
 <translation id="4726710629007580002">B'ant bistados avisos cando as provadu a assetare cust'estensione:</translation>
@@ -182,7 +177,6 @@
 <translation id="5804241973901381774">Ordines</translation>
 <translation id="5828633471261496623">Imprentande...</translation>
 <translation id="583281660410589416">No si connoschet</translation>
-<translation id="5908769186679515905">No permites a zassu web perunu de impreare Flash</translation>
 <translation id="5956585768868398362">Est custa sa pàgina pro sas chircas chi t'ispetasti?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
 <translation id="5978277834170881274">Imprea su cuntrollu de sa sillabatzione basilare</translation>
@@ -222,7 +216,6 @@
 <translation id="7270858098575133036">Pregunta-mi cando unu giassu web cheret impreare unu sistema esclusivu pro impitare dispositivos MIDI</translation>
 <translation id="7287143125007575591">No podes bintrare.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7311079019872751559">Impreu de plugin fora de sandbox</translation>
 <translation id="7385854874724088939">Calchi cosa est andada male in s'imprenta. Pro piaghere cuntrolla s'imprentadora e torra-bi a provare.</translation>
 <translation id="7423098979219808738">Pregunta-mi a primu</translation>
 <translation id="7427348830195639090">Pàgina in background: <ph name="BACKGROUND_PAGE_URL" /></translation>

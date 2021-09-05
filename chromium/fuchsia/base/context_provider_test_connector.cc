@@ -8,6 +8,7 @@
 
 #include <fuchsia/sys/cpp/fidl.h>
 #include <lib/fdio/directory.h>
+#include <lib/fdio/fd.h>
 #include <lib/sys/cpp/component_context.h>
 #include <zircon/processargs.h>
 #include <utility>
@@ -17,23 +18,36 @@
 
 namespace cr_fuchsia {
 
-fidl::InterfaceHandle<fuchsia::io::Directory> StartWebEngineForTests(
+namespace {
+
+// |is_for_logging_test| should only be true when testing WebEngine's logging
+// behavior as it prevents WebEngine logs from being included in the test
+// output. When false, WebEngine logs are not included in the Fuchsia system
+// log.
+fidl::InterfaceHandle<fuchsia::io::Directory> StartWebEngineForTestsInternal(
     fidl::InterfaceRequest<fuchsia::sys::ComponentController>
         component_controller_request,
-    const base::CommandLine& command_line) {
+    const base::CommandLine& command_line,
+    bool is_for_logging_test) {
+  DCHECK(command_line.argv()[0].empty()) << "Must use NO_PROGRAM.";
+
   fuchsia::sys::LaunchInfo launch_info;
   launch_info.url =
       "fuchsia-pkg://fuchsia.com/web_engine#meta/context_provider.cmx";
-  launch_info.arguments = command_line.argv();
+  // Add all switches and arguments, skipping the program.
+  launch_info.arguments.emplace(std::vector<std::string>(
+      command_line.argv().begin() + 1, command_line.argv().end()));
 
-  // Clone stderr from the current process to WebEngine and ask it to
-  // redirects all logs to stderr.
-  launch_info.err = fuchsia::sys::FileDescriptor::New();
-  launch_info.err->type0 = PA_FD;
-  zx_status_t status = fdio_fd_clone(
-      STDERR_FILENO, launch_info.err->handle0.reset_and_get_address());
-  ZX_CHECK(status == ZX_OK, status);
-  launch_info.arguments->push_back("--enable-logging=stderr");
+  if (!is_for_logging_test) {
+    // Clone stderr from the current process to WebEngine and ask it to
+    // redirect all logs to stderr.
+    launch_info.err = fuchsia::sys::FileDescriptor::New();
+    launch_info.err->type0 = PA_FD;
+    zx_status_t status = fdio_fd_clone(
+        STDERR_FILENO, launch_info.err->handle0.reset_and_get_address());
+    ZX_CHECK(status == ZX_OK, status);
+    launch_info.arguments->push_back("--enable-logging=stderr");
+  }
 
   fidl::InterfaceHandle<fuchsia::io::Directory> web_engine_services_dir;
   launch_info.directory_request =
@@ -47,13 +61,31 @@ fidl::InterfaceHandle<fuchsia::io::Directory> StartWebEngineForTests(
   return web_engine_services_dir;
 }
 
+}  // namespace
+
+fidl::InterfaceHandle<fuchsia::io::Directory> StartWebEngineForTests(
+    fidl::InterfaceRequest<fuchsia::sys::ComponentController>
+        component_controller_request,
+    const base::CommandLine& command_line) {
+  return StartWebEngineForTestsInternal(std::move(component_controller_request),
+                                        command_line, false);
+}
+
 fuchsia::web::ContextProviderPtr ConnectContextProvider(
     fidl::InterfaceRequest<fuchsia::sys::ComponentController>
         component_controller_request,
     const base::CommandLine& command_line) {
-  sys::ServiceDirectory web_engine_service_dir(StartWebEngineForTests(
-      std::move(component_controller_request), command_line));
+  sys::ServiceDirectory web_engine_service_dir(StartWebEngineForTestsInternal(
+      std::move(component_controller_request), command_line, false));
   return web_engine_service_dir.Connect<fuchsia::web::ContextProvider>();
 }
 
+fuchsia::web::ContextProviderPtr ConnectContextProviderForLoggingTest(
+    fidl::InterfaceRequest<fuchsia::sys::ComponentController>
+        component_controller_request,
+    const base::CommandLine& command_line) {
+  sys::ServiceDirectory web_engine_service_dir(StartWebEngineForTestsInternal(
+      std::move(component_controller_request), command_line, true));
+  return web_engine_service_dir.Connect<fuchsia::web::ContextProvider>();
+}
 }  // namespace cr_fuchsia

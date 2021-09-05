@@ -4,21 +4,28 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_section.h"
 
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/accessibility/accessibility_state_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/speech/extension_api/tts_engine_extension_observer.h"
+#include "chrome/browser/speech/extension_api/tts_engine_extension_observer_chromeos.h"
 #include "chrome/browser/ui/webui/settings/accessibility_main_handler.h"
+#include "chrome/browser/ui/webui/settings/captions_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
+#include "chrome/browser/ui/webui/settings/chromeos/tts_handler.h"
 #include "chrome/browser/ui/webui/settings/font_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
-#include "chrome/browser/ui/webui/settings/tts_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -410,6 +417,8 @@ void AccessibilitySection::AddLoadTimeData(
       {"chromeVoxLabel", IDS_SETTINGS_CHROMEVOX_LABEL},
       {"chromeVoxOptionsLabel", IDS_SETTINGS_CHROMEVOX_OPTIONS_LABEL},
       {"screenMagnifierLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_LABEL},
+      {"screenMagnifierFocusFollowingLabel",
+       IDS_SETTINGS_SCREEN_MAGNIFIER_FOCUS_FOLLOWING_LABEL},
       {"screenMagnifierZoomLabel", IDS_SETTINGS_SCREEN_MAGNIFIER_ZOOM_LABEL},
       {"dockedMagnifierLabel", IDS_SETTINGS_DOCKED_MAGNIFIER_LABEL},
       {"dockedMagnifierZoomLabel", IDS_SETTINGS_DOCKED_MAGNIFIER_ZOOM_LABEL},
@@ -557,10 +566,6 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_LABEL},
       {"tabletModeShelfNavigationButtonsSettingDescription",
        IDS_SETTINGS_A11Y_TABLET_MODE_SHELF_BUTTONS_DESCRIPTION},
-      {"captionsEnableLiveCaptionTitle",
-       IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_TITLE},
-      {"captionsEnableLiveCaptionSubtitle",
-       IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_SUBTITLE},
       {"caretBrowsingTitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_TITLE},
       {"caretBrowsingSubtitle", IDS_SETTINGS_ENABLE_CARET_BROWSING_SUBTITLE},
   };
@@ -582,8 +587,6 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddString("tabletModeShelfNavigationButtonsLearnMoreUrl",
                          chrome::kTabletModeGesturesLearnMoreURL);
 
-  html_source->AddBoolean("enableLiveCaption", AreLiveCaptionsAllowed());
-
   html_source->AddBoolean("showExperimentalAccessibilityCursorColor",
                           IsCursorColorAllowed());
 
@@ -597,6 +600,8 @@ void AccessibilitySection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(std::make_unique<::settings::TtsHandler>());
   web_ui->AddMessageHandler(
       std::make_unique<::settings::FontHandler>(profile()));
+  web_ui->AddMessageHandler(
+      std::make_unique<::settings::CaptionsHandler>(profile()->GetPrefs()));
 }
 
 int AccessibilitySection::GetSectionNameMessageId() const {
@@ -616,8 +621,16 @@ std::string AccessibilitySection::GetSectionPath() const {
 }
 bool AccessibilitySection::LogMetric(mojom::Setting setting,
                                      base::Value& value) const {
-  // Unimplemented.
-  return false;
+  switch (setting) {
+    case mojom::Setting::kFullscreenMagnifierFocusFollowing:
+      base::UmaHistogramBoolean(
+          "ChromeOS.Settings.Accessibility.FullscreenMagnifierFocusFollowing",
+          value.GetBool());
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 void AccessibilitySection::RegisterHierarchy(
@@ -637,6 +650,7 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kSelectToSpeak,
       mojom::Setting::kHighContrastMode,
       mojom::Setting::kFullscreenMagnifier,
+      mojom::Setting::kFullscreenMagnifierFocusFollowing,
       mojom::Setting::kDockedMagnifier,
       mojom::Setting::kStickyKeys,
       mojom::Setting::kOnScreenKeyboard,
@@ -726,8 +740,9 @@ void AccessibilitySection::UpdateTextToSpeechEnginesSearchTags() {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.RemoveSearchTags(GetTextToSpeechEnginesSearchConcepts());
 
-  const std::set<std::string> extensions =
-      TtsEngineExtensionObserver::GetInstance(profile())->GetTtsExtensions();
+  const std::set<std::string>& extensions =
+      TtsEngineExtensionObserverChromeOS::GetInstance(profile())
+          ->engine_extension_ids();
   if (!extensions.empty()) {
     updater.AddSearchTags(GetTextToSpeechEnginesSearchConcepts());
   }

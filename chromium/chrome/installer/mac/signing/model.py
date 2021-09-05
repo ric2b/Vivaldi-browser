@@ -209,6 +209,14 @@ class Distribution(object):
             package_as_pkg: If True, then a .pkg file will be created containing
                 the product.
         """
+        if channel_customize:
+            # Side-by-side channels must have a distinct names and creator
+            # codes, as well as keep their user data in separate locations.
+            assert channel
+            assert app_name_fragment
+            assert product_dirname
+            # assert creator_code
+
         self.channel = channel
         self.branding_code = branding_code
         self.app_name_fragment = app_name_fragment
@@ -218,6 +226,18 @@ class Distribution(object):
         self.channel_customize = channel_customize
         self.package_as_dmg = package_as_dmg
         self.package_as_pkg = package_as_pkg
+
+    def brandless_copy(self):
+        """Derives and returns a copy of this Distribution object, identical
+        except for not having a branding code.
+
+        This is useful in the case where a non-branded app bundle needs to be
+        created with otherwise the same configuration.
+        """
+        return Distribution(self.channel, None, self.app_name_fragment,
+                            self.packaging_name_fragment, self.product_dirname,
+                            self.creator_code, self.channel_customize,
+                            self.package_as_dmg, self.package_as_pkg)
 
     def to_config(self, base_config):
         """Produces a derived |config.CodeSignConfig| for the Distribution.

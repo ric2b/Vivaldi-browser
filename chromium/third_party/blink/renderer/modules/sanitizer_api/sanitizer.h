@@ -11,10 +11,13 @@
 
 namespace blink {
 
+class Document;
 class DocumentFragment;
 class ExceptionState;
 class SanitizerConfig;
 class ScriptState;
+class StringOrDocumentFragmentOrDocument;
+class StringOrTrustedHTMLOrDocumentFragmentOrDocument;
 
 class MODULES_EXPORT Sanitizer final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
@@ -24,17 +27,49 @@ class MODULES_EXPORT Sanitizer final : public ScriptWrappable {
   explicit Sanitizer(const SanitizerConfig*);
   ~Sanitizer() override;
 
-  String sanitizeToString(ScriptState*, const String&, ExceptionState&);
-  DocumentFragment* sanitize(ScriptState*, const String&, ExceptionState&);
-
-  SanitizerConfig* creationOptions() const;
+  String sanitizeToString(ScriptState*,
+                          StringOrDocumentFragmentOrDocument&,
+                          ExceptionState&);
+  DocumentFragment* sanitize(ScriptState*,
+                             StringOrTrustedHTMLOrDocumentFragmentOrDocument&,
+                             ExceptionState&);
 
   void Trace(Visitor*) const override;
 
  private:
-  // TODO(lyf): Make config_ read-only. The creationOptions getter which
-  // asks for the pointer is forbidened by a read-only variable.
-  Member<SanitizerConfig> config_ = {};
+  void ElementFormatter(HashSet<String>&, const Vector<String>&);
+  void AttrFormatter(HashMap<String, Vector<String>>&,
+                     const Vector<std::pair<String, Vector<String>>>&);
+
+  DocumentFragment* SanitizeImpl(ScriptState*,
+                                 StringOrDocumentFragmentOrDocument&,
+                                 ExceptionState&);
+
+  HashSet<String> allow_elements_ = {};
+  HashSet<String> block_elements_ = {};
+  HashSet<String> drop_elements_ = {};
+  HashMap<String, Vector<String>> allow_attributes_ = {};
+  HashMap<String, Vector<String>> drop_attributes_ = {};
+
+  bool has_allow_elements_ = false;
+  bool has_allow_attributes_ = false;
+
+  const HashSet<String> default_block_elements_ = {};
+  const HashSet<String> default_drop_elements_ = {"SCRIPT",    "ANNOTATION-XML",
+                                                  "AUDIO",     "COLGROUP",
+                                                  "DESC",      "FOREIGNOBJECT",
+                                                  "HEAD",      "IFRAME",
+                                                  "MATH",      "MI",
+                                                  "MN",        "MO",
+                                                  "MS",        "MTEXT",
+                                                  "NOEMBED",   "NOFRAMES",
+                                                  "PLAINTEXT", "STYLE",
+                                                  "SVG",       "TEMPLATE",
+                                                  "THEAD",     "TITLE",
+                                                  "VIDEO",     "XMP"};
+  const HashMap<String, Vector<String>> default_drop_attributes_ = {
+      {"onclick", Vector<String>({"*"})},
+      {"onsubmit", Vector<String>({"*"})}};
 };
 
 }  // namespace blink

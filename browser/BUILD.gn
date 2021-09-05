@@ -51,13 +51,6 @@ static_library("browser") {
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/prefs:prefs_strings",
   ]
-  if (is_win) {
-    deps += [ "//vivaldi/third_party:sparkle" ]
-  } else if (is_mac) {
-    deps += [
-      #"//vivaldi/third_party:copy_sparkle_framework",
-    ]
-  }
   if (!is_android) {
     deps += [
       "//components/guest_view/browser",
@@ -165,8 +158,4 @@ source_set("init_sparkle") {
     "//base:base_static",
     "//url",
   ]
-
-  if (is_win) {
-    deps += [ "//vivaldi/third_party:sparkle" ]
-  }
 }

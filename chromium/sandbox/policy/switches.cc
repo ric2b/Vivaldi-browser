@@ -5,6 +5,7 @@
 #include "sandbox/policy/switches.h"
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 
 #if defined(OS_WIN)
 #include "base/command_line.h"
@@ -41,10 +42,10 @@ const char kIconReaderSandbox[] = "icon_reader";
 const char kMediaFoundationCdmSandbox[] = "mf_cdm";
 #endif  // OS_WIN
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kImeSandbox[] = "ime";
 const char kTtsSandbox[] = "tts";
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Flags owned by the service manager sandbox.
 
@@ -114,7 +115,6 @@ const char kProcessType[] = "type";
 const char kGpuProcess[] = "gpu-process";
 const char kNaClBrokerProcess[] = "nacl-broker";
 const char kNaClLoaderProcess[] = "nacl-loader";
-const char kPpapiBrokerProcess[] = "ppapi-broker";
 const char kPpapiPluginProcess[] = "ppapi";
 const char kRendererProcess[] = "renderer";
 const char kUtilityProcess[] = "utility";

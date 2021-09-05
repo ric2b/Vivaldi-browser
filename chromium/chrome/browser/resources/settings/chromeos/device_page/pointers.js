@@ -27,6 +27,23 @@ Polymer({
 
     hasTouchpad: Boolean,
 
+    swapPrimaryOptions: {
+      readOnly: true,
+      type: Array,
+      value() {
+        return [
+          {
+            value: false,
+            name: loadTimeData.getString('primaryMouseButtonLeft')
+          },
+          {
+            value: true,
+            name: loadTimeData.getString('primaryMouseButtonRight')
+          },
+        ];
+      },
+    },
+
     /**
      * Interim property for use until we have a separate subsection for pointing
      * sticks. (See crbug.com/1114828)
@@ -34,12 +51,26 @@ Polymer({
      */
     showMouseSection_: {
       type: Boolean,
-      computed: 'computeShowMouseSection_(hasMouse, hasPointingStick)',
+      computed: 'computeShowMouseSection_(separatePointingStickSettings_, ' +
+          'hasMouse, hasPointingStick)',
+    },
+
+    showHeadings_: {
+      type: Boolean,
+      computed: 'computeShowHeadings_(separatePointingStickSettings_, ' +
+          'hasMouse, hasPointingStick, hasTouchpad)',
+    },
+
+    subsectionClass_: {
+      type: String,
+      computed: 'computeSubsectionClass_(separatePointingStickSettings_, ' +
+          'hasMouse, hasPointingStick, hasTouchpad)',
     },
 
     /**
      * TODO(michaelpg): settings-slider should optionally take a min and max so
      * we don't have to generate a simple range of natural numbers ourselves.
+     * These values match the TouchpadSensitivity enum in enums.xml.
      * @type {!Array<number>}
      * @private
      */
@@ -72,6 +103,18 @@ Polymer({
     },
 
     /**
+     * TODO(crbug.com/1114828): Remove this conditional once the feature is
+     * launched.
+     * @private
+     */
+    separatePointingStickSettings_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('separatePointingStickSettings');
+      },
+    },
+
+    /**
      * Used by DeepLinkingBehavior to focus this page's deep links.
      * @type {!Set<!chromeos.settings.mojom.Setting>}
      */
@@ -94,16 +137,50 @@ Polymer({
   },
 
   /**
+   * @param {boolean} separateSettings
    * @param {boolean} hasMouse
    * @param {boolean} hasPointingStick
    */
-  computeShowMouseSection_(hasMouse, hasPointingStick) {
-    return hasMouse || hasPointingStick;
+  computeShowMouseSection_(separateSettings, hasMouse, hasPointingStick) {
+    return separateSettings ? hasMouse : hasMouse || hasPointingStick;
   },
 
-  // Used to correctly identify when the mouse button has been released.
-  // crbug.com/686949.
-  receivedMouseSwapButtonsDown_: false,
+  /**
+   * Headings should only be visible if more than one subsection is present.
+   * @param {boolean} separateSettings
+   * @param {boolean} hasMouse
+   * @param {boolean} hasPointingStick
+   * @param {boolean} hasTouchpad
+   * @return {boolean}
+   * @private
+   */
+  computeShowHeadings_(
+      separateSettings, hasMouse, hasPointingStick, hasTouchpad) {
+    if (!separateSettings) {
+      return (hasMouse || hasPointingStick) && hasTouchpad;
+    }
+    const sectionVisibilities = [hasMouse, hasPointingStick, hasTouchpad];
+    // Count the number of true values in sectionVisibilities.
+    const numVisibleSections = sectionVisibilities.filter(x => x).length;
+    return numVisibleSections > 1;
+  },
+
+  /**
+   * Mouse, pointing stick, and touchpad sections are only subsections if more
+   * than one is present.
+   * @param {boolean} separateSettings
+   * @param {boolean} hasMouse
+   * @param {boolean} hasPointingStick
+   * @param {boolean} hasTouchpad
+   * @return {string}
+   * @private
+   */
+  computeSubsectionClass_(
+      separateSettings, hasMouse, hasPointingStick, hasTouchpad) {
+    const subsections = this.computeShowHeadings_(
+        separateSettings, hasMouse, hasPointingStick, hasTouchpad);
+    return subsections ? 'subsection' : '';
+  },
 
   /**
    * @param {!settings.Route} route
@@ -119,37 +196,6 @@ Polymer({
   },
 
   /**
-   * Mouse and touchpad sections are only subsections if they are both present.
-   * @param {boolean} showMouseSection
-   * @param {boolean} hasTouchpad
-   * @return {string}
-   * @private
-   */
-  getSubsectionClass_(showMouseSection, hasTouchpad) {
-    return showMouseSection && hasTouchpad ? 'subsection' : '';
-  },
-
-  /** @private */
-  onMouseSwapButtonsDown_() {
-    this.receivedMouseSwapButtonsDown_ = true;
-  },
-
-  /** @private */
-  onMouseSwapButtonsUp_() {
-    this.receivedMouseSwapButtonsDown_ = false;
-    /** @type {!SettingsToggleButtonElement} */ (this.$.mouseSwapButton)
-        .sendPrefChange();
-  },
-
-  /** @private */
-  onMouseSwapButtonsChange_() {
-    if (!this.receivedMouseSwapButtonsDown_) {
-      /** @type {!SettingsToggleButtonElement} */ (this.$.mouseSwapButton)
-          .sendPrefChange();
-    }
-  },
-
-  /**
    * @param {!Event} event
    * @private
    */
@@ -158,7 +204,7 @@ Polymer({
       return;
     }
 
-    if (event.path[0].tagName == 'A') {
+    if (event.path[0].tagName === 'A') {
       // Do not toggle reverse scrolling if the contained link is clicked.
       event.stopPropagation();
     }

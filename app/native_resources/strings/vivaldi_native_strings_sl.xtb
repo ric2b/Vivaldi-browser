@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Pošljite povezavo po e-pošti</translation>
 <translation id="1454726940098520109">Ne pokaži več potrditve</translation>
 <translation id="1462666970065907900">Ali zares želite zapreti to okno?</translation>
+<translation id="1526344461589023948">Med poskusom shranjevanja prenesene posodobitve je prišlo do napake. Preverite, ali ima računalnik dovolj prostora na disku, in poskusite znova pozneje.</translation>
 <translation id="1657174850639146440">Pošast 9</translation>
 <translation id="1676595396635191120">Novo zasebno okno</translation>
+<translation id="1702758681952953055">Če napaka ni odpravljena, jo prijavite in vključite naslednje podrobnosti:</translation>
 <translation id="1728549374069268714">Prilepi in kreni</translation>
 <translation id="1756026472674246267">Odpri povezavo v novem zavihku</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Pokrajina 15</translation>
 <translation id="19598411548897379">Splošno</translation>
 <translation id="2079036669923635404">Kliknite tukaj za posodobitev Vivaldija na različico <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Med prenosom posodobitvenih datotek je prišlo do napake. Preverite internetno povezavo in poskusite znova pozneje.</translation>
 <translation id="2441056087170876076">Pošast 2</translation>
 <translation id="2444387452209867610">Vstavi opombo</translation>
 <translation id="2486841023299517366">Žival 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Odpri povezavo v novem oknu</translation>
 <translation id="3588820906588687999">Odpri sliko v novem zavihku</translation>
 <translation id="3601066750251199488">Pošast 3</translation>
+<translation id="3708982624815781692">Prenos je bil preklican.</translation>
 <translation id="3732157130969736834">Shrani trenutno povezavo kot zaznamek</translation>
 <translation id="3732388226447288666">Žival 2</translation>
 <translation id="3732439195215136813">Žival 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Pošast 5</translation>
 <translation id="5615637589913244581">Opera različica 15+ (Beta)</translation>
 <translation id="5648110075441906505">Odpri sliko v novem oknu</translation>
+<translation id="5656371807944747581">Napaka pri posodabljanju!</translation>
 <translation id="5716238312826274098">Onemogočanje obvestil</translation>
 <translation id="5770433027661640693">Pokrajina 10</translation>
 <translation id="5857090052475505287">Nova mapa</translation>
 <translation id="588258955323874662">Celozaslonski način</translation>
 <translation id="5916080360077521750">Na žalost vaše nastavitve Chrome niso na voljo med delovanjem brskalnika. Če želite te nastavitve uvažati v Vivaldi, shranite svoje delo in zaprite vsa okna Chrome. Nato kliknite Nadaljuj.</translation>
+<translation id="6040143037577758943">Zapri</translation>
 <translation id="6229528619562190452">Kliknite tukaj, če želite posodobiti Vivaldi.</translation>
 <translation id="6234173136417926046">Uporabi sliko kot ozadje začetne strani</translation>
 <translation id="630690498669249215">Datoteka Opera Zaznamki</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Pokrajina 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi omogoča <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> odprtokodni projekt in druga <ph name="BEGIN_LINK_OSS" /> odprtokodna programska oprema<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Namestitve posodobitve ni uspelo zagnati. Preverite, ali ima računalnik dovolj pomnilnika ali prostora na disku, in poskusite znova pozneje.</translation>
 <translation id="7715497554424665066">&amp;Prezri posodobitev</translation>
 <translation id="7724603315864178912">Izreži</translation>
 <translation id="7793738202466490491">Dodaj kot dogodek v koledarju</translation>
+<translation id="7848222781052558334">Digitalnega podpisa prenesenih datotek ni bilo mogoče preveriti.</translation>
 <translation id="7865983598101744945">Potrdite izhod</translation>
 <translation id="7957213167373139414">Moj koledar</translation>
 <translation id="8027581147000338959">Odpri v novem oknu</translation>

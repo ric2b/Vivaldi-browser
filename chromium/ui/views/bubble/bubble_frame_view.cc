@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/feature_list.h"
 #include "build/build_config.h"
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -36,7 +35,6 @@
 #include "ui/views/paint_info.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/view_class_properties.h"
-#include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/client_view.h"
@@ -91,7 +89,14 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
   default_title_->SetVisible(false);
   AddChildView(default_title_);
 
-  auto close = CreateCloseButton(this);
+  auto close = CreateCloseButton(base::BindRepeating(
+      [](BubbleFrameView* view, const ui::Event& event) {
+        if (view->input_protector_.IsPossiblyUnintendedInteraction(event))
+          return;
+        view->GetWidget()->CloseWithReason(
+            Widget::ClosedReason::kCloseButtonClicked);
+      },
+      this));
   close->SetVisible(false);
 #if defined(OS_WIN)
   // Windows will automatically create a tooltip for the close button based on
@@ -102,7 +107,13 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
 #endif
   close_ = AddChildView(std::move(close));
 
-  auto minimize = CreateMinimizeButton(this);
+  auto minimize = CreateMinimizeButton(base::BindRepeating(
+      [](BubbleFrameView* view, const ui::Event& event) {
+        if (view->input_protector_.IsPossiblyUnintendedInteraction(event))
+          return;
+        view->GetWidget()->Minimize();
+      },
+      this));
   minimize->SetVisible(false);
 #if defined(OS_WIN)
   minimize->SetTooltipText(base::string16());
@@ -132,12 +143,11 @@ std::unique_ptr<Label> BubbleFrameView::CreateDefaultTitleLabel(
 
 // static
 std::unique_ptr<Button> BubbleFrameView::CreateCloseButton(
-    ButtonListener* listener) {
+    Button::PressedCallback callback) {
   auto close_button = CreateVectorImageButtonWithNativeTheme(
-      listener, vector_icons::kCloseRoundedIcon);
+      std::move(callback), vector_icons::kCloseRoundedIcon);
   close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
   close_button->SizeToPreferredSize();
-  close_button->SetFocusForPlatform();
 
   InstallCircleHighlightPathGenerator(close_button.get());
 
@@ -146,13 +156,12 @@ std::unique_ptr<Button> BubbleFrameView::CreateCloseButton(
 
 // static
 std::unique_ptr<Button> BubbleFrameView::CreateMinimizeButton(
-    ButtonListener* listener) {
+    Button::PressedCallback callback) {
   auto minimize_button = CreateVectorImageButtonWithNativeTheme(
-      listener, kWindowControlMinimizeIcon);
+      std::move(callback), kWindowControlMinimizeIcon);
   minimize_button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_APP_ACCNAME_MINIMIZE));
   minimize_button->SizeToPreferredSize();
-  minimize_button->SetFocusForPlatform();
 
   InstallCircleHighlightPathGenerator(minimize_button.get());
 
@@ -187,12 +196,9 @@ bool BubbleFrameView::GetClientMask(const gfx::Size& size, SkPath* path) const {
 
   // BubbleFrameView only returns a SkPath for the purpose of clipping the
   // client view's corners so that it fits within the borders of its rounded
-  // frame. With MD rounded coners if a client view is painted to a layer the
-  // rounding is handled by the |SetRoundedCornerRadius()| layer API, so we
-  // return false here.
-  if (base::FeatureList::IsEnabled(
-          features::kEnableMDRoundedCornersOnDialogs) &&
-      GetWidget()->client_view()->layer()) {
+  // frame. If a client view is painted to a layer the rounding is handled by
+  // the |SetRoundedCornerRadius()| layer API, so we return false here.
+  if (GetWidget()->client_view()->layer()) {
     return false;
   }
 
@@ -504,17 +510,6 @@ void BubbleFrameView::PaintChildren(const PaintInfo& paint_info) {
   OnPaintBorder(recorder.canvas());
 }
 
-void BubbleFrameView::ButtonPressed(Button* sender, const ui::Event& event) {
-  if (input_protector_.IsPossiblyUnintendedInteraction(event))
-    return;
-
-  if (sender == close_) {
-    GetWidget()->CloseWithReason(Widget::ClosedReason::kCloseButtonClicked);
-  } else if (sender == minimize_) {
-    GetWidget()->Minimize();
-  }
-}
-
 void BubbleFrameView::SetBubbleBorder(std::unique_ptr<BubbleBorder> border) {
   bubble_border_ = border.get();
 
@@ -583,8 +578,6 @@ SkColor BubbleFrameView::GetBackgroundColor() const {
 }
 
 void BubbleFrameView::UpdateClientViewBackground() {
-  if (!base::FeatureList::IsEnabled(features::kEnableMDRoundedCornersOnDialogs))
-    return;
   DCHECK(GetWidget());
   DCHECK(GetWidget()->client_view());
 
@@ -884,9 +877,10 @@ int BubbleFrameView::GetHeaderHeightForFrameWidth(int frame_width) const {
 }
 
 void BubbleFrameView::UpdateClientLayerCornerRadius() {
-  if (GetWidget() && GetWidget()->client_view()->layer() &&
-      base::FeatureList::IsEnabled(
-          features::kEnableMDRoundedCornersOnDialogs)) {
+  // If the ClientView is painted to a layer we need to apply the appropriate
+  // corner radius so that the ClientView and all its child layers are masked
+  // appropriately to fit within the BubbleFrameView.
+  if (GetWidget() && GetWidget()->client_view()->layer()) {
     GetWidget()->client_view()->layer()->SetRoundedCornerRadius(
         GetClientCornerRadii());
   }

@@ -26,10 +26,8 @@
 #include "ash/wm/overview/overview_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/metrics/histogram_macros.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window_targeter.h"
-#include "ui/compositor/animation_metrics_reporter.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -674,8 +672,7 @@ HotseatWidget::~HotseatWidget() {
 }
 
 bool HotseatWidget::ShouldShowHotseatBackground() {
-  return chromeos::switches::ShouldShowShelfHotseat() &&
-         Shell::Get()->tablet_mode_controller() &&
+  return Shell::Get()->tablet_mode_controller() &&
          Shell::Get()->tablet_mode_controller()->InTabletMode();
 }
 
@@ -693,11 +690,11 @@ void HotseatWidget::Initialize(aura::Window* container, Shelf* shelf) {
   params.layer_type = ui::LAYER_NOT_DRAWN;
   Init(std::move(params));
   set_focus_on_creation(false);
-  GetFocusManager()->set_arrow_key_traversal_enabled_for_widget(true);
 
   scrollable_shelf_view_ = GetContentsView()->AddChildView(
       std::make_unique<ScrollableShelfView>(ShelfModel::Get(), shelf));
   delegate_view_->Init(scrollable_shelf_view(), GetLayer(), this);
+  delegate_view_->SetEnableArrowKeyTraversal(true);
 
   // The initialization of scrollable shelf should update the translucent
   // background which is stored in |delegate_view_|. So initializes
@@ -1102,21 +1099,17 @@ void HotseatWidget::MaybeAdjustTargetBoundsForAppScaling(
 }
 
 HotseatDensity HotseatWidget::CalculateTargetHotseatDensity() const {
-  if (!ash::features::IsAppScalingEnabled())
-    return HotseatDensity::kNormal;
-
   // App scaling is only applied to the standard shelf. So the hotseat density
   // should not update in dense shelf.
   if (ShelfConfig::Get()->is_dense())
     return target_hotseat_density_;
 
-  // Currently the scaling animation of hotseat bounds and that of shelf icons
-  // do not synchronize due to performance issue. As a result, shelf scaling is
-  // not applied to the hotseat state transition, such as the transition from
-  // the home launcher state to the extended state. Hotseat density relies
-  // on the hotseat bounds in the home launcher state instead of the current
-  // hotseat state.
-  // TODO(crbug.com/1081476).
+  // TODO(crbug.com/1081476): Currently the scaling animation of hotseat bounds
+  // and that of shelf icons do not synchronize due to performance issue. As a
+  // result, shelf scaling is not applied to the hotseat state transition, such
+  // as the transition from the home launcher state to the extended state.
+  // Hotseat density relies on the hotseat bounds in the home launcher state
+  // instead of the current hotseat state.
 
   // Try candidate button sizes in decreasing order. If shelf buttons in one
   // size can show without scrolling, return the density type corresponding to

@@ -5,7 +5,7 @@
 #include "chrome/browser/media/router/mojo/media_router_desktop.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -15,7 +15,6 @@
 #include "chrome/browser/media/router/providers/wired_display/wired_display_media_route_provider.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "components/media_router/browser/media_router_factory.h"
 #include "components/media_router/common/media_source.h"
@@ -52,7 +51,6 @@ void MediaRouterDesktop::OnUserGesture() {
   // media source.
   UpdateMediaSinks(MediaSource::ForUnchosenDesktop().id());
 
-  media_sink_service_->BindLogger(GetLogger());
   media_sink_service_->OnUserGesture();
 
 #if defined(OS_WIN)
@@ -104,6 +102,7 @@ MediaRouterDesktop::MediaRouterDesktop(content::BrowserContext* context,
       cast_provider_(nullptr, base::OnTaskRunnerDeleter(nullptr)),
       dial_provider_(nullptr, base::OnTaskRunnerDeleter(nullptr)),
       media_sink_service_(media_sink_service) {
+  media_sink_service_->BindLogger(GetLogger());
   InitializeMediaRouteProviders();
 }
 

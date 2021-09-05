@@ -19,7 +19,6 @@
 namespace cc {
 class LayerTreeFrameSink;
 struct BeginMainFrameMetrics;
-class RenderFrameMetadataObserver;
 }  // namespace cc
 
 namespace blink {
@@ -40,10 +39,6 @@ class WidgetBaseClient {
   // Called to update the document lifecycle, advance the state of animations
   // and dispatch rAF.
   virtual void BeginMainFrame(base::TimeTicks frame_time) = 0;
-
-  // Called to record the time between when the widget was marked visible
-  // until the compositor begain producing a frame.
-  virtual void RecordTimeToFirstActivePaint(base::TimeDelta duration) = 0;
 
   // Requests that the lifecycle of the widget be updated.
   virtual void UpdateLifecycle(WebLifecycleUpdate requested_update,
@@ -107,16 +102,12 @@ class WidgetBaseClient {
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) {}
 
-  using LayerTreeFrameSinkCallback = base::OnceCallback<void(
-      std::unique_ptr<cc::LayerTreeFrameSink>,
-      std::unique_ptr<cc::RenderFrameMetadataObserver>)>;
-
-  // Requests a LayerTreeFrameSink to submit CompositorFrames to.
-  virtual void RequestNewLayerTreeFrameSink(
-      LayerTreeFrameSinkCallback callback) = 0;
-
   virtual void WillBeginMainFrame() {}
   virtual void DidCompletePageScaleAnimation() {}
+
+  virtual std::unique_ptr<cc::LayerTreeFrameSink>
+  AllocateNewLayerTreeFrameSink() = 0;
+
   virtual void FocusChangeComplete() {}
 
   virtual WebInputEventResult DispatchBufferedTouchEvents() = 0;
@@ -126,7 +117,7 @@ class WidgetBaseClient {
 
   virtual void DidHandleKeyEvent() {}
   virtual bool WillHandleGestureEvent(const WebGestureEvent& event) = 0;
-  virtual bool WillHandleMouseEvent(const WebMouseEvent& event) = 0;
+  virtual void WillHandleMouseEvent(const WebMouseEvent& event) = 0;
   virtual void ObserveGestureEventAndResult(
       const WebGestureEvent& gesture_event,
       const gfx::Vector2dF& unused_delta,
@@ -139,9 +130,6 @@ class WidgetBaseClient {
 
   // Called to inform the Widget of the mouse cursor's visibility.
   virtual void SetCursorVisibilityState(bool is_visible) {}
-
-  // Mouse capture has been lost.
-  virtual void MouseCaptureLost() {}
 
   // The FrameWidget interface if this is a FrameWidget.
   virtual blink::FrameWidget* FrameWidget() { return nullptr; }
@@ -204,6 +192,18 @@ class WidgetBaseClient {
 
   // Inform the widget that it was shown.
   virtual void WasShown(bool was_evicted) {}
+
+  virtual void RunPaintBenchmark(int repeat_count,
+                                 cc::PaintBenchmarkResult& result) {}
+
+  // When the WebWidget is part of a frame tree, returns the active url for
+  // main frame of that tree, if the main frame is local in that tree. When
+  // the WebWidget is of a different kind (e.g. a popup) it returns the active
+  // url for the main frame of the frame tree that spawned the WebWidget, if
+  // the main frame is local in that tree. When the relevant main frame is
+  // remote in that frame tree, then the url is not known, and an empty url is
+  // returned.
+  virtual KURL GetURLForDebugTrace() = 0;
 };
 
 }  // namespace blink

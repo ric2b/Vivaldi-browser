@@ -304,8 +304,8 @@ LayoutTextFragment* LayoutQuote::FindFragmentChild() const {
   // We walk from the end of the child list because, if we've had a first-letter
   // LayoutObject inserted then the remaining text will be at the end.
   while (LayoutObject* child = LastChild()) {
-    if (child->IsText() && ToLayoutText(child)->IsTextFragment())
-      return ToLayoutTextFragment(child);
+    if (auto* fragment = DynamicTo<LayoutTextFragment>(child))
+      return fragment;
   }
 
   return nullptr;
@@ -355,9 +355,9 @@ void LayoutQuote::AttachQuote() {
        predecessor = predecessor->PreviousInPreOrder()) {
     // Skip unattached predecessors to avoid having stale m_previous pointers
     // if the previous node is never attached and is then destroyed.
-    if (!predecessor->IsQuote() || !ToLayoutQuote(predecessor)->IsAttached())
+    if (!predecessor->IsQuote() || !To<LayoutQuote>(predecessor)->IsAttached())
       continue;
-    previous_ = ToLayoutQuote(predecessor);
+    previous_ = To<LayoutQuote>(predecessor);
     next_ = previous_->next_;
     previous_->next_ = this;
     if (next_)

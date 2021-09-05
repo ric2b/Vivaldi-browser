@@ -17,7 +17,7 @@ GEN('#if defined(NDEBUG)');
 
 GEN('#include "ash/public/cpp/ash_features.h"');
 GEN('#include "build/branding_buildflags.h"');
-GEN('#include "chrome/browser/browser_features.h"');
+GEN('#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"');
 GEN('#include "chrome/common/chrome_features.h"');
 GEN('#include "chromeos/constants/chromeos_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
@@ -54,6 +54,7 @@ var SettingsLocalizedLinkTest = class extends OSSettingsBrowserTest {
   /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../test_util.js',
       'localized_link_test.js',
     ]);
   }
@@ -216,6 +217,30 @@ var OSSettingsAddUsersTest = class extends OSSettingsBrowserTest {
 };
 
 TEST_F('OSSettingsAddUsersTest', 'AllJsTests', () => {
+  mocha.run();
+});
+
+// Tests for settings-user-page
+// eslint-disable-next-line no-var
+var OSSettingsUserPageTest = class extends OSSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload + 'accounts.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      '//ui/webui/resources/js/assert.js',
+      BROWSER_SETTINGS_PATH + '../test_util.js',
+      BROWSER_SETTINGS_PATH + '../fake_chrome_event.js',
+      'fake_users_private.js',
+      'user_page_tests.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsUserPageTest', 'AllJsTests', () => {
   mocha.run();
 });
 
@@ -663,6 +688,10 @@ TEST_F('OSSettingsDevicePageTest', 'PointersTest', () => {
   mocha.grep(assert(device_page_tests.TestNames.Pointers)).run();
 });
 
+TEST_F('OSSettingsDevicePageTest', 'PointersWithPointingStickTest', () => {
+  mocha.grep(assert(device_page_tests.TestNames.PointingStick)).run();
+});
+
 TEST_F('OSSettingsDevicePageTest', 'PowerTest', () => {
   mocha.grep(assert(device_page_tests.TestNames.Power)).run();
 });
@@ -705,7 +734,7 @@ var OSSettingsGoogleAssistantPageTest = class extends OSSettingsBrowserTest {
   /** @override */
   get browsePreload() {
     return super.browsePreload +
-        'google_assistant_page/google_assistant_page.html';
+        'chromeos/google_assistant_page/google_assistant_page.html';
   }
 
   /** @override */
@@ -719,6 +748,7 @@ var OSSettingsGoogleAssistantPageTest = class extends OSSettingsBrowserTest {
   get extraLibraries() {
     return super.extraLibraries.concat([
       '//ui/webui/resources/js/promise_resolver.js',
+      '//ui/webui/resources/js/util.js',
       BROWSER_SETTINGS_PATH + '../test_browser_proxy.js',
       BROWSER_SETTINGS_PATH + '../test_util.js',
       'google_assistant_page_test.js',
@@ -986,6 +1016,7 @@ var OSSettingsMultideviceFeatureItemTest = class extends OSSettingsBrowserTest {
   /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../test_util.js',
       'multidevice_feature_item_tests.js',
     ]);
   }
@@ -1115,6 +1146,55 @@ TEST_F('OSSettingsMultideviceSubPageTest', 'AllJsTests', () => {
   mocha.run();
 });
 
+// Test fixture for the multidevice wifi sync disabled link.
+// eslint-disable-next-line no-var
+var OSSettingsMultideviceWifiSyncDisabledLinkTest =
+    class extends OSSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload +
+        'chromeos/multidevice_page/multidevice_wifi_sync_disabled_link.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../test_util.js',
+      'multidevice_wifi_sync_disabled_link_tests.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsMultideviceWifiSyncDisabledLinkTest', 'AllJsTests', () => {
+  mocha.run();
+});
+
+// Test fixture for the multidevice wifi sync item.
+// eslint-disable-next-line no-var
+var OSSettingsMultideviceWifiSyncItemTest =
+    class extends OSSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return super.browsePreload +
+        'chromeos/multidevice_page/multidevice_wifi_sync_item.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return super.extraLibraries.concat([
+      BROWSER_SETTINGS_PATH + '../test_util.js',
+      BROWSER_SETTINGS_PATH + '../test_browser_proxy.js',
+      BROWSER_SETTINGS_PATH + 'test_sync_browser_proxy.js',
+      'multidevice_wifi_sync_item_tests.js',
+    ]);
+  }
+};
+
+TEST_F('OSSettingsMultideviceWifiSyncItemTest', 'AllJsTests', () => {
+  mocha.run();
+});
+
+
 // Test fixture for the Nearby Share receive dialog.
 // eslint-disable-next-line no-var
 var OSSettingsNearbyShareReceiveDialogTest =
@@ -1129,6 +1209,7 @@ var OSSettingsNearbyShareReceiveDialogTest =
   get extraLibraries() {
     return super.extraLibraries.concat([
       '../../nearby_share/shared/fake_nearby_contact_manager.js',
+      '../../nearby_share/shared/fake_nearby_share_settings.js',
       '../../test_util.js',
       '../../test_browser_proxy.js',
       'fake_receive_manager.js',
@@ -1158,6 +1239,8 @@ var OSSettingsNearbyShareSubPageTest = class extends OSSettingsBrowserTest {
   /** @override */
   get extraLibraries() {
     return super.extraLibraries.concat([
+      '//ui/webui/resources/js/assert.js',
+      '//ui/webui/resources/js/util.js',
       BROWSER_SETTINGS_PATH + '../test_browser_proxy.js',
       BROWSER_SETTINGS_PATH + '../test_util.js',
       '../../nearby_share/shared/fake_nearby_share_settings.js',
@@ -1794,7 +1877,7 @@ TEST_F('OSSettingsInputMethodOptionsPageTest', 'AllJsTests', () => {
 var OSSettingsInputPageTest = class extends OSSettingsBrowserTest {
   /** @override */
   get browsePreload() {
-    return super.browsePreload + 'chromeos/os_language_page/input_page.html';
+    return super.browsePreload + 'chromeos/os_languages_page/input_page.html';
   }
 
   /** @override */
@@ -1870,7 +1953,7 @@ TEST_F('OSSettingsResetPageTest', 'AllJsTests', () => {
 
 // Test fixture for the "Search and assistant" page.
 // eslint-disable-next-line no-var
-var OSSettingsSearchPageTest = class extends OSSettingsBrowserTest {
+var OSSettingsOsSearchPageTest = class extends OSSettingsBrowserTest {
   /** @override */
   get browsePreload() {
     return super.browsePreload + 'chromeos/os_search_page/os_search_page.html';
@@ -1887,7 +1970,7 @@ var OSSettingsSearchPageTest = class extends OSSettingsBrowserTest {
   }
 };
 
-TEST_F('OSSettingsSearchPageTest', 'AllJsTests', () => {
+TEST_F('OSSettingsOsSearchPageTest', 'AllJsTests', () => {
   mocha.run();
 });
 

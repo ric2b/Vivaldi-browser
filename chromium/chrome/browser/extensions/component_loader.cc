@@ -8,7 +8,7 @@
 
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
@@ -52,6 +52,7 @@
 #if defined(OS_CHROMEOS)
 #include "ash/keyboard/ui/grit/keyboard_resources.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/constants/chromeos_pref_names.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/site_instance.h"
@@ -403,7 +404,15 @@ void ComponentLoader::AddKeyboardApp() {
 }
 
 void ComponentLoader::AddChromeCameraApp() {
-  if (base::FeatureList::IsEnabled(chromeos::features::kCameraSystemWebApp)) {
+  // TODO(crbug.com/1135280): Remove all the logic here once CCA is fully
+  // migrated to SWA.
+
+  // If users should use the SWA version of CCA and the status from the platform
+  // app version is already migrated, there is no need to install the platform
+  // version of CCA.
+  if (base::FeatureList::IsEnabled(chromeos::features::kCameraSystemWebApp) &&
+      profile_->GetPrefs()->GetBoolean(
+          chromeos::prefs::kHasCameraAppMigratedToSWA)) {
     return;
   }
 
@@ -545,27 +554,10 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     return;
   }
 
-#if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // TODO(b/159863346): Delete this entirely around M88 when it has has a chance
-  // to be cleaned up.
-  if (extensions::ExtensionPrefs::Get(profile_)
-          ->ShouldInstallObsoleteComponentExtension(
-              extension_misc::kGeniusAppId)) {
-    // Since this is a v2 Chrome app it has a background page.
-    AddWithNameAndDescription(
-        IDR_GENIUS_APP_MANIFEST,
-        base::FilePath(
-            FILE_PATH_LITERAL("/usr/share/chromeos-assets/genius_app")),
-        l10n_util::GetStringUTF8(IDS_GENIUS_APP_NAME),
-        l10n_util::GetStringFUTF8(IDS_GENIUS_APP_DESCRIPTION,
-                                  ui::GetChromeOSDeviceName()));
-  }
-#endif
-
   if (!skip_session_components) {
 #if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
     if (profile_->GetPrefs()->GetBoolean(
-      vivaldiprefs::kPrivacyGoogleComponentExtensionsMediaRouter)) {
+      vivaldiprefs::kPrivacyGoogleComponentExtensionsHangoutServices)) {
     AddHangoutServicesExtension();
     }
 #endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)

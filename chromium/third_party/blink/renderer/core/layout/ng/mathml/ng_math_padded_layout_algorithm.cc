@@ -16,10 +16,7 @@ namespace blink {
 
 NGMathPaddedLayoutAlgorithm::NGMathPaddedLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
-    : NGLayoutAlgorithm(params) {
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
-}
+    : NGLayoutAlgorithm(params) {}
 
 LayoutUnit NGMathPaddedLayoutAlgorithm::RequestedLSpace() const {
   return std::max(LayoutUnit(),
@@ -85,8 +82,8 @@ scoped_refptr<const NGLayoutResult> NGMathPaddedLayoutAlgorithm::Layout() {
         &To<NGPhysicalBoxFragment>(content_layout_result->PhysicalFragment());
     content_margins =
         ComputeMarginsFor(constraint_space, content.Style(), ConstraintSpace());
-    NGBoxFragment fragment(ConstraintSpace().GetWritingMode(),
-                           ConstraintSpace().Direction(), *content_fragment);
+    NGBoxFragment fragment(ConstraintSpace().GetWritingDirection(),
+                           *content_fragment);
     content_ascent = content_margins.block_start +
                      fragment.Baseline().value_or(fragment.BlockSize());
     content_descent =

@@ -20,8 +20,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
+#include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -36,7 +36,7 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/pdf/pdf_extension_test_util.h"
-#include "chrome/browser/prerender/prerender_link_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_link_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
@@ -46,7 +46,6 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -56,13 +55,14 @@
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
-#include "components/prerender/browser/prerender_link_manager.h"
+#include "components/no_state_prefetch/browser/prerender_link_manager.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/version_info/channel.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/gpu_data_manager.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -317,8 +317,10 @@ class LeftMouseClick {
     mouse_event_.SetPositionInScreen(point.x() + offset.x(),
                                      point.y() + offset.y());
     mouse_event_.click_count = 1;
-    web_contents_->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
-        mouse_event_);
+    web_contents_->GetMainFrame()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->ForwardMouseEvent(mouse_event_);
 
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
@@ -338,8 +340,10 @@ class LeftMouseClick {
  private:
   void SendMouseUp() {
     mouse_event_.SetType(blink::WebInputEvent::Type::kMouseUp);
-    web_contents_->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
-        mouse_event_);
+    web_contents_->GetMainFrame()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->ForwardMouseEvent(mouse_event_);
     click_completed_ = true;
     if (message_loop_runner_)
       message_loop_runner_->Quit();
@@ -807,11 +811,15 @@ class WebViewTest : public extensions::PlatformAppBrowserTest {
         blink::WebInputEvent::GetStaticTimeStampForTests());
     mouse_event.button = blink::WebMouseEvent::Button::kRight;
     mouse_event.SetPositionInWidget(1, 1);
-    web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
-        mouse_event);
+    web_contents->GetMainFrame()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->ForwardMouseEvent(mouse_event);
     mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
-    web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
-        mouse_event);
+    web_contents->GetMainFrame()
+        ->GetRenderViewHost()
+        ->GetWidget()
+        ->ForwardMouseEvent(mouse_event);
   }
 
   content::WebContents* GetGuestWebContents() {
@@ -1342,7 +1350,7 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestDisplayNoneWebviewLoad) {
   TestHelper("testDisplayNoneWebviewLoad", "web_view/shim", NO_TEST_SERVER);
 }
 
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_Shim_TestDisplayNoneWebviewRemoveChild \
   DISABLED_Shim_TestDisplayNoneWebviewRemoveChild
 #else
@@ -3252,6 +3260,51 @@ IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestLoadDataAPI) {
   TestHelper("testLoadDataAPI", "web_view/shim", NEEDS_TEST_SERVER);
 }
 
+IN_PROC_BROWSER_TEST_F(WebViewTest, Shim_TestLoadDataAPIAccessibleResources) {
+  TestHelper("testLoadDataAPIAccessibleResources", "web_view/shim",
+             NEEDS_TEST_SERVER);
+}
+
+namespace {
+// Fails the test if a navigation is started in the given WebContents.
+class FailOnNavigation : public content::WebContentsObserver {
+ public:
+  explicit FailOnNavigation(content::WebContents* contents)
+      : content::WebContentsObserver(contents) {}
+
+  // content::WebContentsObserver:
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    ADD_FAILURE() << "Unexpected navigation: " << navigation_handle->GetURL();
+  }
+};
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(WebViewTest, LoadDataAPINotRelativeToAnotherExtension) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  const extensions::Extension* other_extension =
+      LoadExtension(test_data_dir_.AppendASCII("simple_with_file"));
+  LoadAppWithGuest("web_view/simple");
+  content::WebContents* embedder = GetEmbedderWebContents();
+  content::WebContents* guest = GetGuestWebContents();
+
+  FailOnNavigation fail_if_webview_navigates(guest);
+  ASSERT_TRUE(content::ExecuteScript(
+      embedder, content::JsReplace(
+                    "var webview = document.querySelector('webview'); "
+                    "webview.loadDataWithBaseUrl('data:text/html,hello', $1);",
+                    other_extension->url())));
+
+  // We expect the call to loadDataWithBaseUrl to fail and not cause a
+  // navigation. Since loadDataWithBaseUrl doesn't notify when it fails, we
+  // resort to a timeout here. If |fail_if_webview_navigates| doesn't see a
+  // navigation in that time, we consider the test to have passed.
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), TestTimeouts::tiny_timeout());
+  run_loop.Run();
+}
+
 // This test verifies that the resize and contentResize events work correctly.
 IN_PROC_BROWSER_TEST_F(WebViewSizeTest, Shim_TestResizeEvents) {
   TestHelper("testResizeEvents", "web_view/shim", NO_TEST_SERVER);
@@ -3741,6 +3794,44 @@ IN_PROC_BROWSER_TEST_F(WebViewAccessibilityTest, FocusAccessibility) {
             node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
 }
 
+// Validate that an inner frame within a guest WebContents correctly receives
+// focus when requested by accessibility. Previously the root
+// BrowserAccessibilityManager would not be updated due to how we were updating
+// the AXTreeData.
+// The test was disabled. See crbug.com/1141313.
+IN_PROC_BROWSER_TEST_F(WebViewAccessibilityTest,
+                       DISABLED_FocusAccessibilityNestedFrame) {
+  LoadAppWithGuest("web_view/focus_accessibility");
+  content::WebContents* web_contents = GetFirstAppWindowWebContents();
+  content::EnableAccessibilityForWebContents(web_contents);
+  content::WebContents* guest_web_contents = GetGuestWebContents();
+  content::EnableAccessibilityForWebContents(guest_web_contents);
+
+  // Wait for focus to land on the "root web area" role, representing
+  // focus on the main document itself.
+  while (content::GetFocusedAccessibilityNodeInfo(web_contents).role !=
+         ax::mojom::Role::kRootWebArea) {
+    content::WaitForAccessibilityFocusChange();
+  }
+
+  // Now keep pressing the Tab key until focus lands on a text field.
+  // This is testing that the inner frame within the guest WebContents receives
+  // focus, and that the focus state is accurately reflected in the accessiblity
+  // state.
+  while (content::GetFocusedAccessibilityNodeInfo(web_contents).role !=
+         ax::mojom::Role::kTextField) {
+    content::SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('\t'),
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
+    content::WaitForAccessibilityFocusChange();
+  }
+
+  ui::AXNodeData node_data =
+      content::GetFocusedAccessibilityNodeInfo(web_contents);
+  EXPECT_EQ("InnerFrameTextField",
+            node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+}
+
 class WebContentsAccessibilityEventWatcher
     : public content::WebContentsObserver {
  public:
@@ -3813,8 +3904,10 @@ IN_PROC_BROWSER_TEST_F(WebViewAccessibilityTest, DISABLED_TouchAccessibility) {
       blink::WebInputEvent::kIsTouchAccessibility,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   accessibility_touch_event.SetPositionInWidget(95, 55);
-  web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
-      accessibility_touch_event);
+  web_contents->GetMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(accessibility_touch_event);
 
   // Ensure that we got just a single hover event on the guest WebContents,
   // and that it was fired on a button.
@@ -3966,7 +4059,7 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
                                 ui::LatencyInfo(ui::SourceEventType::WHEEL));
 
   content::InputEventAckWaiter update_waiter(
-      guest_contents->GetRenderViewHost()->GetWidget(),
+      guest_contents->GetMainFrame()->GetRenderViewHost()->GetWidget(),
       base::BindRepeating([](blink::mojom::InputEventResultSource,
                              blink::mojom::InputEventResultState state,
                              const blink::WebInputEvent& event) {

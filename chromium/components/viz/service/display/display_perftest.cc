@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <limits>
 #include <vector>
 
 #include "base/bind.h"
@@ -71,10 +72,17 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
         FakeOutputSurface::Create3d();
 
     auto overlay_processor = std::make_unique<OverlayProcessorStub>();
+    // Normally display will need to take ownership of a
+    // gpu::GpuTaskschedulerhelper in order to keep it alive to share between
+    // the output surface and the overlay processor. In this case the overlay
+    // processor is a stub and the output surface is test only as well, so there
+    // is no need to pass in a real gpu::GpuTaskSchedulerHelper.
+    // TODO(weiliangc): Figure out a better way to set up test without passing
+    // in nullptr.
     auto display = std::make_unique<Display>(
         &bitmap_manager_, RendererSettings(), &debug_settings_, frame_sink_id,
-        std::move(output_surface), std::move(overlay_processor),
-        std::move(scheduler), task_runner_.get());
+        nullptr /* gpu::GpuTaskSchedulerHelper */, std::move(output_surface),
+        std::move(overlay_processor), std::move(scheduler), task_runner_.get());
     return display;
   }
 
@@ -90,7 +98,7 @@ class RemoveOverdrawQuadPerfTest : public testing::Test {
 
     SharedQuadState* state = render_pass->CreateAndAppendSharedQuadState();
     state->SetAll(quad_transform, rect, rect,
-                  /*rounded_corner_bounds=*/gfx::RRectF(), rect, is_clipped,
+                  /*mask_filter_info=*/gfx::MaskFilterInfo(), rect, is_clipped,
                   are_contents_opaque, opacity, blend_mode, sorting_context_id);
     return state;
   }

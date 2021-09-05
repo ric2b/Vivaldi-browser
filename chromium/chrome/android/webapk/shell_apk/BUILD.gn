@@ -4,6 +4,7 @@
 
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
+import("//tools/grit/grit_rule.gni")
 import("current_version/current_version.gni")
 import("generate_manifest_for_upload_outputs.gni")
 import("mustache_pass.gni")
@@ -77,7 +78,6 @@ template("webapk_java") {
       "//chrome/android/webapk/libs/common:splash_java",
       "//components/webapk/android/libs/common:java",
       "//third_party/android_deps:androidx_annotation_annotation_java",
-      "//third_party/android_sdk/androidx_browser:androidx_browser_java",
     ]
   }
 }

@@ -16,6 +16,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/download/DownloadFilter.java",
     "java/src/org/chromium/chrome/browser/download/DownloadInfo.java",
     "java/src/org/chromium/chrome/browser/download/DownloadLaterMetrics.java",
+    "java/src/org/chromium/chrome/browser/download/DownloadLocationDialogMetrics.java",
     "java/src/org/chromium/chrome/browser/download/DownloadManagerBridge.java",
     "java/src/org/chromium/chrome/browser/download/DownloadStartupUtils.java",
     "java/src/org/chromium/chrome/browser/download/DownloadStatus.java",
@@ -144,6 +145,7 @@ android_library("junit_tests") {
   sources = [
     "java/src/org/chromium/chrome/browser/download/DownloadDialogBridgeUnitTest.java",
     "java/src/org/chromium/chrome/browser/download/DownloadLaterMetricsUnitTest.java",
+    "java/src/org/chromium/chrome/browser/download/DownloadLocationDialogMetricsUnitTest.java",
     "java/src/org/chromium/chrome/browser/download/dialogs/DownloadDialogUtilsUnitTest.java",
     "java/src/org/chromium/chrome/browser/download/dialogs/DownloadLaterDialogHelperUnitTest.java",
   ]
@@ -178,8 +180,6 @@ android_resources("java_resources") {
     "java/res/drawable-xxhdpi/ic_refresh_white_36dp.png",
     "java/res/drawable-xxxhdpi/ic_refresh_white_24dp.png",
     "java/res/drawable-xxxhdpi/ic_refresh_white_36dp.png",
-    "java/res/drawable/async_image_view_unavailable.xml",
-    "java/res/drawable/async_image_view_waiting.xml",
     "java/res/drawable/circular_progress_bar_background_large.xml",
     "java/res/drawable/circular_progress_bar_background_small.xml",
     "java/res/drawable/circular_progress_bar_determinate_large.xml",

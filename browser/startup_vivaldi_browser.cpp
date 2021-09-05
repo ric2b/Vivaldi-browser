@@ -63,11 +63,6 @@ GURL GetVivaldiNewTabURL() {
   return GURL(vivaldi::kVivaldiNewTabURL);
 }
 
-bool IsAutoupdateEnabled(Profile* profile) {
-  const PrefService* prefs = profile->GetPrefs();
-  return prefs->GetBoolean(vivaldiprefs::kAutoUpdateEnabled);
-}
-
 bool LaunchVivaldi(const base::CommandLine& command_line,
                    const base::FilePath& cur_dir,
                    Profile* profile) {
@@ -81,7 +76,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   if (extension) {
     RecordCmdLineAppHistogram(extensions::Manifest::TYPE_PLATFORM_APP);
 #if defined(OS_MAC)
-    InitializeSparkle(command_line, base::Bind(&IsAutoupdateEnabled, profile));
+    init_sparkle::Initialize(command_line);
 #endif
   }
   // Never launch the update notifier process from guest windows
@@ -97,7 +92,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
   params.command_line = command_line;
   params.current_directory = cur_dir;
 
-  ::OpenApplicationWithReenablePrompt(profile, params);
+  ::OpenApplicationWithReenablePrompt(profile, std::move(params));
 
   return true;
 #else

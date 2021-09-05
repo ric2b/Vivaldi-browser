@@ -29,6 +29,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
@@ -51,8 +53,6 @@ import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
@@ -265,7 +265,8 @@ public class FullscreenManagerTest {
         final BrowserControlsManager browserControlsManager =
                 mActivityTestRule.getActivity().getBrowserControlsManager();
 
-        Assert.assertEquals(browserControlsManager.getTopControlOffset(), 0f, 0);
+        CriteriaHelper.pollUiThread(
+                () -> { return browserControlsManager.getTopControlOffset() == 0f; });
 
         FullscreenManagerTestUtils.waitForBrowserControlsToBeMoveable(
                 mActivityTestRule, mActivityTestRule.getActivity().getActivityTab());
@@ -362,7 +363,8 @@ public class FullscreenManagerTest {
         final BrowserControlsManager browserControlsManager =
                 mActivityTestRule.getActivity().getBrowserControlsManager();
 
-        Assert.assertEquals(browserControlsManager.getTopControlOffset(), 0f, 0);
+        CriteriaHelper.pollUiThread(
+                () -> { return browserControlsManager.getTopControlOffset() == 0f; });
 
         // Detect layouts. Note this doesn't actually need to be atomic (just final).
         final AtomicInteger layoutCount = new AtomicInteger();
@@ -440,7 +442,8 @@ public class FullscreenManagerTest {
 
         BrowserControlsManager browserControlsManager =
                 mActivityTestRule.getActivity().getBrowserControlsManager();
-        Assert.assertEquals(browserControlsManager.getTopControlOffset(), 0f, 0);
+        CriteriaHelper.pollUiThread(
+                () -> { return browserControlsManager.getTopControlOffset() == 0f; });
 
         FullscreenManagerTestUtils.scrollBrowserControls(mActivityTestRule, false);
 
@@ -466,7 +469,8 @@ public class FullscreenManagerTest {
 
         BrowserControlsManager browserControlsManager =
                 mActivityTestRule.getActivity().getBrowserControlsManager();
-        Assert.assertEquals(browserControlsManager.getTopControlOffset(), 0f, 0);
+        CriteriaHelper.pollUiThread(
+                () -> { return browserControlsManager.getTopControlOffset() == 0f; });
 
         FullscreenManagerTestUtils.scrollBrowserControls(mActivityTestRule, false);
 
@@ -492,7 +496,8 @@ public class FullscreenManagerTest {
         // after the controls are hidden.
         BrowserControlsManager browserControlsManager =
                 mActivityTestRule.getActivity().getBrowserControlsManager();
-        Assert.assertEquals(0f, browserControlsManager.getTopControlOffset(), 0);
+        CriteriaHelper.pollUiThread(
+                () -> { return browserControlsManager.getTopControlOffset() == 0f; });
 
         Tab tab = mActivityTestRule.getActivity().getActivityTab();
         TouchCommon.singleClickView(tab.getView());
@@ -511,7 +516,8 @@ public class FullscreenManagerTest {
 
         BrowserControlsManager browserControlsManager =
                 mActivityTestRule.getActivity().getBrowserControlsManager();
-        Assert.assertEquals(browserControlsManager.getTopControlOffset(), 0f, 0);
+        CriteriaHelper.pollUiThread(
+                () -> { return browserControlsManager.getTopControlOffset() == 0f; });
 
         int browserControlsHeight = browserControlsManager.getTopControlsHeight();
         float dragX = 50f;

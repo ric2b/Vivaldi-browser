@@ -29,4 +29,23 @@ constexpr SkColor kShelfButtonColor = SK_ColorWHITE;
 constexpr SkColor kIndicatorColorActive = SK_ColorWHITE;
 constexpr SkColor kInicatorColorRunning = SkColorSetA(SK_ColorWHITE, 0x7F);
 
+// Colors for back gesture.
+constexpr SkColor kArrowColorBeforeActivated = gfx::kGoogleBlue600;
+constexpr SkColor kArrowColorAfterActivated = gfx::kGoogleGrey100;
+const SkColor kBackgroundColorBeforeActivated = SK_ColorWHITE;
+const SkColor kBackgroundColorAfterActivated = gfx::kGoogleBlue600;
+
+// Colors for back gesture nudge.
+constexpr SkColor kCircleColor = SK_ColorWHITE;
+constexpr SkColor kLabelBackgroundColor = SkColorSetA(SK_ColorBLACK, 0xDE);
+
+// Colors for split view.
+constexpr SkColor kSplitviewLabelBackgroundColor =
+    SkColorSetA(SK_ColorBLACK, 0xDE);
+constexpr SkColor kSplitviewLabelEnabledColor = SK_ColorWHITE;
+constexpr SkColor kSplitviewBlackScrimLayerColor = SK_ColorBLACK;
+constexpr SkColor kSplitviewHighlightViewBackgroundColor = SK_ColorWHITE;
+constexpr SkColor kSplitviewHighlightViewBackgroundCannotSnapColor =
+    SK_ColorBLACK;
+
 #endif  // ASH_STYLE_DEFAULT_COLOR_CONSTANTS_H_

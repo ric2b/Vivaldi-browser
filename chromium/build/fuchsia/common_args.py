@@ -43,6 +43,11 @@ def _AddTargetSpecificationArgs(arg_parser):
                            'subclass of Target that will be used. Only '
                            'needed if device specific operations such as '
                            'paving is required.')
+  device_args.add_argument('--fuchsia-out-dir',
+                           help='Path to a Fuchsia build output directory. '
+                           'Setting the GN arg '
+                           '"default_fuchsia_build_dir_for_installation" '
+                           'will cause it to be passed here.')
 
 
 def _GetTargetClass(args):
@@ -95,9 +100,6 @@ def AddCommonArgs(arg_parser):
       help='Name of the package to execute, defined in ' + 'package metadata.')
 
   common_args = arg_parser.add_argument_group('common', 'Common arguments')
-  common_args.add_argument('--target-staging-path',
-                           help='target path under which to stage packages '
-                           'during deployment.', default='/data')
   common_args.add_argument('--runner-logs-dir',
                            help='Directory to write test runner logs to.')
   common_args.add_argument('--exclude-system-logs',
@@ -107,11 +109,6 @@ def AddCommonArgs(arg_parser):
   common_args.add_argument('--verbose', '-v', default=False,
                            action='store_true',
                            help='Enable debug-level logging.')
-  common_args.add_argument('--fuchsia-out-dir',
-                           nargs='+',
-                           help='Path to a Fuchsia build output directory. '
-                           'If more than one outdir is supplied, the last one '
-                           'in the sequence will be used.')
 
 
 def ConfigureLogging(args):
@@ -150,10 +147,12 @@ def GetDeploymentTargetForArgs(additional_args=None):
   known_args, _ = target_arg_parser.parse_known_args()
   target_args = vars(known_args)
 
-  # target_cpu is needed to determine target type, so we need to add
-  # it here to the args used to initialize the Target.
+  # target_cpu is needed to determine target type, and fuchsia_out_dir
+  # is needed for devices with Fuchsia built from source code.
   target_args.update({'target_cpu': module_args.target_cpu})
+  target_args.update({'fuchsia_out_dir': module_args.fuchsia_out_dir})
 
   if additional_args:
     target_args.update(additional_args)
+
   return target_class(**target_args)

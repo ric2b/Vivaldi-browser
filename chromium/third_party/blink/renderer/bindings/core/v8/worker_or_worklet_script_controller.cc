@@ -134,7 +134,8 @@ void WorkerOrWorkletScriptController::Initialize(const KURL& url_for_debugger) {
   const WrapperTypeInfo* wrapper_type_info =
       script_wrappable->GetWrapperTypeInfo();
   v8::Local<v8::FunctionTemplate> global_interface_template =
-      wrapper_type_info->DomTemplate(isolate_, *world_);
+      wrapper_type_info->GetV8ClassTemplate(isolate_, *world_)
+          .As<v8::FunctionTemplate>();
   DCHECK(!global_interface_template.IsEmpty());
   v8::Local<v8::ObjectTemplate> global_template =
       global_interface_template->InstanceTemplate();
@@ -329,20 +330,10 @@ ScriptEvaluationResult WorkerOrWorkletScriptController::EvaluateAndReturnValue(
   // Use default ReferrerScriptInfo here, as
   // - A work{er,let} script doesn't have a nonce, and
   // - a work{er,let} script is always "not parser inserted".
-  // TODO(crbug/1114988): After crbug/1114988 is fixed, this can be the
-  // default ScriptFetchOptions(). Currently the default ScriptFetchOptions()
-  // is not used because it has CredentialsMode::kOmit.
-  // TODO(crbug/1114989): Plumb this from ClassicScript.
-  ScriptFetchOptions script_fetch_options(
-      String(), IntegrityMetadataSet(), String(),
-      ParserDisposition::kNotParserInserted,
-      network::mojom::CredentialsMode::kSameOrigin,
-      network::mojom::ReferrerPolicy::kDefault,
-      mojom::blink::FetchImportanceMode::kImportanceAuto);
-
+  // TODO(crbug/1114989): Plumb ScriptFetchOptions from ClassicScript.
   ScriptEvaluationResult result = V8ScriptRunner::CompileAndRunScript(
       isolate_, script_state_, global_scope_, source_code, base_url,
-      sanitize_script_errors, script_fetch_options, v8_cache_options,
+      sanitize_script_errors, ScriptFetchOptions(), v8_cache_options,
       std::move(rethrow_errors));
 
   if (result.GetResultType() == ScriptEvaluationResult::ResultType::kAborted)

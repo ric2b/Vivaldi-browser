@@ -23,8 +23,8 @@
 #include "ui/views/test/widget_test.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
-#include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
+#include "chrome/browser/ui/views/frame/immersive_mode_controller_chromeos.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller_test_api.h"
 #endif
 
 #if defined(OS_MAC)
@@ -93,7 +93,15 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, NonImmersiveFullscreen) {
 // Test whether the zoom bubble is anchored to the same location if the toolbar
 // shows in fullscreen. And when the toolbar hides in fullscreen, the zoom
 // bubble should close and re-show in a new un-anchored position.
-IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, AnchorPositionsInFullscreen) {
+//
+// TODO(crbug.com/1142682): Fails on Lacros bots.
+#if BUILDFLAG(IS_LACROS)
+#define MAYBE_AnchorPositionsInFullscreen DISABLED_AnchorPositionsInFullscreen
+#else
+#define MAYBE_AnchorPositionsInFullscreen AnchorPositionsInFullscreen
+#endif
+IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest,
+                       MAYBE_AnchorPositionsInFullscreen) {
 #if defined(OS_MAC)
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
 #endif
@@ -176,8 +184,8 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, ImmersiveFullscreen) {
 
   ImmersiveModeController* immersive_controller =
       browser_view->immersive_mode_controller();
-  ash::ImmersiveFullscreenControllerTestApi(
-      static_cast<ImmersiveModeControllerAsh*>(immersive_controller)
+  chromeos::ImmersiveFullscreenControllerTestApi(
+      static_cast<ImmersiveModeControllerChromeos*>(immersive_controller)
           ->controller())
       .SetupForTest();
 

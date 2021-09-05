@@ -14,6 +14,7 @@
 #include "base/util/type_safety/pass_key.h"
 #include "ui/base/models/dialog_model_field.h"
 #include "ui/base/models/dialog_model_host.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/ui_base_types.h"
 
 namespace ui {
@@ -83,20 +84,51 @@ class COMPONENT_EXPORT(UI_BASE) DialogModel final {
  public:
   // Builder for DialogModel. Used for properties that are either only or
   // commonly const after construction.
-  class COMPONENT_EXPORT(UI_BASE) Builder {
+  class COMPONENT_EXPORT(UI_BASE) Builder final {
    public:
+    // Constructs a Builder for a DialogModel with a DialogModelDelegate whose
+    // lifetime (and storage) is tied to the lifetime of the DialogModel.
     explicit Builder(std::unique_ptr<DialogModelDelegate> delegate);
+
+    // Constructs a DialogModel without a DialogModelDelegate (that doesn't
+    // require storage tied to the DialogModel). For access to the DialogModel
+    // during construction (for use in callbacks), use model().
+    Builder();
+
+    Builder(const Builder&) = delete;
+    Builder& operator=(const Builder&) = delete;
+
     ~Builder();
 
     std::unique_ptr<DialogModel> Build() WARN_UNUSED_RESULT;
 
-    Builder& SetShowCloseButton(bool show_close_button) {
-      model_->show_close_button_ = show_close_button;
+    // Gets the DialogModel. Used for setting up callbacks that make use of the
+    // model later once it's fully constructed. This is useful for dialogs or
+    // callbacks that don't use DialogModelDelegate and don't have direct access
+    // to the model through DialogModelDelegate::dialog_model().
+    //
+    // Note that the DialogModel* returned here is only for registering
+    // callbacks with the DialogModel::Builder. These callbacks share lifetimes
+    // with the DialogModel so uses of it will not result in use-after-frees.
+    DialogModel* model() { return model_.get(); }
+
+    // Overrides the close-x use for the dialog. Should be avoided as the
+    // close-x is generally derived from dialog modality. Kept to allow
+    // conversion of dialogs that currently do not allow style.
+    // TODO(pbos): Propose UX updates to existing dialogs that require this,
+    // then remove OverrideShowCloseButton().
+    Builder& OverrideShowCloseButton(bool show_close_button) {
+      model_->override_show_close_button_ = show_close_button;
       return *this;
     }
 
     Builder& SetTitle(base::string16 title) {
       model_->title_ = std::move(title);
+      return *this;
+    }
+
+    Builder& SetIcon(ImageModel icon) {
+      model_->icon_ = std::move(icon);
       return *this;
     }
 
@@ -192,6 +224,10 @@ class COMPONENT_EXPORT(UI_BASE) DialogModel final {
 
   DialogModel(util::PassKey<DialogModel::Builder>,
               std::unique_ptr<DialogModelDelegate> delegate);
+
+  DialogModel(const DialogModel&) = delete;
+  DialogModel& operator=(const DialogModel&) = delete;
+
   ~DialogModel();
 
   // The host in which this model is hosted. Set by the Host implementation
@@ -242,13 +278,16 @@ class COMPONENT_EXPORT(UI_BASE) DialogModel final {
     host_ = host;
   }
 
-  bool show_close_button(util::PassKey<DialogModelHost>) const {
-    return show_close_button_;
+  const base::Optional<bool>& override_show_close_button(
+      util::PassKey<DialogModelHost>) const {
+    return override_show_close_button_;
   }
 
   const base::string16& title(util::PassKey<DialogModelHost>) const {
     return title_;
   }
+
+  const ImageModel& icon(util::PassKey<DialogModelHost>) const { return icon_; }
 
   base::Optional<int> initially_focused_field(
       util::PassKey<DialogModelHost>) const {
@@ -293,11 +332,11 @@ class COMPONENT_EXPORT(UI_BASE) DialogModel final {
   std::unique_ptr<DialogModelDelegate> delegate_;
   DialogModelHost* host_ = nullptr;
 
-  bool show_close_button_ = false;
+  base::Optional<bool> override_show_close_button_;
   bool close_on_deactivate_ = true;
   base::string16 title_;
+  ImageModel icon_;
 
-  static constexpr int kExtraButtonId = DIALOG_BUTTON_LAST + 1;
   std::vector<std::unique_ptr<DialogModelField>> fields_;
   base::Optional<int> initially_focused_field_;
   bool is_alert_dialog_ = false;

@@ -38,6 +38,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/about_ui.h"
+#include "chrome/browser/ui/webui/chromeos/login/active_directory_login_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/active_directory_password_change_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_downloading_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
@@ -49,7 +50,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/demo_preferences_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/demo_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/device_disabled_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/discover_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enable_adb_sideloading_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enable_debugging_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/encryption_migration_screen_handler.h"
@@ -71,8 +71,11 @@
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_display_chooser.h"
 #include "chrome/browser/ui/webui/chromeos/login/packaged_license_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/parental_handoff_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/pin_setup_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/recommend_apps_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/reset_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/supervision_transition_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/sync_consent_screen_handler.h"
@@ -120,7 +123,6 @@ namespace chromeos {
 namespace {
 
 const char* kKnownDisplayTypes[] = {OobeUI::kAppLaunchSplashDisplay,
-                                    OobeUI::kDiscoverDisplay,
                                     OobeUI::kGaiaSigninDisplay,
                                     OobeUI::kLoginDisplay,
                                     OobeUI::kOobeDisplay,
@@ -136,13 +138,26 @@ constexpr char kArcSupervisionIconPath[] = "supervision_icon.png";
 constexpr char kCustomElementsHTMLPath[] = "custom_elements.html";
 constexpr char kCustomElementsJSPath[] = "custom_elements.js";
 constexpr char kDebuggerJSPath[] = "debug.js";
-constexpr char kDiscoverJSPath[] = "discover_app.js";
 constexpr char kKeyboardUtilsJSPath[] = "keyboard_utils.js";
 constexpr char kLoginJSPath[] = "login.js";
 constexpr char kOobeJSPath[] = "oobe.js";
 constexpr char kProductLogoPath[] = "product-logo.png";
 constexpr char kRecommendAppListViewHTMLPath[] = "recommend_app_list_view.html";
 constexpr char kRecommendAppListViewJSPath[] = "recommend_app_list_view.js";
+// Components
+constexpr char kCommonStylesHTML[] = "components/common_styles.html";
+constexpr char kI18nBehaviorHTML[] = "components/oobe_i18n_behavior.html";
+constexpr char kI18nBehaviorJS[] = "components/oobe_i18n_behavior.js";
+constexpr char kHDIronIconHTML[] = "components/hd_iron_icon.html";
+constexpr char kHDIronIconJS[] = "components/hd_iron_icon.js";
+constexpr char kOobeCarouselHTML[] = "components/oobe_carousel.html";
+constexpr char kOobeCarouselJS[] = "components/oobe_carousel.js";
+constexpr char kOobeSlideHTML[] = "components/oobe_slide.html";
+constexpr char kOobeSlideJS[] = "components/oobe_slide.js";
+constexpr char kProgressListItemHTML[] = "components/progress_list_item.html";
+constexpr char kProgressListItemJS[] = "components/progress_list_item.js";
+constexpr char kThrobberNoticeHTML[] = "components/throbber_notice.html";
+constexpr char kThrobberNoticeJS[] = "components/throbber_notice.js";
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr char kLogo24PX1XSvgPath[] = "logo_24px-1x.svg";
@@ -181,7 +196,7 @@ void AddArcScreensResources(content::WebUIDataSource* source) {
   source->AddResourcePath(kArcPlaystoreCSSPath, IDR_ARC_SUPPORT_PLAYSTORE_CSS);
   source->AddResourcePath(kArcPlaystoreJSPath, IDR_ARC_SUPPORT_PLAYSTORE_JS);
   source->AddResourcePath(kArcPlaystoreLogoPath,
-      IDR_ARC_SUPPORT_PLAYSTORE_LOGO);
+                          IDR_ARC_SUPPORT_PLAYSTORE_LOGO);
 
   source->AddResourcePath(kRecommendAppListViewJSPath,
                           IDR_ARC_SUPPORT_RECOMMEND_APP_LIST_VIEW_JS);
@@ -283,15 +298,6 @@ void AddOobeDisplayTypeDefaultResources(content::WebUIDataSource* source) {
   source->AddResourcePath(kCustomElementsJSPath, IDR_CUSTOM_ELEMENTS_OOBE_JS);
 }
 
-// Default and non-shared resource definition for kDiscoverDisplay display type.
-// chrome://oobe/discover
-void AddDiscoverDisplayTypeDefaultResources(content::WebUIDataSource* source) {
-  source->SetDefaultResource(IDR_CHROMEOS_DISCOVER_APP_HTML);
-  source->AddResourcePath(kDiscoverJSPath, IDR_CHROMEOS_DISCOVER_APP_JS);
-  source->AddResourcePath("manifest.json", IDR_CHROMEOS_DISCOVER_MANIFEST);
-  source->AddResourcePath("logo.png", IDR_DISCOVER_APP_192);
-}
-
 // Default and non-shared resource definition for kLoginDisplay display type.
 // chrome://oobe/login
 void AddLoginDisplayTypeDefaultResources(content::WebUIDataSource* source) {
@@ -313,14 +319,14 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   source->AddLocalizedStrings(localized_strings);
   source->UseStringsJs();
 
+  OobeUI::AddOobeComponents(source, localized_strings);
+
   // First, configure default and non-shared resources for the current display
   // type.
   if (display_type == OobeUI::kOobeDisplay) {
     AddOobeDisplayTypeDefaultResources(source);
   } else if (display_type == OobeUI::kLockDisplay) {
     NOTREACHED();
-  } else if (display_type == OobeUI::kDiscoverDisplay) {
-    AddDiscoverDisplayTypeDefaultResources(source);
   } else {
     AddLoginDisplayTypeDefaultResources(source);
   }
@@ -366,7 +372,6 @@ std::string GetDisplayType(const GURL& url) {
 
 // static
 const char OobeUI::kAppLaunchSplashDisplay[] = "app-launch-splash";
-const char OobeUI::kDiscoverDisplay[] = "discover";
 const char OobeUI::kGaiaSigninDisplay[] = "gaia-signin";
 const char OobeUI::kLockDisplay[] = "lock";
 const char OobeUI::kLoginDisplay[] = "login";
@@ -466,12 +471,18 @@ void OobeUI::ConfigureOobeDisplay() {
   AddScreenHandler(std::make_unique<GaiaPasswordChangedScreenHandler>(
       js_calls_container_.get()));
 
+  AddScreenHandler(std::make_unique<ActiveDirectoryLoginScreenHandler>(
+      js_calls_container_.get(), core_handler_));
+
   auto password_change_handler =
       std::make_unique<ActiveDirectoryPasswordChangeScreenHandler>(
           js_calls_container_.get(), core_handler_);
 
   AddScreenHandler(std::make_unique<GaiaScreenHandler>(
       js_calls_container_.get(), core_handler_, network_state_informer_));
+
+  AddScreenHandler(std::make_unique<SignInFatalErrorScreenHandler>(
+      js_calls_container_.get()));
 
   AddScreenHandler(std::move(password_change_handler));
 
@@ -510,6 +521,9 @@ void OobeUI::ConfigureOobeDisplay() {
 
   AddScreenHandler(
       std::make_unique<TpmErrorScreenHandler>(js_calls_container_.get()));
+
+  AddScreenHandler(std::make_unique<ParentalHandoffScreenHandler>(
+      js_calls_container_.get()));
 
   Profile* profile = Profile::FromWebUI(web_ui());
   // Set up the chrome://theme/ source, for Chrome logo.
@@ -563,9 +577,6 @@ void OobeUI::BindInterface(
 
 OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
     : ui::MojoWebUIController(web_ui, true /* enable_chrome_send */) {
-  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "1082670 : Creating new OobeUI";
-
   display_type_ = GetDisplayType(url);
 
   js_calls_container_ = std::make_unique<JSCallsContainer>();
@@ -576,11 +587,10 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 
   AddWebUIHandler(std::move(core_handler));
 
-  if (display_type_ != OobeUI::kDiscoverDisplay)
-    ConfigureOobeDisplay();
+  ConfigureOobeDisplay();
 
   AddScreenHandler(
-      std::make_unique<DiscoverScreenHandler>(js_calls_container_.get()));
+      std::make_unique<PinSetupScreenHandler>(js_calls_container_.get()));
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   bool enable_debugger =
@@ -606,6 +616,40 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 OobeUI::~OobeUI() {
   for (Observer& observer : observer_list_)
     observer.OnDestroyingOobeUI();
+}
+
+// static
+
+void OobeUI::AddOobeComponents(content::WebUIDataSource* source,
+                               const base::DictionaryValue& localized_strings) {
+  source->AddResourcePath(kI18nBehaviorHTML,
+                          IDR_OOBE_COMPONENTS_I18N_BEHAVIOR_HTML);
+  source->AddResourcePath(kI18nBehaviorJS,
+                          IDR_OOBE_COMPONENTS_I18N_BEHAVIOR_JS);
+
+  source->AddResourcePath(kCommonStylesHTML,
+                          IDR_OOBE_COMPONENTS_COMMON_STYLES_HTML);
+
+  source->AddResourcePath(kHDIronIconHTML,
+                          IDR_OOBE_COMPONENTS_HD_IRON_ICON_HTML);
+  source->AddResourcePath(kHDIronIconJS, IDR_OOBE_COMPONENTS_HD_IRON_ICON_JS);
+
+  source->AddResourcePath(kOobeCarouselHTML,
+                          IDR_OOBE_COMPONENTS_OOBE_CAROUSEL_HTML);
+  source->AddResourcePath(kOobeCarouselJS,
+                          IDR_OOBE_COMPONENTS_OOBE_CAROUSEL_JS);
+  source->AddResourcePath(kOobeSlideHTML, IDR_OOBE_COMPONENTS_OOBE_SLIDE_HTML);
+  source->AddResourcePath(kOobeSlideJS, IDR_OOBE_COMPONENTS_OOBE_SLIDE_JS);
+
+  source->AddResourcePath(kProgressListItemHTML,
+                          IDR_OOBE_COMPONENTS_PROGRESS_LIST_ITEM_HTML);
+  source->AddResourcePath(kProgressListItemJS,
+                          IDR_OOBE_COMPONENTS_PROGRESS_LIST_ITEM_JS);
+
+  source->AddResourcePath(kThrobberNoticeHTML,
+                          IDR_OOBE_COMPONENTS_THROBBER_NOTICE_HTML);
+  source->AddResourcePath(kThrobberNoticeJS,
+                          IDR_OOBE_COMPONENTS_THROBBER_NOTICE_JS);
 }
 
 CoreOobeView* OobeUI::GetCoreOobeView() {
@@ -652,13 +696,7 @@ void OobeUI::AddScreenHandler(std::unique_ptr<BaseScreenHandler> handler) {
 }
 
 void OobeUI::InitializeHandlers() {
-  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "1082670 : OobeUI::InitializeHandlers";
-
   js_calls_container_->ExecuteDeferredJSCalls(web_ui());
-
-  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "1082670 : OobeUI::Marking as ready and executing callbacks";
 
   ready_ = true;
   for (size_t i = 0; i < ready_callbacks_.size(); ++i)
@@ -690,9 +728,6 @@ bool OobeUI::IsScreenInitialized(OobeScreenId screen) {
 }
 
 bool OobeUI::IsJSReady(const base::Closure& display_is_ready_callback) {
-  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "1082670 : OobeUI::IsJSReady? = " << ready_;
-
   if (!ready_)
     ready_callbacks_.push_back(display_is_ready_callback);
   return ready_;
@@ -729,6 +764,17 @@ void OobeUI::ResetSigninScreenHandlerDelegate() {
   signin_screen_handler_->SetDelegate(nullptr);
 }
 
+gfx::NativeView OobeUI::GetNativeView() {
+  return web_ui()->GetWebContents()->GetNativeView();
+}
+
+gfx::NativeWindow OobeUI::GetTopLevelNativeWindow() {
+  return web_ui()->GetWebContents()->GetTopLevelNativeWindow();
+}
+
+gfx::Size OobeUI::GetViewSize() {
+  return web_ui()->GetWebContents()->GetSize();
+}
 
 void OobeUI::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);

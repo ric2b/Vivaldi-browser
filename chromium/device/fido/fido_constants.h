@@ -335,6 +335,7 @@ COMPONENT_EXPORT(DEVICE_FIDO) extern const char kPinUvTokenMapKey[];
 extern const char kDefaultCredProtectKey[];
 extern const char kEnterpriseAttestationKey[];
 extern const char kLargeBlobsKey[];
+extern const char kAlwaysUvKey[];
 
 // HID transport specific constants.
 constexpr uint32_t kHidBroadcastChannel = 0xffffffff;
@@ -365,12 +366,6 @@ constexpr uint8_t kP1CheckOnly = 0x07;
 // return with this registration.
 constexpr uint8_t kP1IndividualAttestation = 0x80;
 constexpr size_t kMaxKeyHandleLength = 255;
-
-// kCableOverAOAVersion is a magic value that is sent as the "version" in an
-// Android AOA[1] configuration to identity a security-key request.
-//
-// [1] https://source.android.com/devices/accessories/aoa
-constexpr char kCableOverAOAVersion[] = "12eba9f901039b36";
 
 // kCableWebSocketProtocol is the name of the WebSocket subprotocol used by
 // caBLEv2. See https://tools.ietf.org/html/rfc6455#section-1.9.
@@ -472,6 +467,12 @@ enum class CredProtectRequest : uint8_t {
 // The map key for inserting the googleAndroidClientDataExtension output into a
 // CTAP2 makeCredential or getAssertion response.
 constexpr int kAndroidClientDataExtOutputKey = 0xf0;
+
+// PINUVAuthProtocol is the version number of a PIN/UV auth protocol.
+enum class PINUVAuthProtocol : uint8_t {
+  kV1 = 1,
+  kV2 = 2,
+};
 
 }  // namespace device
 

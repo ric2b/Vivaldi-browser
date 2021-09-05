@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
@@ -32,10 +32,6 @@
 
 #if BUILDFLAG(ENABLE_LIBVPX)
 #include "media/filters/vpx_video_decoder.h"
-#endif
-
-#if BUILDFLAG(ENABLE_LIBAOM)
-#include "media/filters/aom_video_decoder.h"
 #endif
 
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
@@ -165,7 +161,7 @@ void SetupGlobalEnvironmentIfNeeded() {
 // |kNestableTasksAllowed| because we could be running the RunLoop in a task,
 // e.g. in component builds when we share the same task runner as the host. In
 // a static build, this is not necessary.
-class VideoDecoderAdapter : public CdmVideoDecoder {
+class VideoDecoderAdapter final : public CdmVideoDecoder {
  public:
   VideoDecoderAdapter(CdmHostProxy* cdm_host_proxy,
                       std::unique_ptr<VideoDecoder> video_decoder)
@@ -321,9 +317,6 @@ std::unique_ptr<CdmVideoDecoder> CreateVideoDecoder(
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
     if (config.codec == cdm::kCodecAv1)
       video_decoder.reset(new Dav1dVideoDecoder(null_media_log.get()));
-#elif BUILDFLAG(ENABLE_LIBAOM)
-    if (config.codec == cdm::kCodecAv1)
-      video_decoder.reset(new AomVideoDecoder(null_media_log.get()));
 #endif
   }
 

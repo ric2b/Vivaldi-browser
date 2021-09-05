@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Printimi dështoi.</translation>
 <translation id="1125564390852150847">Krijo një skedë të re</translation>
 <translation id="1145536944570833626">Fshi të dhënat ekzistuese.</translation>
+<translation id="1147031633655575115">Identifikuar si <ph name="USER" /></translation>
 <translation id="1154690515305205900">Nuk mund të krijohet një lidhje me tekstin e theksuar.</translation>
+<translation id="1157749421655780457">Lejo vendndodhjen...</translation>
 <translation id="1165039591588034296">Gabim</translation>
 <translation id="1172898394251786223">Fusha tjetër</translation>
 <translation id="1176932207622159128">Imazhi nuk mund të ruhet</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Fshih fjalëkalimin</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> artikuj</translation>
 <translation id="1491277525950327607">Trokit dy herë për të ndryshuar cilësimin</translation>
+<translation id="1492417797159476138">E ke ruajtur tashmë këtë emër përdoruesi për këtë sajt</translation>
 <translation id="1509486075633541495">Identifikohu në sajtin e uebit</translation>
 <translation id="1509960214886564027">Veçoritë në shumë sajte mund të ndalojnë së funksionuari</translation>
 <translation id="152234381334907219">Nuk u ruajt asnjëherë</translation>
@@ -266,6 +269,7 @@ Ndiq hapat më poshtë:</translation>
 <translation id="385051799172605136">Prapa</translation>
 <translation id="3892144330757387737">Këtu do të gjesh historikun tënd</translation>
 <translation id="3897092660631435901">Menyja</translation>
+<translation id="3913386780052199712">Identifikuar në Chrome</translation>
 <translation id="3915450441834151894">Informacionet rreth sajtit</translation>
 <translation id="3922310737605261887">Kërko për tekstin e kopjuar</translation>
 <translation id="3928666092801078803">Ndërthur të dhënat e mia</translation>
@@ -340,6 +344,7 @@ Të dhënat e tua janë të koduara me frazën tënde të kalimit. Fute atë pë
 <translation id="4751645464639803239">Skedë e re "e fshehtë"</translation>
 <translation id="4758977202923349869">Pozicionoje kartën e kreditit në këtë kornizë</translation>
 <translation id="4775879719735953715">Shfletuesi i parazgjedhur</translation>
+<translation id="4778644898150334464">Përdor një fjalëkalim tjetër</translation>
 <translation id="4802417911091824046">Enkriptimi me frazën e kalimit nuk përfshin mënyrat e pagesës dhe adresat nga Google Pay.
 
 Për të ndryshuar këtë cilësim, <ph name="BEGIN_LINK" />rivendos sinkronizimin<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ Për të ndryshuar këtë cilësim, <ph name="BEGIN_LINK" />rivendos sinkronizim
 <translation id="5059136629401106827">Në rregull</translation>
 <translation id="5062321486222145940">Instalo "Diskun e Google"</translation>
 <translation id="5083464117946352670">Madhësia nuk mund të përcaktohet.</translation>
+<translation id="5090832849094901128">Fshirja e këtij fjalëkalimi nuk do ta fshijë llogarinë tënde në <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">Tweet përfundoi.</translation>
 <translation id="5118764316110575523">Joaktiv</translation>
 <translation id="5127805178023152808">Sinkronizimi është joaktiv</translation>
@@ -511,6 +517,9 @@ Sajtet nuk mund t'i përdorin kukit për të parë aktivitetin tënd të shfleti
 <translation id="6476800141292307438">Po përkthen faqen në <ph name="LANGUAGE" />. Opsionet që ofrohen janë pranë fundit të ekranit.</translation>
 <translation id="648164694371393720">Gabim i vërtetimit</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> elementë u fshinë</translation>
+<translation id="6497772452874122664">Nëse ke besim te <ph name="TIME" />, mund të përdorësh një fjalëkalim të ruajtur nga një sajt tjetër.
+
+Provo të përdorësh një fjalëkalim unik për çdo sajt.</translation>
 <translation id="651505212789431520">Të anulohet sinkronizimi? Mund ta aktivizosh sinkronizimin në çdo kohë te "Cilësimet".</translation>
 <translation id="6561262006871132942">Zmadho</translation>
 <translation id="6585618849026997638">Mund të kthehesh te një faqe që është e rëndësishme për ty duke shtuar një faqeshënues</translation>
@@ -590,6 +599,7 @@ Sajtet nuk mund t'i përdorin kukit për të parë aktivitetin tënd të shfleti
 <translation id="739941347996872055">Skeda e mëparshme</translation>
 <translation id="7400418766976504921">URL-ja</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> artikuj të palexuar.</translation>
+<translation id="7412027924265291969">Vazhdo</translation>
 <translation id="7425346204213733349">Ndryshimet te faqeshënuesit, historiku, fjalëkalimet dhe cilësimet e tjera nuk do të sinkronizohen më te llogaria jote e Google. Sidoqoftë, të dhënat e tua ekzistuese do të qëndrojnë të ruajtura te llogaria jote e Google.</translation>
 <translation id="7435356471928173109">Çaktivizuar nga administratori yt</translation>
 <translation id="7454057999980797137">Shteti / Qarku</translation>
@@ -600,6 +610,7 @@ Sajtet nuk mund t'i përdorin kukit për të parë aktivitetin tënd të shfleti
 <translation id="7472734401283673885">Emri i kompanisë</translation>
 <translation id="7473891865547856676">Jo, faleminderit</translation>
 <translation id="7481312909269577407">Përpara</translation>
+<translation id="7483467499335917849">Përdor vendndodhjen tënde aktuale</translation>
 <translation id="750493650310597496">0 të përzgjedhura</translation>
 <translation id="7514365320538308">Shkarko</translation>
 <translation id="7537586195939242955">Na vjen keq, "Pass" nuk mund të instalohet te "Passbook" në këtë moment.</translation>
@@ -733,6 +744,7 @@ Sajtet mund t'i përdorin kukit për të parë aktivitetin tënd të shfletimit 
 <translation id="9094033019050270033">Përditëso fjalëkalimin</translation>
 <translation id="9100610230175265781">Kërkohet shprehja e kalimit</translation>
 <translation id="9107664647686727385">Kontrollo për fjalëkalime të komprometuara</translation>
+<translation id="9137526406337347448">Shërbimet e Google</translation>
 <translation id="9148126808321036104">Identifikohu sërish</translation>
 <translation id="9152539721251340337">Krijo një kod QR</translation>
 <translation id="9157836665414082580">Fshih dialogjet</translation>

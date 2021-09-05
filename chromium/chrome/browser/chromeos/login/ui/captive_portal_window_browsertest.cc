@@ -77,7 +77,8 @@ class CaptivePortalWindowTest : public InProcessBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(chromeos::switches::kForceLoginManagerInTests);
     command_line->AppendSwitch(chromeos::switches::kLoginManager);
-    command_line->AppendSwitch(chromeos::switches::kDisableHIDDetectionOnOOBE);
+    command_line->AppendSwitch(
+        chromeos::switches::kDisableHIDDetectionOnOOBEForTesting);
   }
 
   void SetUpOnMainThread() override {
@@ -189,13 +190,11 @@ class CaptivePortalWindowCtorDtorTest : public LoginManagerTest {
 
     network_portal_detector_ = new NetworkPortalDetectorTestImpl();
     network_portal_detector::InitializeForTesting(network_portal_detector_);
-    NetworkPortalDetector::CaptivePortalState portal_state;
-    portal_state.status = NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL;
-    portal_state.response_code = 200;
     network_portal_detector_->SetDefaultNetworkForTesting(
         FakeShillManagerClient::kFakeEthernetNetworkGuid);
     network_portal_detector_->SetDetectionResultsForTesting(
-        FakeShillManagerClient::kFakeEthernetNetworkGuid, portal_state);
+        FakeShillManagerClient::kFakeEthernetNetworkGuid,
+        NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL, 200);
   }
 
  protected:

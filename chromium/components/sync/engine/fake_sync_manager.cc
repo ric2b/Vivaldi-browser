@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -78,6 +78,10 @@ void FakeSyncManager::Init(InitArgs* args) {
 
 ModelTypeSet FakeSyncManager::InitialSyncEndedTypes() {
   return initial_sync_ended_types_;
+}
+
+ModelTypeSet FakeSyncManager::GetEnabledTypes() {
+  return progress_marker_types_;
 }
 
 void FakeSyncManager::UpdateCredentials(const SyncCredentials& credentials) {
@@ -168,19 +172,6 @@ void FakeSyncManager::RefreshTypes(ModelTypeSet types) {
   last_refresh_request_types_ = types;
 }
 
-void FakeSyncManager::RegisterDirectoryTypeDebugInfoObserver(
-    TypeDebugInfoObserver* observer) {}
-
-void FakeSyncManager::UnregisterDirectoryTypeDebugInfoObserver(
-    TypeDebugInfoObserver* observer) {}
-
-bool FakeSyncManager::HasDirectoryTypeDebugInfoObserver(
-    TypeDebugInfoObserver* observer) {
-  return false;
-}
-
-void FakeSyncManager::RequestEmitDebugInfo() {}
-
 void FakeSyncManager::OnIncomingInvalidation(
     ModelType type,
     std::unique_ptr<InvalidationInterface> invalidation) {
@@ -200,6 +191,10 @@ void FakeSyncManager::OnCookieJarChanged(bool account_mismatch,
 
 void FakeSyncManager::UpdateInvalidationClientId(const std::string&) {
   NOTIMPLEMENTED();
+}
+
+void FakeSyncManager::UpdateSingleClientStatus(bool single_client) {
+  // Do nothing.
 }
 
 }  // namespace syncer

@@ -41,7 +41,6 @@ Polymer({
         chromeos.settings.mojom.Setting.kForgetPhone,
         chromeos.settings.mojom.Setting.kPhoneHubOnOff,
         chromeos.settings.mojom.Setting.kPhoneHubNotificationsOnOff,
-        chromeos.settings.mojom.Setting.kPhoneHubNotificationBadgeOnOff,
         chromeos.settings.mojom.Setting.kPhoneHubTaskContinuationOnOff,
         chromeos.settings.mojom.Setting.kWifiSyncOnOff,
       ]),
@@ -158,5 +157,13 @@ Polymer({
     return !this.isSuiteOn() ||
         messagesFeatureState ===
         settings.MultiDeviceFeatureState.PROHIBITED_BY_POLICY;
-  }
+  },
+
+  getPhoneHubNotificationsTooltip_() {
+    if (!this.isPhoneHubNotificationAccessProhibited()) {
+      return '';
+    }
+
+    return this.i18n('multideviceNotificationAccessProhibitedTooltip');
+  },
 });

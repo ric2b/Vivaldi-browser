@@ -122,18 +122,11 @@ class SharedImageRepresentationDawnIOSurface
 
     dawn_native::metal::ExternalImageDescriptorIOSurface descriptor;
     descriptor.cTextureDescriptor = &texture_descriptor;
-    descriptor.isCleared = IsCleared();
+    descriptor.isInitialized = IsCleared();
     descriptor.ioSurface = io_surface_.get();
     descriptor.plane = 0;
 
     texture_ = dawn_native::metal::WrapIOSurface(device_, &descriptor);
-
-    if (texture_) {
-      // Keep a reference to the texture so that it stays valid (its content
-      // might be destroyed).
-      dawn_procs_.textureReference(texture_);
-    }
-
     return texture_;
   }
 

@@ -25,6 +25,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -481,7 +482,8 @@ void AppSearchProvider::RefreshAppsAndUpdateResultsDeferred() {
 void AppSearchProvider::UpdateRecommendedResults(
     const base::flat_map<std::string, uint16_t>& id_to_app_list_index) {
   SearchProvider::Results new_results;
-  std::set<std::string> seen_or_filtered_apps;
+  std::set<std::string> seen_or_filtered_tile_apps;
+  std::set<std::string> seen_or_filtered_chip_apps;
   const uint16_t apps_size = apps_.size();
   new_results.reserve(apps_size);
 
@@ -512,18 +514,6 @@ void AppSearchProvider::UpdateRecommendedResults(
         app->data_source()->CreateResult(app->id(), list_controller_, true);
     result->SetTitle(title);
 
-    if (app->id() == chromeos::default_web_apps::kHelpAppId) {
-      auto release_notes_storage =
-          std::make_unique<chromeos::ReleaseNotesStorage>(profile_);
-      // If we should show the release notes suggestion chip, change the title
-      // and url of the Help App. Otherwise leave as normal.
-      if (release_notes_storage->ShouldShowSuggestionChip()) {
-        result->SetTitle(ui::SubstituteChromeOSDeviceType(
-            IDS_RELEASE_NOTES_DEVICE_SPECIFIC_NOTIFICATION_TITLE));
-        result->SetQueryUrl(GURL("chrome://help-app/updates"));
-      }
-    }
-
     const auto find_in_app_list = id_to_app_list_index.find(app->id());
     const base::Time time = app->GetLastActivityTime();
 
@@ -544,7 +534,18 @@ void AppSearchProvider::UpdateRecommendedResults(
       result->set_relevance(0.0f);
     }
 
-    MaybeAddResult(&new_results, std::move(result), &seen_or_filtered_apps);
+    // Create a second result to the display in the launcher chips, that is
+    // otherwise identical to |result|.
+    std::unique_ptr<AppResult> chip_result =
+        app->data_source()->CreateResult(app->id(), list_controller_, true);
+    chip_result->SetMetadata(result->CloneMetadata());
+    chip_result->SetDisplayType(ChromeSearchResult::DisplayType::kChip);
+    chip_result->set_relevance(result->relevance());
+
+    MaybeAddResult(&new_results, std::move(result),
+                   &seen_or_filtered_tile_apps);
+    MaybeAddResult(&new_results, std::move(chip_result),
+                   &seen_or_filtered_chip_apps);
   }
   PublishQueriedResultsOrRecommendation(false, &new_results);
 }

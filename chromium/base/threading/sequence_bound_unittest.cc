@@ -8,7 +8,7 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
@@ -613,6 +613,14 @@ TEST_F(SequenceBoundTest, AsyncCallWithArgsIntThen) {
         }));
     loop.Run();
   }
+}
+
+TEST_F(SequenceBoundTest, AsyncCallIsConstQualified) {
+  // Tests that both const and non-const methods may be called through a
+  // const-qualified SequenceBound.
+  const SequenceBound<NoArgsVoidReturn> s(task_runner_);
+  s.AsyncCall(&NoArgsVoidReturn::ConstMethod);
+  s.AsyncCall(&NoArgsVoidReturn::Method);
 }
 
 // TODO(dcheng): Maybe use the nocompile harness here instead of being

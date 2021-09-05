@@ -19,7 +19,7 @@
       #header {
         margin-inline-end:  var(--nearby-page-space-inline);
         margin-inline-start: var(--nearby-page-space-inline);
-        padding-block-end: var(--nearby-page-space-block);
+        padding-block-end: 16px;
         padding-block-start: var(--nearby-page-space-block);
       }
 
@@ -49,7 +49,8 @@
         margin-inline-end: auto;
       }
     </style>
-    <div id="pageContainer">
+    <div id="pageContainer" role="dialog" aria-modal="true"
+        aria-labelledby="pageTitle pageSubTitle">
       <div id="header">
         <div id="pageTitle">[[title]]</div>
         <div id="pageSubTitle">[[subTitle]]</div>

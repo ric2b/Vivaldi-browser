@@ -53,10 +53,8 @@
 #include "third_party/blink/renderer/core/dom/document_encoding_data.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/dom/document_timing.h"
-#include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
 #include "third_party/blink/renderer/core/dom/live_node_list_registry.h"
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
-#include "third_party/blink/renderer/core/dom/scripted_idle_task_controller.h"
 #include "third_party/blink/renderer/core/dom/synchronous_mutation_observer.h"
 #include "third_party/blink/renderer/core/dom/text_link_colors.h"
 #include "third_party/blink/renderer/core/dom/tree_scope.h"
@@ -145,6 +143,7 @@ class FloatQuad;
 class FloatRect;
 class FontMatchingMetrics;
 class FormController;
+class FrameCallback;
 class HTMLAllCollection;
 class HTMLBodyElement;
 class FrameScheduler;
@@ -160,6 +159,7 @@ class HTMLScriptElementOrSVGScriptElement;
 class HitTestRequest;
 class HttpRefreshScheduler;
 class IdleRequestOptions;
+class IdleTask;
 class IntersectionObserverController;
 class LayoutView;
 class LazyLoadImageObserver;
@@ -183,6 +183,7 @@ class Range;
 class ResourceFetcher;
 class RootScrollerController;
 class ScriptValue;
+class ScriptedIdleTaskController;
 class SVGDocumentExtensions;
 class SVGUseElement;
 class Text;
@@ -999,7 +1000,7 @@ class CORE_EXPORT Document : public ContainerNode,
                                       int margin_height,
                                       mojom::blink::ScrollbarMode,
                                       bool is_display_none,
-                                      ColorScheme color_scheme);
+                                      mojom::ColorScheme color_scheme);
 
   String title() const { return title_; }
   void setTitle(const String&);
@@ -1295,13 +1296,12 @@ class CORE_EXPORT Document : public ContainerNode,
 
   const DocumentTiming& GetTiming() const { return document_timing_; }
 
-  int RequestAnimationFrame(FrameRequestCallbackCollection::FrameCallback*);
+  int RequestAnimationFrame(FrameCallback*);
   void CancelAnimationFrame(int id);
   void ServiceScriptedAnimations(
       base::TimeTicks monotonic_animation_start_time);
 
-  int RequestIdleCallback(ScriptedIdleTaskController::IdleTask*,
-                          const IdleRequestOptions*);
+  int RequestIdleCallback(IdleTask*, const IdleRequestOptions*);
   void CancelIdleCallback(int id);
 
   ScriptedAnimationController& GetScriptedAnimationController();
@@ -1662,6 +1662,14 @@ class CORE_EXPORT Document : public ContainerNode,
   void MarkFirstPaint();
   void MaybeExecuteDelayedAsyncScripts();
 
+  enum class DeclarativeShadowRootAllowState : uint8_t {
+    kNotSet,
+    kAllow,
+    kDeny
+  };
+  DeclarativeShadowRootAllowState GetDeclarativeShadowRootAllowState() const;
+  void setAllowDeclarativeShadowRoot(bool val);
+
   void SetFindInPageActiveMatchNode(Node*);
   const Node* GetFindInPageActiveMatchNode() const;
 
@@ -1678,9 +1686,12 @@ class CORE_EXPORT Document : public ContainerNode,
  private:
   friend class DocumentTest;
   friend class IgnoreDestructiveWriteCountIncrementer;
+  friend class TextFragmentSelectorGeneratorTest;
   friend class ThrowOnDynamicMarkupInsertionCountIncrementer;
   friend class IgnoreOpensDuringUnloadCountIncrementer;
   friend class NthIndexCache;
+  friend class CanvasRenderingAPIUkmMetricsTest;
+  friend class OffscreenCanvasRenderingAPIUkmMetricsTest;
   FRIEND_TEST_ALL_PREFIXES(FrameFetchContextSubresourceFilterTest,
                            DuringOnFreeze);
   FRIEND_TEST_ALL_PREFIXES(DocumentTest, FindInPageUkm);
@@ -1688,6 +1699,8 @@ class CORE_EXPORT Document : public ContainerNode,
                            BeforeMatchExpandedHiddenMatchableUkm);
   FRIEND_TEST_ALL_PREFIXES(TextFinderSimTest,
                            BeforeMatchExpandedHiddenMatchableUkmNoHandler);
+  FRIEND_TEST_ALL_PREFIXES(TextFragmentAnchorMetricsTest, LinkOpenedSuccessUKM);
+  FRIEND_TEST_ALL_PREFIXES(TextFragmentAnchorMetricsTest, LinkOpenedFailedUKM);
   class NetworkStateObserver;
 
   friend class AXContext;
@@ -1713,6 +1726,8 @@ class CORE_EXPORT Document : public ContainerNode,
   bool NeedsFullLayoutTreeUpdate() const;
 
   void PropagateStyleToViewport();
+
+  void InvalidateScrollbars();
 
   void UpdateUseShadowTreesIfNeeded();
   void EvaluateMediaQueryListIfNeeded();
@@ -2199,6 +2214,9 @@ class CORE_EXPORT Document : public ContainerNode,
 
   int async_script_count_ = 0;
   bool first_paint_recorded_ = false;
+
+  DeclarativeShadowRootAllowState declarative_shadow_root_allow_state_ =
+      DeclarativeShadowRootAllowState::kNotSet;
 
   WeakMember<Node> find_in_page_active_match_node_;
 

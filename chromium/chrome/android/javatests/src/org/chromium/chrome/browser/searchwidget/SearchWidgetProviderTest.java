@@ -27,6 +27,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.FirstRunActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -35,8 +36,7 @@ import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.searchwidget.SearchActivity.SearchActivityDelegate;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
+import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -102,7 +102,7 @@ public class SearchWidgetProviderTest {
 
     @Before
     public void setUp() {
-        ApplicationTestUtils.setUp(InstrumentationRegistry.getTargetContext());
+        ChromeApplicationTestUtils.setUp(InstrumentationRegistry.getTargetContext());
         SearchActivity.setDelegateForTests(new TestSearchDelegate());
 
         mContext = new TestContext();
@@ -112,7 +112,7 @@ public class SearchWidgetProviderTest {
 
     @After
     public void tearDown() {
-        ApplicationTestUtils.tearDown(InstrumentationRegistry.getTargetContext());
+        ChromeApplicationTestUtils.tearDown(InstrumentationRegistry.getTargetContext());
     }
 
     @Test

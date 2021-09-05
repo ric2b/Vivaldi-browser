@@ -65,8 +65,10 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
       CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       bool hidden,
-      bool never_composited);
+      bool never_composited,
+      bool is_for_child_local_root);
   ~WidgetBase() override;
 
   // Initialize the compositor. |settings| is typically null. When |settings| is
@@ -141,6 +143,8 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   void EndUpdateLayers() override;
   void UpdateVisualState() override;
   void WillBeginMainFrame() override;
+  void RunPaintBenchmark(int repeat_count,
+                         cc::PaintBenchmarkResult& result) override;
 
   cc::AnimationHost* AnimationHost() const;
   cc::LayerTreeHost* LayerTreeHost() const;
@@ -216,14 +220,6 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   void set_handling_select_range(bool value) { handling_select_range_ = value; }
   bool handling_select_range() const { return handling_select_range_; }
 
-  void RequestMouseLock(
-      bool has_transient_user_activation,
-      bool priviledged,
-      bool request_unadjusted_movement,
-      base::OnceCallback<
-          void(blink::mojom::PointerLockResult,
-               CrossVariantMojoRemote<
-                   mojom::blink::PointerLockContextInterfaceBase>)> callback);
   bool ComputePreferCompositingToLCDText();
 
   const viz::LocalSurfaceId& local_surface_id_from_parent() {
@@ -243,7 +239,10 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   // the window rect is delivered asynchronously to the browser. Pass in nullptr
   // to clear the pending window rect once the browser has acknowledged the
   // request.
-  void SetPendingWindowRect(const gfx::Rect* rect);
+  void SetPendingWindowRect(const gfx::Rect& rect);
+
+  // Must correspond with a previous call to SetPendingWindowRect.
+  void AckPendingWindowRect();
 
   // Returns the location/bounds of the widget (in screen coordinates).
   const gfx::Rect& WidgetScreenRect() const { return widget_screen_rect_; }
@@ -348,8 +347,6 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   mojo::AssociatedReceiver<mojom::blink::Widget> receiver_;
   std::unique_ptr<scheduler::WebRenderWidgetSchedulingState>
       render_widget_scheduling_state_;
-  bool first_update_visual_state_after_hidden_ = false;
-  base::TimeTicks was_shown_time_ = base::TimeTicks::Now();
   bool has_focus_ = false;
   WidgetBaseInputHandler input_handler_{this};
   scoped_refptr<WidgetCompositor> widget_compositor_;
@@ -418,6 +415,14 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   // physical device pixels.
   gfx::Rect widget_screen_rect_;
   gfx::Rect window_screen_rect_;
+
+  // While we are waiting for the browser to update window sizes, we track the
+  // pending size temporarily.
+  int pending_window_rect_count_ = 0;
+
+  // A pending window rect that is inflight and hasn't been acknowledged by the
+  // browser yet. This should only be set if |pending_window_rect_count_| is
+  // non-zero.
   base::Optional<gfx::Rect> pending_window_rect_;
 
   // The size of the visible viewport (in DIPs).
@@ -432,6 +437,13 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
 
   // Indicates that we are never visible, so never produce graphical output.
   const bool never_composited_;
+
+  // Indicates this is for a child local root.
+  const bool is_for_child_local_root_;
+
+  // The task runner on the main thread used for compositor tasks.
+  scoped_refptr<base::SingleThreadTaskRunner>
+      main_thread_compositor_task_runner_;
 
   base::WeakPtrFactory<WidgetBase> weak_ptr_factory_{this};
 };

@@ -45,6 +45,8 @@ int AutocompleteClassifier::DefaultOmniboxProviders() {
       AutocompleteProvider::TYPE_KEYWORD |
 #else
       AutocompleteProvider::TYPE_CLIPBOARD |
+      AutocompleteProvider::TYPE_MOST_VISITED_SITES |
+      AutocompleteProvider::TYPE_VERBATIM_MATCH |
 #endif
       AutocompleteProvider::TYPE_ZERO_SUGGEST |
       AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY |
@@ -97,7 +99,7 @@ void AutocompleteClassifier::Classify(
 
   *match = *default_match;
   if (alternate_nav_url) {
-    *alternate_nav_url =
-        AutocompleteResult::ComputeAlternateNavUrl(input, *match);
+    *alternate_nav_url = AutocompleteResult::ComputeAlternateNavUrl(
+        input, *match, controller_->autocomplete_provider_client());
   }
 }

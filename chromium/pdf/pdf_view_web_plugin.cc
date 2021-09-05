@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/check_op.h"
-#include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_checker.h"
@@ -285,6 +284,19 @@ float PdfViewWebPlugin::GetToolbarHeightInScreenCoords() {
 
 void PdfViewWebPlugin::DocumentFocusChanged(bool document_has_focus) {}
 
+void PdfViewWebPlugin::SetSelectedText(const std::string& selected_text) {
+  NOTIMPLEMENTED();
+}
+
+void PdfViewWebPlugin::SetLinkUnderCursor(
+    const std::string& link_under_cursor) {
+  NOTIMPLEMENTED();
+}
+
+bool PdfViewWebPlugin::IsValidLink(const std::string& url) {
+  return base::Value(url).is_string();
+}
+
 bool PdfViewWebPlugin::IsValid() const {
   return container_ && container_->GetDocument().GetFrame();
 }
@@ -311,11 +323,9 @@ void PdfViewWebPlugin::SetReferrerForRequest(
 std::unique_ptr<blink::WebAssociatedURLLoader>
 PdfViewWebPlugin::CreateAssociatedURLLoader(
     const blink::WebAssociatedURLLoaderOptions& options) {
-  // TODO(crbug.com/1127146): blink::WebLocalFrame::CreateAssociatedURLLoader()
-  // really should return a std::unique_ptr instead.
   DCHECK(IsValid());
-  return base::WrapUnique(
-      container_->GetDocument().GetFrame()->CreateAssociatedURLLoader(options));
+  return container_->GetDocument().GetFrame()->CreateAssociatedURLLoader(
+      options);
 }
 
 base::WeakPtr<PdfViewPluginBase> PdfViewWebPlugin::GetWeakPtr() {

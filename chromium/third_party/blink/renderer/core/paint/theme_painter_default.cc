@@ -25,7 +25,6 @@
 #include "third_party/blink/renderer/core/paint/theme_painter_default.h"
 
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/public/resources/grit/blink_image_resources.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -176,7 +175,7 @@ bool ThemePainterDefault::PaintCheckbox(const Element& element,
 
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartCheckbox, GetWebThemeState(element),
-      WebRect(unzoomed_rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(unzoomed_rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -192,7 +191,7 @@ bool ThemePainterDefault::PaintRadio(const Element& element,
 
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartRadio, GetWebThemeState(element),
-      WebRect(rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -212,7 +211,7 @@ bool ThemePainterDefault::PaintButton(const Element& element,
   }
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartButton, GetWebThemeState(element),
-      WebRect(rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -251,7 +250,7 @@ bool ThemePainterDefault::PaintTextField(const Element& element,
 
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartTextField, GetWebThemeState(element),
-      WebRect(rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -285,7 +284,7 @@ bool ThemePainterDefault::PaintMenuList(const Element& element,
   cc::PaintCanvas* canvas = i.context.Canvas();
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartMenuList, GetWebThemeState(element),
-      WebRect(rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -304,7 +303,7 @@ bool ThemePainterDefault::PaintMenuListButton(const Element& element,
   cc::PaintCanvas* canvas = paint_info.context.Canvas();
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartMenuList, GetWebThemeState(element),
-      WebRect(rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -395,7 +394,7 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
 
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartSliderTrack, GetWebThemeState(element),
-      WebRect(unzoomed_rect), &extra_params, o.StyleRef().UsedColorScheme());
+      gfx::Rect(unzoomed_rect), &extra_params, o.StyleRef().UsedColorScheme());
   return false;
 }
 
@@ -424,7 +423,7 @@ bool ThemePainterDefault::PaintSliderThumb(const Element& element,
 
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartSliderThumb, GetWebThemeState(element),
-      WebRect(unzoomed_rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(unzoomed_rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -450,7 +449,7 @@ bool ThemePainterDefault::PaintInnerSpinButton(const Element& element,
 
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartInnerSpinButton, GetWebThemeState(element),
-      WebRect(rect), &extra_params, style.UsedColorScheme());
+      gfx::Rect(rect), &extra_params, style.UsedColorScheme());
   return false;
 }
 
@@ -461,7 +460,7 @@ bool ThemePainterDefault::PaintProgressBar(const Element& element,
   if (!o.IsProgress())
     return true;
 
-  const LayoutProgress& layout_progress = ToLayoutProgress(o);
+  const auto& layout_progress = To<LayoutProgress>(o);
   IntRect value_rect = ProgressValueRectFor(layout_progress, rect);
 
   WebThemeEngine::ExtraParams extra_params;
@@ -475,7 +474,7 @@ bool ThemePainterDefault::PaintProgressBar(const Element& element,
   cc::PaintCanvas* canvas = i.context.Canvas();
   Platform::Current()->ThemeEngine()->Paint(
       canvas, WebThemeEngine::kPartProgressBar, GetWebThemeState(element),
-      WebRect(rect), &extra_params, o.StyleRef().UsedColorScheme());
+      gfx::Rect(rect), &extra_params, o.StyleRef().UsedColorScheme());
   return false;
 }
 
@@ -504,7 +503,7 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
                                                : cancel_button_object;
   if (!base_layout_object.IsBox())
     return false;
-  const LayoutBox& input_layout_box = ToLayoutBox(base_layout_object);
+  const auto& input_layout_box = To<LayoutBox>(base_layout_object);
   PhysicalRect input_content_box = input_layout_box.PhysicalContentBoxRect();
 
   // Make sure the scaled button stays square and will fit in its parent's box.
@@ -522,7 +521,8 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
       cancel_button_size, cancel_button_size);
   IntRect painting_rect = ConvertToPaintingRect(
       input_layout_box, cancel_button_object, cancel_button_rect, r);
-  ColorScheme color_scheme = cancel_button_object.StyleRef().UsedColorScheme();
+  mojom::blink::ColorScheme color_scheme =
+      cancel_button_object.StyleRef().UsedColorScheme();
   DEFINE_STATIC_REF(Image, cancel_image,
                     (Image::LoadPlatformResource(IDR_SEARCH_CANCEL)));
   DEFINE_STATIC_REF(Image, cancel_pressed_image,
@@ -533,10 +533,13 @@ bool ThemePainterDefault::PaintSearchFieldCancelButton(
       Image, cancel_pressed_image_dark_mode,
       (Image::LoadPlatformResource(IDR_SEARCH_CANCEL_PRESSED_DARK_MODE)));
   Image* color_scheme_adjusted_cancel_image =
-      color_scheme == kLight ? cancel_image : cancel_image_dark_mode;
+      color_scheme == mojom::blink::ColorScheme::kLight
+          ? cancel_image
+          : cancel_image_dark_mode;
   Image* color_scheme_adjusted_cancel_pressed_image =
-      color_scheme == kLight ? cancel_pressed_image
-                             : cancel_pressed_image_dark_mode;
+      color_scheme == mojom::blink::ColorScheme::kLight
+          ? cancel_pressed_image
+          : cancel_pressed_image_dark_mode;
   paint_info.context.DrawImage(
       To<Element>(cancel_button_object.GetNode())->IsActive()
           ? color_scheme_adjusted_cancel_pressed_image

@@ -15,7 +15,7 @@
 #include "ash/public/mojom/cros_display_config.mojom-test-utils.h"
 #include "ash/public/mojom/cros_display_config.mojom.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/path_service.h"
 #include "base/strings/safe_sprintf.h"
@@ -566,7 +566,7 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, DisabledForHostedApps) {
       "test_browser_app", true /* trusted_source */, gfx::Rect(),
       browser()->profile(), true);
   params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* browser = new Browser(params);
+  Browser* browser = Browser::Create(params);
   AddBlankTabAndShow(browser);
 
   ASSERT_TRUE(browser->is_type_app());
@@ -799,8 +799,9 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, MAYBE_TestClosingATab) {
                                TopChromeShownState::kFullyHidden);
 }
 
+// Times out on CrOS. crbug.com/1136011
 IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest,
-                       TestFocusEditableElements) {
+                       DISABLED_TestFocusEditableElements) {
   ToggleTabletMode();
   ASSERT_TRUE(GetTabletModeEnabled());
   EXPECT_TRUE(top_controls_slide_controller()->IsEnabled());
@@ -1360,7 +1361,7 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest,
 
   // Fire a geolocation permission request, which should show a permission
   // request bubble resulting in top chrome unhiding.
-  auto decided = [](ContentSetting) {};
+  auto decided = [](ContentSetting, bool) {};
   permissions::PermissionRequestImpl permission_request(
       url, ContentSettingsType::GEOLOCATION, true /* user_gesture */,
       base::BindOnce(decided), base::DoNothing() /* delete_callback */);

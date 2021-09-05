@@ -6,6 +6,7 @@ package org.chromium.chrome.features.start_surface;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.native_page.NativePageNavigationDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
@@ -17,7 +18,11 @@ import org.chromium.ui.mojom.WindowOpenDisposition;
 class ExploreSurfaceNavigationDelegate implements NativePageNavigationDelegate {
     private static final String NEW_TAB_URL_HELP = "https://support.google.com/chrome/?p=new_tab";
 
-    ExploreSurfaceNavigationDelegate() {}
+    private final Supplier<Tab> mParentTabSupplier;
+
+    ExploreSurfaceNavigationDelegate(Supplier<Tab> parentTabSupplier) {
+        mParentTabSupplier = parentTabSupplier;
+    }
 
     @Override
     public boolean isOpenInNewWindowEnabled() {
@@ -27,16 +32,19 @@ class ExploreSurfaceNavigationDelegate implements NativePageNavigationDelegate {
     @Override
     @Nullable
     public Tab openUrl(int windowOpenDisposition, LoadUrlParams loadUrlParams) {
+        // TODO(crbug.com/1159879): Set PageTransition.AUTO_BOOKMARK here.
         boolean result = ReturnToChromeExperimentsUtil.willHandleLoadUrlFromStartSurface(
-                loadUrlParams.getUrl(), PageTransition.AUTO_BOOKMARK,
-                windowOpenDisposition == WindowOpenDisposition.OFF_THE_RECORD);
+                loadUrlParams.getUrl(), PageTransition.AUTO_TOPLEVEL,
+                windowOpenDisposition == WindowOpenDisposition.OFF_THE_RECORD,
+                mParentTabSupplier.get());
         assert result;
         return null;
     }
 
     @Override
     public void navigateToHelpPage() {
+        // TODO(crbug.com/1159879): Set PageTransition.AUTO_BOOKMARK here.
         openUrl(WindowOpenDisposition.CURRENT_TAB,
-                new LoadUrlParams(NEW_TAB_URL_HELP, PageTransition.AUTO_BOOKMARK));
+                new LoadUrlParams(NEW_TAB_URL_HELP, PageTransition.AUTO_TOPLEVEL));
     }
 }

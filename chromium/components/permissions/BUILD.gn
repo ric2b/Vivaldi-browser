@@ -2,6 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+source_set("permissions_common") {
+  sources = [
+    "features.cc",
+    "features.h",
+    "permission_request_enums.h",
+  ]
+  deps = [ "//base" ]
+}
+
 source_set("permissions") {
   sources = [
     "chooser_context_base.cc",
@@ -12,8 +21,6 @@ source_set("permissions") {
     "contexts/geolocation_permission_context.h",
     "contexts/webxr_permission_context.cc",
     "contexts/webxr_permission_context.h",
-    "features.cc",
-    "features.h",
     "notification_permission_ui_selector.cc",
     "notification_permission_ui_selector.h",
     "permission_context_base.cc",
@@ -52,6 +59,7 @@ source_set("permissions") {
     "//components/content_settings/browser",
     "//components/content_settings/core/browser",
     "//components/keyed_service/content",
+    "//components/permissions/prediction_service",
     "//components/strings:components_strings_grit",
     "//components/ukm/content",
     "//components/url_formatter",
@@ -86,6 +94,7 @@ source_set("permissions") {
   } else {
     sources += [ "permission_prompt_impl.cc" ]
   }
+  public_deps = [ ":permissions_common" ]
 }
 
 source_set("test_support") {

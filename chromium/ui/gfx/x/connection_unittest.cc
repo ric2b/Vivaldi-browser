@@ -37,13 +37,13 @@ Window CreateWindow(Connection* connection) {
 TEST(X11ConnectionTest, Basic) {
   Connection connection;
   ASSERT_TRUE(connection.XcbConnection());
-  EXPECT_FALSE(xcb_connection_has_error(connection.XcbConnection()));
+  EXPECT_TRUE(connection.Ready());
 }
 
 TEST(X11ConnectionTest, Request) {
   Connection connection;
   ASSERT_TRUE(connection.XcbConnection());
-  EXPECT_FALSE(xcb_connection_has_error(connection.XcbConnection()));
+  EXPECT_TRUE(connection.Ready());
 
   Window window = CreateWindow(&connection);
 
@@ -63,7 +63,7 @@ TEST(X11ConnectionTest, Request) {
 TEST(X11ConnectionTest, Event) {
   Connection connection;
   ASSERT_TRUE(connection.XcbConnection());
-  EXPECT_FALSE(xcb_connection_has_error(connection.XcbConnection()));
+  EXPECT_TRUE(connection.Ready());
 
   Window window = CreateWindow(&connection);
 
@@ -95,15 +95,17 @@ TEST(X11ConnectionTest, Event) {
 TEST(X11ConnectionTest, Error) {
   Connection connection;
   ASSERT_TRUE(connection.XcbConnection());
-  EXPECT_FALSE(xcb_connection_has_error(connection.XcbConnection()));
+  EXPECT_TRUE(connection.Ready());
 
   Window invalid_window = connection.GenerateId<Window>();
 
   auto geometry = connection.GetGeometry({invalid_window}).Sync();
   ASSERT_FALSE(geometry);
-  xcb_generic_error_t* error = geometry.error.get();
-  EXPECT_EQ(error->error_code, XCB_DRAWABLE);
-  EXPECT_EQ(error->resource_id, static_cast<uint32_t>(invalid_window));
+  auto* error = geometry.error.get();
+  ASSERT_TRUE(error);
+  // TODO(thomasanderson): Implement As<> for errors, similar to events.
+  auto* drawable_error = reinterpret_cast<x11::DrawableError*>(error);
+  EXPECT_EQ(drawable_error->bad_value, static_cast<uint32_t>(invalid_window));
 }
 
 }  // namespace x11

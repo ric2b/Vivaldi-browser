@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 
+#include "base/allocator/partition_allocator/partition_root.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -15,8 +16,9 @@
 #include "base/run_loop.h"
 #include "base/sampling_heap_profiler/poisson_allocation_sampler.h"
 #include "base/stl_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/platform_thread.h"
+#include "base/trace_event/heap_profiler.h"
 #include "base/trace_event/heap_profiler_event_filter.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -341,7 +343,9 @@ TestDriver::TestDriver()
     : wait_for_ui_thread_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                           base::WaitableEvent::InitialState::NOT_SIGNALED) {
   base::PartitionAllocGlobalInit(HandleOOM);
-  partition_allocator_.init();
+  partition_allocator_.init({base::PartitionOptions::Alignment::kRegular,
+                             base::PartitionOptions::ThreadCache::kDisabled,
+                             base::PartitionOptions::PCScan::kAlwaysDisabled});
 }
 TestDriver::~TestDriver() {
   base::PartitionAllocGlobalUninitForTesting();

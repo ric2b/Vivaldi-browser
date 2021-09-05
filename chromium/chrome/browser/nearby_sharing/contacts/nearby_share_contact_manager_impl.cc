@@ -26,6 +26,7 @@
 
 namespace {
 
+constexpr base::TimeDelta kContactUploadPeriod = base::TimeDelta::FromHours(24);
 constexpr base::TimeDelta kContactDownloadPeriod =
     base::TimeDelta::FromHours(12);
 constexpr base::TimeDelta kContactDownloadRpcTimeout =
@@ -59,6 +60,15 @@ std::vector<nearbyshare::proto::Contact> ContactRecordsToContacts(
     }
   }
   return contacts;
+}
+
+nearbyshare::proto::Contact CreateLocalContact(
+    const std::string& profile_user_name) {
+  nearbyshare::proto::Contact contact;
+  contact.mutable_identifier()->set_account_name(profile_user_name);
+  // Always consider your own account a selected contact.
+  contact.set_is_selected(true);
+  return contact;
 }
 
 // Creates a hex-encoded hash of the contact data, implicitly including the
@@ -138,13 +148,16 @@ std::unique_ptr<NearbyShareContactManager>
 NearbyShareContactManagerImpl::Factory::Create(
     PrefService* pref_service,
     NearbyShareClientFactory* http_client_factory,
-    NearbyShareLocalDeviceDataManager* local_device_data_manager) {
+    NearbyShareLocalDeviceDataManager* local_device_data_manager,
+    const std::string& profile_user_name) {
   if (test_factory_) {
     return test_factory_->CreateInstance(pref_service, http_client_factory,
-                                         local_device_data_manager);
+                                         local_device_data_manager,
+                                         profile_user_name);
   }
   return base::WrapUnique(new NearbyShareContactManagerImpl(
-      pref_service, http_client_factory, local_device_data_manager));
+      pref_service, http_client_factory, local_device_data_manager,
+      profile_user_name));
 }
 
 // static
@@ -158,10 +171,22 @@ NearbyShareContactManagerImpl::Factory::~Factory() = default;
 NearbyShareContactManagerImpl::NearbyShareContactManagerImpl(
     PrefService* pref_service,
     NearbyShareClientFactory* http_client_factory,
-    NearbyShareLocalDeviceDataManager* local_device_data_manager)
+    NearbyShareLocalDeviceDataManager* local_device_data_manager,
+    const std::string& profile_user_name)
     : pref_service_(pref_service),
       http_client_factory_(http_client_factory),
       local_device_data_manager_(local_device_data_manager),
+      profile_user_name_(profile_user_name),
+      periodic_contact_upload_scheduler_(
+          NearbyShareSchedulerFactory::CreatePeriodicScheduler(
+              kContactUploadPeriod,
+              /*retry_failures=*/false,
+              /*require_connectivity=*/true,
+              prefs::kNearbySharingSchedulerPeriodicContactUploadPrefName,
+              pref_service_,
+              base::BindRepeating(&NearbyShareContactManagerImpl::
+                                      OnPeriodicContactsUploadRequested,
+                                  base::Unretained(this)))),
       contact_download_and_upload_scheduler_(
           NearbyShareSchedulerFactory::CreatePeriodicScheduler(
               kContactDownloadPeriod,
@@ -191,10 +216,12 @@ void NearbyShareContactManagerImpl::SetAllowedContacts(
 }
 
 void NearbyShareContactManagerImpl::OnStart() {
+  periodic_contact_upload_scheduler_->Start();
   contact_download_and_upload_scheduler_->Start();
 }
 
 void NearbyShareContactManagerImpl::OnStop() {
+  periodic_contact_upload_scheduler_->Stop();
   contact_download_and_upload_scheduler_->Stop();
 }
 
@@ -220,6 +247,12 @@ std::set<std::string> NearbyShareContactManagerImpl::GetAllowedContacts()
   return allowlist;
 }
 
+void NearbyShareContactManagerImpl::OnPeriodicContactsUploadRequested() {
+  NS_LOG(VERBOSE) << __func__
+                  << ": Periodic Nearby Share contacts upload requested. "
+                  << "Upload will occur after next contacts download.";
+}
+
 void NearbyShareContactManagerImpl::OnContactsDownloadRequested() {
   NS_LOG(VERBOSE) << __func__ << ": Nearby Share contacts download requested.";
 
@@ -235,7 +268,8 @@ void NearbyShareContactManagerImpl::OnContactsDownloadRequested() {
 }
 
 void NearbyShareContactManagerImpl::OnContactsDownloadSuccess(
-    std::vector<nearbyshare::proto::ContactRecord> contacts) {
+    std::vector<nearbyshare::proto::ContactRecord> contacts,
+    uint32_t num_unreachable_contacts_filtered_out) {
   contact_downloader_.reset();
 
   NS_LOG(VERBOSE) << __func__ << ": Nearby Share download of "
@@ -247,29 +281,48 @@ void NearbyShareContactManagerImpl::OnContactsDownloadSuccess(
 
   // Notify observers that the contact list was downloaded.
   std::set<std::string> allowed_contact_ids = GetAllowedContacts();
-  NotifyContactsDownloaded(allowed_contact_ids, contacts);
-  NotifyMojoObserverContactsDownloaded(allowed_contact_ids, contacts);
+  NotifyContactsDownloaded(allowed_contact_ids, contacts,
+                           num_unreachable_contacts_filtered_out);
+  NotifyMojoObserverContactsDownloaded(allowed_contact_ids, contacts,
+                                       num_unreachable_contacts_filtered_out);
 
-  // Only request a contacts upload if the contact list or allowlist has changed
-  // since the last successful upload.
   std::vector<nearbyshare::proto::Contact> contacts_to_upload =
       ContactRecordsToContacts(GetAllowedContacts(), contacts);
+
+  // Enable cross-device self-share by adding your account to the list of
+  // contacts. It is also marked as a selected contact.
+  if (profile_user_name_.empty()) {
+    NS_LOG(WARNING) << __func__ << ": Profile user name is empty; could not "
+                    << "add self to list of contacts to upload.";
+  } else {
+    contacts_to_upload.push_back(CreateLocalContact(profile_user_name_));
+  }
+
   std::string contact_upload_hash = ComputeHash(contacts_to_upload);
-  if (contact_upload_hash ==
-      pref_service_->GetString(
-          prefs::kNearbySharingContactUploadHashPrefName)) {
-    contact_download_and_upload_scheduler_->HandleResult(/*success=*/true);
+  bool did_contacts_change_since_last_upload =
+      contact_upload_hash !=
+      pref_service_->GetString(prefs::kNearbySharingContactUploadHashPrefName);
+  if (did_contacts_change_since_last_upload) {
+    NS_LOG(VERBOSE) << __func__
+                    << ": Contact list or allowlist changed since last "
+                    << "successful upload to the Nearby Share server.";
+  }
+
+  // Request a contacts upload if the contact list or allowlist has changed
+  // since the last successful upload. Also request an upload periodically.
+  if (did_contacts_change_since_last_upload ||
+      periodic_contact_upload_scheduler_->IsWaitingForResult()) {
+    local_device_data_manager_->UploadContacts(
+        std::move(contacts_to_upload),
+        base::BindOnce(&NearbyShareContactManagerImpl::OnContactsUploadFinished,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       did_contacts_change_since_last_upload,
+                       contact_upload_hash));
     return;
   }
 
-  NS_LOG(VERBOSE) << __func__
-                  << ": Contact list or allowlist changed since last "
-                  << "successful upload to the Nearby Share server. "
-                  << "Starting contacts upload.";
-  local_device_data_manager_->UploadContacts(
-      std::move(contacts_to_upload),
-      base::BindOnce(&NearbyShareContactManagerImpl::OnContactsUploadFinished,
-                     weak_ptr_factory_.GetWeakPtr(), contact_upload_hash));
+  // No upload is needed.
+  contact_download_and_upload_scheduler_->HandleResult(/*success=*/true);
 }
 
 void NearbyShareContactManagerImpl::OnContactsDownloadFailure() {
@@ -286,15 +339,24 @@ void NearbyShareContactManagerImpl::OnContactsDownloadFailure() {
 }
 
 void NearbyShareContactManagerImpl::OnContactsUploadFinished(
+    bool did_contacts_change_since_last_upload,
     const std::string& contact_upload_hash,
     bool success) {
   NS_LOG(VERBOSE) << __func__ << ": Upload of contacts to Nearby Share server "
                   << (success ? "succeeded." : "failed.")
                   << " Contact upload hash: " << contact_upload_hash;
   if (success) {
+    // Only resolve the periodic upload request on success; let the
+    // download-and-upload scheduler handle any failure retries. The periodic
+    // upload scheduler will remember that it has an outstanding request even
+    // after reboot.
+    if (periodic_contact_upload_scheduler_->IsWaitingForResult()) {
+      periodic_contact_upload_scheduler_->HandleResult(success);
+    }
+
     pref_service_->SetString(prefs::kNearbySharingContactUploadHashPrefName,
                              contact_upload_hash);
-    NotifyContactsUploaded(/*did_contacts_change_since_last_upload=*/true);
+    NotifyContactsUploaded(did_contacts_change_since_last_upload);
   }
 
   contact_download_and_upload_scheduler_->HandleResult(success);
@@ -317,7 +379,8 @@ bool NearbyShareContactManagerImpl::SetAllowlist(
 
 void NearbyShareContactManagerImpl::NotifyMojoObserverContactsDownloaded(
     const std::set<std::string>& allowed_contact_ids,
-    const std::vector<nearbyshare::proto::ContactRecord>& contacts) {
+    const std::vector<nearbyshare::proto::ContactRecord>& contacts,
+    uint32_t num_unreachable_contacts_filtered_out) {
   if (observers_set_.empty()) {
     return;
   }
@@ -329,6 +392,7 @@ void NearbyShareContactManagerImpl::NotifyMojoObserverContactsDownloaded(
   // Notify mojo remotes.
   for (auto& remote : observers_set_) {
     remote->OnContactsDownloaded(allowed_contact_ids_vector,
-                                 ProtoToMojo(contacts));
+                                 ProtoToMojo(contacts),
+                                 num_unreachable_contacts_filtered_out);
   }
 }

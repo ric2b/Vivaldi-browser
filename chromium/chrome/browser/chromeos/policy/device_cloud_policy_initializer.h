@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/chromeos/policy/server_backed_state_keys_broker.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
@@ -40,10 +41,6 @@ class StatisticsProvider;
 }
 
 }  // namespace chromeos
-
-namespace cryptohome {
-class AsyncMethodCaller;
-}
 
 namespace policy {
 
@@ -71,7 +68,6 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
       ServerBackedStateKeysBroker* state_keys_broker,
       DeviceCloudPolicyStoreChromeOS* policy_store,
       DeviceCloudPolicyManagerChromeOS* policy_manager,
-      cryptohome::AsyncMethodCaller* async_method_caller,
       std::unique_ptr<chromeos::attestation::AttestationFlow> attestation_flow,
       chromeos::system::StatisticsProvider* statistics_provider);
 
@@ -122,8 +118,7 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
   // sign data using the enrollment certificate's TPM-bound key.
   class TpmEnrollmentKeySigningService : public policy::SigningService {
    public:
-    TpmEnrollmentKeySigningService(
-        cryptohome::AsyncMethodCaller* async_method_caller);
+    TpmEnrollmentKeySigningService();
     ~TpmEnrollmentKeySigningService() override;
 
     void SignData(const std::string& data, SigningCallback callback) override;
@@ -131,15 +126,19 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
    private:
     void OnDataSigned(const std::string& data,
                       SigningCallback callback,
-                      bool success,
-                      const std::string& signed_data);
-
-    cryptohome::AsyncMethodCaller* async_method_caller_;
+                      const ::attestation::SignSimpleChallengeReply& reply);
 
     // Used to create tasks which run delayed on the UI thread.
     base::WeakPtrFactory<TpmEnrollmentKeySigningService> weak_ptr_factory_{
         this};
   };
+
+  FRIEND_TEST_ALL_PREFIXES(
+      DeviceCloudPolicyInitializerTpmEnrollmentKeySigningServiceTest,
+      SigningSuccess);
+  FRIEND_TEST_ALL_PREFIXES(
+      DeviceCloudPolicyInitializerTpmEnrollmentKeySigningServiceTest,
+      SigningFailure);
 
   // Handles completion signaled by |enrollment_handler_|.
   void EnrollmentCompleted(const EnrollmentCallback& enrollment_callback,

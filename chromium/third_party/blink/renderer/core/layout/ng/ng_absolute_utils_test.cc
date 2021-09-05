@@ -16,13 +16,12 @@ namespace {
 
 class NGAbsoluteUtilsTest : public RenderingTest {
  protected:
-  NGConstraintSpace CreateConstraintSpace(TextDirection direction,
-                                          WritingMode out_writing_mode) {
-    NGConstraintSpaceBuilder builder(
-        WritingMode::kHorizontalTb, out_writing_mode,
-        /* is_new_fc */ true);
+  NGConstraintSpace CreateConstraintSpace(
+      WritingDirectionMode writing_direction) {
+    NGConstraintSpaceBuilder builder(WritingMode::kHorizontalTb,
+                                     writing_direction,
+                                     /* is_new_fc */ true);
     builder.SetAvailableSize({LayoutUnit(200), LayoutUnit(300)});
-    builder.SetTextDirection(direction);
     return builder.ToConstraintSpace();
   }
 
@@ -42,14 +41,14 @@ class NGAbsoluteUtilsTest : public RenderingTest {
     RunDocumentLifecycle();
 
     element_ = GetDocument().getElementById("target");
-    ltr_space_ =
-        CreateConstraintSpace(TextDirection::kLtr, WritingMode::kHorizontalTb);
-    rtl_space_ =
-        CreateConstraintSpace(TextDirection::kRtl, WritingMode::kHorizontalTb);
+    ltr_space_ = CreateConstraintSpace(
+        {WritingMode::kHorizontalTb, TextDirection::kLtr});
+    rtl_space_ = CreateConstraintSpace(
+        {WritingMode::kHorizontalTb, TextDirection::kRtl});
     vlr_space_ =
-        CreateConstraintSpace(TextDirection::kLtr, WritingMode::kVerticalLr);
+        CreateConstraintSpace({WritingMode::kVerticalLr, TextDirection::kLtr});
     vrl_space_ =
-        CreateConstraintSpace(TextDirection::kLtr, WritingMode::kVerticalRl);
+        CreateConstraintSpace({WritingMode::kVerticalRl, TextDirection::kLtr});
   }
 
   void SetHorizontalStyle(const String& left,
@@ -131,7 +130,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, min_max_60,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(min_max_60.min_size, dimensions.size.inline_size);
   EXPECT_EQ(0, dimensions.inset.inline_start);
 
@@ -141,7 +140,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position_inline_end,
       min_max_60, base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(min_max_60.min_size, dimensions.size.inline_size);
   EXPECT_EQ(200, dimensions.inset.inline_end);
 
@@ -150,7 +149,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, rtl_space_, rtl_border_padding, static_position, min_max_60,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(min_max_60.min_size, dimensions.size.inline_size);
   // 200 = 0 + 0 + 116 + 84 + 0
   EXPECT_EQ(84, dimensions.inset.inline_end);
@@ -161,7 +160,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 200 = 5 + 11 + 160 + 11 + 13
   EXPECT_EQ(16, dimensions.inset.inline_start);
   EXPECT_EQ(24, dimensions.inset.inline_end);
@@ -171,7 +170,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, vlr_space_, vlr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(16, dimensions.inset.block_start);
   EXPECT_EQ(24, dimensions.inset.block_end);
@@ -181,7 +180,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, vrl_space_, vrl_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(16, dimensions.inset.block_end);
   EXPECT_EQ(24, dimensions.inset.block_start);
@@ -191,7 +190,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(5, dimensions.inset.inline_start);
   EXPECT_EQ(-5, dimensions.inset.inline_end);
 
@@ -200,7 +199,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, rtl_space_, rtl_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kRtl, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kRtl}, &dimensions);
   EXPECT_EQ(-13, dimensions.inset.inline_start);
   EXPECT_EQ(13, dimensions.inset.inline_end);
 
@@ -210,7 +209,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, min_max_60,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(min_max_60.min_size, dimensions.size.inline_size);
 
   // Rule 2 left and right are auto LTR.
@@ -219,7 +218,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 200 = 0 + 7 + 160 + 15 + 18
   EXPECT_EQ(0 + 7, dimensions.inset.inline_start);
   EXPECT_EQ(15 + 18, dimensions.inset.inline_end);
@@ -230,7 +229,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, rtl_space_, rtl_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kRtl, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kRtl}, &dimensions);
   // 200 = 0 + 7 + 160 + 15 + 18
   EXPECT_EQ(0 + 7, dimensions.inset.inline_start);
   EXPECT_EQ(15 + 18, dimensions.inset.inline_end);
@@ -241,7 +240,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, min_max_60,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 200 = 5 + 7 + 116 + 15 + 57
   EXPECT_EQ(min_max_60.min_size, dimensions.size.inline_size);
   EXPECT_EQ(15 + 57, dimensions.inset.inline_end);
@@ -252,7 +251,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 200 = 5 + 7 + 160 + 15 + 13
   EXPECT_EQ(5 + 7, dimensions.inset.inline_start);
 
@@ -263,7 +262,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 200 = 5 + 7 + 160 + 15 + 13
   EXPECT_EQ(5 + 7, dimensions.inset.inline_start);
 
@@ -273,7 +272,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 200 = 5 + 7 + 160 + 15 + 13
   EXPECT_EQ(15 + 13, dimensions.inset.inline_end);
 
@@ -283,7 +282,7 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 200 = 5 + 7 + 160 + 15 + 13
   EXPECT_EQ(160, dimensions.size.inline_size);
 }
@@ -321,7 +320,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), true);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, auto_60,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(60, dimensions.size.block_size);
   EXPECT_EQ(0, dimensions.inset.block_start);
@@ -329,7 +328,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   // All auto, static position bottom.
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position_block_end, auto_60,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(300, dimensions.inset.block_end);
 
@@ -338,7 +337,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   // 300 = 5 + 11 + 260 + 11 + 13
   EXPECT_EQ(5 + 11, dimensions.inset.block_start);
@@ -350,7 +349,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   ComputeOutOfFlowInlineDimensions(
       node, vlr_space_, vlr_border_padding, static_position, min_max_60,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 300 = 5 + 11 + 260 + 11 + 13
   EXPECT_EQ(5 + 11, dimensions.inset.inline_start);
   EXPECT_EQ(11 + 13, dimensions.inset.inline_end);
@@ -361,7 +360,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   ComputeOutOfFlowInlineDimensions(
       node, vrl_space_, vrl_border_padding, static_position, min_max_60,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   // 300 = 5 + 11 + 260 + 11 + 13
   EXPECT_EQ(5 + 11, dimensions.inset.inline_start);
   EXPECT_EQ(11 + 13, dimensions.inset.inline_end);
@@ -371,7 +370,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   // 300 = 5 + (-9) + 300 + (-9) + 13
   EXPECT_EQ(5 - 9, dimensions.inset.block_start);
@@ -382,7 +381,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), true);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, auto_60,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(*auto_60, dimensions.size.block_size);
 
@@ -391,7 +390,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   // 300 = 0 + 7 + 260 + 15 + 18
   EXPECT_EQ(0 + 7, dimensions.inset.block_start);
@@ -403,7 +402,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), true);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, LayoutUnit(20),
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(56, dimensions.size.block_size);
 
@@ -412,7 +411,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), true);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, auto_60,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(*auto_60, dimensions.size.block_size);
 
@@ -421,7 +420,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   // 300 = 5 + 7 + 260 + 15 + 13
   EXPECT_EQ(5 + 7, dimensions.inset.block_start);
@@ -431,7 +430,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   // 300 = 5 + 7 + 260 + 15 + 13
   EXPECT_EQ(15 + 13, dimensions.inset.block_end);
@@ -441,7 +440,7 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
   EXPECT_EQ(AbsoluteNeedsChildBlockSize(node), false);
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(260, dimensions.size.block_size);
 }
@@ -465,7 +464,7 @@ TEST_F(NGAbsoluteUtilsTest, CenterStaticPosition) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, border_padding, static_position,
       MinMaxSizes{LayoutUnit(), LayoutUnit(1000)}, base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(100, dimensions.size.inline_size);
   EXPECT_EQ(100, dimensions.inset.inline_start);
   EXPECT_EQ(0, dimensions.inset.inline_end);
@@ -473,14 +472,14 @@ TEST_F(NGAbsoluteUtilsTest, CenterStaticPosition) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, border_padding, static_position,
       MinMaxSizes{LayoutUnit(), LayoutUnit(1000)}, base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kRtl, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kRtl}, &dimensions);
   EXPECT_EQ(100, dimensions.size.inline_size);
   EXPECT_EQ(100, dimensions.inset.inline_start);
   EXPECT_EQ(0, dimensions.inset.inline_end);
 
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, border_padding, static_position, LayoutUnit(150),
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(150, dimensions.size.block_size);
   EXPECT_EQ(125, dimensions.inset.block_start);
@@ -512,7 +511,7 @@ TEST_F(NGAbsoluteUtilsTest, MinMax) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, estimated_inline,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(70, dimensions.size.inline_size);
 
   // width > max gets set to max.
@@ -520,7 +519,7 @@ TEST_F(NGAbsoluteUtilsTest, MinMax) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, estimated_inline,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(150, dimensions.size.inline_size);
 
   // Unspecified width becomes min_max, gets clamped to min.
@@ -528,7 +527,7 @@ TEST_F(NGAbsoluteUtilsTest, MinMax) {
   ComputeOutOfFlowInlineDimensions(
       node, ltr_space_, ltr_border_padding, static_position, estimated_inline,
       base::nullopt, base::nullopt,
-      WritingMode::kHorizontalTb, TextDirection::kLtr, &dimensions);
+      {WritingMode::kHorizontalTb, TextDirection::kLtr}, &dimensions);
   EXPECT_EQ(70, dimensions.size.inline_size);
 
   // HEIGHT TESTS
@@ -537,7 +536,7 @@ TEST_F(NGAbsoluteUtilsTest, MinMax) {
   SetVerticalStyle("auto", "auto", "5px", "auto", "auto");
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(70, dimensions.size.block_size);
 
@@ -545,7 +544,7 @@ TEST_F(NGAbsoluteUtilsTest, MinMax) {
   SetVerticalStyle("auto", "auto", "200px", "auto", "auto");
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, base::nullopt,
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(150, dimensions.size.block_size);
 
@@ -553,7 +552,7 @@ TEST_F(NGAbsoluteUtilsTest, MinMax) {
   SetVerticalStyle("auto", "auto", "auto", "auto", "auto");
   ComputeOutOfFlowBlockDimensions(
       node, ltr_space_, ltr_border_padding, static_position, LayoutUnit(20),
-      base::nullopt, WritingMode::kHorizontalTb, TextDirection::kLtr,
+      base::nullopt, {WritingMode::kHorizontalTb, TextDirection::kLtr},
       &dimensions);
   EXPECT_EQ(70, dimensions.size.block_size);
 }

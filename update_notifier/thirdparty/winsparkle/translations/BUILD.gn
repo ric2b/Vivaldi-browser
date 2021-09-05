@@ -1,0 +1,43 @@
+import("//build/config/locales.gni")
+import("//vivaldi/gn/node_action.gni")
+
+# We should have translation files for all supported locales.
+translation_files = []
+foreach(locale, locales) {
+  translation_files += [ string_replace(locale, "-", "_") + ".po" ]
+}
+
+node_action("compile_translations") {
+  script = "//vivaldi/vivapp/bin/po2mo.js"
+  sources = translation_files
+  inputs = [ "//vivaldi/vivapp/bin/po2mo.js" ]
+  outputs = []
+  args = [ rebase_path(target_gen_dir, root_build_dir) ]
+  foreach (source, sources) {
+    output_name = string_replace(source, ".po", ".mo")
+    outputs += [ "$target_gen_dir/" + output_name ]
+    args += [ rebase_path(source, root_build_dir) ]
+  }
+}
+
+source_set("resources") {
+  # Create translations.rc that embeds all *.mo files. Each line should be in
+  # the following format:
+  # winsparkle_LOCALE MOFILE "locale.mo"
+  rc_lines = []
+  foreach (file, translation_files) {
+    locale = string_replace(file, ".po", "")
+    line = "winsparkle_" + locale + " MOFILE \"" + locale + ".mo\""
+
+    # Ensure that the generated file gets \r\n line endings.
+    rc_lines += [ line + "$0x0D" ]
+  }
+  write_file("$target_gen_dir/translations.rc", rc_lines)
+
+  sources = [
+    "$target_gen_dir/translations.rc",
+  ]
+  deps = [
+    ":compile_translations",
+  ]
+}

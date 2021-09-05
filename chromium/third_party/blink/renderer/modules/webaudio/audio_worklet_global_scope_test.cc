@@ -26,7 +26,9 @@
 #include "third_party/blink/renderer/core/messaging/message_channel.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
+#include "third_party/blink/renderer/core/script/js_module_script.h"
 #include "third_party/blink/renderer/core/script/script.h"
+#include "third_party/blink/renderer/core/testing/module_test_base.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/worker_backing_thread.h"
@@ -54,12 +56,19 @@ static const size_t kRenderQuantumFrames = 128;
 
 // The test uses OfflineAudioWorkletThread because the test does not have a
 // strict real-time constraint.
-class AudioWorkletGlobalScopeTest : public PageTestBase {
+class AudioWorkletGlobalScopeTest : public PageTestBase,
+                                    public ParametrizedModuleTest {
  public:
   void SetUp() override {
+    ParametrizedModuleTest::SetUp();
     PageTestBase::SetUp(IntSize());
     NavigateTo(KURL("https://example.com/"));
     reporting_proxy_ = std::make_unique<WorkerReportingProxy>();
+  }
+
+  void TearDown() override {
+    PageTestBase::TearDown();
+    ParametrizedModuleTest::TearDown();
   }
 
   std::unique_ptr<OfflineAudioWorkletThread> CreateAudioWorkletThread() {
@@ -132,9 +141,9 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
   }
 
  private:
-  // Returns false when a script evaluation error happens.
-  bool EvaluateScriptModule(AudioWorkletGlobalScope* global_scope,
-                            const String& source_code) {
+  void ExpectEvaluateScriptModule(AudioWorkletGlobalScope* global_scope,
+                                  const String& source_code,
+                                  bool expect_success) {
     ScriptState* script_state =
         global_scope->ScriptController()->GetScriptState();
     EXPECT_TRUE(script_state);
@@ -149,9 +158,14 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
     EXPECT_TRUE(exception.IsEmpty());
 
     ScriptEvaluationResult result =
-        ModuleRecord::Evaluate(script_state, module, js_url);
-    return result.GetResultType() ==
-           ScriptEvaluationResult::ResultType::kSuccess;
+        JSModuleScript::CreateForTest(Modulator::From(script_state), module,
+                                      js_url)
+            ->RunScriptAndReturnValue();
+    if (expect_success) {
+      EXPECT_FALSE(GetResult(script_state, result).IsEmpty());
+    } else {
+      EXPECT_FALSE(GetException(script_state, result).IsEmpty());
+    }
   }
 
   // Test if AudioWorkletGlobalScope and V8 components (ScriptState, Isolate)
@@ -181,7 +195,7 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
           }
           registerProcessor('testProcessor', TestProcessor);
         )JS";
-    ASSERT_TRUE(EvaluateScriptModule(global_scope, source_code));
+    ExpectEvaluateScriptModule(global_scope, source_code, true);
 
     AudioWorkletProcessorDefinition* definition =
         global_scope->FindDefinition("testProcessor");
@@ -230,7 +244,7 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
             class2.prototype = { process: function () {} };
             registerProcessor('class2', class2);
           )JS";
-      ASSERT_TRUE(EvaluateScriptModule(global_scope, source_code));
+      ExpectEvaluateScriptModule(global_scope, source_code, true);
       EXPECT_TRUE(global_scope->FindDefinition("class1"));
       EXPECT_TRUE(global_scope->FindDefinition("class2"));
     }
@@ -250,7 +264,7 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
               });
             registerProcessor('class3', class3);
           )JS";
-      ASSERT_FALSE(EvaluateScriptModule(global_scope, source_code));
+      ExpectEvaluateScriptModule(global_scope, source_code, false);
       EXPECT_FALSE(global_scope->FindDefinition("class3"));
     }
 
@@ -286,7 +300,7 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
           }
           registerProcessor('testProcessor', TestProcessor);
         )JS";
-    ASSERT_TRUE(EvaluateScriptModule(global_scope, source_code));
+    ExpectEvaluateScriptModule(global_scope, source_code, true);
 
     auto* channel = MakeGarbageCollected<MessageChannel>(thread->GlobalScope());
     MessagePortChannel dummy_port_channel = channel->port2()->Disentangle();
@@ -351,7 +365,7 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
           }
           registerProcessor('testProcessor', TestProcessor);
         )JS";
-    ASSERT_TRUE(EvaluateScriptModule(global_scope, source_code));
+    ExpectEvaluateScriptModule(global_scope, source_code, true);
 
     AudioWorkletProcessorDefinition* definition =
         global_scope->FindDefinition("testProcessor");
@@ -374,7 +388,7 @@ class AudioWorkletGlobalScopeTest : public PageTestBase {
   std::unique_ptr<WorkerReportingProxy> reporting_proxy_;
 };
 
-TEST_F(AudioWorkletGlobalScopeTest, Basic) {
+TEST_P(AudioWorkletGlobalScopeTest, Basic) {
   std::unique_ptr<OfflineAudioWorkletThread> thread
       = CreateAudioWorkletThread();
   RunBasicTest(thread.get());
@@ -382,7 +396,7 @@ TEST_F(AudioWorkletGlobalScopeTest, Basic) {
   thread->WaitForShutdownForTesting();
 }
 
-TEST_F(AudioWorkletGlobalScopeTest, Parsing) {
+TEST_P(AudioWorkletGlobalScopeTest, Parsing) {
   std::unique_ptr<OfflineAudioWorkletThread> thread
       = CreateAudioWorkletThread();
   RunParsingTest(thread.get());
@@ -390,7 +404,7 @@ TEST_F(AudioWorkletGlobalScopeTest, Parsing) {
   thread->WaitForShutdownForTesting();
 }
 
-TEST_F(AudioWorkletGlobalScopeTest, BufferProcessing) {
+TEST_P(AudioWorkletGlobalScopeTest, BufferProcessing) {
   std::unique_ptr<OfflineAudioWorkletThread> thread
       = CreateAudioWorkletThread();
   RunSimpleProcessTest(thread.get());
@@ -398,12 +412,18 @@ TEST_F(AudioWorkletGlobalScopeTest, BufferProcessing) {
   thread->WaitForShutdownForTesting();
 }
 
-TEST_F(AudioWorkletGlobalScopeTest, ParsingParameterDescriptor) {
+TEST_P(AudioWorkletGlobalScopeTest, ParsingParameterDescriptor) {
   std::unique_ptr<OfflineAudioWorkletThread> thread
       = CreateAudioWorkletThread();
   RunParsingParameterDescriptorTest(thread.get());
   thread->Terminate();
   thread->WaitForShutdownForTesting();
 }
+
+// Instantiate tests once with TLA and once without:
+INSTANTIATE_TEST_SUITE_P(AudioWorkletGlobalScopeTestGroup,
+                         AudioWorkletGlobalScopeTest,
+                         testing::Bool(),
+                         ParametrizedModuleTestParamName());
 
 }  // namespace blink

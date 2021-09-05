@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Solo selezione</translation>
 <translation id="1244303850296295656">Errore delle estensioni</translation>
 <translation id="125220115284141797">Predefinito</translation>
-<translation id="1274977772557788323">Impostazioni di archiviazione Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destinazione</translation>
 <translation id="1303101771013849280">File HTML Segnalibri</translation>
 <translation id="1380436189840894976">Vuoi chiudere comunque la modalità di navigazione in incognito?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Incolla come testo semplice</translation>
 <translation id="2249605167705922988">ad es. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Autorizza gli identificatori a mostrare contenuti protetti (potrebbe essere necessario un riavvio del computer)</translation>
-<translation id="2263497240924215535">(Disabilitato)</translation>
 <translation id="2277255602909579701">Tutti i cookie e i dati dei siti</translation>
 <translation id="2280486287150724112">Margine destro</translation>
 <translation id="2282146716419988068">Processo GPU</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Riattiva</translation>
 <translation id="2721037002783622288">&amp;Cerca <ph name="SEARCH_ENGINE" /> per immagine</translation>
+<translation id="2783321960289401138">Crea scorciatoia...</translation>
 <translation id="2785873697295365461">Descrittori di file</translation>
 <translation id="2809586584051668049">e altre <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Non mostrare le immagini</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">Dispositivi MIDI</translation>
 <translation id="3021678814754966447">&amp;Visualizza sorgente frame</translation>
 <translation id="3036546437875325427">Abilita Flash</translation>
-<translation id="3038675903128704560">Non consentire ai siti di utilizzare un plug-in per accedere al tuo computer</translation>
 <translation id="3046910703532196514">Pagina web, completa</translation>
 <translation id="3067198360141518313">Esegui questo plug-in</translation>
 <translation id="3080207940057008665">Un altro programma sul computer ha aggiunto un tema che potrebbe modificare il funzionamento di Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Questa estensione potrebbe essere stata danneggiata.</translation>
 <translation id="3387614642886316601">Usa il controllo ortografico avanzato</translation>
 <translation id="3432227430032737297">Rimuovi tutti i cookie visualizzati</translation>
-<translation id="3440761377721825626">Chiedi conferma quando un sito vuole utilizzare un plug-in per accedere al tuo computer</translation>
 <translation id="345693547134384690">Apri &amp;immagine in una nuova scheda</translation>
 <translation id="3494769164076977169">Chiedi conferma quando un sito tenta di scaricare automaticamente file dopo il primo file (opzione consigliata)</translation>
 <translation id="3505030558724226696">Revoca accesso ai dispositivi</translation>
 <translation id="3511307672085573050">Copia Indir&amp;izzo Link</translation>
-<translation id="3523642406908660543">Chiedi conferma quando un sito vuole utilizzare un plug-in per accedere al tuo computer (opzione consigliata)</translation>
 <translation id="354068948465830244">Può leggere e cambiare i dati del sito</translation>
 <translation id="3560034655160545939">&amp;Controllo ortografico</translation>
 <translation id="3574917942258583917">Vuoi uscire comunque dalla modalità di navigazione in incognito?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vuole condividere una stampante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un gruppo gestito da te: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Se accetti, tutti i membri del gruppo potranno utilizzare la stampante.</translation>
 <translation id="3587482841069643663">Tutte</translation>
 <translation id="3627588569887975815">Apri link in finestra di navigazione in inco&amp;gnito</translation>
+<translation id="3627879631695760395">Installa <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Gestori</translation>
 <translation id="3678156199662914018">Estensione: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Richiesta di condivisione dello schermo da parte di <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Ripristina Impostazioni</translation>
 <translation id="4434045419905280838">Popup e reindirizzamenti</translation>
 <translation id="4478664379124702289">Salva lin&amp;k come...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Impossibile trasmettere <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">Vai alla pa&amp;gina <ph name="URL" /></translation>
 <translation id="4595560905247879544">Le app e le estensioni possono essere modificate solo dal gestore (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Sconosciuto</translation>
 <translation id="5860491529813859533">Attiva</translation>
 <translation id="5867841422488265304">Cerca o digita l'indirizzo web</translation>
-<translation id="5908769186679515905">Impedisci ai siti di eseguire Flash</translation>
 <translation id="5910363049092958439">Sal&amp;va Immagine Come...</translation>
 <translation id="5956585768868398362">È la pagina di ricerca prevista?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (picco di <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Accesso negato.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Mostra &amp;controlli</translation>
-<translation id="7311079019872751559">Accesso con plug-in senza sandbox</translation>
 <translation id="7385854874724088939">Si è verificato un problema durante il tentativo di stampa. Controlla la stampante e riprova.</translation>
 <translation id="7412226954991670867">Memoria GPU</translation>
 <translation id="7421925624202799674">&amp;Visualizza sorgente pagina</translation>
@@ -477,6 +471,7 @@ Conserva il file di chiave in un luogo sicuro. Ti servirà per creare nuove vers
 <translation id="9027459031423301635">Apri Link in una Nuova &amp;Scheda</translation>
 <translation id="9056810968620647706">Nessuna corrispondenza trovata.</translation>
 <translation id="9137916601698928395">Apri link come <ph name="USER" /></translation>
+<translation id="91568222606626347">Crea scorciatoia...</translation>
 <translation id="916607977885256133">Picture in Picture</translation>
 <translation id="9170848237812810038">&amp;Annulla</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" aggiunta</translation>

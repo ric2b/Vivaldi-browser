@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Enviar ligação por correio eletrónico</translation>
 <translation id="1454726940098520109">Não mostrar confirmação novamente</translation>
 <translation id="1462666970065907900">Quer mesmo fechar esta janela?</translation>
+<translation id="1526344461589023948">Ocorreu um erro ao tentar gravar uma atualização transferida. Confirme que o computador tem espaço suficiente em disco e tente novamente mais tarde.</translation>
 <translation id="1657174850639146440">Monstro 9</translation>
 <translation id="1676595396635191120">Nova janela privada</translation>
+<translation id="1702758681952953055">Se o erro persistir, por favor reporte-o incluindo os seguintes detalhes:</translation>
 <translation id="1728549374069268714">Colar e ir</translation>
 <translation id="1756026472674246267">Abrir ligação num novo separador</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Paisagem 15</translation>
 <translation id="19598411548897379">Genérico</translation>
 <translation id="2079036669923635404">Clique aqui para atualizar o Vivaldi para a versão <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Ocorreu um erro ao transferir ficheiros de atualização. Verifique a sua ligação à internet e tente novamente mais tarde.</translation>
 <translation id="2441056087170876076">Monstro 2</translation>
 <translation id="2444387452209867610">Inserir nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Abrir ligação numa nova janela</translation>
 <translation id="3588820906588687999">Abrir imagem num novo separador</translation>
 <translation id="3601066750251199488">Monstro 3</translation>
+<translation id="3708982624815781692">A transferência foi cancelada.</translation>
 <translation id="3732157130969736834">Adicionar ligação aos favoritos</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Monstro 5</translation>
 <translation id="5615637589913244581">Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Abrir imagem numa nova janela</translation>
+<translation id="5656371807944747581">Erro de atualização!</translation>
 <translation id="5716238312826274098">Desativar notificações</translation>
 <translation id="5770433027661640693">Paisagem 10</translation>
 <translation id="5857090052475505287">Nova pasta</translation>
 <translation id="588258955323874662">Ecrã inteiro</translation>
 <translation id="5916080360077521750">Infelizmente, as suas definições do Chrome não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Chrome. Depois, clique em Continuar.</translation>
+<translation id="6040143037577758943">Fechar</translation>
 <translation id="6229528619562190452">Clique aqui para atualizar o Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagem como fundo da Speed Dial</translation>
 <translation id="630690498669249215">Ficheiro de favoritos do Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Paisagem 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">O Vivaldi existe graças ao projeto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e outro <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Falhou a execução do instalador de atualizações. Confirme que o computador tem memória ou espaço em disco suficiente e tente novamente mais tarde.</translation>
 <translation id="7715497554424665066">&amp;Ignorar atualização</translation>
 <translation id="7724603315864178912">Cortar</translation>
 <translation id="7793738202466490491">Adicionar como evento de calendário</translation>
+<translation id="7848222781052558334">Falha ao verificar a assinatura digital dos ficheiros transferidos.</translation>
 <translation id="7865983598101744945">Confirmar saída</translation>
 <translation id="7957213167373139414">O meu calendário</translation>
 <translation id="8027581147000338959">Abrir numa nova janela</translation>

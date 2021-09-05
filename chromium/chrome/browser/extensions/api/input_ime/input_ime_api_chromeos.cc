@@ -401,20 +401,17 @@ class ImeObserverChromeOS : public ui::ImeObserver {
   // won't open new windows/pages. See crbug.com/395621.
   std::string GetCurrentScreenType() override {
     switch (chromeos::input_method::InputMethodManager::Get()
-                ->GetUISessionState()) {
-      case chromeos::input_method::InputMethodManager::STATE_LOGIN_SCREEN:
+                ->GetActiveIMEState()
+                ->GetUIStyle()) {
+      case chromeos::input_method::InputMethodManager::UIStyle::kLogin:
         return "login";
-      case chromeos::input_method::InputMethodManager::STATE_LOCK_SCREEN:
-        return "lock";
-      case chromeos::input_method::InputMethodManager::
-          STATE_SECONDARY_LOGIN_SCREEN:
+      case chromeos::input_method::InputMethodManager::UIStyle::kSecondaryLogin:
         return "secondary-login";
-      case chromeos::input_method::InputMethodManager::STATE_BROWSER_SCREEN:
-      case chromeos::input_method::InputMethodManager::STATE_TERMINATING:
+      case chromeos::input_method::InputMethodManager::UIStyle::kLock:
+        return "lock";
+      case chromeos::input_method::InputMethodManager::UIStyle::kNormal:
         return "normal";
     }
-    NOTREACHED() << "New screen type is added. Please add new entry above.";
-    return "normal";
   }
 
   std::string ConvertInputContextFocusReason(
@@ -589,10 +586,22 @@ bool InputImeEventRouter::RegisterImeExtension(
   }
 
   Profile* profile = GetProfile();
+  // TODO(https://crbug.com/1140236): Investigate whether profile selection
+  // is really needed.
+  bool is_login = false;
+  // When Chrome starts with the Login screen, sometimes active IME State was
+  // not set yet. It's asynchronous process. So we need a fallback for that.
+  scoped_refptr<chromeos::input_method::InputMethodManager::State>
+      active_state = chromeos::input_method::InputMethodManager::Get()
+                         ->GetActiveIMEState();
+  if (active_state) {
+    is_login = active_state->GetUIStyle() ==
+               chromeos::input_method::InputMethodManager::UIStyle::kLogin;
+  } else {
+    is_login = chromeos::ProfileHelper::IsSigninProfile(profile);
+  }
 
-  if (chromeos::input_method::InputMethodManager::Get()->GetUISessionState() ==
-          chromeos::input_method::InputMethodManager::STATE_LOGIN_SCREEN &&
-      profile->HasPrimaryOTRProfile()) {
+  if (is_login && profile->HasPrimaryOTRProfile()) {
     profile = profile->GetPrimaryOTRProfile();
   }
 
@@ -654,7 +663,7 @@ ExtensionFunction::ResponseAction InputImeClearCompositionFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
 
   std::unique_ptr<ClearComposition::Params> parent_params(
@@ -666,10 +675,11 @@ ExtensionFunction::ResponseAction InputImeClearCompositionFunction::Run() {
   std::unique_ptr<base::ListValue> results =
       std::make_unique<base::ListValue>();
   results->Append(std::make_unique<base::Value>(success));
-  return RespondNow(
-      success ? ArgumentList(std::move(results))
-              : ErrorWithArguments(std::move(results),
-                                   InformativeError(error, function_name())));
+  return RespondNow(success
+                        ? ArgumentList(std::move(results))
+                        : ErrorWithArguments(
+                              std::move(results),
+                              InformativeError(error, static_function_name())));
 }
 
 ExtensionFunction::ResponseAction InputImeHideInputViewFunction::Run() {
@@ -677,7 +687,7 @@ ExtensionFunction::ResponseAction InputImeHideInputViewFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine)
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   engine->HideInputView();
   return RespondNow(NoArguments());
 }
@@ -688,7 +698,7 @@ InputImeSetAssistiveWindowPropertiesFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
   std::unique_ptr<SetAssistiveWindowProperties::Params> parent_params(
       SetAssistiveWindowProperties::Params::Create(*args_));
@@ -705,8 +715,8 @@ InputImeSetAssistiveWindowPropertiesFunction::Run() {
   engine->SetAssistiveWindowProperties(params.context_id, assistive_window,
                                        &error);
   if (!error.empty())
-    return RespondNow(Error(InformativeError(error, function_name())));
-  return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
+  return RespondNow(OneArgument(base::Value(true)));
 }
 
 ExtensionFunction::ResponseAction
@@ -715,7 +725,7 @@ InputImeSetAssistiveWindowButtonHighlightedFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
   std::unique_ptr<SetAssistiveWindowButtonHighlighted::Params> parent_params(
       SetAssistiveWindowButtonHighlighted::Params::Create(*args_));
@@ -731,7 +741,7 @@ InputImeSetAssistiveWindowButtonHighlightedFunction::Run() {
   engine->SetButtonHighlighted(params.context_id, button, params.highlighted,
                                &error);
   if (!error.empty())
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
 
   return RespondNow(NoArguments());
 }
@@ -747,7 +757,7 @@ InputImeSetCandidateWindowPropertiesFunction::Run() {
   InputMethodEngine* engine =
       GetEngine(browser_context(), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
 
   const SetCandidateWindowProperties::Params::Parameters::Properties&
@@ -759,7 +769,7 @@ InputImeSetCandidateWindowPropertiesFunction::Run() {
         std::make_unique<base::ListValue>();
     results->Append(std::make_unique<base::Value>(false));
     return RespondNow(ErrorWithArguments(
-        std::move(results), InformativeError(error, function_name())));
+        std::move(results), InformativeError(error, static_function_name())));
   }
 
   InputMethodEngine::CandidateWindowProperty properties_out =
@@ -815,7 +825,7 @@ InputImeSetCandidateWindowPropertiesFunction::Run() {
     engine->SetCandidateWindowProperty(params.engine_id, properties_out);
   }
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
+  return RespondNow(OneArgument(base::Value(true)));
 }
 
 ExtensionFunction::ResponseAction InputImeSetCandidatesFunction::Run() {
@@ -823,7 +833,7 @@ ExtensionFunction::ResponseAction InputImeSetCandidatesFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
 
   std::unique_ptr<SetCandidates::Params> parent_params(
@@ -851,10 +861,11 @@ ExtensionFunction::ResponseAction InputImeSetCandidatesFunction::Run() {
   std::unique_ptr<base::ListValue> results =
       std::make_unique<base::ListValue>();
   results->Append(std::make_unique<base::Value>(success));
-  return RespondNow(
-      success ? ArgumentList(std::move(results))
-              : ErrorWithArguments(std::move(results),
-                                   InformativeError(error, function_name())));
+  return RespondNow(success
+                        ? ArgumentList(std::move(results))
+                        : ErrorWithArguments(
+                              std::move(results),
+                              InformativeError(error, static_function_name())));
 }
 
 ExtensionFunction::ResponseAction InputImeSetCursorPositionFunction::Run() {
@@ -862,7 +873,7 @@ ExtensionFunction::ResponseAction InputImeSetCursorPositionFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
 
   std::unique_ptr<SetCursorPosition::Params> parent_params(
@@ -875,23 +886,23 @@ ExtensionFunction::ResponseAction InputImeSetCursorPositionFunction::Run() {
   std::unique_ptr<base::ListValue> results =
       std::make_unique<base::ListValue>();
   results->Append(std::make_unique<base::Value>(success));
-  return RespondNow(
-      success ? ArgumentList(std::move(results))
-              : ErrorWithArguments(std::move(results),
-                                   InformativeError(error, function_name())));
+  return RespondNow(success
+                        ? ArgumentList(std::move(results))
+                        : ErrorWithArguments(
+                              std::move(results),
+                              InformativeError(error, static_function_name())));
 }
 
 ExtensionFunction::ResponseAction InputImeSetMenuItemsFunction::Run() {
   std::unique_ptr<SetMenuItems::Params> parent_params(
       SetMenuItems::Params::Create(*args_));
-  const SetMenuItems::Params::Parameters& params =
-      parent_params->parameters;
+  const input_ime::MenuParameters& params = parent_params->parameters;
 
   std::string error;
   InputMethodEngine* engine =
       GetEngine(browser_context(), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
 
   std::vector<chromeos::input_method::InputMethodManager::MenuItem> items_out;
@@ -903,7 +914,7 @@ ExtensionFunction::ResponseAction InputImeSetMenuItemsFunction::Run() {
   if (!engine->SetMenuItems(items_out, &error)) {
     return RespondNow(Error(InformativeError(
         base::StringPrintf("%s %s", kErrorSetMenuItemsFail, error.c_str()),
-        function_name())));
+        static_function_name())));
   }
   return RespondNow(NoArguments());
 }
@@ -911,14 +922,13 @@ ExtensionFunction::ResponseAction InputImeSetMenuItemsFunction::Run() {
 ExtensionFunction::ResponseAction InputImeUpdateMenuItemsFunction::Run() {
   std::unique_ptr<UpdateMenuItems::Params> parent_params(
       UpdateMenuItems::Params::Create(*args_));
-  const UpdateMenuItems::Params::Parameters& params =
-      parent_params->parameters;
+  const input_ime::MenuParameters& params = parent_params->parameters;
 
   std::string error;
   InputMethodEngine* engine =
       GetEngine(browser_context(), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
 
   std::vector<chromeos::input_method::InputMethodManager::MenuItem> items_out;
@@ -930,7 +940,7 @@ ExtensionFunction::ResponseAction InputImeUpdateMenuItemsFunction::Run() {
   if (!engine->UpdateMenuItems(items_out, &error)) {
     return RespondNow(Error(InformativeError(
         base::StringPrintf("%s %s", kErrorUpdateMenuItemsFail, error.c_str()),
-        function_name())));
+        static_function_name())));
   }
   return RespondNow(NoArguments());
 }
@@ -945,14 +955,14 @@ ExtensionFunction::ResponseAction InputImeDeleteSurroundingTextFunction::Run() {
   InputMethodEngine* engine =
       GetEngine(browser_context(), extension_id(), &error);
   if (!engine) {
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   }
 
   engine->DeleteSurroundingText(params.context_id, params.offset, params.length,
                                 &error);
-  return RespondNow(error.empty()
-                        ? NoArguments()
-                        : Error(InformativeError(error, function_name())));
+  return RespondNow(
+      error.empty() ? NoArguments()
+                    : Error(InformativeError(error, static_function_name())));
 }
 
 ExtensionFunction::ResponseAction
@@ -961,15 +971,15 @@ InputMethodPrivateFinishComposingTextFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine)
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
   std::unique_ptr<FinishComposingText::Params> parent_params(
       FinishComposingText::Params::Create(*args_));
   const FinishComposingText::Params::Parameters& params =
       parent_params->parameters;
   engine->FinishComposingText(params.context_id, &error);
-  return RespondNow(error.empty()
-                        ? NoArguments()
-                        : Error(InformativeError(error, function_name())));
+  return RespondNow(
+      error.empty() ? NoArguments()
+                    : Error(InformativeError(error, static_function_name())));
 }
 
 ExtensionFunction::ResponseAction
@@ -986,13 +996,13 @@ InputMethodPrivateNotifyImeMenuItemActivatedFunction::Run() {
       GetEngineIfActive(Profile::FromBrowserContext(browser_context()),
                         active_extension_id, &error);
   if (!engine)
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
 
   std::unique_ptr<NotifyImeMenuItemActivated::Params> params(
       NotifyImeMenuItemActivated::Params::Create(*args_));
   if (params->engine_id != engine->GetActiveComponentId())
     return RespondNow(
-        Error(InformativeError(kErrorEngineNotActive, function_name())));
+        Error(InformativeError(kErrorEngineNotActive, static_function_name())));
   engine->PropertyActivate(params->name);
   return RespondNow(NoArguments());
 }
@@ -1003,7 +1013,7 @@ InputMethodPrivateGetCompositionBoundsFunction::Run() {
   InputMethodEngine* engine = GetEngineIfActive(
       Profile::FromBrowserContext(browser_context()), extension_id(), &error);
   if (!engine)
-    return RespondNow(Error(InformativeError(error, function_name())));
+    return RespondNow(Error(InformativeError(error, static_function_name())));
 
   auto bounds_list = std::make_unique<base::ListValue>();
   for (const auto& bounds : engine->composition_bounds()) {
@@ -1015,7 +1025,8 @@ InputMethodPrivateGetCompositionBoundsFunction::Run() {
     bounds_list->Append(std::move(bounds_value));
   }
 
-  return RespondNow(OneArgument(std::move(bounds_list)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(bounds_list))));
 }
 
 void InputImeAPI::OnExtensionLoaded(content::BrowserContext* browser_context,

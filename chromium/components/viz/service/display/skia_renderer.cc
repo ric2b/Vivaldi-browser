@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/bits.h"
 #include "base/command_line.h"
@@ -68,6 +69,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/transform.h"
+#include "ui/gfx/transform_util.h"
 
 #if defined(USE_OZONE)
 #include "ui/base/ui_base_features.h"
@@ -277,27 +279,28 @@ bool IsAAForcedOff(const DrawQuad* quad) {
   }
 }
 
-SkFilterQuality GetFilterQuality(const DrawQuad* quad) {
-  bool nearest_neighbor;
+bool UseNearestNeighborSampling(const DrawQuad* quad) {
   switch (quad->material) {
     case DrawQuad::Material::kPictureContent:
-      nearest_neighbor = PictureDrawQuad::MaterialCast(quad)->nearest_neighbor;
-      break;
+      return PictureDrawQuad::MaterialCast(quad)->nearest_neighbor;
     case DrawQuad::Material::kTextureContent:
-      nearest_neighbor = TextureDrawQuad::MaterialCast(quad)->nearest_neighbor;
-      break;
+      return TextureDrawQuad::MaterialCast(quad)->nearest_neighbor;
     case DrawQuad::Material::kTiledContent:
-      nearest_neighbor = TileDrawQuad::MaterialCast(quad)->nearest_neighbor;
-      break;
+      return TileDrawQuad::MaterialCast(quad)->nearest_neighbor;
     default:
-      // Other quad types do not expose filter quality, so default to bilinear
-      // TODO(penghuang): figure out how to set correct filter quality for YUV
-      // and video stream quads.
-      nearest_neighbor = false;
-      break;
+      // Other quad types do not expose nearest_neighbor.
+      return false;
   }
+}
 
-  return nearest_neighbor ? kNone_SkFilterQuality : kLow_SkFilterQuality;
+SkFilterQuality GetFilterQuality(const DrawQuad* quad) {
+  if (UseNearestNeighborSampling(quad))
+    return kNone_SkFilterQuality;
+
+  // Default to bilinear if the quad doesn't specify nearest_neighbor.
+  // TODO(penghuang): figure out how to set correct filter quality for YUV and
+  // video stream quads.
+  return kLow_SkFilterQuality;
 }
 
 // Returns kFast if sampling outside of vis_tex_coords due to AA or bilerp will
@@ -550,7 +553,7 @@ class SkiaRenderer::ScopedSkImageBuilder {
                        ResourceId resource_id,
                        SkAlphaType alpha_type = kPremul_SkAlphaType,
                        GrSurfaceOrigin origin = kTopLeft_GrSurfaceOrigin,
-                       bool use_skia_color_conversion = true);
+                       bool use_target_color_space = false);
   ~ScopedSkImageBuilder() = default;
 
   const SkImage* sk_image() const { return sk_image_; }
@@ -566,14 +569,18 @@ SkiaRenderer::ScopedSkImageBuilder::ScopedSkImageBuilder(
     ResourceId resource_id,
     SkAlphaType alpha_type,
     GrSurfaceOrigin origin,
-    bool use_skia_color_conversion) {
+    bool use_target_color_space) {
   if (!resource_id)
     return;
   auto* resource_provider = skia_renderer->resource_provider_;
   DCHECK(IsTextureResource(resource_provider, resource_id));
 
+  gfx::ColorSpace color_space;
+  if (use_target_color_space)
+    color_space = skia_renderer->CurrentRenderPassColorSpace();
+
   auto* image_context = skia_renderer->lock_set_for_external_use_->LockResource(
-      resource_id, use_skia_color_conversion);
+      resource_id, /*is_video_plane=*/false, color_space);
   // |ImageContext::image| provides thread safety: (a) this ImageContext is
   // only accessed by GPU thread after |image| is set and (b) the fields of
   // ImageContext that are accessed by both compositor and GPU thread are no
@@ -612,20 +619,20 @@ class SkiaRenderer::ScopedYUVSkImageBuilder {
     // Skia API ignores the color space information on the individual planes.
     // Dropping them here avoids some LOG spam.
     auto* y_context = skia_renderer->lock_set_for_external_use_->LockResource(
-        quad->y_plane_resource_id(), /*use_skia_color_conversion=*/false);
+        quad->y_plane_resource_id(), /*is_video_plane=*/true);
     contexts.push_back(std::move(y_context));
     auto* u_context = skia_renderer->lock_set_for_external_use_->LockResource(
-        quad->u_plane_resource_id(), /*use_skia_color_conversion=*/false);
+        quad->u_plane_resource_id(), /*is_video_plane=*/true);
     contexts.push_back(std::move(u_context));
     if (is_i420) {
       auto* v_context = skia_renderer->lock_set_for_external_use_->LockResource(
-          quad->v_plane_resource_id(), /*use_skia_color_conversion=*/false);
+          quad->v_plane_resource_id(), /*is_video_plane=*/true);
       contexts.push_back(std::move(v_context));
     }
 
     if (has_alpha) {
       auto* a_context = skia_renderer->lock_set_for_external_use_->LockResource(
-          quad->a_plane_resource_id(), /*use_skia_color_conversion=*/false);
+          quad->a_plane_resource_id(), /*is_video_plane=*/true);
       contexts.push_back(std::move(a_context));
     }
 
@@ -645,24 +652,6 @@ class SkiaRenderer::ScopedYUVSkImageBuilder {
 
   DISALLOW_COPY_AND_ASSIGN(ScopedYUVSkImageBuilder);
 };
-
-SkiaRenderer::SkiaRenderer(const RendererSettings* settings,
-                           const DebugRendererSettings* debug_settings,
-                           OutputSurface* output_surface,
-                           DisplayResourceProvider* resource_provider,
-                           OverlayProcessorInterface* overlay_processor,
-                           SkiaOutputSurface* skia_output_surface)
-    : DirectRenderer(settings,
-                     debug_settings,
-                     output_surface,
-                     resource_provider,
-                     overlay_processor),
-      skia_output_surface_(skia_output_surface) {
-  DCHECK(skia_output_surface_);
-  lock_set_for_external_use_.emplace(resource_provider, skia_output_surface_);
-}
-
-SkiaRenderer::~SkiaRenderer() = default;
 
 class SkiaRenderer::FrameResourceFence : public ResourceFence {
  public:
@@ -686,6 +675,27 @@ class SkiaRenderer::FrameResourceFence : public ResourceFence {
   DISALLOW_COPY_AND_ASSIGN(FrameResourceFence);
 };
 
+SkiaRenderer::SkiaRenderer(const RendererSettings* settings,
+                           const DebugRendererSettings* debug_settings,
+                           OutputSurface* output_surface,
+                           DisplayResourceProvider* resource_provider,
+                           OverlayProcessorInterface* overlay_processor,
+                           SkiaOutputSurface* skia_output_surface)
+    : DirectRenderer(settings,
+                     debug_settings,
+                     output_surface,
+                     resource_provider,
+                     overlay_processor),
+      skia_output_surface_(skia_output_surface) {
+  DCHECK(skia_output_surface_);
+  lock_set_for_external_use_.emplace(resource_provider, skia_output_surface_);
+
+  current_frame_resource_fence_ = base::MakeRefCounted<FrameResourceFence>();
+  resource_provider_->SetReadLockFence(current_frame_resource_fence_.get());
+}
+
+SkiaRenderer::~SkiaRenderer() = default;
+
 bool SkiaRenderer::CanPartialSwap() {
     return output_surface_->capabilities().supports_post_sub_buffer;
 }
@@ -693,10 +703,7 @@ bool SkiaRenderer::CanPartialSwap() {
 void SkiaRenderer::BeginDrawingFrame() {
   TRACE_EVENT0("viz", "SkiaRenderer::BeginDrawingFrame");
 
-  DCHECK(!current_frame_resource_fence_);
-
-  current_frame_resource_fence_ = base::MakeRefCounted<FrameResourceFence>();
-  resource_provider_->SetReadLockFence(current_frame_resource_fence_.get());
+  DCHECK(!current_frame_resource_fence_->WasSet());
 
 #if defined(OS_ANDROID)
   for (const auto& pass : *current_frame()->render_passes_in_draw_order) {
@@ -710,7 +717,6 @@ void SkiaRenderer::BeginDrawingFrame() {
 
 void SkiaRenderer::FinishDrawingFrame() {
   TRACE_EVENT0("viz", "SkiaRenderer::FinishDrawingFrame");
-  current_frame_resource_fence_ = nullptr;
   current_canvas_ = nullptr;
   current_surface_ = nullptr;
 
@@ -746,14 +752,17 @@ void SkiaRenderer::SwapBuffers(SwapFrameData swap_frame_data) {
 
   skia_output_surface_->SwapBuffers(std::move(output_frame));
   swap_buffer_rect_ = gfx::Rect();
+
+  FlushOutputSurface();
 }
 
 void SkiaRenderer::SwapBuffersSkipped() {
   skia_output_surface_->SwapBuffersSkipped();
+  FlushOutputSurface();
 }
 
 void SkiaRenderer::SwapBuffersComplete() {
-  // Right now, only macOS needs to return maliboxes of released overlays, so
+  // Right now, only macOS needs to return mailboxes of released overlays, so
   // we should not release |committed_overlay_locks_| here. The resources in it
   // will be released by DidReceiveReleasedOverlays() later.
 #if defined(OS_APPLE)
@@ -1237,8 +1246,8 @@ SkiaRenderer::DrawQuadParams SkiaRenderer::CalculateDrawQuadParams(
   if (ShouldApplyRoundedCorner(quad)) {
     // Transform by the window and projection matrix to go from target to
     // device space, which should always be a scale+translate.
-    SkRRect corner_bounds =
-        SkRRect(quad->shared_quad_state->rounded_corner_bounds);
+    SkRRect corner_bounds = SkRRect(
+        quad->shared_quad_state->mask_filter_info.rounded_corner_bounds());
     SkMatrix to_device;
     gfx::TransformToFlattenedSkMatrix(target_to_device, &to_device);
 
@@ -1310,6 +1319,12 @@ const DrawQuad* SkiaRenderer::CanPassBeDrawnDirectly(
   if (quad->material == DrawQuad::Material::kAggregatedRenderPass ||
       quad->material == DrawQuad::Material::kDebugBorder ||
       quad->material == DrawQuad::Material::kPictureContent)
+    return nullptr;
+
+  // If the quad specifies nearest-neighbor scaling then there could be two
+  // scaling operations at different quality levels. This requires drawing to an
+  // intermediate render pass. See https://crbug.com/1155338.
+  if (UseNearestNeighborSampling(quad))
     return nullptr;
 
   if (quad->material == DrawQuad::Material::kTextureContent) {
@@ -1808,7 +1823,7 @@ void SkiaRenderer::DrawTextureQuad(const TextureDrawQuad* quad,
       this, quad->resource_id(),
       quad->premultiplied_alpha ? kPremul_SkAlphaType : kUnpremul_SkAlphaType,
       quad->y_flipped ? kBottomLeft_GrSurfaceOrigin : kTopLeft_GrSurfaceOrigin,
-      /*use_skia_color_conversion=*/!needs_color_conversion_filter);
+      /*use_target_color_space=*/needs_color_conversion_filter);
   const SkImage* image = builder.sk_image();
   if (!image)
     return;
@@ -2058,6 +2073,8 @@ void SkiaRenderer::DrawUnsupportedQuad(const DrawQuad* quad,
 }
 
 void SkiaRenderer::ScheduleOverlays() {
+  DCHECK(!current_frame_resource_fence_->WasSet());
+
   pending_overlay_locks_.emplace_back();
   if (current_frame()->overlay_list.empty())
     return;
@@ -2162,8 +2179,17 @@ void SkiaRenderer::ScheduleOverlays() {
   NOTREACHED();
 #endif  // defined(OS_ANDROID)
 
+  base::OnceClosure on_finished_callback;
+  if (current_frame_resource_fence_->WasSet()) {
+    on_finished_callback = base::BindOnce(
+        &FrameResourceFence::Signal, std::move(current_frame_resource_fence_));
+    current_frame_resource_fence_ = base::MakeRefCounted<FrameResourceFence>();
+    resource_provider_->SetReadLockFence(current_frame_resource_fence_.get());
+  }
+
   skia_output_surface_->ScheduleOverlays(
-      std::move(current_frame()->overlay_list), std::move(sync_tokens));
+      std::move(current_frame()->overlay_list), std::move(sync_tokens),
+      std::move(on_finished_callback));
 }
 
 sk_sp<SkColorFilter> SkiaRenderer::GetColorSpaceConversionFilter(
@@ -2498,20 +2524,35 @@ void SkiaRenderer::FinishDrawingQuadList() {
   if (!batched_quads_.empty())
     FlushBatchedQuads();
 
+  bool is_root_render_pass =
+      current_frame()->current_render_pass == current_frame()->root_render_pass;
+
+  // Drawing the delegated ink trail must happen after the final
+  // FlushBatchedQuads() call so that the trail can always be on top of
+  // everything else that has already been drawn on the page. For the same
+  // reason, it should only happen on the root render pass.
+  if (is_root_render_pass && delegated_ink_point_renderer_)
+    DrawDelegatedInkTrail();
+
   base::OnceClosure on_finished_callback;
   // Signal |current_frame_resource_fence_| when the root render pass is
   // finished.
-  if (current_frame_resource_fence_ &&
-      current_frame_resource_fence_->WasSet() &&
-      current_frame()->current_render_pass ==
-          current_frame()->root_render_pass) {
+  if (current_frame_resource_fence_->WasSet()) {
     on_finished_callback = base::BindOnce(
         &FrameResourceFence::Signal, std::move(current_frame_resource_fence_));
+    current_frame_resource_fence_ = base::MakeRefCounted<FrameResourceFence>();
+    resource_provider_->SetReadLockFence(current_frame_resource_fence_.get());
   }
-  gpu::SyncToken sync_token =
-      skia_output_surface_->SubmitPaint(std::move(on_finished_callback));
+  skia_output_surface_->EndPaint(std::move(on_finished_callback));
 
-  lock_set_for_external_use_->UnlockResources(sync_token);
+  // Defer flushing drawing task for root render pass, to avoid extra
+  // MakeCurrent() call. It is expensive on GL.
+  // TODO(https://crbug.com/1141008): Consider deferring drawing tasks for
+  // all render passes.
+  if (is_root_render_pass)
+    return;
+
+  FlushOutputSurface();
 }
 
 void SkiaRenderer::GenerateMipmap() {
@@ -2575,6 +2616,11 @@ void SkiaRenderer::AllocateRenderPassResourceIfNeeded(
                          color_space, format}));
 }
 
+void SkiaRenderer::FlushOutputSurface() {
+  auto sync_token = skia_output_surface_->Flush();
+  lock_set_for_external_use_->UnlockResources(sync_token);
+}
+
 #if defined(OS_APPLE)
 void SkiaRenderer::PrepareRenderPassOverlay(CALayerOverlay* overlay) {
   DCHECK(!current_canvas_);
@@ -2582,21 +2628,82 @@ void SkiaRenderer::PrepareRenderPassOverlay(CALayerOverlay* overlay) {
   DCHECK(overlay->rpdq);
 
   auto* const quad = overlay->rpdq;
-  overlay->rpdq = nullptr;
-  gfx::Transform target_to_device =
-      current_frame()->window_matrix * current_frame()->projection_matrix;
-  const gfx::Rect* scissor = is_scissor_enabled_ ? &scissor_rect_ : nullptr;
 
+  // The overlay will be sent to GPU the thread, so set rpdq to nullptr to avoid
+  // being accessed on the GPU thread.
+  overlay->rpdq = nullptr;
+
+  // The |current_render_pass| could be used for calculating destination
+  // color space or clipping rect for backdrop filters. However
+  // the |current_render_pass| is nullptr during ScheduleOverlays(), since all
+  // overlay quads should be in the |root_render_pass|, before they are promoted
+  // to overlays, so set the |root_render_pass| to the |current_render_pass|.
+  base::AutoReset<const AggregatedRenderPass*> auto_reset_current_render_pass(
+      &current_frame()->current_render_pass, current_frame()->root_render_pass);
+
+  auto* shared_quad_state =
+      const_cast<SharedQuadState*>(quad->shared_quad_state);
+
+  gfx::Transform quad_to_target_transform_inverse(
+      gfx::Transform::kSkipInitialization);
+  if (shared_quad_state->is_clipped ||
+      !shared_quad_state->mask_filter_info.IsEmpty()) {
+    bool result = shared_quad_state->quad_to_target_transform.GetInverse(
+        &quad_to_target_transform_inverse);
+    DCHECK(result) << "quad_to_target_transform.GetInverse() failed";
+  }
+
+  // The |clip_rect| is in the device coordinate and with all transforms
+  // (translation, scaling, rotation, etc), so remove them.
+  base::Optional<base::AutoReset<gfx::Rect>> auto_reset_clip_rect;
+  if (shared_quad_state->is_clipped) {
+    gfx::RectF clip_rect(shared_quad_state->clip_rect);
+    quad_to_target_transform_inverse.TransformRect(&clip_rect);
+    auto_reset_clip_rect.emplace(&shared_quad_state->clip_rect,
+                                 gfx::ToEnclosedRect(clip_rect));
+  }
+
+  // The |mask_filter_info| is in the device coordinate and with all transforms
+  // (translation, scaling, rotation, etc), so remove them.
+  if (!shared_quad_state->mask_filter_info.IsEmpty()) {
+    auto result = shared_quad_state->mask_filter_info.Transform(
+        quad_to_target_transform_inverse);
+    DCHECK(result) << "shared_quad_state->mask_filter_info.Transform() failed.";
+  }
+
+  // Reset |quad_to_target_transform|, so the quad will be rendered at the
+  // origin (0,0) without all transforms (translation, scaling, rotation, etc)
+  // and then we will use OS compositor to do those transforms.
+  base::AutoReset<gfx::Transform> auto_reset_transform(
+      &shared_quad_state->quad_to_target_transform, gfx::Transform());
+
+  const auto& viewport_size = current_frame()->device_viewport_size;
+  auto projection_matrix = gfx::OrthoProjectionMatrix(
+      /*left=*/0, /*right=*/viewport_size.width(), /*bottom=*/0,
+      /*top=*/viewport_size.height());
+  auto window_matrix =
+      gfx::WindowMatrix(/*x=*/0, /*y=*/0, /*width=*/viewport_size.width(),
+                        /*height=*/viewport_size.height());
+
+  gfx::Transform target_to_device = window_matrix * projection_matrix;
+
+  // Use nullptr scissor, so we can always render the whole render pass in an
+  // overlay backing.
+  // TODO(penghuang): reusing overlay backing from previous frame to avoid
+  // reproducing the overlay backing if the render pass content quad properties
+  // and content are not changed.
   DrawQuadParams params = CalculateDrawQuadParams(
-      target_to_device, scissor, quad, /*draw_region=*/nullptr);
+      target_to_device, /*scissor=*/nullptr, quad, /*draw_region=*/nullptr);
   DrawRPDQParams rpdq_params = CalculateRPDQParams(quad, &params);
+
+  const auto& filter_bounds = rpdq_params.filter_bounds;
 
   // |filter_bounds| is the content space bounds that includes any filtered
   // extents. If empty, the draw can be skipped.
-  if (rpdq_params.filter_bounds.IsEmpty())
+  if (filter_bounds.IsEmpty())
     return;
 
-  ResourceFormat buffer_format;
+  ResourceFormat buffer_format{};
   gfx::ColorSpace color_space;
 
   RenderPassBacking* backing = nullptr;
@@ -2622,16 +2729,13 @@ void SkiaRenderer::PrepareRenderPassOverlay(CALayerOverlay* overlay) {
     color_space = backing->color_space;
   }
 
-  auto dst_filter_bounds = gfx::RectF(rpdq_params.filter_bounds);
-  params.content_device_transform.TransformRect(&dst_filter_bounds);
 
-  gfx::Size buffer_size = gfx::ToCeiledSize(dst_filter_bounds.size());
   // Adjust the overlay |buffer_size| to reduce memory fragmentation. It also
   // increases buffer reusing possibilities.
   constexpr int kBufferMultiple = 64;
-  buffer_size.SetSize(
-      cc::MathUtil::CheckedRoundUp(buffer_size.width(), kBufferMultiple),
-      cc::MathUtil::CheckedRoundUp(buffer_size.height(), kBufferMultiple));
+  gfx::Size buffer_size(
+      cc::MathUtil::CheckedRoundUp(filter_bounds.width(), kBufferMultiple),
+      cc::MathUtil::CheckedRoundUp(filter_bounds.height(), kBufferMultiple));
 
   current_canvas_ = skia_output_surface_->BeginPaintRenderPassOverlay(
       buffer_size, buffer_format, /*mipmap=*/false,
@@ -2641,16 +2745,19 @@ void SkiaRenderer::PrepareRenderPassOverlay(CALayerOverlay* overlay) {
     return;
   }
 
-  current_canvas_->clear(overlay->background_color);
+  // Clear the backing to ARGB(0,0,0,0).
+  current_canvas_->clear(SkColorSetARGB(0, 0, 0, 0));
 
-  // Calculate visible_rect's origin in output device coordinates.
-  auto dst_visible_rect_origin = params.visible_rect.origin();
-  params.content_device_transform.TransformPoint(&dst_visible_rect_origin);
-
-  // Adjust the content_device_transform to make sure filter extends are drawn
+  // Adjust the |content_device_transform| to make sure filter extends are drawn
   // inside of the buffer.
-  params.content_device_transform.Translate(-dst_filter_bounds.x(),
-                                            -dst_filter_bounds.y());
+  params.content_device_transform.Translate(-filter_bounds.x(),
+                                            -filter_bounds.y());
+
+  // Also adjust the |rounded_corner_bounds| to the new location.
+  if (params.rounded_corner_bounds) {
+    params.rounded_corner_bounds->Offset(-filter_bounds.x(),
+                                         -filter_bounds.y());
+  }
 
   // When Render Pass has a single quad inside we would draw that directly.
   if (bypass != render_pass_bypass_quads_.end()) {
@@ -2695,16 +2802,11 @@ void SkiaRenderer::PrepareRenderPassOverlay(CALayerOverlay* overlay) {
   // Put overlay related information in CALayerOverlay,
   // so SkiaOutputSurfaceImplOnGpu can use the DDL to create overlay buffer and
   // play the DDL back to it accordingly.
-  overlay->bounds_rect = gfx::RectF(gfx::SizeF(buffer_size));
   overlay->ddl = std::move(ddl);
 
-  // Since the overlay may be in different size comparing to the render pass's
-  // visible rect due to filter effect extends and buffer size round up, so we
-  // have to adjust the overlay transform to put overlay at the right position.
-  overlay->transform = overlay->shared_state->transform;
-  overlay->transform->preTranslate(
-      -dst_visible_rect_origin.x() + dst_filter_bounds.x(),
-      -dst_visible_rect_origin.y() + dst_filter_bounds.y(), 0);
+  // Adjust |bounds_rect| to contain the whole buffer and at the right location.
+  overlay->bounds_rect.set_origin(gfx::PointF(filter_bounds.origin()));
+  overlay->bounds_rect.set_size(gfx::SizeF(buffer_size));
 }
 #endif
 
@@ -2726,6 +2828,17 @@ bool SkiaRenderer::CreateDelegatedInkPointRenderer() {
   delegated_ink_point_renderer_ =
       std::make_unique<DelegatedInkPointRendererSkia>();
   return true;
+}
+
+void SkiaRenderer::DrawDelegatedInkTrail() {
+  delegated_ink_point_renderer_->DrawDelegatedInkTrail(current_canvas_);
+}
+
+DelegatedInkPointRendererBase* SkiaRenderer::GetDelegatedInkPointRenderer() {
+  if (!delegated_ink_point_renderer_ && !CreateDelegatedInkPointRenderer())
+    return nullptr;
+
+  return delegated_ink_point_renderer_.get();
 }
 
 #if defined(OS_APPLE)

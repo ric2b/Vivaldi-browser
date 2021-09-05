@@ -71,8 +71,7 @@ bool FocusManager::OnKeyEvent(const ui::KeyEvent& event) {
       return false;
     }
 
-    if ((arrow_key_traversal_enabled_ ||
-         arrow_key_traversal_enabled_for_widget_) &&
+    if (IsArrowKeyTraversalEnabledForWidget() &&
         ProcessArrowKeyTraversal(event)) {
       return false;
     }
@@ -169,7 +168,7 @@ bool FocusManager::RotatePaneFocus(Direction direction,
 
   // Initialize |index| to an appropriate starting index if nothing is
   // focused initially.
-  int index = direction == kBackward ? 0 : count - 1;
+  int index = direction == Direction::kBackward ? 0 : count - 1;
 
   // Check to see if a pane already has focus and update the index accordingly.
   const views::View* focused_view = GetFocusedView();
@@ -185,7 +184,7 @@ bool FocusManager::RotatePaneFocus(Direction direction,
   // Rotate focus.
   int start_index = index;
   for (;;) {
-    if (direction == kBackward)
+    if (direction == Direction::kBackward)
       index--;
     else
       index++;
@@ -648,6 +647,16 @@ bool FocusManager::RedirectAcceleratorToBubbleAnchorWidget(
 #endif
 
   return accelerator_processed;
+}
+
+bool FocusManager::IsArrowKeyTraversalEnabledForWidget() const {
+  if (arrow_key_traversal_enabled_)
+    return true;
+
+  Widget* const widget = (focused_view_ && focused_view_->GetWidget())
+                             ? focused_view_->GetWidget()
+                             : widget_;
+  return widget->widget_delegate()->enable_arrow_key_traversal();
 }
 
 }  // namespace views

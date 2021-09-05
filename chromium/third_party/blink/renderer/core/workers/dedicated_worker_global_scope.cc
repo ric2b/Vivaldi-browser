@@ -36,6 +36,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_post_message_options.h"
@@ -235,7 +236,8 @@ void DedicatedWorkerGlobalScope::FetchAndRunClassicScript(
 
   // Step 12. "Fetch a classic worker script given url, outside settings,
   // destination, and inside settings."
-  mojom::RequestContextType context_type = mojom::RequestContextType::WORKER;
+  mojom::blink::RequestContextType context_type =
+      mojom::blink::RequestContextType::WORKER;
   network::mojom::RequestDestination destination =
       network::mojom::RequestDestination::kWorker;
 
@@ -250,9 +252,8 @@ void DedicatedWorkerGlobalScope::FetchAndRunClassicScript(
       *this,
       CreateOutsideSettingsFetcher(outside_settings_object,
                                    outside_resource_timing_notifier),
-      script_url, std::move(worker_main_script_load_params),
-      CloneResourceLoadInfoNotifier(), context_type, destination,
-      network::mojom::RequestMode::kSameOrigin,
+      script_url, std::move(worker_main_script_load_params), context_type,
+      destination, network::mojom::RequestMode::kSameOrigin,
       network::mojom::CredentialsMode::kSameOrigin,
       WTF::Bind(&DedicatedWorkerGlobalScope::DidReceiveResponseForClassicScript,
                 WrapWeakPersistent(this),
@@ -280,7 +281,8 @@ void DedicatedWorkerGlobalScope::FetchAndRunModuleScript(
 
   // Step 12: "Let destination be "sharedworker" if is shared is true, and
   // "worker" otherwise."
-  mojom::RequestContextType context_type = mojom::RequestContextType::WORKER;
+  mojom::blink::RequestContextType context_type =
+      mojom::blink::RequestContextType::WORKER;
   network::mojom::RequestDestination destination =
       network::mojom::RequestDestination::kWorker;
 
@@ -411,9 +413,7 @@ void DedicatedWorkerGlobalScope::DidFetchClassicScript(
 int DedicatedWorkerGlobalScope::requestAnimationFrame(
     V8FrameRequestCallback* callback,
     ExceptionState& exception_state) {
-  auto* frame_callback =
-      MakeGarbageCollected<FrameRequestCallbackCollection::V8FrameCallback>(
-          callback);
+  auto* frame_callback = MakeGarbageCollected<V8FrameCallback>(callback);
   frame_callback->SetUseLegacyTimeBase(false);
 
   int ret = animation_frame_provider_->RegisterCallback(frame_callback);

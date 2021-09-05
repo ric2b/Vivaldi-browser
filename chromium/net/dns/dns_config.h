@@ -22,8 +22,8 @@ class Value;
 
 namespace net {
 
-// Default to 1 second timeout (before exponential backoff).
-constexpr base::TimeDelta kDnsDefaultTimeout = base::TimeDelta::FromSeconds(1);
+constexpr base::TimeDelta kDnsDefaultFallbackPeriod =
+    base::TimeDelta::FromSeconds(1);
 
 // DnsConfig stores configuration of the system resolver.
 struct NET_EXPORT DnsConfig {
@@ -78,7 +78,10 @@ struct NET_EXPORT DnsConfig {
   // Minimum number of dots before global resolution precedes |search|.
   int ndots;
   // Time between retransmissions, see res_state.retrans.
-  base::TimeDelta timeout;
+  // Used by Chrome as the initial transaction attempt fallback period (before
+  // exponential backoff and dynamic period determination based on previous
+  // attempts.)
+  base::TimeDelta fallback_period;
   // Maximum number of attempts, see res_state.retry.
   int attempts;
   // Maximum number of times a DoH server is attempted per attempted per DNS

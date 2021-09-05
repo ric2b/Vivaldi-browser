@@ -167,6 +167,9 @@ ConsumerHost::TracingSession::TracingSession(
     if (data_source.config().chrome_config().privacy_filtering_enabled()) {
       privacy_filtering_enabled_ = true;
     }
+    if (data_source.config().chrome_config().convert_to_legacy_json()) {
+      convert_to_legacy_json_ = true;
+    }
   }
 #if DCHECK_IS_ON()
   if (privacy_filtering_enabled_) {
@@ -194,7 +197,25 @@ ConsumerHost::TracingSession::TracingSession(
   base::EraseIf(*pending_enable_tracing_ack_pids_,
                 [this](base::ProcessId pid) { return !IsExpectedPid(pid); });
 
-  host_->consumer_endpoint()->EnableTracing(trace_config);
+  perfetto::TraceConfig effective_config(trace_config);
+  // If we're going to convert the data to JSON, don't enable privacy filtering
+  // at the data source level since it will be performed at conversion time
+  // (otherwise there's nothing to pass through the allowlist).
+  if (convert_to_legacy_json_ && privacy_filtering_enabled_) {
+    for (auto& data_source : *effective_config.mutable_data_sources()) {
+      auto* chrome_config =
+          data_source.mutable_config()->mutable_chrome_config();
+      chrome_config->set_privacy_filtering_enabled(false);
+      // Argument filtering should still be enabled together with privacy
+      // filtering to ensure, for example, that only the expected metadata gets
+      // written.
+      base::trace_event::TraceConfig base_config(chrome_config->trace_config());
+      base_config.EnableArgumentFilter();
+      chrome_config->set_trace_config(base_config.ToString());
+    }
+  }
+
+  host_->consumer_endpoint()->EnableTracing(effective_config);
   MaybeSendEnableTracingAck();
 
   if (pending_enable_tracing_ack_pids_) {
@@ -327,7 +348,7 @@ void ConsumerHost::TracingSession::DisableTracing() {
   host_->consumer_endpoint()->DisableTracing();
 }
 
-void ConsumerHost::TracingSession::OnTracingDisabled() {
+void ConsumerHost::TracingSession::OnTracingDisabled(const std::string& error) {
   DCHECK(tracing_session_client_);
 
   if (enable_tracing_ack_timer_.IsRunning()) {
@@ -335,7 +356,8 @@ void ConsumerHost::TracingSession::OnTracingDisabled() {
   }
   DCHECK(!pending_enable_tracing_ack_pids_);
 
-  tracing_session_client_->OnTracingDisabled();
+  tracing_session_client_->OnTracingDisabled(
+      /*tracing_succeeded=*/error.empty());
 
   if (trace_processor_) {
     host_->consumer_endpoint()->ReadBuffers();
@@ -356,6 +378,7 @@ void ConsumerHost::TracingSession::OnConsumerClientDisconnected() {
 void ConsumerHost::TracingSession::ReadBuffers(
     mojo::ScopedDataPipeProducerHandle stream,
     ReadBuffersCallback callback) {
+  DCHECK(!convert_to_legacy_json_);
   read_buffers_stream_writer_ = base::SequenceBound<StreamWriter>(
       StreamWriter::CreateTaskRunner(), std::move(stream), std::move(callback),
       base::BindOnce(&TracingSession::OnConsumerClientDisconnected,
@@ -393,7 +416,7 @@ void ConsumerHost::TracingSession::DisableTracingAndEmitJson(
     // For filtering/allowlisting to be possible at JSON export time,
     // filtering must not have been enabled during proto emission time
     // (or there's nothing to pass through the allowlist).
-    DCHECK(!privacy_filtering_enabled_);
+    DCHECK(!privacy_filtering_enabled_ || convert_to_legacy_json_);
     privacy_filtering_enabled_ = true;
   }
 
@@ -473,8 +496,8 @@ void ConsumerHost::TracingSession::OnJSONTraceData(std::string json,
                                                    bool has_more) {
   auto slice = std::make_unique<StreamWriter::Slice>();
   slice->swap(json);
-  read_buffers_stream_writer_.Post(FROM_HERE, &StreamWriter::WriteToStream,
-                                   std::move(slice), has_more);
+  read_buffers_stream_writer_.AsyncCall(&StreamWriter::WriteToStream)
+      .WithArgs(std::move(slice), has_more);
 
   if (!has_more) {
     read_buffers_stream_writer_.Reset();
@@ -537,8 +560,8 @@ void ConsumerHost::TracingSession::OnTraceData(
       chunk->append(static_cast<const char*>(slice.start), slice.size);
     }
   }
-  read_buffers_stream_writer_.Post(FROM_HERE, &StreamWriter::WriteToStream,
-                                   std::move(chunk), has_more);
+  read_buffers_stream_writer_.AsyncCall(&StreamWriter::WriteToStream)
+      .WithArgs(std::move(chunk), has_more);
   if (!has_more) {
     read_buffers_stream_writer_.Reset();
   }
@@ -603,10 +626,30 @@ ConsumerHost::~ConsumerHost() {
 void ConsumerHost::EnableTracing(
     mojo::PendingReceiver<mojom::TracingSessionHost> tracing_session_host,
     mojo::PendingRemote<mojom::TracingSessionClient> tracing_session_client,
-    const perfetto::TraceConfig& trace_config,
-    mojom::TracingClientPriority priority) {
+    const perfetto::TraceConfig& trace_config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!tracing_session_);
+
+  auto priority = mojom::TracingClientPriority::kUnknown;
+  for (const auto& data_source : trace_config.data_sources()) {
+    if (!data_source.has_config() ||
+        !data_source.config().has_chrome_config()) {
+      continue;
+    }
+    switch (data_source.config().chrome_config().client_priority()) {
+      case perfetto::protos::gen::ChromeConfig::BACKGROUND:
+        priority =
+            std::max(priority, mojom::TracingClientPriority::kBackground);
+        break;
+      case perfetto::protos::gen::ChromeConfig::USER_INITIATED:
+        priority =
+            std::max(priority, mojom::TracingClientPriority::kUserInitiated);
+        break;
+      default:
+      case perfetto::protos::gen::ChromeConfig::UNKNOWN:
+        break;
+    }
+  }
 
   // We create our new TracingSession async, if the PerfettoService allows
   // us to, after it's stopped any currently running lower or equal priority
@@ -638,10 +681,10 @@ void ConsumerHost::OnConnect() {}
 
 void ConsumerHost::OnDisconnect() {}
 
-void ConsumerHost::OnTracingDisabled() {
+void ConsumerHost::OnTracingDisabled(const std::string& error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (tracing_session_) {
-    tracing_session_->OnTracingDisabled();
+    tracing_session_->OnTracingDisabled(error);
   }
 }
 

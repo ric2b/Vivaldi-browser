@@ -33,7 +33,6 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
-#include "chrome/common/render_messages.h"
 #include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -258,15 +257,12 @@ void WebViewGuest::ExtendedLoadProgressChanged(double progress,
 
 void WebViewGuest::ToggleFullscreenModeForTab(
     content::WebContents* web_contents,
-    bool enter_fullscreen,
-    bool skip_window_state) {
+    bool enter_fullscreen) {
   if (enter_fullscreen == is_fullscreen_)
     return;
   is_fullscreen_ = enter_fullscreen;
 
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-  if (!browser)
-    return;
 
 #if defined(USE_AURA)
   PrefService* pref_service =
@@ -284,41 +280,10 @@ void WebViewGuest::ToggleFullscreenModeForTab(
 #endif  // USE_AURA
 
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetInteger("windowId", browser->session_id().id());
+  args->SetInteger("windowId", browser ? browser->session_id().id() : -1);
   args->SetBoolean("enterFullscreen", enter_fullscreen);
   DispatchEventToView(base::WrapUnique(
     new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
-
-  bool is_tab_casting = web_contents->IsBeingCaptured();
-  // Avoid bringing the window to fullscreen if we are tab-casting.
-  if (skip_window_state || is_tab_casting) {
-    return;
-  }
-
-  VivaldiBrowserWindow* app_win =
-      static_cast<VivaldiBrowserWindow*>(browser->window());
-  if (!app_win)
-    return;
-
-  if (enter_fullscreen) {
-    ui::WindowShowState current_window_state = app_win->GetRestoredState();
-    window_state_prior_to_fullscreen_ = current_window_state;
-    app_win->SetFullscreen(true);
-  } else {
-    switch (window_state_prior_to_fullscreen_) {
-      case ui::SHOW_STATE_MAXIMIZED:
-      case ui::SHOW_STATE_NORMAL:
-      case ui::SHOW_STATE_DEFAULT:
-        app_win->Restore();
-        break;
-      case ui::SHOW_STATE_FULLSCREEN:
-        app_win->SetFullscreen(true);
-        break;
-      default:
-        NOTREACHED() << "uncovered state";
-        break;
-    }
-  }
 }
 
 void WebViewGuest::BeforeUnloadFired(content::WebContents* web_contents,
@@ -382,15 +347,9 @@ void WebViewGuest::NavigationStateChanged(
   }
 }
 
-bool WebViewGuest::EmbedsFullscreenWidget() {
-  // If WebContents::GetFullscreenRenderWidgetHostView is present there is a
-  // window other than this handling the fullscreen operation.
-  return web_contents()->GetFullscreenRenderWidgetHostView() == NULL;
-}
-
-void WebViewGuest::SetIsFullscreen(bool is_fullscreen, bool skip_window_state) {
+void WebViewGuest::SetIsFullscreen(bool is_fullscreen) {
   SetFullscreenState(is_fullscreen);
-  ToggleFullscreenModeForTab(web_contents(), is_fullscreen, skip_window_state);
+  ToggleFullscreenModeForTab(web_contents(), is_fullscreen);
 }
 
 void WebViewGuest::VisibleSecurityStateChanged(WebContents* source) {

@@ -5,8 +5,9 @@
 #include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_forward.h"
+#include "base/callback_helpers.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -17,7 +18,7 @@
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/file_source_request.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/file_analysis_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -31,7 +32,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/features.h"
-#include "components/safe_browsing/core/proto/webprotect.pb.h"
 #include "components/url_matcher/url_matcher.h"
 #include "content/public/browser/download_item_utils.h"
 
@@ -151,6 +151,17 @@ EventResult GetEventResult(DownloadCheckResult download_result,
   return EventResult::UNKNOWN;
 }
 
+std::string GetTriggerName(DeepScanningRequest::DeepScanTrigger trigger) {
+  switch (trigger) {
+    case DeepScanningRequest::DeepScanTrigger::TRIGGER_UNKNOWN:
+      return "Unknown";
+    case DeepScanningRequest::DeepScanTrigger::TRIGGER_APP_PROMPT:
+      return "AdvancedProtectionPrompt";
+    case DeepScanningRequest::DeepScanTrigger::TRIGGER_POLICY:
+      return "Policy";
+  }
+}
+
 }  // namespace
 
 /* static */
@@ -195,7 +206,7 @@ void DeepScanningRequest::Start() {
   // Indicate we're now scanning the file.
   callback_.Run(DownloadCheckResult::ASYNC_SCANNING);
 
-  auto request = std::make_unique<FileSourceRequest>(
+  auto request = std::make_unique<FileAnalysisRequest>(
       analysis_settings_, item_->GetFullPath(),
       item_->GetTargetFilePath().BaseName(),
       base::BindOnce(&DeepScanningRequest::OnScanComplete,
@@ -220,6 +231,8 @@ void DeepScanningRequest::Start() {
     OnScanComplete(BinaryUploadService::Result::UNKNOWN,
                    enterprise_connectors::ContentAnalysisResponse());
   }
+
+  base::UmaHistogramEnumeration("SBClientDownload.DeepScanTrigger", trigger_);
 }
 
 void DeepScanningRequest::PrepareRequest(BinaryUploadService::Request* request,
@@ -251,6 +264,9 @@ void DeepScanningRequest::OnScanComplete(
   DownloadCheckResult download_result = DownloadCheckResult::UNKNOWN;
   if (result == BinaryUploadService::Result::SUCCESS) {
     ResponseToDownloadCheckResult(response, &download_result);
+    base::UmaHistogramEnumeration(
+        "SBClientDownload.MalwareDeepScanResult." + GetTriggerName(trigger_),
+        download_result);
   } else if (trigger_ == DeepScanTrigger::TRIGGER_APP_PROMPT &&
              MaybeShowDeepScanFailureModalDialog(
                  base::BindOnce(&DeepScanningRequest::Start,

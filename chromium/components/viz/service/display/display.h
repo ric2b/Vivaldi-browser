@@ -20,6 +20,7 @@
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/surface_id.h"
+#include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
 #include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/display/frame_rate_decider.h"
@@ -81,14 +82,16 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // a MessageLoop.
   // TODO(penghuang): Remove skia_output_surface when all DirectRenderer
   // subclasses are replaced by SkiaRenderer.
-  Display(SharedBitmapManager* bitmap_manager,
-          const RendererSettings& settings,
-          const DebugRendererSettings* debug_settings,
-          const FrameSinkId& frame_sink_id,
-          std::unique_ptr<OutputSurface> output_surface,
-          std::unique_ptr<OverlayProcessorInterface> overlay_processor,
-          std::unique_ptr<DisplaySchedulerBase> scheduler,
-          scoped_refptr<base::SingleThreadTaskRunner> current_task_runner);
+  Display(
+      SharedBitmapManager* bitmap_manager,
+      const RendererSettings& settings,
+      const DebugRendererSettings* debug_settings,
+      const FrameSinkId& frame_sink_id,
+      std::unique_ptr<DisplayCompositorMemoryAndTaskController> gpu_dependency,
+      std::unique_ptr<OutputSurface> output_surface,
+      std::unique_ptr<OverlayProcessorInterface> overlay_processor,
+      std::unique_ptr<DisplaySchedulerBase> scheduler,
+      scoped_refptr<base::SingleThreadTaskRunner> current_task_runner);
 
   ~Display() override;
 
@@ -253,6 +256,7 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   std::unique_ptr<gpu::ScopedAllowScheduleGpuTask>
       allow_schedule_gpu_task_during_destruction_;
 #endif
+  std::unique_ptr<DisplayCompositorMemoryAndTaskController> gpu_dependency_;
   std::unique_ptr<OutputSurface> output_surface_;
   SkiaOutputSurface* const skia_output_surface_;
   std::unique_ptr<DisplayDamageTracker> damage_tracker_;

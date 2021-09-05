@@ -33,6 +33,7 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
@@ -183,7 +184,7 @@ class CORE_EXPORT ContentSecurityPolicy final
     kPrefetchSrc,
     kReportTo,
     kReportURI,
-    kTrustedTypes,
+    kRequireTrustedTypesFor,
     kSandbox,
     kScriptSrc,
     kScriptSrcAttr,
@@ -191,10 +192,11 @@ class CORE_EXPORT ContentSecurityPolicy final
     kStyleSrc,
     kStyleSrcAttr,
     kStyleSrcElem,
+    kTreatAsPublicAddress,
+    kTrustedTypes,
     kUndefined,
     kUpgradeInsecureRequests,
     kWorkerSrc,
-    kRequireTrustedTypesFor,
   };
 
   // CheckHeaderType can be passed to Allow*FromSource methods to control which
@@ -231,7 +233,7 @@ class CORE_EXPORT ContentSecurityPolicy final
   void AddPolicyFromHeaderValue(const String&,
                                 network::mojom::ContentSecurityPolicyType,
                                 network::mojom::ContentSecurityPolicySource);
-  void ReportAccumulatedHeaders(LocalFrame*) const;
+  void ReportAccumulatedHeaders() const;
 
   Vector<CSPHeaderAndType> Headers() const;
 
@@ -311,10 +313,10 @@ class CORE_EXPORT ContentSecurityPolicy final
 
   static bool IsScriptInlineType(InlineType);
 
-  // TODO(crbug.com/889751): Remove "mojom::RequestContextType" once
+  // TODO(crbug.com/889751): Remove "mojom::blink::RequestContextType" once
   // all the code migrates.
   bool AllowRequestWithoutIntegrity(
-      mojom::RequestContextType,
+      mojom::blink::RequestContextType,
       network::mojom::RequestDestination,
       const KURL&,
       const KURL& url_before_redirects,
@@ -322,9 +324,9 @@ class CORE_EXPORT ContentSecurityPolicy final
       ReportingDisposition = ReportingDisposition::kReport,
       CheckHeaderType = CheckHeaderType::kCheckAll) const;
 
-  // TODO(crbug.com/889751): Remove "mojom::RequestContextType" once
+  // TODO(crbug.com/889751): Remove "mojom::blink::RequestContextType" once
   // all the code migrates.
-  bool AllowRequest(mojom::RequestContextType,
+  bool AllowRequest(mojom::blink::RequestContextType,
                     network::mojom::RequestDestination,
                     const KURL&,
                     const String& nonce,
@@ -436,10 +438,19 @@ class CORE_EXPORT ContentSecurityPolicy final
 
   // Whether the main world's CSP should be bypassed based on the current
   // javascript world we are in.
+  // Note: This is deprecated. New usages should not be added. Operations in an
+  // isolated world should use the isolated world CSP instead of bypassing the
+  // main world CSP. See
+  // ExecutionContext::GetContentSecurityPolicyForCurrentWorld.
+  // TODO(karandeepb): Rename to ShouldBypassMainWorldDeprecated.
   static bool ShouldBypassMainWorld(const ExecutionContext*);
 
   // Whether the main world's CSP should be bypassed for operations in the given
   // |world|.
+  // Note: This is deprecated. New usages should not be added. Operations in an
+  // isolated world should use the isolated world CSP instead of bypassing the
+  // main world CSP. See ExecutionContext::GetContentSecurityPolicyForWorld.
+  // TODO(karandeepb): Rename to ShouldBypassMainWorldDeprecated.
   static bool ShouldBypassMainWorld(const DOMWrapperWorld* world);
 
   static bool IsNonceableElement(const Element*);
@@ -565,6 +576,7 @@ class CORE_EXPORT ContentSecurityPolicy final
 
   void ReportContentSecurityPolicyIssue(
       const blink::SecurityPolicyViolationEventInit& violation_data,
+      network::mojom::ContentSecurityPolicyType header_type,
       ContentSecurityPolicyViolationType violation_type,
       LocalFrame* = nullptr,
       Element* = nullptr);

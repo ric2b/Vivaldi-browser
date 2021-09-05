@@ -577,8 +577,10 @@ bool IsAppContainerEnabled() {
   if (base::win::GetVersion() < base::win::Version::WIN8)
     return false;
 
-  return base::FeatureList::IsEnabled(
-      {"RendererAppContainer", base::FEATURE_DISABLED_BY_DEFAULT});
+  static const base::Feature kRendererAppContainer{
+      "RendererAppContainer", base::FEATURE_DISABLED_BY_DEFAULT};
+
+  return base::FeatureList::IsEnabled(kRendererAppContainer);
 }
 
 ResultCode SetJobMemoryLimit(const base::CommandLine& cmd_line,
@@ -697,7 +699,7 @@ ResultCode SetupAppContainerProfile(AppContainerProfile* profile,
         !profile->AddCapability(L"lpacServicesManagement") ||
         !profile->AddCapability(L"lpacSessionManagement") ||
         !profile->AddCapability(L"lpacAppExperience") ||
-        !profile->AddCapability(L"lpacAppServices") ||
+        !profile->AddCapability(L"lpacInstrumentation") ||
         !profile->AddCapability(L"lpacCryptoServices") ||
         !profile->AddCapability(L"lpacEnterprisePolicyChangeNotifications")) {
       DLOG(ERROR)

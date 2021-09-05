@@ -42,6 +42,8 @@ import org.hamcrest.Matchers;
 import org.junit.Assert;
 
 import org.chromium.base.task.PostTask;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ChromeWindow;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
@@ -53,12 +55,10 @@ import org.chromium.chrome.browser.keyboard_accessory.data.PropertyProvider;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AddressAccessorySheetCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.CreditCardAccessorySheetCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.PasswordAccessorySheetCoordinator;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestInputMethodManagerWrapper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -77,7 +77,7 @@ public class ManualFillingTestHelper {
     private static final String USERNAME_NODE_ID = "username_field";
     private static final String SUBMIT_NODE_ID = "input_submit_button";
 
-    private final ChromeActivityTestRule mActivityTestRule;
+    private final ChromeTabbedActivityTestRule mActivityTestRule;
     private final AtomicReference<WebContents> mWebContentsRef = new AtomicReference<>();
     private TestInputMethodManagerWrapper mInputMethodManagerWrapper;
     private PropertyProvider<AccessorySheetData> mSheetSuggestionsProvider =
@@ -89,7 +89,7 @@ public class ManualFillingTestHelper {
         return (FakeKeyboard) mActivityTestRule.getKeyboardDelegate();
     }
 
-    public ManualFillingTestHelper(ChromeActivityTestRule activityTestRule) {
+    public ManualFillingTestHelper(ChromeTabbedActivityTestRule activityTestRule) {
         mActivityTestRule = activityTestRule;
     }
 
@@ -107,7 +107,11 @@ public class ManualFillingTestHelper {
                 InstrumentationRegistry.getInstrumentation().getContext(),
                 ServerCertificate.CERT_OK);
         ChromeWindow.setKeyboardVisibilityDelegateFactory(keyboardDelegate);
-        mActivityTestRule.startMainActivityWithURL(mEmbeddedTestServer.getURL(url));
+        if (mActivityTestRule.getActivity() == null) {
+            mActivityTestRule.startMainActivityWithURL(mEmbeddedTestServer.getURL(url));
+        } else {
+            mActivityTestRule.loadUrl(mEmbeddedTestServer.getURL(url));
+        }
         setRtlForTesting(isRtl);
         updateWebContentsDependentState();
         cacheCredentials(new String[0], new String[0], false); // This caches the empty state.
@@ -349,14 +353,17 @@ public class ManualFillingTestHelper {
 
     public static void createAutofillTestProfiles() throws TimeoutException {
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "Johnathan Smithonian-Jackson", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco",
-                "", "94102", "", "US", "(415) 888-9999", "john.sj@acme-mail.inc", "en"));
+                "" /* honorific prefix */, "Johnathan Smithonian-Jackson", "Acme Inc",
+                "1 Main\nApt A", "CA", "San Francisco", "", "94102", "", "US", "(415) 888-9999",
+                "john.sj@acme-mail.inc", "en"));
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "Jane Erika Donovanova", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "",
-                "94102", "", "US", "(415) 999-0000", "donovanova.j@acme-mail.inc", "en"));
+                "" /* honorific prefix */, "Jane Erika Donovanova", "Acme Inc", "1 Main\nApt A",
+                "CA", "San Francisco", "", "94102", "", "US", "(415) 999-0000",
+                "donovanova.j@acme-mail.inc", "en"));
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "Marcus McSpartangregor", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "",
-                "94102", "", "US", "(415) 999-0000", "marc@acme-mail.inc", "en"));
+                "" /* honorific prefix */, "Marcus McSpartangregor", "Acme Inc", "1 Main\nApt A",
+                "CA", "San Francisco", "", "94102", "", "US", "(415) 999-0000",
+                "marc@acme-mail.inc", "en"));
     }
 
     public static void disableServerPredictions() {

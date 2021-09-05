@@ -24,7 +24,6 @@
 #include "ui/events/x/x11_window_event_manager.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/extension_manager.h"
-#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/xkb.h"
 #include "ui/gfx/x/xproto.h"
@@ -53,12 +52,6 @@ void InitializeXkb(x11::Connection* connection) {
 
   auto& xkb = connection->xkb();
 
-  xkb.UseExtension({x11::Xkb::major_version, x11::Xkb::minor_version})
-      .OnResponse(base::BindOnce([](x11::Xkb::UseExtensionResponse response) {
-        if (!response || !response->supported)
-          DVLOG(1) << "Xkb extension not available.";
-      }));
-
   // Ask the server not to send KeyRelease event when the user holds down a key.
   // crbug.com/138092
   xkb
@@ -77,7 +70,7 @@ void InitializeXkb(x11::Connection* connection) {
       }));
 
   constexpr auto kXkbAllMapPartMask = static_cast<x11::Xkb::MapPart>(0xff);
-  xkb.SelectEvents({
+  xkb.SelectEvents(x11::Xkb::SelectEventsRequest{
       .deviceSpec = static_cast<x11::Xkb::DeviceSpec>(x11::Xkb::Id::UseCoreKbd),
       .affectWhich = x11::Xkb::EventType::NewKeyboardNotify,
       .selectAll = x11::Xkb::EventType::NewKeyboardNotify,
@@ -168,7 +161,7 @@ x11::Time X11EventSource::GetCurrentServerTime() {
   if (!dummy_initialized_) {
     // Create a new Window and Atom that will be used for the property change.
     dummy_window_ = connection_->GenerateId<x11::Window>();
-    connection_->CreateWindow({
+    connection_->CreateWindow(x11::CreateWindowRequest{
         .wid = dummy_window_,
         .parent = connection_->default_root(),
         .width = 1,
@@ -191,7 +184,7 @@ x11::Time X11EventSource::GetCurrentServerTime() {
 
   // Make a no-op property change on |dummy_window_|.
   std::vector<uint8_t> data{0};
-  connection_->ChangeProperty({
+  connection_->ChangeProperty(x11::ChangePropertyRequest{
       .window = static_cast<x11::Window>(dummy_window_),
       .property = dummy_atom_,
       .type = x11::Atom::STRING,

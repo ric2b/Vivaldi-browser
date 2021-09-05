@@ -78,17 +78,6 @@ class CaptivePortalRoutineTest : public ::testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  // See IsCaptivePortalState() in chromeos/network/network_state.cc to see how
-  // the captive portal state is determined.
-  void SetUpCaptivePortalState(const std::string& portal_detection_phase,
-                               const std::string& portal_detection_status) {
-    DCHECK(!wifi_path_.empty());
-    SetServiceProperty(wifi_path_, shill::kPortalDetectionFailedPhaseProperty,
-                       base::Value(portal_detection_phase));
-    SetServiceProperty(wifi_path_, shill::kPortalDetectionFailedStatusProperty,
-                       base::Value(portal_detection_status));
-  }
-
   void InitializeManagedNetworkConfigurationHandler() {
     network_profile_handler_ = NetworkProfileHandler::InitializeForTesting();
     network_configuration_handler_ =
@@ -170,29 +159,12 @@ class CaptivePortalRoutineTest : public ::testing::Test {
 };
 
 // Test whether an online active network successfully passes.
-TEST_F(CaptivePortalRoutineTest, TestNoCaptivePortalState) {
+TEST_F(CaptivePortalRoutineTest, TestNoCaptivePortal) {
   SetUpWiFi(shill::kStateOnline);
   std::vector<mojom::CaptivePortalProblem> expected_problems = {};
   captive_portal_routine()->RunRoutine(
       base::BindOnce(&CaptivePortalRoutineTest::CompareVerdict, weak_ptr(),
                      mojom::RoutineVerdict::kNoProblem, expected_problems));
-  run_loop().Run();
-}
-
-// Test whether an active network trapped in captive portal is reported
-// correctly.
-TEST_F(CaptivePortalRoutineTest, TestCaptivePortalState) {
-  SetUpWiFi(shill::kStatePortal);
-  // Provide an instance of the service properties and their corresponding
-  // values that occur when we do not know the portal detection state. This
-  // ensures the network is not in a state of restricted connectivity.
-  SetUpCaptivePortalState(shill::kPortalDetectionPhaseUnknown,
-                          shill::kPortalDetectionStatusFailure);
-  std::vector<mojom::CaptivePortalProblem> expected_problems = {
-      mojom::CaptivePortalProblem::kCaptivePortalState};
-  captive_portal_routine()->RunRoutine(
-      base::BindOnce(&CaptivePortalRoutineTest::CompareVerdict, weak_ptr(),
-                     mojom::RoutineVerdict::kProblem, expected_problems));
   run_loop().Run();
 }
 
@@ -207,21 +179,40 @@ TEST_F(CaptivePortalRoutineTest, TestNoActiveNetworks) {
   run_loop().Run();
 }
 
-// Test that an active network with restricted connectivity is detected.
-TEST_F(CaptivePortalRoutineTest, TestRestrictedConnectivity) {
-  SetUpWiFi(shill::kStatePortal);
-  // Provide an instance of the service properties and their corresponding
-  // values that occur when trapped in a captive portal. This ensures that the
-  // network is in a state of restricted connectivity.
-  SetUpCaptivePortalState(shill::kPortalDetectionPhaseContent,
-                          shill::kPortalDetectionStatusFailure);
+// Test that an active network with a suspected portal state is detected.
+TEST_F(CaptivePortalRoutineTest, TestPortalSuspected) {
+  SetUpWiFi(shill::kStatePortalSuspected);
   std::vector<mojom::CaptivePortalProblem> expected_problems = {
-      mojom::CaptivePortalProblem::kRestrictedConnectivity};
+      mojom::CaptivePortalProblem::kPortalSuspected};
   captive_portal_routine()->RunRoutine(
       base::BindOnce(&CaptivePortalRoutineTest::CompareVerdict, weak_ptr(),
                      mojom::RoutineVerdict::kProblem, expected_problems));
   run_loop().Run();
 }
+
+// Test that an active network behind a portal is detected.
+TEST_F(CaptivePortalRoutineTest, TestPortalDetected) {
+  SetUpWiFi(shill::kStateRedirectFound);
+  std::vector<mojom::CaptivePortalProblem> expected_problems = {
+      mojom::CaptivePortalProblem::kPortal};
+  captive_portal_routine()->RunRoutine(
+      base::BindOnce(&CaptivePortalRoutineTest::CompareVerdict, weak_ptr(),
+                     mojom::RoutineVerdict::kProblem, expected_problems));
+  run_loop().Run();
+}
+
+// Test that an active network with no internet is detected.
+TEST_F(CaptivePortalRoutineTest, TestNoInternet) {
+  SetUpWiFi(shill::kStateNoConnectivity);
+  std::vector<mojom::CaptivePortalProblem> expected_problems = {
+      mojom::CaptivePortalProblem::kNoInternet};
+  captive_portal_routine()->RunRoutine(
+      base::BindOnce(&CaptivePortalRoutineTest::CompareVerdict, weak_ptr(),
+                     mojom::RoutineVerdict::kProblem, expected_problems));
+  run_loop().Run();
+}
+
+// TODO(khegde): Add a test for unknown captive portal state.
 
 }  // namespace network_diagnostics
 }  // namespace chromeos

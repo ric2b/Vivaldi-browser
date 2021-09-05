@@ -30,12 +30,14 @@ class VIZ_VULKAN_CONTEXT_PROVIDER_EXPORT VulkanInProcessContextProvider
  public:
   static scoped_refptr<VulkanInProcessContextProvider> Create(
       gpu::VulkanImplementation* vulkan_implementation,
-      const GrContextOptions& context_options = GrContextOptions(),
+      uint32_t heap_memory_limit = 0,
+      uint32_t sync_cpu_memory_limit = 0,
       const gpu::GPUInfo* gpu_info = nullptr);
 
   void Destroy();
 
   // VulkanContextProvider implementation
+  bool InitializeGrContext(const GrContextOptions& context_options) override;
   gpu::VulkanImplementation* GetVulkanImplementation() override;
   gpu::VulkanDeviceQueue* GetDeviceQueue() override;
   GrDirectContext* GetGrContext() override;
@@ -43,19 +45,23 @@ class VIZ_VULKAN_CONTEXT_PROVIDER_EXPORT VulkanInProcessContextProvider
   void EnqueueSecondaryCBSemaphores(
       std::vector<VkSemaphore> semaphores) override;
   void EnqueueSecondaryCBPostSubmitTask(base::OnceClosure closure) override;
+  uint32_t GetSyncCpuMemoryLimit() const override;
 
  private:
   explicit VulkanInProcessContextProvider(
-      gpu::VulkanImplementation* vulkan_implementation);
+      gpu::VulkanImplementation* vulkan_implementation,
+      uint32_t heap_memory_limit,
+      uint32_t sync_cpu_memory_limit);
   ~VulkanInProcessContextProvider() override;
 
-  bool Initialize(const GrContextOptions& context_options,
-                  const gpu::GPUInfo* gpu_info);
+  bool Initialize(const gpu::GPUInfo* gpu_info);
 
 #if BUILDFLAG(ENABLE_VULKAN)
   sk_sp<GrDirectContext> gr_context_;
   gpu::VulkanImplementation* vulkan_implementation_;
   std::unique_ptr<gpu::VulkanDeviceQueue> device_queue_;
+  const uint32_t heap_memory_limit_;
+  const uint32_t sync_cpu_memory_limit_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(VulkanInProcessContextProvider);

@@ -65,11 +65,8 @@ void DiagnosticsService::GetRoutineUpdate(
 }
 
 void DiagnosticsService::RunBatteryCapacityRoutine(
-    uint32_t low_mah,
-    uint32_t high_mah,
     RunBatteryCapacityRoutineCallback callback) {
   GetService()->RunBatteryCapacityRoutine(
-      low_mah, high_mah,
       base::BindOnce(
           [](health::mojom::DiagnosticsService::
                  RunBatteryCapacityRoutineCallback callback,
@@ -80,11 +77,8 @@ void DiagnosticsService::RunBatteryCapacityRoutine(
 }
 
 void DiagnosticsService::RunBatteryHealthRoutine(
-    uint32_t maximum_cycle_count,
-    uint32_t percent_battery_wear_allowed,
     RunBatteryHealthRoutineCallback callback) {
   GetService()->RunBatteryHealthRoutine(
-      maximum_cycle_count, percent_battery_wear_allowed,
       base::BindOnce(
           [](health::mojom::DiagnosticsService::RunBatteryHealthRoutineCallback
                  callback,

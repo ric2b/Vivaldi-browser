@@ -37,7 +37,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.BandwidthOverallBytesPerSecond" units="units"
-    expires_after="2020-12-27">
+    expires_after="2021-04-11">
   <owner>dtrainor@chromium.org</owner>
   <summary>
     Overall bandwidth seen for the download. Note that this is measured at the
@@ -55,7 +55,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.ContentType.Audio" enum="DownloadAudioType"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>xingliu@chromium.org</owner>
   <summary>Types of audio files that are downloaded.</summary>
 </histogram>
@@ -69,7 +69,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.ContentType.Text" enum="DownloadTextType"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>xingliu@chromium.org</owner>
   <summary>Types of text files that are downloaded.</summary>
 </histogram>
@@ -83,7 +83,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Download.Counts" enum="DownloadCountType"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
 <!-- Name completed by histogram_suffixes name="DownloadSource" -->
 
   <owner>xingliu@chromium.org</owner>
@@ -113,8 +113,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.Database.IsAvailable" enum="BooleanAvailable"
-    expires_after="M85">
+    expires_after="never">
+<!-- expires-never: Helpful to track download database issue. -->
+
   <owner>xingliu@chromium.org</owner>
+  <owner>qinmin@chromium.org</owner>
   <summary>
     Records whether the download database is available when database startup
     completes, before starting any pending downloads. If the database is
@@ -320,7 +323,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.IOSDownloadFileUI" enum="DownloadFileUI"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>ewannpv@chromium.org</owner>
   <owner>eugenebut@chromium.org</owner>
   <summary>
@@ -330,7 +333,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.IOSDownloadFileUIGoogleDrive"
-    enum="DownloadFileUIGoogleDrive" expires_after="2020-11-29">
+    enum="DownloadFileUIGoogleDrive" expires_after="2021-11-29">
   <owner>ewannpv@chromium.org</owner>
   <owner>eugenebut@chromium.org</owner>
   <summary>
@@ -341,7 +344,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.IOSDownloadMimeType" enum="DownloadMimeTypeResult"
-    expires_after="2020-12-20">
+    expires_after="2021-04-11">
   <owner>eugenebut@chromium.org</owner>
   <summary>
     MIME type of a download response. Logged when the download UI was offered by
@@ -488,6 +491,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Download.ParallelDownload.CreationEvent"
     enum="ParallelDownloadCreationEvent" expires_after="2020-12-06">
+  <obsolete>
+    Deprecated as of 10/2020
+  </obsolete>
   <owner>xingliu@chromium.org</owner>
   <summary>
     When parallel downloading feature is enabled, a download may be created as
@@ -511,6 +517,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Download.ParallelDownloadAddStreamSuccess"
     enum="BooleanSuccess" expires_after="2020-10-25">
+  <obsolete>
+    Depcreated 10/2020
+  </obsolete>
   <owner>xingliu@chromium.org</owner>
   <summary>
     Records if the byte stream reader of a subsequent request is successfully
@@ -535,7 +544,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.Parallelizable.FileSize" units="KB"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>The download size of a parallelizable download.</summary>
@@ -768,7 +777,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.Service.Files.FreeDiskSpace" units="%"
-    expires_after="2021-01-17">
+    expires_after="2021-05-02">
   <owner>xingliu@chromium.org</owner>
   <summary>
     The percentage of free disk space to total disk space. Recorded during
@@ -939,7 +948,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Download.Start.ContentType.NormalProfile"
-    enum="DownloadContentType" expires_after="2021-01-31">
+    enum="DownloadContentType" expires_after="2021-04-25">
   <owner>shaktisahu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>

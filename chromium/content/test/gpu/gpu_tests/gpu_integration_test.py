@@ -5,6 +5,7 @@
 import logging
 import re
 import sys
+import time
 
 from telemetry.testing import serially_executed_browser_test_case
 from telemetry.util import screenshot
@@ -284,15 +285,43 @@ class GpuIntegrationTest(
         self._RestartBrowser('unexpected test failure')
       raise
     else:
+      # Fuchsia does not have minidump support, use system info to check
+      # for crash count.
+      if os_name == 'fuchsia':
+        total_expected_crashes = sum(expected_crashes.values())
+        actual_and_expected_crashes_match = self._CheckCrashCountMatch(
+            total_expected_crashes)
       # We always want to clear any expected crashes, but we don't bother
       # failing the test if it's expected to fail.
-      actual_and_expected_crashes_match = self._ClearExpectedCrashes(
-          expected_crashes)
+      else:
+        actual_and_expected_crashes_match = self._ClearExpectedCrashes(
+            expected_crashes)
       if ResultType.Failure in expected_results:
         logging.warning('%s was expected to fail, but passed.\n', test_name)
       else:
         if not actual_and_expected_crashes_match:
           raise RuntimeError('Actual and expected crashes did not match')
+
+  def _CheckCrashCountMatch(self, total_expected_crashes):
+    # We can't get crashes if we don't have a browser.
+    if self.browser is None:
+      return True
+
+    number_of_crashes = -1
+    system_info = self.browser.GetSystemInfo()
+    number_of_crashes = \
+        system_info.gpu.aux_attributes[u'process_crash_count']
+
+    retval = True
+    if number_of_crashes != total_expected_crashes:
+      retval = False
+      logging.warning('Expected %d gpu process crashes; got: %d' %
+                      (total_expected_crashes, number_of_crashes))
+    if number_of_crashes > 0:
+      # Restarting is necessary because the crash count includes all
+      # crashes since the browser started.
+      self._RestartBrowser('Restarting browser to clear process crash count.')
+    return retval
 
   @staticmethod
   def _IsIntel(vendor_id):
@@ -509,19 +538,10 @@ class GpuIntegrationTest(
       tags.extend([re.sub('[ _]', '-', tag) for tag in gpu_tags])
 
       # Add tags based on GPU feature status.
-      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info.feature_status)
+      startup_args = getattr(browser, 'startup_args', None)
+      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info.feature_status,
+                                                 startup_args)
       tags.append(skia_renderer)
-      use_vulkan = gpu_helper.GetVulkan(gpu_info.feature_status)
-      tags.append(use_vulkan)
-
-    # If additional options have been set via '--extra-browser-args' check for
-    # those which map to expectation tags. The '_browser_backend' attribute may
-    # not exist in unit tests.
-    if hasattr(browser, 'startup_args'):
-      use_gl = gpu_helper.GetGL(browser.startup_args)
-      tags.append(use_gl)
-      use_skia_dawn = gpu_helper.GetSkiaDawn(browser.startup_args)
-      tags.append(use_skia_dawn)
     return tags
 
   @classmethod
@@ -555,6 +575,44 @@ class GpuIntegrationTest(
   @staticmethod
   def GetJSONResultsDelimiter():
     return '/'
+
+  @classmethod
+  def IgnoredTags(cls):
+    return [
+        # We only ever use android-webview-instrumentation if we want to specify
+        # that an expectation applies to Webview.
+        'android-webview',
+        'android-not-webview',
+        # These GPUs are analogous to a particular device, and specifying the
+        # device name is clearer.
+        'arm-mali-t860',  # chromeos-board-kevin
+        'qualcomm-adreno-(tm)-330',  # android-nexus-5
+        'qualcomm-adreno-(tm)-418',  # android-nexus-5x
+        'qualcomm-adreno-(tm)-420',  # android-nexus-6
+        'qualcomm-adreno-(tm)-430',  # android-nexus-6p
+        'qualcomm-adreno-(tm)-540',  # android-pixel-2
+        'nvidia-nvidia-tegra',  # android-nexus-9 and android-shield-android-tv
+        'vmware',  # VMs
+        'vmware,-0x1050',  # ChromeOS VMs
+        # Fuchsia VMs
+        ('google-angle-(vulkan-1.1.0(swiftshader-device-('
+         'llvm-7.0.1)-(0x0000c0de)))'),
+        # These browsers are analogous to a particular OS, and specifying the
+        # OS name is clearer.
+        'cros-chrome',  # ChromeOS
+        'web-engine-shell',  # Fuchsia
+        # WebGL version is already handled by having expectations in separate
+        # files.
+        # TODO(crbug.com/1140283): Consider merging the two files and using
+        # these tags once stale expectations are removed and the files are more
+        # reasonably sized.
+        'webgl-version-1',
+        'webgl-version-2',
+        # GPU tests are always run in remote mode on the bots, and it shouldn't
+        # make a difference to these tests anyways.
+        'chromeos-local',
+        'chromeos-remote',
+    ]
 
 
 def LoadAllTestsInModule(module):

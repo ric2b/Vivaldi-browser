@@ -24,8 +24,6 @@
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
 #include "ui/gfx/x/keysyms/keysyms.h"
-#include "ui/gfx/x/x11.h"
-#include "ui/gfx/x/x11_types.h"
 #include "ui/gfx/x/xproto.h"
 
 #if defined(USE_OZONE)
@@ -95,8 +93,7 @@ TEST(XEventTranslationTest, KeyEventXEventPropertiesSet) {
   auto hw_keycode_it = properties->find(ui::kPropertyKeyboardHwKeyCode);
   EXPECT_NE(hw_keycode_it, properties->end());
   EXPECT_EQ(1u, hw_keycode_it->second.size());
-  EXPECT_EQ(static_cast<uint8_t>(
-                connection->KeysymToKeycode(static_cast<x11::KeySym>(XK_a))),
+  EXPECT_EQ(static_cast<uint8_t>(connection->KeysymToKeycode(XK_a)),
             hw_keycode_it->second[0]);
 
   auto kbd_group_it = properties->find(ui::kPropertyKeyboardGroup);

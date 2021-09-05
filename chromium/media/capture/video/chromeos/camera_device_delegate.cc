@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/no_destructor.h"
 #include "base/numerics/ranges.h"
 #include "base/posix/safe_strerror.h"
@@ -23,7 +23,6 @@
 #include "media/capture/video/blob_utils.h"
 #include "media/capture/video/chromeos/camera_3a_controller.h"
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
-#include "media/capture/video/chromeos/camera_device_context.h"
 #include "media/capture/video/chromeos/camera_hal_delegate.h"
 #include "media/capture/video/chromeos/camera_metadata_utils.h"
 #include "media/capture/video/chromeos/request_manager.h"
@@ -48,6 +47,7 @@ constexpr char kTiltRange[] = "com.google.control.tiltRange";
 constexpr char kZoom[] = "com.google.control.zoom";
 constexpr char kZoomRange[] = "com.google.control.zoomRange";
 constexpr int32_t kColorTemperatureStep = 100;
+constexpr int32_t kMicroToNano = 1000;
 
 using AwbModeTemperatureMap = std::map<uint8_t, int32_t>;
 
@@ -271,11 +271,13 @@ CameraDeviceDelegate::CameraDeviceDelegate(
     VideoCaptureDeviceDescriptor device_descriptor,
     scoped_refptr<CameraHalDelegate> camera_hal_delegate,
     scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner,
-    CameraAppDeviceImpl* camera_app_device)
+    CameraAppDeviceImpl* camera_app_device,
+    ClientType client_type)
     : device_descriptor_(device_descriptor),
       camera_hal_delegate_(std::move(camera_hal_delegate)),
       ipc_task_runner_(std::move(ipc_task_runner)),
-      camera_app_device_(camera_app_device) {}
+      camera_app_device_(camera_app_device),
+      client_type_(client_type) {}
 
 CameraDeviceDelegate::~CameraDeviceDelegate() = default;
 
@@ -289,6 +291,7 @@ void CameraDeviceDelegate::AllocateAndStart(
   is_set_awb_mode_ = false;
   is_set_brightness_ = false;
   is_set_contrast_ = false;
+  is_set_exposure_time_ = false;
   is_set_pan_ = false;
   is_set_saturation_ = false;
   is_set_sharpness_ = false;
@@ -509,29 +512,33 @@ void CameraDeviceDelegate::SetPhotoOptions(
     is_set_awb_mode_ = false;
   }
 
-  bool is_resolution_specified = settings->has_width && settings->has_height;
-  bool should_reconfigure_streams =
-      is_resolution_specified && (current_blob_resolution_.IsEmpty() ||
-                                  current_blob_resolution_.width() !=
-                                      static_cast<int32_t>(settings->width) ||
-                                  current_blob_resolution_.height() !=
-                                      static_cast<int32_t>(settings->height));
-  if (!request_manager_->HasStreamsConfiguredForTakePhoto() ||
-      should_reconfigure_streams) {
-    if (is_resolution_specified) {
-      gfx::Size new_blob_resolution(static_cast<int32_t>(settings->width),
-                                    static_cast<int32_t>(settings->height));
-      request_manager_->StopPreview(
-          base::BindOnce(&CameraDeviceDelegate::OnFlushed, GetWeakPtr(),
-                         std::move(new_blob_resolution)));
-    } else {
-      request_manager_->StopPreview(base::BindOnce(
-          &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), base::nullopt));
-    }
-    set_photo_option_callback_ = std::move(callback);
+  if (settings->has_exposure_mode &&
+      settings->exposure_mode == mojom::MeteringMode::MANUAL &&
+      settings->has_exposure_time) {
+    int64_t exposure_time_nanoseconds_ =
+        settings->exposure_time * 100 * kMicroToNano;
+    camera_3a_controller_->SetExposureTime(false, exposure_time_nanoseconds_);
+    is_set_exposure_time_ = true;
+  } else if (is_set_exposure_time_) {
+    camera_3a_controller_->SetExposureTime(true, 0);
+    is_set_exposure_time_ = false;
+  }
+
+  // If there is callback of SetPhotoOptions(), the streams might being
+  // reconfigured and we should notify them once the reconfiguration is done.
+  auto on_reconfigured_callback = base::BindOnce(
+      [](VideoCaptureDevice::SetPhotoOptionsCallback callback) {
+        std::move(callback).Run(true);
+      },
+      std::move(callback));
+  if (!on_reconfigured_callbacks_.empty()) {
+    on_reconfigured_callbacks_.push(std::move(on_reconfigured_callback));
   } else {
-    set_photo_option_callback_.Reset();
-    std::move(callback).Run(true);
+    if (MaybeReconfigureForPhotoStream(std::move(settings))) {
+      on_reconfigured_callbacks_.push(std::move(on_reconfigured_callback));
+    } else {
+      std::move(on_reconfigured_callback).Run();
+    }
   }
   result_metadata_frame_number_for_photo_state_ = current_request_frame_number_;
 }
@@ -544,6 +551,32 @@ void CameraDeviceDelegate::SetRotation(int rotation) {
 
 base::WeakPtr<CameraDeviceDelegate> CameraDeviceDelegate::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
+}
+
+bool CameraDeviceDelegate::MaybeReconfigureForPhotoStream(
+    mojom::PhotoSettingsPtr settings) {
+  bool is_resolution_specified = settings->has_width && settings->has_height;
+  bool should_reconfigure_streams =
+      (is_resolution_specified && (current_blob_resolution_.IsEmpty() ||
+                                   current_blob_resolution_.width() !=
+                                       static_cast<int32_t>(settings->width) ||
+                                   current_blob_resolution_.height() !=
+                                       static_cast<int32_t>(settings->height)));
+  if (!should_reconfigure_streams) {
+    return false;
+  }
+
+  if (is_resolution_specified) {
+    gfx::Size new_blob_resolution(static_cast<int32_t>(settings->width),
+                                  static_cast<int32_t>(settings->height));
+    request_manager_->StopPreview(
+        base::BindOnce(&CameraDeviceDelegate::OnFlushed, GetWeakPtr(),
+                       std::move(new_blob_resolution)));
+  } else {
+    request_manager_->StopPreview(base::BindOnce(
+        &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), base::nullopt));
+  }
+  return true;
 }
 
 void CameraDeviceDelegate::TakePhotoImpl() {
@@ -559,15 +592,18 @@ void CameraDeviceDelegate::TakePhotoImpl() {
     return;
   }
 
-  SetPhotoOptions(
-      mojom::PhotoSettings::New(),
-      base::BindOnce(
-          [](base::WeakPtr<Camera3AController> controller,
-             base::OnceClosure callback, bool result) {
-            controller->Stabilize3AForStillCapture(std::move(callback));
-          },
-          camera_3a_controller_->GetWeakPtr(),
-          std::move(construct_request_cb)));
+  // Trigger the reconfigure process if it not yet triggered.
+  if (on_reconfigured_callbacks_.empty()) {
+    request_manager_->StopPreview(base::BindOnce(
+        &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), base::nullopt));
+  }
+  auto on_reconfigured_callback = base::BindOnce(
+      [](base::WeakPtr<Camera3AController> controller,
+         base::OnceClosure callback) {
+        controller->Stabilize3AForStillCapture(std::move(callback));
+      },
+      camera_3a_controller_->GetWeakPtr(), std::move(construct_request_cb));
+  on_reconfigured_callbacks_.push(std::move(on_reconfigured_callback));
 }
 
 void CameraDeviceDelegate::OnMojoConnectionError() {
@@ -680,7 +716,7 @@ void CameraDeviceDelegate::Initialize() {
       device_context_, chrome_capture_params_.buffer_type,
       std::make_unique<CameraBufferFactory>(),
       base::BindRepeating(&RotateAndBlobify), ipc_task_runner_,
-      camera_app_device_);
+      camera_app_device_, client_type_);
   camera_3a_controller_ = std::make_unique<Camera3AController>(
       static_metadata_, request_manager_.get(), ipc_task_runner_);
   device_ops_->Initialize(
@@ -1068,8 +1104,9 @@ void CameraDeviceDelegate::OnGotFpsRange(
     TakePhotoImpl();
   }
 
-  if (set_photo_option_callback_) {
-    std::move(set_photo_option_callback_).Run(true);
+  while (!on_reconfigured_callbacks_.empty()) {
+    std::move(on_reconfigured_callbacks_.front()).Run();
+    on_reconfigured_callbacks_.pop();
   }
 }
 
@@ -1242,13 +1279,25 @@ void CameraDeviceDelegate::OnResultMetadataAvailable(
         gfx::Rect(rect[0], rect[1], rect[2], rect[3]);
   }
 
+  result_metadata_.ae_mode.reset();
+  auto ae_mode = GetMetadataEntryAsSpan<uint8_t>(
+      result_metadata, cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AE_MODE);
+  if (ae_mode.size() == 1)
+    result_metadata_.ae_mode = ae_mode[0];
+
+  result_metadata_.exposure_time.reset();
+  auto exposure_time = GetMetadataEntryAsSpan<int64_t>(
+      result_metadata,
+      cros::mojom::CameraMetadataTag::ANDROID_SENSOR_EXPOSURE_TIME);
+  if (exposure_time.size() == 1)
+    result_metadata_.exposure_time = exposure_time[0];
+
   result_metadata_.awb_mode.reset();
   auto awb_mode = GetMetadataEntryAsSpan<uint8_t>(
       result_metadata,
       cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AWB_MODE);
-  if (awb_mode.size() == 1) {
+  if (awb_mode.size() == 1)
     result_metadata_.awb_mode = awb_mode[0];
-  }
 
   result_metadata_frame_number_ = frame_number;
   // We need to wait the new result metadata for new settings.
@@ -1380,6 +1429,45 @@ void CameraDeviceDelegate::DoGetPhotoState(
     photo_state->color_temperature->max = max;
     photo_state->color_temperature->step = kColorTemperatureStep;
     photo_state->color_temperature->current = current_temperature;
+  }
+
+  auto ae_available_modes = GetMetadataEntryAsSpan<uint8_t>(
+      static_metadata_,
+      cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AE_AVAILABLE_MODES);
+  bool support_manual_exposure_time = false;
+  if (ae_available_modes.size() > 1 && result_metadata_.ae_mode) {
+    support_manual_exposure_time = base::Contains(
+        ae_available_modes,
+        static_cast<uint8_t>(
+            cros::mojom::AndroidControlAeMode::ANDROID_CONTROL_AE_MODE_OFF));
+  }
+
+  auto exposure_time_range = GetMetadataEntryAsSpan<int64_t>(
+      static_metadata_,
+      cros::mojom::CameraMetadataTag::ANDROID_SENSOR_INFO_EXPOSURE_TIME_RANGE);
+
+  if (support_manual_exposure_time && exposure_time_range.size() == 2 &&
+      result_metadata_.exposure_time) {
+    photo_state->supported_exposure_modes.push_back(
+        mojom::MeteringMode::MANUAL);
+    photo_state->supported_exposure_modes.push_back(
+        mojom::MeteringMode::CONTINUOUS);
+    if (result_metadata_.ae_mode ==
+        static_cast<uint8_t>(
+            cros::mojom::AndroidControlAeMode::ANDROID_CONTROL_AE_MODE_OFF))
+      photo_state->current_exposure_mode = mojom::MeteringMode::MANUAL;
+    else
+      photo_state->current_exposure_mode = mojom::MeteringMode::CONTINUOUS;
+
+    // The unit of photo_state->exposure_time is 100 microseconds and from
+    // metadata is nanoseconds.
+    photo_state->exposure_time->min = std::ceil(
+        static_cast<float>(exposure_time_range[0]) / (100 * kMicroToNano));
+    photo_state->exposure_time->max =
+        exposure_time_range[1] / (100 * kMicroToNano);
+    photo_state->exposure_time->step = 1;  // 100 microseconds
+    photo_state->exposure_time->current =
+        result_metadata_.exposure_time.value() / (100 * kMicroToNano);
   }
 
   std::move(callback).Run(std::move(photo_state));

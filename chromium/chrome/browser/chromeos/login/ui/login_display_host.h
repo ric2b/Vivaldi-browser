@@ -11,6 +11,7 @@
 #include "ash/public/cpp/login_accelerators.h"
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list_types.h"
 #include "base/optional.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/login/auth/auth_prewarmer.h"
@@ -29,6 +30,10 @@ enum class OobeDialogState;
 namespace content {
 class WebContents;
 }
+
+namespace gfx {
+class Rect;
+}  // namespace gfx
 
 namespace chromeos {
 
@@ -60,6 +65,12 @@ class KioskAppId;
 // - LoginDisplayHostWebUI is for OOBE, which is written in HTML/JS/CSS.
 class LoginDisplayHost {
  public:
+  class Observer : public base::CheckedObserver {
+   public:
+    // `bounds` is the WebDialogView's bounds in screen coordinate system.
+    virtual void WebDialogViewBoundsChanged(const gfx::Rect& bounds) = 0;
+  };
+
   // Returns the default LoginDisplayHost instance if it has been created.
   static LoginDisplayHost* default_host() { return default_host_; }
 
@@ -85,7 +96,7 @@ class LoginDisplayHost {
   virtual void BeforeSessionStart() = 0;
 
   // Called when user enters or returns to browsing session so LoginDisplayHost
-  // instance may delete itself. |completion_callback| will be invoked when the
+  // instance may delete itself. `completion_callback` will be invoked when the
   // instance is gone.
   virtual void Finalize(base::OnceClosure completion_callback) = 0;
 
@@ -98,7 +109,7 @@ class LoginDisplayHost {
 
   // Starts out-of-box-experience flow or shows other screen handled by
   // Wizard controller i.e. camera, recovery.
-  // One could specify start screen with |first_screen|.
+  // One could specify start screen with `first_screen`.
   virtual void StartWizard(OobeScreenId first_screen) = 0;
 
   // Returns current WizardController, if it exists.
@@ -110,8 +121,8 @@ class LoginDisplayHost {
   virtual KioskLaunchController* GetKioskLaunchController() = 0;
 
   // Starts screen for adding user into session.
-  // |completion_callback| is invoked after login display host shutdown.
-  // |completion_callback| can be null.
+  // `completion_callback` is invoked after login display host shutdown.
+  // `completion_callback` can be null.
   virtual void StartUserAdding(base::OnceClosure completion_callback) = 0;
 
   // Cancel addint user into session.
@@ -129,12 +140,12 @@ class LoginDisplayHost {
   // Starts the demo app launch.
   virtual void StartDemoAppLaunch() = 0;
 
-  // Start kiosk identified by |kiosk_app-id| splash screen. if |is_auto_launch| is
-  // true, the app is being auto-launched with no delay.
+  // Start kiosk identified by `kiosk_app_id` splash screen. if `is_auto_launch`
+  // is true, the app is being auto-launched with no delay.
   virtual void StartKiosk(const KioskAppId& kiosk_app_id,
                           bool is_auto_launch) = 0;
 
-  // Show the gaia dialog. If available, |account| is preloaded in the gaia
+  // Show the gaia dialog. If available, `account` is preloaded in the gaia
   // dialog.
   virtual void ShowGaiaDialog(const AccountId& prefilled_account) = 0;
 
@@ -144,7 +155,7 @@ class LoginDisplayHost {
   // Update the state of the oobe dialog.
   virtual void UpdateOobeDialogState(ash::OobeDialogState state) = 0;
 
-  // Confirms sign in by provided credentials in |user_context|.
+  // Confirms sign in by provided credentials in `user_context`.
   // Used for new user login via GAIA extension.
   virtual void CompleteLogin(const UserContext& user_context) = 0;
 
@@ -152,16 +163,16 @@ class LoginDisplayHost {
   virtual void OnGaiaScreenReady() = 0;
 
   // Sets the displayed email for the next login attempt. If it succeeds,
-  // user's displayed email value will be updated to |email|.
+  // user's displayed email value will be updated to `email`.
   virtual void SetDisplayEmail(const std::string& email) = 0;
 
   // Sets the displayed name and given name for the next login attempt. If it
   // succeeds, user's displayed name and give name values will be updated to
-  // |display_name| and |given_name|.
+  // `display_name` and `given_name`.
   virtual void SetDisplayAndGivenName(const std::string& display_name,
                                       const std::string& given_name) = 0;
 
-  // Load wallpaper for given |account_id|.
+  // Load wallpaper for given `account_id`.
   virtual void LoadWallpaper(const AccountId& account_id) = 0;
 
   // Loads the default sign-in wallpaper.
@@ -176,7 +187,7 @@ class LoginDisplayHost {
   // Cancels current password changed flow.
   virtual void CancelPasswordChangedFlow() = 0;
 
-  // Decrypt cryptohome using user provided |old_password| and migrate to new
+  // Decrypt cryptohome using user provided `old_password` and migrate to new
   // password.
   virtual void MigrateUserData(const std::string& old_password) = 0;
 
@@ -185,7 +196,7 @@ class LoginDisplayHost {
   virtual void ResyncUserData() = 0;
 
   // Handles an accelerator action.
-  // Returns |true| if the accelerator was handled.
+  // Returns `true` if the accelerator was handled.
   virtual bool HandleAccelerator(ash::LoginAcceleratorAction action) = 0;
 
   // Handles a request to show the captive portal web dialog. For webui, the
@@ -198,6 +209,13 @@ class LoginDisplayHost {
 
   // Update the system info at login screen.
   virtual void RequestSystemInfoUpdate() = 0;
+
+  // Returns if the device has any user after filtering based on policy.
+  virtual bool HasUserPods() = 0;
+
+  // Used to add an observer for the changes in the web dilaog login view.
+  virtual void AddObserver(Observer* observer) = 0;
+  virtual void RemoveObserver(Observer* observer) = 0;
 
  protected:
   LoginDisplayHost();

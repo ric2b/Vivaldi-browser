@@ -14,6 +14,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -28,9 +29,9 @@ def shell_join(cmd):
     return ' '.join(shlex.quote(c) for c in cmd)
 
 
-def run(args):
+def run(args, cwd=None):
     logging.debug(f'$ {shell_join(args)}')
-    subprocess.check_call(args)
+    subprocess.check_call(args, cwd=cwd)
 
 
 def build_locale_strings():
@@ -46,8 +47,7 @@ def build_locale_strings():
 
 
 def build_mojom_bindings(mojom_bindings):
-    pylib = os.path.join(get_chromium_root(),
-                         'mojo/public/tools/mojom')
+    pylib = os.path.join(get_chromium_root(), 'mojo/public/tools/mojom')
     sys.path.insert(0, pylib)
     # pylint: disable=import-error,import-outside-toplevel
     from mojom.parse.parser import Parse
@@ -90,9 +90,8 @@ def build_mojom_bindings(mojom_bindings):
     ]
     run(precompile_cmd)
 
-    parser = os.path.join(
-        get_chromium_root(),
-        'mojo/public/tools/mojom/mojom_parser.py')
+    parser = os.path.join(get_chromium_root(),
+                          'mojo/public/tools/mojom/mojom_parser.py')
 
     parse_cmd = [
         parser,
@@ -195,6 +194,68 @@ def deploy(args):
     run(cmd)
 
 
+def deploy_swa(args):
+    cca_root = os.getcwd()
+    target_dir = os.path.join(get_chromium_root(), f'out_{args.board}/Release')
+
+    build_pak_cmd = [
+        'tools/grit/grit.py',
+        '-i',
+        os.path.join(cca_root, 'camera_app_resources.grd'),
+        'build',
+        '-o',
+        os.path.join(target_dir, 'gen/chromeos'),
+        '-f',
+        os.path.join(target_dir,
+                     'gen/tools/gritsettings/default_resource_ids'),
+        '-E',
+        f'root_gen_dir={os.path.join(target_dir, "gen")}',
+    ]
+    # Since there is a constraint in grit.py which will replace ${root_gen_dir}
+    # in .grd file only if the script is executed in the parent directory of
+    # ${root_gen_dir}, execute the script in Chromium root as a workaround.
+    run(build_pak_cmd, get_chromium_root())
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pak_util_script = os.path.join(get_chromium_root(),
+                                       'tools/grit/pak_util.py')
+        extract_resources_pak_cmd = [
+            pak_util_script,
+            'extract',
+            os.path.join(target_dir, 'resources.pak'),
+            '-o',
+            tmp_dir,
+        ]
+        run(extract_resources_pak_cmd)
+
+        extract_camera_pak_cmd = [
+            pak_util_script,
+            'extract',
+            os.path.join(target_dir,
+                         'gen/chromeos/chromeos_camera_app_resources.pak'),
+            '-o',
+            tmp_dir,
+        ]
+        run(extract_camera_pak_cmd)
+
+        create_new_resources_pak_cmd = [
+            pak_util_script,
+            'create',
+            '-i',
+            tmp_dir,
+            os.path.join(target_dir, 'resources.pak'),
+        ]
+        run(create_new_resources_pak_cmd)
+
+    deploy_new_resources_pak_cmd = [
+        'rsync',
+        '--inplace',
+        os.path.join(target_dir, 'resources.pak'),
+        f'{args.device}:/opt/google/chrome/',
+    ]
+    run(deploy_new_resources_pak_cmd)
+
+
 def test(args):
     assert 'CCAUI' not in args.device, (
         'The first argument should be <device> instead of a test name pattern.'
@@ -206,36 +267,6 @@ def test(args):
         shell_join(tast_cmd),
     ]
     run(cmd)
-
-
-def pack(args):
-    assert os.path.exists(args.key), f'There is no key at {args.key}'
-
-    pubkey = None
-    if shutil.which('openssl'):
-        openssl_cmd = ['openssl', 'rsa', '-in', args.key, '-pubout']
-        openssl_output = subprocess.check_output(openssl_cmd,
-                                                 stderr=subprocess.DEVNULL,
-                                                 text=True)
-        pubkey = ''.join(openssl_output.splitlines()[1:-1])
-    build_cca(overlay='dev', key=pubkey)
-
-    if os.path.exists('build/camera.crx'):
-        os.remove('build/camera.crx')
-    pack_cmd = [
-        'google-chrome',
-        '--disable-gpu',  # suppress an error about sandbox on gpu process
-        '--pack-extension=build/camera',
-        shlex.quote(f'--pack-extension-key={args.key}'),
-    ]
-    if shutil.which('xvfb-run'):
-        # Run it in a virtual X server environment
-        pack_cmd.insert(0, 'xvfb-run')
-    run(pack_cmd)
-    assert os.path.exists('build/camera.crx')
-    shutil.move('build/camera.crx', args.output)
-
-    # TODO(shik): Add an option to deploy/install the packed crx on device
 
 
 def lint(args):
@@ -257,6 +288,17 @@ def parse_args(args):
     deploy_parser.add_argument('device')
     deploy_parser.set_defaults(func=deploy)
 
+    deploy_swa_parser = subparsers.add_parser(
+        'deploy-swa',
+        help='deploy CCA (SWA) to device',
+        description='''Deploy CCA (SWA) to device.
+            This script only works if there is no file added/deleted.
+            And please build Chrome at least once before running the command.'''
+    )
+    deploy_swa_parser.add_argument('board')
+    deploy_swa_parser.add_argument('device')
+    deploy_swa_parser.set_defaults(func=deploy_swa)
+
     test_parser = subparsers.add_parser('test',
                                         help='run tests',
                                         description='Run CCA tests on device.')
@@ -266,19 +308,6 @@ def parse_args(args):
                              default=['camera.CCAUI*'],
                              help='test patterns. (default: camera.CCAUI*)')
     test_parser.set_defaults(func=test)
-
-    pack_parser = subparsers.add_parser('pack',
-                                        help='pack crx',
-                                        description='Pack CCA into a crx.')
-    pack_parser.add_argument('-o',
-                             '--output',
-                             help='output file (default: build/camera.crx)',
-                             default='build/camera.crx')
-    pack_parser.add_argument('-k',
-                             '--key',
-                             help='private key file (default: camera.pem)',
-                             default='camera.pem')
-    pack_parser.set_defaults(func=pack)
 
     lint_parser = subparsers.add_parser('lint',
                                         help='check code',

@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Odoslať odkaz prostredníctvom pošty</translation>
 <translation id="1454726940098520109">Nepýtať sa znova</translation>
 <translation id="1462666970065907900">Naozaj chcete zatvoriť toto okno?</translation>
+<translation id="1526344461589023948">Počas uloženia stiahnutej aktualizácie došlo k chybe. Skontrolujte si prosím, či váš počítač disponuje dostatkom ukladacieho priestoru a skúste to znova neskôr.</translation>
 <translation id="1657174850639146440">Zlostník (Príšerka 9)</translation>
 <translation id="1676595396635191120">Nové súkromné okno</translation>
+<translation id="1702758681952953055">Ak chyba pretrváva, prosíme nahláste to a priložte nasledujúce detaily:</translation>
 <translation id="1728549374069268714">Prilepiť a prejsť</translation>
 <translation id="1756026472674246267">Otvoriť odkaz v novom liste</translation>
 <translation id="1759842336958782510">Google Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Sahara (Krajina 15)</translation>
 <translation id="19598411548897379">Všeobecný</translation>
 <translation id="2079036669923635404">Kliknutím sem aktualizujete prehliadač Vivaldi na verziu <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Pri sťahovaní aktualizácie došlo k chybe. Skontrolujte si prosím svoje internetové pripojenie a skúste to znova neskôr.</translation>
 <translation id="2441056087170876076">Zajačí zúbok (Príšerka 2)</translation>
 <translation id="2444387452209867610">Vložiť poznámku</translation>
 <translation id="2486841023299517366">Pes (Zviera 4)</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Otvoriť odkaz v novom okne</translation>
 <translation id="3588820906588687999">Otvoriť obrázok v novom liste</translation>
 <translation id="3601066750251199488">Mimozemšťan (Príšerka 3)</translation>
+<translation id="3708982624815781692">Sťahovanie bolo prerušené.</translation>
 <translation id="3732157130969736834">Pridať odkaz do záložiek</translation>
 <translation id="3732388226447288666">Líška (Zviera 2)</translation>
 <translation id="3732439195215136813">Koala (Zviera 5)</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">„Milá mačička“ (Príšerka 1)</translation>
 <translation id="5615637589913244581">Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Otvoriť obrázok v novom okne</translation>
+<translation id="5656371807944747581">Chyba aktualizácie!</translation>
 <translation id="5716238312826274098">Vypnutie upozornení</translation>
 <translation id="5770433027661640693">Ostrov (Krajina 10)</translation>
 <translation id="5857090052475505287">Nový priečinok</translation>
 <translation id="588258955323874662">Celá obrazovka</translation>
 <translation id="5916080360077521750">Ľutujeme, nastavenia prehliadača Google Chrome nie sú k dispozícii, kým je tento prehliadač otvorený. Ak chcete importovať tieto nastavenia do prehliadača Vivaldi, uložte svoju prácu a zatvorte všetky okná prehliadača Google Chrome. Potom kliknite na tlačidlo Pokračovať.</translation>
+<translation id="6040143037577758943">Zatvoriť</translation>
 <translation id="6229528619562190452">Kliknite sem, pre aktualizáciu prehliadača Vivaldi.</translation>
 <translation id="6234173136417926046">Použiť obrázok ako pozadie rýchleho prístupu</translation>
 <translation id="630690498669249215">Súbor záložiek prehliadača Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Veterný mlyn (Krajina 9)</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Prehliadač Vivaldi dokázal vzniknúť vďaka <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source projektu a ďalšiemu <ph name="BEGIN_LINK_OSS" /> open source softvéru<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Chyba pri spustení inštalátora aktualizácie. Skontrolujte si prosím, či váš počítač disponuje dostatočným ukladacím priestorom alebo ukladacou pamäťou a skúste to znova neskôr.</translation>
 <translation id="7715497554424665066">&amp;Odmietnuť aktualizáciu</translation>
 <translation id="7724603315864178912">Vystrihnúť</translation>
 <translation id="7793738202466490491">Pridať ako udalosť kalendára</translation>
+<translation id="7848222781052558334">Zlyhanie pri overení digitálneho podpisu stiahnutých súborov.</translation>
 <translation id="7865983598101744945">Potvrdenie k ukončeniu prehliadača</translation>
 <translation id="7957213167373139414">Môj kalendár</translation>
 <translation id="8027581147000338959">Otvoriť v novom okne</translation>

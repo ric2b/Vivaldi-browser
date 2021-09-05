@@ -165,24 +165,8 @@
 
   [self dispatchToEndpointsForBrowser:_mainBrowser.get()];
 
-  std::string sessionID = base::SysNSStringToUTF8(self.sessionID);
-  SnapshotBrowserAgent::FromBrowser(_mainBrowser.get())
-      ->SetSessionID(sessionID);
+  [self setSessionIDForBrowser:_mainBrowser.get() restoreSession:YES];
 
-  // If the OS doesn't support multiple scenes, use the previous run scene ID
-  // for the session restoration.
-  NSString* restoreSessionID = self.sessionID;
-  if (_sceneState.appState.previousSingleWindowSessionID) {
-    restoreSessionID = _sceneState.appState.previousSingleWindowSessionID;
-  }
-  SessionRestorationBrowserAgent* restorationAgent =
-      SessionRestorationBrowserAgent::FromBrowser(_mainBrowser.get());
-  restorationAgent->SetSessionID(base::SysNSStringToUTF8(restoreSessionID));
-  restorationAgent->RestoreSession();
-  restorationAgent->SetSessionID(sessionID);
-  if (base::SysNSStringToUTF8(restoreSessionID) != sessionID) {
-    restorationAgent->SaveSession(true);
-  }
   breakpad::MonitorTabStateForWebStateList(_mainBrowser->GetWebStateList());
   // Follow loaded URLs in the main tab model to send those in case of
   // crashes.
@@ -220,11 +204,6 @@
   if (self.currentInterface) {
     // Tell the current BVC it moved to the background.
     [self.currentInterface setPrimary:NO];
-
-    // Data storage for the browser is always owned by the current BVC, so it
-    // must be updated when switching between BVCs.
-    [self changeStorageFromBrowserState:self.currentInterface.browserState
-                         toBrowserState:interface.browserState];
   }
 
   _currentInterface = interface;
@@ -285,27 +264,6 @@
   }
 
   _otrBrowser = std::move(otrBrowser);
-}
-
-#pragma mark - Mode Switching
-
-- (void)switchGlobalStateToMode:(ApplicationMode)mode {
-  // TODO(crbug.com/1048690): use scene-local storage in multiwindow.
-  const BOOL incognito = (mode == ApplicationMode::INCOGNITO);
-  // Write the state to disk of what is "active".
-  NSUserDefaults* standardDefaults = [NSUserDefaults standardUserDefaults];
-  [standardDefaults setBool:incognito forKey:kIncognitoCurrentKey];
-  // Save critical state information for switching between normal and
-  // incognito.
-  [standardDefaults synchronize];
-}
-
-// Updates the local storage, cookie store, and sets the global state.
-- (void)changeStorageFromBrowserState:(ChromeBrowserState*)oldState
-                       toBrowserState:(ChromeBrowserState*)newState {
-  ApplicationMode mode = newState->IsOffTheRecord() ? ApplicationMode::INCOGNITO
-                                                    : ApplicationMode::NORMAL;
-  [self switchGlobalStateToMode:mode];
 }
 
 #pragma mark - Other public methods
@@ -402,14 +360,9 @@
       BrowserListFactory::GetForBrowserState(browser->GetBrowserState());
   browserList->AddIncognitoBrowser(browser.get());
   [self dispatchToEndpointsForBrowser:browser.get()];
-  std::string sessionID = base::SysNSStringToUTF8(self.sessionID);
-  SnapshotBrowserAgent::FromBrowser(browser.get())->SetSessionID(sessionID);
-  SessionRestorationBrowserAgent::FromBrowser(browser.get())
-      ->SetSessionID(sessionID);
-  if (restorePersistedState) {
-    SessionRestorationBrowserAgent::FromBrowser(browser.get())
-        ->RestoreSession();
-  }
+
+  [self setSessionIDForBrowser:browser.get()
+                restoreSession:restorePersistedState];
 
   // Associate the same SceneState with the new OTR browser as is associated
   // with the main browser.
@@ -444,6 +397,57 @@
   [browser->GetCommandDispatcher()
       startDispatchingToTarget:_browsingDataCommandEndpoint
                    forProtocol:@protocol(BrowsingDataCommands)];
+}
+
+- (void)setSessionIDForBrowser:(Browser*)browser
+                restoreSession:(BOOL)restoreSession {
+  SnapshotBrowserAgent::FromBrowser(browser)->SetSessionID(
+      base::SysNSStringToUTF8(self.sessionID));
+
+  SessionRestorationBrowserAgent* restorationAgent =
+      SessionRestorationBrowserAgent::FromBrowser(browser);
+
+  // crbug.com/1153606: when the app is distributed with multi-window enabled,
+  // the "swipe gesture" is sometimes interpreted as a "close window" gesture
+  // by iOS (reproduce easily if the user launch app, swipe it away in a loop).
+  // On the next start after iOS has decided the gesture is "close window", the
+  // session identifier will be reset to a different value.
+  //
+  // For device that support multiple windows (recent iPads running iOS 13+),
+  // the user has the option to restore recently closed windows (presented by
+  // iOS when user ask to see all windows). For other devices however they have
+  // no option to re-open the closed window and lose their data.
+  //
+  // To workaround this behaviour, the session identifier is saved, and on each
+  // run, if the device does not support multi-window, compared to the current
+  // session identifier. If there is a mismatch, load the session using the old
+  // identifier (which is used to construct path to Chrome's session data), and
+  // immediately save it with the new identifier.
+  //
+  // TODO(crbug.com/1165798): clean up this by using fixed identifier when the
+  // device do no support multi-windows.
+  if (!IsMultipleScenesSupported() && restoreSession) {
+    NSString* previousSessionID =
+        _sceneState.appState.previousSingleWindowSessionID;
+    if (previousSessionID &&
+        ![self.sessionID isEqualToString:previousSessionID]) {
+      restorationAgent->SetSessionID(
+          base::SysNSStringToUTF8(previousSessionID));
+      restorationAgent->RestoreSession();
+
+      restorationAgent->SetSessionID(base::SysNSStringToUTF8(self.sessionID));
+      restorationAgent->SaveSession(true);
+
+      // Fallback to the normal codepath. It will set the session identifier
+      // in the SessionRestorationBrowserAgent. Since the session has been
+      // loaded already, skip this step by setting |restoreSession| to NO.
+      restoreSession = NO;
+    }
+  }
+
+  restorationAgent->SetSessionID(base::SysNSStringToUTF8(self.sessionID));
+  if (restoreSession)
+    restorationAgent->RestoreSession();
 }
 
 @end

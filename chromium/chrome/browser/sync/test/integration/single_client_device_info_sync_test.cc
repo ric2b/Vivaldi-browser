@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <ostream>
 #include <string>
 
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "chrome/browser/sync/test/integration/device_info_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
-#include "chrome/browser/sync/test/integration/status_change_checker.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/ui/browser.h"
 #include "components/sync/base/model_type.h"
@@ -28,6 +27,7 @@ namespace {
 
 using testing::ElementsAre;
 using testing::IsSupersetOf;
+using testing::UnorderedElementsAre;
 
 MATCHER_P(HasCacheGuid, expected_cache_guid, "") {
   return arg.specifics().device_info().cache_guid() == expected_cache_guid;
@@ -65,48 +65,6 @@ sync_pb::DeviceInfoSpecifics CreateSpecifics(int suffix) {
       syncer::TimeToProtoTime(base::Time::Now()));
   return specifics;
 }
-
-class ServerDeviceInfoMatchChecker : public StatusChangeChecker,
-                                     fake_server::FakeServer::Observer {
- public:
-  using Matcher = testing::Matcher<std::vector<sync_pb::SyncEntity>>;
-
-  ServerDeviceInfoMatchChecker(fake_server::FakeServer* fake_server,
-                               const Matcher& matcher)
-      : fake_server_(fake_server), matcher_(matcher) {
-    fake_server->AddObserver(this);
-  }
-
-  ~ServerDeviceInfoMatchChecker() override {
-    fake_server_->RemoveObserver(this);
-  }
-
-  // FakeServer::Observer overrides.
-  void OnCommit(const std::string& committer_id,
-                syncer::ModelTypeSet committed_model_types) override {
-    if (committed_model_types.Has(syncer::DEVICE_INFO)) {
-      CheckExitCondition();
-    }
-  }
-
-  // StatusChangeChecker overrides.
-  bool IsExitConditionSatisfied(std::ostream* os) override {
-    std::vector<sync_pb::SyncEntity> entities =
-        fake_server_->GetSyncEntitiesByModelType(syncer::DEVICE_INFO);
-
-    testing::StringMatchResultListener result_listener;
-    const bool matches =
-        testing::ExplainMatchResult(matcher_, entities, &result_listener);
-    *os << result_listener.str();
-    return matches;
-  }
-
- private:
-  fake_server::FakeServer* const fake_server_;
-  const Matcher matcher_;
-
-  DISALLOW_COPY_AND_ASSIGN(ServerDeviceInfoMatchChecker);
-};
 
 class SingleClientDeviceInfoSyncTest : public SyncTest {
  public:
@@ -209,6 +167,37 @@ IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
   EXPECT_THAT(fake_server_->GetSyncEntitiesByModelType(syncer::DEVICE_INFO),
               IsSupersetOf({HasCacheGuid(CacheGuidForSuffix(1)),
                             HasCacheGuid(CacheGuidForSuffix(2))}));
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
+                       ShouldSetTheOnlyClientFlag) {
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(
+      ServerDeviceInfoMatchChecker(
+          GetFakeServer(), ElementsAre(HasCacheGuid(GetLocalCacheGuid())))
+          .Wait());
+
+  sync_pb::ClientToServerMessage message;
+  GetFakeServer()->GetLastCommitMessage(&message);
+
+  EXPECT_TRUE(message.commit().config_params().single_client());
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientDeviceInfoSyncTest,
+                       ShouldNotProvideTheOnlyClientFlag) {
+  InjectDeviceInfoEntityToServer(/*suffix=*/1);
+
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(ServerDeviceInfoMatchChecker(
+                  GetFakeServer(),
+                  UnorderedElementsAre(HasCacheGuid(GetLocalCacheGuid()),
+                                       HasCacheGuid(CacheGuidForSuffix(1))))
+                  .Wait());
+
+  sync_pb::ClientToServerMessage message;
+  GetFakeServer()->GetLastCommitMessage(&message);
+
+  EXPECT_FALSE(message.commit().config_params().single_client());
 }
 
 }  // namespace

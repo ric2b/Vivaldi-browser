@@ -20,7 +20,6 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/android/content_jni_headers/ImeAdapterImpl_jni.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -194,7 +193,7 @@ void ImeAdapterAndroid::UpdateState(const ui::mojom::TextInputState& state) {
       state.composition ? state.composition.value().end() : -1,
       state.reply_to_request,
       static_cast<int>(state.last_vk_visibility_request),
-      static_cast<int>(state.vk_policy));
+      static_cast<int>(state.vk_policy), ShouldVirtualKeyboardOverlayContent());
 }
 
 void ImeAdapterAndroid::UpdateOnTouchDown() {
@@ -490,6 +489,12 @@ ImeAdapterAndroid::GetFocusedFrameWidgetInputHandler() {
   if (!rwhi)
     return nullptr;
   return rwhi->GetFrameWidgetInputHandler();
+}
+
+bool ImeAdapterAndroid::ShouldVirtualKeyboardOverlayContent() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  return rwhva_ && rwhva_->ShouldVirtualKeyboardOverlayContent();
 }
 
 std::vector<ui::ImeTextSpan> ImeAdapterAndroid::GetImeTextSpansFromJava(

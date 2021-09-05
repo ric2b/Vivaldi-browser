@@ -2,6 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// This file is loaded into a <webview> and cannot reference any chrome:
+// resources. The only communication to and from this implementation and the
+// WebUI is through postMessage.
+
+// Note that these imports are stripped by a build step before being packaged.
+// They're only present to help Closure compiler do type checks and must be
+// referenced only within Closure annotations.
+import {FavIconInfo, FrameInfo, GraphChangeStreamInterface, PageInfo, ProcessInfo, WorkerInfo} from './chrome/browser/ui/webui/discards/discards.mojom-webui.js';
+
 // Radius of a node circle.
 const /** number */ kNodeRadius = 6;
 
@@ -231,7 +240,7 @@ class ToolTip {
 /** @implements {d3.ForceNode} */
 class GraphNode {
   constructor(id) {
-    /** @type {number} */
+    /** @type {bigint} */
     this.id = id;
     /** @type {string} */
     this.color = 'black';
@@ -316,7 +325,7 @@ class GraphNode {
     return -200;
   }
 
-  /** @return {!Array<number>} an array of node ids. */
+  /** @return {!Array<bigint>} an array of node ids. */
   get linkTargets() {
     return [];
   }
@@ -326,7 +335,7 @@ class GraphNode {
    * things, but be owned by exactly one (per relationship type). As such, the
    * relationship is expressed on the *owned* object. These links are drawn with
    * an arrow at the beginning of the link, pointing to the owned object.
-   * @return {!Array<number>} an array of node ids.
+   * @return {!Array<bigint>} an array of node ids.
    */
   get dashedLinkTargets() {
     return [];
@@ -334,19 +343,22 @@ class GraphNode {
 
   /**
    * Selects a color string from an id.
-   * @param {number} id The id the returned color is selected from.
+   * @param {bigint} id The id the returned color is selected from.
    * @return {string}
    */
   selectColor(id) {
-    return d3.schemeSet3[Math.abs(id) % 12];
+    if (id < 0) {
+      id = -id;
+    }
+    return d3.schemeSet3[Number(id % BigInt(12))];
   }
 }
 
 class PageNode extends GraphNode {
-  /** @param {!discards.mojom.PageInfo} page */
+  /** @param {!PageInfo} page */
   constructor(page) {
     super(page.id);
-    /** @type {!discards.mojom.PageInfo} */
+    /** @type {!PageInfo} */
     this.page = page;
     this.y = kPageNodesTargetY;
   }
@@ -392,10 +404,10 @@ class PageNode extends GraphNode {
 }
 
 class FrameNode extends GraphNode {
-  /** @param {!discards.mojom.FrameInfo} frame */
+  /** @param {!FrameInfo} frame */
   constructor(frame) {
     super(frame.id);
-    /** @type {!discards.mojom.FrameInfo} frame */
+    /** @type {!FrameInfo} frame */
     this.frame = frame;
     this.color = this.selectColor(frame.processId);
   }
@@ -425,10 +437,10 @@ class FrameNode extends GraphNode {
 }
 
 class ProcessNode extends GraphNode {
-  /** @param {!discards.mojom.ProcessInfo} process */
+  /** @param {!ProcessInfo} process */
   constructor(process) {
     super(process.id);
-    /** @type {!discards.mojom.ProcessInfo} */
+    /** @type {!ProcessInfo} */
     this.process = process;
 
     this.color = this.selectColor(process.id);
@@ -466,10 +478,10 @@ class ProcessNode extends GraphNode {
 }
 
 class WorkerNode extends GraphNode {
-  /** @param {!discards.mojom.WorkerInfo} worker */
+  /** @param {!WorkerInfo} worker */
   constructor(worker) {
     super(worker.id);
-    /** @type {!discards.mojom.WorkerInfo} */
+    /** @type {!WorkerInfo} */
     this.worker = worker;
 
     this.color = this.selectColor(worker.processId);
@@ -567,7 +579,7 @@ function boundingForce(graphHeight, graphWidth) {
 }
 
 /**
- * @implements {discards.mojom.GraphChangeStreamInterface}
+ * @implements {GraphChangeStreamInterface}
  */
 class Graph {
   /**
@@ -627,7 +639,7 @@ class Graph {
      */
     this.dashedLinkGroup_ = null;
 
-    /** @private {!Map<number, !GraphNode>} */
+    /** @private {!Map<bigint, !GraphNode>} */
     this.nodes_ = new Map();
 
     /**
@@ -846,7 +858,7 @@ class Graph {
    */
   nodeDescriptions_(nodeDescriptions) {
     for (const nodeId in nodeDescriptions) {
-      const node = this.nodes_.get(Number.parseInt(nodeId, 10));
+      const node = this.nodes_.get(BigInt(nodeId));
       if (node && node.tooltip) {
         node.tooltip.onDescription(nodeDescriptions[nodeId]);
       }
@@ -889,46 +901,46 @@ class Graph {
     }
 
     const type = /** @type {string} */ (event.data[0]);
-    const data = /** @type {Object|number} */ (event.data[1]);
+    const data = /** @type {Object|number|bigint} */ (event.data[1]);
     switch (type) {
       case 'frameCreated':
         this.frameCreated(
-            /** @type {!discards.mojom.FrameInfo} */ (data));
+            /** @type {!FrameInfo} */ (data));
         break;
       case 'pageCreated':
         this.pageCreated(
-            /** @type {!discards.mojom.PageInfo} */ (data));
+            /** @type {!PageInfo} */ (data));
         break;
       case 'processCreated':
         this.processCreated(
-            /** @type {!discards.mojom.ProcessInfo} */ (data));
+            /** @type {!ProcessInfo} */ (data));
         break;
       case 'workerCreated':
         this.workerCreated(
-            /** @type {!discards.mojom.WorkerInfo} */ (data));
+            /** @type {!WorkerInfo} */ (data));
         break;
       case 'frameChanged':
         this.frameChanged(
-            /** @type {!discards.mojom.FrameInfo} */ (data));
+            /** @type {!FrameInfo} */ (data));
         break;
       case 'pageChanged':
         this.pageChanged(
-            /** @type {!discards.mojom.PageInfo} */ (data));
+            /** @type {!PageInfo} */ (data));
         break;
       case 'processChanged':
         this.processChanged(
-            /** @type {!discards.mojom.ProcessInfo} */ (data));
+            /** @type {!ProcessInfo} */ (data));
         break;
       case 'favIconDataAvailable':
         this.favIconDataAvailable(
-            /** @type {!discards.mojom.FavIconInfo} */ (data));
+            /** @type {!FavIconInfo} */ (data));
         break;
       case 'workerChanged':
         this.workerChanged(
-            /** @type {!discards.mojom.WorkerInfo} */ (data));
+            /** @type {!WorkerInfo} */ (data));
         break;
       case 'nodeDeleted':
-        this.nodeDeleted(/** @type {number} */ (data));
+        this.nodeDeleted(/** @type {bigint} */ (data));
         break;
       case 'nodeDescriptions':
         this.nodeDescriptions_(/** @type {!Object<string>} */ (data));

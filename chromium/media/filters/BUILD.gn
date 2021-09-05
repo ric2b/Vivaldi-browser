@@ -85,6 +85,7 @@ source_set("filters") {
 
   deps = [
     "//base/util/type_safety:type_safety",
+    "//build:chromeos_buildflags",
     "//cc/base",  # For MathUtil.
     "//media:media_buildflags",
     "//media/base",
@@ -138,14 +139,6 @@ source_set("filters") {
       "vpx_video_decoder.h",
     ]
     deps += [ "//third_party/libvpx" ]
-  }
-
-  if (enable_libaom) {
-    sources += [
-      "aom_video_decoder.cc",
-      "aom_video_decoder.h",
-    ]
-    deps += [ "//third_party/libaom" ]
   }
 
   if (enable_dav1d_decoder) {
@@ -223,6 +216,7 @@ source_set("filters") {
       "fuchsia/fuchsia_video_decoder.h",
     ]
     deps += [
+      "//components/viz/common",
       "//gpu/command_buffer/client",
       "//gpu/command_buffer/common",
       "//gpu/ipc/common",
@@ -310,6 +304,7 @@ source_set("unit_tests") {
 
   deps = [
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//media:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -334,8 +329,10 @@ source_set("unit_tests") {
   if (is_fuchsia) {
     sources += [ "fuchsia/fuchsia_video_decoder_unittest.cc" ]
     deps += [
+      "//components/viz/common",
       "//components/viz/test:test_support",
       "//gpu/command_buffer/client",
+      "//gpu/config",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sysmem",
       "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     ]
@@ -378,10 +375,6 @@ source_set("unit_tests") {
 
   if (media_use_libvpx) {
     sources += [ "vpx_video_decoder_unittest.cc" ]
-  }
-
-  if (enable_libaom) {
-    sources += [ "aom_video_decoder_unittest.cc" ]
   }
 
   if (enable_dav1d_decoder) {

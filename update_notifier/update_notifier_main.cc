@@ -4,6 +4,7 @@
 #include <shellscalingapi.h>
 
 #include "base/at_exit.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/task/single_thread_task_executor.h"
@@ -50,11 +51,17 @@ void EnableHighDPISupport() {
 
 int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE prev, wchar_t*, int) {
   base::AtExitManager at_exit;
+  base::CommandLine::Init(0, nullptr);
   base::SingleThreadTaskExecutor executor(base::MessagePumpType::UI);
 
   install_static::InitializeProductDetailsForPrimaryModule();
   EnableHighDPISupport();
 
-  return vivaldi_update_notifier::UpdateNotifierManager::GetInstance()
-                 ->RunNotifier(instance) ? 0 : 1;
+  vivaldi_update_notifier::UpdateNotifierManager manager;
+  bool ok = manager.RunNotifier();
+
+  // Directly call ExitProcess() to skip any C++ global destructors in wxWidgets
+  // and terminate all threads immediately. This also ensures that the manager
+  // instance is alive and the process terminats.
+  ExitProcess(ok ? 0 : 1);
 }

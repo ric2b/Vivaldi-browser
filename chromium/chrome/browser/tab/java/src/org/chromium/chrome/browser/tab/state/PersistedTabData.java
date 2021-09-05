@@ -8,11 +8,13 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
+import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.UserData;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.tab.Tab;
@@ -35,21 +37,16 @@ import java.util.Map;
 public abstract class PersistedTabData implements UserData {
     private static final String TAG = "PTD";
     private static final Map<String, List<Callback>> sCachedCallbacks = new HashMap<>();
+    private static final long NEEDS_UPDATE_DISABLED = Long.MAX_VALUE;
+    private static final long LAST_UPDATE_UNKNOWN = 0;
     protected final Tab mTab;
     private final PersistedTabDataStorage mPersistedTabDataStorage;
     private final String mPersistedTabDataId;
-
-    /**
-     * @param tab {@link Tab} {@link PersistedTabData} is being stored for
-     * @param data serialized {@link Tab} metadata
-     * @param persistedTabDataStorage storage for {@link PersistedTabData}
-     * @param persistedTabDataId identifier for {@link PersistedTabData} in storage
-     */
-    PersistedTabData(Tab tab, byte[] data, PersistedTabDataStorage persistedTabDataStorage,
-            String persistedTabDataId) {
-        this(tab, persistedTabDataStorage, persistedTabDataId);
-        deserializeAndLog(data);
-    }
+    private long mLastUpdatedMs = LAST_UPDATE_UNKNOWN;
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public ObservableSupplierImpl<Boolean> mIsTabSaveEnabledSupplier;
+    private Callback<Boolean> mTabSaveEnabledToggleCallback;
+    private boolean mFirstSaveDone;
 
     /**
      * @param tab {@link Tab} {@link PersistedTabData} is being stored for
@@ -75,8 +72,10 @@ public abstract class PersistedTabData implements UserData {
             Tab tab, PersistedTabDataFactory<T> factory, byte[] data, Class<T> clazz) {
         PersistedTabDataConfiguration config =
                 PersistedTabDataConfiguration.get(clazz, tab.isIncognito());
-        T persistedTabData = factory.create(data, config.storage, config.id);
-        setUserData(tab, clazz, persistedTabData);
+        T persistedTabData = factory.create(data, config.getStorage(), config.getId());
+        if (persistedTabData != null) {
+            setUserData(tab, clazz, persistedTabData);
+        }
         return persistedTabData;
     }
 
@@ -87,22 +86,33 @@ public abstract class PersistedTabData implements UserData {
      * At a minimum, a frozen tab with an identifier and isIncognito fields set
      * is required.
      * @param factory {@link PersistedTabDataFactory} which will create {@link PersistedTabData}
-     * @param supplier for constructing a {@link PersistedTabData} from a
-     * {@link Tab}. This will be used as a fallback in the event that the {@link PersistedTabData}
-     * cannot be found in storage.
+     * @param tabDataCreator for constructing a {@link PersistedTabData} corresponding to the passed
+     * in tab. This will be used as a fallback in the event that the {@link PersistedTabData} cannot
+     * be found in storage or needs an update.
      * @param clazz class of the {@link PersistedTabData}
      * @param callback callback to pass the {@link PersistedTabData} in
      * @return {@link PersistedTabData} from storage
      */
     protected static <T extends PersistedTabData> void from(Tab tab,
-            PersistedTabDataFactory<T> factory, Supplier<T> supplier, Class<T> clazz,
-            Callback<T> callback) {
+            PersistedTabDataFactory<T> factory, Callback<Callback<T>> tabDataCreator,
+            Class<T> clazz, Callback<T> callback) {
         ThreadUtils.assertOnUiThread();
         // TODO(crbug.com/1059602) cache callbacks
         T persistedTabDataFromTab = getUserData(tab, clazz);
         if (persistedTabDataFromTab != null) {
-            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
-                    () -> { callback.onResult(persistedTabDataFromTab); });
+            if (persistedTabDataFromTab.needsUpdate()) {
+                tabDataCreator.onResult((tabData) -> {
+                    updateLastUpdatedMs(tabData);
+                    if (tabData != null) {
+                        setUserData(tab, clazz, tabData);
+                    }
+                    PostTask.runOrPostTask(
+                            UiThreadTaskTraits.DEFAULT, () -> { callback.onResult(tabData); });
+                });
+            } else {
+                PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
+                        () -> { callback.onResult(persistedTabDataFromTab); });
+            }
             return;
         }
         String key = String.format(Locale.ENGLISH, "%d-%s", tab.getId(), clazz.toString());
@@ -111,21 +121,55 @@ public abstract class PersistedTabData implements UserData {
         if (sCachedCallbacks.get(key).size() > 1) return;
         PersistedTabDataConfiguration config =
                 PersistedTabDataConfiguration.get(clazz, tab.isIncognito());
-        config.storage.restore(tab.getId(), config.id, (data) -> {
-            T persistedTabData;
+        config.getStorage().restore(tab.getId(), config.getId(), (data) -> {
             if (data == null) {
-                persistedTabData = supplier.get();
+                tabDataCreator.onResult((tabData) -> {
+                    updateLastUpdatedMs(tabData);
+                    onPersistedTabDataResult(tabData, tab, clazz, key);
+                });
             } else {
-                persistedTabData = factory.create(data, config.storage, config.id);
+                T persistedTabDataFromStorage =
+                        factory.create(data, config.getStorage(), config.getId());
+                if (persistedTabDataFromStorage.needsUpdate()) {
+                    tabDataCreator.onResult((tabData) -> {
+                        updateLastUpdatedMs(tabData);
+                        onPersistedTabDataResult(tabData, tab, clazz, key);
+                    });
+                } else {
+                    onPersistedTabDataResult(persistedTabDataFromStorage, tab, clazz, key);
+                }
             }
-            if (persistedTabData != null) {
-                setUserData(tab, clazz, persistedTabData);
-            }
-            for (Callback cachedCallback : sCachedCallbacks.get(key)) {
-                cachedCallback.onResult(persistedTabData);
-            }
-            sCachedCallbacks.remove(key);
         });
+    }
+
+    private static void updateLastUpdatedMs(PersistedTabData persistedTabData) {
+        if (persistedTabData != null) {
+            persistedTabData.setLastUpdatedMs(System.currentTimeMillis());
+        }
+    }
+
+    /**
+     * @return if the {@link PersistedTabData} should be refetched.
+     */
+    protected boolean needsUpdate() {
+        if (getTimeToLiveMs() == NEEDS_UPDATE_DISABLED) {
+            return false;
+        }
+        if (mLastUpdatedMs == LAST_UPDATE_UNKNOWN) {
+            return true;
+        }
+        return mLastUpdatedMs + getTimeToLiveMs() < System.currentTimeMillis();
+    }
+
+    private static <T extends PersistedTabData> void onPersistedTabDataResult(
+            T persistedTabData, Tab tab, Class<T> clazz, String key) {
+        if (persistedTabData != null) {
+            setUserData(tab, clazz, persistedTabData);
+        }
+        for (Callback cachedCallback : sCachedCallbacks.get(key)) {
+            cachedCallback.onResult(persistedTabData);
+        }
+        sCachedCallbacks.remove(key);
     }
 
     /**
@@ -140,12 +184,20 @@ public abstract class PersistedTabData implements UserData {
      */
     protected static <T extends PersistedTabData> T from(
             Tab tab, Class<T> userDataKey, Supplier<T> supplier) {
-        UserDataHost host = tab.getUserDataHost();
-        T persistedTabData = host.getUserData(userDataKey);
+        T persistedTabData = from(tab, userDataKey);
         if (persistedTabData == null) {
-            persistedTabData = host.setUserData(userDataKey, supplier.get());
+            persistedTabData = tab.getUserDataHost().setUserData(userDataKey, supplier.get());
         }
         return persistedTabData;
+    }
+
+    /**
+     * Acquire {@link PersistedTabData} from a {@link Tab} using a {@link UserData} key
+     * @param tab the {@link PersistedTabData} will be acquired from
+     * @param userDataKey the {@link UserData} object to be acquired from the {@link Tab}
+     */
+    protected static <T extends PersistedTabData> T from(Tab tab, Class<T> userDataKey) {
+        return tab.getUserDataHost().getUserData(userDataKey);
     }
 
     private static <T extends PersistedTabData> void addCallback(String key, Callback<T> callback) {
@@ -182,7 +234,13 @@ public abstract class PersistedTabData implements UserData {
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     protected void save() {
-        mPersistedTabDataStorage.save(mTab.getId(), mPersistedTabDataId, serializeAndLog());
+        if (mIsTabSaveEnabledSupplier != null && mIsTabSaveEnabledSupplier.get()) {
+            byte[] serialized = serializeAndLog();
+            if (serialized == null) {
+                return;
+            }
+            mPersistedTabDataStorage.save(mTab.getId(), mPersistedTabDataId, serialized);
+        }
     }
 
     /**
@@ -190,11 +248,17 @@ public abstract class PersistedTabData implements UserData {
      */
     abstract byte[] serialize();
 
-    private byte[] serializeAndLog() {
+    @VisibleForTesting
+    protected byte[] serializeAndLog() {
         byte[] res;
         try (TraceEvent e = TraceEvent.scoped("PersistedTabData.Serialize")) {
             res = serialize();
+        } catch (OutOfMemoryError oe) {
+            Log.e(TAG, "Out of memory error when attempting to save PersistedTabData");
+            res = null;
         }
+        // TODO(crbug.com/1162293) convert to enum histogram and differentiate null/not null/out of
+        // memory
         RecordHistogram.recordBooleanHistogram(
                 "Tabs.PersistedTabData.Serialize." + getUmaTag(), res != null);
         return res;
@@ -207,7 +271,7 @@ public abstract class PersistedTabData implements UserData {
      */
     abstract boolean deserialize(@Nullable byte[] bytes);
 
-    private void deserializeAndLog(@Nullable byte[] bytes) {
+    protected void deserializeAndLog(@Nullable byte[] bytes) {
         boolean success;
         try (TraceEvent e = TraceEvent.scoped("PersistedTabData.Deserialize")) {
             success = deserialize(bytes);
@@ -230,10 +294,69 @@ public abstract class PersistedTabData implements UserData {
      * in memory. It will not delete the stored data on a file or database.
      */
     @Override
-    public abstract void destroy();
+    public void destroy() {
+        if (mIsTabSaveEnabledSupplier != null) {
+            mIsTabSaveEnabledSupplier.removeObserver(mTabSaveEnabledToggleCallback);
+            mTabSaveEnabledToggleCallback = null;
+        }
+    }
 
     /**
      * @return unique tag for logging in Uma
      */
     public abstract String getUmaTag();
+
+    /**
+     * @return length of time before data should be refetched from endpoint
+     * The default value is NEEDS_UPDATE_DISABLED (Long.MAX_VALUE) indicating
+     * the PersistedTabData will never be refetched. Subclasses can override
+     * this value if they need to make use of the time to live functionality.
+     */
+    public long getTimeToLiveMs() {
+        return NEEDS_UPDATE_DISABLED;
+    }
+
+    /**
+     * Set last time the {@link PersistedTabData} was updated
+     * @param lastUpdatedMs time last updated in milliseconds
+     */
+    protected void setLastUpdatedMs(long lastUpdatedMs) {
+        mLastUpdatedMs = lastUpdatedMs;
+    }
+
+    /**
+     * @return time the {@link PersistedTabDAta} was last updated in milliseconds
+     */
+    protected long getLastUpdatedMs() {
+        return mLastUpdatedMs;
+    }
+
+    /**
+     * @param isTabSaveEnabledSupplier {@link ObservableSupplierImpl} which provides
+     * access to the flag indicating if the {@link Tab} metadata will be saved and
+     * forward changes to the flag's value.
+     */
+    public void registerIsTabSaveEnabledSupplier(
+            ObservableSupplierImpl<Boolean> isTabSaveEnabledSupplier) {
+        mIsTabSaveEnabledSupplier = isTabSaveEnabledSupplier;
+        mTabSaveEnabledToggleCallback = (isTabSaveEnabled) -> {
+            if (isTabSaveEnabled) {
+                save();
+                mFirstSaveDone = true;
+            } else if (mFirstSaveDone) {
+                delete();
+            }
+        };
+        mIsTabSaveEnabledSupplier.addObserver(mTabSaveEnabledToggleCallback);
+    }
+
+    /**
+     * Delete all {@link PersistedTabData} when a {@link Tab} is closed.
+     */
+    public static void onTabClose(Tab tab) {
+        tab.setIsTabSaveEnabled(false);
+        if (ShoppingPersistedTabData.from(tab) != null) {
+            ShoppingPersistedTabData.from(tab).disableSaving();
+        }
+    }
 }

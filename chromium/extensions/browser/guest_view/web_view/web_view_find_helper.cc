@@ -184,7 +184,7 @@ void WebViewFindHelper::FindReply(int request_id,
       screen->GetDisplayNearestWindow(window);
 
     scale = display.device_scale_factor();
-    gfx::Rect scaled_selection_rect = gfx::ToFlooredRectDeprecated(
+    gfx::Rect scaled_selection_rect = gfx::ToNearestRect(
         gfx::ConvertRectToDips(selection_rect, scale));
 
     find_info->AggregateResults(number_of_matches, scaled_selection_rect,

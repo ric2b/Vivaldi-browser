@@ -146,6 +146,27 @@ var defaultTests = [
     chrome.autotestPrivate.getVisibleNotifications(function(){});
     chrome.test.succeed();
   },
+  function removeAllNotifications() {
+    // Image data URL of a small red dot to use for the notification icon.
+    var red_dot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA' +
+        'AAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO' +
+        '9TXL0Y4OHwAAAABJRU5ErkJggg=='
+    var opts =
+        {type: 'basic', title: 'test', message: 'test', iconUrl: red_dot};
+
+    chrome.notifications.create('test', opts, function() {
+      chrome.autotestPrivate.getVisibleNotifications(function(notifications) {
+        chrome.test.assertTrue(notifications.length > 0);
+        chrome.autotestPrivate.removeAllNotifications(function() {
+          chrome.autotestPrivate.getVisibleNotifications(function(
+              notifications) {
+            chrome.test.assertEq(notifications.length, 0);
+            chrome.test.succeed();
+          });
+        });
+      });
+    });
+  },
   // In this test, ARC is available but not managed and not enabled by default.
   function getPlayStoreState() {
     chrome.autotestPrivate.getPlayStoreState(function(state) {
@@ -285,6 +306,11 @@ var defaultTests = [
         true /* value */,
         chrome.test.callbackFail(
             'Unable to set the pref because Assistant has not been enabled.'));
+    // Note that onboarding pref is a counter that can be set without
+    // enabling Assistant at the same time.
+    chrome.autotestPrivate.setWhitelistedPref(
+        'ash.assistant.num_sessions_where_onboarding_shown' /* pref_name */,
+        3 /* value */, chrome.test.callbackPass());
   },
   // This test verifies that getArcState returns provisioned False in case ARC
   // is not provisioned by default.
@@ -864,9 +890,11 @@ var defaultTests = [
       // Wait for a few frames.
       await raf();
 
-      chrome.autotestPrivate.stopSmoothnessTracking(function(smoothness) {
+      chrome.autotestPrivate.stopSmoothnessTracking(function(data) {
         chrome.test.assertNoLastError();
-        chrome.test.assertTrue(smoothness >= 0 && smoothness <= 100);
+        chrome.test.assertTrue(data.hasOwnProperty('framesExpected') ||
+                               data.hasOwnProperty('framesProduced') ||
+                               data.hasOwnProperty('jankCount'));
         chrome.test.succeed();
       });
     });
@@ -886,14 +914,16 @@ var defaultTests = [
           await raf();
 
           chrome.autotestPrivate.stopSmoothnessTracking(badDisplay,
-                                                        function(smoothness) {
+                                                        function(data) {
             chrome.test.assertEq(chrome.runtime.lastError.message,
                 'Smoothness is not tracked for display: -1');
 
             chrome.autotestPrivate.stopSmoothnessTracking(displayId,
-                                                          function(smoothness) {
+                                                          function(data) {
               chrome.test.assertNoLastError();
-              chrome.test.assertTrue(smoothness >= 0 && smoothness <= 100);
+              chrome.test.assertTrue(data.hasOwnProperty('framesExpected') ||
+                                     data.hasOwnProperty('framesProduced') ||
+                                     data.hasOwnProperty('jankCount'));
               chrome.test.succeed();
             });
           });

@@ -23,6 +23,7 @@
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" />-г хуваалцах боломжгүй байна</translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" />-г <ph name="SECOND_ITEM_TITLE" />-р сольсон</translation>
 <translation id="1498028757988366001">Та үүнийг өмнө нь хайж байсан. "<ph name="QUERY" />"-г түүхээсээ устгаснаар үүнийг таны бүх төхөөрөмж дээрх бүртгэлээс бүрмөсөн хасах болно.</translation>
+<translation id="1510238584712386396">Launcher</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 минут }other{# минут }}</translation>
 <translation id="1643823602425662293">Мэдэгдэл</translation>
 <translation id="169515659049020177">Солих</translation>
@@ -54,7 +55,7 @@
 <translation id="2267918077332197517">Энэ сайтын бүх мэдэгдлийг блоклох</translation>
 <translation id="2289052229480071835">Дэлгэцийнхээ хүрэх хэсгийг товшино уу.</translation>
 <translation id="2295140143284145483">Судалгаа</translation>
-<translation id="2297836609126180313"><ph name="QUANTITY" /> терабайт/секунд</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> ТБ/секунд</translation>
 <translation id="2353636109065292463">Таны интернэт холболтыг шалгаж байна</translation>
 <translation id="2388990488038464401">Таны утаснаас энэ дугаар луу залгах уу?</translation>
 <translation id="24452542372838207">Мэдэгдлийг дэлгэх</translation>
@@ -81,7 +82,7 @@
 <translation id="2931838996092594335">дарах</translation>
 <translation id="2981684127883932071">Зөвлөмжийг үзүүлж байна</translation>
 <translation id="3036649622769666520">Файл нээх</translation>
-<translation id="3049748772180311791"><ph name="QUANTITY" /> Мегабайт</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> МБ</translation>
 <translation id="3068711042108640621">Зүүн талын shelf</translation>
 <translation id="3087734570205094154">Доод</translation>
 <translation id="3126026824346185272">Ctrl</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" /> Файл</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Харах “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3622035490309591977">Түр санах ойн түүх</translation>
 <translation id="364720409959344976">Татаж оруулах хавтсыг сонгох</translation>
 <translation id="3660179305079774227">Дээш заасан сум</translation>
 <translation id="3670030362669914947">Тоо</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Өнөөдөр идэвхтэй байсан}=1{1 өдрийн өмнө идэвхтэй байсан}other{# өдрийн өмнө идэвхтэй байсан}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 өдөр ба }other{# өдөр ба }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Зураг.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 жилийн дараа}other{# жилийн дараа}}</translation>
 <translation id="588258955323874662">Дэлгэц дүүрэн</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 секунд үлдсэн}other{# секунд үлдсэн}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">Дарах</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 цаг үлдсэн}other{# цаг үлдсэн}}</translation>
 <translation id="688711909580084195">Гарчиггүй веб хуудас</translation>
+<translation id="6902419395050653510">HTML контент.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> ПБ/с</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 жил үлдсэн}other{# жил үлдсэн}}</translation>
 <translation id="6945221475159498467">Сонгох</translation>
@@ -206,7 +210,7 @@
 <translation id="7389409599945284130">- <ph name="MESSAGE" /></translation>
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 минут үлдсэн }other{# минут үлдсэн}}</translation>
 <translation id="7430878839542012341">Энэ хайлтыг түүхээсээ устгах уу?</translation>
-<translation id="7460907917090416791"><ph name="QUANTITY" /> терабайт</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> ТБ</translation>
 <translation id="7507604095951736240">Эможи</translation>
 <translation id="7658239707568436148">Болих</translation>
 <translation id="7781829728241885113">Өчигдөр</translation>
@@ -228,7 +232,7 @@
 <translation id="815598010540052116">Доош нь гүйлгэж харах</translation>
 <translation id="8179976553408161302">Нэвтрэх</translation>
 <translation id="8210608804940886430">Хуудас доошлуулах</translation>
-<translation id="8245914219290430011">Чихтэй хуудас</translation>
+<translation id="8245914219290430011">Таб</translation>
 <translation id="8247998213073982446"><ph name="APP_NAME" />, апп</translation>
 <translation id="8259556432390118667">Hex өнгөний утга</translation>
 <translation id="8328145009876646418">Зүүн тал</translation>
@@ -257,7 +261,7 @@
 <translation id="9002566407876343676">нээх</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 сек}other{# сек}}</translation>
 <translation id="9059834730836941392">Мэдэгдлийг буулгах</translation>
-<translation id="9150735707954472829">Чихтэй хуудас</translation>
+<translation id="9150735707954472829">Таб</translation>
 <translation id="9161053988251441839">САНАЛ БОЛГОСОН АПП</translation>
 <translation id="9170848237812810038">&amp; Буцаах</translation>
 <translation id="9178475906033259337"><ph name="QUERY" />-н 1 илэрцийг үзүүлж байна</translation>

@@ -15,7 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/system/sys_info.h"
-#import "ios/chrome/browser/metrics/previous_session_info.h"
+#import "components/previous_session_info/previous_session_info.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -51,7 +51,8 @@ void CreateSyntheticCrashReportForUte(
     const std::string& breakpad_product_display,
     const std::string& breakpad_product,
     const std::string& breakpad_version,
-    const std::string& breakpad_url) {
+    const std::string& breakpad_url,
+    const std::vector<std::string>& breadcrumbs) {
   std::vector<std::string> config;
 
   AppendConfig(config, "MinidumpDir", path.value());
@@ -72,8 +73,52 @@ void CreateSyntheticCrashReportForUte(
                  "BreakpadServerParameterPrefix_memory_warning_in_progress",
                  "yes");
   }
+
+  if (previous_session.applicationState &&
+      *(previous_session.applicationState) == UIApplicationStateBackground) {
+    AppendConfig(config, "BreakpadServerParameterPrefix_crashed_in_background",
+                 "yes");
+  }
+
+  if (previous_session.terminatedDuringSessionRestoration) {
+    AppendConfig(config,
+                 "BreakpadServerParameterPrefix_crashed_during_session_restore",
+                 "yes");
+  }
+
+  if (previous_session.OSVersion) {
+    AppendConfig(config, "BreakpadServerParameterPrefix_osVersion",
+                 base::SysNSStringToUTF8(previous_session.OSVersion));
+    AppendConfig(config, "BreakpadServerParameterPrefix_osName", "iOS");
+  }
+
   AppendConfig(config, "BreakpadServerParameterPrefix_platform",
                base::SysInfo::HardwareModelName());
+  AppendConfig(config, "BreakpadServerParameterPrefix_breadcrumbs",
+               base::JoinString(breadcrumbs, "\n"));
+  std::string signature = breadcrumbs.empty()
+                              ? "No Breadcrumbs"
+                              : breadcrumbs.back().substr(strlen("00:00 "));               
+  AppendConfig(config, "BreakpadServerParameterPrefix_signature", signature);
+
+
+  for (NSString* key in previous_session.reportParameters.allKeys) {
+    AppendConfig(
+        config,
+        base::StringPrintf("BreakpadServerParameterPrefix_%s",
+                           base::SysNSStringToUTF8(key).c_str()),
+        base::SysNSStringToUTF8(previous_session.reportParameters[key]));
+  }
+
+  if (previous_session.sessionStartTime && previous_session.sessionEndTime) {
+    NSTimeInterval uptime = [previous_session.sessionEndTime
+        timeIntervalSinceDate:previous_session.sessionStartTime];
+    AppendConfig(config, "BreakpadProcessUpTime",
+                 base::NumberToString(static_cast<long>(uptime * 1000)));
+  }
+
+  AppendConfig(config, "BreakpadServerParameterPrefix_memory_footprint",
+               base::NumberToString(previous_session.memoryFootprint));
 
   // Write empty minidump file, as Breakpad can't upload config without the
   // minidump.

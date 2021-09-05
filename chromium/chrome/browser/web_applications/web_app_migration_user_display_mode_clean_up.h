@@ -10,12 +10,16 @@
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/web_applications/extensions/bookmark_app_registrar.h"
-#include "chrome/browser/web_applications/extensions/bookmark_app_registry_controller.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_service_observer.h"
 
 class Profile;
+
+namespace extensions {
+class BookmarkAppRegistrar;
+class BookmarkAppRegistryController;
+}  // namespace extensions
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -51,20 +55,23 @@ class WebAppSyncBridge;
 // user_display_mode for their web apps to kBrowser after migration. This clean
 // up CL will erroneously undo such a change. To mitigate this we only run the
 // clean up once per migrated device.
-class WebAppMigrationUserDisplayModeCleanUp
+class WebAppMigrationUserDisplayModeCleanUp final
     : public syncer::SyncServiceObserver {
  public:
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
   static std::unique_ptr<WebAppMigrationUserDisplayModeCleanUp> CreateIfNeeded(
       Profile* profile,
-      WebAppSyncBridge* sync_bridge);
+      WebAppSyncBridge* sync_bridge,
+      OsIntegrationManager* os_integration_manager);
 
   static void DisableForTesting();
   static void SkipWaitForSyncForTesting();
   static void SetCompletedCallbackForTesting(base::OnceClosure callback);
 
-  WebAppMigrationUserDisplayModeCleanUp(Profile* profile,
-                                        WebAppSyncBridge* sync_bridge);
+  WebAppMigrationUserDisplayModeCleanUp(
+      Profile* profile,
+      WebAppSyncBridge* sync_bridge,
+      OsIntegrationManager* os_integration_manager);
   WebAppMigrationUserDisplayModeCleanUp(
       const WebAppMigrationUserDisplayModeCleanUp&) = delete;
   WebAppMigrationUserDisplayModeCleanUp& operator=(
@@ -88,8 +95,9 @@ class WebAppMigrationUserDisplayModeCleanUp
   syncer::SyncService* sync_service_ = nullptr;
   base::OnceClosure sync_ready_callback_;
 
-  extensions::BookmarkAppRegistrar bookmark_app_registrar_;
-  extensions::BookmarkAppRegistryController bookmark_app_registry_controller_;
+  std::unique_ptr<extensions::BookmarkAppRegistrar> bookmark_app_registrar_;
+  std::unique_ptr<extensions::BookmarkAppRegistryController>
+      bookmark_app_registry_controller_;
 
   ScopedObserver<syncer::SyncService, syncer::SyncServiceObserver>
       sync_observer_{this};

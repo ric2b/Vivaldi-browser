@@ -6,6 +6,7 @@
 #define ASH_WM_OVERVIEW_OVERVIEW_CONSTANTS_H_
 
 #include "ash/ash_export.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/wm/window_mini_view.h"
 #include "base/time/time.h"
 
@@ -26,17 +27,6 @@ constexpr int kHeaderHeightDp = WindowMiniView::kHeaderHeightDp;
 // vice versa) will be classified as too wide or too tall and will be handled
 // slightly differently in overview mode.
 constexpr float kExtremeWindowRatioThreshold = 2.f;
-
-namespace overview_constants {
-
-// The opacity of the wallpaper in overview mode.
-constexpr float kOpacity = 0.4f;
-
-// Amount of blur to apply on the wallpaper when we enter or exit overview
-// mode.
-constexpr float kBlurSigma = 10.f;
-
-}  // namespace overview_constants
 
 }  // namespace ash
 

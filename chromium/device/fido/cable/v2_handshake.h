@@ -90,6 +90,20 @@ GURL GetContactURL(const std::string& tunnel_server,
 
 namespace eid {
 
+// Encrypt turns an EID into a BLE advert payload by encrypting and
+// authenticating with |key|.
+COMPONENT_EXPORT(DEVICE_FIDO)
+std::array<uint8_t, kAdvertSize> Encrypt(
+    const CableEidArray& eid,
+    base::span<const uint8_t, kEIDKeySize> key);
+
+// Decrypt turns a BLE advert payload into a plaintext EID (suitable for passing
+// to |FromComponents|) by decrypting with |key|.
+COMPONENT_EXPORT(DEVICE_FIDO)
+base::Optional<CableEidArray> Decrypt(
+    const std::array<uint8_t, kAdvertSize>& advert,
+    base::span<const uint8_t, kEIDKeySize> key);
+
 // TODO(agl): this could probably be a class.
 
 // Components contains the parts of a decrypted EID.
@@ -104,10 +118,6 @@ struct Components {
 COMPONENT_EXPORT(DEVICE_FIDO)
 CableEidArray FromComponents(const Components& components);
 
-// IsValid returns true if |eid| could have been produced by |FromComponents|.
-COMPONENT_EXPORT(DEVICE_FIDO)
-bool IsValid(const CableEidArray& eid);
-
 // ToComponents explodes a decrypted EID into its components. It's the
 // inverse of |ComponentsToEID|. |IsValid| must be true for the given EID before
 // calling this function.
@@ -115,6 +125,23 @@ COMPONENT_EXPORT(DEVICE_FIDO)
 Components ToComponents(const CableEidArray& eid);
 
 }  // namespace eid
+
+namespace qr {
+
+// Components contains the parsed elements of a QR code.
+struct COMPONENT_EXPORT(DEVICE_FIDO) Components {
+  std::array<uint8_t, device::kP256X962Length> peer_identity;
+  std::array<uint8_t, 16> secret;
+};
+
+COMPONENT_EXPORT(DEVICE_FIDO)
+base::Optional<Components> Parse(const std::string& qr_url);
+
+// Encode returns the contents of a QR code that represents |qr_key|.
+COMPONENT_EXPORT(DEVICE_FIDO)
+std::string Encode(base::span<const uint8_t, kQRKeySize> qr_key);
+
+}  // namespace qr
 
 // DerivedValueType enumerates the different types of values that might be
 // derived in caBLEv2 from some secret. The values this this enum are protocol
@@ -221,9 +248,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) HandshakeInitiator {
   // BuildInitialMessage returns the handshake message to send to the peer to
   // start a handshake.
   std::vector<uint8_t> BuildInitialMessage(
-      // eid is the EID that was advertised for this handshake. This is checked
-      // as part of the handshake.
-      base::span<const uint8_t, kCableEphemeralIdSize> eid,
       // getinfo contains the CBOR-serialised getInfo response for this
       // authenticator. This is assumed not to contain highly-sensitive
       // information and is included to avoid an extra round-trip. (It is
@@ -270,9 +294,6 @@ base::Optional<ResponderResult> RespondToHandshake(
     // psk is derived from the connection nonce and either QR-code secrets or
     // pairing secrets.
     base::span<const uint8_t, 32> psk,
-    // eid is the EID that was advertised for this handshake. This is checked
-    // as part of the handshake.
-    base::span<const uint8_t, kCableEphemeralIdSize> eid,
     // identity_seed, if not nullopt, specifies that this is a QR handshake and
     // contains the seed for QR key for this client.
     base::Optional<base::span<const uint8_t, kQRSeedSize>> identity_seed,

@@ -96,9 +96,6 @@ void CloseWebContents(Browser* browser,
 }
 
 void ConfigureTabGroupForNavigation(NavigateParams* nav_params) {
-  if (!base::FeatureList::IsEnabled(features::kTabGroups))
-    return;
-
   if (!nav_params->source_contents)
     return;
 
@@ -123,7 +120,7 @@ void ConfigureTabGroupForNavigation(NavigateParams* nav_params) {
       nav_params->disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
     nav_params->group = model->GetTabGroupForTab(source_index);
     if (base::FeatureList::IsEnabled(features::kTabGroupsAutoCreate) &&
-        !nav_params->group.has_value()) {
+        !nav_params->group.has_value() && !model->IsTabPinned(source_index)) {
       const GURL& source_url =
           nav_params->source_contents->GetLastCommittedURL();
       const GURL& target_url = nav_params->url;

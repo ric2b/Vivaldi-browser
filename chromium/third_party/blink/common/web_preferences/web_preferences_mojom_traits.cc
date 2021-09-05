@@ -77,197 +77,6 @@ bool EnumTraits<blink::mojom::HoverType, ui::HoverType>::FromMojom(
 }
 
 // static
-blink::mojom::EditingBehavior EnumTraits<blink::mojom::EditingBehavior,
-                                         blink::web_pref::EditingBehaviorType>::
-    ToMojom(blink::web_pref::EditingBehaviorType behavior) {
-  switch (behavior) {
-    case blink::web_pref::EditingBehaviorType::kEditingMacBehavior:
-      return blink::mojom::EditingBehavior::kEditingMacBehavior;
-    case blink::web_pref::EditingBehaviorType::kEditingWindowsBehavior:
-      return blink::mojom::EditingBehavior::kEditingWindowsBehavior;
-    case blink::web_pref::EditingBehaviorType::kEditingUnixBehavior:
-      return blink::mojom::EditingBehavior::kEditingUnixBehavior;
-    case blink::web_pref::EditingBehaviorType::kEditingAndroidBehavior:
-      return blink::mojom::EditingBehavior::kEditingAndroidBehavior;
-    case blink::web_pref::EditingBehaviorType::kEditingChromeOSBehavior:
-      return blink::mojom::EditingBehavior::kEditingChromeOSBehavior;
-  }
-  NOTREACHED();
-  return blink::mojom::EditingBehavior::kMaxValue;
-}
-
-// static
-bool EnumTraits<blink::mojom::EditingBehavior,
-                blink::web_pref::EditingBehaviorType>::
-    FromMojom(blink::mojom::EditingBehavior input,
-              blink::web_pref::EditingBehaviorType* out) {
-  switch (input) {
-    case blink::mojom::EditingBehavior::kEditingMacBehavior:
-      *out = blink::web_pref::EditingBehaviorType::kEditingMacBehavior;
-      return true;
-    case blink::mojom::EditingBehavior::kEditingWindowsBehavior:
-      *out = blink::web_pref::EditingBehaviorType::kEditingWindowsBehavior;
-      return true;
-    case blink::mojom::EditingBehavior::kEditingUnixBehavior:
-      *out = blink::web_pref::EditingBehaviorType::kEditingUnixBehavior;
-      return true;
-    case blink::mojom::EditingBehavior::kEditingAndroidBehavior:
-      *out = blink::web_pref::EditingBehaviorType::kEditingAndroidBehavior;
-      return true;
-    case blink::mojom::EditingBehavior::kEditingChromeOSBehavior:
-      *out = blink::web_pref::EditingBehaviorType::kEditingChromeOSBehavior;
-      return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
-// static
-blink::mojom::ImageAnimationPolicy
-EnumTraits<blink::mojom::ImageAnimationPolicy,
-           blink::web_pref::ImageAnimationPolicy>::
-    ToMojom(blink::web_pref::ImageAnimationPolicy policy) {
-  switch (policy) {
-    case blink::web_pref::ImageAnimationPolicy::kImageAnimationPolicyAllowed:
-      return blink::mojom::ImageAnimationPolicy::kImageAnimationPolicyAllowed;
-    case blink::web_pref::ImageAnimationPolicy::
-        kImageAnimationPolicyAnimateOnce:
-      return blink::mojom::ImageAnimationPolicy::
-          kImageAnimationPolicyAnimateOnce;
-    case blink::web_pref::ImageAnimationPolicy::
-        kImageAnimationPolicyNoAnimation:
-      return blink::mojom::ImageAnimationPolicy::
-          kImageAnimationPolicyNoAnimation;
-  }
-  NOTREACHED();
-  return blink::mojom::ImageAnimationPolicy::kImageAnimationPolicyNoAnimation;
-}
-
-// static
-bool EnumTraits<blink::mojom::ImageAnimationPolicy,
-                blink::web_pref::ImageAnimationPolicy>::
-    FromMojom(blink::mojom::ImageAnimationPolicy input,
-              blink::web_pref::ImageAnimationPolicy* out) {
-  switch (input) {
-    case blink::mojom::ImageAnimationPolicy::kImageAnimationPolicyAllowed:
-      *out =
-          blink::web_pref::ImageAnimationPolicy::kImageAnimationPolicyAllowed;
-      return true;
-    case blink::mojom::ImageAnimationPolicy::kImageAnimationPolicyAnimateOnce:
-      *out = blink::web_pref::ImageAnimationPolicy::
-          kImageAnimationPolicyAnimateOnce;
-      return true;
-    case blink::mojom::ImageAnimationPolicy::kImageAnimationPolicyNoAnimation:
-      *out = blink::web_pref::ImageAnimationPolicy::
-          kImageAnimationPolicyNoAnimation;
-      return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
-// static
-blink::mojom::ViewportStyle
-EnumTraits<blink::mojom::ViewportStyle, blink::web_pref::ViewportStyle>::
-    ToMojom(blink::web_pref::ViewportStyle style) {
-  switch (style) {
-    case blink::web_pref::ViewportStyle::kDefault:
-      return blink::mojom::ViewportStyle::kDefault;
-    case blink::web_pref::ViewportStyle::kMobile:
-      return blink::mojom::ViewportStyle::kMobile;
-    case blink::web_pref::ViewportStyle::kTelevision:
-      return blink::mojom::ViewportStyle::kTelevision;
-  }
-  NOTREACHED();
-  return blink::mojom::ViewportStyle::kLast;
-}
-
-// static
-bool EnumTraits<blink::mojom::ViewportStyle, blink::web_pref::ViewportStyle>::
-    FromMojom(blink::mojom::ViewportStyle input,
-              blink::web_pref::ViewportStyle* out) {
-  switch (input) {
-    case blink::mojom::ViewportStyle::kDefault:
-      *out = blink::web_pref::ViewportStyle::kDefault;
-      return true;
-    case blink::mojom::ViewportStyle::kMobile:
-      *out = blink::web_pref::ViewportStyle::kMobile;
-      return true;
-    case blink::mojom::ViewportStyle::kTelevision:
-      *out = blink::web_pref::ViewportStyle::kTelevision;
-      return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
-// static
-blink::mojom::AutoplayPolicy
-EnumTraits<blink::mojom::AutoplayPolicy, blink::web_pref::AutoplayPolicy>::
-    ToMojom(blink::web_pref::AutoplayPolicy style) {
-  switch (style) {
-    case blink::web_pref::AutoplayPolicy::kNoUserGestureRequired:
-      return blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
-    case blink::web_pref::AutoplayPolicy::kUserGestureRequired:
-      return blink::mojom::AutoplayPolicy::kUserGestureRequired;
-    case blink::web_pref::AutoplayPolicy::kDocumentUserActivationRequired:
-      return blink::mojom::AutoplayPolicy::kDocumentUserActivationRequired;
-  }
-  NOTREACHED();
-  return blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
-}
-
-// static
-bool EnumTraits<blink::mojom::AutoplayPolicy, blink::web_pref::AutoplayPolicy>::
-    FromMojom(blink::mojom::AutoplayPolicy input,
-              blink::web_pref::AutoplayPolicy* out) {
-  switch (input) {
-    case blink::mojom::AutoplayPolicy::kNoUserGestureRequired:
-      *out = blink::web_pref::AutoplayPolicy::kNoUserGestureRequired;
-      return true;
-    case blink::mojom::AutoplayPolicy::kUserGestureRequired:
-      *out = blink::web_pref::AutoplayPolicy::kUserGestureRequired;
-      return true;
-    case blink::mojom::AutoplayPolicy::kDocumentUserActivationRequired:
-      *out = blink::web_pref::AutoplayPolicy::kDocumentUserActivationRequired;
-      return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
-// static
-blink::mojom::PreferredColorScheme EnumTraits<
-    blink::mojom::PreferredColorScheme,
-    blink::PreferredColorScheme>::ToMojom(blink::PreferredColorScheme scheme) {
-  switch (scheme) {
-    case blink::PreferredColorScheme::kDark:
-      return blink::mojom::PreferredColorScheme::kDark;
-    case blink::PreferredColorScheme::kLight:
-      return blink::mojom::PreferredColorScheme::kLight;
-  }
-  NOTREACHED();
-  return blink::mojom::PreferredColorScheme::kLight;
-}
-
-// static
-bool EnumTraits<blink::mojom::PreferredColorScheme,
-                blink::PreferredColorScheme>::
-    FromMojom(blink::mojom::PreferredColorScheme input,
-              blink::PreferredColorScheme* out) {
-  switch (input) {
-    case blink::mojom::PreferredColorScheme::kDark:
-      *out = blink::PreferredColorScheme::kDark;
-      return true;
-    case blink::mojom::PreferredColorScheme::kLight:
-      *out = blink::PreferredColorScheme::kLight;
-      return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
-// static
 blink::mojom::EffectiveConnectionType EnumTraits<
     blink::mojom::EffectiveConnectionType,
     net::EffectiveConnectionType>::ToMojom(net::EffectiveConnectionType type) {
@@ -353,11 +162,8 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
       !data.ReadTextTrackWindowRadius(&out->text_track_window_radius) ||
       !data.ReadPrimaryPointerType(&out->primary_pointer_type) ||
       !data.ReadPrimaryHoverType(&out->primary_hover_type) ||
-      !data.ReadEditingBehavior(&out->editing_behavior) ||
       !data.ReadViewportStyle(&out->viewport_style) ||
       !data.ReadAnimationPolicy(&out->animation_policy) ||
-      !data.ReadAutoplayPolicy(&out->autoplay_policy) ||
-      !data.ReadPreferredColorScheme(&out->preferred_color_scheme) ||
       !data.ReadLowPriorityIframesThreshold(
           &out->low_priority_iframes_threshold) ||
       !data.ReadNetworkQualityEstimatorWebHoldback(
@@ -434,6 +240,7 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
   out->should_clear_document_background =
       data.should_clear_document_background();
   out->enable_scroll_animator = data.enable_scroll_animator();
+  out->threaded_scrolling_enabled = data.threaded_scrolling_enabled();
   out->prefers_reduced_motion = data.prefers_reduced_motion();
   out->touch_event_feature_detection_enabled =
       data.touch_event_feature_detection_enabled();
@@ -444,7 +251,10 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
       data.dont_send_key_events_to_javascript();
   out->barrel_button_for_drag_enabled = data.barrel_button_for_drag_enabled();
   out->sync_xhr_in_documents_enabled = data.sync_xhr_in_documents_enabled();
+  out->target_blank_implies_no_opener_enabled_will_be_removed =
+      data.target_blank_implies_no_opener_enabled_will_be_removed();
   out->number_of_cpu_cores = data.number_of_cpu_cores();
+  out->editing_behavior = data.editing_behavior();
   out->supports_multiple_windows = data.supports_multiple_windows();
   out->viewport_enabled = data.viewport_enabled();
   out->viewport_meta_enabled = data.viewport_meta_enabled();
@@ -508,7 +318,6 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
       data.disable_features_depending_on_viz();
   out->disable_accelerated_small_canvases =
       data.disable_accelerated_small_canvases();
-  out->reenable_web_components_v0 = data.reenable_web_components_v0();
 #endif
   out->force_dark_mode_enabled = data.force_dark_mode_enabled();
   out->default_minimum_page_scale_factor =
@@ -520,6 +329,9 @@ bool StructTraits<blink::mojom::WebPreferencesDataView,
   out->media_controls_enabled = data.media_controls_enabled();
   out->do_not_update_selection_on_mutating_selection_range =
       data.do_not_update_selection_on_mutating_selection_range();
+  out->autoplay_policy = data.autoplay_policy();
+  out->preferred_color_scheme = data.preferred_color_scheme();
+  out->preferred_contrast = data.preferred_contrast();
   out->picture_in_picture_enabled = data.picture_in_picture_enabled();
   out->translate_service_available = data.translate_service_available();
   out->lazy_load_enabled = data.lazy_load_enabled();

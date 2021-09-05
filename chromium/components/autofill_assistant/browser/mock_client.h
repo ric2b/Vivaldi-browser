@@ -31,14 +31,13 @@ class MockClient : public Client {
   MOCK_CONST_METHOD0(GetWebContents, content::WebContents*());
   MOCK_CONST_METHOD0(GetPersonalDataManager, autofill::PersonalDataManager*());
   MOCK_CONST_METHOD0(GetWebsiteLoginManager, WebsiteLoginManager*());
-  MOCK_CONST_METHOD0(GetPasswordManagerClient,
-                     password_manager::PasswordManagerClient*());
   MOCK_METHOD0(GetAccessTokenFetcher, AccessTokenFetcher*());
   MOCK_METHOD1(Shutdown, void(Metrics::DropOutReason reason));
   MOCK_METHOD1(RecordDropOut, void(Metrics::DropOutReason reason));
   MOCK_METHOD0(AttachUI, void());
   MOCK_METHOD0(DestroyUI, void());
   MOCK_CONST_METHOD0(HasHadUI, bool());
+  MOCK_CONST_METHOD0(IsFirstTimeTriggerScriptUser, bool());
 
  private:
   std::unique_ptr<MockPersonalDataManager> mock_personal_data_manager_;

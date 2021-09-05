@@ -23,9 +23,9 @@
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "components/metrics/delegating_provider.h"
-#include "components/metrics/demographic_metrics_provider.h"
+#include "components/metrics/demographics/demographic_metrics_provider.h"
+#include "components/metrics/demographics/demographic_metrics_test_utils.h"
 #include "components/metrics/metrics_switches.h"
-#include "components/metrics/test/demographic_metrics_test_utils.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "content/public/test/browser_test.h"
@@ -146,7 +146,7 @@ IN_PROC_BROWSER_TEST_P(MetricsServiceUserDemographicsBrowserTest,
         uma_proto->user_demographics().birth_year());
     EXPECT_EQ(test_gender, uma_proto->user_demographics().gender());
     histogram.ExpectUniqueSample("UMA.UserDemographics.Status",
-                                 syncer::UserDemographicsStatus::kSuccess, 1);
+                                 UserDemographicsStatus::kSuccess, 1);
   } else {
     EXPECT_FALSE(uma_proto->has_user_demographics());
     histogram.ExpectTotalCount("UMA.UserDemographics.Status", /*count=*/0);

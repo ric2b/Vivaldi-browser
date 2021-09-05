@@ -19,8 +19,9 @@
 #include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/protocol_utils.h"
-#include "components/autofill_assistant/browser/service_impl.h"
+#include "components/autofill_assistant/browser/service/service_impl.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
+#include "components/autofill_assistant/browser/url_utils.h"
 #include "components/autofill_assistant/browser/user_data.h"
 #include "components/autofill_assistant/browser/view_layout.pb.h"
 #include "components/google/core/common/google_util.h"
@@ -31,6 +32,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "net/http/http_status_code.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -88,37 +90,12 @@ bool StateNeedsUiInLiteScript(AutofillAssistantState state) {
   }
 }
 
-// Check whether a domain is a subdomain of another domain.
-bool IsSubdomainOf(const std::string& subdomain,
-                   const std::string& parent_domain) {
-  return base::EndsWith(base::StringPiece(subdomain),
-                        base::StringPiece("." + parent_domain),
-                        base::CompareCase::INSENSITIVE_ASCII);
-}
-
-// Check whether two URLs have the same domain.
-bool HasSameDomainAs(const GURL& a, const GURL& b) {
-  return a.host() == b.host();
-}
-
-// Check whether |subdomain| is a subdomain of a set of domains in |whitelist|.
-bool IsInWhitelist(const std::string& subdomain,
-                   const std::vector<std::string> whitelist) {
-  const GURL subdomain_gurl = GURL(subdomain);
-  for (const std::string& parent_domain : whitelist) {
-    if (HasSameDomainAs(subdomain_gurl, GURL(parent_domain)) ||
-        IsSubdomainOf(subdomain, parent_domain))
-      return true;
-  }
-  return false;
-}
-
 }  // namespace
 
 Controller::Controller(content::WebContents* web_contents,
                        Client* client,
                        const base::TickClock* tick_clock,
-                       RuntimeManagerImpl* runtime_manager,
+                       base::WeakPtr<RuntimeManagerImpl> runtime_manager,
                        std::unique_ptr<Service> service)
     : content::WebContentsObserver(web_contents),
       client_(client),
@@ -162,8 +139,7 @@ Service* Controller::GetService() {
 
 WebController* Controller::GetWebController() {
   if (!web_controller_) {
-    web_controller_ =
-        WebController::CreateForWebContents(web_contents(), &settings_);
+    web_controller_ = WebController::CreateForWebContents(web_contents());
   }
   return web_controller_.get();
 }
@@ -379,6 +355,19 @@ void Controller::SetUserActions(
     SetDefaultChipType(user_actions.get());
   }
   user_actions_ = std::move(user_actions);
+  SetVisibilityAndUpdateUserActions();
+}
+
+void Controller::SetVisibilityAndUpdateUserActions() {
+  // All non-cancel chips should be hidden while the keyboard is showing.
+  if (user_actions_) {
+    for (UserAction& user_action : *user_actions_) {
+      if (user_action.chip().type != CANCEL_ACTION) {
+        user_action.chip().visible = !is_keyboard_showing_;
+      }
+    }
+  }
+
   for (ControllerObserver& observer : observers_) {
     observer.OnUserActionsChanged(GetUserActions());
   }
@@ -402,7 +391,9 @@ void Controller::RequireUI() {
 
 void Controller::SetUiShown(bool shown) {
   ui_shown_ = shown;
-  runtime_manager_->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
+  if (runtime_manager_) {
+    runtime_manager_->SetUIState(shown ? UIState::kShown : UIState::kNotShown);
+  }
 }
 
 void Controller::SetGenericUi(
@@ -453,8 +444,8 @@ void Controller::SetExpandSheetForPromptAction(bool expand) {
   expand_sheet_for_prompt_action_ = expand;
 }
 
-void Controller::SetBrowseDomainsWhitelist(std::vector<std::string> domains) {
-  browse_domains_whitelist_ = std::move(domains);
+void Controller::SetBrowseDomainsAllowlist(std::vector<std::string> domains) {
+  browse_domains_allowlist_ = std::move(domains);
 }
 
 bool Controller::PerformUserActionWithContext(
@@ -818,7 +809,7 @@ void Controller::GetOrCheckScripts() {
     return;
 
   const GURL& url = GetCurrentURL();
-  if (!HasSameDomainAs(script_url_, url)) {
+  if (script_url_.host() != url.host()) {
     StopPeriodicScriptChecks();
     script_url_ = url;
 #ifdef NDEBUG
@@ -885,21 +876,23 @@ void Controller::OnPeriodicScriptCheck() {
 }
 
 void Controller::OnGetScripts(const GURL& url,
-                              bool result,
+                              int http_status,
                               const std::string& response) {
   if (state_ == AutofillAssistantState::STOPPED)
     return;
 
   // If the domain of the current URL changed since the request was sent, the
   // response is not relevant anymore and can be safely discarded.
-  if (!HasSameDomainAs(script_url_, url))
+  if (script_url_.host() != url.host())
     return;
 
-  if (!result) {
+  if (http_status != net::HTTP_OK) {
 #ifdef NDEBUG
-    VLOG(1) << "Failed to get assistant scripts for <redacted>";
+    VLOG(1) << "Failed to get assistant scripts for <redacted>, http-status="
+            << http_status;
 #else
-    VLOG(1) << "Failed to get assistant scripts for " << script_url_.host();
+    VLOG(1) << "Failed to get assistant scripts for " << script_url_.host()
+            << ", http-status=" << http_status;
 #endif
     OnFatalError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_DEFAULT_ERROR),
                  Metrics::DropOutReason::GET_SCRIPTS_FAILED);
@@ -1186,18 +1179,27 @@ bool Controller::Start(const GURL& deeplink_url,
 }
 
 void Controller::ShowFirstMessageAndStart() {
-  // Only show default status message if necessary. Scripts started by lite
-  // scripts that also showed the onboarding do not show the loading message.
-  if (status_message_.empty() &&
-      !(GetTriggerContext()->is_onboarding_shown() &&
-        GetTriggerContext()->WasStartedByTriggerScript())) {
+  if (!status_message_.empty()) {
+    // A status message may have been set prior to calling |Start|.
+    SetStatusMessage(status_message_);
+  } else if (!(GetTriggerContext()->is_onboarding_shown() &&
+               GetTriggerContext()->WasStartedByLegacyTriggerScript())) {
     SetStatusMessage(
         l10n_util::GetStringFUTF8(IDS_AUTOFILL_ASSISTANT_LOADING,
                                   base::UTF8ToUTF16(GetCurrentURL().host())));
+  } else {
+    // Only show default status message if necessary. Scripts started by lite
+    // scripts that also showed the onboarding do not show the loading message.
   }
   if (step_progress_bar_configuration_.has_value() &&
       step_progress_bar_configuration_->use_step_progress_bar()) {
-    SetProgressActiveStep(0);
+    if (!progress_active_step_.has_value()) {
+      // Set default progress unless already specified in
+      // |progress_active_step_|.
+      progress_active_step_ = 0;
+    }
+    SetStepProgressBarConfiguration(*step_progress_bar_configuration_);
+    SetProgressActiveStep(*progress_active_step_);
   } else {
     SetProgress(kAutostartInitialProgress);
   }
@@ -1620,7 +1622,7 @@ void Controller::OnFatalError(const std::string& error_message,
   // never will.
   MaybeReportFirstCheckDone();
 
-  if (tracking_ && HasSameDomainAs(script_url_, GetCurrentURL())) {
+  if (tracking_ && script_url_.host() == GetCurrentURL().host()) {
     // When tracking the controller should stays until the browser has navigated
     // away from the last domain that was checked to be able to tell callers
     // that the set of user actions is empty.
@@ -1657,7 +1659,7 @@ void Controller::OnStop(const std::string& message,
 
 void Controller::PerformDelayedShutdownIfNecessary() {
   if (delayed_shutdown_reason_ &&
-      !HasSameDomainAs(script_url_, GetCurrentURL())) {
+      script_url_.host() != GetCurrentURL().host()) {
     Metrics::DropOutReason reason = delayed_shutdown_reason_.value();
     delayed_shutdown_reason_ = base::nullopt;
     tracking_ = false;
@@ -1881,11 +1883,9 @@ void Controller::DidFinishNavigation(
   // from the original assisted domain. Subdomains of the original domain are
   // supported.
   if (state_ == AutofillAssistantState::BROWSE) {
-    auto current_host = web_contents()->GetLastCommittedURL().host();
-    auto script_host = script_url_.host();
-    if (current_host != script_host &&
-        !IsSubdomainOf(current_host, script_host) &&
-        !IsInWhitelist(current_host, browse_domains_whitelist_)) {
+    if (!url_utils::IsInDomainOrSubDomain(GetCurrentURL(), script_url_) &&
+        !url_utils::IsInDomainOrSubDomain(GetCurrentURL(),
+                                          browse_domains_allowlist_)) {
       OnScriptError(l10n_util::GetStringUTF8(IDS_AUTOFILL_ASSISTANT_GIVE_UP),
                     Metrics::DropOutReason::DOMAIN_CHANGE_DURING_BROWSE_MODE);
     }
@@ -2001,6 +2001,11 @@ bool Controller::StateNeedsUI(AutofillAssistantState state) {
 
 bool Controller::IsRunningLiteScript() const {
   return service_ ? service_->IsLiteService() : false;
+}
+
+void Controller::OnKeyboardVisibilityChanged(bool visible) {
+  is_keyboard_showing_ = visible;
+  SetVisibilityAndUpdateUserActions();
 }
 
 ElementArea* Controller::touchable_element_area() {

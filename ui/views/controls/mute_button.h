@@ -28,7 +28,7 @@ class VIEWS_EXPORT MuteButton : public views::ImageButton {
   // The button's class name.
   static const char kViewClassName[];
 
-  MuteButton(views::ButtonListener* listener);
+  MuteButton(PressedCallback callback);
   ~MuteButton() override;
 
   // Set a specified button state.

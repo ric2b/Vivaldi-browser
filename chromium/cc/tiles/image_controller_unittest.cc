@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
@@ -239,16 +239,17 @@ class BlockingTask : public TileTask {
 int kDefaultTimeoutSeconds = 10;
 
 DrawImage CreateDiscardableDrawImage(gfx::Size size) {
-  return DrawImage(CreateDiscardablePaintImage(size),
+  return DrawImage(CreateDiscardablePaintImage(size), false,
                    SkIRect::MakeWH(size.width(), size.height()),
                    kNone_SkFilterQuality, SkMatrix::I(),
                    PaintImage::kDefaultFrameIndex, gfx::ColorSpace());
 }
 
 DrawImage CreateBitmapDrawImage(gfx::Size size) {
-  return DrawImage(
-      CreateBitmapImage(size), SkIRect::MakeWH(size.width(), size.height()),
-      kNone_SkFilterQuality, SkMatrix::I(), PaintImage::kDefaultFrameIndex);
+  return DrawImage(CreateBitmapImage(size), false,
+                   SkIRect::MakeWH(size.width(), size.height()),
+                   kNone_SkFilterQuality, SkMatrix::I(),
+                   PaintImage::kDefaultFrameIndex);
 }
 
 class ImageControllerTest : public testing::Test {

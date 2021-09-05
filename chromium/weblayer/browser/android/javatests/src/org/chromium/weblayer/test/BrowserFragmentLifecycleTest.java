@@ -305,6 +305,27 @@ public class BrowserFragmentLifecycleTest {
         helper.waitForCallback(callCount, 1);
     }
 
+    @Test
+    @SmallTest
+    public void browserAndTabIsDestroyedWhenFragmentDestroyed() throws Throwable {
+        mActivityTestRule.launchShellWithUrl(mActivityTestRule.getTestDataURL("simple_page.html"));
+
+        CallbackHelper helper = new CallbackHelper();
+        Browser browser = TestThreadUtils.runOnUiThreadBlocking(
+                () -> { return mActivityTestRule.getActivity().getBrowser(); });
+        Tab tab = TestThreadUtils.runOnUiThreadBlocking(() -> { return browser.getActiveTab(); });
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertFalse(browser.isDestroyed());
+            Assert.assertFalse(tab.isDestroyed());
+            destroyFragment(helper);
+        });
+        helper.waitForFirst();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(browser.isDestroyed());
+            Assert.assertTrue(tab.isDestroyed());
+        });
+    }
+
     // Used to track new Browsers finish restoring.
     private static final class BrowserRestoreHelper
             implements InstrumentationActivity.OnCreatedCallback {

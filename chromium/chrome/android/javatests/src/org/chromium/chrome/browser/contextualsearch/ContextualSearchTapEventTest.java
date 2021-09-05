@@ -26,7 +26,7 @@ import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManagerWrapper;
 import org.chromium.chrome.browser.compositor.bottombar.contextualsearch.ContextualSearchPanel;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -67,7 +67,7 @@ public class ContextualSearchTapEventTest {
     private ContextualSearchPanel mPanel;
     private OverlayPanelManagerWrapper mPanelManager;
     private SelectionClient mContextualSearchClient;
-    private LayoutManager mLayoutManager;
+    private LayoutManagerImpl mLayoutManager;
 
     // --------------------------------------------------------------------------------------------
 
@@ -75,8 +75,8 @@ public class ContextualSearchTapEventTest {
      * ContextualSearchPanel wrapper that prevents native calls.
      */
     private static class ContextualSearchPanelWrapper extends ContextualSearchPanel {
-        public ContextualSearchPanelWrapper(
-                Context context, LayoutManager layoutManager, OverlayPanelManager panelManager) {
+        public ContextualSearchPanelWrapper(Context context, LayoutManagerImpl layoutManager,
+                OverlayPanelManager panelManager) {
             super(context, layoutManager, panelManager);
         }
 
@@ -97,7 +97,8 @@ public class ContextualSearchTapEventTest {
      */
     private static class ContextualSearchManagerWrapper extends ContextualSearchManager {
         public ContextualSearchManagerWrapper(ChromeActivity activity) {
-            super(activity, null, activity.getRootUiCoordinatorForTesting().getScrimCoordinator());
+            super(activity, null, activity.getRootUiCoordinatorForTesting().getScrimCoordinator(),
+                    activity.getActivityTabProvider());
             setSelectionController(new MockCSSelectionController(activity, this));
             WebContents webContents = WebContentsFactory.createWebContents(false, false);
             ContentView cv = ContentView.createContentView(
@@ -107,7 +108,8 @@ public class ContextualSearchTapEventTest {
             SelectionPopupController selectionPopupController =
                     WebContentsUtils.createSelectionPopupController(webContents);
             selectionPopupController.setSelectionClient(this.getContextualSearchSelectionClient());
-            MockContextualSearchPolicy policy = new MockContextualSearchPolicy();
+            MockContextualSearchPolicy policy =
+                    new MockContextualSearchPolicy(getSelectionController());
             setContextualSearchPolicy(policy);
             getSelectionController().setPolicy(policy);
         }

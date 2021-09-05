@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
@@ -165,8 +165,7 @@ class CookieSettings : public CookieSettingsBase,
   // content_settings::Observer:
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               const std::string& resource_identifier) override;
+                               ContentSettingsType content_type) override;
 
   void OnCookiePreferencesChanged();
 
@@ -177,8 +176,8 @@ class CookieSettings : public CookieSettingsBase,
   base::ThreadChecker thread_checker_;
   base::ObserverList<Observer> observers_;
   scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
-  ScopedObserver<HostContentSettingsMap, content_settings::Observer>
-      content_settings_observer_{this};
+  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
+      content_settings_observation_{this};
   PrefChangeRegistrar pref_change_registrar_;
   const bool is_incognito_;
   const char* extension_scheme_;  // Weak.

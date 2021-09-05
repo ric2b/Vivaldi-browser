@@ -6,6 +6,7 @@
 #import "ios/chrome/app/main_controller_private.h"
 
 #include <memory>
+
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_functions.h"
@@ -21,6 +22,7 @@
 #include "components/password_manager/core/common/passwords_directory_util_ios.h"
 #include "components/prefs/ios/pref_observer_bridge.h"
 #include "components/prefs/pref_change_registrar.h"
+#import "components/previous_session_info/previous_session_info.h"
 #include "components/ukm/ios/features.h"
 #include "components/web_resource/web_resource_pref_names.h"
 #import "ios/chrome/app/application_delegate/metrics_mediator.h"
@@ -48,16 +50,14 @@
 #include "ios/chrome/browser/chrome_paths.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
-#include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_keyed_service.h"
-#include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_keyed_service_factory.h"
+#include "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_persistent_storage_manager.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
 #include "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #include "ios/chrome/browser/crash_report/crash_loop_detection_util.h"
 #include "ios/chrome/browser/crash_report/crash_report_helper.h"
 #import "ios/chrome/browser/crash_report/crash_restore_helper.h"
-#include "ios/chrome/browser/credential_provider/credential_provider_service_factory.h"
-#include "ios/chrome/browser/credential_provider/credential_provider_support.h"
+#include "ios/chrome/browser/credential_provider/credential_provider_buildflags.h"
 #include "ios/chrome/browser/download/download_directory_util.h"
 #import "ios/chrome/browser/external_files/external_file_remover_factory.h"
 #import "ios/chrome/browser/external_files/external_file_remover_impl.h"
@@ -68,7 +68,8 @@
 #import "ios/chrome/browser/main/browser_list_factory.h"
 #import "ios/chrome/browser/memory/memory_debugger_manager.h"
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
-#import "ios/chrome/browser/metrics/previous_session_info.h"
+#import "ios/chrome/browser/metrics/incognito_usage_app_state_agent.h"
+#import "ios/chrome/browser/metrics/window_configuration_recorder.h"
 #import "ios/chrome/browser/net/cookie_util.h"
 #import "ios/chrome/browser/omaha/omaha_service.h"
 #include "ios/chrome/browser/pref_names.h"
@@ -108,6 +109,11 @@
 #include "ios/web/public/webui/web_ui_ios_controller_factory.h"
 #import "net/base/mac/url_conversions.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+
+#if BUILDFLAG(IOS_CREDENTIAL_PROVIDER_ENABLED)
+#include "ios/chrome/browser/credential_provider/credential_provider_service_factory.h"
+#include "ios/chrome/browser/credential_provider/credential_provider_support.h"
+#endif
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -259,6 +265,8 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
   // Variable backing metricsMediator property.
   __weak MetricsMediator* _metricsMediator;
+
+  WindowConfigurationRecorder* _windowConfigurationRecorder;
 
   // Hander for the startup tasks, deferred or not.
   StartupTasks* _startupTasks;
@@ -523,10 +531,14 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
           self.appState.mainBrowserState);
   service->Initialize();
 
+#if BUILDFLAG(IOS_CREDENTIAL_PROVIDER_ENABLED)
   if (IsCredentialProviderExtensionSupported()) {
     CredentialProviderServiceFactory::GetForBrowserState(
         self.appState.mainBrowserState);
   }
+#endif
+
+  _windowConfigurationRecorder = [[WindowConfigurationRecorder alloc] init];
 
   return needRestoration;
 }
@@ -592,6 +604,7 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
   // Create app state agents.
   [appState addAgent:[[ContentSuggestionsSchedulerAppAgent alloc] init]];
+  [appState addAgent:[[IncognitoUsageAppStateAgent alloc] init]];
 }
 
 - (id<BrowserInterfaceProvider>)interfaceProvider {
@@ -627,21 +640,6 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   _firstUserActionRecorder.reset();
 }
 
-- (BOOL)canLaunchInIncognito {
-  NSUserDefaults* standardDefaults = [NSUserDefaults standardUserDefaults];
-  if (![standardDefaults boolForKey:kIncognitoCurrentKey])
-    return NO;
-  // If the application crashed in incognito mode, don't stay in incognito
-  // mode, since the prompt to restore should happen in non-incognito
-  // context.
-  if ([self mustShowRestoreInfobar])
-    return NO;
-  // If there are no incognito tabs, then ensure the app starts in normal mode,
-  // since the UI isn't supposed to ever put the user in incognito mode without
-  // any incognito tabs.
-  return !(self.otrBrowser->GetWebStateList()->empty());
-}
-
 - (void)expireFirstUserActionRecorderAfterDelay:(NSTimeInterval)delay {
   [self performSelector:@selector(expireFirstUserActionRecorder)
              withObject:nil
@@ -662,14 +660,19 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 
   if (base::FeatureList::IsEnabled(kLogBreadcrumbs)) {
     if (self.appState.mainBrowserState->HasOffTheRecordChromeBrowserState()) {
-      breakpad::StopMonitoringBreadcrumbManagerService(
+      BreadcrumbManagerKeyedService* service =
           BreadcrumbManagerKeyedServiceFactory::GetForBrowserState(
               self.appState.mainBrowserState
-                  ->GetOffTheRecordChromeBrowserState()));
+                  ->GetOffTheRecordChromeBrowserState());
+      service->StopPersisting();
+      breakpad::StopMonitoringBreadcrumbManagerService(service);
     }
-    breakpad::StopMonitoringBreadcrumbManagerService(
+
+    BreadcrumbManagerKeyedService* service =
         BreadcrumbManagerKeyedServiceFactory::GetForBrowserState(
-            self.appState.mainBrowserState));
+            self.appState.mainBrowserState);
+    service->StopPersisting();
+    breakpad::StopMonitoringBreadcrumbManagerService(service);
   }
 
   _extensionSearchEngineDataUpdater = nullptr;
@@ -933,29 +936,19 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
           self.appState.mainBrowserState);
   breakpad::MonitorBreadcrumbManagerService(breadcrumbService);
 
-  __weak __typeof(self) weakSelf = self;
-  BreadcrumbPersistentStorageKeyedService* persistentStorageService =
-      BreadcrumbPersistentStorageKeyedServiceFactory::GetForBrowserState(
-          self.appState.mainBrowserState);
-  // Get stored persistent breadcrumbs from last run and set them on the
-  // breadcrumb manager.
-  persistentStorageService->GetStoredEvents(
+  BreadcrumbPersistentStorageManager* persistentStorageManager =
+      GetApplicationContext()->GetBreadcrumbPersistentStorageManager();
+
+  // Application context can return a null persistent storage manager if
+  // breadcrumbs are not being persisted.
+  if (persistentStorageManager) {
+    breadcrumbService->StartPersisting(persistentStorageManager);
+  }
+
+  // Get stored persistent breadcrumbs from last run to set on crash reports.
+  persistentStorageManager->GetStoredEvents(
       base::BindOnce(^(std::vector<std::string> events) {
-        __strong __typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || !strongSelf.appState.mainBrowserState) {
-          return;
-        }
-
-        BreadcrumbManagerKeyedServiceFactory::GetForBrowserState(
-            strongSelf.appState.mainBrowserState)
-            ->SetPreviousEvents(events);
         breakpad::SetPreviousSessionEvents(events);
-
-        // Notify persistent breadcrumb service to clear old breadcrumbs and
-        // start storing breadcrumbs for this session.
-        BreadcrumbPersistentStorageKeyedServiceFactory::GetForBrowserState(
-            strongSelf.appState.mainBrowserState)
-            ->StartStoringEvents();
       }));
 }
 

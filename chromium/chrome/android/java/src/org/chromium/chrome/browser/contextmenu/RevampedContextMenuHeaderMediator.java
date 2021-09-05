@@ -28,10 +28,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver;
 import org.chromium.chrome.browser.performance_hints.PerformanceHintsObserver.PerformanceClass;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.ui.favicon.IconType;
-import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
+import org.chromium.components.favicon.IconType;
+import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.ui.modelutil.PropertyModel;
 
 class RevampedContextMenuHeaderMediator implements View.OnClickListener {
@@ -41,13 +41,20 @@ class RevampedContextMenuHeaderMediator implements View.OnClickListener {
     private String mPlainUrl;
 
     RevampedContextMenuHeaderMediator(Context context, PropertyModel model,
-            @PerformanceClass int performanceClass, ContextMenuParams params, Profile profile) {
+            @PerformanceClass int performanceClass, ContextMenuParams params, Profile profile,
+            ContextMenuNativeDelegate nativeDelegate) {
         mContext = context;
         mPlainUrl = params.getUrl();
         mModel = model;
         mModel.set(RevampedContextMenuHeaderProperties.TITLE_AND_URL_CLICK_LISTENER, this);
 
-        if (!params.isImage() && !params.isVideo()) {
+        if (params.isImage()) {
+            final Resources res = mContext.getResources();
+            final int imageMaxSize =
+                    res.getDimensionPixelSize(R.dimen.revamped_context_menu_header_image_max_size);
+            nativeDelegate.retrieveImageForContextMenu(
+                    imageMaxSize, imageMaxSize, this::onImageThumbnailRetrieved);
+        } else if (!params.isImage() && !params.isVideo()) {
             LargeIconBridge iconBridge = new LargeIconBridge(profile);
             iconBridge.getLargeIconForStringUrl(mPlainUrl,
                     context.getResources().getDimensionPixelSize(R.dimen.default_favicon_min_size),
@@ -65,7 +72,6 @@ class RevampedContextMenuHeaderMediator implements View.OnClickListener {
      * @param thumbnail The bitmap received that will be displayed as the header image.
      */
     void onImageThumbnailRetrieved(Bitmap thumbnail) {
-        RecordHistogram.recordBooleanHistogram("ContextMenu.ThumbnailFetched", thumbnail != null);
         if (thumbnail != null) {
             setHeaderImage(getImageWithCheckerBackground(mContext.getResources(), thumbnail), true);
         }
@@ -73,7 +79,7 @@ class RevampedContextMenuHeaderMediator implements View.OnClickListener {
     }
 
     /**
-     * See {@link org.chromium.chrome.browser.ui.favicon.LargeIconBridge#getLargeIconForUrl}
+     * See {@link org.chromium.components.favicon.LargeIconBridge#getLargeIconForUrl}
      */
     private void onFaviconAvailable(@Nullable Bitmap icon, @ColorInt int fallbackColor,
             boolean isColorDefault, @IconType int iconType) {

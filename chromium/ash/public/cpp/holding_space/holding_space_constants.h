@@ -30,18 +30,22 @@ constexpr int kHoldingSpaceDownloadsChevronIconSize = 20;
 constexpr int kHoldingSpaceDownloadsHeaderSpacing = 16;
 constexpr int kHoldingSpacePinIconSize = 20;
 constexpr int kHoldingSpaceRowSpacing = 8;
-constexpr gfx::Insets kHoldingSpaceScreenshotPadding(8);
-constexpr int kHoldingSpaceScreenshotSpacing = 8;
-constexpr gfx::Size kHoldingSpaceScreenshotSize(104, 80);
-constexpr gfx::Insets kHoldingSpaceScreenshotsContainerPadding(8, 0);
+constexpr gfx::Insets kHoldingSpaceScreenCapturePadding(8);
+constexpr gfx::Size kHoldingSpaceScreenCapturePinButtonSize(24, 24);
+constexpr int kHoldingSpaceScreenCaptureSpacing = 8;
+constexpr gfx::Size kHoldingSpaceScreenCaptureSize(104, 80);
+constexpr gfx::Insets kHoldingSpaceScreenCapturesContainerPadding(8, 0);
 constexpr float kHoldingSpaceSelectedOverlayOpacity = 0.24f;
-constexpr int kHoldingSpaceTrayMainAxisMargin = 6;
+constexpr int kHoldingSpaceTrayIconMaxVisiblePreviews = 3;
+constexpr int kHoldingSpaceTrayIconSize = 20;
 
 // Context menu commands.
 enum HoldingSpaceCommandId {
-  kPinItem,
   kCopyImageToClipboard,
+  kHidePreviews,
+  kPinItem,
   kShowInFolder,
+  kShowPreviews,
   kUnpinItem,
   kMaxValue = kUnpinItem
 };
@@ -49,6 +53,7 @@ enum HoldingSpaceCommandId {
 // View IDs.
 constexpr int kHoldingSpacePinnedFilesContainerId = 1;
 constexpr int kHoldingSpaceRecentFilesContainerId = 2;
+constexpr int kHoldingSpaceTrayIconId = 3;
 
 // The maximum allowed age for files restored into the holding space model.
 // Note that this is not enforced for pinned items.
@@ -57,8 +62,8 @@ constexpr base::TimeDelta kMaxFileAge = base::TimeDelta::FromDays(1);
 // The maximum allowed number of downloads to display in holding space UI.
 constexpr size_t kMaxDownloads = 2u;
 
-// The maximum allowed number of screenshots to display in holding space UI.
-constexpr size_t kMaxScreenshots = 3u;
+// The maximum allowed number of screen captures to display in holding space UI.
+constexpr size_t kMaxScreenCaptures = 3u;
 
 // Mime type with wildcard which matches all image types.
 constexpr char kMimeTypeImage[] = "image/*";

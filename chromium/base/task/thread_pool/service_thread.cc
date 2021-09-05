@@ -5,7 +5,7 @@
 #include "base/task/thread_pool/service_thread.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/alias.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
@@ -25,8 +25,6 @@ TimeDelta g_heartbeat_for_testing = TimeDelta();
 
 ServiceThread::ServiceThread(const TaskTracker* task_tracker)
     : Thread("ThreadPoolServiceThread"), task_tracker_(task_tracker) {}
-
-ServiceThread::~ServiceThread() = default;
 
 // static
 void ServiceThread::SetHeartbeatIntervalForTesting(TimeDelta heartbeat) {
@@ -81,10 +79,8 @@ void ServiceThread::PerformHeartbeatLatencyReport() const {
   // reported latency.
   ThreadPool::PostTask(
       FROM_HERE, {profiled_priority},
-      BindOnce(
-          &TaskTracker::RecordHeartbeatLatencyAndTasksRunWhileQueuingHistograms,
-          Unretained(task_tracker_), profiled_priority, TimeTicks::Now(),
-          task_tracker_->GetNumTasksRun()));
+      BindOnce(&TaskTracker::RecordHeartbeatLatencyHistogram,
+               Unretained(task_tracker_), profiled_priority, TimeTicks::Now()));
 }
 
 }  // namespace internal

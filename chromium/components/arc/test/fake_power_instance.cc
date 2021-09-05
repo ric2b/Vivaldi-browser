@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 
 namespace arc {
 
@@ -50,6 +50,11 @@ void FakePowerInstance::UpdateScreenBrightnessSettings(double percent) {
 
 void FakePowerInstance::PowerSupplyInfoChanged() {
   num_power_supply_info_++;
+}
+
+void FakePowerInstance::GetWakefulnessMode(
+    GetWakefulnessModeCallback callback) {
+  std::move(callback).Run(mojom::WakefulnessMode::AWAKE);
 }
 
 }  // namespace arc

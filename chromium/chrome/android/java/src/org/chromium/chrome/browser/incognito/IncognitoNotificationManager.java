@@ -27,7 +27,7 @@ import org.chromium.chrome.browser.ChromeApplication;
  * Manages the notification indicating that there are incognito tabs opened in Document mode.
  */
 public class IncognitoNotificationManager {
-    private static final String INCOGNITO_TABS_OPEN_TAG = "incognito_tabs_open";
+    public static final String INCOGNITO_TABS_OPEN_TAG = "incognito_tabs_open";
     private static final int INCOGNITO_TABS_OPEN_ID = 100;
 
     /**
@@ -55,7 +55,7 @@ public class IncognitoNotificationManager {
                                         INCOGNITO_TABS_OPEN_TAG, INCOGNITO_TABS_OPEN_ID))
                         .setContentTitle(title)
                         .setContentIntent(
-                                IncognitoNotificationService.getRemoveAllIncognitoTabsIntent(
+                                IncognitoNotificationServiceImpl.getRemoveAllIncognitoTabsIntent(
                                         context))
                         .setContentText(actionMessage)
                         .setOngoing(true)

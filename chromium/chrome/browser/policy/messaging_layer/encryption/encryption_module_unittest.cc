@@ -14,6 +14,7 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "chrome/browser/policy/messaging_layer/encryption/decryption.h"
+#include "chrome/browser/policy/messaging_layer/encryption/encryption.h"
 #include "chrome/browser/policy/messaging_layer/util/status.h"
 #include "chrome/browser/policy/messaging_layer/util/status_macros.h"
 #include "chrome/browser/policy/messaging_layer/util/statusor.h"
@@ -29,52 +30,35 @@ namespace {
 //
 //   TestEvent<ResType> e;
 //   ... Do some async work passing e.cb() as a completion callback of
-//       base::OnceCallback<void(ResType* res)> type which also may perform
-//       some other action specified by |done| callback provided by the caller.
+//       base::OnceCallback<void(ResType* res)> type which also may perform some
+//       other action specified by |done| callback provided by the caller.
 //   ... = e.result();  // Will wait for e.cb() to be called and return the
-//                      // collected result.
-//
-// Or, when the callback is not expected to be invoked:
-//
-//   TestEvent<ResType> e(/*expected_to_complete=*/false);
-//   ... Start work passing e.cb() as a completion callback,
-//       which will not happen.
+//       collected result.
 //
 template <typename ResType>
 class TestEvent {
  public:
-  explicit TestEvent(bool expected_to_complete = true)
-      : expected_to_complete_(expected_to_complete),
-        completed_(base::WaitableEvent::ResetPolicy::MANUAL,
-                   base::WaitableEvent::InitialState::NOT_SIGNALED) {}
-  ~TestEvent() {
-    if (expected_to_complete_) {
-      EXPECT_TRUE(completed_.IsSignaled()) << "Not responded";
-    } else {
-      EXPECT_FALSE(completed_.IsSignaled()) << "Responded";
-    }
-  }
+  TestEvent() : run_loop_(std::make_unique<base::RunLoop>()) {}
+  ~TestEvent() { EXPECT_FALSE(run_loop_->running()) << "Not responded"; }
   TestEvent(const TestEvent& other) = delete;
   TestEvent& operator=(const TestEvent& other) = delete;
   ResType result() {
-    completed_.Wait();
+    run_loop_->Run();
     return std::forward<ResType>(result_);
   }
 
   // Completion callback to hand over to the processing method.
   base::OnceCallback<void(ResType res)> cb() {
-    DCHECK(!completed_.IsSignaled());
     return base::BindOnce(
-        [](base::WaitableEvent* completed, ResType* result, ResType res) {
+        [](base::RunLoop* run_loop, ResType* result, ResType res) {
           *result = std::forward<ResType>(res);
-          completed->Signal();
+          run_loop->Quit();
         },
-        base::Unretained(&completed_), base::Unretained(&result_));
+        base::Unretained(run_loop_.get()), base::Unretained(&result_));
   }
 
  private:
-  bool expected_to_complete_;
-  base::WaitableEvent completed_;
+  std::unique_ptr<base::RunLoop> run_loop_;
   ResType result_;
 };
 
@@ -131,8 +115,9 @@ class EncryptionModuleTest : public ::testing::Test {
     return decrypted_string;
   }
 
-  StatusOr<std::string> DecryptMatchingSecret(uint32_t public_key_id,
-                                              base::StringPiece encrypted_key) {
+  StatusOr<std::string> DecryptMatchingSecret(
+      Encryptor::PublicKeyId public_key_id,
+      base::StringPiece encrypted_key) {
     // Retrieve private key that matches public key hash.
     TestEvent<StatusOr<std::string>> retrieve_private_key;
     decryptor_->RetrieveMatchingPrivateKey(public_key_id,
@@ -150,19 +135,20 @@ class EncryptionModuleTest : public ::testing::Test {
     uint8_t out_private_key[X25519_PRIVATE_KEY_LEN];
     X25519_keypair(out_public_value, out_private_key);
 
-    TestEvent<Status> record_keys;
+    TestEvent<StatusOr<Encryptor::PublicKeyId>> record_keys;
     decryptor_->RecordKeyPair(
         std::string(reinterpret_cast<const char*>(out_private_key),
                     X25519_PRIVATE_KEY_LEN),
         std::string(reinterpret_cast<const char*>(out_public_value),
                     X25519_PUBLIC_VALUE_LEN),
         record_keys.cb());
-    RETURN_IF_ERROR(record_keys.result());
+    ASSIGN_OR_RETURN(Encryptor::PublicKeyId new_public_key_id,
+                     record_keys.result());
     TestEvent<Status> set_public_key;
     encryption_module_->UpdateAsymmetricKey(
         std::string(reinterpret_cast<const char*>(out_public_value),
                     X25519_PUBLIC_VALUE_LEN),
-        set_public_key.cb());
+        new_public_key_id, set_public_key.cb());
     RETURN_IF_ERROR(set_public_key.result());
     return Status::StatusOK();
   }
@@ -292,10 +278,12 @@ TEST_F(EncryptionModuleTest, EncryptAndDecryptMultipleParallel) {
     SingleEncryptionContext(
         base::StringPiece test_string,
         base::StringPiece public_key,
+        Encryptor::PublicKeyId public_key_id,
         scoped_refptr<EncryptionModule> encryption_module,
         base::OnceCallback<void(StatusOr<EncryptedRecord>)> response)
         : test_string_(test_string),
           public_key_(public_key),
+          public_key_id_(public_key_id),
           encryption_module_(encryption_module),
           response_(std::move(response)) {}
 
@@ -320,7 +308,7 @@ TEST_F(EncryptionModuleTest, EncryptAndDecryptMultipleParallel) {
     }
     void SetPublicKey() {
       encryption_module_->UpdateAsymmetricKey(
-          public_key_,
+          public_key_, public_key_id_,
           base::BindOnce(
               [](SingleEncryptionContext* self, Status status) {
                 if (!status.ok()) {
@@ -351,6 +339,7 @@ TEST_F(EncryptionModuleTest, EncryptAndDecryptMultipleParallel) {
    private:
     const std::string test_string_;
     const std::string public_key_;
+    const Encryptor::PublicKeyId public_key_id_;
     const scoped_refptr<EncryptionModule> encryption_module_;
     base::OnceCallback<void(StatusOr<EncryptedRecord>)> response_;
   };
@@ -482,6 +471,7 @@ TEST_F(EncryptionModuleTest, EncryptAndDecryptMultipleParallel) {
   // Public and private key pairs in this test are reversed strings.
   std::vector<std::string> private_key_strings;
   std::vector<std::string> public_value_strings;
+  std::vector<Encryptor::PublicKeyId> public_value_ids;
   for (size_t i = 0; i < 3; ++i) {
     // Generate new pair of private key and public value.
     uint8_t out_public_value[X25519_PUBLIC_VALUE_LEN];
@@ -494,27 +484,17 @@ TEST_F(EncryptionModuleTest, EncryptAndDecryptMultipleParallel) {
         X25519_PUBLIC_VALUE_LEN);
   }
 
-  // Encrypt all records in parallel.
-  std::vector<TestEvent<StatusOr<EncryptedRecord>>> results(
-      kTestStrings.size());
-  for (size_t i = 0; i < kTestStrings.size(); ++i) {
-    // Choose random key pair.
-    size_t i_key_pair = base::RandInt(0, public_value_strings.size() - 1);
-    (new SingleEncryptionContext(kTestStrings[i],
-                                 public_value_strings[i_key_pair],
-                                 encryption_module_, results[i].cb()))
-        ->Start();
-  }
-
   // Register all key pairs for decryption.
-  std::vector<TestEvent<Status>> record_results(public_value_strings.size());
+  std::vector<TestEvent<StatusOr<Encryptor::PublicKeyId>>> record_results(
+      public_value_strings.size());
   for (size_t i = 0; i < public_value_strings.size(); ++i) {
     base::ThreadPool::PostTask(
         FROM_HERE, base::BindOnce(
                        [](base::StringPiece private_key_string,
                           base::StringPiece public_key_string,
                           scoped_refptr<Decryptor> decryptor,
-                          base::OnceCallback<void(Status)> done_cb) {
+                          base::OnceCallback<void(
+                              StatusOr<Encryptor::PublicKeyId>)> done_cb) {
                          decryptor->RecordKeyPair(private_key_string,
                                                   public_key_string,
                                                   std::move(done_cb));
@@ -524,7 +504,21 @@ TEST_F(EncryptionModuleTest, EncryptAndDecryptMultipleParallel) {
   }
   // Verify registration success.
   for (auto& record_result : record_results) {
-    ASSERT_OK(record_result.result()) << record_result.result();
+    const auto result = record_result.result();
+    ASSERT_OK(result.status()) << result.status();
+    public_value_ids.push_back(result.ValueOrDie());
+  }
+
+  // Encrypt all records in parallel.
+  std::vector<TestEvent<StatusOr<EncryptedRecord>>> results(
+      kTestStrings.size());
+  for (size_t i = 0; i < kTestStrings.size(); ++i) {
+    // Choose random key pair.
+    size_t i_key_pair = base::RandInt(0, public_value_strings.size() - 1);
+    (new SingleEncryptionContext(
+         kTestStrings[i], public_value_strings[i_key_pair],
+         public_value_ids[i_key_pair], encryption_module_, results[i].cb()))
+        ->Start();
   }
 
   // Decrypt all records in parallel.

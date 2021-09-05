@@ -19,7 +19,7 @@ namespace media_router {
 class StartPresentationContext;
 }  // namespace media_router
 
-class PresentationRequestNotificationItem
+class PresentationRequestNotificationItem final
     : public media_message_center::MediaNotificationItem {
  public:
   PresentationRequestNotificationItem(
@@ -47,7 +47,7 @@ class PresentationRequestNotificationItem
   void OnMediaSessionActionButtonPressed(
       media_session::mojom::MediaSessionAction action) final;
   void Dismiss() final;
-  bool SourceIsCast() final;
+  media_message_center::SourceType SourceType() override;
 
   const std::string id_;
   MediaNotificationService* const notification_service_;

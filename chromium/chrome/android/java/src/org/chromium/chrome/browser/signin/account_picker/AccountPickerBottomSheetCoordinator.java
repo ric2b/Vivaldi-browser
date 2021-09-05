@@ -10,9 +10,10 @@ import android.view.View;
 import androidx.annotation.MainThread;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.incognito.interstitial.IncognitoInterstitialCoordinator;
 import org.chromium.chrome.browser.incognito.interstitial.IncognitoInterstitialDelegate;
-import org.chromium.chrome.browser.signin.account_picker.AccountPickerCoordinator.AccountPickerAccessPoint;
+import org.chromium.chrome.browser.signin.SigninPreferencesManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
@@ -61,14 +62,18 @@ public class AccountPickerBottomSheetCoordinator {
             BottomSheetController bottomSheetController,
             AccountPickerDelegate accountPickerDelegate,
             IncognitoInterstitialDelegate incognitoInterstitialDelegate) {
+        SigninPreferencesManager.getInstance().incrementAccountPickerBottomSheetShownCount();
         AccountPickerDelegate.recordAccountConsistencyPromoAction(
                 AccountConsistencyPromoAction.SHOWN);
+        AccountPickerDelegate.recordAccountConsistencyPromoShownCount(
+                "Signin.AccountConsistencyPromoAction.Shown.Count");
 
         mAccountPickerBottomSheetMediator = new AccountPickerBottomSheetMediator(
                 activity, accountPickerDelegate, this::dismissBottomSheet);
         mView = new AccountPickerBottomSheetView(activity, mAccountPickerBottomSheetMediator);
         mAccountPickerCoordinator = new AccountPickerCoordinator(mView.getAccountListView(),
-                mAccountPickerBottomSheetMediator, null, AccountPickerAccessPoint.WEB);
+                mAccountPickerBottomSheetMediator, /* selectedAccountName= */ null,
+                /* showIncognitoRow= */ IncognitoUtils.isIncognitoModeEnabled());
         IncognitoInterstitialCoordinator incognitoInterstitialCoordinator =
                 new IncognitoInterstitialCoordinator(
                         mView.getIncognitoInterstitialView(), incognitoInterstitialDelegate);

@@ -16,7 +16,10 @@
 #include "chrome/browser/banners/app_banner_manager_android.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
+#include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/installable/installable_metrics.h"
+#include "components/feature_engagement/public/event_constants.h"
+#include "components/feature_engagement/public/tracker.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -118,18 +121,19 @@ void AddToHomescreenMediator::AddToHomescreen(
 }
 
 void AddToHomescreenMediator::OnUiDismissed(JNIEnv* env) {
-  if (!params_) {
-    delete this;
-    return;
+  if (params_) {
+    event_callback_.Run(AddToHomescreenInstaller::Event::UI_CANCELLED,
+                        *params_);
   }
-
-  event_callback_.Run(AddToHomescreenInstaller::Event::UI_DISMISSED, *params_);
-  delete this;
 }
 
 void AddToHomescreenMediator::OnNativeDetailsShown(JNIEnv* env) {
   event_callback_.Run(AddToHomescreenInstaller::Event::NATIVE_DETAILS_SHOWN,
                       *params_);
+}
+
+void AddToHomescreenMediator::Destroy(JNIEnv* env) {
+  delete this;
 }
 
 AddToHomescreenMediator::~AddToHomescreenMediator() = default;
@@ -139,7 +143,7 @@ void AddToHomescreenMediator::SetIcon(const SkBitmap& display_icon,
   JNIEnv* env = base::android::AttachCurrentThread();
   DCHECK(!display_icon.drawsNothing());
   base::android::ScopedJavaLocalRef<jobject> java_bitmap =
-      gfx::ConvertToJavaBitmap(&display_icon);
+      gfx::ConvertToJavaBitmap(display_icon);
   Java_AddToHomescreenMediator_setIcon(env, java_ref_, java_bitmap,
                                        params_->has_maskable_primary_icon,
                                        need_to_add_padding);
@@ -209,6 +213,14 @@ void AddToHomescreenMediator::OnDataAvailable(const ShortcutInfo& info,
   }
   UMA_HISTOGRAM_ENUMERATION("Webapp.AddToHomescreenMediator.AppTypeToMenuEntry",
                             entry, AppTypeToMenuEntry::kAppTypeFinalEntry);
+
+  if (is_webapk) {
+    DVLOG(2) << "Sending event: IPH used for Installing PWA";
+    feature_engagement::Tracker* tracker =
+        feature_engagement::TrackerFactory::GetForBrowserContext(
+            data_fetcher_->web_contents()->GetBrowserContext());
+    tracker->NotifyEvent(feature_engagement::events::kPwaInstallMenuSelected);
+  }
 }
 
 void AddToHomescreenMediator::RecordEventForAppMenu(

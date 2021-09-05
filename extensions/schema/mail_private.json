@@ -11,15 +11,12 @@
       {
         "name": "getPaths",
         "type": "function",
-        "description": "Returns array of mail paths under a given directory. The root folder location is the profile directory of the current running instance. / Mail",
+        "description": "Returns array of file paths under a given directory.",
         "parameters": [
           {
-            "name": "paths",
-            "type": "array",
-            "description": "String array that that builds up a folder structure as starting point for searching for mails",
-            "items": {
-              "type": "string"
-            }
+            "name": "path",
+            "type": "string",
+            "description": "The root folder from where to build up the file paths."
           },
           {
             "type": "function",

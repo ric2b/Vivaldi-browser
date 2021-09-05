@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/views/web_apps/web_app_uninstall_dialog_view.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
@@ -145,7 +145,7 @@ void WebAppUninstallDialogDelegateView::OnDialogCanceled() {
 
 gfx::Size WebAppUninstallDialogDelegateView::CalculatePreferredSize() const {
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
+                        views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
                     margins().width();
   return gfx::Size(width, GetHeightForWidth(width));
 }

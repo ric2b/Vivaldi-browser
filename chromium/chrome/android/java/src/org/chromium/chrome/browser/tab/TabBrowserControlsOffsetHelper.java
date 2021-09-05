@@ -74,7 +74,7 @@ public class TabBrowserControlsOffsetHelper extends EmptyTabObserver implements 
      *                                      may be changing as a result of an in-progress min-height
      *                                      change animation in the renderer.
      */
-    void setBottomOffset(int bottomControlsOffset, int bottomControlsMinHeightOffset) {
+    public void setBottomOffset(int bottomControlsOffset, int bottomControlsMinHeightOffset) {
         if (mOffsetInitialized && mBottomControlsOffset == bottomControlsOffset
                 && mBottomControlsMinHeightOffset == bottomControlsMinHeightOffset) {
             return;

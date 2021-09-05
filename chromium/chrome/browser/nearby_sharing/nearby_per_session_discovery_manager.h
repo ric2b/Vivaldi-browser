@@ -10,6 +10,8 @@
 
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/nearby_sharing/attachment.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service.h"
@@ -49,8 +51,26 @@ class NearbyPerSessionDiscoveryManager
   void GetSendPreview(GetSendPreviewCallback callback) override;
 
  private:
+  // Used for metrics. These values are persisted to logs, and the entries are
+  // ordered based on how far along they are in the discovery flow. Entries
+  // should not be renumbered and numeric values should never be reused.
+  enum class DiscoveryProgress {
+    kDiscoveryNotAttempted = 0,
+    kFailedToStartDiscovery = 1,
+    kStartedDiscoveryNothingFound = 2,
+    kDiscoveredShareTargetNothingSent = 3,
+    kFailedToLookUpSelectedShareTarget = 4,
+    kFailedToStartSend = 5,
+    kStartedSend = 6,
+    kMaxValue = kStartedSend
+  };
+
   // Unregisters this class from the NearbySharingService.
   void UnregisterSendSurface();
+
+  // Used for metrics. Changes |furthest_progress_| to |progress| if |progress|
+  // is further along in the discovery flow than |furthest_progress_|.
+  void UpdateFurthestDiscoveryProgressIfNecessary(DiscoveryProgress progress);
 
   bool registered_as_send_surface_ = false;
   NearbySharingService* nearby_sharing_service_;
@@ -61,6 +81,20 @@ class NearbyPerSessionDiscoveryManager
 
   // Map of ShareTarget id to discovered ShareTargets.
   base::flat_map<base::UnguessableToken, ShareTarget> discovered_share_targets_;
+
+  // Used for metrics to track the furthest step reached in the discovery
+  // session.
+  DiscoveryProgress furthest_progress_ =
+      DiscoveryProgress::kDiscoveryNotAttempted;
+
+  // Used for metrics. Tracks the time when StartDiscovery() is called, or
+  // base::nullopt if never called.
+  base::Optional<base::TimeTicks> discovery_start_time_;
+
+  // Used for metrics. Tracks the total number devices discovered and lost in a
+  // given discovery session.
+  size_t num_discovered_ = 0;
+  size_t num_lost_ = 0;
 
   base::WeakPtrFactory<NearbyPerSessionDiscoveryManager> weak_ptr_factory_{
       this};

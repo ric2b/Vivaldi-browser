@@ -6,15 +6,16 @@
 #define CHROME_BROWSER_ANDROID_READING_LIST_READING_LIST_MANAGER_FACTORY_H_
 
 #include "base/memory/singleton.h"
-#include "components/keyed_service/core/simple_keyed_service_factory.h"
+#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
 class ReadingListManager;
 
 // A factory to create the ReadingListManager singleton.
-class ReadingListManagerFactory : public SimpleKeyedServiceFactory {
+class ReadingListManagerFactory : public BrowserContextKeyedServiceFactory {
  public:
   static ReadingListManagerFactory* GetInstance();
-  static ReadingListManager* GetForKey(SimpleFactoryKey* key);
+  static ReadingListManager* GetForBrowserContext(
+      content::BrowserContext* context);
 
  private:
   friend struct base::DefaultSingletonTraits<ReadingListManagerFactory>;
@@ -26,8 +27,11 @@ class ReadingListManagerFactory : public SimpleKeyedServiceFactory {
   ReadingListManagerFactory& operator=(const ReadingListManagerFactory&) =
       delete;
 
-  std::unique_ptr<KeyedService> BuildServiceInstanceFor(
-      SimpleFactoryKey* key) const override;
+  // BrowserContextKeyedServiceFactory overrides.
+  KeyedService* BuildServiceInstanceFor(
+      content::BrowserContext* context) const override;
+  content::BrowserContext* GetBrowserContextToUse(
+      content::BrowserContext* context) const override;
 };
 
 #endif  // CHROME_BROWSER_ANDROID_READING_LIST_READING_LIST_MANAGER_FACTORY_H_

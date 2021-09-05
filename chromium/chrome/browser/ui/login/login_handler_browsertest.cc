@@ -27,9 +27,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
+#include "components/no_state_prefetch/common/prerender_origin.h"
 #include "components/prefs/pref_service.h"
-#include "components/prerender/browser/prerender_manager.h"
-#include "components/prerender/common/prerender_origin.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/security_interstitials/content/ssl_blocking_page.h"
 #include "content/public/browser/notification_details.h"
@@ -147,8 +147,11 @@ void TestProxyAuth(Browser* browser, const GURL& test_page) {
     auth_cancelled_waiter.Wait();
     reload_observer.Wait();
     if (https) {
-      EXPECT_EQ(true, content::EvalJs(contents, "document.body === null"));
+      EXPECT_EQ(
+          "<head></head><body></body>",
+          content::EvalJs(contents, "document.documentElement.innerHTML"));
     }
+
     EXPECT_FALSE(browser->location_bar_model()->GetFormattedFullURL().empty());
   }
 
@@ -344,21 +347,11 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest, PrefetchAuthCancels) {
 
   class SetPrefetchForTest {
    public:
-    explicit SetPrefetchForTest(bool prefetch)
-        : old_prerender_mode_(prerender::PrerenderManager::GetMode()) {
+    explicit SetPrefetchForTest(bool prefetch) {
       std::string exp_group = prefetch ? "ExperimentYes" : "ExperimentNo";
       base::FieldTrialList::CreateFieldTrial("Prefetch", exp_group);
-      // Disable prerender so this is just a prefetch of the top-level page.
-      prerender::PrerenderManager::SetMode(
-          prerender::PrerenderManager::PRERENDER_MODE_SIMPLE_LOAD_EXPERIMENT);
     }
-
-    ~SetPrefetchForTest() {
-      prerender::PrerenderManager::SetMode(old_prerender_mode_);
-    }
-
-   private:
-    prerender::PrerenderManager::PrerenderManagerMode old_prerender_mode_;
+    ~SetPrefetchForTest() = default;
   } set_prefetch_for_test(true);
 
   content::WebContents* contents =

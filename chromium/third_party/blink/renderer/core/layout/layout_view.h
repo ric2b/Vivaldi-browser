@@ -94,7 +94,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
 
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectLayoutView || LayoutBlockFlow::IsOfType(type);
+    return type == kLayoutObjectView || LayoutBlockFlow::IsOfType(type);
   }
 
   PaintLayerType LayerTypeRequired() const override {
@@ -163,8 +163,6 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
       VisualRectFlags = kDefaultVisualRectFlags) const override;
   PhysicalOffset OffsetForFixedPosition() const;
   PhysicalOffset PixelSnappedOffsetForFixedPosition() const;
-
-  void InvalidatePaintForViewAndCompositedLayers();
 
   void Paint(const PaintInfo&) const override;
   void PaintBoxDecorationBackground(
@@ -291,7 +289,7 @@ class CORE_EXPORT LayoutView final : public LayoutBlockFlow {
   // Invalidates paint for the entire view, including composited descendants,
   // but not including child frames.
   // It is very likely you do not want to call this method.
-  void SetShouldDoFullPaintInvalidationForViewAndAllDescendants();
+  void InvalidatePaintForViewAndDescendants();
 
   bool ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const override;
 

@@ -9,6 +9,7 @@
 
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
+@class ThumbStripCoordinator;
 @class ViewRevealingVerticalPanHandler;
 
 // Coordinator for the thumb strip, which is a 1-row horizontal display of tab

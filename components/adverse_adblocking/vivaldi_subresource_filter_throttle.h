@@ -39,7 +39,7 @@ class VivaldiSubresourceFilterAdblockingThrottle
  public:
   VivaldiSubresourceFilterAdblockingThrottle(
       content::NavigationHandle* handle,
-      base::WeakPtr<VivaldiSubresourceFilterClient> client);
+      VivaldiSubresourceFilterClient* client);
   ~VivaldiSubresourceFilterAdblockingThrottle() override;
 
   // content::NavigationThrottle:
@@ -72,6 +72,10 @@ class VivaldiSubresourceFilterAdblockingThrottle
   void CheckCurrentUrl();
   void NotifyResult();
 
+  void LogMetricsOnChecksComplete(ActivationList matched_list,
+    ActivationDecision decision,
+    subresource_filter::mojom::ActivationLevel level) const;
+
   bool HasFinishedAllSafeBrowsingChecks() const;
   // Gets the configuration with the highest priority among those activated.
   // Returns it, or none if no valid activated configurations.
@@ -88,13 +92,17 @@ class VivaldiSubresourceFilterAdblockingThrottle
   // throughout the subresource_filter-component.
   std::vector<SubresourceFilterSafeBrowsingClient::CheckResult> check_results_;
 
+  // Set to TimeTicks::Now() when the navigation is deferred in
+  // WillProcessResponse. If deferral was not necessary, will remain null.
+  base::TimeTicks defer_time_;
+
   // Whether this throttle is deferring the navigation. Only set to true in
   // WillProcessResponse if there are ongoing safe browsing checks.
   bool deferring_ = false;
 
-  // This must outlive this class and is passed as a WeakPtr so all running
-  // tasks here will be cancelled when it goes away.
-  base::WeakPtr<VivaldiSubresourceFilterClient> filter_client_;
+  // Must outlive this class, and is owned by
+  //ContentSubresourceFilterThrottleManager.
+  VivaldiSubresourceFilterClient* filter_client_;
 
   content::BrowserContext* browser_context_;
 

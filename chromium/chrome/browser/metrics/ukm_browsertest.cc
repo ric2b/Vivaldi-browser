@@ -30,8 +30,9 @@
 #include "chrome/browser/sync/test/integration/secondary_account_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/unified_consent/unified_consent_service_factory.h"
-#include "components/metrics/demographic_metrics_provider.h"
-#include "components/metrics/test/demographic_metrics_test_utils.h"
+#include "chrome/test/base/testing_profile.h"
+#include "components/metrics/demographics/demographic_metrics_provider.h"
+#include "components/metrics/demographics/demographic_metrics_test_utils.h"
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -136,7 +137,7 @@ class TestTabModel : public TabModel {
     return nullptr;
   }
   bool IsSessionRestoreInProgress() const override { return false; }
-  bool IsCurrentModel() const override { return false; }
+  bool IsActiveModel() const override { return false; }
   void AddObserver(TabModelObserver* observer) override {}
   void RemoveObserver(TabModelObserver* observer) override {}
 
@@ -156,19 +157,6 @@ void UnblockOnProfileCreation(base::RunLoop* run_loop,
                               Profile::CreateStatus status) {
   if (status == Profile::CREATE_STATUS_INITIALIZED)
     run_loop->Quit();
-}
-#endif  // !defined(OS_ANDROID)
-
-#if !defined(OS_ANDROID)
-Profile* CreateGuestProfile() {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  base::FilePath new_path = profile_manager->GetGuestProfilePath();
-  base::RunLoop run_loop;
-  profile_manager->CreateProfileAsync(
-      new_path, base::Bind(&UnblockOnProfileCreation, &run_loop),
-      base::string16(), std::string());
-  run_loop.Run();
-  return profile_manager->GetProfileByPath(new_path);
 }
 #endif  // !defined(OS_ANDROID)
 
@@ -282,7 +270,7 @@ class UkmBrowserTestBase : public SyncTest {
         profile_manager->GenerateNextProfileDirectoryPath();
     base::RunLoop run_loop;
     profile_manager->CreateProfileAsync(
-        new_path, base::Bind(&UnblockOnProfileCreation, &run_loop),
+        new_path, base::BindRepeating(&UnblockOnProfileCreation, &run_loop),
         base::string16(), std::string());
     run_loop.Run();
     Profile* profile = profile_manager->GetProfileByPath(new_path);
@@ -486,9 +474,21 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, IncognitoPlusRegularCheck) {
   ClosePlatformBrowser(browser);
 }
 
+class GuestUkmBrowserTest : public UkmBrowserTest,
+                            public ::testing::WithParamInterface<bool> {
+ public:
+  GuestUkmBrowserTest() {
+    TestingProfile::SetScopedFeatureListForEphemeralGuestProfiles(
+        scoped_feature_list_, GetParam());
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
 // Make sure that UKM is disabled while a guest profile's window is open.
-#if !defined(OS_ANDROID)
-IN_PROC_BROWSER_TEST_F(UkmBrowserTest, RegularPlusGuestCheck) {
+#if !defined(OS_ANDROID) && !defined(CHROME_OS)
+IN_PROC_BROWSER_TEST_P(GuestUkmBrowserTest, RegularPlusGuestCheck) {
   ukm::UkmTestHelper ukm_test_helper(GetUkmService());
   MetricsConsentOverride metrics_consent(true);
 
@@ -500,10 +500,8 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, RegularPlusGuestCheck) {
   EXPECT_TRUE(ukm_test_helper.IsRecordingEnabled());
   uint64_t original_client_id = ukm_test_helper.GetClientId();
 
-  // Create browser for guest profile. Only "off the record" browsers may be
-  // opened in this mode.
-  Profile* guest_profile = CreateGuestProfile();
-  Browser* guest_browser = CreateIncognitoBrowser(guest_profile);
+  // Create browser for guest profile.
+  Browser* guest_browser = InProcessBrowserTest::CreateGuestBrowser();
   EXPECT_FALSE(ukm_test_helper.IsRecordingEnabled());
 
   CloseBrowserSynchronously(guest_browser);
@@ -515,7 +513,11 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, RegularPlusGuestCheck) {
   harness->service()->GetUserSettings()->SetSyncRequested(false);
   CloseBrowserSynchronously(regular_browser);
 }
-#endif  // !defined(OS_ANDROID)
+#endif  // !defined(OS_ANDROID) && !defined(CHROME_OS)
+
+INSTANTIATE_TEST_SUITE_P(AllGuestTypes,
+                         GuestUkmBrowserTest,
+                         /*is_ephemeral=*/testing::Bool());
 
 // Make sure that UKM is disabled while an non-sync profile's window is open.
 #if !defined(OS_ANDROID)
@@ -673,7 +675,7 @@ IN_PROC_BROWSER_TEST_P(UkmBrowserTestWithDemographics,
         report->user_demographics().birth_year());
     EXPECT_EQ(test_gender, report->user_demographics().gender());
     histogram.ExpectUniqueSample("UKM.UserDemographics.Status",
-                                 syncer::UserDemographicsStatus::kSuccess, 1);
+                                 UserDemographicsStatus::kSuccess, 1);
   } else {
     EXPECT_FALSE(report->has_user_demographics());
     histogram.ExpectTotalCount("UKM.UserDemographics.Status", /*count=*/0);

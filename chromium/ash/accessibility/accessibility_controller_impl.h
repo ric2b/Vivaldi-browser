@@ -43,6 +43,7 @@ class FloatingAccessibilityController;
 class PointScanController;
 class ScopedBacklightsForcedOff;
 class SelectToSpeakEventHandler;
+class SelectToSpeakMenuBubbleController;
 class SwitchAccessMenuBubbleController;
 
 enum AccessibilityNotificationVisibility {
@@ -197,10 +198,13 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetAutoclickMenuPosition(FloatingMenuPosition position);
   FloatingMenuPosition GetAutoclickMenuPosition();
   void RequestAutoclickScrollableBoundsForPoint(gfx::Point& point_in_screen);
+  void MagnifierBoundsChanged(const gfx::Rect& bounds_in_screen);
 
   void SetFloatingMenuPosition(FloatingMenuPosition position);
   FloatingMenuPosition GetFloatingMenuPosition();
   FloatingAccessibilityController* GetFloatingMenuController();
+
+  PointScanController* GetPointScanController();
 
   // Update the autoclick menu bounds if necessary. This may need to happen when
   // the display work area changes, or if system ui regions change (like the
@@ -255,6 +259,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   bool IsEnterpriseIconVisibleForSwitchAccess();
   void SetAccessibilityEventRewriter(
       AccessibilityEventRewriter* accessibility_event_rewriter);
+  bool IsPointScanEnabled();
 
   bool IsVirtualKeyboardSettingVisibleInTray();
   bool IsEnterpriseIconVisibleForVirtualKeyboard();
@@ -346,11 +351,14 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetSelectToSpeakState(SelectToSpeakState state) override;
   void SetSelectToSpeakEventHandlerDelegate(
       SelectToSpeakEventHandlerDelegate* delegate) override;
+  void ShowSelectToSpeakPanel(const gfx::Rect& anchor, bool is_paused) override;
+  void HideSelectToSpeakPanel() override;
   void HideSwitchAccessBackButton() override;
   void HideSwitchAccessMenu() override;
   void ShowSwitchAccessBackButton(const gfx::Rect& anchor) override;
   void ShowSwitchAccessMenu(const gfx::Rect& anchor,
                             std::vector<std::string> actions_to_show) override;
+  void ActivatePointScan() override;
   void SetDictationActive(bool is_active) override;
   void ToggleDictationFromSource(DictationToggleSource source) override;
   void HandleAutoclickScrollableBoundsFound(
@@ -373,6 +381,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
     return switch_access_bubble_controller_.get();
   }
   void DisableSwitchAccessDisableConfirmationDialogTesting() override;
+  SelectToSpeakMenuBubbleController*
+  GetSelectToSpeakMenuBubbleControllerForTest() {
+    return select_to_speak_bubble_controller_.get();
+  }
 
  private:
   // Populate |features_| with the feature of the correct type.
@@ -433,6 +445,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   std::unique_ptr<SelectToSpeakEventHandler> select_to_speak_event_handler_;
   SelectToSpeakEventHandlerDelegate* select_to_speak_event_handler_delegate_ =
       nullptr;
+  std::unique_ptr<SelectToSpeakMenuBubbleController>
+      select_to_speak_bubble_controller_;
 
   // List of key codes that Switch Access should capture.
   std::vector<int> switch_access_keys_to_capture_;

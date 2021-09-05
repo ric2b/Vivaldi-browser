@@ -107,6 +107,7 @@ class V4L2StatefulVideoDecoderBackend : public V4L2VideoDecoderBackend {
   // becomes available.
   scoped_refptr<VideoFrame> GetPoolVideoFrame();
 
+  bool SendStopCommand();
   bool InitiateFlush(VideoDecoder::DecodeCB flush_cb);
   bool CompleteFlush();
 
@@ -143,6 +144,12 @@ class V4L2StatefulVideoDecoderBackend : public V4L2VideoDecoderBackend {
   // Closure that will be called once the flush triggered by a resolution change
   // event completes.
   base::OnceClosure resolution_change_cb_;
+
+  // Whether there is any decoding request coming after
+  // initialization/flush/reset is finished.
+  // This flag is set on the first decode request, and reset after a successful
+  // flush or reset.
+  bool has_pending_requests_ = false;
 
   base::WeakPtr<V4L2StatefulVideoDecoderBackend> weak_this_;
   base::WeakPtrFactory<V4L2StatefulVideoDecoderBackend> weak_this_factory_{

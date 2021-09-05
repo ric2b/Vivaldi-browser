@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -149,7 +149,7 @@ void SlowWindowCapturerChromeOS::CreateOverlay(
       std::make_unique<SlowCaptureOverlayChromeOS>(this, std::move(receiver));
 }
 
-class SlowWindowCapturerChromeOS::InFlightFrame
+class SlowWindowCapturerChromeOS::InFlightFrame final
     : public viz::mojom::FrameSinkVideoConsumerFrameCallbacks {
  public:
   InFlightFrame(base::WeakPtr<SlowWindowCapturerChromeOS> capturer,

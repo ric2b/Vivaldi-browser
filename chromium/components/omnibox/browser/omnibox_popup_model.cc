@@ -176,8 +176,8 @@ void OmniboxPopupModel::SetSelection(Selection new_selection,
     // If the new selection is a Header, the temporary text is an empty string.
     edit_model_->OnPopupDataChanged(base::string16(),
                                     /*is_temporary_text=*/true,
-                                    base::string16(), base::string16(), keyword,
-                                    is_keyword_hint, base::string16());
+                                    base::string16(), base::string16(), {},
+                                    keyword, is_keyword_hint, base::string16());
   } else if (old_selection.line != selection_.line ||
              (old_selection.IsButtonFocused() &&
               !new_selection.IsButtonFocused() &&
@@ -189,12 +189,12 @@ void OmniboxPopupModel::SetSelection(Selection new_selection,
       edit_model_->OnPopupDataChanged(
           base::string16(),
           /*is_temporary_text=*/false, match.inline_autocompletion,
-          match.prefix_autocompletion, keyword, is_keyword_hint,
-          match.fill_into_edit_additional_text);
+          match.prefix_autocompletion, match.split_autocompletion, keyword,
+          is_keyword_hint, match.fill_into_edit_additional_text);
     } else {
       edit_model_->OnPopupDataChanged(
           match.fill_into_edit,
-          /*is_temporary_text=*/true, base::string16(), base::string16(),
+          /*is_temporary_text=*/true, base::string16(), base::string16(), {},
           keyword, is_keyword_hint, match.fill_into_edit_additional_text);
     }
   }
@@ -612,12 +612,15 @@ base::string16 OmniboxPopupModel::GetAccessibilityLabelForCurrentSelection(
             match.pedal->GetLabelStrings().id_accessibility_suffix;
         available_actions_count++;
       }
+      if (IsControlPresentOnMatch(
+              Selection(line, FOCUSED_BUTTON_REMOVE_SUGGESTION))) {
+        additional_message_id = IDS_ACC_REMOVE_SUGGESTION_SUFFIX;
+        available_actions_count++;
+      }
       DCHECK_EQ(LINE_STATE_MAX_VALUE, 6);
       if (available_actions_count > 1)
         additional_message_id = IDS_ACC_MULTIPLE_ACTIONS_SUFFIX;
 
-      // Don't add an additional message for removable suggestions without
-      // button focus, since they are relatively common.
       break;
     }
     case KEYWORD_MODE:

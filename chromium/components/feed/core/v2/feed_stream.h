@@ -16,8 +16,10 @@
 #include "base/version.h"
 #include "components/feed/core/common/enums.h"
 #include "components/feed/core/common/user_classifier.h"
+#include "components/feed/core/proto/v2/ui.pb.h"
 #include "components/feed/core/proto/v2/wire/response.pb.h"
 #include "components/feed/core/v2/enums.h"
+#include "components/feed/core/v2/notice_card_tracker.h"
 #include "components/feed/core/v2/protocol_translator.h"
 #include "components/feed/core/v2/public/feed_stream_api.h"
 #include "components/feed/core/v2/request_throttler.h"
@@ -68,6 +70,7 @@ class FeedStream : public FeedStreamApi,
     virtual std::string GetLanguageTag() = 0;
     virtual void ClearAll() = 0;
     virtual bool IsSignedIn() = 0;
+    virtual void PrefetchImage(const GURL& url) = 0;
   };
 
   // Forwards to |feed::TranslateWireResponse()| by default. Can be overridden
@@ -90,8 +93,14 @@ class FeedStream : public FeedStreamApi,
 
     void Populate(feedstore::Metadata metadata);
 
-    std::string GetConsistencyToken() const;
+    const std::string& GetConsistencyToken() const;
     void SetConsistencyToken(std::string consistency_token);
+
+    const std::string& GetSessionIdToken() const;
+    base::Time GetSessionIdExpiryTime() const;
+    void SetSessionId(std::string token, base::Time expiry_time);
+    void MaybeUpdateSessionId(base::Optional<std::string> token,
+                              const base::Clock* clock);
 
     LocalActionId GetNextActionId();
 
@@ -123,11 +132,12 @@ class FeedStream : public FeedStreamApi,
   // FeedStreamApi.
 
   bool IsActivityLoggingEnabled() const override;
+  std::string GetSessionId() const override;
   void AttachSurface(SurfaceInterface*) override;
   void DetachSurface(SurfaceInterface*) override;
   void SetArticlesListVisible(bool is_visible) override;
   bool IsArticlesListVisible() override;
-  std::string GetClientInstanceId() override;
+  std::string GetClientInstanceId() const override;
   void ExecuteRefreshTask() override;
   ImageFetchId FetchImage(
       const GURL& url,
@@ -148,6 +158,8 @@ class FeedStream : public FeedStreamApi,
   DebugStreamData GetDebugStreamData() override;
   void ForceRefreshForDebugging() override;
   std::string DumpStateForDebugging() override;
+  void SetForcedStreamUpdateForDebugging(
+      const feedui::StreamUpdate& stream_update) override;
 
   void ReportSliceViewed(SurfaceId surface_id,
                          const std::string& slice_id) override;
@@ -211,7 +223,10 @@ class FeedStream : public FeedStreamApi,
   FeedStore* GetStore() { return store_; }
   RequestThrottler* GetRequestThrottler() { return &request_throttler_; }
   Metadata* GetMetadata() { return &metadata_; }
+  const Metadata* GetMetadata() const { return &metadata_; }
   MetricsReporter* GetMetricsReporter() const { return metrics_reporter_; }
+
+  void PrefetchImage(const GURL& url);
 
   // Returns the time of the last content fetch.
   base::Time GetLastFetchTime();
@@ -252,7 +267,7 @@ class FeedStream : public FeedStreamApi,
 
   const base::Clock* GetClock() const { return clock_; }
   const base::TickClock* GetTickClock() const { return tick_clock_; }
-  RequestMetadata GetRequestMetadata();
+  RequestMetadata GetRequestMetadata(bool is_for_next_page) const;
 
   const WireResponseTranslator* GetWireResponseTranslator() const {
     return wire_response_translator_;
@@ -353,6 +368,12 @@ class FeedStream : public FeedStreamApi,
 
   // To allow tests to wait on task queue idle.
   base::RepeatingClosure idle_callback_;
+
+  // Stream update forced to use for new surfaces. This is provided in feed
+  // internals page for debugging purpose.
+  feedui::StreamUpdate forced_stream_update_for_debugging_;
+
+  NoticeCardTracker notice_card_tracker_;
 
   base::WeakPtrFactory<FeedStream> weak_ptr_factory_{this};
 };

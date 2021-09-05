@@ -156,9 +156,9 @@ void NotesSubMenuObserver::ExecuteCommand(int command_id) {
         proxy_->GetWebContents()->GetFocusedFrame();
 
     if (focused_frame) {
-      proxy_->GetWebContents()->GetRenderViewHost()->Send(
+      focused_frame->Send(
         new VivaldiMsg_InsertText(
-            proxy_->GetWebContents()->GetRenderViewHost()->GetRoutingID(),
+          focused_frame->GetRoutingID(),
             node->GetContent()));
     }
   }

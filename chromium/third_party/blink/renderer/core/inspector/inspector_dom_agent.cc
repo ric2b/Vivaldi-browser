@@ -180,6 +180,8 @@ protocol::DOM::PseudoType InspectorDOMAgent::ProtocolPseudoElementType(
       return protocol::DOM::PseudoTypeEnum::Backdrop;
     case kPseudoIdSelection:
       return protocol::DOM::PseudoTypeEnum::Selection;
+    case kPseudoIdTargetText:
+      return protocol::DOM::PseudoTypeEnum::TargetText;
     case kPseudoIdFirstLineInherited:
       return protocol::DOM::PseudoTypeEnum::FirstLineInherited;
     case kPseudoIdScrollbar:
@@ -870,7 +872,7 @@ Response InspectorDOMAgent::setAttributesAsText(int element_id,
       attribute_name = attribute_name.DeprecatedLower();
     found_original_attribute |=
         name.isJust() && attribute_name == case_adjusted_name;
-    Response response =
+    response =
         dom_editor_->SetAttribute(element, attribute_name, attribute.Value());
     if (!response.IsSuccess())
       return response;
@@ -1144,42 +1146,41 @@ Response InspectorDOMAgent::performSearch(
           break;
       }
     }
+  }
 
-    // XPath evaluation
-    for (Document* document : docs) {
-      DCHECK(document);
-      DummyExceptionStateForTesting exception_state;
-      XPathResult* result = DocumentXPathEvaluator::evaluate(
-          *document, whitespace_trimmed_query, document, nullptr,
-          XPathResult::kOrderedNodeSnapshotType, ScriptValue(),
-          exception_state);
-      if (exception_state.HadException() || !result)
-        continue;
+  // XPath evaluation
+  for (Document* document : docs) {
+    DCHECK(document);
+    DummyExceptionStateForTesting exception_state;
+    XPathResult* result = DocumentXPathEvaluator::evaluate(
+        *document, whitespace_trimmed_query, document, nullptr,
+        XPathResult::kOrderedNodeSnapshotType, ScriptValue(), exception_state);
+    if (exception_state.HadException() || !result)
+      continue;
 
-      wtf_size_t size = result->snapshotLength(exception_state);
-      for (wtf_size_t i = 0; !exception_state.HadException() && i < size; ++i) {
-        Node* node = result->snapshotItem(i, exception_state);
-        if (exception_state.HadException())
-          break;
+    wtf_size_t size = result->snapshotLength(exception_state);
+    for (wtf_size_t i = 0; !exception_state.HadException() && i < size; ++i) {
+      Node* node = result->snapshotItem(i, exception_state);
+      if (exception_state.HadException())
+        break;
 
-        if (node->getNodeType() == Node::kAttributeNode)
-          node = To<Attr>(node)->ownerElement();
-        result_collector.insert(node);
-      }
+      if (node->getNodeType() == Node::kAttributeNode)
+        node = To<Attr>(node)->ownerElement();
+      result_collector.insert(node);
     }
+  }
 
-    // Selector evaluation
-    for (Document* document : docs) {
-      DummyExceptionStateForTesting exception_state;
-      StaticElementList* element_list = document->QuerySelectorAll(
-          AtomicString(whitespace_trimmed_query), exception_state);
-      if (exception_state.HadException() || !element_list)
-        continue;
+  // Selector evaluation
+  for (Document* document : docs) {
+    DummyExceptionStateForTesting exception_state;
+    StaticElementList* element_list = document->QuerySelectorAll(
+        AtomicString(whitespace_trimmed_query), exception_state);
+    if (exception_state.HadException() || !element_list)
+      continue;
 
-      unsigned size = element_list->length();
-      for (unsigned i = 0; i < size; ++i)
-        result_collector.insert(element_list->item(i));
-    }
+    unsigned size = element_list->length();
+    for (unsigned i = 0; i < size; ++i)
+      result_collector.insert(element_list->item(i));
   }
 
   *search_id = IdentifiersFactory::CreateIdentifier();

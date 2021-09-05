@@ -9,10 +9,9 @@
 #include "base/notreached.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/reauth_result.h"
 #include "chrome/browser/signin/signin_features.h"
@@ -80,6 +79,14 @@ std::unique_ptr<net::test_server::BasicHttpResponse> CreateEmptyResponse(
   return http_response;
 }
 
+std::unique_ptr<net::test_server::BasicHttpResponse> CreateNonEmptyResponse(
+    net::HttpStatusCode code) {
+  auto http_response = std::make_unique<net::test_server::BasicHttpResponse>();
+  http_response->set_code(code);
+  http_response->set_content("<html>");
+  return http_response;
+}
+
 std::unique_ptr<net::test_server::HttpResponse> HandleReauthURL(
     const GURL& base_url,
     const net::test_server::HttpRequest& request) {
@@ -102,8 +109,10 @@ std::unique_ptr<net::test_server::HttpResponse> HandleReauthURL(
   }
 
   if (parameter == "unexpected") {
-    // Returns a response that isn't expected by Chrome.
-    return CreateEmptyResponse(net::HTTP_NOT_IMPLEMENTED);
+    // Returns a response that isn't expected by Chrome. Note that we shouldn't
+    // return an empty response here because that will result in an error page
+    // being committed for the navigation.
+    return CreateNonEmptyResponse(net::HTTP_NOT_IMPLEMENTED);
   }
 
   NOTREACHED();

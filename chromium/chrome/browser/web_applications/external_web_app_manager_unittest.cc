@@ -11,21 +11,23 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_path_override.h"
+#include "chrome/browser/extensions/extension_management_test_util.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/web_applications/components/external_app_install_features.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -57,6 +59,9 @@ constexpr char kAppUnmanagedUrl[] = "https://www.google.com/unmanaged";
 class ExternalWebAppManagerTest : public testing::Test {
  public:
   ExternalWebAppManagerTest() = default;
+  ExternalWebAppManagerTest(const ExternalWebAppManagerTest&) = delete;
+  ExternalWebAppManagerTest& operator=(const ExternalWebAppManagerTest&) =
+      delete;
   ~ExternalWebAppManagerTest() override = default;
 
   // testing::Test:
@@ -169,6 +174,8 @@ class ExternalWebAppManagerTest : public testing::Test {
 
   base::HistogramTester histograms_;
 
+  ScopedTestingPreinstalledAppData preinstalled_web_app_override_;
+
  private:
 #if defined(OS_CHROMEOS)
   chromeos::FakeChromeUserManager* user_manager() {
@@ -182,9 +189,56 @@ class ExternalWebAppManagerTest : public testing::Test {
 
   // To support context of browser threads.
   content::BrowserTaskEnvironment task_environment_;
-
-  DISALLOW_COPY_AND_ASSIGN(ExternalWebAppManagerTest);
 };
+
+TEST_F(ExternalWebAppManagerTest, ReplacementExtensionBlockedByPolicy) {
+  using PolicyUpdater = extensions::ExtensionManagementPrefUpdater<
+      sync_preferences::TestingPrefServiceSyncable>;
+  auto test_profile = std::make_unique<TestingProfile>();
+  sync_preferences::TestingPrefServiceSyncable* prefs =
+      test_profile->GetTestingPrefService();
+
+  GURL install_url("https://test.app");
+  constexpr char kExtensionId[] = "abcdefghijklmnopabcdefghijklmnop";
+  ExternalInstallOptions options(install_url, DisplayMode::kBrowser,
+                                 ExternalInstallSource::kExternalDefault);
+  options.user_type_allowlist = {"unmanaged"};
+  options.uninstall_and_replace = {kExtensionId};
+  options.only_use_app_info_factory = true;
+  options.app_info_factory = base::BindRepeating(
+      []() { return std::make_unique<WebApplicationInfo>(); });
+  preinstalled_web_app_override_.apps.push_back(std::move(options));
+
+  auto expect_present = [&]() {
+    std::vector<ExternalInstallOptions> options_list =
+        LoadApps(/*test_dir=*/"", test_profile.get());
+    ASSERT_EQ(options_list.size(), 1u);
+    EXPECT_EQ(options_list[0].install_url, install_url);
+  };
+
+  auto expect_not_present = [&]() {
+    std::vector<ExternalInstallOptions> options_list =
+        LoadApps(/*test_dir=*/"", test_profile.get());
+    ASSERT_EQ(options_list.size(), 0u);
+  };
+
+  expect_present();
+
+  PolicyUpdater(prefs).SetBlocklistedByDefault(false);
+  expect_present();
+
+  PolicyUpdater(prefs).SetBlocklistedByDefault(true);
+  expect_not_present();
+
+  PolicyUpdater(prefs).SetIndividualExtensionInstallationAllowed(kExtensionId,
+                                                                 true);
+  expect_present();
+
+  PolicyUpdater(prefs).SetBlocklistedByDefault(false);
+  PolicyUpdater(prefs).SetIndividualExtensionInstallationAllowed(kExtensionId,
+                                                                 false);
+  expect_not_present();
+}
 
 // Only Chrome OS parses config files.
 #if defined(OS_CHROMEOS)
@@ -200,6 +254,7 @@ TEST_F(ExternalWebAppManagerTest, GoodJson) {
     ExternalInstallOptions install_options(
         GURL("https://www.chromestatus.com/features"), DisplayMode::kBrowser,
         ExternalInstallSource::kExternalDefault);
+    install_options.user_type_allowlist = {"unmanaged"};
     install_options.add_to_applications_menu = true;
     install_options.add_to_search = true;
     install_options.add_to_management = true;
@@ -212,6 +267,7 @@ TEST_F(ExternalWebAppManagerTest, GoodJson) {
     ExternalInstallOptions install_options(
         GURL("https://events.google.com/io2016/?utm_source=web_app_manifest"),
         DisplayMode::kStandalone, ExternalInstallSource::kExternalDefault);
+    install_options.user_type_allowlist = {"unmanaged"};
     install_options.add_to_applications_menu = true;
     install_options.add_to_search = true;
     install_options.add_to_management = true;

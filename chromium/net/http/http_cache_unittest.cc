@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
@@ -2458,7 +2458,7 @@ TEST_F(HttpCacheTest, RangeGET_ParallelValidationDifferentRanges) {
     std::string data_read(buffer->data(), kBufferSize);
     first_read = data_read;
 
-    EXPECT_EQ(LOAD_STATE_READING_RESPONSE, c->trans->GetLoadState());
+    EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
   }
 
   // 2nd transaction requests ranges 30-39.
@@ -2611,7 +2611,7 @@ TEST_F(HttpCacheTest, RangeGET_ParallelValidationCacheLockTimeout) {
     std::string data_read(buffer->data(), kBufferSize);
     first_read = data_read;
 
-    EXPECT_EQ(LOAD_STATE_READING_RESPONSE, c->trans->GetLoadState());
+    EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
   }
 
   // Cache lock timeout will lead to dooming the entry since the transaction may
@@ -2706,7 +2706,7 @@ TEST_F(HttpCacheTest, RangeGET_ParallelValidationCouldntConditionalize) {
     std::string data_read(buffer->data(), kBufferSize);
     first_read = data_read;
 
-    EXPECT_EQ(LOAD_STATE_READING_RESPONSE, c->trans->GetLoadState());
+    EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
   }
 
   // 2nd transaction requests a range.
@@ -2794,7 +2794,7 @@ TEST_F(HttpCacheTest, RangeGET_ParallelValidationCouldConditionalize) {
     std::string data_read(buffer->data(), kBufferSize);
     first_read = data_read;
 
-    EXPECT_EQ(LOAD_STATE_READING_RESPONSE, c->trans->GetLoadState());
+    EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
   }
 
   // 2nd transaction requests a range.
@@ -2870,7 +2870,7 @@ TEST_F(HttpCacheTest, RangeGET_ParallelValidationOverlappingRanges) {
     std::string data_read(buffer->data(), kBufferSize);
     first_read = data_read;
 
-    EXPECT_EQ(LOAD_STATE_READING_RESPONSE, c->trans->GetLoadState());
+    EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
   }
 
   // 2nd transaction requests ranges 30-49.
@@ -2973,7 +2973,7 @@ TEST_F(HttpCacheTest, RangeGET_ParallelValidationRestartDoneHeaders) {
     std::string data_read(buffer->data(), kBufferSize);
     first_read = data_read;
 
-    EXPECT_EQ(LOAD_STATE_READING_RESPONSE, c->trans->GetLoadState());
+    EXPECT_EQ(LOAD_STATE_IDLE, c->trans->GetLoadState());
   }
 
   // 2nd transaction requests ranges 30-59.
@@ -10567,6 +10567,7 @@ TEST_F(HttpCacheTest, HttpCacheProfileThirdPartyCSS) {
   // Requesting with the same top-frame origin should not count as third-party
   // but should still be recorded as CSS
   trans_info.network_isolation_key = NetworkIsolationKey(origin_a, origin_a);
+  trans_info.possibly_top_frame_origin = origin_a;
 
   RunTransactionTestWithRequest(cache.http_cache(), transaction, trans_info,
                                 &response);
@@ -10578,6 +10579,7 @@ TEST_F(HttpCacheTest, HttpCacheProfileThirdPartyCSS) {
   // Requesting with a different top-frame origin should count as third-party
   // and recorded as CSS
   trans_info.network_isolation_key = NetworkIsolationKey(origin_b, origin_b);
+  trans_info.possibly_top_frame_origin = origin_b;
 
   RunTransactionTestWithRequest(cache.http_cache(), transaction, trans_info,
                                 &response);
@@ -10602,6 +10604,7 @@ TEST_F(HttpCacheTest, HttpCacheProfileThirdPartyJavaScript) {
   // Requesting with the same top-frame origin should not count as third-party
   // but should still be recorded as JavaScript
   trans_info.network_isolation_key = NetworkIsolationKey(origin_a, origin_a);
+  trans_info.possibly_top_frame_origin = origin_a;
 
   RunTransactionTestWithRequest(cache.http_cache(), transaction, trans_info,
                                 &response);
@@ -10613,6 +10616,7 @@ TEST_F(HttpCacheTest, HttpCacheProfileThirdPartyJavaScript) {
   // Requesting with a different top-frame origin should count as third-party
   // and recorded as JavaScript
   trans_info.network_isolation_key = NetworkIsolationKey(origin_b, origin_b);
+  trans_info.possibly_top_frame_origin = origin_b;
 
   RunTransactionTestWithRequest(cache.http_cache(), transaction, trans_info,
                                 &response);
@@ -10637,6 +10641,7 @@ TEST_F(HttpCacheTest, HttpCacheProfileThirdPartyFont) {
   // Requesting with the same top-frame origin should not count as third-party
   // but should still be recorded as a font
   trans_info.network_isolation_key = NetworkIsolationKey(origin_a, origin_a);
+  trans_info.possibly_top_frame_origin = origin_a;
 
   RunTransactionTestWithRequest(cache.http_cache(), transaction, trans_info,
                                 &response);
@@ -10648,6 +10653,7 @@ TEST_F(HttpCacheTest, HttpCacheProfileThirdPartyFont) {
   // Requesting with a different top-frame origin should count as third-party
   // and recorded as a font
   trans_info.network_isolation_key = NetworkIsolationKey(origin_b, origin_b);
+  trans_info.possibly_top_frame_origin = origin_b;
 
   RunTransactionTestWithRequest(cache.http_cache(), transaction, trans_info,
                                 &response);
@@ -10703,6 +10709,19 @@ TEST_F(HttpCacheTest, SplitCache) {
                                 trans_info, &response);
   EXPECT_TRUE(response.was_cached);
 
+  // If the same resource with the same NIK is for a subframe document resource,
+  // it should not be a cache hit.
+  MockHttpRequest subframe_document_trans_info = trans_info;
+  subframe_document_trans_info.is_subframe_document_resource = true;
+  RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
+                                subframe_document_trans_info, &response);
+  EXPECT_FALSE(response.was_cached);
+
+  // Same request again should be a cache hit.
+  RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
+                                subframe_document_trans_info, &response);
+  EXPECT_TRUE(response.was_cached);
+
   // Now request with b.com as the top frame origin. It shouldn't be cached.
   trans_info.network_isolation_key = NetworkIsolationKey(origin_b, origin_b);
   RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
@@ -10750,6 +10769,47 @@ TEST_F(HttpCacheTest, SplitCache) {
   RunTransactionTestWithRequest(cache.http_cache(), kSimplePOST_Transaction,
                                 post_info, &response);
   EXPECT_FALSE(response.was_cached);
+}
+
+TEST_F(HttpCacheTest, SplitCacheEnabledByDefault) {
+  HttpCache::ClearGlobalsForTesting();
+  HttpCache::SplitCacheFeatureEnableByDefault();
+  EXPECT_TRUE(HttpCache::IsSplitCacheEnabled());
+
+  MockHttpCache cache;
+  HttpResponseInfo response;
+
+  url::Origin origin_a = url::Origin::Create(GURL("http://a.com"));
+  url::Origin origin_b = url::Origin::Create(GURL("http://b.com"));
+  MockHttpRequest trans_info = MockHttpRequest(kSimpleGET_Transaction);
+  net::NetworkIsolationKey key_a(origin_a, origin_a);
+  trans_info.network_isolation_key = key_a;
+  RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
+                                trans_info, &response);
+  EXPECT_FALSE(response.was_cached);
+
+  // Subsequent requests with the same NIK and different NIK will be a cache hit
+  // and miss respectively.
+  RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
+                                trans_info, &response);
+  EXPECT_TRUE(response.was_cached);
+
+  net::NetworkIsolationKey key_b(origin_b, origin_b);
+  trans_info.network_isolation_key = key_b;
+  RunTransactionTestWithRequest(cache.http_cache(), kSimpleGET_Transaction,
+                                trans_info, &response);
+  EXPECT_FALSE(response.was_cached);
+}
+
+TEST_F(HttpCacheTest, SplitCacheEnabledByDefaultButOverridden) {
+  HttpCache::ClearGlobalsForTesting();
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      net::features::kSplitCacheByNetworkIsolationKey);
+
+  // Enabling it here should have no effect as it is already overridden.
+  HttpCache::SplitCacheFeatureEnableByDefault();
+  EXPECT_FALSE(HttpCache::IsSplitCacheEnabled());
 }
 
 TEST_F(HttpCacheTest, SplitCacheUsesRegistrableDomain) {

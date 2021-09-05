@@ -62,11 +62,11 @@ void SystemTrayModel::SetUse24HourClock(bool use_24_hour) {
   clock()->SetUse24HourClock(use_24_hour);
 }
 
-void SystemTrayModel::SetEnterpriseDisplayDomain(
-    const std::string& enterprise_display_domain,
+void SystemTrayModel::SetEnterpriseDomainInfo(
+    const std::string& enterprise_domain_manager,
     bool active_directory_managed) {
-  enterprise_domain()->SetEnterpriseDisplayDomain(enterprise_display_domain,
-                                                  active_directory_managed);
+  enterprise_domain()->SetEnterpriseDomainInfo(enterprise_domain_manager,
+                                               active_directory_managed);
 }
 
 void SystemTrayModel::SetPerformanceTracingIconVisible(bool visible) {
@@ -121,15 +121,17 @@ void SystemTrayModel::ShowNetworkDetailedViewBubble(bool show_by_click) {
 
 void SystemTrayModel::SetPhoneHubManager(
     chromeos::phonehub::PhoneHubManager* phone_hub_manager) {
-  auto* phone_hub_tray = Shell::GetPrimaryRootWindowController()
-                             ->GetStatusAreaWidget()
-                             ->phone_hub_tray();
-  phone_hub_tray->SetPhoneHubManager(phone_hub_manager);
+  for (RootWindowController* root_window_controller :
+       Shell::GetAllRootWindowControllers()) {
+    auto* phone_hub_tray =
+        root_window_controller->GetStatusAreaWidget()->phone_hub_tray();
+    phone_hub_tray->SetPhoneHubManager(phone_hub_manager);
+  }
 
   Shell::Get()
       ->message_center_controller()
       ->phone_hub_notification_controller()
-      ->SetManager(phone_hub_manager->GetNotificationManager());
+      ->SetManager(phone_hub_manager);
 }
 
 }  // namespace ash

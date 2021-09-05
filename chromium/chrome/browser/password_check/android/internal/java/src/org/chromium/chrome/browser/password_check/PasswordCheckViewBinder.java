@@ -257,14 +257,18 @@ class PasswordCheckViewBinder {
     private static void updateActionButton(
             View view, @PasswordCheckUIStatus int status, Runnable startCheck) {
         ImageButton restartButton = view.findViewById(R.id.check_status_restart_button);
-        if (status != PasswordCheckUIStatus.RUNNING) {
-            restartButton.setVisibility(View.VISIBLE);
-            restartButton.setClickable(true);
-            restartButton.setOnClickListener(unusedView -> startCheck.run());
-        } else {
-            restartButton.setVisibility(View.GONE);
-            restartButton.setClickable(false);
-        }
+        LinearLayout textWrapper = view.findViewById(R.id.check_status_text_layout);
+        boolean shouldBeVisible = shouldShowActionButton(status);
+
+        LinearLayout.LayoutParams layoutParams =
+                (LinearLayout.LayoutParams) textWrapper.getLayoutParams();
+        layoutParams.setMarginEnd(shouldBeVisible ? 0
+                                                  : view.getResources().getDimensionPixelSize(
+                                                          R.dimen.check_status_text_margin));
+
+        restartButton.setVisibility(shouldBeVisible ? View.VISIBLE : View.GONE);
+        restartButton.setOnClickListener(shouldBeVisible ? unusedView -> startCheck.run() : null);
+        restartButton.setClickable(shouldBeVisible);
     }
 
     private static void updateStatusIcon(
@@ -278,6 +282,23 @@ class PasswordCheckViewBinder {
                 .setVisibility(getProgressBarVisibility(status));
     }
 
+    private static boolean shouldShowActionButton(@PasswordCheckUIStatus int status) {
+        switch (status) {
+            case PasswordCheckUIStatus.IDLE:
+            case PasswordCheckUIStatus.ERROR_OFFLINE:
+            case PasswordCheckUIStatus.ERROR_UNKNOWN:
+                return true;
+            case PasswordCheckUIStatus.RUNNING:
+            case PasswordCheckUIStatus.ERROR_NO_PASSWORDS:
+            case PasswordCheckUIStatus.ERROR_SIGNED_OUT:
+            case PasswordCheckUIStatus.ERROR_QUOTA_LIMIT:
+            case PasswordCheckUIStatus.ERROR_QUOTA_LIMIT_ACCOUNT_CHECK:
+                return false;
+        }
+        assert false : "Unhandled check status " + status + "on action button update";
+        return false;
+    }
+
     private static int getIconResource(
             @PasswordCheckUIStatus int status, Integer compromisedCredentialsCount) {
         switch (status) {
@@ -285,7 +306,7 @@ class PasswordCheckViewBinder {
                 assert compromisedCredentialsCount != null;
                 return compromisedCredentialsCount == 0
                         ? R.drawable.ic_check_circle_filled_green_24dp
-                        : org.chromium.chrome.R.drawable.ic_warning_red_24dp;
+                        : R.drawable.ic_warning_red_24dp;
             case PasswordCheckUIStatus.RUNNING:
                 return 0;
             case PasswordCheckUIStatus.ERROR_OFFLINE:
@@ -294,7 +315,7 @@ class PasswordCheckViewBinder {
             case PasswordCheckUIStatus.ERROR_QUOTA_LIMIT:
             case PasswordCheckUIStatus.ERROR_QUOTA_LIMIT_ACCOUNT_CHECK:
             case PasswordCheckUIStatus.ERROR_UNKNOWN:
-                return org.chromium.chrome.R.drawable.ic_error_grey800_24dp_filled;
+                return R.drawable.ic_error_grey800_24dp_filled;
             default:
                 assert false : "Unhandled check status " + status + "on icon update";
         }
@@ -412,14 +433,12 @@ class PasswordCheckViewBinder {
 
         String relativeTime;
         if (daysElapsed > 0L) {
-            relativeTime = res.getQuantityString(
-                    org.chromium.chrome.R.plurals.n_days_ago, daysElapsed, daysElapsed);
+            relativeTime = res.getQuantityString(R.plurals.n_days_ago, daysElapsed, daysElapsed);
         } else if (hoursElapsed > 0L) {
-            relativeTime = res.getQuantityString(
-                    org.chromium.chrome.R.plurals.n_hours_ago, hoursElapsed, hoursElapsed);
+            relativeTime = res.getQuantityString(R.plurals.n_hours_ago, hoursElapsed, hoursElapsed);
         } else if (minutesElapsed > 0L) {
-            relativeTime = res.getQuantityString(
-                    org.chromium.chrome.R.plurals.n_minutes_ago, minutesElapsed, minutesElapsed);
+            relativeTime =
+                    res.getQuantityString(R.plurals.n_minutes_ago, minutesElapsed, minutesElapsed);
         } else {
             relativeTime = res.getString(R.string.password_check_just_now);
         }

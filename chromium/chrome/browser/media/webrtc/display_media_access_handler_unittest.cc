@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/fake_desktop_media_picker_factory.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -26,6 +27,10 @@
 
 #if defined(OS_MAC)
 #include "base/mac/mac_util.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/policy/dlp/mock_dlp_content_manager.h"
 #endif
 
 class DisplayMediaAccessHandlerTest : public ChromeRenderViewHostTestHarness {
@@ -159,6 +164,30 @@ TEST_F(DisplayMediaAccessHandlerTest, PermissionDenied) {
   EXPECT_EQ(blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED, result);
   EXPECT_EQ(0u, devices.size());
 }
+
+#if defined(OS_CHROMEOS)
+TEST_F(DisplayMediaAccessHandlerTest, DlpRestricted) {
+  const content::DesktopMediaID media_id(content::DesktopMediaID::TYPE_SCREEN,
+                                         content::DesktopMediaID::kFakeId);
+
+  // Setup Data Leak Prevention restriction.
+  policy::MockDlpContentManager mock_dlp_content_manager;
+  policy::DlpContentManager::SetDlpContentManagerForTesting(
+      &mock_dlp_content_manager);
+  EXPECT_CALL(mock_dlp_content_manager, IsScreenCaptureRestricted(media_id))
+      .Times(1)
+      .WillOnce(testing::Return(true));
+
+  blink::mojom::MediaStreamRequestResult result;
+  blink::MediaStreamDevices devices;
+  ProcessRequest(media_id, &result, &devices, /*request_audio=*/false);
+
+  EXPECT_EQ(blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED, result);
+  EXPECT_EQ(0u, devices.size());
+
+  policy::DlpContentManager::ResetDlpContentManagerForTesting();
+}
+#endif
 
 TEST_F(DisplayMediaAccessHandlerTest, UpdateMediaRequestStateWithClosing) {
   const int render_process_id = 0;

@@ -28,6 +28,9 @@ class PrimaryAccountAccessTokenFetcher;
 
 namespace chromeos {
 
+// Records start of polling event in UMA histogram.
+void RecordStartOfSyncTokenPollingUMA(bool in_session);
+
 // A simple fetcher object that interacts with the sync token API in order to
 // create a new token, get one or verify validity of its local copy.
 // The instance is not reusable, so for each StartToken(), the instance must be
@@ -83,7 +86,7 @@ class PasswordSyncTokenFetcher final {
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   Profile* const profile_;
-  // |consumer_| to call back when this request completes.
+  // `consumer_` to call back when this request completes.
   Consumer* const consumer_;
 
   std::unique_ptr<network::SimpleURLLoader> simple_url_loader_;

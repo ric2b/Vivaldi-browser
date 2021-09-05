@@ -14,6 +14,16 @@
 namespace content {
 class WebContents;
 }
+
+namespace password_manager {
+struct PasswordForm;
+}  // namespace password_manager
+
+namespace views {
+class Label;
+}
+
+class FeaturePromoControllerViews;
 class PasswordBubbleControllerBase;
 
 // Base class for all manage-passwords bubbles. Provides static methods for
@@ -41,7 +51,8 @@ class PasswordBubbleViewBase : public LocationBarBubbleDelegateView {
   static PasswordBubbleViewBase* CreateBubble(
       content::WebContents* web_contents,
       views::View* anchor_view,
-      DisplayReason reason);
+      DisplayReason reason,
+      FeaturePromoControllerViews* promo_controller);
 
   // Closes the existing bubble.
   static void CloseCurrentBubble();
@@ -66,8 +77,10 @@ class PasswordBubbleViewBase : public LocationBarBubbleDelegateView {
 
   ~PasswordBubbleViewBase() override;
 
-  // views::BubbleDialogDelegateView:
-  ax::mojom::Role GetAccessibleWindowRole() override;
+  static std::unique_ptr<views::Label> CreateUsernameLabel(
+      const password_manager::PasswordForm& form);
+  static std::unique_ptr<views::Label> CreatePasswordLabel(
+      const password_manager::PasswordForm& form);
 
  private:
   // views::BubbleDialogDelegateView:

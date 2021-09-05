@@ -83,9 +83,9 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   void CallClientMethod(
       const std::string& object_name,
       const std::string& method_name,
-      const base::Value& arg1 = {},
-      const base::Value& arg2 = {},
-      const base::Value& arg3 = {},
+      base::Value arg1 = {},
+      base::Value arg2 = {},
+      base::Value arg3 = {},
       base::OnceCallback<void(base::Value)> completion_callback =
           base::OnceCallback<void(base::Value)>());
   void AttachTo(const scoped_refptr<content::DevToolsAgentHost>& agent_host);
@@ -171,7 +171,10 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   void SetOpenNewWindowForPopups(bool value) override;
   void RegisterExtensionsAPI(const std::string& origin,
                              const std::string& script) override;
-  void GetSurveyAPIKey(const DispatchCallback& callback) override;
+  void ShowSurvey(const DispatchCallback& callback,
+                  const std::string& trigger) override;
+  void CanShowSurvey(const DispatchCallback& callback,
+                     const std::string& trigger) override;
 
   void EnableRemoteDeviceCounter(bool enable);
 
@@ -195,7 +198,7 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
                     int result,
                     const std::string& message);
   void DevicesDiscoveryConfigUpdated();
-  void SendPortForwardingStatus(const base::Value& status);
+  void SendPortForwardingStatus(base::Value status);
 
   // DevToolsFileHelper::Delegate overrides.
   void FileSystemAdded(

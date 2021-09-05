@@ -22,6 +22,7 @@
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "content/common/buildflags.h"
+#include "content/common/common_param_traits_macros.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/frame_delete_intention.h"
@@ -29,10 +30,8 @@
 #include "content/common/navigation_gesture.h"
 #include "content/common/navigation_params.h"
 #include "content/public/common/common_param_traits.h"
-#include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/impression.h"
 #include "content/public/common/navigation_policy.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/stop_find_action.h"
 #include "content/public/common/three_d_api_types.h"
@@ -43,20 +42,19 @@
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
-#include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-shared.h"
 #include "third_party/blink/public/mojom/feature_policy/policy_disposition.mojom.h"
-#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
@@ -64,15 +62,15 @@
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
-#include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/public/web/web_frame_owner_properties.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/ipc/color/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
-#include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -116,13 +114,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::PolicyDisposition,
                           blink::mojom::PolicyDisposition::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::FrameVisibility,
                           blink::mojom::FrameVisibility::kMaxValue)
-IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::FrameOcclusionState,
-                              blink::FrameOcclusionState::kUnknown,
-                              blink::FrameOcclusionState::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::WebFeature,
                           blink::mojom::WebFeature::kMaxValue)
-IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::RequestDestination,
-                          network::mojom::RequestDestination::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::InsecureRequestPolicy,
                           blink::mojom::InsecureRequestPolicy::kMaxValue)
 
@@ -181,17 +174,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::CustomContextMenuContext)
   IPC_STRUCT_TRAITS_MEMBER(link_followed)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(blink::mojom::FrameOwnerProperties)
-  IPC_STRUCT_TRAITS_MEMBER(name)
-  IPC_STRUCT_TRAITS_MEMBER(scrollbar_mode)
-  IPC_STRUCT_TRAITS_MEMBER(margin_width)
-  IPC_STRUCT_TRAITS_MEMBER(margin_height)
-  IPC_STRUCT_TRAITS_MEMBER(allow_fullscreen)
-  IPC_STRUCT_TRAITS_MEMBER(allow_payment_request)
-  IPC_STRUCT_TRAITS_MEMBER(is_display_none)
-  IPC_STRUCT_TRAITS_MEMBER(required_csp)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(blink::FrameVisualProperties)
   IPC_STRUCT_TRAITS_MEMBER(screen_info)
   IPC_STRUCT_TRAITS_MEMBER(auto_resize_enabled)
@@ -217,29 +199,6 @@ IPC_STRUCT_TRAITS_BEGIN(blink::FramePolicy)
   IPC_STRUCT_TRAITS_MEMBER(disallow_document_access)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(blink::ViewportIntersectionState)
-  IPC_STRUCT_TRAITS_MEMBER(viewport_intersection)
-  IPC_STRUCT_TRAITS_MEMBER(main_frame_intersection)
-  IPC_STRUCT_TRAITS_MEMBER(compositor_visible_rect)
-  IPC_STRUCT_TRAITS_MEMBER(occlusion_state)
-  IPC_STRUCT_TRAITS_MEMBER(main_frame_viewport_size)
-  IPC_STRUCT_TRAITS_MEMBER(main_frame_scroll_offset)
-  IPC_STRUCT_TRAITS_MEMBER(main_frame_transform)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::FrameNavigateParams)
-  IPC_STRUCT_TRAITS_MEMBER(nav_entry_id)
-  IPC_STRUCT_TRAITS_MEMBER(item_sequence_number)
-  IPC_STRUCT_TRAITS_MEMBER(document_sequence_number)
-  IPC_STRUCT_TRAITS_MEMBER(url)
-  IPC_STRUCT_TRAITS_MEMBER(base_url)
-  IPC_STRUCT_TRAITS_MEMBER(referrer)
-  IPC_STRUCT_TRAITS_MEMBER(transition)
-  IPC_STRUCT_TRAITS_MEMBER(redirects)
-  IPC_STRUCT_TRAITS_MEMBER(should_update_history)
-  IPC_STRUCT_TRAITS_MEMBER(contents_mime_type)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(blink::ScreenInfo)
   IPC_STRUCT_TRAITS_MEMBER(device_scale_factor)
   IPC_STRUCT_TRAITS_MEMBER(display_color_spaces)
@@ -254,10 +213,55 @@ IPC_STRUCT_TRAITS_BEGIN(blink::ScreenInfo)
 IPC_STRUCT_TRAITS_END()
 
 // Parameters structure for mojom::FrameHost::DidCommitProvisionalLoad.
-// TODO(https://crbug.com/729021): Convert this to a Mojo struct.
-IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
-                             content::FrameNavigateParams)
-  IPC_STRUCT_TRAITS_PARENT(content::FrameNavigateParams)
+// TODO(https://crbug.com/729021, https://crbug.com/1145888):
+// Convert this to a Mojo struct.
+IPC_STRUCT_BEGIN(FrameHostMsg_DidCommitProvisionalLoad_Params)
+  // The unique ID of the NavigationEntry for browser-initiated navigations.
+  // This value was given to the render process in the HistoryNavigationParams
+  // and is being returned by the renderer without it having any idea what it
+  // means. If the navigation was renderer-initiated, this value is 0.
+  IPC_STRUCT_MEMBER(int, nav_entry_id, 0)
+
+  // The item sequence number identifies each stop in the session history.  It
+  // is unique within the renderer process and makes a best effort to be unique
+  // across browser sessions (using a renderer process timestamp).
+  IPC_STRUCT_MEMBER(int64_t, item_sequence_number, -1)
+
+  // The document sequence number is used to identify cross-document navigations
+  // in session history.  It increments for each new document and is unique in
+  // the same way as |item_sequence_number|.  In-page navigations get a new item
+  // sequence number but the same document sequence number.
+  IPC_STRUCT_MEMBER(int64_t, document_sequence_number, -1)
+
+  // URL of the page being loaded.
+  IPC_STRUCT_MEMBER(GURL, url)
+
+  // The base URL for the page's document when the frame was committed. Empty if
+  // similar to 'url' above. Note that any base element in the page has not been
+  // parsed yet and is therefore not reflected.
+  // This is of interest when a MHTML file is loaded, as the base URL has been
+  // set to original URL of the site the MHTML represents.
+  IPC_STRUCT_MEMBER(GURL, base_url)
+
+  // URL of the referrer of this load. WebKit generates this based on the
+  // source of the event that caused the load.
+  IPC_STRUCT_MEMBER(content::Referrer, referrer)
+
+  // The type of transition.
+  IPC_STRUCT_MEMBER(ui::PageTransition, transition, ui::PAGE_TRANSITION_LINK)
+
+  // Lists the redirects that occurred on the way to the current page. This
+  // vector has the same format as reported by the WebDataSource in the glue,
+  // with the current page being the last one in the list (so even when
+  // there's no redirect, there will be one entry in the list.
+  IPC_STRUCT_MEMBER(std::vector<GURL>, redirects)
+
+  // Set to false if we want to update the session history but not update
+  // the browser history.  E.g., on unreachable urls.
+  IPC_STRUCT_MEMBER(bool, should_update_history, false)
+
+  // Contents MIME type of main frame.
+  IPC_STRUCT_MEMBER(std::string, contents_mime_type)
 
   // This is the value from the browser (copied from the navigation request)
   // indicating whether it intended to make a new entry. TODO(avi): Remove this
@@ -288,7 +292,7 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
   IPC_STRUCT_MEMBER(bool, url_is_unreachable)
 
   // Serialized history item state to store in the navigation entry.
-  IPC_STRUCT_MEMBER(content::PageState, page_state)
+  IPC_STRUCT_MEMBER(blink::PageState, page_state)
 
   // Original request's URL.
   IPC_STRUCT_MEMBER(GURL, original_request_url)
@@ -329,12 +333,6 @@ IPC_STRUCT_BEGIN_WITH_PARENT(FrameHostMsg_DidCommitProvisionalLoad_Params,
   IPC_STRUCT_MEMBER(base::Optional<base::UnguessableToken>, embedding_token)
 IPC_STRUCT_END()
 
-IPC_STRUCT_TRAITS_BEGIN(network::mojom::SourceLocation)
-  IPC_STRUCT_TRAITS_MEMBER(url)
-  IPC_STRUCT_TRAITS_MEMBER(line)
-  IPC_STRUCT_TRAITS_MEMBER(column)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(blink::ParsedFeaturePolicyDeclaration)
   IPC_STRUCT_TRAITS_MEMBER(feature)
   IPC_STRUCT_TRAITS_MEMBER(allowed_origins)
@@ -361,42 +359,11 @@ IPC_STRUCT_TRAITS_BEGIN(content::FrameReplicationState)
   IPC_STRUCT_TRAITS_MEMBER(ad_frame_type)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_BEGIN(FrameHostMsg_CreateChildFrame_Params)
-  IPC_STRUCT_MEMBER(int32_t, parent_routing_id)
-  IPC_STRUCT_MEMBER(blink::mojom::TreeScopeType, scope)
-  IPC_STRUCT_MEMBER(std::string, frame_name)
-  IPC_STRUCT_MEMBER(std::string, frame_unique_name)
-  IPC_STRUCT_MEMBER(bool, is_created_by_script)
-  IPC_STRUCT_MEMBER(blink::FramePolicy, frame_policy)
-  IPC_STRUCT_MEMBER(blink::mojom::FrameOwnerProperties, frame_owner_properties)
-  IPC_STRUCT_MEMBER(blink::mojom::FrameOwnerElementType,
-                    frame_owner_element_type)
-IPC_STRUCT_END()
-
-IPC_STRUCT_BEGIN(FrameHostMsg_CreateChildFrame_Params_Reply)
-  IPC_STRUCT_MEMBER(int32_t, child_routing_id)
-  IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, new_interface_provider)
-  IPC_STRUCT_MEMBER(mojo::MessagePipeHandle, browser_interface_broker_handle)
-  IPC_STRUCT_MEMBER(base::UnguessableToken, frame_token)
-  IPC_STRUCT_MEMBER(base::UnguessableToken, devtools_frame_token)
-IPC_STRUCT_END()
-
 IPC_STRUCT_TRAITS_BEGIN(network::mojom::ContentSecurityPolicyHeader)
   IPC_STRUCT_TRAITS_MEMBER(header_value)
   IPC_STRUCT_TRAITS_MEMBER(type)
   IPC_STRUCT_TRAITS_MEMBER(source)
 IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_BEGIN(FrameMsg_MixedContentFound_Params)
-  IPC_STRUCT_MEMBER(GURL, main_resource_url)
-  IPC_STRUCT_MEMBER(GURL, mixed_content_url)
-  IPC_STRUCT_MEMBER(blink::mojom::RequestContextType, request_context_type)
-  IPC_STRUCT_MEMBER(network::mojom::RequestDestination, request_destination)
-  IPC_STRUCT_MEMBER(bool, was_allowed)
-  IPC_STRUCT_MEMBER(GURL, url_before_redirects)
-  IPC_STRUCT_MEMBER(bool, had_redirect)
-  IPC_STRUCT_MEMBER(network::mojom::SourceLocation, source_location)
-IPC_STRUCT_END()
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 IPC_STRUCT_TRAITS_BEGIN(content::PepperRendererInstanceData)
@@ -422,10 +389,6 @@ IPC_MESSAGE_ROUTED2(FrameMsg_CustomContextMenuAction,
                     unsigned /* action */)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-// Notifies the renderer of updates to the Plugin Power Saver origin allowlist.
-IPC_MESSAGE_ROUTED1(FrameMsg_UpdatePluginContentOriginAllowlist,
-                    std::set<url::Origin> /* origin_allowlist */)
-
 // This message notifies that the frame that the volume of the Pepper instance
 // for |pp_instance| should be changed to |volume|.
 IPC_MESSAGE_ROUTED2(FrameMsg_SetPepperVolume,
@@ -433,26 +396,8 @@ IPC_MESSAGE_ROUTED2(FrameMsg_SetPepperVolume,
                     double /* volume */)
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
-// Informs the renderer that mixed content was found by the browser. The
-// included data is used for instance to report to the CSP policy and to log to
-// the frame console.
-IPC_MESSAGE_ROUTED1(FrameMsg_MixedContentFound,
-                    FrameMsg_MixedContentFound_Params)
-
 // -----------------------------------------------------------------------------
 // Messages sent from the renderer to the browser.
-
-// Sent by the renderer when a child frame is created in the renderer.
-//
-// Each of these messages will have a corresponding mojom::FrameHost::Detach API
-// sent when the frame is detached from the DOM.
-// Note that |params_reply| is an out parameter. Browser process defines it for
-// the renderer process.
-// |params_reply.child_routing_id| may not be assigned MSG_ROUTING_NONE.
-IPC_SYNC_MESSAGE_CONTROL1_1(FrameHostMsg_CreateChildFrame,
-                            FrameHostMsg_CreateChildFrame_Params,
-                            // params_reply
-                            FrameHostMsg_CreateChildFrame_Params_Reply)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Notification sent from a renderer to the browser that a Pepper plugin
@@ -505,13 +450,6 @@ IPC_SYNC_MESSAGE_CONTROL4_3(FrameHostMsg_GetPluginInfo,
                             bool /* found */,
                             content::WebPluginInfo /* plugin info */,
                             std::string /* actual_mime_type */)
-
-// A renderer sends this to the browser process when it wants to temporarily
-// whitelist an origin's plugin content as essential. This temporary whitelist
-// is specific to a top level frame, and is cleared when the whitelisting
-// RenderFrame is destroyed.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_PluginContentOriginAllowed,
-                    url::Origin /* content_origin */)
 
 // A renderer sends this to the browser process when it wants to create a ppapi
 // plugin.  The browser will create the plugin process if necessary, and will
@@ -577,21 +515,6 @@ IPC_MESSAGE_CONTROL3(FrameHostMsg_DidDeleteOutOfProcessPepperInstance,
                      int32_t /* pp_instance */,
                      bool /* is_external */)
 
-// A renderer sends this to the browser process when it wants to
-// create a ppapi broker.  The browser will create the broker process
-// if necessary, and will return a handle to the channel on success.
-// On error an empty string is returned.
-// The browser will respond with ViewMsg_PpapiBrokerChannelCreated.
-IPC_MESSAGE_CONTROL2(FrameHostMsg_OpenChannelToPpapiBroker,
-                     int /* routing_id */,
-                     base::FilePath /* path */)
-
-// A renderer sends this to the browser process when it throttles or unthrottles
-// a plugin instance for the Plugin Power Saver feature.
-IPC_MESSAGE_CONTROL3(FrameHostMsg_PluginInstanceThrottleStateChange,
-                     int /* plugin_child_id */,
-                     int32_t /* pp_instance */,
-                     bool /* is_throttled */)
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 // Indicates that the current frame has finished running its unload handler (if
@@ -602,12 +525,6 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_Unload_ACK)
 // Tells the browser that a child's visual properties have changed.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_SynchronizeVisualProperties,
                     blink::FrameVisualProperties)
-
-// Sent by a parent frame to notify its child about the state of the child's
-// intersection with the parent's viewport, primarily for use by the
-// IntersectionObserver API.
-IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateViewportIntersection,
-                    blink::ViewportIntersectionState /* intersection_state */)
 
 // Used to tell the parent that the user right clicked on an area of the
 // content area, and a context menu should be shown for it. The params

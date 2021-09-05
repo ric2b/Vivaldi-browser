@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Kan <ph name="CONTENT_TYPE" /> niet delen</translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> is verwisseld met <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Je hebt hier eerder naar gezocht. Als je '<ph name="QUERY" />' uit je geschiedenis verwijdert, wordt deze zoekopdracht definitief op al je apparaten uit je account verwijderd.</translation>
+<translation id="1510238584712386396">Launcher</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minuut en }other{# minuten en }}</translation>
 <translation id="1643823602425662293">Melding</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" />-bestand</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">'<ph name="LOOKUP_STRING" />' opzoeken</translation>
+<translation id="3622035490309591977">Klembordgeschiedenis</translation>
 <translation id="364720409959344976">Map voor uploaden selecteren</translation>
 <translation id="3660179305079774227">Pijl-omhoog</translation>
 <translation id="3670030362669914947">Nummer</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Vandaag actief}=1{1 dag geleden actief}other{# dagen geleden actief}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 dag en }other{# dagen en }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Afbeelding.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{over 1 j}other{over # j}}</translation>
 <translation id="588258955323874662">Volledig scherm</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 seconde resterend}other{# seconden reseterend}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">Indrukken</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Nog 1 uur}other{Nog # uur}}</translation>
 <translation id="688711909580084195">Naamloze webpagina</translation>
+<translation id="6902419395050653510">Html-content.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{Nog 1 jaar}other{Nog # jaar}}</translation>
 <translation id="6945221475159498467">Selecteren</translation>

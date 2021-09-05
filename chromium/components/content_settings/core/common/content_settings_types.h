@@ -96,10 +96,6 @@ enum class ContentSettingsType : int32_t {
   // technology.
   ACCESSIBILITY_EVENTS,
 
-  // Used to store whether the user has ever changed the Flash permission for
-  // a site.
-  PLUGINS_DATA,
-
   // Used to store whether to allow a website to install a payment handler.
   PAYMENT_HANDLER,
 
@@ -228,6 +224,10 @@ enum class ContentSettingsType : int32_t {
   // Stores per-origin state for permission auto-revocation (for all permission
   // types).
   PERMISSION_AUTOREVOCATION_DATA,
+
+  // Stores per-origin state of the most recently selected directory for the use
+  // by the File System Access API.
+  FILE_SYSTEM_LAST_PICKED_DIRECTORY,
 
   NUM_TYPES,
 };

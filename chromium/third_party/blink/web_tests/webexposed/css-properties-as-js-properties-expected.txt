@@ -2,6 +2,7 @@ This test (crudely) documents Blink's web-exposed CSS properties.  All changes t
 
 
 advanceOverride
+advanceProportionalOverride
 alignContent
 alignItems
 alignSelf
@@ -15,6 +16,7 @@ animationFillMode
 animationIterationCount
 animationName
 animationPlayState
+animationTimeline
 animationTimingFunction
 appearance
 ascentOverride
@@ -140,6 +142,7 @@ direction
 display
 dominantBaseline
 emptyCells
+end
 fill
 fillOpacity
 fillRule
@@ -274,6 +277,7 @@ outlineWidth
 overflow
 overflowAnchor
 overflowBlock
+overflowClipMargin
 overflowInline
 overflowWrap
 overflowX
@@ -346,14 +350,17 @@ scrollSnapAlign
 scrollSnapStop
 scrollSnapType
 scrollbarGutter
+scrollbarWidth
 setProperty
 shapeImageThreshold
 shapeMargin
 shapeOutside
 shapeRendering
 size
+source
 speak
 src
+start
 stopColor
 stopOpacity
 stroke
@@ -387,6 +394,7 @@ textSizeAdjust
 textTransform
 textUnderlineOffset
 textUnderlinePosition
+timeRange
 top
 touchAction
 transform

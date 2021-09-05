@@ -10,8 +10,8 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/json/json_writer.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,6 +57,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
@@ -67,7 +68,6 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/version_info/version_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
@@ -310,7 +310,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, OpenURLsPopup) {
   OpenURLsPopupObserver observer;
   BrowserList::AddObserver(&observer);
 
-  Browser* popup = new Browser(
+  Browser* popup = Browser::Create(
       Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile(), true));
   ASSERT_TRUE(popup->is_type_popup());
   ASSERT_EQ(popup, observer.added_browser_);
@@ -546,12 +546,9 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, ValidNotificationLaunchId) {
   command_line.AppendSwitchNative(
       switches::kNotificationLaunchId,
       L"1|1|0|Default|0|https://example.com/|notification_id");
-  chrome::startup::IsFirstRun first_run =
-      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
-                                    : chrome::startup::IS_NOT_FIRST_RUN;
-  StartupBrowserCreatorImpl launch(base::FilePath(), command_line, first_run);
-  ASSERT_TRUE(
-      launch.Launch(browser()->profile(), std::vector<GURL>(), false, nullptr));
+
+  ASSERT_TRUE(StartupBrowserCreator().ProcessCmdLineImpl(
+      command_line, base::FilePath(), false, browser()->profile(), {}));
 
   // The launch delegates to the notification system and doesn't open any new
   // browser window.
@@ -562,12 +559,9 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, InvalidNotificationLaunchId) {
   // Simulate a launch with invalid launch id, which will fail.
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   command_line.AppendSwitchNative(switches::kNotificationLaunchId, L"");
-  chrome::startup::IsFirstRun first_run =
-      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
-                                    : chrome::startup::IS_NOT_FIRST_RUN;
-  StartupBrowserCreatorImpl launch(base::FilePath(), command_line, first_run);
-  ASSERT_FALSE(
-      launch.Launch(browser()->profile(), std::vector<GURL>(), false, nullptr));
+  StartupBrowserCreator browser_creator;
+  ASSERT_FALSE(StartupBrowserCreator().ProcessCmdLineImpl(
+      command_line, base::FilePath(), false, browser()->profile(), {}));
 
   // No new browser window is open.
   ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
@@ -735,15 +729,15 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, PRE_UpdateWithTwoProfiles) {
   DisableWelcomePages({profile1, profile2});
 
   // Open some urls with the browsers, and close them.
-  Browser* browser1 =
-      new Browser(Browser::CreateParams(Browser::TYPE_NORMAL, profile1, true));
+  Browser* browser1 = Browser::Create(
+      Browser::CreateParams(Browser::TYPE_NORMAL, profile1, true));
   chrome::NewTab(browser1);
   ui_test_utils::NavigateToURL(browser1,
                                embedded_test_server()->GetURL("/empty.html"));
   CloseBrowserSynchronously(browser1);
 
-  Browser* browser2 =
-      new Browser(Browser::CreateParams(Browser::TYPE_NORMAL, profile2, true));
+  Browser* browser2 = Browser::Create(
+      Browser::CreateParams(Browser::TYPE_NORMAL, profile2, true));
   chrome::NewTab(browser2);
   ui_test_utils::NavigateToURL(browser2,
                                embedded_test_server()->GetURL("/form.html"));
@@ -877,7 +871,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
   SessionStartupPref::SetStartupPref(profile_urls, pref_urls);
 
   // Open a page with profile_last.
-  Browser* browser_last = new Browser(
+  Browser* browser_last = Browser::Create(
       Browser::CreateParams(Browser::TYPE_NORMAL, profile_last, true));
   chrome::NewTab(browser_last);
   ui_test_utils::NavigateToURL(browser_last,
@@ -1189,34 +1183,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 
 #endif  // !defined(OS_CHROMEOS)
 
-#if defined(OS_WIN)
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
-                       PRE_ShortcutsAreMigratedOnce) {
-  content::RunAllTasksUntilIdle();
-
-  // Confirm that shortcuts were migrated.
-  const std::string last_version_migrated =
-      g_browser_process->local_state()->GetString(
-          prefs::kShortcutMigrationVersion);
-  EXPECT_EQ(last_version_migrated, version_info::GetVersionNumber());
-
-  // Set the version back as far as kLastVersionNeedingMigration and ensure it's
-  // not migrated again.
-  g_browser_process->local_state()->SetString(prefs::kShortcutMigrationVersion,
-                                              "86.0.4231.0");
-}
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest, ShortcutsAreMigratedOnce) {
-  content::RunAllTasksUntilIdle();
-
-  // Confirm that shortcuts weren't migrated when marked as having last been
-  // migrated in kLastVersionNeedingMigration+.
-  const std::string last_version_migrated =
-      g_browser_process->local_state()->GetString(
-          prefs::kShortcutMigrationVersion);
-  EXPECT_EQ(last_version_migrated, "86.0.4231.0");
-}
-#endif  // defined(OS_WIN)
-
 class StartupBrowserCreatorExtensionsCheckupExperimentTest
     : public extensions::ExtensionBrowserTest {
  public:
@@ -1225,6 +1191,10 @@ class StartupBrowserCreatorExtensionsCheckupExperimentTest
   StartupBrowserCreatorExtensionsCheckupExperimentTest() {
     set_open_about_blank_on_browser_launch(false);
   }
+  StartupBrowserCreatorExtensionsCheckupExperimentTest(
+      const StartupBrowserCreatorExtensionsCheckupExperimentTest&) = delete;
+  StartupBrowserCreatorExtensionsCheckupExperimentTest& operator=(
+      const StartupBrowserCreatorExtensionsCheckupExperimentTest&) = delete;
 
   void SetUp() override {
     // Enable the extensions checkup experiment.
@@ -1253,8 +1223,6 @@ class StartupBrowserCreatorExtensionsCheckupExperimentTest
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  DISALLOW_COPY_AND_ASSIGN(
-      StartupBrowserCreatorExtensionsCheckupExperimentTest);
 };
 
 // Test that when the extensions checkup experiment is enabled for the startup
@@ -1324,6 +1292,10 @@ class StartupBrowserCreatorFirstRunTest : public InProcessBrowserTest {
   StartupBrowserCreatorFirstRunTest() {
     scoped_feature_list_.InitWithFeatures({welcome::kForceEnabled}, {});
   }
+  StartupBrowserCreatorFirstRunTest(const StartupBrowserCreatorFirstRunTest&) =
+      delete;
+  StartupBrowserCreatorFirstRunTest& operator=(
+      const StartupBrowserCreatorFirstRunTest&) = delete;
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override;
@@ -1334,8 +1306,6 @@ class StartupBrowserCreatorFirstRunTest : public InProcessBrowserTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(StartupBrowserCreatorFirstRunTest);
 };
 
 void StartupBrowserCreatorFirstRunTest::SetUpCommandLine(
@@ -1901,6 +1871,10 @@ class StartupBrowserCreatorPickerTest : public InProcessBrowserTest {
   StartupBrowserCreatorPickerTest() {
     scoped_feature_list_.InitAndEnableFeature(features::kNewProfilePicker);
   }
+  StartupBrowserCreatorPickerTest(const StartupBrowserCreatorPickerTest&) =
+      delete;
+  StartupBrowserCreatorPickerTest& operator=(
+      const StartupBrowserCreatorPickerTest&) = delete;
   ~StartupBrowserCreatorPickerTest() override = default;
 
  protected:
@@ -1925,12 +1899,15 @@ class StartupBrowserCreatorPickerTest : public InProcessBrowserTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(StartupBrowserCreatorPickerTest);
 };
 
 // Flaky: https://crbug.com/1126886
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest, DISABLED_OpensPicker) {
+#if defined(USE_OZONE) || defined(OS_WIN)
+#define MAYBE_OpensPicker DISABLED_OpensPicker
+#else
+#define MAYBE_OpensPicker OpensPicker
+#endif
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest, MAYBE_OpensPicker) {
   ASSERT_EQ(1u, chrome::GetTotalBrowserCount());
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   StartWithTwoProfiles(command_line);
@@ -1953,27 +1930,6 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest, SkipsPickerWithURL) {
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(1, tab_strip->count());
   EXPECT_EQ(url, tab_strip->GetWebContentsAt(0)->GetURL());
-}
-
-IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest, SkipsPickerWithGuest) {
-  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
-  command_line.AppendSwitch(switches::kGuest);
-
-  // The guest profile needs to get created before it gets opened.
-  Profile* guest_profile = nullptr;
-  {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    ProfileManager* profile_manager = g_browser_process->profile_manager();
-    guest_profile =
-        profile_manager->GetProfile(profile_manager->GetGuestProfilePath());
-  }
-
-  StartWithTwoProfiles(command_line);
-  // Skips the picker and creates a new browser window for the guest profile (by
-  // definition, it opens the OTR profile).
-  Browser* new_browser =
-      chrome::FindBrowserWithProfile(guest_profile->GetPrimaryOTRProfile());
-  EXPECT_TRUE(new_browser);
 }
 
 IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest,
@@ -2000,4 +1956,66 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest,
   Browser* new_browser = FindOneOtherBrowser(browser());
   EXPECT_TRUE(new_browser);
 }
+
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest, SkipsPickerInAppMode) {
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  command_line.AppendSwitch(switches::kApp);
+
+  StartWithTwoProfiles(command_line);
+
+  // Skips the picker and creates a new browser window.
+  Browser* new_browser = FindOneOtherBrowser(browser());
+  EXPECT_TRUE(new_browser);
+}
+
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorPickerTest, SkipsPickerWithAppId) {
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  command_line.AppendSwitch(switches::kAppId);
+
+  StartWithTwoProfiles(command_line);
+
+  // Skips the picker and creates a new browser window.
+  Browser* new_browser = FindOneOtherBrowser(browser());
+  EXPECT_TRUE(new_browser);
+}
+
+class GuestStartupBrowserCreatorPickerTest
+    : public StartupBrowserCreatorPickerTest,
+      public ::testing::WithParamInterface<bool> {
+ public:
+  GuestStartupBrowserCreatorPickerTest() {
+    TestingProfile::SetScopedFeatureListForEphemeralGuestProfiles(
+        scoped_feature_list_, GetParam());
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(GuestStartupBrowserCreatorPickerTest,
+                       SkipsPickerWithGuest) {
+  base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
+  command_line.AppendSwitch(switches::kGuest);
+
+  // The guest profile needs to get created before it gets opened.
+  Profile* guest_profile = nullptr;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ProfileManager* profile_manager = g_browser_process->profile_manager();
+    guest_profile =
+        profile_manager->GetProfile(profile_manager->GetGuestProfilePath());
+  }
+
+  StartWithTwoProfiles(command_line);
+  // Skips the picker and creates a new browser window for the guest profile (by
+  // definition, it opens the OTR profile).
+  if (!Profile::IsEphemeralGuestProfileEnabled())
+    guest_profile = guest_profile->GetPrimaryOTRProfile();
+  Browser* new_browser = chrome::FindBrowserWithProfile(guest_profile);
+  EXPECT_TRUE(new_browser);
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         GuestStartupBrowserCreatorPickerTest,
+                         /*ephemeral_guest_profile_enabled=*/testing::Bool());
 #endif  // !defined(OS_CHROMEOS)

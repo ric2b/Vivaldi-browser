@@ -50,6 +50,10 @@ std::string ItemTypeToString(HoldingSpaceItem::Type type) {
       return "PinnedFile";
     case HoldingSpaceItem::Type::kScreenshot:
       return "Screenshot";
+    case HoldingSpaceItem::Type::kNearbyShare:
+      return "NearbyShare";
+    case HoldingSpaceItem::Type::kScreenRecording:
+      return "ScreenRecording";
   }
   NOTREACHED();
   return std::string();
@@ -77,20 +81,28 @@ void RecordItemAction(const std::vector<const HoldingSpaceItem*>& items,
 }
 
 void RecordItemCounts(const std::vector<const HoldingSpaceItem*>& items) {
-  if (items.empty())
-    return;
-
   base::UmaHistogramCounts1000("HoldingSpace.Item.Count.All", items.size());
 
   std::map<HoldingSpaceItem::Type, int> counts_by_type;
   for (const HoldingSpaceItem* item : items)
     ++counts_by_type[item->type()];
 
-  for (const auto& count_by_type : counts_by_type) {
+  for (int i = 0; i <= static_cast<int>(HoldingSpaceItem::Type::kMaxValue);
+       ++i) {
+    const auto type = static_cast<HoldingSpaceItem::Type>(i);
     base::UmaHistogramCounts1000(
-        "HoldingSpace.Item.Count." + ItemTypeToString(count_by_type.first),
-        count_by_type.second);
+        "HoldingSpace.Item.Count." + ItemTypeToString(type),
+        counts_by_type[type]);
   }
+}
+
+void RecordTimeFromFirstAvailabilityToFirstAdd(base::TimeDelta time_delta) {
+  // NOTE: 24 days appears to be the max supported number of days.
+  base::UmaHistogramCustomTimes(
+      "HoldingSpace.TimeFromFirstAvailabilityToFirstAdd", time_delta,
+      /*min=*/base::TimeDelta::FromMinutes(1),
+      /*max=*/base::TimeDelta::FromDays(24),
+      /*buckets=*/50);
 }
 
 void RecordTimeFromFirstAvailabilityToFirstEntry(base::TimeDelta time_delta) {

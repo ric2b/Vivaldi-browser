@@ -26,7 +26,7 @@ class MEDIA_GPU_EXPORT CopyingTexture2DWrapper : public Texture2DWrapper {
   // be given to the swap chain directly, or video processed later).
   CopyingTexture2DWrapper(const gfx::Size& size,
                           std::unique_ptr<Texture2DWrapper> output_wrapper,
-                          std::unique_ptr<VideoProcessorProxy> processor,
+                          scoped_refptr<VideoProcessorProxy> processor,
                           ComD3D11Texture2D output_texture,
                           base::Optional<gfx::ColorSpace> output_color_space);
   ~CopyingTexture2DWrapper() override;
@@ -40,13 +40,13 @@ class MEDIA_GPU_EXPORT CopyingTexture2DWrapper : public Texture2DWrapper {
               ComD3D11Texture2D texture,
               size_t array_slice) override;
 
-  void SetStreamHDRMetadata(const gl::HDRMetadata& stream_metadata) override;
+  void SetStreamHDRMetadata(const gfx::HDRMetadata& stream_metadata) override;
   void SetDisplayHDRMetadata(
       const DXGI_HDR_METADATA_HDR10& dxgi_display_metadata) override;
 
  private:
   gfx::Size size_;
-  std::unique_ptr<VideoProcessorProxy> video_processor_;
+  scoped_refptr<VideoProcessorProxy> video_processor_;
   std::unique_ptr<Texture2DWrapper> output_texture_wrapper_;
   ComD3D11Texture2D output_texture_;
   // If set, then this is the desired output color space for the copy.

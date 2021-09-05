@@ -80,8 +80,7 @@ apps::AppServiceProxy* GetAppServiceProxy(Profile* profile) {
 namespace web_app {
 
 SystemWebAppManagerBrowserTestBase::SystemWebAppManagerBrowserTestBase(
-    bool install_mock) {
-}
+    bool install_mock) {}
 
 SystemWebAppManagerBrowserTestBase::~SystemWebAppManagerBrowserTestBase() =
     default;
@@ -124,15 +123,16 @@ apps::AppLaunchParams SystemWebAppManagerBrowserTestBase::LaunchParamsForApp(
 }
 
 content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
-    const apps::AppLaunchParams& params,
+    apps::AppLaunchParams&& params,
     bool wait_for_load,
     Browser** out_browser) {
   content::TestNavigationObserver navigation_observer(GetStartUrl(params));
   navigation_observer.StartWatchingNewWebContents();
 
-  content::WebContents* web_contents = GetAppServiceProxy(browser()->profile())
-                                           ->BrowserAppLauncher()
-                                           ->LaunchAppWithParams(params);
+  content::WebContents* web_contents =
+      GetAppServiceProxy(browser()->profile())
+          ->BrowserAppLauncher()
+          ->LaunchAppWithParams(std::move(params));
 
   if (wait_for_load)
     navigation_observer.Wait();
@@ -144,9 +144,9 @@ content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
 }
 
 content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
-    const apps::AppLaunchParams& params,
+    apps::AppLaunchParams&& params,
     Browser** browser) {
-  return LaunchApp(params, /* wait_for_load */ true, browser);
+  return LaunchApp(std::move(params), /* wait_for_load */ true, browser);
 }
 
 content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
@@ -157,9 +157,9 @@ content::WebContents* SystemWebAppManagerBrowserTestBase::LaunchApp(
 
 content::WebContents*
 SystemWebAppManagerBrowserTestBase::LaunchAppWithoutWaiting(
-    const apps::AppLaunchParams& params,
+    apps::AppLaunchParams&& params,
     Browser** browser) {
-  return LaunchApp(params, /* wait_for_load */ false, browser);
+  return LaunchApp(std::move(params), /* wait_for_load */ false, browser);
 }
 
 content::WebContents*
@@ -181,13 +181,6 @@ GURL SystemWebAppManagerBrowserTestBase::GetStartUrl(
 SystemWebAppManagerBrowserTest::SystemWebAppManagerBrowserTest(
     bool install_mock)
     : SystemWebAppManagerBrowserTestBase(install_mock) {
-  if (provider_type() == ProviderType::kWebApps) {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kDesktopPWAsWithoutExtensions);
-  } else if (provider_type() == ProviderType::kBookmarkApps) {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kDesktopPWAsWithoutExtensions);
-  }
   if (install_mock) {
     maybe_installation_ =
         TestSystemWebAppInstallation::SetUpStandaloneSingleWindowApp(
@@ -230,14 +223,6 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest, Install) {
       registrar.FindAppWithUrlInScope(content::GetWebUIURL("test-system-app/")),
       app_id);
 
-  if (!base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
-    const extensions::Extension* extension =
-        extensions::ExtensionRegistry::Get(profile)->GetInstalledExtension(
-            app_id);
-    EXPECT_TRUE(extension->from_bookmark());
-    EXPECT_EQ(extensions::Manifest::EXTERNAL_COMPONENT, extension->location());
-  }
-
   // OS Integration only relevant for Chrome OS.
 #if defined(OS_CHROMEOS)
   apps::AppServiceProxy* proxy = GetAppServiceProxy(browser()->profile());
@@ -254,18 +239,11 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest, Install) {
 std::string SystemWebAppManagerTestParamsToString(
     const ::testing::TestParamInfo<SystemWebAppManagerTestParams>& param_info) {
   std::string output;
-  switch (std::get<0>(param_info.param)) {
-    case ProviderType::kBookmarkApps:
-      output.append("BookmarkApps");
-      break;
-    case ProviderType::kWebApps:
-      output.append("WebApps");
-      break;
-  }
-  if (std::get<1>(param_info.param) == InstallationType::kWebAppInfoInstall) {
+
+  if (std::get<0>(param_info.param) == InstallationType::kWebAppInfoInstall) {
     output.append("_WebAppInfoInstall");
   }
-  switch (std::get<2>(param_info.param)) {
+  switch (std::get<1>(param_info.param)) {
     case TestProfileType::kRegular:
       break;
     case TestProfileType::kIncognito:
@@ -274,6 +252,10 @@ std::string SystemWebAppManagerTestParamsToString(
     case TestProfileType::kGuest:
       output.append("_Guest");
       break;
+  }
+  // The framework doesn't accept a blank param
+  if (output.empty()) {
+    output = "_Default";
   }
   return output;
 }
@@ -325,7 +307,7 @@ IN_PROC_BROWSER_TEST_P(SystemWebAppManagerWebAppInfoBrowserTest,
   navigation_observer.StartWatchingNewWebContents();
 
   LaunchSystemWebApp(browser()->profile(), GetMockAppType(),
-                     maybe_installation_->GetAppUrl(), params);
+                     maybe_installation_->GetAppUrl(), std::move(params));
 
   navigation_observer.Wait();
   histograms.ExpectTotalCount("Apps.DefaultAppLaunch.FromAppListGrid", 1);
@@ -390,22 +372,13 @@ class SystemWebAppManagerFileHandlingBrowserTestBase
   explicit SystemWebAppManagerFileHandlingBrowserTestBase(
       IncludeLaunchDirectory include_launch_directory)
       : SystemWebAppManagerBrowserTestBase(/*install_mock=*/false) {
-    web_app::ProviderType provider_type = std::get<0>(GetParam());
-    if (provider_type == ProviderType::kWebApps) {
-      scoped_feature_web_app_provider_type_.InitAndEnableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    } else if (provider_type == ProviderType::kBookmarkApps) {
-      scoped_feature_web_app_provider_type_.InitAndDisableFeature(
-          features::kDesktopPWAsWithoutExtensions);
-    }
-
     scoped_feature_blink_api_.InitWithFeatures(
         {blink::features::kFileHandlingAPI}, {});
 
     maybe_installation_ =
         TestSystemWebAppInstallation::SetUpAppThatReceivesLaunchFiles(
             include_launch_directory,
-            std::get<1>(GetParam()) == InstallationType::kWebAppInfoInstall);
+            std::get<0>(GetParam()) == InstallationType::kWebAppInfoInstall);
   }
 
   content::WebContents* LaunchApp(
@@ -415,7 +388,7 @@ class SystemWebAppManagerFileHandlingBrowserTestBase
     params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
     params.launch_files = launch_files;
 
-    return SystemWebAppManagerBrowserTestBase::LaunchApp(params);
+    return SystemWebAppManagerBrowserTestBase::LaunchApp(std::move(params));
   }
 
   content::WebContents* LaunchAppWithoutWaiting(
@@ -424,7 +397,8 @@ class SystemWebAppManagerFileHandlingBrowserTestBase
     params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
     params.launch_files = launch_files;
 
-    return SystemWebAppManagerBrowserTestBase::LaunchAppWithoutWaiting(params);
+    return SystemWebAppManagerBrowserTestBase::LaunchAppWithoutWaiting(
+        std::move(params));
   }
 
   // Must be called before WaitAndExposeLaunchParamsToWindow. This sets up the
@@ -960,7 +934,7 @@ class SystemWebAppManagerFileHandlingOriginTrialsBrowserTest
     params.source = apps::mojom::AppLaunchSource::kSourceChromeInternal;
     params.launch_files = {temp_file_path};
 
-    return SystemWebAppManagerBrowserTestBase::LaunchApp(params);
+    return SystemWebAppManagerBrowserTestBase::LaunchApp(std::move(params));
   }
 
   bool WaitForLaunchParam(content::WebContents* web_contents) {
@@ -1130,18 +1104,29 @@ class SystemWebAppManagerUpgradeBrowserTest
   }
   ~SystemWebAppManagerUpgradeBrowserTest() override = default;
 
+  // Don't use WaitForTestSystemAppInstall in this test, because it artificially
+  // resets the OnAppsSynchronized signal, and starts a new synchronize request.
+  void WaitForSystemAppsSynchronized() {
+    base::RunLoop run_loop;
+    WebAppProvider::Get(browser()->profile())
+        ->system_web_app_manager()
+        .on_apps_synchronized()
+        .Post(FROM_HERE, run_loop.QuitClosure());
+    run_loop.Run();
+  }
+
  private:
   base::test::ScopedFeatureList features_;
 };
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerUpgradeBrowserTest, PRE_Upgrade) {
-  WaitForTestSystemAppInstall();
+  WaitForSystemAppsSynchronized();
   EXPECT_GE(GetManager().GetRegisteredSystemAppsForTesting().size(),
             GetManager().GetAppIds().size());
 }
 
 IN_PROC_BROWSER_TEST_P(SystemWebAppManagerUpgradeBrowserTest, Upgrade) {
-  WaitForTestSystemAppInstall();
+  WaitForSystemAppsSynchronized();
   const auto& app_ids = GetManager().GetAppIds();
 
   EXPECT_EQ(GetManager().GetRegisteredSystemAppsForTesting().size(),

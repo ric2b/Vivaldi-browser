@@ -8,7 +8,7 @@
 
 #include "base/containers/span.h"
 #include "base/feature_list.h"
-#include "chrome/browser/browser_features.h"
+#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/nearby_internals/nearby_internals_contact_handler.h"
 #include "chrome/browser/ui/webui/nearby_internals/nearby_internals_http_handler.h"
@@ -24,11 +24,6 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/webui/web_ui_util.h"
 
-namespace {
-constexpr char kNearbyInternalsGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/nearby_internals/";
-}  // namespace
-
 NearbyInternalsUI::NearbyInternalsUI(content::WebUI* web_ui)
     : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/true) {
   Profile* profile = Profile::FromWebUI(web_ui);
@@ -42,7 +37,7 @@ NearbyInternalsUI::NearbyInternalsUI(content::WebUI* web_ui)
   webui::SetupWebUIDataSource(
       html_source,
       base::make_span(kNearbyInternalsResources, kNearbyInternalsResourcesSize),
-      kNearbyInternalsGeneratedPath, IDR_NEARBY_INTERNALS_INDEX_HTML);
+      /*generated_path=*/std::string(), IDR_NEARBY_INTERNALS_INDEX_HTML);
 
   content::WebUIDataSource::Add(profile, html_source);
   content::BrowserContext* context =

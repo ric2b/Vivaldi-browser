@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Nije uspelo deljenje: <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540">Stavka <ph name="FIRST_ITEM_TITLE" /> je zamenjena stavkom <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Ovo ste već tražili ranije. Ako izbrišete „<ph name="QUERY" />“ iz istorije, trajno ćete ga ukloniti sa naloga na svim uređajima.</translation>
+<translation id="1510238584712386396">Pokretač</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minut i }one{# minut i }few{# minuta i }other{# minuta i }}</translation>
 <translation id="1643823602425662293">Obaveštenje</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" /> datoteka</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Potraži „<ph name="LOOKUP_STRING" />“</translation>
+<translation id="3622035490309591977">Istorija privremene memorije</translation>
 <translation id="364720409959344976">Izbor direktorijuma za otpremanje</translation>
 <translation id="3660179305079774227">Strelica nagore</translation>
 <translation id="3670030362669914947">Broj</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Poslednja aktivnost: danas}=1{Poslednja aktivnost: pre 1 dan}one{Poslednja aktivnost: pre # dan}few{Poslednja aktivnost: pre # dana}other{Poslednja aktivnost: pre # dana}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 dan i }one{# dan i }few{# dana i }other{# dana i }}</translation>
 <translation id="5789643057113097023">,</translation>
+<translation id="5843690142429128814">Slika.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{za 1 g}one{za # g}few{za # g}other{za # g}}</translation>
 <translation id="588258955323874662">Ceo ekran</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Još 1 sekunda}one{Još # sekunda}few{Još # sekunde}other{Još # sekundi}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">pritisni</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Još 1 sat}one{Još # sat}few{Još # sata}other{Još # sati}}</translation>
 <translation id="688711909580084195">Veb-stranica bez naslova</translation>
+<translation id="6902419395050653510">HTML sadržaj.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{Još 1 godina}one{Još # godina}few{Još # godine}other{Još # godina}}</translation>
 <translation id="6945221475159498467">Izaberi</translation>

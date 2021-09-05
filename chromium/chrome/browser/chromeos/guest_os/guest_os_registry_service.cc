@@ -12,6 +12,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/time/clock.h"
@@ -19,6 +20,8 @@
 #include "base/time/time.h"
 #include "chrome/browser/apps/app_service/dip_px_util.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/borealis/borealis_features.h"
+#include "chrome/browser/chromeos/borealis/borealis_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
@@ -53,16 +56,6 @@ constexpr char kCrostiniAppsInstalledHistogram[] =
 
 constexpr char kPluginVmAppsInstalledHistogram[] =
     "PluginVm.AppsInstalledAtLogin";
-
-std::string GenerateAppId(const std::string& desktop_file_id,
-                          const std::string& vm_name,
-                          const std::string& container_name) {
-  // These can collide in theory because the user could choose VM and container
-  // names which contain slashes, but this will only result in apps missing from
-  // the launcher.
-  return crx_file::id_util::GenerateId(kCrostiniAppIdPrefix + vm_name + "/" +
-                                       container_name + "/" + desktop_file_id);
-}
 
 base::Value ProtoToDictionary(const App::LocaleString& locale_string) {
   base::Value result(base::Value::Type::DICTIONARY);
@@ -381,6 +374,12 @@ std::string GuestOsRegistryService::Registration::ContainerName() const {
 }
 
 std::string GuestOsRegistryService::Registration::Name() const {
+  if (VmType() ==
+      GuestOsRegistryService::VmType::ApplicationList_VmType_PLUGIN_VM) {
+    return l10n_util::GetStringFUTF8(
+        IDS_PLUGIN_VM_APP_NAME_WINDOWS_SUFFIX,
+        base::UTF8ToUTF16(LocalizedString(guest_os::prefs::kAppNameKey)));
+  }
   return LocalizedString(guest_os::prefs::kAppNameKey);
 }
 
@@ -568,7 +567,10 @@ GuestOsRegistryService::GetEnabledApps() const {
       crostini::CrostiniFeatures::Get()->IsEnabled(profile_);
   bool plugin_vm_enabled =
       plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile_);
-  if (!crostini_enabled && !plugin_vm_enabled)
+  bool borealis_enabled = borealis::BorealisService::GetForProfile(profile_)
+                              ->Features()
+                              .IsEnabled();
+  if (!crostini_enabled && !plugin_vm_enabled && !borealis_enabled)
     return {};
 
   auto apps = GetAllRegisteredApps();
@@ -580,6 +582,9 @@ GuestOsRegistryService::GetEnabledApps() const {
         break;
       case VmType::ApplicationList_VmType_PLUGIN_VM:
         enabled = plugin_vm_enabled;
+        break;
+      case VmType::ApplicationList_VmType_BOREALIS:
+        enabled = borealis_enabled;
         break;
       default:
         LOG(ERROR) << "Unsupported VmType: "
@@ -632,7 +637,10 @@ void GuestOsRegistryService::RecordStartupMetrics() {
       crostini::CrostiniFeatures::Get()->IsEnabled(profile_);
   bool plugin_vm_enabled =
       plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile_);
-  if (!crostini_enabled && !plugin_vm_enabled)
+  bool borealis_enabled = borealis::BorealisService::GetForProfile(profile_)
+                              ->Features()
+                              .IsEnabled();
+  if (!crostini_enabled && !plugin_vm_enabled && !borealis_enabled)
     return;
 
   int num_crostini_apps = 0;
@@ -667,6 +675,8 @@ void GuestOsRegistryService::RecordStartupMetrics() {
   if (plugin_vm_enabled)
     UMA_HISTOGRAM_COUNTS_1000(kPluginVmAppsInstalledHistogram,
                               num_plugin_vm_apps);
+
+  // TODO(b/166691285): borealis launch metrics.
 }
 
 base::FilePath GuestOsRegistryService::GetAppPath(
@@ -1018,6 +1028,18 @@ void GuestOsRegistryService::SetAppScaled(const std::string& app_id,
     return;
   }
   app->SetKey(guest_os::prefs::kAppScaledKey, base::Value(scaled));
+}
+
+// static
+std::string GuestOsRegistryService::GenerateAppId(
+    const std::string& desktop_file_id,
+    const std::string& vm_name,
+    const std::string& container_name) {
+  // These can collide in theory because the user could choose VM and container
+  // names which contain slashes, but this will only result in apps missing from
+  // the launcher.
+  return crx_file::id_util::GenerateId(kCrostiniAppIdPrefix + vm_name + "/" +
+                                       container_name + "/" + desktop_file_id);
 }
 
 void GuestOsRegistryService::RequestContainerAppIcon(

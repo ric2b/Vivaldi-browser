@@ -72,6 +72,9 @@ template("chrome_public_common_apk_or_module_tmpl") {
   _is_trichrome = defined(invoker.is_trichrome) && invoker.is_trichrome
   _is_64_bit_browser =
       defined(invoker.is_64_bit_browser) && invoker.is_64_bit_browser
+  _is_bundle = invoker.target_type == "android_app_bundle_module"
+  _enable_chrome_module =
+      _is_bundle && enable_chrome_module && (_is_monochrome || _is_trichrome)
   not_needed([ "_is_64_bit_browser" ])
   assert(!(_is_monochrome && _is_trichrome),
          "Cannot be both trichrome and monochrome!")
@@ -154,11 +157,6 @@ template("chrome_public_common_apk_or_module_tmpl") {
       "*ic_file_download_white*",  # Bottom edge seems misaligned.
       "*ic_lock.*",  # Bottom edge seems misaligned.
     ]
-
-    if (min_sdk_version >= 21) {
-      # Resources used by AndroidManifest.xml only for pre-21.
-      resource_exclusion_regex += "|app_single_page_icon"
-    }
 
     # Note most of these, with the exception of resource_exclusion_exceptions,
     # are currently duplicated in system_webview_apk_tmpl.gni.
@@ -333,6 +331,10 @@ template("chrome_public_common_apk_or_module_tmpl") {
         proguard_configs +=
             [ "//base/android/proguard/disable_all_obfuscation.flags" ]
       }
+      if (_enable_chrome_module) {
+        proguard_configs +=
+            [ "//chrome/android/proguard/isolated_splits.flags" ]
+      }
     }
 
     if (use_chromium_linker) {
@@ -367,22 +369,8 @@ template("chrome_public_common_apk_or_module_tmpl") {
       deps += [ ":$_unwind_asset_target" ]
     }
 
-    _is_bundle = invoker.target_type == "android_app_bundle_module"
-    if (!_is_bundle || !enable_chrome_module ||
-        (!_is_monochrome && !_is_trichrome)) {
+    if (!_enable_chrome_module) {
       deps += [ "//chrome/android:chrome_all_java" ]
-    }
-
-    # Use a consistent baseline so that it is easy to regenerate by deleting the
-    # file and re-building the "android_lint" target.
-    if (defined(enable_lint) && enable_lint) {
-      if (!defined(lint_baseline_file)) {
-        lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
-      }
-      if (!defined(lint_suppressions_file)) {
-        lint_suppressions_file =
-            "//chrome/android/expectations/lint-suppressions.xml"
-      }
     }
 
     # Prefer to add this data_dep on the final target instead of java targets
@@ -448,8 +436,14 @@ template("monochrome_public_common_apk_or_module_tmpl") {
       if (defined(_module_desc.native_deps) && _module_desc.native_deps != []) {
         _lib_target = "//chrome/android:${_base_target_name}_${_module_desc.name}${_toolchain}"
         _chrome_module_shared_lib_deps += [ _lib_target ]
-        _lib_out_dir = get_label_info(_lib_target, "root_out_dir")
-        _chrome_module_loadable_modules += [ "${_lib_out_dir}/${_base_target_name}_${_module_desc.name}_partition.so" ]
+
+        # In component builds, native libraries from DFMs are not in partitions,
+        # so include them as normal shared libraries instead of loadable
+        # modules.
+        if (!is_component_build) {
+          _lib_out_dir = get_label_info(_lib_target, "root_out_dir")
+          _chrome_module_loadable_modules += [ "${_lib_out_dir}/${_base_target_name}_${_module_desc.name}_partition.so" ]
+        }
       }
     }
   }
@@ -513,7 +507,7 @@ template("monochrome_public_common_apk_or_module_tmpl") {
 
         if (!enable_chrome_module) {
           deps += [
-            "//chrome/browser/android/vr:ar_java",
+            "//components/webxr/android:ar_java",
             "//third_party/arcore-android-sdk-client:com_google_ar_core_java",
           ]
         }
@@ -538,12 +532,33 @@ template("monochrome_public_common_apk_or_module_tmpl") {
 
       # Add all loadable modules and shared libraries from DFMs.
       if (_enable_chrome_module) {
+        # Sets ISOLATED_SPLITS_ENABLED in BuildConfig.java.
+        isolated_splits_enabled = true
+
+        # The arcore manifest needs to be merged into the base module because the Play
+        # Store verifies the com.google.ar.core.min_apk_version meta-data tag is in
+        # the base manifest.
+        if (enable_arcore) {
+          deps += [
+            "//third_party/arcore-android-sdk-client:com_google_ar_core_java",
+          ]
+        }
+
         if (is_monochrome) {
           deps += [ "//chrome/android:base_monochrome_module_java" ]
         } else {
           deps += [ "//chrome/android:base_module_java" ]
         }
-        deps += _chrome_module_shared_lib_deps
+        deps += [ ":${target_name}__all_chrome_resources" ]
+        if (is_component_build) {
+          if (android_64bit_target_cpu && !invoker.is_64_bit_browser) {
+            secondary_abi_shared_libraries += _chrome_module_shared_lib_deps
+          } else {
+            shared_libraries += _chrome_module_shared_lib_deps
+          }
+        } else {
+          deps += _chrome_module_shared_lib_deps
+        }
         _loadable_modules_32_bit = []
         _loadable_modules_64_bit = []
         foreach(_module_desc, _module_descs) {
@@ -782,6 +797,7 @@ template("monochrome_public_common_apk_or_module_tmpl") {
       "deps",
       "is_monochrome",
       "is_trichrome",
+      "isolated_splits_enabled",
       "loadable_modules",
       "native_lib_placeholders",
       "negative_main_dex_globs",

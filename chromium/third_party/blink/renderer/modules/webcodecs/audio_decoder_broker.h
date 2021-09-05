@@ -14,13 +14,20 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/sequence_checker.h"
-#include "base/single_thread_task_runner.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/decode_status.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
+
+namespace base {
+class SequencedTaskRunner;
+}  // namespace base
+
+namespace media {
+class MediaLog;
+}
 
 namespace blink {
 
@@ -63,7 +70,8 @@ class MODULES_EXPORT AudioDecoderBroker : public media::AudioDecoder,
  public:
   static constexpr char kDefaultDisplayName[] = "EmptyWebCodecsAudioDecoder";
 
-  explicit AudioDecoderBroker(ExecutionContext& execution_context);
+  explicit AudioDecoderBroker(media::MediaLog* media_log,
+                              ExecutionContext& execution_context);
   ~AudioDecoderBroker() override;
 
   // Disallow copy and assign.
@@ -81,6 +89,7 @@ class MODULES_EXPORT AudioDecoderBroker : public media::AudioDecoder,
   void Decode(scoped_refptr<media::DecoderBuffer> buffer,
               DecodeCB decode_cb) override;
   void Reset(base::OnceClosure reset_cb) override;
+  // Should always be false. See https://crbug.com/1119947
   bool NeedsBitstreamConversion() const override;
 
  private:
@@ -106,7 +115,7 @@ class MODULES_EXPORT AudioDecoderBroker : public media::AudioDecoder,
   HashMap<int, base::OnceClosure> pending_reset_cb_map_;
 
   // Task runner for running codec work (traditionally the media thread).
-  scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> media_task_runner_;
 
   // Owner of state and methods to be used on media_task_runner_;
   std::unique_ptr<MediaAudioTaskWrapper> media_tasks_;

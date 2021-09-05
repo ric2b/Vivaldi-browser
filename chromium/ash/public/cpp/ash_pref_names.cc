@@ -28,6 +28,10 @@ const char kAccessibilityHighContrastEnabled[] =
 // See http://crbug.com/170850 for history.
 const char kAccessibilityScreenMagnifierEnabled[] =
     "settings.a11y.screen_magnifier";
+// A boolean pref which determines whether focus following for screen magnifier
+// is enabled.
+const char kAccessibilityScreenMagnifierFocusFollowingEnabled[] =
+    "settings.a11y.screen_magnifier_focus_following";
 // A boolean pref which determines whether screen magnifier should center
 // the text input focus.
 const char kAccessibilityScreenMagnifierCenterFocus[] =
@@ -156,6 +160,8 @@ const char kContextualTooltips[] = "settings.contextual_tooltip.shown_info";
 // name will appear in this list as an empty string. The desk names are stored
 // as UTF8 strings.
 const char kDesksNamesList[] = "ash.desks.desks_names_list";
+// An integer index of a user's active desk.
+const char kDesksActiveDesk[] = "ash.desks.active_desk";
 
 // A boolean pref storing the enabled status of the Docked Magnifier feature.
 const char kDockedMagnifierEnabled[] = "ash.docked_magnifier.enabled";
@@ -210,6 +216,10 @@ const char kExternalDisplayMirrorInfo[] =
 // Its key is the ID of the display and its value is a dictionary for the
 // layout/offset information.
 const char kSecondaryDisplays[] = "settings.display.secondary_displays";
+
+// A boolean pref that enable fullscreen alert bubble.
+// TODO(zxdan): Change to an allowlist in M89.
+const char kFullscreenAlertEnabled[] = "ash.fullscreen_alert_enabled";
 
 // A boolean pref storing whether the gesture education notification has ever
 // been shown to the user, which we use to stop showing it again.
@@ -587,11 +597,6 @@ const char kColorModeThemed[] = "cros.system.color_mode_themed";
 // shelf.
 const char kAppNotificationBadgingEnabled[] =
     "ash.app_notification_badging_enabled";
-
-// An integer pref that counts how many times the reverse gesture notification
-// shows.
-const char kReverseGestureNotificationCount[] =
-    "ash.wm.reverse_gesture_notification_count";
 
 // An integer pref that indicates whether global media controls is pinned to
 // shelf or it's unset and need to be determined by screen size during runtime.

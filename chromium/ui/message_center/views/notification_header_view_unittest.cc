@@ -19,6 +19,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/view.h"
 
 namespace message_center {
 
@@ -41,7 +42,8 @@ class NotificationHeaderViewTest : public views::ViewsTestBase {
     views::View* container =
         widget_.SetContentsView(std::make_unique<views::View>());
 
-    notification_header_view_ = new NotificationHeaderView(nullptr);
+    notification_header_view_ =
+        new NotificationHeaderView(views::Button::PressedCallback());
     container->AddChildView(notification_header_view_);
 
     widget_.Show();
@@ -205,4 +207,10 @@ TEST_F(NotificationHeaderViewTest, ColorContrastEnforcement) {
   EXPECT_TRUE(MatchesAppIconColor(expected_color));
   EXPECT_TRUE(MatchesExpandIconColor(expected_color));
 }
+
+TEST_F(NotificationHeaderViewTest, DefaultFocusBehavior) {
+  EXPECT_EQ(views::View::FocusBehavior::ACCESSIBLE_ONLY,
+            notification_header_view_->GetFocusBehavior());
+}
+
 }  // namespace message_center

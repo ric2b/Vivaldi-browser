@@ -75,7 +75,7 @@ const char* JobTypeToRequestType(
       return dm_protocol::kValueRequestPublicSamlUser;
     case DeviceManagementService::JobConfiguration::
         TYPE_UPLOAD_REAL_TIME_REPORT:
-      NOTREACHED() << "Not a DMServer request type" << type;
+      NOTREACHED() << "Not a DMServer request type " << type;
       break;
     case DeviceManagementService::JobConfiguration::TYPE_CHROME_OS_USER_REPORT:
       return dm_protocol::kValueRequestChromeOsUserReport;
@@ -85,6 +85,10 @@ const char* JobTypeToRequestType(
     case DeviceManagementService::JobConfiguration::
         TYPE_PSM_HAS_DEVICE_STATE_REQUEST:
       return dm_protocol::kValueRequestPsmHasDeviceState;
+    case DeviceManagementService::JobConfiguration::
+        TYPE_UPLOAD_ENCRYPTED_REPORT:
+      NOTREACHED() << "Not a DMServer request type " << type;
+      break;
   }
   NOTREACHED() << "Invalid job type " << type;
   return "";
@@ -204,6 +208,9 @@ DMServerJobConfiguration::MapNetErrorAndResponseCodeToDMStatus(
       case DeviceManagementService::kTosHasNotBeenAccepted:
         code = DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED;
         break;
+      case DeviceManagementService::kIllegalAccountForPackagedEDULicense:
+        code = DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE;
+        break;
       default:
         // Handle all unknown 5xx HTTP error codes as temporary and any other
         // unknown error as one that needs more time to recover.
@@ -254,7 +261,7 @@ void DMServerJobConfiguration::OnURLLoadComplete(
   std::move(callback_).Run(job, code, net_error, response);
 }
 
-GURL DMServerJobConfiguration::GetURL(int last_error) {
+GURL DMServerJobConfiguration::GetURL(int last_error) const {
   // DM server requests always expect a dm_protocol::kParamRetry URL parameter
   // to indicate if this request is a retry.  Furthermore, if so then the
   // dm_protocol::kParamLastError URL parameter is also expected with the value

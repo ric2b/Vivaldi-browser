@@ -32,6 +32,11 @@ class RootWindow;
 class Window;
 }  // namespace aura
 
+namespace chromeos {
+class ImmersiveContext;
+class SnapController;
+}  // namespace chromeos
+
 namespace dbus {
 class Bus;
 }
@@ -122,7 +127,6 @@ class HighlighterController;
 class HoldingSpaceController;
 class HomeScreenController;
 class ImeControllerImpl;
-class ImmersiveContext;
 class InSessionAuthDialogControllerImpl;
 class KeyAccessibilityEnabler;
 class KeyboardBrightnessControlDelegate;
@@ -175,7 +179,6 @@ struct ShellInitParams;
 class ShellObserver;
 class ShutdownControllerImpl;
 class SmsObserver;
-class SnapController;
 class StickyKeysController;
 class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
@@ -690,7 +693,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<HoldingSpaceController> holding_space_controller_;
   std::unique_ptr<HomeScreenController> home_screen_controller_;
   std::unique_ptr<ImeControllerImpl> ime_controller_;
-  std::unique_ptr<ImmersiveContext> immersive_context_;
+  std::unique_ptr<chromeos::ImmersiveContext> immersive_context_;
   std::unique_ptr<InSessionAuthDialogControllerImpl>
       in_session_auth_dialog_controller_;
   std::unique_ptr<KeyboardBrightnessControlDelegate>
@@ -829,7 +832,7 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   std::unique_ptr<DockedMagnifierControllerImpl> docked_magnifier_controller_;
 
-  std::unique_ptr<SnapController> snap_controller_;
+  std::unique_ptr<chromeos::SnapController> snap_controller_;
 
   // |native_cursor_manager_| is owned by |cursor_manager_|, but we keep a
   // pointer to vend to test code.

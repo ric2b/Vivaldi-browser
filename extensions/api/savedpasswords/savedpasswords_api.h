@@ -33,7 +33,8 @@ class SavedpasswordsGetListFunction
 
   // PasswordStoreConsumer
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override;
 
   DISALLOW_COPY_AND_ASSIGN(SavedpasswordsGetListFunction);
 };
@@ -53,7 +54,8 @@ class SavedpasswordsRemoveFunction
 
   // PasswordStoreConsumer
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override;
 
   size_t id_to_remove_;
   scoped_refptr<password_manager::PasswordStore> password_store_;
@@ -87,7 +89,8 @@ class SavedpasswordsGetFunction
   ResponseAction Run() override;
 
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override;
 
   std::string username_;
 

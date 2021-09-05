@@ -1253,11 +1253,6 @@
               {
                 "name": "result",
                 "$ref": "CalendarEvent"
-              },
-              {
-                "name": "res",
-                "type": "string",
-                "optional": true
               }
             ]
           }

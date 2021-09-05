@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -145,8 +145,8 @@ class TransparentButton : public views::Button {
  public:
   METADATA_HEADER(TransparentButton);
 
-  explicit TransparentButton(DownloadItemView* parent) : Button(nullptr) {
-    SetFocusForPlatform();
+  explicit TransparentButton(DownloadItemView* parent)
+      : Button(Button::PressedCallback()) {
     views::InstallRectHighlightPathGenerator(this);
     SetInkDropMode(InkDropMode::ON);
     set_context_menu_controller(parent);
@@ -256,7 +256,7 @@ DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr model,
   // views to localize functionality and simplify this class.
 
   open_button_ = AddChildView(std::make_unique<TransparentButton>(this));
-  open_button_->set_callback(base::BindRepeating(
+  open_button_->SetCallback(base::BindRepeating(
       &DownloadItemView::OpenButtonPressed, base::Unretained(this)));
 
   file_name_label_ = AddChildView(std::make_unique<views::StyledLabel>());
@@ -305,7 +305,6 @@ DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr model,
       IDS_DOWNLOAD_ITEM_DROPDOWN_BUTTON_ACCESSIBLE_TEXT));
   dropdown_button_->SetBorder(views::CreateEmptyBorder(gfx::Insets(10)));
   dropdown_button_->SetHasInkDropActionOnClick(false);
-  dropdown_button_->SetFocusForPlatform();
   dropdown_button_->SizeToPreferredSize();
 
   complete_animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(2500));

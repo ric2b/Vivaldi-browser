@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Не удается отправить: <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540">Вы поменяли местами объекты "<ph name="FIRST_ITEM_TITLE" />" и "<ph name="SECOND_ITEM_TITLE" />"</translation>
 <translation id="1498028757988366001">Вы уже искали эту информацию. Если вы удалите запрос "<ph name="QUERY" />" из истории, он будет навсегда скрыт на всех ваших устройствах, где выполнен вход в аккаунт.</translation>
+<translation id="1510238584712386396">Панель запуска</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 минута }one{# минута }few{# минуты }many{# минут }other{# минуты }}</translation>
 <translation id="1643823602425662293">Уведомление</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" />-файл</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Найти "<ph name="LOOKUP_STRING" />"</translation>
+<translation id="3622035490309591977">История буфера обмена</translation>
 <translation id="364720409959344976">Выберите папку для загрузки</translation>
 <translation id="3660179305079774227">Стрелка вверх</translation>
 <translation id="3670030362669914947">Номер</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Последние действия: сегодня}=1{Последние действия: 1 день назад}one{Последние действия: # день назад}few{Последние действия: # дня назад}many{Последние действия: # дней назад}other{Последние действия: # дня назад}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 день }one{# день }few{# дня }many{# дней }other{# дня }}</translation>
 <translation id="5789643057113097023">:</translation>
+<translation id="5843690142429128814">Изображение.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{через 1 г.}one{через # г.}few{через # г.}many{через # л.}other{через # г.}}</translation>
 <translation id="588258955323874662">Полноэкранный режим</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Осталась 1 секунда}one{Осталась # секунда}few{Осталось # секунды}many{Осталось # секунд}other{Осталось # секунды}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">нажать</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Остался 1 час}one{Остался # час}few{Осталось # часа}many{Осталось # часов}other{Осталось # часа}}</translation>
 <translation id="688711909580084195">Страница без названия</translation>
+<translation id="6902419395050653510">HTML-контент.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> ПБ/с</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{остался 1 год}one{остался # год}few{осталось # года}many{осталось # лет}other{осталось # года}}</translation>
 <translation id="6945221475159498467">Выбрать</translation>

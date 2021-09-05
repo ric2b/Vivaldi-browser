@@ -20,7 +20,6 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/chrome_features.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -104,7 +103,7 @@ void AppBannerManagerDesktop::InvalidateWeakPtrs() {
   weak_factory_.InvalidateWeakPtrs();
 }
 
-bool AppBannerManagerDesktop::IsSupportedAppPlatform(
+bool AppBannerManagerDesktop::IsSupportedNonWebAppPlatform(
     const base::string16& platform) const {
   if (base::EqualsASCII(platform, kPlatformChromeWebStore))
     return true;
@@ -120,7 +119,7 @@ bool AppBannerManagerDesktop::IsSupportedAppPlatform(
   return false;
 }
 
-bool AppBannerManagerDesktop::IsRelatedAppInstalled(
+bool AppBannerManagerDesktop::IsRelatedNonWebAppInstalled(
     const blink::Manifest::RelatedApplication& related_app) const {
   if (!related_app.id || related_app.id->empty() || !related_app.platform ||
       related_app.platform->empty()) {

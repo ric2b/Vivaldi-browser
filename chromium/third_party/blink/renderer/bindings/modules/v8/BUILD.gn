@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/python.gni")
 import("//third_party/blink/renderer/bindings/bindings.gni")
 import("//third_party/blink/renderer/bindings/generated_in_modules.gni")
 import("//third_party/blink/renderer/bindings/modules/v8/generated.gni")
@@ -26,7 +27,8 @@ blink_modules_sources("v8") {
     sources += generated_dictionary_sources_in_modules
   }
   if (use_blink_v8_binding_new_idl_interface) {
-    sources += generated_interface_sources_in_modules
+    sources += generated_interface_sources_in_modules +
+               generated_namespace_sources_in_modules
   }
 
   deps = [
@@ -60,6 +62,8 @@ source_set("testing") {
 
   deps = [
     ":generated",
+    "//third_party/blink/renderer/core",
+    "//third_party/blink/renderer/modules",
     "//third_party/blink/renderer/platform",
     "//v8",
   ]
@@ -75,8 +79,10 @@ group("generated") {
     "//third_party/blink/renderer/modules/*",
   ]
 
-  public_deps =
-      [ "//third_party/blink/renderer/bindings:generate_bindings_all" ]
+  public_deps = [
+    ":bindings_modules_v8_generated",
+    "//third_party/blink/renderer/bindings:generate_bindings_all",
+  ]
 }
 
 group("bindings_modules_v8_generated") {
@@ -87,6 +93,7 @@ group("bindings_modules_v8_generated") {
     ":generate_bindings_modules_v8_partial_interfaces",
     ":generate_bindings_modules_v8_partial_interfaces_for_testing",
     ":generate_v8_context_snapshot_external_references",
+    "//third_party/blink/renderer/bindings/core/v8:bindings_core_v8_generated",
   ]
 }
 
@@ -205,7 +212,7 @@ group("generate_mojo_bindings") {
 
   deps = [
     "//device/gamepad/public/mojom:mojom_blink_headers",
-    "//device/vr/public/mojom:mojom_blink_headers",
+    "//device/vr/public/mojom:vr_service_blink_headers",
     "//media/capture/mojom:image_capture_blink_headers",
     "//media/midi:mojo_blink_headers",
     "//services/device/public/mojom:generic_sensor_headers",
@@ -241,7 +248,8 @@ blink_modules_sources("bindings_modules_impl") {
   ]
 }
 
-action("generate_v8_context_snapshot_external_references") {
+# TODO(crbug.com/1112471): Get this to run cleanly under Python 3.
+python2_action("generate_v8_context_snapshot_external_references") {
   script = "$bindings_scripts_dir/generate_v8_context_snapshot_external_references.py"
   idl_files =
       core_interface_idl_files_core_only +

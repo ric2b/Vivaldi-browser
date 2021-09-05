@@ -820,10 +820,7 @@ void UtilitiesSelectLocalImageFunction::OnFileSelected(
                                           profile->GetPath().AsUTF8Unsafe());
     Respond(ArgumentList(Results::Create(true)));
 
-    extensions::VivaldiRuntimeFeaturesFactory* factory =
-      extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
-
-    factory->OnProfileAvatarChanged(profile->GetPath());
+    RuntimeAPI::OnProfileAvatarChanged(profile);
   }
 }
 
@@ -1433,7 +1430,7 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
           : ContentSettingsPattern::FromString(secondary_pattern_string);
 
   map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
-                                    content_type, "", setting);
+                                    content_type, setting);
 
   return RespondNow(NoArguments());
 }

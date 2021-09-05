@@ -171,6 +171,14 @@ TEST(NinjaActionTargetWriter, ForEach) {
   dep.SetToolchain(setup.toolchain());
   ASSERT_TRUE(dep.OnResolved(&err));
 
+  Target bundle_data_dep(setup.settings(),
+                         Label(SourceDir("//foo/"), "bundle_data_dep"));
+  bundle_data_dep.sources().push_back(SourceFile("//foo/some_data.txt"));
+  bundle_data_dep.set_output_type(Target::BUNDLE_DATA);
+  bundle_data_dep.visibility().SetPublic();
+  bundle_data_dep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(bundle_data_dep.OnResolved(&err));
+
   Target datadep(setup.settings(), Label(SourceDir("//foo/"), "datadep"));
   datadep.set_output_type(Target::ACTION);
   datadep.visibility().SetPublic();
@@ -180,6 +188,7 @@ TEST(NinjaActionTargetWriter, ForEach) {
   Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
   target.set_output_type(Target::ACTION_FOREACH);
   target.private_deps().push_back(LabelTargetPair(&dep));
+  target.private_deps().push_back(LabelTargetPair(&bundle_data_dep));
   target.data_deps().push_back(LabelTargetPair(&datadep));
 
   target.sources().push_back(SourceFile("//foo/input1.txt"));
@@ -226,7 +235,8 @@ TEST(NinjaActionTargetWriter, ForEach) {
       "  source_name_part = input2\n"
       "\n"
       "build obj/foo/bar.stamp: "
-      "stamp input1.out input2.out || obj/foo/datadep.stamp\n";
+      "stamp input1.out input2.out || obj/foo/bundle_data_dep.stamp "
+      "obj/foo/datadep.stamp\n";
 
   std::string out_str = out.str();
 #if defined(OS_WIN)

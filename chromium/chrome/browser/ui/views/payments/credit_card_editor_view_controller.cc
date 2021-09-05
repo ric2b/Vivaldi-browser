@@ -109,14 +109,14 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
     views::Combobox* month_combobox = static_cast<views::Combobox*>(
         view_parent->GetViewByID(EditorViewController::GetInputFieldViewId(
             autofill::CREDIT_CARD_EXP_MONTH)));
-    base::string16 month =
-        month_combobox->model()->GetItemAt(month_combobox->GetSelectedIndex());
+    base::string16 month = month_combobox->GetModel()->GetItemAt(
+        month_combobox->GetSelectedIndex());
 
     views::Combobox* year_combobox = static_cast<views::Combobox*>(
         view_parent->GetViewByID(EditorViewController::GetInputFieldViewId(
             autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR)));
     base::string16 year =
-        year_combobox->model()->GetItemAt(year_combobox->GetSelectedIndex());
+        year_combobox->GetModel()->GetItemAt(year_combobox->GetSelectedIndex());
 
     bool is_expired = IsCardExpired(month, year, app_locale_);
     month_combobox->SetInvalid(is_expired);
@@ -160,7 +160,6 @@ CreditCardEditorViewController::CreditCardEditorViewController(
     base::WeakPtr<PaymentRequestState> state,
     base::WeakPtr<PaymentRequestDialogView> dialog,
     BackNavigationType back_navigation,
-    int next_ui_tag,
     base::OnceClosure on_edited,
     base::OnceCallback<void(const autofill::CreditCard&)> on_added,
     autofill::CreditCard* credit_card,
@@ -168,8 +167,7 @@ CreditCardEditorViewController::CreditCardEditorViewController(
     : EditorViewController(spec, state, dialog, back_navigation, is_incognito),
       on_edited_(std::move(on_edited)),
       on_added_(std::move(on_added)),
-      credit_card_to_edit_(credit_card),
-      add_billing_address_button_tag_(next_ui_tag) {
+      credit_card_to_edit_(credit_card) {
   if (spec)
     supported_card_networks_ = spec->supported_card_networks_set();
 }
@@ -361,9 +359,15 @@ CreditCardEditorViewController::CreateExtraViewForField(
 
   // The button to add new billing addresses.
   auto add_button = std::make_unique<views::MdTextButton>(
-      this, l10n_util::GetStringUTF16(IDS_ADD));
+      base::BindRepeating(
+          &PaymentRequestDialogView::ShowShippingAddressEditor, dialog(),
+          BackNavigationType::kOneStep, base::RepeatingClosure(),
+          base::BindRepeating(
+              &CreditCardEditorViewController::AddAndSelectNewBillingAddress,
+              weak_ptr_factory_.GetWeakPtr()),
+          nullptr),
+      l10n_util::GetStringUTF16(IDS_ADD));
   add_button->SetID(static_cast<int>(DialogViewID::ADD_BILLING_ADDRESS_BUTTON));
-  add_button->set_tag(add_billing_address_button_tag_);
   add_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   button_view->AddChildView(std::move(add_button));
   return button_view;
@@ -417,7 +421,8 @@ bool CreditCardEditorViewController::ValidateModelAndSave() {
       return false;
 
     autofill::AddressComboboxModel* model =
-        static_cast<autofill::AddressComboboxModel*>(address_combobox->model());
+        static_cast<autofill::AddressComboboxModel*>(
+            address_combobox->GetModel());
 
     credit_card_to_edit_->set_billing_address_id(
         model->GetItemIdentifierAt(address_combobox->GetSelectedIndex()));
@@ -449,7 +454,7 @@ bool CreditCardEditorViewController::ValidateModelAndSave() {
 
     if (field.second.type == kBillingAddressType) {
       autofill::AddressComboboxModel* model =
-          static_cast<autofill::AddressComboboxModel*>(combobox->model());
+          static_cast<autofill::AddressComboboxModel*>(combobox->GetModel());
 
       credit_card.set_billing_address_id(
           model->GetItemIdentifierAt(combobox->GetSelectedIndex()));
@@ -604,30 +609,14 @@ base::string16 CreditCardEditorViewController::GetSheetTitle() {
                        : title;
 }
 
-void CreditCardEditorViewController::ButtonPressed(views::Button* sender,
-                                                   const ui::Event& event) {
-  if (sender->tag() == add_billing_address_button_tag_) {
-    dialog()->ShowShippingAddressEditor(
-        BackNavigationType::kOneStep,
-        /*on_edited=*/
-        base::OnceClosure(),
-        /*on_added=*/
-        base::BindOnce(
-            &CreditCardEditorViewController::AddAndSelectNewBillingAddress,
-            weak_ptr_factory_.GetWeakPtr()),
-        /*profile=*/nullptr);
-  } else {
-    EditorViewController::ButtonPressed(sender, event);
-  }
-}
-
 void CreditCardEditorViewController::AddAndSelectNewBillingAddress(
     const autofill::AutofillProfile& profile) {
   state()->AddAutofillShippingProfile(false, profile);
   views::Combobox* address_combobox = static_cast<views::Combobox*>(
       dialog()->GetViewByID(GetInputFieldViewId(kBillingAddressType)));
   autofill::AddressComboboxModel* model =
-      static_cast<autofill::AddressComboboxModel*>(address_combobox->model());
+      static_cast<autofill::AddressComboboxModel*>(
+          address_combobox->GetModel());
   int index = model->AddNewProfile(profile);
   // SetSelectedIndex doesn't trigger a perform action notification, which is
   // needed to update the valid state.
@@ -738,7 +727,7 @@ bool CreditCardEditorViewController::CreditCardValidationDelegate::
     // TODO(crbug.com/718905) Find a way to deal with existing incomplete
     // addresses when choosing them as billing addresses.
     autofill::AddressComboboxModel* model =
-        static_cast<autofill::AddressComboboxModel*>(combobox->model());
+        static_cast<autofill::AddressComboboxModel*>(combobox->GetModel());
     if (model->GetItemIdentifierAt(combobox->GetSelectedIndex()).empty()) {
       if (error_message) {
         *error_message =

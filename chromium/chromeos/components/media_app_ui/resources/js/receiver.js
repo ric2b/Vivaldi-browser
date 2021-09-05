@@ -134,6 +134,7 @@ class ReceivedFileList {
     }
 
     this.length = files.length;
+    this.currentFileIndex = files.length ? 0 : -1;
     /** @type {!Array<!ReceivedFile>} */
     this.files = files.map(f => new ReceivedFile(f));
     /** @type {number} */
@@ -175,6 +176,10 @@ class ReceivedFileList {
   /** @override */
   addObserver(observer) {
     this.observers.push(observer);
+  }
+
+  async openFile() {
+    await parentMessagePipe.sendMessage(Message.OPEN_FILE);
   }
 
   /** @param {!Array<!ReceivedFile>} files */
@@ -239,6 +244,23 @@ const DELEGATE = {
    */
   async openFile() {
     await parentMessagePipe.sendMessage(Message.OPEN_FILE);
+  },
+  /**
+   * @param {!Blob} file
+   * @return {!Promise<!File>}
+   */
+  async extractPreview(file) {
+    try {
+      const [buffer] = /** @type {!Array<!ArrayBuffer>} */ (
+          await Promise.all([file.arrayBuffer(), loadPiex()]));
+      return await extractFromRawImageBuffer(buffer);
+    } catch (/** @type {!Error} */ e) {
+      console.warn(e);
+      if (e.name === 'Error') {
+        e.name = 'JpegNotFound';
+      }
+      throw e;
+    }
   }
 };
 
@@ -262,7 +284,7 @@ async function loadFiles(fileList) {
     await app.loadFiles(fileList);
   } else {
     // Note we don't await in this case, which may affect b/152729704.
-    window.customLaunchData = {files: fileList};
+    window.customLaunchData.files = fileList;
   }
 }
 
@@ -291,6 +313,15 @@ function mutationCallback(mutationsList, observer) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  // TODO(crbug/1138798): Reorder .js deps so this can be done at load time.
+  // Note: go/bbsrc/flags.ts processes this, `window.features` variable.
+  /** @type{{features: Object<string, boolean>}} */ (window).features = {
+    imageAnnotation: loadTimeData.getBoolean('imageAnnotation'),
+    pdfInInk: loadTimeData.getBoolean('pdfInInk'),
+    flagsMenu: loadTimeData.getBoolean('flagsMenu'),
+    isDevChannel: loadTimeData.getBoolean('isDevChannel'),
+  };
+
   const app = getApp();
   if (app) {
     initializeApp(app);
@@ -301,6 +332,13 @@ window.addEventListener('DOMContentLoaded', () => {
   const observer = new MutationObserver(mutationCallback);
   observer.observe(document.body, {childList: true});
 });
+
+// Ensure that if no files are loaded into the media app there is a default
+// empty file list available.
+window.customLaunchData = {
+  delegate: DELEGATE,
+  files: new ReceivedFileList({files: [], writableFileIndex: 0})
+};
 
 // Attempting to show file pickers in the sandboxed <iframe> is guaranteed to
 // result in a SecurityError: hide them.

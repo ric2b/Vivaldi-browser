@@ -14,13 +14,13 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneShotCallback;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -35,7 +35,11 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
+import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
+import org.chromium.chrome.features.start_surface.StartSurfaceState;
+import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar;
+import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
 
@@ -46,16 +50,17 @@ import org.vivaldi.browser.toolbar.VivaldiTopToolbarCoordinator;
  */
 public class TopToolbarCoordinator implements Toolbar {
     /**
-     * Observes toolbar URL expansion percentage change.
+     * Observes toolbar URL expansion progress change.
      */
     public interface UrlExpansionObserver {
         /**
-         * Notified when toolbar URL expansion percentage changes.
-         * @param percentage The toolbar expansion percentage. 0 indicates that the URL bar is not
+         * Notified when toolbar URL expansion progress fraction changes.
+         *
+         * @param fraction The toolbar expansion progress. 0 indicates that the URL bar is not
          *                   expanded. 1 indicates that the URL bar is expanded to the maximum
          *                   width.
          */
-        void onUrlExpansionPercentageChanged(float percentage);
+        void onUrlExpansionProgressChanged(float fraction);
     }
 
     public static final int TAB_SWITCHER_MODE_NORMAL_ANIMATION_DURATION_MS = 200;
@@ -78,8 +83,11 @@ public class TopToolbarCoordinator implements Toolbar {
 
     private MenuButtonCoordinator mMenuButtonCoordinator;
     private ObservableSupplier<AppMenuButtonHelper> mAppMenuButtonHelperSupplier;
-    private CallbackController mCallbackController = new CallbackController();
     private ObservableSupplier<TabModelSelector> mTabModelSelectorSupplier;
+
+    private Callback<ClipDrawableProgressBar.DrawingInfo> mProgressDrawInfoCallback;
+    private ToolbarControlContainer mControlContainer;
+    private Supplier<ResourceManager> mResourceManagerSupplier;
 
     /**
      * Creates a new {@link TopToolbarCoordinator}.
@@ -88,8 +96,7 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param userEducationHelper Helper class for showing in-product help text bubbles.
      * @param buttonDataProviders List of classes that wish to display an optional button in the
      *         browsing mode toolbar.
-     * @param overviewModeBehaviorSupplier Supplier of the overview mode manager for the current
-     *                                     profile.
+     * @param layoutStateProviderSupplier Supplier of the {@link LayoutStateProvider}.
      * @param normalThemeColorProvider The {@link ThemeColorProvider} for normal mode.
      * @param overviewThemeColorProvider The {@link ThemeColorProvider} for overview mode.
      * @param tabModelSelectorSupplier Supplier of the {@link TabModelSelector}.
@@ -99,12 +106,14 @@ public class TopToolbarCoordinator implements Toolbar {
      *        invalidate the drawing surface.  This will give the object that registers as the host
      *        for the {@link Invalidator} a chance to defer the actual invalidate to sync drawing.
      * @param identityDiscButtonSupplier Supplier of Identity Disc button.
+     * @param startSurfaceSupplier Supplier of the StartSurface.
+     * @param resourceManagerSupplier A supplier of a resource manager for native textures.
      */
     public TopToolbarCoordinator(ToolbarControlContainer controlContainer,
             ToolbarLayout toolbarLayout, ToolbarDataProvider toolbarDataProvider,
             ToolbarTabController tabController, UserEducationHelper userEducationHelper,
             List<ButtonDataProvider> buttonDataProviders,
-            OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
+            OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
             ThemeColorProvider normalThemeColorProvider,
             ThemeColorProvider overviewThemeColorProvider,
             MenuButtonCoordinator browsingModeMenuButtonCoordinator,
@@ -113,15 +122,19 @@ public class TopToolbarCoordinator implements Toolbar {
             ObservableSupplier<TabModelSelector> tabModelSelectorSupplier,
             ObservableSupplier<Boolean> homeButtonVisibilitySupplier,
             ObservableSupplier<Boolean> identityDiscStateSupplier,
-            Callback<Runnable> invalidatorCallback,
-            Supplier<ButtonData> identityDiscButtonSupplier) {
+            Callback<Runnable> invalidatorCallback, Supplier<ButtonData> identityDiscButtonSupplier,
+            OneshotSupplier<StartSurface> startSurfaceSupplier, Runnable tabOrModelChangeRunnable,
+            Supplier<ResourceManager> resourceManagerSupplier) {
+        mControlContainer = controlContainer;
         mToolbarLayout = toolbarLayout;
         mMenuButtonCoordinator = browsingModeMenuButtonCoordinator;
         mOptionalButtonController = new OptionalBrowsingModeButtonController(buttonDataProviders,
                 userEducationHelper, mToolbarLayout, () -> toolbarDataProvider.getTab());
-
-        overviewModeBehaviorSupplier.onAvailable(
-                mCallbackController.makeCancelable(this::setOverviewModeBehavior));
+        mResourceManagerSupplier = resourceManagerSupplier;
+        mProgressDrawInfoCallback = (info) -> {
+            if (controlContainer == null) return;
+            controlContainer.getProgressBarDrawingInfo(info);
+        };
 
         mTabModelSelectorSupplier = tabModelSelectorSupplier;
 
@@ -132,9 +145,9 @@ public class TopToolbarCoordinator implements Toolbar {
             if (StartSurfaceConfiguration.isStartSurfaceEnabled()) {
                 mStartSurfaceToolbarCoordinator = new StartSurfaceToolbarCoordinator(
                         controlContainer.getRootView().findViewById(R.id.tab_switcher_toolbar_stub),
-                        userEducationHelper, overviewModeBehaviorSupplier,
-                        identityDiscStateSupplier, overviewThemeColorProvider,
-                        overviewModeMenuButtonCoordinator, identityDiscButtonSupplier);
+                        userEducationHelper, layoutStateProviderSupplier, identityDiscStateSupplier,
+                        overviewThemeColorProvider, overviewModeMenuButtonCoordinator,
+                        identityDiscButtonSupplier);
             } else {
                 mTabSwitcherModeCoordinatorPhone = new TabSwitcherModeTTCoordinatorPhone(
                         controlContainer.getRootView().findViewById(R.id.tab_switcher_toolbar_stub),
@@ -142,7 +155,8 @@ public class TopToolbarCoordinator implements Toolbar {
             }
         }
         controlContainer.setToolbar(this);
-        mToolbarLayout.initialize(toolbarDataProvider, tabController, mMenuButtonCoordinator);
+        mToolbarLayout.initialize(toolbarDataProvider, tabController, mMenuButtonCoordinator,
+                tabOrModelChangeRunnable);
 
         mToolbarLayout.setThemeColorProvider(normalThemeColorProvider);
         mAppMenuButtonHelperSupplier = appMenuButtonHelperSupplier;
@@ -169,11 +183,13 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param newTabClickHandler The click handler for the new tab button.
      * @param bookmarkClickHandler The click handler for the bookmarks button.
      * @param customTabsBackClickHandler The click handler for the custom tabs back button.
+     * @param browserControlsStateProvider Access to the state of the browser controls.
      */
     public void initializeWithNative(Runnable layoutUpdater,
             OnClickListener tabSwitcherClickHandler,
             OnLongClickListener tabSwitcherLongClickHandler, OnClickListener newTabClickHandler,
-            OnClickListener bookmarkClickHandler, OnClickListener customTabsBackClickHandler) {
+            OnClickListener bookmarkClickHandler, OnClickListener customTabsBackClickHandler,
+            BrowserControlsStateProvider browserControlsStateProvider) {
         assert mTabModelSelectorSupplier.get() != null;
         if (mTabSwitcherModeCoordinatorPhone != null) {
             mTabSwitcherModeCoordinatorPhone.setOnTabSwitcherClickHandler(tabSwitcherClickHandler);
@@ -190,7 +206,6 @@ public class TopToolbarCoordinator implements Toolbar {
 
         mToolbarLayout.setTabModelSelector(mTabModelSelectorSupplier.get());
         getLocationBar().updateVisualsForState();
-        getLocationBar().setUrlToPageUrl();
         mToolbarLayout.setOnTabSwitcherClickHandler(tabSwitcherClickHandler);
         mToolbarLayout.setOnTabSwitcherLongClickHandler(tabSwitcherLongClickHandler);
         mToolbarLayout.setBookmarkClickHandler(bookmarkClickHandler);
@@ -200,20 +215,15 @@ public class TopToolbarCoordinator implements Toolbar {
         mToolbarLayout.onNativeLibraryReady();
     }
 
-    private void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
-        assert overviewModeBehavior != null;
-        mToolbarLayout.setOverviewModeBehavior(overviewModeBehavior);
-    }
-
     /**
-     * @param urlExpansionObserver The observer that observes URL expansion percentage change.
+     * @param urlExpansionObserver The observer that observes URL expansion progress change.
      */
     public void addUrlExpansionObserver(UrlExpansionObserver urlExpansionObserver) {
         mToolbarLayout.addUrlExpansionObserver(urlExpansionObserver);
     }
 
     /**
-     * @param urlExpansionObserver The observer that observes URL expansion percentage change.
+     * @param urlExpansionObserver The observer that observes URL expansion progress change.
      */
     public void removeUrlExpansionObserver(UrlExpansionObserver urlExpansionObserver) {
         mToolbarLayout.removeUrlExpansionObserver(urlExpansionObserver);
@@ -237,11 +247,6 @@ public class TopToolbarCoordinator implements Toolbar {
             mStartSurfaceToolbarCoordinator.destroy();
         }
 
-        if (mCallbackController != null) {
-            mCallbackController.destroy();
-            mCallbackController = null;
-        }
-
         if (mOptionalButtonController != null) {
             mOptionalButtonController.destroy();
             mOptionalButtonController = null;
@@ -252,6 +257,9 @@ public class TopToolbarCoordinator implements Toolbar {
         }
         if (mTabModelSelectorSupplier != null) {
             mTabModelSelectorSupplier = null;
+        }
+        if (mControlContainer != null) {
+            mControlContainer = null;
         }
     }
 
@@ -268,6 +276,7 @@ public class TopToolbarCoordinator implements Toolbar {
         return mMenuButtonCoordinator.getMenuButton();
     }
 
+    @Nullable
     @Override
     public ToolbarProgressBar getProgressBar() {
         return mToolbarLayout.getProgressBar();
@@ -276,18 +285,6 @@ public class TopToolbarCoordinator implements Toolbar {
     @Override
     public int getPrimaryColor() {
         return mToolbarLayout.getToolbarDataProvider().getPrimaryColor();
-    }
-
-    @Override
-    public void updateTabSwitcherToolbarState(boolean requestToShow) {
-        // TODO(https://crbug.com/1041123): Investigate whether isInOverviewAndShowingOmnibox check
-        // is needed.
-        if (mStartSurfaceToolbarCoordinator == null
-                || mToolbarLayout.getToolbarDataProvider() == null
-                || !mToolbarLayout.getToolbarDataProvider().isInOverviewAndShowingOmnibox()) {
-            return;
-        }
-        mStartSurfaceToolbarCoordinator.setStartSurfaceToolbarVisibility(requestToShow);
     }
 
     @Override
@@ -599,9 +596,56 @@ public class TopToolbarCoordinator implements Toolbar {
         return mToolbarLayout.getLocationBar();
     }
 
+    /**
+     * Update the start surface toolbar state.
+     * @param newState New Start Surface State.
+     * @param requestToShow Whether or not request showing the start surface toolbar.
+     */
+    public void updateStartSurfaceToolbarState(
+            @StartSurfaceState int newState, boolean requestToShow) {
+        if (mStartSurfaceToolbarCoordinator == null
+                || mToolbarLayout.getToolbarDataProvider() == null) {
+            return;
+        }
+        mStartSurfaceToolbarCoordinator.onStartSurfaceStateChanged(newState, requestToShow);
+        updateToolbarContainerVisibility();
+    }
+
+    /**
+     * Triggered when the offset of start surface header view is changed.
+     * @param verticalOffset The start surface header view's offset.
+     */
+    public void onStartSurfaceHeaderOffsetChanged(int verticalOffset) {
+        if (mStartSurfaceToolbarCoordinator != null) {
+            mStartSurfaceToolbarCoordinator.onStartSurfaceHeaderOffsetChanged(verticalOffset);
+            updateToolbarContainerVisibility();
+        }
+    }
+
+    private void updateToolbarContainerVisibility() {
+        if (mStartSurfaceToolbarCoordinator != null) {
+            boolean shouldHideToolbarContainer =
+                    mStartSurfaceToolbarCoordinator.shouldHideToolbarContainer(getHeight());
+            mControlContainer.setToolbarContainerVisibility(
+                    shouldHideToolbarContainer ? View.INVISIBLE : View.VISIBLE);
+        }
+    }
+
     @Override
     public int getHeight() {
         return mToolbarLayout.getHeight();
+    }
+
+    /**
+     * Sets the highlight on the new tab button shown during overview mode.
+     * @param highlight If the new tab button should be highlighted.
+     */
+    public void setNewTabButtonHighlight(boolean highlight) {
+        if (mTabSwitcherModeCoordinatorPhone != null) {
+            mTabSwitcherModeCoordinatorPhone.setNewTabButtonHighlight(highlight);
+        } else if (mStartSurfaceToolbarCoordinator != null) {
+            mStartSurfaceToolbarCoordinator.setNewTabButtonHighlight(highlight);
+        }
     }
 
     /**

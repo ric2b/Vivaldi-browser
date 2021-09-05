@@ -124,7 +124,7 @@ public class Profile {
     }
 
     /**
-     * Returns the name of the profile. While added in 88, this can be used with any version.
+     * Returns the name of the profile. While added in 87, this can be used with any version.
      *
      * @return The name of the profile.
      *
@@ -136,7 +136,7 @@ public class Profile {
     }
 
     /**
-     * Returns true if the profile is incognito. While added in 88, this can be used with any
+     * Returns true if the profile is incognito. While added in 87, this can be used with any
      * version.
      *
      * @return True if the profile is incognito.
@@ -308,7 +308,7 @@ public class Profile {
     /**
      * Gets the prerender controller for this profile.
      *
-     * @since 88
+     * @since 87
      */
     @NonNull
     public PrerenderController getPrerenderController() {

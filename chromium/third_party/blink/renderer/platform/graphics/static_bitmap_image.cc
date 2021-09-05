@@ -35,7 +35,7 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
       orientation);
 }
 
-IntSize StaticBitmapImage::SizeRespectingOrientation() const {
+IntSize StaticBitmapImage::PreferredDisplaySize() const {
   if (orientation_.UsesWidthAsHeight())
     return Size().TransposedSize();
   else
@@ -58,7 +58,7 @@ void StaticBitmapImage::DrawHelper(
 
   cc::PaintCanvasAutoRestore auto_restore(canvas, false);
   FloatRect adjusted_dst_rect = dst_rect;
-  if (respect_orientation && orientation_ != kDefaultImageOrientation) {
+  if (respect_orientation && orientation_ != ImageOrientationEnum::kDefault) {
     canvas->save();
 
     // ImageOrientation expects the origin to be at (0, 0)
@@ -116,9 +116,9 @@ bool StaticBitmapImage::CopyToByteArray(
       (color_params.GetSkColorType() == kRGBA_F16_SkColorType)
           ? kRGBA_F16_SkColorType
           : kRGBA_8888_SkColorType;
-  SkImageInfo info = SkImageInfo::Make(
-      rect.Width(), rect.Height(), color_type, kUnpremul_SkAlphaType,
-      color_params.GetSkColorSpaceForSkSurfaces());
+  SkImageInfo info =
+      SkImageInfo::Make(rect.Width(), rect.Height(), color_type,
+                        kUnpremul_SkAlphaType, color_params.GetSkColorSpace());
   bool read_pixels_successful =
       src_image->PaintImageForCurrentFrame().readPixels(
           info, dst.data(), info.minRowBytes(), rect.X(), rect.Y());

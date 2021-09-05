@@ -88,6 +88,7 @@ class RulesIndexManager : public RuleService::Observer {
 
   std::string index_checksum_;
   std::unique_ptr<RulesIndex> rules_index_;
+  int index_read_fail_count_ = 0;
 
   RulesIndexChangedCallback rules_index_change_callback_;
   RulesIndexLoadedCallback rules_index_loaded_callback_;

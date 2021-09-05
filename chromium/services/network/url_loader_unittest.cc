@@ -13,7 +13,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -26,10 +26,9 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -82,6 +81,7 @@
 #include "services/network/public/mojom/cookie_access_observer.mojom-forward.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/ip_address_space.mojom.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/origin_policy_manager.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
@@ -1035,7 +1035,9 @@ TEST_F(URLLoaderTest, InsecureRequestToLocalResource) {
   set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
-              IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
+              IsError(net::ERR_FAILED));
+  EXPECT_THAT(client()->completion_status().cors_error_status,
+              Optional(CorsErrorStatus(mojom::IPAddressSpace::kLocal)));
 }
 
 TEST_F(URLLoaderTest, InsecurePublicToLocalIsBlocked) {
@@ -1045,7 +1047,9 @@ TEST_F(URLLoaderTest, InsecurePublicToLocalIsBlocked) {
   set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
-              IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
+              IsError(net::ERR_FAILED));
+  EXPECT_THAT(client()->completion_status().cors_error_status,
+              Optional(CorsErrorStatus(mojom::IPAddressSpace::kLocal)));
 }
 
 TEST_F(URLLoaderTest, InsecurePrivateToLocalIsBlocked) {
@@ -1055,7 +1059,9 @@ TEST_F(URLLoaderTest, InsecurePrivateToLocalIsBlocked) {
   set_factory_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
-              IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
+              IsError(net::ERR_FAILED));
+  EXPECT_THAT(client()->completion_status().cors_error_status,
+              Optional(CorsErrorStatus(mojom::IPAddressSpace::kLocal)));
 }
 
 TEST_F(URLLoaderTest, InsecureLocalToLocalIsOk) {
@@ -1078,7 +1084,9 @@ TEST_F(URLLoaderTest, TrustedParamsInsecurePublicToLocalIsBlocked) {
   set_request_client_security_state(std::move(client_security_state));
 
   EXPECT_THAT(Load(test_server()->GetURL("/empty.html")),
-              IsError(net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST));
+              IsError(net::ERR_FAILED));
+  EXPECT_THAT(client()->completion_status().cors_error_status,
+              Optional(CorsErrorStatus(mojom::IPAddressSpace::kLocal)));
 }
 
 // Bundles together the inputs to a parameterized private network request test.
@@ -1150,6 +1158,10 @@ TEST_P(URLLoaderFakeTransportInfoTest, PrivateNetworkRequestLoadsCorrectly) {
 
   // Despite its name, IsError(OK) asserts that the matched value is OK.
   EXPECT_THAT(Load(url), IsError(params.expected_result));
+  if (params.expected_result != net::OK) {
+    EXPECT_THAT(client()->completion_status().cors_error_status,
+                Optional(CorsErrorStatus(params.endpoint_address_space)));
+  }
 }
 
 // Lists all combinations we want to test in URLLoaderFakeTransportInfoTest.
@@ -1169,12 +1181,12 @@ constexpr URLLoaderFakeTransportInfoTestParams
         {
             mojom::IPAddressSpace::kUnknown,
             mojom::IPAddressSpace::kPrivate,
-            net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST,
+            net::ERR_FAILED,
         },
         {
             mojom::IPAddressSpace::kUnknown,
             mojom::IPAddressSpace::kLocal,
-            net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST,
+            net::ERR_FAILED,
         },
         // Client: kPublic
         {
@@ -1190,12 +1202,12 @@ constexpr URLLoaderFakeTransportInfoTestParams
         {
             mojom::IPAddressSpace::kPublic,
             mojom::IPAddressSpace::kPrivate,
-            net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST,
+            net::ERR_FAILED,
         },
         {
             mojom::IPAddressSpace::kPublic,
             mojom::IPAddressSpace::kLocal,
-            net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST,
+            net::ERR_FAILED,
         },
         // Client: kPrivate
         {
@@ -1216,7 +1228,7 @@ constexpr URLLoaderFakeTransportInfoTestParams
         {
             mojom::IPAddressSpace::kPrivate,
             mojom::IPAddressSpace::kLocal,
-            net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST,
+            net::ERR_FAILED,
         },
         // Client: kLocal
         {
@@ -5241,7 +5253,7 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
         CreateResourceRequest("GET", server.GetURL("/with_policy"));
     // This is what the IsolationInfo for a main frame will normally look like.
     request.trusted_params->isolation_info = net::IsolationInfo::Create(
-        net::IsolationInfo::RedirectMode::kUpdateTopFrame,
+        net::IsolationInfo::RequestType::kMainFrame,
         test_server_origin /* top_frame_origin */,
         test_server_origin /* frame_origin */,
         net::SiteForCookies::FromOrigin(test_server_origin));
@@ -5285,13 +5297,13 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
 
     // Check IsolationInfo sent to the OriginPolicyManager. Both origins should
     // be the same as the |isolation_info| field of
-    // ResourceRequest::trusted_params, but the RedirectMode should be
-    // kUpdateNothing, and the SiteForCookies should be null.
+    // ResourceRequest::trusted_params, but the RequestType should be
+    // kOther, and the SiteForCookies should be null.
     EXPECT_TRUE(
-        net::IsolationInfo::Create(
-            net::IsolationInfo::RedirectMode::kUpdateNothing,
-            test_server_origin /* top_frame_origin */,
-            test_server_origin /* frame_origin */, net::SiteForCookies())
+        net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                   test_server_origin /* top_frame_origin */,
+                                   test_server_origin /* frame_origin */,
+                                   net::SiteForCookies())
             .IsEqualForTesting(mock_origin_policy_manager.isolation_info()));
   }
 
@@ -5385,7 +5397,7 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
     // IsolationInfo used for the ResourceRequest. This is what the
     // IsolationInfo for a cross-origin subframe will normally look like.
     request.trusted_params->isolation_info = net::IsolationInfo::Create(
-        net::IsolationInfo::RedirectMode::kUpdateFrameOnly, top_frame_origin,
+        net::IsolationInfo::RequestType::kSubFrame, top_frame_origin,
         test_server_origin /* frame_origin */, net::SiteForCookies());
     request.site_for_cookies =
         request.trusted_params->isolation_info.site_for_cookies();
@@ -5419,11 +5431,11 @@ TEST_F(URLLoaderTest, OriginPolicyManagerCalled) {
 
     // Check IsolationInfo sent to the OriginPolicyManager. Both origins should
     // be the same as the |isolation_info| field of
-    // ResourceRequest::trusted_params, but the RedirectMode should be
-    // kUpdateNothing, and the SiteForCookies should be null.
+    // ResourceRequest::trusted_params, but the RequestType should be
+    // kOther, and the SiteForCookies should be null.
     EXPECT_TRUE(
         net::IsolationInfo::Create(
-            net::IsolationInfo::RedirectMode::kUpdateNothing, top_frame_origin,
+            net::IsolationInfo::RequestType::kOther, top_frame_origin,
             test_server_origin /* frame_origin */, net::SiteForCookies())
             .IsEqualForTesting(mock_origin_policy_manager.isolation_info()));
   }
@@ -5540,15 +5552,21 @@ class NoopTrustTokenKeyCommitmentGetter : public TrustTokenKeyCommitmentGetter {
 base::NoDestructor<NoopTrustTokenKeyCommitmentGetter>
     noop_key_commitment_getter{};
 
+mojom::NetworkContextClient* ReturnNullNetworkContextClient() {
+  return nullptr;
+}
+
 class MockTrustTokenRequestHelperFactory
     : public TrustTokenRequestHelperFactory {
  public:
   MockTrustTokenRequestHelperFactory(
       mojom::TrustTokenOperationStatus creation_failure_error,
       SyncOrAsync sync_or_async)
-      : TrustTokenRequestHelperFactory(nullptr,
-                                       noop_key_commitment_getter.get(),
-                                       {}),
+      : TrustTokenRequestHelperFactory(
+            nullptr,
+            noop_key_commitment_getter.get(),
+            base::BindRepeating(&ReturnNullNetworkContextClient),
+            {}),
         sync_or_async_(sync_or_async),
         creation_failure_error_(creation_failure_error) {}
 
@@ -5557,9 +5575,11 @@ class MockTrustTokenRequestHelperFactory
       base::Optional<mojom::TrustTokenOperationStatus> on_finalize,
       SyncOrAsync sync_or_async,
       bool* begin_done_flag)
-      : TrustTokenRequestHelperFactory(nullptr,
-                                       noop_key_commitment_getter.get(),
-                                       {}),
+      : TrustTokenRequestHelperFactory(
+            nullptr,
+            noop_key_commitment_getter.get(),
+            base::BindRepeating(&ReturnNullNetworkContextClient),
+            {}),
         sync_or_async_(sync_or_async),
         helper_(
             std::make_unique<MockTrustTokenRequestHelper>(on_begin,
@@ -5685,11 +5705,11 @@ TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
 // the load.
 //
 // (This is the case exactly when the request is for token redemption, and the
-// Trust Tokens logic determines that there is already a cached signed
-// redemption record stored locally, obviating the need to execute a redemption
+// Trust Tokens logic determines that there is already a cached redemption
+// record stored locally, obviating the need to execute a redemption
 // operation.)
 TEST_P(URLLoaderSyncOrAsyncTrustTokenOperationTest,
-       HandlesTrustTokenSignedRedemptionRecordCacheHit) {
+       HandlesTrustTokenRedemptionRecordCacheHit) {
   ResourceRequest request =
       CreateResourceRequest("GET", test_server()->GetURL("/simple_page.html"));
   request.trust_token_params =

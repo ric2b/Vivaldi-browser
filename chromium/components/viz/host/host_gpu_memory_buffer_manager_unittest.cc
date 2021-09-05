@@ -4,10 +4,12 @@
 
 #include "components/viz/host/host_gpu_memory_buffer_manager.h"
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/clang_profiling_buildflags.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/run_loop.h"
@@ -162,6 +164,8 @@ class TestGpuService : public mojom::GpuService {
   void DisplayAdded() override {}
 
   void DisplayRemoved() override {}
+
+  void DisplayMetricsChanged() override {}
 
   void DestroyAllChannels() override {}
 

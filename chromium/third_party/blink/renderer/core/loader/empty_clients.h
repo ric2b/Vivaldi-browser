@@ -40,6 +40,7 @@
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/common/widget/screen_info.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_spell_check_panel_host_client.h"
@@ -96,7 +97,10 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
   void DidFocusPage() override {}
   bool CanTakeFocus(mojom::blink::FocusType) override { return false; }
   void TakeFocus(mojom::blink::FocusType) override {}
-  void Show(NavigationPolicy) override {}
+  void Show(const base::UnguessableToken& opener_frame_token,
+            NavigationPolicy navigation_policy,
+            const IntRect& initial_rect,
+            bool user_gesture) override {}
   void DidOverscroll(const gfx::Vector2dF&,
                      const gfx::Vector2dF&,
                      const gfx::PointF&,
@@ -136,7 +140,8 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
                              const WebWindowFeatures&,
                              network::mojom::blink::WebSandboxFlags,
                              const FeaturePolicyFeatureState&,
-                             const SessionStorageNamespaceId&) override {
+                             const SessionStorageNamespaceId&,
+                             bool& consumed_user_gesture) override {
     return nullptr;
   }
   bool OpenJavaScriptAlertDelegate(LocalFrame*, const String&) override {
@@ -405,8 +410,7 @@ class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
   unsigned BackForwardLength() override { return 0; }
   void FrameRectsChanged(const IntRect& local_frame_rect,
                          const IntRect& transformed_frame_rect) override {}
-  void UpdateRemoteViewportIntersection(
-      const ViewportIntersectionState& intersection_state) override {}
+  void SynchronizeVisualProperties() override {}
   AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces() override {
     return AssociatedInterfaceProvider::GetEmptyAssociatedInterfaceProvider();
   }

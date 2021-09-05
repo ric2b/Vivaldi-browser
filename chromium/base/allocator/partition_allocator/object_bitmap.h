@@ -45,12 +45,6 @@ class ObjectBitmap final {
 
   inline ObjectBitmap();
 
-  // Finds the beginning of the closest object that starts at or before
-  // |address|. It may return an object from another slot if the slot where
-  // |address| lies in is unallocated. The caller is responsible for range
-  // checking. Returns |kSentinel| if no object was found.
-  inline uintptr_t FindPotentialObjectBeginning(uintptr_t address) const;
-
   inline void SetBit(uintptr_t address);
   inline void ClearBit(uintptr_t address);
   inline bool CheckBit(uintptr_t address) const;
@@ -90,35 +84,6 @@ inline ObjectBitmap<PageSize, PageAlignment, ObjectAlignment>::ObjectBitmap() =
     default;
 
 template <size_t PageSize, size_t PageAlignment, size_t ObjectAlignment>
-uintptr_t ObjectBitmap<PageSize, PageAlignment, ObjectAlignment>::
-    FindPotentialObjectBeginning(uintptr_t address) const {
-  const uintptr_t page_base = reinterpret_cast<uintptr_t>(this) & kPageBaseMask;
-  PA_DCHECK(page_base <= address && address < page_base + kPageSize);
-
-  size_t cell_index, bit;
-  std::tie(cell_index, bit) = ObjectIndexAndBit(address);
-
-  // Find the first set bit at or before |bit|.
-  uint8_t byte = LoadCell(cell_index) & ((1 << (bit + 1)) - 1);
-  while (!byte && cell_index) {
-    PA_DCHECK(0u < cell_index);
-    byte = LoadCell(--cell_index);
-  }
-
-  if (!byte) {
-    // No object was found.
-    return kSentinel;
-  }
-
-  const int leading_zeroes = base::bits::CountLeadingZeroBits(byte);
-  const size_t object_number =
-      (cell_index * kBitsPerCell) + (kBitsPerCell - 1) - leading_zeroes;
-  const size_t offset_in_page = object_number * kObjectAlignment;
-
-  return offset_in_page + page_base;
-}
-
-template <size_t PageSize, size_t PageAlignment, size_t ObjectAlignment>
 void ObjectBitmap<PageSize, PageAlignment, ObjectAlignment>::SetBit(
     uintptr_t address) {
   size_t cell_index, object_bit;
@@ -155,7 +120,6 @@ std::pair<size_t, size_t>
 ObjectBitmap<PageSize, PageAlignment, ObjectAlignment>::ObjectIndexAndBit(
     uintptr_t address) const {
   const uintptr_t offset_in_page = address & kPageOffsetMask;
-  PA_DCHECK(!(offset_in_page % kObjectAlignment));
   const size_t object_number = offset_in_page / kObjectAlignment;
   const size_t cell_index = object_number / kBitsPerCell;
   PA_DCHECK(kBitmapSize > cell_index);

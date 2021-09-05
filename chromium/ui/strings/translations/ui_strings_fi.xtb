@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Jakaminen ei onnistu: <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> vaihdettiin: <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Hait tätä aiemmin. Jos <ph name="QUERY" /> poistetaan historiastasi, se poistetaan pysyvästi tililtäsi kaikilla laitteillasi.</translation>
+<translation id="1510238584712386396">Käynnistysohjelma</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minuutti ja }other{# minuuttia ja }}</translation>
 <translation id="1643823602425662293">Ilmoitus</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -31,7 +32,7 @@
 <translation id="1761785978543082658"><ph name="QUANTITY" /> t</translation>
 <translation id="1801827354178857021">Jakso</translation>
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 kuukausi}other{# kuukautta}}</translation>
-<translation id="1809410197924942083"><ph name="QUANTITY" /> Mt/s</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> Mb/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 tunti ja }other{# tuntia ja }}</translation>
 <translation id="1830308660060964064"><ph name="ITEM_TITLE" /> irrotettiin</translation>
 <translation id="1842960171412779397">Valitse</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" />-tiedosto</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Hae ”<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3622035490309591977">Leikepöydän historia</translation>
 <translation id="364720409959344976">Valitse lähetettävä kansio</translation>
 <translation id="3660179305079774227">Nuoli yl.</translation>
 <translation id="3670030362669914947">Numero</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Aktiivinen tänään}=1{Aktiivinen 1 päivä sitten}other{Aktiivinen # päivää sitten}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 päivä ja }other{# päivää ja }}</translation>
 <translation id="5789643057113097023">,</translation>
+<translation id="5843690142429128814">Kuva.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{1 v:n päästä}other{# v:n päästä}}</translation>
 <translation id="588258955323874662">Koko ruutu</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{1 sekunti jäljellä}other{# sekuntia jäljellä}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">paina</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{1 tunti jäljellä}other{# tuntia jäljellä}}</translation>
 <translation id="688711909580084195">Nimetön verkkosivu</translation>
+<translation id="6902419395050653510">HTML-sisältö</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> Pt/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{1 vuosi jäljellä}other{# vuotta jäljellä}}</translation>
 <translation id="6945221475159498467">Valitse</translation>

@@ -101,8 +101,9 @@ std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildPolicyHandlerList(
   DCHECK(IsEnterprisePolicyEnabled());
   std::unique_ptr<policy::ConfigurationPolicyHandlerList> handlers =
       std::make_unique<policy::ConfigurationPolicyHandlerList>(
-          base::Bind(&PopulatePolicyHandlerParameters),
-          base::Bind(&policy::GetChromePolicyDetails), allow_future_policies);
+          base::BindRepeating(&PopulatePolicyHandlerParameters),
+          base::BindRepeating(&policy::GetChromePolicyDetails),
+          allow_future_policies);
 
   // Check the feature flag before adding handlers to the list.
   if (!ShouldInstallEnterprisePolicyHandlers()) {
@@ -122,12 +123,9 @@ std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildPolicyHandlerList(
   handlers->AddHandler(std::make_unique<policy::DefaultSearchPolicyHandler>());
   handlers->AddHandler(
       std::make_unique<safe_browsing::SafeBrowsingPolicyHandler>());
-
-  if (ShouldInstallManagedBookmarksPolicyHandler()) {
-    handlers->AddHandler(
-        std::make_unique<bookmarks::ManagedBookmarksPolicyHandler>(
-            chrome_schema));
-  }
+  handlers->AddHandler(
+      std::make_unique<bookmarks::ManagedBookmarksPolicyHandler>(
+          chrome_schema));
 
   if (ShouldInstallURLBlocklistPolicyHandlers()) {
     handlers->AddHandler(std::make_unique<policy::URLBlocklistPolicyHandler>(

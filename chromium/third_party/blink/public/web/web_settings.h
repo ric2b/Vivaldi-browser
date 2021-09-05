@@ -34,10 +34,9 @@
 #include <unicode/uscript.h>
 
 #include "third_party/blink/public/common/css/navigation_controls.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
-#include "third_party/blink/public/common/web_preferences/viewport_style.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-forward.h"
+#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-forward.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/public/platform/web_size.h"
@@ -114,7 +113,7 @@ class WebSettings {
   virtual void SetAlwaysShowContextMenuOnTouch(bool) = 0;
   virtual void SetAntialiased2dCanvasEnabled(bool) = 0;
   virtual void SetAntialiasedClips2dCanvasEnabled(bool) = 0;
-  virtual void SetAutoplayPolicy(web_pref::AutoplayPolicy) = 0;
+  virtual void SetAutoplayPolicy(mojom::AutoplayPolicy) = 0;
   virtual void SetAutoZoomFocusedNodeToLegibleScale(bool) = 0;
   virtual void SetCaretBrowsingEnabled(bool) = 0;
   virtual void SetClobberUserAgentInitialScaleQuirk(bool) = 0;
@@ -134,7 +133,7 @@ class WebSettings {
   virtual void SetDontSendKeyEventsToJavascript(bool) = 0;
   virtual void SetDoubleTapToZoomEnabled(bool) = 0;
   virtual void SetDownloadableBinaryFontsEnabled(bool) = 0;
-  virtual void SetEditingBehavior(web_pref::EditingBehaviorType) = 0;
+  virtual void SetEditingBehavior(mojom::EditingBehavior) = 0;
   virtual void SetEnableScrollAnimator(bool) = 0;
   virtual void SetPrefersReducedMotion(bool) = 0;
   virtual void SetSmoothScrollForFindEnabled(bool) = 0;
@@ -152,7 +151,7 @@ class WebSettings {
   virtual void SetHighlightAds(bool) = 0;
   virtual void SetHyperlinkAuditingEnabled(bool) = 0;
   virtual void SetIgnoreMainFrameOverflowHiddenQuirk(bool) = 0;
-  virtual void SetImageAnimationPolicy(web_pref::ImageAnimationPolicy) = 0;
+  virtual void SetImageAnimationPolicy(mojom::ImageAnimationPolicy) = 0;
   virtual void SetImagesEnabled(bool) = 0;
   virtual void SetInlineTextBoxAccessibilityEnabled(bool) = 0;
   virtual void SetJavaScriptCanAccessClipboard(bool) = 0;
@@ -220,6 +219,8 @@ class WebSettings {
   virtual void SetSupportDeprecatedTargetDensityDPI(bool) = 0;
   virtual void SetSupportsMultipleWindows(bool) = 0;
   virtual void SetSyncXHRInDocumentsEnabled(bool) = 0;
+  // TODO(https://crbug.com/1163644): Remove once Chrome Apps are deprecated.
+  virtual void SetTargetBlankImpliesNoOpenerEnabledWillBeRemoved(bool) = 0;
   virtual void SetTextAreasAreResizable(bool) = 0;
   virtual void SetTextAutosizingEnabled(bool) = 0;
   virtual void SetAccessibilityFontScaleFactor(float) = 0;
@@ -241,7 +242,7 @@ class WebSettings {
   virtual void SetTouchDragEndContextMenu(bool) = 0;
   virtual void SetBarrelButtonForDragEnabled(bool) = 0;
   virtual void SetUseLegacyBackgroundSizeShorthandBehavior(bool) = 0;
-  virtual void SetViewportStyle(web_pref::ViewportStyle) = 0;
+  virtual void SetViewportStyle(mojom::ViewportStyle) = 0;
   virtual void SetUseWideViewport(bool) = 0;
   virtual void SetV8CacheOptions(mojom::V8CacheOptions) = 0;
   virtual void SetValidationMessageTimerMagnification(int) = 0;
@@ -275,7 +276,8 @@ class WebSettings {
   virtual void SetLazyImageFirstKFullyLoad3G(int) = 0;
   virtual void SetLazyImageFirstKFullyLoad4G(int) = 0;
   virtual void SetForceDarkModeEnabled(bool) = 0;
-  virtual void SetPreferredColorScheme(PreferredColorScheme) = 0;
+  virtual void SetPreferredColorScheme(blink::mojom::PreferredColorScheme) = 0;
+  virtual void SetPreferredContrast(mojom::PreferredContrast) = 0;
   virtual void SetNavigationControls(NavigationControls) = 0;
   virtual void SetAriaModalPrunesAXTree(bool) = 0;
   virtual void SetUseAXMenuList(bool) = 0;

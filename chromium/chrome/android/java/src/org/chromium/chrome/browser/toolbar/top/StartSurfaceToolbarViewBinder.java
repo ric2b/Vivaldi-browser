@@ -19,8 +19,10 @@ import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarPropert
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.LOGO_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.MENU_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_BUTTON_AT_START;
+import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_BUTTON_HIGHLIGHT;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_BUTTON_IS_VISIBLE;
 import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.NEW_TAB_CLICK_HANDLER;
+import static org.chromium.chrome.browser.toolbar.top.StartSurfaceToolbarProperties.TRANSLATION_Y;
 
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -61,8 +63,12 @@ class StartSurfaceToolbarViewBinder {
             view.setOnNewTabClickHandler(model.get(NEW_TAB_CLICK_HANDLER));
         } else if (propertyKey == NEW_TAB_BUTTON_AT_START) {
             view.setNewTabButtonAtStart(model.get(NEW_TAB_BUTTON_AT_START));
+        } else if (propertyKey == NEW_TAB_BUTTON_HIGHLIGHT) {
+            view.setNewTabButtonHighlight(model.get(NEW_TAB_BUTTON_HIGHLIGHT));
         } else if (propertyKey == NEW_TAB_BUTTON_IS_VISIBLE) {
             view.setNewTabButtonVisibility(model.get(NEW_TAB_BUTTON_IS_VISIBLE));
+        } else if (propertyKey == TRANSLATION_Y) {
+            view.setTranslationY(model.get(TRANSLATION_Y));
         }
     }
 }

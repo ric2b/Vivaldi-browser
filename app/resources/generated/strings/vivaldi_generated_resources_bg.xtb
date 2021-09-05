@@ -19,9 +19,8 @@
 <translation id="1221825588892235038">Само избраното</translation>
 <translation id="1244303850296295656">Грешка в разширението</translation>
 <translation id="125220115284141797">фабрични</translation>
-<translation id="1274977772557788323">Настройки на хранилището на плейър Flash на Adobe</translation>
 <translation id="1297175357211070620">Назначение</translation>
-<translation id="1303101771013849280">Файл HTML с отметки</translation>
+<translation id="1303101771013849280">Файл с отметки HTML</translation>
 <translation id="1380436189840894976">Изход от частен режим?</translation>
 <translation id="1430915738399379752">Отпечатай</translation>
 <translation id="1433811987160647649">Питай преди достъп</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Постави като текст</translation>
 <translation id="2249605167705922988">т.е. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Позволи идентификатори на защитено съдържание (вероятно ще изисква повторен пуск на компютъра)</translation>
-<translation id="2263497240924215535">(забранена)</translation>
 <translation id="2277255602909579701">Бисквитки и данни на сайта</translation>
 <translation id="2280486287150724112">Дясно поле</translation>
 <translation id="2282146716419988068">Процес на ГПУ</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Магазин на Chrome</translation>
 <translation id="2678063897982469759">Разреши повторно</translation>
 <translation id="2721037002783622288">Потърси &amp;картината чрез <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Създай пряк път…</translation>
 <translation id="2785873697295365461">Файлови описатели</translation>
 <translation id="2809586584051668049">и още <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не показвай картини</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">Устройства MIDI</translation>
 <translation id="3021678814754966447">&amp;Покажи кода на рамката</translation>
 <translation id="3036546437875325427">Разреши Flash</translation>
-<translation id="3038675903128704560">Не позволявай на никой сайт да ползва приставка за достъп до компютъра</translation>
 <translation id="3046910703532196514">Страницата с всичко</translation>
 <translation id="3067198360141518313">Изпълни приставката</translation>
 <translation id="3080207940057008665">Друга програма в компютъра добави тема, вероятно променяща начина на работа на Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Вероятно разширението е повредено.</translation>
 <translation id="3387614642886316601">Ползвай подобрена проверка</translation>
 <translation id="3432227430032737297">Премахни показаните</translation>
-<translation id="3440761377721825626">Питай при опит на сайт да ползва приставка за достъп до компютъра</translation>
 <translation id="345693547134384690">Отвори &amp;картината в нов раздел</translation>
 <translation id="3494769164076977169">Питай при опит на сайт да изтегля автоматично още файлове след първия (препоръчително)</translation>
 <translation id="3505030558724226696">Оттегли достъпа до устройства</translation>
 <translation id="3511307672085573050">Копирай &amp;адреса на препратката</translation>
-<translation id="3523642406908660543">Питай при опит на сайт да ползва приставка за достъп до компютъра (препоръчително)</translation>
 <translation id="354068948465830244">Може да чете и променя данните на сайта</translation>
 <translation id="3560034655160545939">&amp;Провери правописа</translation>
 <translation id="3574917942258583917">Изход от частен режим?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; споделя принтер &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; с вашата група: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. В случай че приемете, всички членове на групата ще могат да печатат на принтера.</translation>
 <translation id="3587482841069643663">всички</translation>
 <translation id="3627588569887975815">Отвори препратката в &amp;частен прозорец</translation>
+<translation id="3627879631695760395">Инсталирай <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Обработчици</translation>
 <translation id="3678156199662914018">Разширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Заявка за споделяне на екрана от <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Възстанови настройките</translation>
 <translation id="4434045419905280838">Изскачащи и пренасочване</translation>
 <translation id="4478664379124702289">Запиши пр&amp;епратката като…</translation>
-<translation id="4552089082226364758">Флаш</translation>
 <translation id="4579581181964204535">Прехвърляне на <ph name="HOST_NAME" /> е невъзможно.</translation>
 <translation id="4593021220803146968">&amp;Премини към <ph name="URL" /></translation>
 <translation id="4595560905247879544">Приложения и разширения могат да се променят само от мениджъра (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Неизвестен</translation>
 <translation id="5860491529813859533">Включи</translation>
 <translation id="5867841422488265304">Потърсете или въведете адрес</translation>
-<translation id="5908769186679515905">Блокирай изпълнение на Flash от сайтовете</translation>
 <translation id="5910363049092958439">Запи&amp;ши картината като…</translation>
 <translation id="5956585768868398362">Тази ли страница за търсене очаквате?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (пик <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Достъпът е отказан.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> тни</translation>
 <translation id="7309257895202129721">Покажи &amp;контролите</translation>
-<translation id="7311079019872751559">Неограничен достъп на приставки</translation>
 <translation id="7385854874724088939">Нещо не е наред при опита за отпечатване. Моля, проверете принтера и опитайте отново.</translation>
 <translation id="7412226954991670867">Памет на ГПУ</translation>
 <translation id="7421925624202799674">&amp;Покажи кода на страницата</translation>
@@ -477,6 +471,7 @@
 <translation id="9027459031423301635">Отвори препратката в нов &amp;раздел</translation>
 <translation id="9056810968620647706">Няма намерени съвпадения.</translation>
 <translation id="9137916601698928395">Отвори препратката като <ph name="USER" /></translation>
+<translation id="91568222606626347">Създай пряк път…</translation>
 <translation id="916607977885256133">Покажи картина в картината</translation>
 <translation id="9170848237812810038">&amp;Отмени</translation>
 <translation id="9215293857209265904"><ph name="EXTENSION_NAME" /> е добавено</translation>

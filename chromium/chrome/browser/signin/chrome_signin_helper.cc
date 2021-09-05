@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
@@ -505,6 +505,7 @@ void FixAccountConsistencyRequestHeader(
     int incognito_availibility,
     AccountConsistencyMethod account_consistency,
     std::string gaia_id,
+    const base::Optional<bool>& is_child_account,
 #if defined(OS_CHROMEOS)
     bool is_secondary_account_addition_allowed,
 #endif
@@ -552,8 +553,8 @@ void FixAccountConsistencyRequestHeader(
 
   // Mirror header:
   AppendOrRemoveMirrorRequestHeader(
-      request, redirect_url, gaia_id, account_consistency, cookie_settings,
-      profile_mode_mask, kChromeMirrorHeaderSource,
+      request, redirect_url, gaia_id, is_child_account, account_consistency,
+      cookie_settings, profile_mode_mask, kChromeMirrorHeaderSource,
       /*force_account_consistency=*/false);
 }
 

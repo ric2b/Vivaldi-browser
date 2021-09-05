@@ -12,11 +12,9 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_paths.h"
-#include "content/public/common/frame_navigate_params.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -129,7 +127,8 @@ IN_PROC_BROWSER_TEST_F(RenderViewHostTest, MAYBE_ReleaseSessionOnCloseACK) {
   EXPECT_TRUE(ExecuteScript(shell(), "window.open();"));
   Shell* new_shell = new_shell_observer.GetShell();
   new_shell->LoadURL(test_url);
-  RenderViewHost* rvh = new_shell->web_contents()->GetRenderViewHost();
+  RenderViewHost* rvh =
+      new_shell->web_contents()->GetMainFrame()->GetRenderViewHost();
   SiteInstance* site_instance = rvh->GetSiteInstance();
   scoped_refptr<SessionStorageNamespace> session_namespace =
       rvh->GetDelegate()->GetSessionStorageNamespace(site_instance);

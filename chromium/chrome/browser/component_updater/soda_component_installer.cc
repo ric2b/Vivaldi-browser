@@ -13,12 +13,19 @@
 #include "chrome/common/pref_names.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/crx_file/id_util.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/soda/constants.h"
 #include "components/update_client/update_client_errors.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
 #include "media/base/media_switches.h"
+
+#if defined(OS_WIN)
+#include <aclapi.h>
+#include <windows.h>
+#include "sandbox/win/src/sid.h"
+#endif
 
 using content::BrowserThread;
 
@@ -65,10 +72,42 @@ void SODAComponentInstallerPolicy::UpdateSODAComponentOnDemand() {
       }));
 }
 
-bool SODAComponentInstallerPolicy::VerifyInstallation(
-    const base::DictionaryValue& manifest,
-    const base::FilePath& install_dir) const {
-  return base::PathExists(install_dir.Append(speech::kSodaBinaryRelativePath));
+update_client::CrxInstaller::Result
+SODAComponentInstallerPolicy::SetComponentDirectoryPermission(
+    const base::FilePath& install_dir) {
+#if defined(OS_WIN)
+  sandbox::Sid users_sid = sandbox::Sid(WinBuiltinUsersSid);
+
+  // Initialize an EXPLICIT_ACCESS structure for an ACE.
+  EXPLICIT_ACCESS explicit_access[1] = {};
+  explicit_access[0].grfAccessPermissions = GENERIC_READ | GENERIC_EXECUTE;
+  explicit_access[0].grfAccessMode = GRANT_ACCESS;
+  explicit_access[0].grfInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
+  explicit_access[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+  explicit_access[0].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
+  explicit_access[0].Trustee.ptstrName =
+      reinterpret_cast<LPTSTR>(users_sid.GetPSID());
+
+  PACL acl = nullptr;
+  if (::SetEntriesInAcl(base::size(explicit_access), explicit_access, nullptr,
+                        &acl) != ERROR_SUCCESS) {
+    return update_client::CrxInstaller::Result(
+        update_client::InstallError::SET_PERMISSIONS_FAILED);
+  }
+
+  // Change the security attributes.
+  LPWSTR file_name = const_cast<LPWSTR>(install_dir.value().c_str());
+  bool success = ::SetNamedSecurityInfo(file_name, SE_FILE_OBJECT,
+                                        DACL_SECURITY_INFORMATION, nullptr,
+                                        nullptr, acl, nullptr) == ERROR_SUCCESS;
+  ::LocalFree(acl);
+  if (!success) {
+    return update_client::CrxInstaller::Result(
+        update_client::InstallError::SET_PERMISSIONS_FAILED);
+  }
+#endif
+
+  return update_client::CrxInstaller::Result(update_client::InstallError::NONE);
 }
 
 bool SODAComponentInstallerPolicy::SupportsGroupPolicyEnabledComponentUpdates()
@@ -84,10 +123,17 @@ update_client::CrxInstaller::Result
 SODAComponentInstallerPolicy::OnCustomInstall(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) {
-  return update_client::CrxInstaller::Result(0);  // Nothing custom here.
+  return SODAComponentInstallerPolicy::SetComponentDirectoryPermission(
+      install_dir);
 }
 
 void SODAComponentInstallerPolicy::OnCustomUninstall() {}
+
+bool SODAComponentInstallerPolicy::VerifyInstallation(
+    const base::DictionaryValue& manifest,
+    const base::FilePath& install_dir) const {
+  return base::PathExists(install_dir.Append(speech::kSodaBinaryRelativePath));
+}
 
 void SODAComponentInstallerPolicy::ComponentReady(
     const base::Version& version,
@@ -129,67 +175,69 @@ void UpdateSODAInstallDirPref(PrefService* prefs,
 #endif
 }
 
-void RegisterSODAComponent(ComponentUpdateService* cus,
-                           PrefService* prefs,
+void RegisterPrefsForSodaComponent(PrefRegistrySimple* registry) {
+  registry->RegisterTimePref(prefs::kSodaScheduledDeletionTime, base::Time());
+  registry->RegisterFilePathPref(prefs::kSodaBinaryPath, base::FilePath());
+  registry->RegisterFilePathPref(prefs::kSodaEnUsConfigPath, base::FilePath());
+  registry->RegisterFilePathPref(prefs::kSodaJaJpConfigPath, base::FilePath());
+}
+
+void RegisterSodaComponent(ComponentUpdateService* cus,
+                           PrefService* profile_prefs,
+                           PrefService* global_prefs,
                            base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!base::FeatureList::IsEnabled(media::kLiveCaption))
-    return;
 
-  if (base::FeatureList::IsEnabled(media::kUseSodaForLiveCaption)) {
-    auto installer = base::MakeRefCounted<ComponentInstaller>(
-        std::make_unique<SODAComponentInstallerPolicy>(base::BindRepeating(
-            [](ComponentUpdateService* cus, PrefService* prefs,
-               const base::FilePath& install_dir) {
-              content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
-                  ->PostTask(FROM_HERE,
-                             base::BindOnce(&UpdateSODAInstallDirPref, prefs,
-                                            install_dir));
-            },
-            cus, prefs)));
+  if (base::FeatureList::IsEnabled(media::kUseSodaForLiveCaption) &&
+      base::FeatureList::IsEnabled(media::kLiveCaption)) {
+    if (profile_prefs->GetBoolean(prefs::kLiveCaptionEnabled)) {
+      global_prefs->SetTime(prefs::kSodaScheduledDeletionTime, base::Time());
+      auto installer = base::MakeRefCounted<ComponentInstaller>(
+          std::make_unique<SODAComponentInstallerPolicy>(base::BindRepeating(
+              [](ComponentUpdateService* cus, PrefService* global_prefs,
+                 const base::FilePath& install_dir) {
+                content::GetUIThreadTaskRunner(
+                    {base::TaskPriority::BEST_EFFORT})
+                    ->PostTask(FROM_HERE,
+                               base::BindOnce(&UpdateSODAInstallDirPref,
+                                              global_prefs, install_dir));
+              },
+              cus, global_prefs)));
 
-    if (prefs->GetBoolean(prefs::kLiveCaptionEnabled)) {
       installer->Register(cus, std::move(callback));
     } else {
-      // Register and uninstall the SODA component to delete the previously
-      // installed SODA files.
-      if (!prefs->GetFilePath(prefs::kSodaBinaryPath).empty()) {
-        installer->Register(
-            cus,
-            base::BindOnce(
-                [](ComponentUpdateService* cus, PrefService* prefs) {
-                  if (component_updater::UninstallSODAComponent(cus, prefs)) {
-                    prefs->SetFilePath(prefs::kSodaBinaryPath,
-                                       base::FilePath());
-                    prefs->SetFilePath(prefs::kSodaEnUsConfigPath,
-                                       base::FilePath());
-                  }
-                },
-                cus, prefs));
+      auto deletion_time =
+          global_prefs->GetTime(prefs::kSodaScheduledDeletionTime);
+      if (!deletion_time.is_null() && deletion_time < base::Time::Now()) {
+        base::DeletePathRecursively(speech::GetSodaDirectory());
+        base::DeletePathRecursively(speech::GetSodaLanguagePacksDirectory());
+        global_prefs->SetTime(prefs::kSodaScheduledDeletionTime, base::Time());
       }
     }
   }
 }
 
 void RegisterSodaLanguageComponent(ComponentUpdateService* cus,
-                                   PrefService* prefs) {
+                                   PrefService* profile_prefs,
+                                   PrefService* global_prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   if (base::FeatureList::IsEnabled(media::kUseSodaForLiveCaption)) {
     speech::LanguageCode language = speech::GetLanguageCode(
-        prefs->GetString(prefs::kLiveCaptionLanguageCode));
+        profile_prefs->GetString(prefs::kLiveCaptionLanguageCode));
     switch (language) {
       case speech::LanguageCode::kNone:
         // Do nothing.
         break;
       case speech::LanguageCode::kEnUs:
         RegisterSodaEnUsComponent(
-            cus, prefs,
+            cus, global_prefs,
             base::BindOnce(&SodaEnUsComponentInstallerPolicy::
                                UpdateSodaEnUsComponentOnDemand));
         break;
       case speech::LanguageCode::kJaJp:
         RegisterSodaJaJpComponent(
-            cus, prefs,
+            cus, global_prefs,
             base::BindOnce(&SodaJaJpComponentInstallerPolicy::
                                UpdateSodaJaJpComponentOnDemand));
         break;
@@ -197,8 +245,4 @@ void RegisterSodaLanguageComponent(ComponentUpdateService* cus,
   }
 }
 
-bool UninstallSODAComponent(ComponentUpdateService* cus, PrefService* prefs) {
-  return cus->UnregisterComponent(
-      SODAComponentInstallerPolicy::GetExtensionId());
-}
 }  // namespace component_updater

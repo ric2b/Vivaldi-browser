@@ -11,10 +11,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-shared.h"
-#include "third_party/blink/public/mojom/loader/resource_load_info_notifier.mojom-shared.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
+#include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/web_code_cache_loader.h"
 #include "third_party/blink/public/platform/web_document_subresource_filter.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -154,13 +154,11 @@ class WebWorkerFetchContext : public base::RefCounted<WebWorkerFetchContext> {
   // offline capability detection in service workers.
   virtual void SetIsOfflineMode(bool is_offline_mode) = 0;
 
-  // Clones a valid notifier held by this context which is used to notify
-  // loading status only when
-  // IsLoadMainScriptForPlzDedicatedWorkerByParamsEnabled() is true.
-  virtual CrossVariantMojoRemote<mojom::ResourceLoadInfoNotifierInterfaceBase>
-  CloneResourceLoadInfoNotifier() {
-    return CrossVariantMojoRemote<mojom::ResourceLoadInfoNotifierInterfaceBase>(
-        mojo::NullRemote());
+  // Creates a notifier used to notify loading stats for workers.
+  virtual std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+  CreateResourceLoadInfoNotifierWrapper() {
+    return std::make_unique<blink::ResourceLoadInfoNotifierWrapper>(
+        /*resource_load_info_notifier=*/nullptr);
   }
 };
 

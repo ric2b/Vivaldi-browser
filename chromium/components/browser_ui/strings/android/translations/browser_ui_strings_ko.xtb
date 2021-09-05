@@ -17,11 +17,11 @@
 <translation id="1369915414381695676"><ph name="SITE_NAME" /> 사이트 추가됨</translation>
 <translation id="1383876407941801731">검색</translation>
 <translation id="1384959399684842514">다운로드 일시중지됨</translation>
+<translation id="1415402041810619267">URL 잘림</translation>
 <translation id="1431402976894535801">사이트에서 사용자 접속 상태를 알 수 없도록 차단</translation>
 <translation id="1446450296470737166">MIDI 기기의 전체 제어 허용</translation>
 <translation id="1509960214886564027">다수의 사이트에서 기능이 작동하지 않을 수 있음</translation>
 <translation id="1620510694547887537">카메라</translation>
-<translation id="1647391597548383849">카메라에 액세스</translation>
 <translation id="1660204651932907780">사이트에서 소리를 재생하도록 허용(권장)</translation>
 <translation id="1677097821151855053">예를 들어 로그인하거나 광고를 맞춤설정하기 위해 정보를 저장하는 데 쿠키와 기타 사이트 데이터가 사용됩니다. 모든 사이트의 쿠키를 관리하려면 <ph name="BEGIN_LINK" />설정<ph name="END_LINK" />을 참조하세요.</translation>
 <translation id="1688867105868176567">사이트 데이터를 삭제하시겠습니까?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">사이트 URL</translation>
 <translation id="2025115093177348061">증강 현실</translation>
 <translation id="2030769033451695672">탭하여 <ph name="URL_OF_THE_CURRENT_TAB" />(으)로 돌아가기</translation>
+<translation id="2054665754582400095">활동</translation>
 <translation id="2079545284768500474">실행취소</translation>
 <translation id="2091887806945687916">소리</translation>
 <translation id="2107397443965016585">사이트에서 보호된 콘텐츠를 재생하도록 허용하기 전에 확인(권장)</translation>
 <translation id="2146738493024040262">인스턴트 앱 열기</translation>
 <translation id="2148716181193084225">오늘</translation>
 <translation id="2182457891543959921">사이트에서 주변 환경의 3D 지도를 생성하거나 카메라 위치를 추적하도록 허용하기 전에 확인(권장)</translation>
-<translation id="2187243482123994665">사용자 접속 상태</translation>
 <translation id="2212565012507486665">쿠키 허용</translation>
 <translation id="2228071138934252756"><ph name="APP_NAME" />에서 카메라에 액세스하도록 허용하려면 <ph name="BEGIN_LINK" />Android 설정<ph name="END_LINK" />에서도 카메라를 사용 설정하세요.</translation>
 <translation id="2241634353105152135">한 번만</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" />MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> 외 <ph name="NUM_MORE" />개 허용됨}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> 외 <ph name="NUM_MORE" />개 허용됨}}</translation>
 <translation id="2434158240863470628">다운로드 완료: <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">위치 액세스</translation>
 <translation id="2482878487686419369">알림</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" />에서 관리함</translation>
 <translation id="2498359688066513246">고객센터</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">마이크</translation>
 <translation id="3277252321222022663">사이트의 센서 액세스 허용(권장)</translation>
 <translation id="3295602654194328831">정보 숨기기</translation>
+<translation id="3328801116991980348">사이트 정보</translation>
 <translation id="3333961966071413176">모든 연락처</translation>
 <translation id="3386292677130313581">사이트에서 내 위치를 파악하도록 허용하기 전에 확인(권장)</translation>
 <translation id="3538390592868664640">사이트에서 주변 환경의 3D 지도를 생성하거나 카메라 위치를 추적하지 못하도록 차단</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">사이트에서 보호된 콘텐츠를 재생하도록 허용</translation>
 <translation id="4468959413250150279">특정 사이트를 음소거합니다.</translation>
 <translation id="4479647676395637221">사이트에서 카메라를 사용하도록 허용하기 전에 확인(권장)</translation>
+<translation id="4505788138578415521">URL 펼쳐짐</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" />에서 마이크에 액세스하도록 허용하려면 <ph name="BEGIN_LINK" />Android 설정<ph name="END_LINK" />에서도 마이크를 사용 설정하세요.</translation>
 <translation id="4570913071927164677">세부정보</translation>
 <translation id="4645575059429386691">부모님이 관리합니다.</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">블루투스</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> 외 <ph name="NUM_MORE" />개}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> 외 <ph name="NUM_MORE" />개}}</translation>
 <translation id="913657688200966289"><ph name="BEGIN_LINK" />Android 설정<ph name="END_LINK" />에서 <ph name="APP_NAME" /> 관련 권한을 허용하세요.</translation>
-<translation id="945632385593298557">마이크에 액세스</translation>
 <translation id="965817943346481315">사이트에서 방해가 되거나 사용자를 현혹하는 광고를 표시하는 경우 광고 차단(권장)</translation>
 <translation id="967624055006145463">저장된 데이터</translation>
 </translationbundle>

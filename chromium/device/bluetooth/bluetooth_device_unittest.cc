@@ -11,8 +11,9 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
 #include "device/bluetooth/public/cpp/bluetooth_address.h"
 #include "device/bluetooth/test/test_bluetooth_adapter_observer.h"
@@ -1150,7 +1151,7 @@ TEST_F(BluetoothTest, MAYBE_GetName_NullName) {
 // and is non trivial to implement. On ChromeOS, it is not essential for
 // this test to operate, and so it is simply skipped. Android at least
 // does require this step.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_ASH)
   StartLowEnergyDiscoverySession();
 #endif
 
@@ -2018,6 +2019,36 @@ TEST_F(BluetoothTest, MAYBE_GetGattServices_DiscoveryError) {
   SimulateGattServicesDiscoveryError(device);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0u, device->GetGattServices().size());
+}
+
+#if defined(OS_WIN)
+TEST_P(BluetoothTestWinrtOnly, GattServicesDiscovered_SomeServicesBlocked) {
+#else
+TEST_F(BluetoothTest, DISABLED_GattServicesDiscovered_SomeServicesBlocked) {
+#endif
+  if (!PlatformSupportsLowEnergy()) {
+    LOG(WARNING) << "Low Energy Bluetooth unavailable, skipping unit test.";
+    return;
+  }
+  InitWithFakeAdapter();
+  StartLowEnergyDiscoverySession();
+  TestBluetoothAdapterObserver observer(adapter_);
+  BluetoothDevice* device = SimulateLowEnergyDevice(3);
+  ResetEventCounts();
+  ASSERT_TRUE(ConnectGatt(device));
+  EXPECT_EQ(1, gatt_discovery_attempts_);
+  EXPECT_EQ(0, observer.gatt_services_discovered_count());
+
+  SimulateGattServicesDiscovered(
+      device,
+      /*uuids=*/{kTestUUIDGenericAccess, kTestUUIDHeartRate},
+      /*blocked_uuids=*/{kTestUUIDU2f});
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(device->IsGattServicesDiscoveryComplete());
+  EXPECT_EQ(1, observer.gatt_services_discovered_count());
+  // Even though some services are blocked they should still appear in the list.
+  EXPECT_EQ(3u, device->GetGattServices().size());
 }
 
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)

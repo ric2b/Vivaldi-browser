@@ -4,7 +4,6 @@
 
 #include "base/trace_event/trace_log.h"
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -17,12 +16,12 @@
 #include "base/debug/leak_annotations.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/no_destructor.h"
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -138,11 +137,12 @@ class AutoThreadLocalBoolean {
     DCHECK(!thread_local_boolean_->Get());
     thread_local_boolean_->Set(true);
   }
+  AutoThreadLocalBoolean(const AutoThreadLocalBoolean&) = delete;
+  AutoThreadLocalBoolean& operator=(const AutoThreadLocalBoolean&) = delete;
   ~AutoThreadLocalBoolean() { thread_local_boolean_->Set(false); }
 
  private:
   ThreadLocalBoolean* thread_local_boolean_;
-  DISALLOW_COPY_AND_ASSIGN(AutoThreadLocalBoolean);
 };
 
 // Use this function instead of TraceEventHandle constructor to keep the
@@ -186,7 +186,10 @@ bool DefaultIsTraceEventArgsAllowlisted(
 // and unlocks at the end of scope if locked.
 class TraceLog::OptionalAutoLock {
  public:
-  explicit OptionalAutoLock(Lock* lock) : lock_(lock), locked_(false) {}
+  explicit OptionalAutoLock(Lock* lock) : lock_(lock) {}
+
+  OptionalAutoLock(const OptionalAutoLock&) = delete;
+  OptionalAutoLock& operator=(const OptionalAutoLock&) = delete;
 
   ~OptionalAutoLock() {
     if (locked_)
@@ -204,8 +207,7 @@ class TraceLog::OptionalAutoLock {
 
  private:
   Lock* lock_;
-  bool locked_;
-  DISALLOW_COPY_AND_ASSIGN(OptionalAutoLock);
+  bool locked_ = false;
 };
 
 class TraceLog::ThreadLocalEventBuffer
@@ -213,6 +215,8 @@ class TraceLog::ThreadLocalEventBuffer
       public MemoryDumpProvider {
  public:
   explicit ThreadLocalEventBuffer(TraceLog* trace_log);
+  ThreadLocalEventBuffer(const ThreadLocalEventBuffer&) = delete;
+  ThreadLocalEventBuffer& operator=(const ThreadLocalEventBuffer&) = delete;
   ~ThreadLocalEventBuffer() override;
 
   TraceEvent* AddTraceEvent(TraceEventHandle* handle);
@@ -246,15 +250,12 @@ class TraceLog::ThreadLocalEventBuffer
   // as long as the thread exists.
   TraceLog* trace_log_;
   std::unique_ptr<TraceBufferChunk> chunk_;
-  size_t chunk_index_;
+  size_t chunk_index_ = 0;
   int generation_;
-
-  DISALLOW_COPY_AND_ASSIGN(ThreadLocalEventBuffer);
 };
 
 TraceLog::ThreadLocalEventBuffer::ThreadLocalEventBuffer(TraceLog* trace_log)
     : trace_log_(trace_log),
-      chunk_index_(0),
       generation_(trace_log->generation()) {
   // ThreadLocalEventBuffer is created only if the thread has a message loop, so
   // the following message_loop won't be NULL.
@@ -777,8 +778,7 @@ void TraceLog::AddEnabledStateObserver(EnabledStateObserver* listener) {
 void TraceLog::RemoveEnabledStateObserver(EnabledStateObserver* listener) {
   AutoLock lock(observers_lock_);
   enabled_state_observers_.erase(
-      std::remove(enabled_state_observers_.begin(),
-                  enabled_state_observers_.end(), listener),
+      ranges::remove(enabled_state_observers_, listener),
       enabled_state_observers_.end());
 }
 

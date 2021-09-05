@@ -99,36 +99,45 @@ const network::mojom::URLResponseHead* DialURLFetcher::GetResponseHead() const {
   return loader_ ? loader_->ResponseInfo() : nullptr;
 }
 
-void DialURLFetcher::Get(const GURL& url) {
+void DialURLFetcher::Get(const GURL& url, bool set_origin_header) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  Start(url, "GET", base::nullopt, kMaxRetries);
+  Start(url, "GET", base::nullopt, kMaxRetries, set_origin_header);
 }
 
 void DialURLFetcher::Delete(const GURL& url) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  Start(url, "DELETE", base::nullopt, 0);
+  Start(url, "DELETE", base::nullopt, 0, true);
 }
 
 void DialURLFetcher::Post(const GURL& url,
                           const base::Optional<std::string>& post_data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  Start(url, "POST", post_data, 0);
+  Start(url, "POST", post_data, 0, true);
 }
 
 void DialURLFetcher::Start(const GURL& url,
                            const std::string& method,
                            const base::Optional<std::string>& post_data,
-                           int max_retries) {
+                           int max_retries,
+                           bool set_origin_header) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!loader_);
 
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = url;
   request->method = method;
-  // As a security mitigation, DIAL launch requests now require a fake origin
-  // which cannot be spoofed by the drive-by Web.  Rather than attempt to
-  // coerce this fake origin into a url::Origin, set the header directly.
-  request->headers.SetHeader("Origin", GetFakeOriginForDialLaunch());
+  // DIAL requests are made by the browser to a fixed set of URLs in response to
+  // user actions, not by Web frames.  They require an Origin header, to prevent
+  // arbitrary Web frames from issuing site-controlled DIAL requests via Fetch
+  // or XHR.  We set a fake Origin that is only used by the browser to satisfy
+  // this requirement.  Rather than attempt to coerce this fake origin into a
+  // url::Origin, set the header directly.
+  //
+  // TODO(crbug.com/1136284): Pass through an actual Origin, which improves
+  // compatibility with certain DIAL applications (e.g., Netflix).
+  if (set_origin_header)
+    request->headers.SetHeader("Origin", GetFakeOriginForDialLaunch());
+
   method_ = method;
 
   // net::LOAD_BYPASS_PROXY: Proxies almost certainly hurt more cases than they

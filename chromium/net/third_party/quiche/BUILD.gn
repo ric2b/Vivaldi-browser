@@ -23,12 +23,8 @@ source_set("quiche") {
 
   if (!is_nacl) {
     sources += [
-      "src/common/platform/api/quiche_arraysize.h",
-      "src/common/platform/api/quiche_endian.h",
       "src/common/platform/api/quiche_export.h",
       "src/common/platform/api/quiche_logging.h",
-      "src/common/platform/api/quiche_optional.h",
-      "src/common/platform/api/quiche_ptr_util.h",
       "src/common/platform/api/quiche_str_cat.h",
       "src/common/platform/api/quiche_string_piece.h",
       "src/common/platform/api/quiche_text_utils.h",
@@ -38,6 +34,7 @@ source_set("quiche") {
       "src/common/quiche_data_reader.h",
       "src/common/quiche_data_writer.cc",
       "src/common/quiche_data_writer.h",
+      "src/common/quiche_endian.h",
       "src/common/simple_linked_hash_map.h",
       "src/http2/decoder/decode_buffer.cc",
       "src/http2/decoder/decode_buffer.h",
@@ -458,6 +455,7 @@ source_set("quiche") {
       "src/quic/core/quic_packet_writer.h",
       "src/quic/core/quic_packets.cc",
       "src/quic/core/quic_packets.h",
+      "src/quic/core/quic_protocol_flags_list.h",
       "src/quic/core/quic_received_packet_manager.cc",
       "src/quic/core/quic_received_packet_manager.h",
       "src/quic/core/quic_sent_packet_manager.cc",
@@ -514,7 +512,6 @@ source_set("quiche") {
       "src/quic/core/uber_quic_stream_id_manager.h",
       "src/quic/core/uber_received_packet_manager.cc",
       "src/quic/core/uber_received_packet_manager.h",
-      "src/quic/platform/api/quic_aligned.h",
       "src/quic/platform/api/quic_bug_tracker.h",
       "src/quic/platform/api/quic_cert_utils.h",
       "src/quic/platform/api/quic_client_stats.h",
@@ -523,7 +520,6 @@ source_set("quiche") {
       "src/quic/platform/api/quic_estimate_memory_usage.h",
       "src/quic/platform/api/quic_export.h",
       "src/quic/platform/api/quic_exported_stats.h",
-      "src/quic/platform/api/quic_fallthrough.h",
       "src/quic/platform/api/quic_file_utils.cc",
       "src/quic/platform/api/quic_file_utils.h",
       "src/quic/platform/api/quic_flag_utils.h",
@@ -535,7 +531,6 @@ source_set("quiche") {
       "src/quic/platform/api/quic_ip_address.h",
       "src/quic/platform/api/quic_ip_address_family.h",
       "src/quic/platform/api/quic_logging.h",
-      "src/quic/platform/api/quic_macros.h",
       "src/quic/platform/api/quic_map_util.h",
       "src/quic/platform/api/quic_mem_slice.h",
       "src/quic/platform/api/quic_mem_slice_span.h",
@@ -586,6 +581,8 @@ source_set("quiche") {
       "src/spdy/core/http2_priority_write_scheduler.h",
       "src/spdy/core/lifo_write_scheduler.h",
       "src/spdy/core/priority_write_scheduler.h",
+      "src/spdy/core/recording_headers_handler.cc",
+      "src/spdy/core/recording_headers_handler.h",
       "src/spdy/core/spdy_alt_svc_wire_format.cc",
       "src/spdy/core/spdy_alt_svc_wire_format.h",
       "src/spdy/core/spdy_bitmasks.h",
@@ -613,7 +610,6 @@ source_set("quiche") {
       "src/spdy/core/zero_copy_output_buffer.h",
       "src/spdy/platform/api/spdy_bug_tracker.h",
       "src/spdy/platform/api/spdy_containers.h",
-      "src/spdy/platform/api/spdy_endianness_util.h",
       "src/spdy/platform/api/spdy_estimate_memory_usage.h",
       "src/spdy/platform/api/spdy_flags.h",
       "src/spdy/platform/api/spdy_logging.h",
@@ -1243,10 +1239,10 @@ source_set("quiche_tests") {
 
     # TODO(rch): Re-enable once the SLOW_TEST annotation is added.
     # "src/quic/core/congestion_control/bbr2_simulator_test.cc",
-    "src/common/platform/api/quiche_endian_test.cc",
     "src/common/platform/api/quiche_str_cat_test.cc",
     "src/common/platform/api/quiche_text_utils_test.cc",
     "src/common/platform/api/quiche_time_utils_test.cc",
+    "src/common/quiche_endian_test.cc",
     "src/quic/core/congestion_control/bbr_sender_test.cc",
     "src/quic/core/congestion_control/cubic_bytes_test.cc",
     "src/quic/core/congestion_control/general_loss_algorithm_test.cc",
@@ -1455,7 +1451,7 @@ source_set("quiche_tests") {
   ]
   public_deps = []
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     public_deps += [ "//net:epoll_quic_tools" ]
   }
   if (is_linux || is_chromeos) {

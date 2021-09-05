@@ -55,44 +55,6 @@ void VivaldiBrowserMainExtraPartsMac::PostEarlyInitialization() {
 
   if (vivaldi::IsVivaldiRunning())
     vivaldi::MaybeSetupVivaldiKeychain();
-
-  // Add Flash - check default adobe install path
-  std::string pepperFlashPath =
-      "/Library/Internet Plug-Ins/PepperFlashPlayer/PepperFlashPlayer.plugin";
-  if (!base::PathExists(base::FilePath(pepperFlashPath))) {
-    // look for chrome bundled pepper flash
-    // Pre macOS 10.13 location
-    std::string location =
-        "/Applications/Google Chrome.app/Contents/Versions/";
-    std::string pepperPath = "Google Chrome Framework.framework/"
-        "Internet Plug-Ins/PepperFlash/PepperFlashPlayer.plugin";
-
-    std::string versionPath;
-    if (checkVersionPath(location, pepperPath, &versionPath)) {
-      pepperFlashPath = versionPath;
-    }
-
-    if (!base::PathExists(base::FilePath(pepperFlashPath))) {
-      // Post macOS 10.13 location
-      NSArray* theDirs = [[NSFileManager defaultManager]
-                          URLsForDirectory:NSApplicationSupportDirectory
-                          inDomains:NSUserDomainMask];
-      std::string appSupportDir = [[theDirs objectAtIndex:0]
-                                   fileSystemRepresentation];
-
-      location = appSupportDir + "/Google/Chrome/PepperFlash";
-      pepperPath = "PepperFlashPlayer.plugin";
-
-      if (checkVersionPath(location, pepperPath, &versionPath)) {
-        pepperFlashPath = versionPath;
-      }
-    }
-  }
-
-  if (base::PathExists(base::FilePath(pepperFlashPath))) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitchNative(
-                                    switches::kPpapiFlashPath, pepperFlashPath);
-  }
  }
 
 void VivaldiBrowserMainExtraPartsMac::PreProfileInit() {

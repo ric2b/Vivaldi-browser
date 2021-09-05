@@ -14,18 +14,29 @@
 namespace chromeos {
 
 class GaiaPasswordChangedView;
-class ScreenManager;
 
 // Controller for the tpm error screen.
 class GaiaPasswordChangedScreen : public BaseScreen {
  public:
+  using TView = GaiaPasswordChangedView;
+
   explicit GaiaPasswordChangedScreen(GaiaPasswordChangedView* view);
   GaiaPasswordChangedScreen(const GaiaPasswordChangedScreen&) = delete;
   GaiaPasswordChangedScreen& operator=(const GaiaPasswordChangedScreen&) =
       delete;
   ~GaiaPasswordChangedScreen() override;
 
-  static GaiaPasswordChangedScreen* Get(ScreenManager* manager);
+  // This enum is tied directly to a UMA enum defined in
+  // //tools/metrics/histograms/enums.xml, and should always reflect it (do not
+  // change one without changing the other).  Entries should be never modified
+  // or deleted.  Only additions possible.
+  enum class UserAction {
+    kResyncUserData = 0,
+    kMigrateUserData = 1,
+    kCancel = 2,
+    kIncorrectOldPassword = 3,
+    kMaxValue = kIncorrectOldPassword
+  };
 
   // Called when the screen is being destroyed. This should call Unbind() on the
   // associated View if this class is destroyed before that.

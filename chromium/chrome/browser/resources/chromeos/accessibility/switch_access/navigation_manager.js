@@ -141,8 +141,9 @@ class NavigationManager {
     NavigationManager.instance = new NavigationManager(desktop);
   }
 
-  /** @param {AutomationNode} menuNode */
-  static jumpToSwitchAccessMenu(menuNode) {
+  /** Jumps into the Switch Access action menu. */
+  static jumpToSwitchAccessMenu() {
+    const menuNode = MenuManager.menuAutomationNode;
     if (!menuNode) {
       return;
     }
@@ -189,7 +190,7 @@ class NavigationManager {
    *     nodes we can move to.
    */
   static tryMoving(node, getNext, startingNode) {
-    if (node == startingNode) {
+    if (node === startingNode) {
       // This should only happen if the desktop contains exactly one interesting
       // child and all other children are windows which are occluded.
       // Unlikely to happen since we can always access the shelf.
@@ -249,7 +250,7 @@ class NavigationManager {
     }
 
     // Make sure the menu isn't open.
-    MenuManager.exit();
+    ActionManager.exitAllMenus();
 
     const child = navigator.group_.firstValidChild();
     if (groupIsValid && child) {
@@ -289,7 +290,7 @@ class NavigationManager {
    */
   onFocusChange_(event) {
     // Ignore focus changes from our own actions.
-    if (event.eventFrom == 'action') {
+    if (event.eventFrom === 'action') {
       return;
     }
 
@@ -310,7 +311,7 @@ class NavigationManager {
       FocusRingManager.setFocusedNode(this.node_);
     }
     this.group_.refresh();
-    MenuManager.refreshMenu();
+    ActionManager.refreshMenu();
   }
 
   /**
@@ -404,7 +405,7 @@ class NavigationManager {
    */
   jumpTo_(group, shouldExitMenu = true) {
     if (shouldExitMenu) {
-      MenuManager.exit();
+      ActionManager.exitAllMenus();
     }
 
     this.history_.save(new FocusData(this.group_, this.node_));
@@ -421,7 +422,7 @@ class NavigationManager {
    * @private
    */
   moveTo_(automationNode) {
-    MenuManager.exit();
+    ActionManager.exitAllMenus();
     if (this.history_.buildFromAutomationNode(automationNode)) {
       this.restoreFromHistory_();
     }
@@ -433,9 +434,23 @@ class NavigationManager {
    */
   restoreFromHistory_() {
     const data = this.history_.retrieve();
+
+    // |data.focus| may not be a child of |data.group| anymore since
+    // |data.group| updates when retrieving the history record. So |data.focus|
+    // should not be used as the preferred focus node.
+    const groupChildren = data.group.children;
+    var focusTarget = null;
+    for (var index = 0; index < groupChildren.length; ++index) {
+      const child = groupChildren[index];
+      if (child.isEquivalentTo(data.focus)) {
+        focusTarget = child;
+        break;
+      }
+    }
+
     // retrieve() guarantees that the group is valid, but not the focus.
-    if (data.focus.isValidAndVisible()) {
-      this.setGroup_(data.group, data.focus);
+    if (focusTarget && focusTarget.isValidAndVisible()) {
+      this.setGroup_(data.group, focusTarget);
     } else {
       this.setGroup_(data.group);
     }

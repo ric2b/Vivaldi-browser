@@ -243,7 +243,7 @@ void RenderWidgetHostViewBase::CopyMainAndPopupFromSurface(
                const gfx::Vector2d offset, const SkBitmap& main_image,
                const SkBitmap& popup_image) {
               // Draw popup_image into main_image.
-              SkCanvas canvas(main_image);
+              SkCanvas canvas(main_image, SkSurfaceProps{});
               canvas.drawBitmap(popup_image, offset.x(), offset.y());
               std::move(final_callback).Run(main_image);
             },
@@ -558,15 +558,6 @@ CursorManager* RenderWidgetHostViewBase::GetCursorManager() {
 
 void RenderWidgetHostViewBase::TransformPointToRootSurface(gfx::PointF* point) {
   return;
-}
-
-const DisplayFeature* RenderWidgetHostViewBase::GetDisplayFeature() {
-  return base::OptionalOrNullptr(display_feature_);
-}
-
-void RenderWidgetHostViewBase::SetDisplayFeatureForTesting(
-    base::Optional<DisplayFeature> display_feature) {
-  display_feature_ = std::move(display_feature);
 }
 
 void RenderWidgetHostViewBase::OnDidNavigateMainFrameToNewPage() {

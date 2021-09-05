@@ -123,6 +123,10 @@ base::FilePath GetBackupFilePath(size_t index) {
                                      kPhotoFileExt);
 }
 
+base::FilePath GetRelatedFilePath(const std::string& file_name) {
+  return GetCachePath().Append(file_name + kRelatedPhotoSuffix + kPhotoFileExt);
+}
+
 bool CreateDirIfNotExists(const base::FilePath& path) {
   return base::DirectoryExists(path) || base::CreateDirectory(path);
 }
@@ -461,8 +465,10 @@ void AmbientPhotoController::OnBackupImageFetched(base::FilePath file_path) {
 const AmbientModeTopic* AmbientPhotoController::GetNextTopic() {
   const auto& topics = ambient_backend_model_.topics();
   // If no more topics, will read from cache.
-  if (topic_index_ == topics.size())
+  if (topic_index_ == topics.size()) {
+    DVLOG(3) << "No more topics";
     return nullptr;
+  }
 
   return &topics[topic_index_++];
 }
@@ -598,11 +604,14 @@ void AmbientPhotoController::TryReadPhotoRawData() {
 
   auto photo_data = std::make_unique<std::string>();
   auto photo_details = std::make_unique<std::string>();
+  auto* photo_data_ptr = photo_data.get();
+  auto* photo_details_ptr = photo_details.get();
 
-  auto on_done =
-      base::BindRepeating(&AmbientPhotoController::OnAllPhotoRawDataAvailable,
-                          weak_factory_.GetWeakPtr(),
-                          /*from_downloading=*/false);
+  auto on_done = base::BarrierClosure(
+      /*num_closures=*/2,
+      base::BindOnce(&AmbientPhotoController::OnAllPhotoRawDataAvailable,
+                     weak_factory_.GetWeakPtr(),
+                     /*from_downloading=*/false));
 
   task_runner_->PostTaskAndReply(
       FROM_HERE,
@@ -620,11 +629,30 @@ void AmbientPhotoController::TryReadPhotoRawData() {
               photo_details->clear();
             }
           },
-          file_name, photo_data.get(), photo_details.get()),
+          file_name, photo_data_ptr, photo_details_ptr),
       base::BindOnce(&AmbientPhotoController::OnPhotoRawDataAvailable,
                      weak_factory_.GetWeakPtr(), /*from_downloading=*/false,
-                     /*is_related_image=*/false, std::move(on_done),
+                     /*is_related_image=*/false, on_done,
                      std::move(photo_details), std::move(photo_data)));
+
+  auto related_photo_data = std::make_unique<std::string>();
+  auto* related_photo_data_ptr = related_photo_data.get();
+  task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::BindOnce(
+          [](const std::string& file_name, std::string* related_photo_data) {
+            const base::FilePath& file = GetRelatedFilePath(file_name);
+            if (!base::PathExists(file) ||
+                !base::ReadFileToString(file, related_photo_data)) {
+              related_photo_data->clear();
+            }
+          },
+          file_name, related_photo_data_ptr),
+      base::BindOnce(&AmbientPhotoController::OnPhotoRawDataAvailable,
+                     weak_factory_.GetWeakPtr(), /*from_downloading=*/false,
+                     /*is_related_image=*/true, on_done,
+                     /*details=*/std::make_unique<std::string>(),
+                     std::move(related_photo_data)));
 }
 
 void AmbientPhotoController::OnPhotoRawDataAvailable(
@@ -647,15 +675,13 @@ void AmbientPhotoController::OnAllPhotoRawDataAvailable(bool from_downloading) {
     if (from_downloading) {
       LOG(ERROR) << "Failed to download image";
       resume_fetch_image_backoff_.InformOfRequest(/*succeeded=*/false);
-    } else {
-      LOG(WARNING) << "Failed to read image";
     }
-
     // Try to read from cache when failure happens.
     TryReadPhotoRawData();
     return;
   }
-
+  DVLOG_IF(3, from_downloading)
+      << "Save photo to cache index: " << cache_index_for_store_;
   const std::string file_name = base::NumberToString(cache_index_for_store_);
   // If the data is fetched from downloading, write to disk.
   // Note: WriteFile() could fail. The saved file name may not be continuous.
@@ -671,18 +697,32 @@ void AmbientPhotoController::OnAllPhotoRawDataAvailable(bool from_downloading) {
                      weak_factory_.GetWeakPtr(), from_downloading,
                      /*hash=*/base::SHA1HashString(*image_data_)));
 
+  base::Optional<std::string> related_image_data;
+  if (related_image_data_)
+    related_image_data = *related_image_data_;
+
   task_runner_->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(
           [](const std::string& file_name, bool need_to_save,
-             const std::string& data, const std::string& details) {
+             const std::string& data, const std::string& details,
+             const base::Optional<std::string>& related_data) {
             if (need_to_save) {
               WriteFile(GetCachePath().Append(file_name + kPhotoFileExt), data);
               WriteFile(GetCachePath().Append(file_name + kPhotoDetailsFileExt),
                         details);
+              const base::FilePath& related_data_file =
+                  GetRelatedFilePath(file_name);
+              if (related_data) {
+                WriteFile(related_data_file, *related_data);
+              } else {
+                if (base::PathExists(related_data_file))
+                  base::DeleteFile(related_data_file);
+              }
             }
           },
-          file_name, from_downloading, *image_data_, *image_details_),
+          file_name, from_downloading, *image_data_, *image_details_,
+          std::move(related_image_data)),
       base::BindOnce(&AmbientPhotoController::DecodePhotoRawData,
                      weak_factory_.GetWeakPtr(), from_downloading,
                      /*is_related_image=*/false, on_done,
@@ -721,7 +761,7 @@ void AmbientPhotoController::OnPhotoDecoded(bool from_downloading,
 void AmbientPhotoController::OnAllPhotoDecoded(bool from_downloading,
                                                const std::string& hash) {
   if (image_.isNull()) {
-    LOG(WARNING) << "Image is null";
+    LOG(WARNING) << "Image decoding failed";
     if (from_downloading)
       resume_fetch_image_backoff_.InformOfRequest(/*succeeded=*/false);
 

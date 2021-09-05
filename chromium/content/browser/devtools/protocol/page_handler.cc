@@ -37,7 +37,6 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
@@ -246,14 +245,14 @@ void PageHandler::SetRenderer(int process_host_id,
 
   RenderWidgetHostImpl* widget_host =
       host_ ? host_->GetRenderWidgetHost() : nullptr;
-  if (widget_host && observer_.IsObserving(widget_host))
-    observer_.Remove(widget_host);
+  if (widget_host && observation_.IsObservingSource(widget_host))
+    observation_.RemoveObservation();
 
   host_ = frame_host;
   widget_host = host_ ? host_->GetRenderWidgetHost() : nullptr;
 
   if (widget_host)
-    observer_.Add(widget_host);
+    observation_.Observe(widget_host);
 
   if (video_consumer_ && frame_host) {
     video_consumer_->SetFrameSinkId(
@@ -284,7 +283,8 @@ void PageHandler::RenderWidgetHostVisibilityChanged(
 }
 
 void PageHandler::RenderWidgetHostDestroyed(RenderWidgetHost* widget_host) {
-  observer_.Remove(widget_host);
+  DCHECK(observation_.IsObservingSource(widget_host));
+  observation_.RemoveObservation();
 }
 
 void PageHandler::DidAttachInterstitialPage() {

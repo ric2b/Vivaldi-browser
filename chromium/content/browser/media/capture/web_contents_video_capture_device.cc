@@ -30,7 +30,7 @@ namespace content {
 
 // Threading note: This is constructed on the device thread, while the
 // destructor and the rest of the class will run exclusively on the UI thread.
-class WebContentsVideoCaptureDevice::FrameTracker
+class WebContentsVideoCaptureDevice::FrameTracker final
     : public WebContentsObserver,
       public base::SupportsWeakPtr<
           WebContentsVideoCaptureDevice::FrameTracker> {
@@ -121,10 +121,7 @@ class WebContentsVideoCaptureDevice::FrameTracker
       return nullptr;
     }
 
-    RenderWidgetHostView* view = contents->GetFullscreenRenderWidgetHostView();
-    if (!view) {
-      view = contents->GetRenderWidgetHostView();
-    }
+    RenderWidgetHostView* view = view = contents->GetRenderWidgetHostView();
     // Make sure the RWHV is still associated with a RWH before considering the
     // view "alive." This is because a null RWH indicates the RWHV has had its
     // Destroy() method called.
@@ -145,8 +142,6 @@ class WebContentsVideoCaptureDevice::FrameTracker
                               RenderFrameHost* new_host) final {
     OnPossibleTargetChange();
   }
-  void DidShowFullscreenWidget() final { OnPossibleTargetChange(); }
-  void DidDestroyFullscreenWidget() final { OnPossibleTargetChange(); }
   void WebContentsDestroyed() final {
     Observe(nullptr);
     is_capturing_ = false;

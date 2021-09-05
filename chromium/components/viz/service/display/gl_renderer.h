@@ -372,6 +372,10 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
 
   bool HasOutputColorMatrix() const;
 
+  // Returns true if the given solid color draw quad can be safely drawn using
+  // the glClear function call.
+  bool CanUseFastSolidColorDraw(const SolidColorDrawQuad* quad) const;
+
   // A map from RenderPass id to the texture used to draw the RenderPass from.
   base::flat_map<AggregatedRenderPassId, ScopedRenderPassTexture>
       render_pass_textures_;
@@ -454,16 +458,19 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   bool use_timer_query_ = false;
   bool use_occlusion_query_ = false;
   bool use_swap_with_bounds_ = false;
+  bool use_fast_path_solid_color_quad_ = false;
 
   // If true, tints all the composited content to red.
   bool tint_gl_composited_content_ = true;
 
+#if defined(OS_APPLE)
   // The method FlippedFramebuffer determines whether the framebuffer associated
   // with a DrawingFrame is flipped. It makes the assumption that the
   // DrawingFrame is being used as part of a render pass. If a DrawingFrame is
   // not being used as part of a render pass, setting it here forces
   // FlippedFramebuffer to return |true|.
   bool force_drawing_frame_framebuffer_unflipped_ = false;
+#endif
 
   BoundGeometry bound_geometry_;
 
@@ -476,6 +483,9 @@ class VIZ_SERVICE_EXPORT GLRenderer : public DirectRenderer {
   // A circular queue of to keep track of timer queries and their associated
   // quad type as string.
   base::queue<std::pair<unsigned, std::string>> timer_queries_;
+
+  // Keeps track of areas that have been drawn to in the current render pass.
+  std::vector<gfx::Rect> drawn_rects_;
 
   // This may be null if the compositor is run on a thread without a
   // MessageLoop.

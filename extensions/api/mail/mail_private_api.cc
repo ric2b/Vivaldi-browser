@@ -2,6 +2,7 @@
 
 #include "extensions/api/mail/mail_private_api.h"
 
+#include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/strings/stringprintf.h"
@@ -105,29 +106,20 @@ namespace extensions {
 namespace mail = vivaldi::mail_private;
 
 ExtensionFunction::ResponseAction MailPrivateGetPathsFunction::Run() {
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-
   std::unique_ptr<vivaldi::mail_private::GetPaths::Params> params(
       vivaldi::mail_private::GetPaths::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::FilePath file_path = profile->GetPath();
-  file_path = file_path.Append(kMailDirectory);
-
-  std::vector<base::FilePath::StringType> string_paths;
-  for (const auto& path : params->paths) {
-    string_paths.push_back(StringToStringType(path));
-  }
-
-  size_t count = string_paths.size();
-
-  for (size_t i = 0; i < count; i++) {
-    file_path = file_path.Append(string_paths[i]);
-  }
+  base::FilePath file_path = base::FilePath::FromUTF8Unsafe(params->path);
 
   if (!file_path.IsAbsolute()) {
     return RespondNow(Error(base::StringPrintf(
         "Path must be absolute %s", file_path.AsUTF8Unsafe().c_str())));
+  }
+
+  if (!base::DirectoryExists(file_path)) {
+    return RespondNow(Error(base::StringPrintf(
+        "Directory does not exist %s", file_path.AsUTF8Unsafe().c_str())));
   }
 
   base::PostTaskAndReplyWithResult(
@@ -410,8 +402,8 @@ ExtensionFunction::ResponseAction MailPrivateReadBufferFunction::Run() {
 
 void MailPrivateReadBufferFunction::OnFinished(ReadFileResult result) {
   if (result.success == true) {
-    Respond(OneArgument(Value::CreateWithCopiedBuffer((&result.raw)->c_str(),
-                                                      (&result.raw)->size())));
+    Respond(
+        OneArgument(base::Value(base::as_bytes(base::make_span(result.raw)))));
   } else {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
@@ -478,8 +470,7 @@ ExtensionFunction::ResponseAction MailPrivateGetDataDirectoryFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&GetDataDirectory, file_path),
-      base::BindOnce(&MailPrivateGetDataDirectoryFunction::OnFinished,
-                         this));
+      base::BindOnce(&MailPrivateGetDataDirectoryFunction::OnFinished, this));
 
   return RespondLater();
 }

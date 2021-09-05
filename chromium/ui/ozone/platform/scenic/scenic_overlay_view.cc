@@ -8,6 +8,7 @@
 #include <lib/ui/scenic/cpp/view_token_pair.h>
 
 #include "base/fuchsia/fuchsia_logging.h"
+#include "ui/ozone/platform/scenic/scenic_surface_factory.h"
 
 namespace ui {
 
@@ -28,8 +29,10 @@ fuchsia::ui::views::ViewToken CreateViewToken(
 }  // namespace
 
 ScenicOverlayView::ScenicOverlayView(
-    scenic::SessionPtrAndListenerRequest session_and_listener_request)
+    scenic::SessionPtrAndListenerRequest session_and_listener_request,
+    ScenicSurfaceFactory* scenic_surface_factory)
     : scenic_session_(std::move(session_and_listener_request)),
+      scenic_surface_factory_(scenic_surface_factory),
       view_(&scenic_session_,
             CreateViewToken(&view_holder_token_),
             kSessionDebugName) {
@@ -39,12 +42,21 @@ ScenicOverlayView::ScenicOverlayView(
   });
 }
 
-ScenicOverlayView::~ScenicOverlayView() = default;
+ScenicOverlayView::~ScenicOverlayView() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  ScenicSurface* surface = scenic_surface_factory_->GetSurface(widget_);
+  if (surface) {
+    surface->AssertBelongsToCurrentThread();
+    surface->RemoveOverlayView(buffer_collection_id_);
+  }
+}
 
 void ScenicOverlayView::Initialize(
     fidl::InterfaceHandle<fuchsia::sysmem::BufferCollectionToken>
         collection_token) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
   uint32_t image_pipe_id = scenic_session_.AllocResourceId();
   scenic_session_.Enqueue(
       scenic::NewCreateImagePipe2Cmd(image_pipe_id, image_pipe_.NewRequest()));
@@ -52,12 +64,12 @@ void ScenicOverlayView::Initialize(
     ZX_LOG(FATAL, status) << "ImagePipe disconnected";
   });
 
-  scenic::Material image_material(&scenic_session_);
-  image_material.SetTexture(image_pipe_id);
+  image_material_ = std::make_unique<scenic::Material>(&scenic_session_);
+  image_material_->SetTexture(image_pipe_id);
 
   scenic::ShapeNode shape(&scenic_session_);
   shape.SetShape(scenic::Rectangle(&scenic_session_, 1.f, 1.f));
-  shape.SetMaterial(image_material);
+  shape.SetMaterial(*image_material_);
 
   view_.AddChild(shape);
   scenic_session_.ReleaseResource(image_pipe_id);
@@ -71,7 +83,74 @@ void ScenicOverlayView::Initialize(
   // TODO(emircan): Consider using one ImagePipe per video decoder instead.
   image_pipe_->AddBufferCollection(kImagePipeBufferCollectionId,
                                    std::move(collection_token));
-  LOG(ERROR) << __func__;
+}
+
+bool ScenicOverlayView::AddImages(uint32_t buffer_count,
+                                  const gfx::Size& size) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  fuchsia::sysmem::ImageFormat_2 image_format = {};
+  image_format.coded_width = size.width();
+  image_format.coded_height = size.height();
+  for (uint32_t i = 0; i < buffer_count; ++i) {
+    // Image id cannot be 0, so add 1 to all buffer indices.
+    image_pipe_->AddImage(i + 1, kImagePipeBufferCollectionId, i, image_format);
+  }
+  return true;
+}
+
+bool ScenicOverlayView::PresentImage(uint32_t buffer_index,
+                                     std::vector<zx::event> acquire_fences,
+                                     std::vector<zx::event> release_fences) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  image_pipe_->PresentImage(buffer_index + 1, zx_clock_get_monotonic(),
+                            std::move(acquire_fences),
+                            std::move(release_fences), [](auto) {});
+  return true;
+}
+
+void ScenicOverlayView::SetBlendMode(bool enable_blend) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  if (enable_blend_ == enable_blend)
+    return;
+
+  enable_blend_ = enable_blend;
+  // Setting alpha as |255| marks the image as opaque and no content below would
+  // be seen. Anything lower than 255 allows blending.
+  image_material_->SetColor(255, 255, 255, enable_blend ? 254 : 255);
+  scenic_session_.Present2(
+      /*requested_presentation_time=*/0,
+      /*requested_prediction_span=*/0,
+      [](fuchsia::scenic::scheduling::FuturePresentationTimes info) {});
+}
+
+bool ScenicOverlayView::CanAttachToAcceleratedWidget(
+    gfx::AcceleratedWidget widget) {
+  return view_holder_token_.value.is_valid() || (widget_ == widget);
+}
+
+bool ScenicOverlayView::AttachToScenicSurface(
+    gfx::AcceleratedWidget widget,
+    gfx::SysmemBufferCollectionId id) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  if (widget_ != gfx::kNullAcceleratedWidget && widget_ == widget)
+    return true;
+
+  if (!view_holder_token_.value.is_valid()) {
+    DLOG(ERROR) << "ViewHolder is already attached.";
+    return false;
+  }
+
+  buffer_collection_id_ = id;
+  widget_ = widget;
+
+  ScenicSurface* surface = scenic_surface_factory_->GetSurface(widget_);
+  DCHECK(surface);
+  return surface->PresentOverlayView(buffer_collection_id_,
+                                     std::move(view_holder_token_));
 }
 
 }  // namespace ui

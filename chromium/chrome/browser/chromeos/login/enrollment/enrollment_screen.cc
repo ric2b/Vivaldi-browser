@@ -5,8 +5,8 @@
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
@@ -75,11 +75,12 @@ bool ShouldAttemptRestart() {
   return false;
 }
 
-// Returns the enterprise display domain after enrollment, or an empty string.
-std::string GetEnterpriseDisplayDomain() {
+// Returns the manager of the domain (either the domain name or the email of the
+// admin of the domain) after enrollment, or an empty string.
+std::string GetEnterpriseDomainManager() {
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  return connector->GetEnterpriseDisplayDomain();
+  return connector->GetEnterpriseDomainManager();
 }
 
 }  // namespace
@@ -202,6 +203,10 @@ void EnrollmentScreen::OnAuthCleared(const base::Closure& callback) {
 }
 
 bool EnrollmentScreen::MaybeSkip(WizardContext* context) {
+  VLOG(1) << "EnrollmentScreen::MaybeSkip("
+          << "config_.is_forced = " << config_.is_forced()
+          << "skip_to_login_for_tests = " << context->skip_to_login_for_tests
+          << ").";
   if (context->skip_to_login_for_tests && !config_.is_forced()) {
     exit_callback_.Run(Result::SKIPPED_FOR_TESTS);
     return true;
@@ -322,7 +327,7 @@ void EnrollmentScreen::OnCancel() {
     authpolicy_login_helper_->CancelRequestsAndRestart();
 
   // The callback passed to ClearAuth is called either immediately or gets
-  // wrapped in a callback bound to a weak pointer from |weak_factory_| - in
+  // wrapped in a callback bound to a weak pointer from `weak_factory_` - in
   // either case, passing exit_callback_ directly should be safe.
   ClearAuth(base::BindRepeating(
       exit_callback_, config_.is_forced() ? Result::BACK : Result::COMPLETED));
@@ -331,7 +336,7 @@ void EnrollmentScreen::OnCancel() {
 void EnrollmentScreen::OnConfirmationClosed() {
   VLOG(1) << "Confirmation closed.";
   // The callback passed to ClearAuth is called either immediately or gets
-  // wrapped in a callback bound to a weak pointer from |weak_factory_| - in
+  // wrapped in a callback bound to a weak pointer from `weak_factory_` - in
   // either case, passing exit_callback_ directly should be safe.
   ClearAuth(base::BindRepeating(exit_callback_, Result::COMPLETED));
 
@@ -378,8 +383,8 @@ void EnrollmentScreen::OnDeviceEnrolled() {
   VLOG(1) << "Device enrolled.";
   enrollment_succeeded_ = true;
   // Some info to be shown on the success screen.
-  view_->SetEnterpriseDomainAndDeviceType(GetEnterpriseDisplayDomain(),
-                                          ui::GetChromeOSDeviceName());
+  view_->SetEnterpriseDomainInfo(GetEnterpriseDomainManager(),
+                                 ui::GetChromeOSDeviceName());
 
   enrollment_helper_->GetDeviceAttributeUpdatePermission();
 
@@ -425,8 +430,8 @@ void EnrollmentScreen::OnDeviceAttributeUpdatePermission(bool granted) {
 
 void EnrollmentScreen::OnRestoreAfterRollbackCompleted() {
   // Pass the enterprise domain and the device type to be shown.
-  view_->SetEnterpriseDomainAndDeviceType(GetEnterpriseDisplayDomain(),
-                                          ui::GetChromeOSDeviceName());
+  view_->SetEnterpriseDomainInfo(GetEnterpriseDomainManager(),
+                                 ui::GetChromeOSDeviceName());
   // Show the success screen
   StartupUtils::MarkDeviceRegistered(
       base::BindOnce(&EnrollmentScreen::ShowEnrollmentStatusOnSuccess,

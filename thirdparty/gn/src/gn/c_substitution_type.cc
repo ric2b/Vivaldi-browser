@@ -10,21 +10,33 @@
 #include "gn/err.h"
 
 const SubstitutionTypes CSubstitutions = {
-    &CSubstitutionAsmFlags,        &CSubstitutionCFlags,
-    &CSubstitutionCFlagsC,         &CSubstitutionCFlagsCc,
-    &CSubstitutionCFlagsObjC,      &CSubstitutionCFlagsObjCc,
-    &CSubstitutionDefines,         &CSubstitutionFrameworkDirs,
-    &CSubstitutionIncludeDirs,     &CSubstitutionSwiftModules,
+    &CSubstitutionAsmFlags,
+    &CSubstitutionCFlags,
+    &CSubstitutionCFlagsC,
+    &CSubstitutionCFlagsCc,
+    &CSubstitutionCFlagsObjC,
+    &CSubstitutionCFlagsObjCc,
+    &CSubstitutionDefines,
+    &CSubstitutionFrameworkDirs,
+    &CSubstitutionIncludeDirs,
+    &CSubstitutionModuleDeps,
+    &CSubstitutionModuleDepsNoSelf,
+    &CSubstitutionSwiftModules,
 
-    &CSubstitutionLinkerInputs,    &CSubstitutionLinkerInputsNewline,
-    &CSubstitutionLdFlags,         &CSubstitutionLibs,
-    &CSubstitutionSoLibs,          &CSubstitutionFrameworks,
+    &CSubstitutionLinkerInputs,
+    &CSubstitutionLinkerInputsNewline,
+    &CSubstitutionLdFlags,
+    &CSubstitutionLibs,
+    &CSubstitutionSoLibs,
+    &CSubstitutionFrameworks,
     &CSubstitutionRlibs,
 
     &CSubstitutionArFlags,
 
-    &CSubstitutionSwiftModuleName, &CSubstitutionSwiftBridgeHeader,
-    &CSubstitutionSwiftModuleDirs, &CSubstitutionSwiftFlags,
+    &CSubstitutionSwiftModuleName,
+    &CSubstitutionSwiftBridgeHeader,
+    &CSubstitutionSwiftModuleDirs,
+    &CSubstitutionSwiftFlags,
 };
 
 // Valid for compiler tools.
@@ -40,11 +52,14 @@ const Substitution CSubstitutionFrameworkDirs = {"{{framework_dirs}}",
                                                  "framework_dirs"};
 const Substitution CSubstitutionIncludeDirs = {"{{include_dirs}}",
                                               "include_dirs"};
+const Substitution CSubstitutionModuleDeps = {"{{module_deps}}", "module_deps"};
+const Substitution CSubstitutionModuleDepsNoSelf = {"{{module_deps_no_self}}",
+                                                    "module_deps_no_self"};
 
 // Valid for linker tools.
 const Substitution CSubstitutionLinkerInputs = {"{{inputs}}", "in"};
 const Substitution CSubstitutionLinkerInputsNewline = {"{{inputs_newline}}",
-                                                      "in_newline"};
+                                                       "in_newline"};
 const Substitution CSubstitutionLdFlags = {"{{ldflags}}", "ldflags"};
 const Substitution CSubstitutionLibs = {"{{libs}}", "libs"};
 const Substitution CSubstitutionSoLibs = {"{{solibs}}", "solibs"};
@@ -72,7 +87,9 @@ bool IsValidCompilerSubstitution(const Substitution* type) {
          type == &CSubstitutionCFlagsCc || type == &CSubstitutionCFlagsObjC ||
          type == &CSubstitutionCFlagsObjCc || type == &CSubstitutionDefines ||
          type == &CSubstitutionFrameworkDirs ||
-         type == &CSubstitutionIncludeDirs;
+         type == &CSubstitutionIncludeDirs ||
+         type == &CSubstitutionModuleDeps ||
+         type == &CSubstitutionModuleDepsNoSelf;
 }
 
 bool IsValidCompilerOutputsSubstitution(const Substitution* type) {

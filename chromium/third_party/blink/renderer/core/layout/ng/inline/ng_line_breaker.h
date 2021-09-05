@@ -44,6 +44,10 @@ class CORE_EXPORT NGLineBreaker {
 
   const NGInlineItemsData& ItemsData() const { return items_data_; }
 
+  // True if the last line has `box-decoration-break: clone`, which affected the
+  // size.
+  bool HasClonedBoxDecorations() const { return has_cloned_box_decorations_; }
+
   // Compute the next line break point and produces NGInlineItemResults for
   // the line.
   inline void NextLine(NGLineInfo* line_info) {
@@ -129,10 +133,6 @@ class CORE_EXPORT NGLineBreaker {
     kContinue,
   };
 
-  inline void HandleText(const NGInlineItem& item, NGLineInfo* line_info) {
-    DCHECK(item.TextShapeResult());
-    HandleText(item, *item.TextShapeResult(), line_info);
-  }
   void HandleText(const NGInlineItem& item, const ShapeResult&, NGLineInfo*);
   enum BreakResult { kSuccess, kOverflow };
   BreakResult BreakText(NGInlineItemResult*,
@@ -157,10 +157,9 @@ class CORE_EXPORT NGLineBreaker {
                                        unsigned start,
                                        unsigned end);
 
-  void HandleTrailingSpacesIfNeeded(NGLineInfo*);
   void HandleTrailingSpaces(const NGInlineItem&, NGLineInfo*);
   void HandleTrailingSpaces(const NGInlineItem&,
-                            const ShapeResult&,
+                            const ShapeResult*,
                             NGLineInfo*);
   void RemoveTrailingCollapsibleSpace(NGLineInfo*);
   LayoutUnit TrailingCollapsibleSpaceWidth(NGLineInfo*);
@@ -184,11 +183,7 @@ class CORE_EXPORT NGLineBreaker {
   void HandleOverflow(NGLineInfo*);
   void RewindOverflow(unsigned new_end, NGLineInfo*);
   void Rewind(unsigned new_end, NGLineInfo*);
-  void ResetRewindLoopDetector() {
-#if DCHECK_IS_ON()
-    last_rewind_from_item_index_ = last_rewind_to_item_index_ = 0;
-#endif
-  }
+  void ResetRewindLoopDetector() { last_rewind_.reset(); }
 
   const ComputedStyle& ComputeCurrentStyle(unsigned item_result_index,
                                            NGLineInfo*) const;
@@ -199,6 +194,7 @@ class CORE_EXPORT NGLineBreaker {
   void MoveToNextOf(const NGInlineItemResult&);
 
   void ComputeBaseDirection();
+  void RecalcClonedBoxDecorations();
 
   LayoutUnit AvailableWidth() const {
     DCHECK_EQ(available_width_, ComputeAvailableWidth());
@@ -214,6 +210,20 @@ class CORE_EXPORT NGLineBreaker {
   LayoutUnit ComputeAvailableWidth() const;
 
   void ClearNeedsLayout(const NGInlineItem& item);
+
+  // True if the current line is hyphenated.
+  bool HasHyphen() const { return hyphen_index_.has_value(); }
+  LayoutUnit AddHyphen(NGInlineItemResults* item_results,
+                       wtf_size_t index,
+                       NGInlineItemResult* item_result,
+                       const NGInlineItem& item);
+  LayoutUnit AddHyphen(NGInlineItemResults* item_results, wtf_size_t index);
+  LayoutUnit AddHyphen(NGInlineItemResults* item_results,
+                       NGInlineItemResult* item_result,
+                       const NGInlineItem& item);
+  LayoutUnit RemoveHyphen(NGInlineItemResults* item_results);
+  void RestoreLastHyphen(NGInlineItemResults* item_results);
+  void FinalizeHyphen(NGInlineItemResults* item_results);
 
   // Represents the current offset of the input.
   LineBreakState state_;
@@ -254,11 +264,6 @@ class CORE_EXPORT NGLineBreaker {
   // True when breaking at soft hyphens (U+00AD) is allowed.
   bool enable_soft_hyphen_ = true;
 
-  // True in quirks mode or limited-quirks mode, which require line-height
-  // quirks.
-  // https://quirks.spec.whatwg.org/#the-line-height-calculation-quirk
-  bool in_line_height_quirks_mode_ = false;
-
   // True when the line we are breaking has a list marker.
   bool has_list_marker_ = false;
 
@@ -291,6 +296,9 @@ class CORE_EXPORT NGLineBreaker {
   bool previous_line_had_forced_break_ = false;
   const Hyphenation* hyphenation_ = nullptr;
 
+  base::Optional<wtf_size_t> hyphen_index_;
+  bool has_any_hyphens_ = false;
+
   // Cache the result of |ComputeTrailingCollapsibleSpace| to avoid shaping
   // multiple times.
   struct TrailingCollapsibleSpace {
@@ -320,11 +328,18 @@ class CORE_EXPORT NGLineBreaker {
 
   Vector<scoped_refptr<const NGBlockBreakToken>> propagated_break_tokens_;
 
-#if DCHECK_IS_ON()
+  // Fields for `box-decoration-break: clone`.
+  unsigned cloned_box_decorations_count_ = 0;
+  LayoutUnit cloned_box_decorations_initial_size_;
+  LayoutUnit cloned_box_decorations_end_size_;
+  bool has_cloned_box_decorations_ = false;
+
   // These fields are to detect rewind-loop.
-  unsigned last_rewind_from_item_index_ = 0;
-  unsigned last_rewind_to_item_index_ = 0;
-#endif
+  struct RewindIndex {
+    wtf_size_t from_item_index;
+    wtf_size_t to_index;
+  };
+  base::Optional<RewindIndex> last_rewind_;
 };
 
 }  // namespace blink

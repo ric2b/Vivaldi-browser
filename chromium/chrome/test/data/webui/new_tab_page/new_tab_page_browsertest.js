@@ -245,14 +245,13 @@ TEST_F('NewTabPageMiddleSlotPromoTest', 'All', function() {
 });
 
 // eslint-disable-next-line no-var
-var NewTabPageModulesShoppingTasksModuleTest =
-    class extends NewTabPageBrowserTest {
+var NewTabPageModulesTaskModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/shopping_tasks/module_test.js';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/task_module/module_test.js';
   }
 };
 
-TEST_F('NewTabPageModulesShoppingTasksModuleTest', 'All', function() {
+TEST_F('NewTabPageModulesTaskModuleTest', 'All', function() {
   mocha.run();
 });

@@ -49,7 +49,6 @@ class TestSearchResult : public ChromeSearchResult {
 
   // ChromeSearchResult overrides:
   void Open(int event_flags) override {}
-  void InvokeAction(int action_index, int event_flags) override {}
 
   // For reference equality testing. (Addresses cannot be used to test reference
   // equality because it is possible that an object will be allocated at the
@@ -230,29 +229,6 @@ TEST_F(MixerTest, ResultsWithDisplayIndex) {
       "app5,app0,omnibox0,playstore0,app1,omnibox1,playstore1,app2,omnibox2,"
       "omnibox3",
       GetResults());
-}
-
-TEST_F(MixerTest, RemoveDuplicates) {
-  CreateMixer();
-
-  const std::string dup = "dup";
-
-  // This gives "dup0,dup1,dup2".
-  app_provider()->set_prefix(dup);
-  app_provider()->set_count(3);
-
-  // This gives "dup0,dup1".
-  omnibox_provider()->set_prefix(dup);
-  omnibox_provider()->set_count(2);
-
-  // This gives "dup0".
-  playstore_provider()->set_prefix(dup);
-  playstore_provider()->set_count(1);
-
-  RunQuery();
-
-  // Only three results with unique id are kept.
-  EXPECT_EQ("dup0,dup1,dup2", GetResults());
 }
 
 }  // namespace test

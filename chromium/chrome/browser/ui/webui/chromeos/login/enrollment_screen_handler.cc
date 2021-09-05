@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -67,7 +67,7 @@ constexpr char kActiveDirectoryJoinHistogram[] =
 
 constexpr char kOAUTHCodeCookie[] = "oauth_code";
 
-// Converts |mode| to a mode identifier for the UI.
+// Converts `mode` to a mode identifier for the UI.
 std::string EnrollmentModeToUIMode(policy::EnrollmentConfig::Mode mode) {
   switch (mode) {
     case policy::EnrollmentConfig::MODE_NONE:
@@ -339,10 +339,10 @@ void EnrollmentScreenHandler::ShowEnrollmentSpinnerScreen() {
   ShowStep(kEnrollmentStepWorking);
 }
 
-void EnrollmentScreenHandler::SetEnterpriseDomainAndDeviceType(
-    const std::string& domain,
+void EnrollmentScreenHandler::SetEnterpriseDomainInfo(
+    const std::string& manager,
     const base::string16& device_type) {
-  CallJS("login.OAuthEnrollmentScreen.setEnterpriseDomainAndDeviceType", domain,
+  CallJS("login.OAuthEnrollmentScreen.setEnterpriseDomainInfo", manager,
          device_type);
 }
 
@@ -424,6 +424,11 @@ void EnrollmentScreenHandler::ShowEnrollmentStatus(
         case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
           ShowError(
               IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED,
+              true);
+          break;
+        case policy::DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE:
+          ShowError(
+              IDS_ENTERPRISE_ENROLLMENT_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE,
               true);
           break;
         default:
@@ -735,6 +740,7 @@ void EnrollmentScreenHandler::HandleToggleFakeEnrollment() {
   VLOG(1) << "HandleToggleFakeEnrollment";
   policy::PolicyOAuth2TokenFetcher::UseFakeTokensForTesting();
   WizardController::SkipEnrollmentPromptsForTesting();
+  use_fake_login_for_testing_ = true;
 }
 
 void EnrollmentScreenHandler::HandleClose(const std::string& reason) {
@@ -825,8 +831,10 @@ void EnrollmentScreenHandler::OnGetCookiesForCompleteLogin(
     }
   }
 
-  if (auth_code.empty()) {
+  // Allow testing to continue without a oauth cookie.
+  if (auth_code.empty() && !use_fake_login_for_testing_) {
     // Will try again from oauth_code_waiter callback.
+    VLOG(1) << "OAuth cookie empty, still waiting";
     return;
   }
 
@@ -836,6 +844,7 @@ void EnrollmentScreenHandler::OnGetCookiesForCompleteLogin(
 }
 
 void EnrollmentScreenHandler::OnCookieWaitTimeout() {
+  LOG(ERROR) << "Timeout waiting for OAuth cookie";
   oauth_code_waiter_.reset();
   ShowError(IDS_LOGIN_FATAL_ERROR_NO_AUTH_TOKEN, true);
 }

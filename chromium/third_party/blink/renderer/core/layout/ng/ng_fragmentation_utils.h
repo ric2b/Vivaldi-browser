@@ -148,7 +148,6 @@ bool IsNodeFullyGrown(NGBlockNode,
 // is to abort layout, then relayout and break earlier.
 bool FinishFragmentation(NGBlockNode node,
                          const NGConstraintSpace&,
-                         const NGBlockBreakToken* previous_break_token,
                          LayoutUnit trailing_border_padding,
                          LayoutUnit space_left,
                          NGBoxFragmentBuilder*);
@@ -264,7 +263,7 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
     const NGConstraintSpace& parent_space,
     LogicalSize column_size,
     LogicalSize percentage_resolution_size,
-    bool is_first_fragmentainer,
+    bool allow_discard_start_margin,
     bool balance_columns);
 
 // Return the adjusted child margin to be applied at the end of a fragment.

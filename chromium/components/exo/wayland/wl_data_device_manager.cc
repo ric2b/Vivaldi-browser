@@ -252,12 +252,12 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
     return surface &&
            wl_resource_get_client(GetSurfaceResource(surface)) == client_;
   }
-  DataOffer* OnDataOffer(DataOffer::Purpose purpose) override {
+  DataOffer* OnDataOffer() override {
     wl_resource* data_offer_resource =
         wl_resource_create(client_, &wl_data_offer_interface,
                            wl_resource_get_version(data_device_resource_), 0);
     std::unique_ptr<DataOffer> data_offer = std::make_unique<DataOffer>(
-        new WaylandDataOfferDelegate(data_offer_resource), purpose);
+        new WaylandDataOfferDelegate(data_offer_resource));
     SetDataOfferResource(data_offer.get(), data_offer_resource);
     SetImplementation(data_offer_resource, &data_offer_implementation,
                       std::move(data_offer));
@@ -306,21 +306,27 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
         serial_tracker_->GetEventType(serial);
     if (event_type == base::nullopt) {
       LOG(ERROR) << "The serial passed to StartDrag does not exist.";
-      source->Cancelled();
+      if (source) {
+        source->Cancelled();
+      }
       return;
     }
     if (event_type == wayland::SerialTracker::EventType::POINTER_BUTTON_DOWN &&
         serial_tracker_->GetPointerDownSerial() == serial) {
+      DCHECK(data_device);
       data_device->StartDrag(source, origin, icon,
                              ui::mojom::DragEventSource::kMouse);
     } else if (event_type == wayland::SerialTracker::EventType::TOUCH_DOWN &&
                serial_tracker_->GetTouchDownSerial() == serial) {
+      DCHECK(data_device);
       data_device->StartDrag(source, origin, icon,
                              ui::mojom::DragEventSource::kTouch);
     } else {
       LOG(ERROR) << "The serial passed to StartDrag does not match its "
                     "expected types.";
-      source->Cancelled();
+      if (source) {
+        source->Cancelled();
+      }
     }
   }
 
@@ -331,9 +337,12 @@ class WaylandDataDeviceDelegate : public DataDeviceDelegate {
         serial_tracker_->GetEventType(serial);
     if (event_type == base::nullopt) {
       LOG(ERROR) << "The serial passed to SetSelection does not exist.";
-      source->Cancelled();
+      if (source) {
+        source->Cancelled();
+      }
       return;
     }
+    DCHECK(data_device);
     data_device->SetSelection(source);
   }
 

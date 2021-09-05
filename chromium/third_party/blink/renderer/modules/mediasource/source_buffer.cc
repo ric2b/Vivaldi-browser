@@ -33,6 +33,7 @@
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "media/base/logging_override_if_enabled.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -125,14 +126,37 @@ SourceBuffer::SourceBuffer(std::unique_ptr<WebSourceBuffer> web_source_buffer,
 
   DCHECK(web_source_buffer_);
   DCHECK(source_);
-  DCHECK(source_->MediaElement());
-  // TODO(https://crbug.com/878133): Enable construction of media tracks that
-  // don't reference the media element if, for instance, they are owned by a
-  // different execution context.
-  audio_tracks_ =
-      MakeGarbageCollected<AudioTrackList>(*source_->MediaElement());
-  video_tracks_ =
-      MakeGarbageCollected<VideoTrackList>(*source_->MediaElement());
+
+  scoped_refptr<MediaSourceAttachmentSupplement> attachment;
+  MediaSourceTracer* tracer;
+  std::tie(attachment, tracer) = source_->AttachmentAndTracer();
+  DCHECK(attachment);
+
+  if (GetExecutionContext()->IsWindow()) {
+    DCHECK(IsMainThread());
+    DCHECK(tracer);  // Same-thread attachments must use a tracer.
+
+    // Have the attachment construct our audio and video tracklist members for
+    // us, since it knows how to do this with knowledge of the attached media
+    // element.
+    audio_tracks_ = attachment->CreateAudioTrackList(tracer);
+    DCHECK(audio_tracks_);
+    video_tracks_ = attachment->CreateVideoTrackList(tracer);
+    DCHECK(video_tracks_);
+  } else {
+    DCHECK(RuntimeEnabledFeatures::MediaSourceInWorkersEnabled() &&
+           GetExecutionContext()->IsDedicatedWorkerGlobalScope());
+    DCHECK(!IsMainThread());
+
+    // TODO(https://crbug.com/878133): Enable construction of media tracks that
+    // don't reference the media element if, for instance, they are owned by a
+    // different execution context. For now, AudioVideoTracks experimental
+    // feature implementation is not complete when MediaSource is in worker.
+    DCHECK(!audio_tracks_);
+    DCHECK(!video_tracks_);
+  }
+
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
   web_source_buffer_->SetClient(this);
 }
 
@@ -157,6 +181,7 @@ AtomicString SourceBuffer::SequenceKeyword() {
 void SourceBuffer::setMode(const AtomicString& new_mode,
                            ExceptionState& exception_state) {
   DVLOG(3) << __func__ << " this=" << this << " new_mode=" << new_mode;
+
   // Section 3.1 On setting mode attribute steps.
   // https://www.w3.org/TR/media-source/#dom-sourcebuffer-mode
   // 1. If this object has been removed from the sourceBuffers attribute of the
@@ -170,14 +195,37 @@ void SourceBuffer::setMode(const AtomicString& new_mode,
     return;
   }
 
+  // Do remainder of steps only if attachment is usable and underlying demuxer
+  // is protected from destruction (applicable especially for MSE-in-Worker
+  // case). Note, we must have |source_| and |source_| must have an attachment
+  // because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(
+          WTF::Bind(&SourceBuffer::SetMode_Locked, WrapPersistent(this),
+                    new_mode, WTF::Unretained(&exception_state)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::SetMode_Locked(
+    AtomicString new_mode,
+    ExceptionState* exception_state,
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   // 4. If generate timestamps flag equals true and new mode equals "segments",
   //    then throw a TypeError exception and abort these steps.
   if (web_source_buffer_->GetGenerateTimestampsFlag() &&
       new_mode == SegmentsKeyword()) {
     MediaSource::LogAndThrowTypeError(
-        exception_state, "The mode value provided (" + SegmentsKeyword() +
-                             ") is invalid for a byte stream format that uses "
-                             "generated timestamps.");
+        *exception_state, "The mode value provided (" + SegmentsKeyword() +
+                              ") is invalid for a byte stream format that uses "
+                              "generated timestamps.");
     return;
   }
 
@@ -198,7 +246,7 @@ void SourceBuffer::setMode(const AtomicString& new_mode,
     append_mode = WebSourceBuffer::kAppendModeSequence;
   if (!web_source_buffer_->SetMode(append_mode)) {
     MediaSource::LogAndThrowDOMException(
-        exception_state, DOMExceptionCode::kInvalidStateError,
+        *exception_state, DOMExceptionCode::kInvalidStateError,
         "The mode may not be set while the SourceBuffer's append state is "
         "'PARSING_MEDIA_SEGMENT'.");
     return;
@@ -220,13 +268,35 @@ TimeRanges* SourceBuffer::buffered(ExceptionState& exception_state) const {
     return nullptr;
   }
 
+  // Obtain the current buffered ranges only if attachment is usable and
+  // underlying demuxer is protected from destruction (applicable especially for
+  // MSE-in-Worker case). Note, we must have |source_| and |source_| must have
+  // an attachment because !IsRemoved().
+  WebTimeRanges ranges;
+  if (!source_->RunUnlessElementGoneOrClosingUs(
+          WTF::Bind(&SourceBuffer::GetBuffered_Locked, WrapPersistent(this),
+                    WTF::Unretained(&ranges)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+    return nullptr;
+  }
+
   // 2. Return a new static normalized TimeRanges object for the media segments
   //    buffered.
-  return MakeGarbageCollected<TimeRanges>(web_source_buffer_->Buffered());
+  return MakeGarbageCollected<TimeRanges>(ranges);
 }
 
-WebTimeRanges SourceBuffer::buffered() const {
-  return web_source_buffer_->Buffered();
+void SourceBuffer::GetBuffered_Locked(
+    WebTimeRanges* ranges /* out parameter */,
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) const {
+  DCHECK(!IsRemoved());
+  DCHECK(ranges);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
+  *ranges = web_source_buffer_->Buffered();
 }
 
 double SourceBuffer::timestampOffset() const {
@@ -249,6 +319,29 @@ void SourceBuffer::setTimestampOffset(double offset,
                                         exception_state))
     return;
 
+  // Do the remainder of steps only if attachment is usable and underlying
+  // demuxer is protected from destruction (applicable especially for
+  // MSE-in-Worker case). Note, we must have |source_| and |source_| must have
+  // an attachment because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(WTF::Bind(
+          &SourceBuffer::SetTimestampOffset_Locked, WrapPersistent(this),
+          offset, WTF::Unretained(&exception_state)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::SetTimestampOffset_Locked(
+    double offset,
+    ExceptionState* exception_state,
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   // 4. If the readyState attribute of the parent media source is in the "ended"
   //    state then run the following steps:
   // 4.1 Set the readyState attribute of the parent media source to "open"
@@ -262,7 +355,7 @@ void SourceBuffer::setTimestampOffset(double offset,
   //    timestamp to new timestamp offset.
   if (!web_source_buffer_->SetTimestampOffset(offset)) {
     MediaSource::LogAndThrowDOMException(
-        exception_state, DOMExceptionCode::kInvalidStateError,
+        *exception_state, DOMExceptionCode::kInvalidStateError,
         "The timestamp offset may not be set while the SourceBuffer's append "
         "state is 'PARSING_MEDIA_SEGMENT'.");
     return;
@@ -274,11 +367,25 @@ void SourceBuffer::setTimestampOffset(double offset,
 
 AudioTrackList& SourceBuffer::audioTracks() {
   DCHECK(HTMLMediaElement::MediaTracksEnabledInternally());
+
+  // TODO(https://crbug.com/878133): Complete the AudioVideoTracks function
+  // necessary to enable successful experimental usage of it when MSE is in
+  // worker. Note that if this is consulted as part of parent |source_|'s
+  // context destruction, then we cannot consult GetExecutionContext() here.
+  CHECK(IsMainThread());
+
   return *audio_tracks_;
 }
 
 VideoTrackList& SourceBuffer::videoTracks() {
   DCHECK(HTMLMediaElement::MediaTracksEnabledInternally());
+
+  // TODO(https://crbug.com/878133): Complete the AudioVideoTracks function
+  // necessary to enable successful experimental usage of it when MSE is in
+  // worker. Note that if this is consulted as part of parent |source_|'s
+  // context destruction, then we cannot consult GetExecutionContext() here.
+  CHECK(IsMainThread());
+
   return *video_tracks_;
 }
 
@@ -311,9 +418,30 @@ void SourceBuffer::setAppendWindowStart(double start,
     return;
   }
 
-  web_source_buffer_->SetAppendWindowStart(start);
+  // Do remainder of steps only if attachment is usable and underlying demuxer
+  // is protected from destruction (applicable especially for MSE-in-Worker
+  // case). Note, we must have |source_| and |source_| must have an attachment
+  // because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(
+          WTF::Bind(&SourceBuffer::SetAppendWindowStart_Locked,
+                    WrapPersistent(this), start))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::SetAppendWindowStart_Locked(
+    double start,
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
 
   // 4. Update the attribute to the new value.
+  web_source_buffer_->SetAppendWindowStart(start);
   append_window_start_ = start;
 }
 
@@ -351,34 +479,51 @@ void SourceBuffer::setAppendWindowEnd(double end,
     return;
   }
 
-  web_source_buffer_->SetAppendWindowEnd(end);
+  // Do remainder of steps only if attachment is usable and underlying demuxer
+  // is protected from destruction (applicable especially for MSE-in-Worker
+  // case). Note, we must have |source_| and |source_| must have an attachment
+  // because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(
+          WTF::Bind(&SourceBuffer::SetAppendWindowEnd_Locked,
+                    WrapPersistent(this), end))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::SetAppendWindowEnd_Locked(
+    double end,
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
 
   // 5. Update the attribute to the new value.
+  web_source_buffer_->SetAppendWindowEnd(end);
   append_window_end_ = end;
 }
 
 void SourceBuffer::appendBuffer(DOMArrayBuffer* data,
                                 ExceptionState& exception_state) {
-  double media_time = GetMediaTime();
-  DVLOG(2) << __func__ << " this=" << this << " media_time=" << media_time
-           << " size=" << data->ByteLengthAsSizeT();
+  DVLOG(2) << __func__ << " this=" << this << " size=" << data->ByteLength();
   // Section 3.2 appendBuffer()
   // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-SourceBuffer-appendBuffer-void-ArrayBufferView-data
-  AppendBufferInternal(media_time,
-                       static_cast<const unsigned char*>(data->Data()),
-                       data->ByteLengthAsSizeT(), exception_state);
+  AppendBufferInternal(static_cast<const unsigned char*>(data->Data()),
+                       data->ByteLength(), exception_state);
 }
 
 void SourceBuffer::appendBuffer(NotShared<DOMArrayBufferView> data,
                                 ExceptionState& exception_state) {
-  double media_time = GetMediaTime();
-  DVLOG(3) << __func__ << " this=" << this << " media_time=" << media_time
-           << " size=" << data.View()->byteLengthAsSizeT();
+  DVLOG(3) << __func__ << " this=" << this
+           << " size=" << data.View()->byteLength();
   // Section 3.2 appendBuffer()
   // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-SourceBuffer-appendBuffer-void-ArrayBufferView-data
   AppendBufferInternal(
-      media_time, static_cast<const unsigned char*>(data.View()->BaseAddress()),
-      data.View()->byteLengthAsSizeT(), exception_state);
+      static_cast<const unsigned char*>(data.View()->BaseAddress()),
+      data.View()->byteLength(), exception_state);
 }
 
 void SourceBuffer::abort(ExceptionState& exception_state) {
@@ -426,14 +571,39 @@ void SourceBuffer::abort(ExceptionState& exception_state) {
   //    following steps: ...
   AbortIfUpdating();
 
+  // Do remainder of steps only if attachment is usable and underlying demuxer
+  // is protected from destruction (applicable especially for MSE-in-Worker
+  // case). Note, we must have |source_| and |source_| must have an attachment
+  // because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(
+          WTF::Bind(&SourceBuffer::Abort_Locked, WrapPersistent(this)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::Abort_Locked(
+    MediaSourceAttachmentSupplement::ExclusiveKey pass_key) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   // 5. Run the reset parser state algorithm.
   web_source_buffer_->ResetParserState();
 
   // 6. Set appendWindowStart to 0.
-  setAppendWindowStart(0, exception_state);
+  // Note, there can be no exception, since appendWindowEnd can never be 0
+  // (appendWindowStart can never be < 0, nor === appendWindowEnd in regular
+  // setAppendWindow{Start,End} steps). Therefore, we can elide some checks and
+  // reuse the existing internal helpers here that do not throw JS exception.
+  SetAppendWindowStart_Locked(0, pass_key);
 
   // 7. Set appendWindowEnd to positive Infinity.
-  setAppendWindowEnd(std::numeric_limits<double>::infinity(), exception_state);
+  // Note, likewise, no possible exception here, so reusing internal helper.
+  SetAppendWindowEnd_Locked(std::numeric_limits<double>::infinity(), pass_key);
 }
 
 void SourceBuffer::remove(double start,
@@ -453,17 +623,41 @@ void SourceBuffer::remove(double start,
                                         exception_state))
     return;
 
+  // Do remainder of steps only if attachment is usable and underlying demuxer
+  // is protected from destruction (applicable especially for MSE-in-Worker
+  // case). Note, we must have |source_| and |source_| must have an attachment
+  // because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(
+          WTF::Bind(&SourceBuffer::Remove_Locked, WrapPersistent(this), start,
+                    end, WTF::Unretained(&exception_state)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::Remove_Locked(
+    double start,
+    double end,
+    ExceptionState* exception_state,
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   // 3. If duration equals NaN, then throw a TypeError exception and abort these
   //    steps.
   // 4. If start is negative or greater than duration, then throw a TypeError
   //    exception and abort these steps.
-  if (start < 0 || std::isnan(source_->duration()) ||
-      start > source_->duration()) {
+  double duration = source_->duration();
+  if (start < 0 || std::isnan(duration) || start > duration) {
     MediaSource::LogAndThrowTypeError(
-        exception_state,
+        *exception_state,
         ExceptionMessages::IndexOutsideRange(
             "start", start, 0.0, ExceptionMessages::kExclusiveBound,
-            std::isnan(source_->duration()) ? 0 : source_->duration(),
+            std::isnan(duration) ? 0 : duration,
             ExceptionMessages::kExclusiveBound));
     return;
   }
@@ -472,7 +666,7 @@ void SourceBuffer::remove(double start,
   //    TypeError exception and abort these steps.
   if (end <= start || std::isnan(end)) {
     MediaSource::LogAndThrowTypeError(
-        exception_state,
+        *exception_state,
         "The end value provided (" + String::Number(end) +
             ") must be greater than the start value provided (" +
             String::Number(start) + ").");
@@ -531,6 +725,29 @@ void SourceBuffer::changeType(const String& type,
                                         exception_state))
     return;
 
+  // Do remainder of steps only if attachment is usable and underlying demuxer
+  // is protected from destruction (applicable especially for MSE-in-Worker
+  // case). Note, we must have |source_| and |source_| must have an attachment
+  // because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(
+          WTF::Bind(&SourceBuffer::ChangeType_Locked, WrapPersistent(this),
+                    type, WTF::Unretained(&exception_state)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::ChangeType_Locked(
+    const String& type,
+    ExceptionState* exception_state,
+    MediaSourceAttachmentSupplement::ExclusiveKey pass_key) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   // 4. If type contains a MIME type that is not supported or contains a MIME
   //    type that is not supported with the types specified (currently or
   //    previously) of SourceBuffer objects in the sourceBuffers attribute of
@@ -545,7 +762,7 @@ void SourceBuffer::changeType(const String& type,
   if (!MediaSource::isTypeSupported(GetExecutionContext(), type) ||
       !web_source_buffer_->CanChangeType(content_type.GetType(), codecs)) {
     MediaSource::LogAndThrowDOMException(
-        exception_state, DOMExceptionCode::kNotSupportedError,
+        *exception_state, DOMExceptionCode::kNotSupportedError,
         "Changing to the type provided ('" + type + "') is not supported.");
     return;
   }
@@ -572,7 +789,7 @@ void SourceBuffer::changeType(const String& type,
   //    of the mode attribute on this SourceBuffer object, without running any
   //    associated steps for that attribute being set.
   if (web_source_buffer_->GetGenerateTimestampsFlag())
-    setMode(SequenceKeyword(), exception_state);
+    SetMode_Locked(SequenceKeyword(), exception_state, pass_key);
 
   // 9. Set pending initialization segment for changeType flag to true.
   // The logic for this flag is handled by the pipeline (the new bytestream
@@ -649,6 +866,8 @@ void SourceBuffer::RemovedFromMediaSource() {
   if (IsRemoved())
     return;
 
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   DVLOG(3) << __func__ << " this=" << this;
   if (pending_remove_start_ != -1) {
     CancelRemove();
@@ -658,10 +877,7 @@ void SourceBuffer::RemovedFromMediaSource() {
 
   if (HTMLMediaElement::MediaTracksEnabledInternally()) {
     DCHECK(source_);
-    if (source_->MediaElement()->audioTracks().length() > 0 ||
-        source_->MediaElement()->videoTracks().length() > 0) {
-      RemoveMediaTracks();
-    }
+    RemoveMediaTracks();
   }
 
   web_source_buffer_->RemovedFromMediaSource();
@@ -672,6 +888,7 @@ void SourceBuffer::RemovedFromMediaSource() {
 
 double SourceBuffer::HighestPresentationTimestamp() {
   DCHECK(!IsRemoved());
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
 
   double pts = web_source_buffer_->HighestPresentationTimestamp();
   DVLOG(3) << __func__ << " this=" << this << ", pts=" << pts;
@@ -679,13 +896,30 @@ double SourceBuffer::HighestPresentationTimestamp() {
 }
 
 void SourceBuffer::RemoveMediaTracks() {
-  DCHECK(HTMLMediaElement::MediaTracksEnabledInternally());
   // Spec:
   // http://w3c.github.io/media-source/#widl-MediaSource-removeSourceBuffer-void-SourceBuffer-sourceBuffer
+  DCHECK(HTMLMediaElement::MediaTracksEnabledInternally());
   DCHECK(source_);
 
-  HTMLMediaElement* media_element = source_->MediaElement();
-  DCHECK(media_element);
+  scoped_refptr<MediaSourceAttachmentSupplement> attachment;
+  MediaSourceTracer* tracer;
+  std::tie(attachment, tracer) = source_->AttachmentAndTracer();
+  DCHECK(attachment);
+
+  // One path leading to here is from |source_|'s ContextDestroyed(), so we
+  // cannot consult GetExecutionContext() here to determine if this is a
+  // worker-thread-owned or main-thread-owned SourceBuffer. Rather, we will rely
+  // on IsMainThread().
+  if (!IsMainThread()) {
+    RemovePlaceholderCrossThreadTracks(attachment, tracer);
+    return;
+  }
+
+  // For safety, ensure we are using SameThreadAttachment behavior. This is just
+  // in case we somehow are incorrectly running on the main thread, but are a
+  // worker-thread-owned SourceBuffer with a cross-thread attachment.
+  CHECK(tracer);  // Only same-thread attachments have a tracer.
+
   // 3. Let SourceBuffer audioTracks list equal the AudioTrackList object
   //    returned by sourceBuffer.audioTracks.
   // 4. If the SourceBuffer audioTracks list is not empty, then run the
@@ -694,6 +928,7 @@ void SourceBuffer::RemoveMediaTracks() {
   //     returned by the audioTracks attribute on the HTMLMediaElement.
   // 4.2 Let the removed enabled audio track flag equal false.
   bool removed_enabled_audio_track = false;
+  Vector<String> audio_track_removal_ids;
   // 4.3 For each AudioTrack object in the SourceBuffer audioTracks list, run
   //     the following steps:
   while (audioTracks().length() > 0) {
@@ -709,7 +944,9 @@ void SourceBuffer::RemoveMediaTracks() {
     // 4.3.4 Queue a task to fire a trusted event named removetrack, that does
     //       not bubble and is not cancelable, and that uses the TrackEvent
     //       interface, at the HTMLMediaElement audioTracks list.
-    media_element->audioTracks().Remove(audio_track->id());
+    // We compile the list of audio tracks to remove from the media element here
+    // and tell the element to remove them, below, with step 4.4.
+    audio_track_removal_ids.push_back(audio_track->id());
     // 4.3.5 Remove the AudioTrack object from the SourceBuffer audioTracks
     //       list.
     // 4.3.6 Queue a task to fire a trusted event named removetrack, that does
@@ -720,10 +957,12 @@ void SourceBuffer::RemoveMediaTracks() {
   // 4.4 If the removed enabled audio track flag equals true, then queue a task
   //     to fire a simple event named change at the HTMLMediaElement audioTracks
   //     list.
-  if (removed_enabled_audio_track) {
-    Event* event = Event::Create(event_type_names::kChange);
-    event->SetTarget(&media_element->audioTracks());
-    media_element->ScheduleEvent(event);
+  // Here, we perform batch removal of audio tracks, compiled in step 4.3.4,
+  // above, along with conditional enqueueing of change event.
+  if (!audio_track_removal_ids.IsEmpty()) {
+    attachment->RemoveAudioTracksFromMediaElement(
+        tracer, audio_track_removal_ids,
+        removed_enabled_audio_track /* enqueue_change_event */);
   }
 
   // 5. Let SourceBuffer videoTracks list equal the VideoTrackList object
@@ -734,6 +973,7 @@ void SourceBuffer::RemoveMediaTracks() {
   //     returned by the videoTracks attribute on the HTMLMediaElement.
   // 6.2 Let the removed selected video track flag equal false.
   bool removed_selected_video_track = false;
+  Vector<String> video_track_removal_ids;
   // 6.3 For each VideoTrack object in the SourceBuffer videoTracks list, run
   //     the following steps:
   while (videoTracks().length() > 0) {
@@ -749,7 +989,9 @@ void SourceBuffer::RemoveMediaTracks() {
     // 6.3.4 Queue a task to fire a trusted event named removetrack, that does
     //       not bubble and is not cancelable, and that uses the TrackEvent
     //       interface, at the HTMLMediaElement videoTracks list.
-    media_element->videoTracks().Remove(video_track->id());
+    // We compile the list of video tracks to remove from the media element here
+    // and tell the element to remove them, below, with step 6.4.
+    video_track_removal_ids.push_back(video_track->id());
     // 6.3.5 Remove the VideoTrack object from the SourceBuffer videoTracks
     //       list.
     // 6.3.6 Queue a task to fire a trusted event named removetrack, that does
@@ -760,25 +1002,24 @@ void SourceBuffer::RemoveMediaTracks() {
   // 6.4 If the removed selected video track flag equals true, then queue a task
   //     to fire a simple event named change at the HTMLMediaElement videoTracks
   //     list.
-  if (removed_selected_video_track) {
-    Event* event = Event::Create(event_type_names::kChange);
-    event->SetTarget(&media_element->videoTracks());
-    media_element->ScheduleEvent(event);
+  // Here, we perform batch removal of video tracks, compiled in step 6.3.4,
+  // above, along with conditional enqueueing of change event.
+  if (!video_track_removal_ids.IsEmpty()) {
+    attachment->RemoveVideoTracksFromMediaElement(
+        tracer, video_track_removal_ids,
+        removed_selected_video_track /* enqueue_change_event */);
   }
 
   // 7-8. TODO(servolk): Remove text tracks once SourceBuffer has text tracks.
 }
 
 double SourceBuffer::GetMediaTime() {
-  double media_time = std::numeric_limits<float>::quiet_NaN();
-  if (source_) {
-    scoped_refptr<MediaSourceAttachmentSupplement> attachment;
-    MediaSourceTracer* tracer;
-    std::tie(attachment, tracer) = source_->AttachmentAndTracer();
-    if (attachment)
-      media_time = attachment->GetRecentMediaTime(tracer);
-  }
-  return media_time;
+  DCHECK(source_);
+  scoped_refptr<MediaSourceAttachmentSupplement> attachment;
+  MediaSourceTracer* tracer;
+  std::tie(attachment, tracer) = source_->AttachmentAndTracer();
+  DCHECK(attachment);
+  return attachment->GetRecentMediaTime(tracer);
 }
 
 template <class T>
@@ -848,20 +1089,143 @@ AtomicString SourceBuffer::DefaultTrackLanguage(
   return track_default ? AtomicString(track_default->language()) : "";
 }
 
+void SourceBuffer::AddPlaceholderCrossThreadTracks(
+    const WebVector<MediaTrackInfo>& new_tracks,
+    scoped_refptr<MediaSourceAttachmentSupplement> attachment) {
+  // TODO(https://crbug.com/878133): Complete the MSE-in-Workers function
+  // necessary to enable successful experimental usage of AudioVideoTracks
+  // feature when MSE is in worker. Meanwhile, at least notify the attachment
+  // to tell the media element to populate appropriately identified tracks so
+  // that the BackgroundVideoOptimization feature functions for MSE-in-Workers
+  // playbacks.
+  DCHECK(RuntimeEnabledFeatures::MediaSourceInWorkersEnabled());
+  DCHECK(!IsMainThread());
+  DCHECK(!first_initialization_segment_received_);
+  DCHECK(source_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
+  // Perform placeholder track additions on the main thread for each audio
+  // and video track in the initialization segment. Note that this depends
+  // on the caller already verifying correctness of the track metadata (see
+  // SourceBufferState::OnNewConfigs()).
+  bool enable_next_audio_track = true;
+  bool select_next_video_track = true;
+  DCHECK(audio_track_ids_for_crossthread_removal_.IsEmpty());
+  DCHECK(video_track_ids_for_crossthread_removal_.IsEmpty());
+  for (const MediaTrackInfo& track_info : new_tracks) {
+    if (track_info.track_type == WebMediaPlayer::kAudioTrack) {
+      WebString label = track_info.label;
+      if (label.IsEmpty()) {
+        label = DefaultTrackLabel(TrackDefault::AudioKeyword(),
+                                  track_info.byte_stream_track_id);
+      }
+
+      WebString language = track_info.language;
+      if (language.IsEmpty()) {
+        language = DefaultTrackLanguage(TrackDefault::AudioKeyword(),
+                                        track_info.byte_stream_track_id);
+      }
+
+      attachment->AddMainThreadAudioTrackToMediaElement(
+          track_info.id, track_info.kind, std::move(label), std::move(language),
+          enable_next_audio_track);
+
+      // Only enable the first audio track for this SourceBuffer.
+      enable_next_audio_track = false;
+
+      // Remember to remove this track from the element later.
+      audio_track_ids_for_crossthread_removal_.push_back(track_info.id);
+    } else if (track_info.track_type == WebMediaPlayer::kVideoTrack) {
+      WebString label = track_info.label;
+      if (label.IsEmpty()) {
+        label = DefaultTrackLabel(TrackDefault::VideoKeyword(),
+                                  track_info.byte_stream_track_id);
+      }
+
+      WebString language = track_info.language;
+      if (language.IsEmpty()) {
+        language = DefaultTrackLanguage(TrackDefault::VideoKeyword(),
+                                        track_info.byte_stream_track_id);
+      }
+      attachment->AddMainThreadVideoTrackToMediaElement(
+          track_info.id, track_info.kind, std::move(label), std::move(language),
+          select_next_video_track);
+
+      // Only select the first video track for this SourceBuffer.
+      select_next_video_track = false;
+
+      // Remember to remove this track from the element later.
+      video_track_ids_for_crossthread_removal_.push_back(track_info.id);
+    }
+  }
+}
+
+void SourceBuffer::RemovePlaceholderCrossThreadTracks(
+    scoped_refptr<MediaSourceAttachmentSupplement> attachment,
+    MediaSourceTracer* tracer) {
+  // TODO(https://crbug.com/878133): Remove this special-casing once worker
+  // thread track creation and tracklist modifications are supported.
+  DCHECK(RuntimeEnabledFeatures::MediaSourceInWorkersEnabled());
+  DCHECK(!IsMainThread());
+  DCHECK(!tracer);  // Cross-thread attachments don't use a tracer.
+
+  // Remove all of this SourceBuffer's cross-thread media element audio and
+  // video tracks, and enqueue a change event against the appropriate track
+  // lists on the media element. The event(s) may be extra, but likely unseen by
+  // application unless it is attempting experimental AudioVideoTracks usage,
+  // too.
+  if (!audio_track_ids_for_crossthread_removal_.IsEmpty()) {
+    attachment->RemoveAudioTracksFromMediaElement(
+        tracer, std::move(audio_track_ids_for_crossthread_removal_),
+        true /* enqueue_change_event */);
+  }
+
+  if (!video_track_ids_for_crossthread_removal_.IsEmpty()) {
+    attachment->RemoveVideoTracksFromMediaElement(
+        tracer, std::move(video_track_ids_for_crossthread_removal_),
+        true /* enqueue_change_event */);
+  }
+}
+
 bool SourceBuffer::InitializationSegmentReceived(
     const WebVector<MediaTrackInfo>& new_tracks) {
   DVLOG(3) << __func__ << " this=" << this << " tracks=" << new_tracks.size();
   DCHECK(source_);
-  DCHECK(source_->MediaElement());
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
+  scoped_refptr<MediaSourceAttachmentSupplement> attachment;
+  MediaSourceTracer* tracer;
+  std::tie(attachment, tracer) = source_->AttachmentAndTracer();
+  DCHECK(attachment);
+  DCHECK_EQ(!tracer, !IsMainThread());
+
   DCHECK(updating_);
 
+  // Feature and execution-context conditioning may disable full population of
+  // tracks in SourceBuffer (and maybe even in media element).
+  bool finish_early = false;
+
   if (!HTMLMediaElement::MediaTracksEnabledInternally()) {
+    // Don't populate SourceBuffer tracks. Let the media element figure out
+    // internally any tracks it wants to populate (it may do placeholders).
+    finish_early = true;
+  } else if (GetExecutionContext()->IsDedicatedWorkerGlobalScope()) {
+    finish_early = true;
+    if (!first_initialization_segment_received_) {
+      AddPlaceholderCrossThreadTracks(new_tracks, attachment);
+    }
+  }
+
+  if (finish_early) {
     if (!first_initialization_segment_received_) {
       source_->SetSourceBufferActive(this, true);
       first_initialization_segment_received_ = true;
     }
     return true;
   }
+
+  DCHECK(GetExecutionContext()->IsWindow());
+  DCHECK(IsMainThread());
 
   // Implementation of Initialization Segment Received, see
   // https://w3c.github.io/media-source/#sourcebuffer-init-segment-received
@@ -1023,7 +1387,7 @@ bool SourceBuffer::InitializationSegmentReceived(
       // 5.2.7 TODO(servolk): Implement track kind processing.
       // 5.2.8.2 Let new audio track be a new AudioTrack object.
       auto* audio_track = MakeGarbageCollected<AudioTrack>(
-          track_info.id, kind, label, language, false);
+          track_info.id, kind, std::move(label), std::move(language), false);
       SourceBufferTrackBaseSupplement::SetSourceBuffer(*audio_track, this);
       // 5.2.8.7 If audioTracks.length equals 0, then run the following steps:
       if (audioTracks().length() == 0) {
@@ -1045,7 +1409,7 @@ bool SourceBuffer::InitializationSegmentReceived(
       //          not bubble and is not cancelable, and that uses the TrackEvent
       //          interface, at the AudioTrackList object referenced by the
       //          audioTracks attribute on the HTMLMediaElement.
-      source_->MediaElement()->audioTracks().Add(audio_track);
+      attachment->AddAudioTrackToMediaElement(tracer, audio_track);
     }
 
     // 5.3. For each video track in the initialization segment, run following
@@ -1084,7 +1448,7 @@ bool SourceBuffer::InitializationSegmentReceived(
       // 5.3.7 TODO(servolk): Implement track kind processing.
       // 5.3.8.2 Let new video track be a new VideoTrack object.
       auto* video_track = MakeGarbageCollected<VideoTrack>(
-          track_info.id, kind, label, language, false);
+          track_info.id, kind, std::move(label), std::move(language), false);
       SourceBufferTrackBaseSupplement::SetSourceBuffer(*video_track, this);
       // 5.3.8.7 If videoTracks.length equals 0, then run the following steps:
       if (videoTracks().length() == 0) {
@@ -1106,7 +1470,7 @@ bool SourceBuffer::InitializationSegmentReceived(
       //          not bubble and is not cancelable, and that uses the TrackEvent
       //          interface, at the VideoTrackList object referenced by the
       //          videoTracks attribute on the HTMLMediaElement.
-      source_->MediaElement()->videoTracks().Add(video_track);
+      attachment->AddVideoTrackToMediaElement(tracer, video_track);
     }
 
     // 5.4 TODO(servolk): Add text track processing here.
@@ -1128,6 +1492,9 @@ bool SourceBuffer::InitializationSegmentReceived(
 }
 
 void SourceBuffer::NotifyParseWarning(const ParseWarning warning) {
+  DCHECK(source_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   switch (warning) {
     case WebSourceBufferClient::kKeyframeTimeGreaterThanDependant:
       // Report this problematic GOP structure to help inform follow-up work.
@@ -1169,7 +1536,13 @@ bool SourceBuffer::HasPendingActivity() const {
 
 void SourceBuffer::ContextDestroyed() {
   append_buffer_async_task_handle_.Cancel();
+  pending_append_data_.clear();
+  pending_append_data_offset_ = 0;
+
   remove_async_task_handle_.Cancel();
+  pending_remove_start_ = -1;
+  pending_remove_end_ = -1;
+
   updating_ = false;
 }
 
@@ -1197,22 +1570,12 @@ void SourceBuffer::ScheduleEvent(const AtomicString& event_name) {
 bool SourceBuffer::PrepareAppend(double media_time,
                                  size_t new_data_size,
                                  ExceptionState& exception_state) {
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("media", "SourceBuffer::prepareAppend",
-                                    TRACE_ID_LOCAL(this));
+  // Runs the remainder of prepare append algorithm steps beyond those already
+  // done by the caller.
   // http://w3c.github.io/media-source/#sourcebuffer-prepare-append
   // 3.5.4 Prepare Append Algorithm
-  // 1. If the SourceBuffer has been removed from the sourceBuffers attribute of
-  //    the parent media source then throw an InvalidStateError exception and
-  //    abort these steps.
-  // 2. If the updating attribute equals true, then throw an InvalidStateError
-  //    exception and abort these steps.
-  if (ThrowExceptionIfRemovedOrUpdating(IsRemoved(), updating_,
-                                        exception_state)) {
-    TRACE_EVENT_NESTABLE_ASYNC_END0("media", "SourceBuffer::prepareAppend",
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("media", "SourceBuffer::prepareAppend",
                                     TRACE_ID_LOCAL(this));
-    return false;
-  }
-
   // 3. If the HTMLMediaElement.error attribute is not null, then throw an
   //    InvalidStateError exception and abort these steps.
   DCHECK(source_);
@@ -1220,7 +1583,7 @@ bool SourceBuffer::PrepareAppend(double media_time,
   MediaSourceTracer* tracer;
   std::tie(attachment, tracer) = source_->AttachmentAndTracer();
   DCHECK(attachment);
-  DCHECK(tracer);
+  DCHECK_EQ(!tracer, !IsMainThread());
   if (attachment->GetElementError(tracer)) {
     MediaSource::LogAndThrowDOMException(
         exception_state, DOMExceptionCode::kInvalidStateError,
@@ -1261,7 +1624,7 @@ bool SourceBuffer::PrepareAppend(double media_time,
 
 bool SourceBuffer::EvictCodedFrames(double media_time, size_t new_data_size) {
   DCHECK(source_);
-  DCHECK(source_->MediaElement());
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
 
   // Nothing to do if this SourceBuffer does not yet have frames to evict.
   if (!first_initialization_segment_received_)
@@ -1277,22 +1640,67 @@ bool SourceBuffer::EvictCodedFrames(double media_time, size_t new_data_size) {
   return result;
 }
 
-void SourceBuffer::AppendBufferInternal(double media_time,
-                                        const unsigned char* data,
+void SourceBuffer::AppendBufferInternal(const unsigned char* data,
                                         size_t size,
                                         ExceptionState& exception_state) {
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("media", "SourceBuffer::appendBuffer",
                                     TRACE_ID_LOCAL(this), "size", size);
   // Section 3.2 appendBuffer()
   // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-SourceBuffer-appendBuffer-void-ArrayBufferView-data
-
+  //
   // 1. Run the prepare append algorithm.
-  if (!PrepareAppend(media_time, size, exception_state)) {
+  //
+  // http://w3c.github.io/media-source/#sourcebuffer-prepare-append
+  // 3.5.4 Prepare Append Algorithm
+  //
+  // Do the first two steps of the prepare append algorithm here, so that we can
+  // be assured if they succeed that the remainder of this scope runs with the
+  // attachment's |attachment_state_lock_| mutex held.
+  //
+  // 1. If the SourceBuffer has been removed from the sourceBuffers attribute of
+  //    the parent media source then throw an InvalidStateError exception and
+  //    abort these steps.
+  // 2. If the updating attribute equals true, then throw an InvalidStateError
+  //    exception and abort these steps.
+  if (ThrowExceptionIfRemovedOrUpdating(IsRemoved(), updating_,
+                                        exception_state)) {
     TRACE_EVENT_NESTABLE_ASYNC_END0("media", "SourceBuffer::appendBuffer",
                                     TRACE_ID_LOCAL(this));
     return;
   }
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("media", "prepareAppend",
+
+  // Do remainder of steps of prepare append algorithm and appendBuffer only if
+  // attachment is usable and underlying demuxer is protected from destruction
+  // (applicable especially for MSE-in-Worker case). Note, we must have
+  // |source_| and |source_| must have an attachment because !IsRemoved().
+  if (!source_->RunUnlessElementGoneOrClosingUs(WTF::Bind(
+          &SourceBuffer::AppendBufferInternal_Locked, WrapPersistent(this),
+          WTF::Unretained(data), size, WTF::Unretained(&exception_state)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, exception should be for this case.
+    MediaSource::LogAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "Worker MediaSource attachment is closing");
+  }
+}
+
+void SourceBuffer::AppendBufferInternal_Locked(
+    const unsigned char* data,
+    size_t size,
+    ExceptionState* exception_state,
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) {
+  DCHECK(source_);
+  DCHECK(!updating_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
+  // Finish the prepare append algorithm begun by the caller.
+  double media_time = GetMediaTime();
+  if (!PrepareAppend(media_time, size, *exception_state)) {
+    TRACE_EVENT_NESTABLE_ASYNC_END0("media", "SourceBuffer::appendBuffer",
+                                    TRACE_ID_LOCAL(this));
+    return;
+  }
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("media", "prepareAsyncAppend",
                                     TRACE_ID_LOCAL(this));
 
   // 2. Add data to the end of the input buffer.
@@ -1314,13 +1722,38 @@ void SourceBuffer::AppendBufferInternal(double media_time,
       FROM_HERE,
       WTF::Bind(&SourceBuffer::AppendBufferAsyncPart, WrapPersistent(this)));
 
-  TRACE_EVENT_NESTABLE_ASYNC_END0("media", "prepareAppend",
+  TRACE_EVENT_NESTABLE_ASYNC_END0("media", "prepareAsyncAppend",
                                   TRACE_ID_LOCAL(this));
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("media", "delay", TRACE_ID_LOCAL(this),
                                     "type", "initialDelay");
 }
 
 void SourceBuffer::AppendBufferAsyncPart() {
+  // Do the async append operation only if attachment is usable and underlying
+  // demuxer is protected from destruction (applicable especially for
+  // MSE-in-Worker case).
+  DCHECK(!IsRemoved());  // So must have |source_| and it must have attachment.
+  if (!source_->RunUnlessElementGoneOrClosingUs(WTF::Bind(
+          &SourceBuffer::AppendBufferAsyncPart_Locked, WrapPersistent(this)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, behavior should be for this case. In this
+    // implementation:
+    // 1) If main context isn't destroyed yet, then there must be a pending
+    // MediaSource::Close() call which will call RemovedFromMediaSource()
+    // eventually if still safe to do so (and that will cleanly shutdown pending
+    // async append state if we just do nothing here now, or
+    // 2) If main context is destroyed, then our context will be destroyed soon.
+    // We cannot safely access the underlying demuxer. So the safest thing to do
+    // is nothing here now.
+    DVLOG(1) << __func__ << " this=" << this
+             << ": Worker MediaSource attachment is closing";
+  }
+}
+
+void SourceBuffer::AppendBufferAsyncPart_Locked(
+    MediaSourceAttachmentSupplement::ExclusiveKey pass_key) {
+  DCHECK(source_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
   DCHECK(updating_);
 
   // Section 3.5.4 Buffer Append Algorithm
@@ -1336,7 +1769,10 @@ void SourceBuffer::AppendBufferAsyncPart() {
   // doesn't block the renderer event loop very long. This value was selected
   // by looking at YouTube SourceBuffer usage across a variety of bitrates.
   // This value allows relatively large appends while keeping append() call
-  // duration in the  ~5-15ms range.
+  // duration in the  ~5-15ms range. Note that even in MSE-in-Worker case, we
+  // retain this behavior because some synchronous operations done by the main
+  // thread media element on our attachment block until we are finished and have
+  // exited the attachment's RunExclusively() callback scope.
   const wtf_size_t kMaxAppendSize = 128 * 1024;
   if (append_size > kMaxAppendSize)
     append_size = kMaxAppendSize;
@@ -1359,7 +1795,7 @@ void SourceBuffer::AppendBufferAsyncPart() {
   if (!append_success) {
     pending_append_data_.clear();
     pending_append_data_offset_ = 0;
-    AppendError();
+    AppendError(pass_key);
   } else {
     pending_append_data_offset_ += append_size;
 
@@ -1401,6 +1837,25 @@ void SourceBuffer::AppendBufferAsyncPart() {
 }
 
 void SourceBuffer::RemoveAsyncPart() {
+  // Do the async remove operation only if attachment is usable and underlying
+  // demuxer is protected from destruction (applicable especially for
+  // MSE-in-Worker case).
+  DCHECK(!IsRemoved());  // So must have |source_| and it must have attachment.
+  if (!source_->RunUnlessElementGoneOrClosingUs(WTF::Bind(
+          &SourceBuffer::RemoveAsyncPart_Locked, WrapPersistent(this)))) {
+    // TODO(https://crbug.com/878133): Determine in specification what the
+    // specific, app-visible, behavior should be for this case. This
+    // implementation takes the safest route and does nothing. See similar case
+    // in AppendBufferAsyncPart for reasoning.
+    DVLOG(1) << __func__ << " this=" << this
+             << ": Worker MediaSource attachment is closing";
+  }
+}
+
+void SourceBuffer::RemoveAsyncPart_Locked(
+    MediaSourceAttachmentSupplement::ExclusiveKey /* passkey */) {
+  DCHECK(source_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
   DCHECK(updating_);
   DCHECK_GE(pending_remove_start_, 0);
   DCHECK_LT(pending_remove_start_, pending_remove_end_);
@@ -1426,8 +1881,12 @@ void SourceBuffer::RemoveAsyncPart() {
   ScheduleEvent(event_type_names::kUpdateend);
 }
 
-void SourceBuffer::AppendError() {
+void SourceBuffer::AppendError(
+    MediaSourceAttachmentSupplement::ExclusiveKey pass_key) {
   DVLOG(3) << __func__ << " this=" << this;
+  DCHECK(source_);
+  source_->AssertAttachmentsMutexHeldIfCrossThreadForDebugging();
+
   // Section 3.5.3 Append Error Algorithm
   // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#sourcebuffer-append-error
 
@@ -1447,7 +1906,8 @@ void SourceBuffer::AppendError() {
 
   // 5. If decode error is true, then run the end of stream algorithm with the
   // error parameter set to "decode".
-  source_->EndOfStreamAlgorithm(WebMediaSource::kEndOfStreamStatusDecodeError);
+  source_->EndOfStreamAlgorithm(WebMediaSource::kEndOfStreamStatusDecodeError,
+                                pass_key);
 }
 
 void SourceBuffer::Trace(Visitor* visitor) const {

@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -638,22 +638,6 @@ void BluetoothAdapter::RemoveTimedOutDevices() {
     for (auto& observer : observers_)
       observer.DeviceRemoved(this, removed_device.get());
   }
-}
-
-// static
-void BluetoothAdapter::RecordBluetoothDiscoverySessionStartOutcome(
-    UMABluetoothDiscoverySessionOutcome outcome) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Bluetooth.DiscoverySession.Start.Outcome", static_cast<int>(outcome),
-      static_cast<int>(UMABluetoothDiscoverySessionOutcome::COUNT));
-}
-
-// static
-void BluetoothAdapter::RecordBluetoothDiscoverySessionStopOutcome(
-    UMABluetoothDiscoverySessionOutcome outcome) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Bluetooth.DiscoverySession.Stop.Outcome", static_cast<int>(outcome),
-      static_cast<int>(UMABluetoothDiscoverySessionOutcome::COUNT));
 }
 
 // static

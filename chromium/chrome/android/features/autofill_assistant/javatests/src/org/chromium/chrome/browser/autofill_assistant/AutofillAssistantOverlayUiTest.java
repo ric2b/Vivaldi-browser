@@ -26,7 +26,6 @@ import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.support.test.InstrumentationRegistry;
 import android.view.View;
 
 import androidx.annotation.Nullable;
@@ -44,7 +43,6 @@ import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayIm
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayModel;
 import org.chromium.chrome.browser.autofill_assistant.overlay.AssistantOverlayState;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
-import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.WebContents;
@@ -68,9 +66,10 @@ public class AutofillAssistantOverlayUiTest {
 
     @Before
     public void setUp() {
-        mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
-                InstrumentationRegistry.getTargetContext(),
-                mTestRule.getTestServer().getURL(TEST_PAGE)));
+        mTestRule.startCustomTabActivityWithIntent(
+                AutofillAssistantUiTestUtil.createMinimalCustomTabIntentForAutobot(
+                        mTestRule.getTestServer().getURL(TEST_PAGE),
+                        /* startImmediately = */ true));
         mTestRule.getActivity()
                 .getRootUiCoordinatorForTesting()
                 .getScrimCoordinator()
@@ -145,8 +144,8 @@ public class AutofillAssistantOverlayUiTest {
         AssistantOverlayModel model = new AssistantOverlayModel();
         AssistantOverlayCoordinator coordinator = createCoordinator(model);
 
-        AssistantOverlayImage image = new AssistantOverlayImage("http://localhost/example.png", 64,
-                64, 40, "example.com", Color.parseColor("#B3FFFFFF"), 40);
+        AssistantOverlayImage image = new AssistantOverlayImage(
+                64, 64, 40, "example.com", Color.parseColor("#B3FFFFFF"), 40);
         runOnUiThreadBlocking(() -> {
             model.set(AssistantOverlayModel.STATE, AssistantOverlayState.FULL);
             model.set(AssistantOverlayModel.OVERLAY_IMAGE, image);
@@ -185,13 +184,12 @@ public class AutofillAssistantOverlayUiTest {
 
         // Now the partial overlay allows tapping the highlighted touch area.
         tapElement("touch_area_one");
-
         waitForElementRemoved(getWebContents(), "touch_area_one");
 
         runOnUiThreadBlocking(
                 () -> model.set(AssistantOverlayModel.TOUCHABLE_AREA, Collections.emptyList()));
-        tapElement("touch_area_three");
-        assertThat(checkElementExists(getWebContents(), "touch_area_three"), is(true));
+        tapElement("touch_area_four");
+        assertThat(checkElementExists(getWebContents(), "touch_area_four"), is(true));
     }
 
     /** Scrolls a touchable area into view and then taps it. */
@@ -201,20 +199,18 @@ public class AutofillAssistantOverlayUiTest {
         AssistantOverlayModel model = new AssistantOverlayModel();
         AssistantOverlayCoordinator coordinator = createCoordinator(model);
 
-        Rect rect = getBoundingRectForElement(getWebContents(), "touch_area_two");
+        scrollIntoViewIfNeeded("touch_area_five");
+        Rect rect = getBoundingRectForElement(getWebContents(), "touch_area_five");
         Rect viewport = getViewport(getWebContents());
         runOnUiThreadBlocking(() -> {
             model.set(AssistantOverlayModel.STATE, AssistantOverlayState.PARTIAL);
+            model.set(AssistantOverlayModel.VISUAL_VIEWPORT, new RectF(viewport));
             model.set(AssistantOverlayModel.TOUCHABLE_AREA,
                     Collections.singletonList(new RectF(rect)));
-            model.set(AssistantOverlayModel.VISUAL_VIEWPORT, new RectF(viewport));
         });
-        scrollIntoViewIfNeeded("touch_area_two");
-        Rect newViewport = getViewport(getWebContents());
-        runOnUiThreadBlocking(
-                () -> model.set(AssistantOverlayModel.VISUAL_VIEWPORT, new RectF(newViewport)));
-        tapElement("touch_area_two");
-        waitForElementRemoved(getWebContents(), "touch_area_two");
+        assertScrimDisplayed(true);
+        tapElement("touch_area_five");
+        waitForElementRemoved(getWebContents(), "touch_area_five");
     }
 
     /**
@@ -234,8 +230,7 @@ public class AutofillAssistantOverlayUiTest {
         runOnUiThreadBlocking(() -> {
             model.set(AssistantOverlayModel.STATE, AssistantOverlayState.FULL);
             model.set(AssistantOverlayModel.OVERLAY_IMAGE,
-                    new AssistantOverlayImage("https://www.example.com/example.png", 32, 32, 12,
-                            "Text", Color.RED, 20));
+                    new AssistantOverlayImage(32, 32, 12, "Text", Color.RED, 20));
         });
 
         assertScrimDisplayed(true);
@@ -252,8 +247,7 @@ public class AutofillAssistantOverlayUiTest {
         runOnUiThreadBlocking(() -> {
             model.set(AssistantOverlayModel.STATE, AssistantOverlayState.FULL);
             model.set(AssistantOverlayModel.OVERLAY_IMAGE,
-                    new AssistantOverlayImage("https://www.example.com/example.png", 32, 32, 12,
-                            "Text", Color.RED, 20));
+                    new AssistantOverlayImage(32, 32, 12, "Text", Color.RED, 20));
         });
 
         assertScrimDisplayed(true);
@@ -294,7 +288,8 @@ public class AutofillAssistantOverlayUiTest {
         TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper javascriptHelper =
                 new TestCallbackHelperContainer.OnEvaluateJavaScriptResultHelper();
         javascriptHelper.evaluateJavaScriptForTests(getWebContents(),
-                "(function() {" + elementId + ".scrollIntoViewIfNeeded();"
+                "(function() {"
+                        + " document.getElementById('" + elementId + "').scrollIntoViewIfNeeded();"
                         + " return true;"
                         + "})()");
         javascriptHelper.waitUntilHasValue();

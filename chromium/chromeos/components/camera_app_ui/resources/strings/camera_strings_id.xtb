@@ -3,6 +3,7 @@
 <translationbundle lang="id">
 <translation id="1276998909102132017">Foto galeri</translation>
 <translation id="1430915738399379752">Cetak</translation>
+<translation id="1473110567575736769">Timer 3 detik</translation>
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Tidak ada yang direkam</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Resolusi kamera</translation>
 <translation id="3517926952904427380">Tidak dapat mengambil foto potret</translation>
 <translation id="3569311554794739032">Yakin ingin menghapus <ph name="FILE" />?</translation>
+<translation id="3750315947605636967">Kamera Anda sedang digunakan aplikasi lain</translation>
 <translation id="3810838688059735925">Video</translation>
+<translation id="4000398125663085899">Foto dan video baru kini akan disimpan ke folder di aplikasi File: File saya &gt; Kamera</translation>
 <translation id="4118525110028899586">Jeda rekaman</translation>
 <translation id="4279490309300973883">Mencerminkan</translation>
 <translation id="4329152592498422850">Beralih ke mode mengambil foto persegi</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">Kamera tidak tersedia untuk saat ini.
         Periksa apakah kamera terhubung dengan benar.</translation>
 <translation id="5152121255775685072">Buka galeri</translation>
+<translation id="5422455049771430511">Foto dan video Anda punya tempat baru</translation>
 <translation id="5671277269877808209">Persegi</translation>
 <translation id="5775960006311140197">Mode pakar</translation>
 <translation id="5869546221129391014">Kisi</translation>
+<translation id="6040143037577758943">Tutup</translation>
 <translation id="6073451960410192870">Berhenti merekam</translation>
 <translation id="6197807149213783179">Simpan metadata</translation>
 <translation id="6233780560267770709">3 kali 3</translation>
@@ -60,6 +65,7 @@ Jika masukan Anda berkaitan dengan kualitas gambar atau video, lampirkan contoh 
 <translation id="6965382102122355670">Oke</translation>
 <translation id="698156982839284926">3 detik</translation>
 <translation id="712848772518857951">Yakin ingin menghapus <ph name="COUNT" /> item?</translation>
+<translation id="7134221860976209830">Timer 10 detik</translation>
 <translation id="7243947652761655814">Resolusi video</translation>
 <translation id="7337660886763914220">Error sistem file.</translation>
 <translation id="7557677699350329807">Beralih ke kamera berikutnya</translation>
@@ -67,7 +73,6 @@ Jika masukan Anda berkaitan dengan kualitas gambar atau video, lampirkan contoh 
 <translation id="7649070708921625228">Bantuan</translation>
 <translation id="7658239707568436148">Batal</translation>
 <translation id="7670511624014457267">60 FPS</translation>
-<translation id="8049189770492311300">Timer</translation>
 <translation id="8067883171444229417">Putar video</translation>
 <translation id="8131740175452115882">Konfirmasi</translation>
 <translation id="8145038249676204903">Beralih ke mode mengambil foto</translation>

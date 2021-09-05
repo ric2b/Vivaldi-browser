@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">საიტი: <ph name="SITE_NAME" /> დამატებულია</translation>
 <translation id="1383876407941801731">ძიება</translation>
 <translation id="1384959399684842514">ჩამოტვირთვა დაპაუზებულია</translation>
+<translation id="1415402041810619267">URL შემოკლებულია</translation>
 <translation id="1431402976894535801">საიტებისთვის თქვენი დასწრების შესახებ ინფორმაციის მიღების დაბლოკვა</translation>
 <translation id="1446450296470737166">MIDI მოწყ. სრული კონტ. დაშვება</translation>
 <translation id="1509960214886564027">მრავალი საიტის ფუნქციებმა შეიძლება არასათანადოდ იმუშაოს</translation>
 <translation id="1620510694547887537">კამერა</translation>
-<translation id="1647391597548383849">თქვენს კამერაზე წვდომა</translation>
 <translation id="1660204651932907780">საიტებისთვის ხმის დაკვრის დაშვება (რეკომენდებული)</translation>
 <translation id="1677097821151855053">ქუქი-ჩანაწერები და საიტების სხვა მონაცემები გამოიყენება თქვენ დასამახსოვრებლად, რომ, მაგალითად, შეიყვანოთ სისტემაში ან რეკლამა მოგარგოთ. ყველა საიტისთვის ქუქი-ჩანაწერების სამართავად გადადით <ph name="BEGIN_LINK" />პარამეტრებზე<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">გსურთ საიტის მონაცემების გასუფთავება?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">საიტის URL</translation>
 <translation id="2025115093177348061">აუგმენტური რეალობა</translation>
 <translation id="2030769033451695672">შეეხეთ <ph name="URL_OF_THE_CURRENT_TAB" />-ზე დასაბრუნებლად</translation>
+<translation id="2054665754582400095">თქვენი დასწრება</translation>
 <translation id="2079545284768500474">მოქმედების გაუქმება</translation>
 <translation id="2091887806945687916">ხმა</translation>
 <translation id="2107397443965016585">შეკითხვა საიტებისთვის დაცული კონტენტის დაკვრის დაშვებამდე (რეკომენდებული)</translation>
 <translation id="2146738493024040262">მყისიერი აპის გახსნა</translation>
 <translation id="2148716181193084225">დღეს</translation>
 <translation id="2182457891543959921">შეკითხვა საიტებისთვის თქვენი გარემოს 3-განზომილებიანი რუკის შექმნის ან კამერის პოზიციისთვის თვალის მიდევნების დაშვებამდე (რეკომენდებული)</translation>
-<translation id="2187243482123994665">მომხმარებლის დასწრება</translation>
 <translation id="2212565012507486665">ქუქი-ჩანაწერების დაშვება</translation>
 <translation id="2228071138934252756"><ph name="APP_NAME" />-მა კამერით რომ ისარგებლოს, გაააქტიურეთ კამერაზე წვდომის ნებართვაც <ph name="BEGIN_LINK" />Android-ის პარამეტრებიდან<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">მხოლოდ ერთხელ</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> მბაიტი</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> და <ph name="NUM_MORE" /> სხვა დაშვებულია}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> და <ph name="NUM_MORE" /> სხვა დაშვებულია}}</translation>
 <translation id="2434158240863470628">ჩამოტვირთვა დასრულდა: <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">მდებარეობაზე წვდომა</translation>
 <translation id="2482878487686419369">შეტყობინებები</translation>
 <translation id="2490684707762498678">მართავს <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">დახმარება და უკუკავშირი</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">მიკროფონი</translation>
 <translation id="3277252321222022663">საიტებისთვის სენსორებზე წვდომის დაშვება (რეკომენდებული)</translation>
 <translation id="3295602654194328831">ინფორმაციის დამალვა</translation>
+<translation id="3328801116991980348">საიტის ინფორმაცია</translation>
 <translation id="3333961966071413176">ყველა კონტაქტი</translation>
 <translation id="3386292677130313581">შეკითხვა საიტებისთვის თქვენი მდებარეობის დადგენის დაშვებამდე (რეკომენდებული)</translation>
 <translation id="3538390592868664640">საიტებისთვის თქვენი გარემოს 3-განზომილებიანი რუკის შექმნის ან კამერის პოზიციისთვის თვალის მიდევნების დაბლოკვა</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">საიტებისთვის დაცული კონტენტის დაკვრის დაშვება</translation>
 <translation id="4468959413250150279">ხმის დადუმება კონკრეტული საიტისთვის.</translation>
 <translation id="4479647676395637221">შეკითხვა საიტებისთვის თქვენი კამერის გამოყენების დაშვებამდე (რეკომენდებული)</translation>
+<translation id="4505788138578415521">URL გაშლილია</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" />-მა მიკროფონით რომ ისარგებლოს, გაააქტიურეთ მიკროფონზე წვდომის ნებართვაც <ph name="BEGIN_LINK" />Android-ის პარამეტრებიდან<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">დეტალები</translation>
 <translation id="4645575059429386691">იმართება თქვენი მშობლის მიერ</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> და <ph name="NUM_MORE" /> სხვა}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> და <ph name="NUM_MORE" /> სხვა}}</translation>
 <translation id="913657688200966289"><ph name="APP_NAME" />-ისთვის ნებართვების გააქტიურება <ph name="BEGIN_LINK" />Android-ის პარამეტრებში<ph name="END_LINK" /> შეგიძლიათ.</translation>
-<translation id="945632385593298557">თქვენი მიკროფონი ხელმისაწვდომია</translation>
 <translation id="965817943346481315">დაბლოკვა, თუ საიტი აჩვენებს მომაბეზრებელ ან შეცდომაში შემყვან რეკლამას (რეკომენდებული)</translation>
 <translation id="967624055006145463">შენახული მონაცემები</translation>
 </translationbundle>

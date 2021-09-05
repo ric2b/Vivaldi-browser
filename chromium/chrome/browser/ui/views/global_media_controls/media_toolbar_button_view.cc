@@ -14,7 +14,7 @@
 #include "chrome/browser/ui/global_media_controls/media_toolbar_button_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/global_media_controls/media_dialog_view.h"
-#include "chrome/browser/ui/views/in_product_help/feature_promo_controller_views.h"
+#include "chrome/browser/ui/views/user_education/feature_promo_controller_views.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/vector_icons/vector_icons.h"
@@ -29,14 +29,15 @@
 #include "ui/views/controls/button/button_controller.h"
 
 MediaToolbarButtonView::MediaToolbarButtonView(BrowserView* browser_view)
-    : ToolbarButton(this),
+    : ToolbarButton(base::BindRepeating(&MediaToolbarButtonView::ButtonPressed,
+                                        base::Unretained(this))),
       browser_(browser_view->browser()),
       service_(MediaNotificationServiceFactory::GetForProfile(
           browser_view->browser()->profile())),
       feature_promo_controller_(browser_view->feature_promo_controller()) {
   button_controller()->set_notify_action(
       views::ButtonController::NotifyAction::kOnPress);
-  EnableCanvasFlippingForRTLUI(false);
+  SetFlipCanvasOnPaintForRTLUI(false);
   SetTooltipText(
       l10n_util::GetStringUTF16(IDS_GLOBAL_MEDIA_CONTROLS_ICON_TOOLTIP_TEXT));
   GetViewAccessibility().OverrideHasPopup(ax::mojom::HasPopup::kDialog);
@@ -63,21 +64,6 @@ void MediaToolbarButtonView::AddObserver(MediaToolbarButtonObserver* observer) {
 void MediaToolbarButtonView::RemoveObserver(
     MediaToolbarButtonObserver* observer) {
   observers_.RemoveObserver(observer);
-}
-
-void MediaToolbarButtonView::ButtonPressed(views::Button* sender,
-                                           const ui::Event& event) {
-  if (MediaDialogView::IsShowing()) {
-    MediaDialogView::HideDialog();
-  } else {
-    MediaDialogView::ShowDialog(this, service_);
-
-    feature_promo_controller_->CloseBubble(
-        feature_engagement::kIPHLiveCaptionFeature);
-
-    for (auto& observer : observers_)
-      observer.OnMediaDialogOpened();
-  }
 }
 
 void MediaToolbarButtonView::Show() {
@@ -123,4 +109,18 @@ void MediaToolbarButtonView::UpdateIcon() {
   const gfx::VectorIcon& icon =
       touch_ui ? kMediaToolbarButtonTouchIcon : kMediaToolbarButtonIcon;
   UpdateIconsWithStandardColors(icon);
+}
+
+void MediaToolbarButtonView::ButtonPressed() {
+  if (MediaDialogView::IsShowing()) {
+    MediaDialogView::HideDialog();
+  } else {
+    MediaDialogView::ShowDialog(this, service_, browser_->profile());
+
+    feature_promo_controller_->CloseBubble(
+        feature_engagement::kIPHLiveCaptionFeature);
+
+    for (auto& observer : observers_)
+      observer.OnMediaDialogOpened();
+  }
 }

@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
@@ -38,15 +38,15 @@ class VpxVideoDecoderTest : public testing::Test {
 
   void InitializeWithConfigWithResult(const VideoDecoderConfig& config,
                                       bool success) {
-    decoder_->Initialize(
-        config, false, nullptr,
-        base::BindOnce(
-            [](bool success, Status status) {
-              EXPECT_EQ(status.is_ok(), success);
-            },
-            success),
-        base::Bind(&VpxVideoDecoderTest::FrameReady, base::Unretained(this)),
-        base::NullCallback());
+    decoder_->Initialize(config, false, nullptr,
+                         base::BindOnce(
+                             [](bool success, Status status) {
+                               EXPECT_EQ(status.is_ok(), success);
+                             },
+                             success),
+                         base::BindRepeating(&VpxVideoDecoderTest::FrameReady,
+                                             base::Unretained(this)),
+                         base::NullCallback());
     base::RunLoop().RunUntilIdle();
   }
 

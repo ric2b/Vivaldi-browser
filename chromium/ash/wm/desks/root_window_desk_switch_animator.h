@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/compositor/layer_animation_observer.h"
 
@@ -36,11 +37,15 @@ namespace ash {
 // visible state of the desks seem constant to the user (e.g. if the starting
 // desk is in overview, it appears to remain in overview while sliding out).
 // This approach makes it possible to show an empty black space separating both
-// desks while we animate them (See |kDesksSpacing|).
-//
+// desks while we animate them (See |kDesksSpacing|). The ending desk may change
+// after the animation has started. In this case, a new animation will replace
+// the current one and animate to the new ending desk, requesting a new
+// screenshot if necessary.
 // - `starting` desk: is the currently activated desk which will be deactivated
 //    shortly.
 // - `ending` desk: is the desk desired to be activated with this animation.
+// These can be changed if the enhanced desk animations feature is enabled using
+// ReplaceAnimation() or UpdateSwipeAnimation().
 //
 // The animation goes through the following phases:
 //
@@ -66,6 +71,16 @@ namespace ash {
 //     roots are taken by all animators (through checking
 //     ending_desk_screenshot_taken()), so that it can start phase (3) on all of
 //     them at the same time.
+//   * Phase (2) can be rentered after starting phase (3) by calling
+//     ReplaceAnimation() or UpdateSwipeAnimation(). The new ending desk will
+//     change, and if it does not have an associated screenshot layer, the
+//     caller will be responsible for requesting one using
+//     TakeEndingDeskScreenshot(). The screenshots are taken as needed since
+//     their layers are fullscreen and require activating a desk which may be a
+//     large operation for something that the user may not see. Once the
+//     screenshot is taken, it is kept until |this| is destroyed. If an
+//     associated screenshot layer exists already, ReplaceAnimation() and
+//     UpdateSwipeAnimation() can proceed without returning to phase (2).
 //
 // - Phase (3) begins when StartAnimation() is called.
 //   * The parent layer of both screenshot layers is animated, either:
@@ -87,10 +102,13 @@ namespace ash {
 //                start here
 //
 //       Animation layer transforms:
-//       * Begin transform: Identity (since starting desk screeshot is already
-//         visible).
-//       * End transform: Negative translation to the left to slide out starting
-//         desk, and slide in ending desk screenshots into the screen.
+//       * Begin transform: The transform that will make the starting desk
+//         screenshot visible. In this case it is a transform with translation
+//         (edge_padding_width_dp_, 0).
+//       * End transform: The transform that will make the ending desk
+//         screenshot visible. In this case it is a transform with translation
+//         (-|edge_padding_width_dp_| - |x_translation_offset_| -
+//         |kDesksSpacing|, 0).
 //
 //     - Or to the right (starting_desk_index_ > ending_desk_index_), when the
 //       starting desk is on the right.
@@ -110,16 +128,23 @@ namespace ash {
 //                                    start here
 //
 //       Animation layer transforms:
-//       * Begin transform: Negative translation to the left (to make starting
-//         desk screeshot visible on the screen).
-//       * End transform: Identity to make a translation to the right to slide
-//         out starting desk, and slide in ending desk screenshots into the
-//         screen.
+//       * Begin transform: The transform that will make the starting desk
+//         screenshot visible. In this case it is a transform with translation
+//         (-|edge_padding_width_dp_| - |x_translation_offset_| -
+//         |kDesksSpacing|, 0).
+//       * End transform: The transform that will make the ending desk
+//         screenshot visible. In this case it is a transform with translation
+//         (edge_padding_width_dp_, 0).
 //
 //   * The animation always begins such that the starting desk screenshot layer
 //     is the one visible on the screen, and the parent (animation layer) always
 //     moves in the direction such that the ending desk screenshot becomes
 //     visible on the screen.
+//   * The children (screenshot layers) are always placed left to right to match
+//     desk order. For example, if there are three desks and this class has been
+//     instructed to create a screenshot for all three desks, desk 1's
+//     screenshot will be on the left, desk 2's screenshot will be in the middle
+//     and desk 3's screenshot will be on the right.
 //   * Once the animation finishes, Delegate::OnDeskSwitchAnimationFinished() is
 //     triggered. The owner of this object can then check that all animators on
 //     all roots have finished their animations (by checking
@@ -152,12 +177,6 @@ namespace ash {
 //   the desks screenshots are animating horizontally.
 // This gives the effect that the removed desk windows are jumping from their
 // desk to the target desk.
-//
-// TODO(sammiequon): Update the class docs. It has been modified slightly to
-// accommodate the chained desk animations feature, and will be modified
-// slightly more to accommodate the continuous desk animations feature. The base
-// algorithm is still valid, but once the features are near completion these
-// need to be updated.
 class ASH_EXPORT RootWindowDeskSwitchAnimator
     : public ui::ImplicitAnimationObserver {
  public:
@@ -170,12 +189,17 @@ class ASH_EXPORT RootWindowDeskSwitchAnimator
     virtual void OnStartingDeskScreenshotTaken(int ending_desk_index) = 0;
 
     // Called when phase (2) completes. The ending desk screenshot has been
-    // taken and put on the screen.
+    // taken and put on the screen. This can be called multiple times during the
+    // lifetime of |this|.
     virtual void OnEndingDeskScreenshotTaken() = 0;
 
     // Called when phase (3) completes. The animation completes and the ending
     // desk screenshot is now showing on the screen.
     virtual void OnDeskSwitchAnimationFinished() = 0;
+
+    // Called while doing a continuous gesture to notify when the desk that is
+    // visible to the user has changed. Used for metrics collection.
+    virtual void OnVisibleDeskChanged() = 0;
 
    protected:
     virtual ~Delegate() = default;
@@ -192,7 +216,7 @@ class ASH_EXPORT RootWindowDeskSwitchAnimator
 
   // In touchpad units, a touchpad swipe of this length will correspond to a
   // full desk change.
-  static constexpr int kTouchpadSwipeLengthForDeskChange = 100;
+  static constexpr int kTouchpadSwipeLengthForDeskChange = 420;
 
   RootWindowDeskSwitchAnimator(aura::Window* root,
                                int starting_desk_index,
@@ -239,15 +263,26 @@ class ASH_EXPORT RootWindowDeskSwitchAnimator
   // Called as a user is performing a touchpad swipe. Requests a new screenshot
   // if necessary based on the last direction as specified in |scroll_delta_x|.
   // |scroll_delta_x| is in touchpad units, it will be converted to display
-  // units and then used to shift the animation layer.
-  bool UpdateSwipeAnimation(float scroll_delta_x);
+  // units and then used to shift the animation layer. If the animation layer is
+  // near its boundaries, this will return an index for the desk we should take
+  // a screenshot for. If we are not near the boundaries, or if there is no next
+  // adjacent desk in the direction we are heading, return base::nullopt. The
+  // delegate is responsible for requesting the screenshot.
+  base::Optional<int> UpdateSwipeAnimation(float scroll_delta_x);
+
+  // Maybe called after UpdateSwipeAnimation() if we need a new screenshot.
+  // Updates |ending_desk_index_| and resets some other internal state related
+  // to the ending desk screenshot.
+  void PrepareForEndingDeskScreenshot(int new_ending_desk_index);
 
   // Called when a user ends a touchpad swipe. This will animate to the most
-  // visible desk.
-  void EndSwipeAnimation();
+  // visible desk, whose index is also returned.
+  int EndSwipeAnimation();
 
   // ui::ImplicitAnimationObserver:
   void OnImplicitAnimationsCompleted() override;
+
+  ui::Layer* GetAnimationLayerForTesting() const;
 
  private:
   friend class RootWindowDeskSwitchAnimatorTestApi;
@@ -290,6 +325,10 @@ class ASH_EXPORT RootWindowDeskSwitchAnimator
   // The index of the desk to activate and animate to with this animator.
   int ending_desk_index_;
 
+  // The index of the desk that is most visible to the user based on the
+  // transform of the animation layer.
+  int visible_desk_index_;
+
   Delegate* const delegate_;
 
   // The owner of the layer tree of the old detached layers of the removed
@@ -310,6 +349,12 @@ class ASH_EXPORT RootWindowDeskSwitchAnimator
   // remaining indices will have nullptr. The layers, if not null are owned by
   // |animation_layer_owner_|.
   std::vector<ui::Layer*> screenshot_layers_;
+
+  // Stores the size of |root_window_| that takes into account all scale factors
+  // by snapping to the edge of the display. This will prevent any 1px gaps we
+  // may see while switching desks. Prefer to use this in all calculations over
+  // |root_window_| get bounds functions.
+  const gfx::Size root_window_size_;
 
   // The amount by which the animation layer will be translated horizontally
   // either startingly or at the end of the animation, depending on the value of
@@ -337,9 +382,13 @@ class ASH_EXPORT RootWindowDeskSwitchAnimator
   bool animation_finished_ = false;
 
   // True while setting a new transform for chaining. If a animation is active,
-  // calling SetTranform will trigger OnImplicitAnimationsCompleted. In these
+  // calling SetTransform will trigger OnImplicitAnimationsCompleted. In these
   // cases we do not want to notify our delegate that the animation is finished.
   bool setting_new_transform_ = false;
+
+  // Callback that is run after the ending screenshot is taken for testing
+  // purposes.
+  base::OnceClosure on_ending_screenshot_taken_callback_for_testing_;
 
   base::WeakPtrFactory<RootWindowDeskSwitchAnimator> weak_ptr_factory_{this};
 };

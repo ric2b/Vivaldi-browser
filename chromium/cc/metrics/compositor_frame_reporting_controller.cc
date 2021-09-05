@@ -61,23 +61,43 @@ bool CompositorFrameReportingController::HasReporterAt(
   return !!reporters_[stage].get();
 }
 
+void CompositorFrameReportingController::ProcessSkippedFramesIfNecessary(
+    const viz::BeginFrameArgs& args) {
+  if (previous_frame_.IsValid() &&
+      previous_frame_.frame_id.source_id == args.frame_id.source_id) {
+    CreateReportersForDroppedFrames(previous_frame_, args);
+  }
+  previous_frame_ = args;
+}
+
 void CompositorFrameReportingController::WillBeginImplFrame(
     const viz::BeginFrameArgs& args) {
+  ProcessSkippedFramesIfNecessary(args);
+
   base::TimeTicks begin_time = Now();
   if (reporters_[PipelineStage::kBeginImplFrame]) {
     auto& reporter = reporters_[PipelineStage::kBeginImplFrame];
     DCHECK(reporter->did_finish_impl_frame());
-    DCHECK(reporter->did_not_produce_frame());
-    reporter->TerminateFrame(FrameTerminationStatus::kDidNotProduceFrame,
-                             reporter->did_not_produce_frame_time());
+    // TODO(1144353): This is a speculative fix. This code should only be
+    // reached after the previous frame have been explicitly marked as 'did not
+    // produce frame', i.e. this code should have a DCHECK instead of a
+    // conditional:
+    //   DCHECK(reporter->did_not_produce_frame()).
+    if (reporter->did_not_produce_frame()) {
+      reporter->TerminateFrame(FrameTerminationStatus::kDidNotProduceFrame,
+                               reporter->did_not_produce_frame_time());
+    } else {
+      reporter->TerminateFrame(FrameTerminationStatus::kReplacedByNewReporter,
+                               Now());
+    }
   }
   auto reporter = std::make_unique<CompositorFrameReporter>(
       active_trackers_, args, latency_ukm_reporter_.get(),
-      should_report_metrics_, GetSmoothThread(), layer_tree_host_id_);
+      should_report_metrics_, GetSmoothThread(), layer_tree_host_id_,
+      dropped_frame_counter_);
   reporter->set_tick_clock(tick_clock_);
   reporter->StartStage(StageType::kBeginImplFrameToSendBeginMainFrame,
                        begin_time);
-  reporter->SetDroppedFrameCounter(dropped_frame_counter_);
   reporters_[PipelineStage::kBeginImplFrame] = std::move(reporter);
 }
 
@@ -100,10 +120,10 @@ void CompositorFrameReportingController::WillBeginMainFrame(
     // deadline yet). So will start a new reporter at BeginMainFrame.
     auto reporter = std::make_unique<CompositorFrameReporter>(
         active_trackers_, args, latency_ukm_reporter_.get(),
-        should_report_metrics_, GetSmoothThread(), layer_tree_host_id_);
+        should_report_metrics_, GetSmoothThread(), layer_tree_host_id_,
+        dropped_frame_counter_);
     reporter->set_tick_clock(tick_clock_);
     reporter->StartStage(StageType::kSendBeginMainFrameToCommit, Now());
-    reporter->SetDroppedFrameCounter(dropped_frame_counter_);
     reporters_[PipelineStage::kBeginMainFrame] = std::move(reporter);
   }
 }
@@ -249,8 +269,8 @@ void CompositorFrameReportingController::DidSubmitCompositorFrame(
         events_metrics.impl_event_metrics.size());
     events_metrics.main_event_metrics.insert(
         events_metrics.main_event_metrics.end(),
-        events_metrics.impl_event_metrics.begin(),
-        events_metrics.impl_event_metrics.end());
+        std::make_move_iterator(events_metrics.impl_event_metrics.begin()),
+        std::make_move_iterator(events_metrics.impl_event_metrics.end()));
   }
 
   if (main_reporter) {
@@ -363,6 +383,7 @@ void CompositorFrameReportingController::OnStoppedRequestingBeginFrames() {
                                     now);
     }
   }
+  previous_frame_ = {};
 }
 
 void CompositorFrameReportingController::SetBlinkBreakdown(
@@ -464,6 +485,41 @@ CompositorFrameReportingController::GetSmoothThread() const {
   return is_compositor_thread_driving_smoothness_
              ? SmoothThread::kSmoothCompositor
              : SmoothThread::kSmoothNone;
+}
+
+void CompositorFrameReportingController::CreateReportersForDroppedFrames(
+    const viz::BeginFrameArgs& old_args,
+    const viz::BeginFrameArgs& new_args) const {
+  DCHECK_EQ(new_args.frame_id.source_id, old_args.frame_id.source_id);
+  DCHECK_GE(new_args.frame_id.sequence_number,
+            old_args.frame_id.sequence_number);
+  const uint32_t interval =
+      new_args.frame_id.sequence_number - old_args.frame_id.sequence_number;
+
+  // Up to 100 frames will be reported (100 closest frames to new_args).
+  const uint32_t kMaxFrameCount = 100;
+
+  // If there are more than 100 frames skipped, ignore them
+  if (interval > kMaxFrameCount)
+    return;
+
+  auto timestamp = old_args.frame_time + old_args.interval;
+  for (uint32_t i = 1; i < interval; ++i, timestamp += old_args.interval) {
+    auto args = viz::BeginFrameArgs::Create(
+        BEGINFRAME_FROM_HERE, old_args.frame_id.source_id,
+        old_args.frame_id.sequence_number + i, timestamp,
+        timestamp + old_args.interval, old_args.interval,
+        viz::BeginFrameArgs::NORMAL);
+    auto reporter = std::make_unique<CompositorFrameReporter>(
+        active_trackers_, args, latency_ukm_reporter_.get(),
+        should_report_metrics_, GetSmoothThread(), layer_tree_host_id_,
+        dropped_frame_counter_);
+    reporter->set_tick_clock(tick_clock_);
+    reporter->StartStage(StageType::kBeginImplFrameToSendBeginMainFrame,
+                         timestamp);
+    reporter->TerminateFrame(FrameTerminationStatus::kDidNotPresentFrame,
+                             args.deadline);
+  }
 }
 
 }  // namespace cc

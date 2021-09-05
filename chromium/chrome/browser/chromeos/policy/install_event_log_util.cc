@@ -49,6 +49,12 @@ constexpr char kUserType[] = "userType";
 constexpr char kIsNewUser[] = "isNewUser";
 constexpr char kIsMisconfigurationFailure[] = "isMisconfigurationFailure";
 constexpr char kInstallCreationStage[] = "installCreationStage";
+constexpr char kDownloadCacheStatus[] = "downloadCacheStatus";
+constexpr char kUnpackerFailureReason[] = "unpackerFailureReason";
+constexpr char kManifestInvalidError[] = "manifestInvalidError";
+constexpr char kCrxInstallErrorDetail[] = "crxInstallErrorDetail";
+constexpr char kFetchErrorCode[] = "fetchErrorCode";
+constexpr char kFetchTries[] = "fetchTries";
 
 // Calculates hash for the given |event| and |context|, and stores the hash in
 // |hash|. Returns true if |event| and |context| are json serializable and
@@ -206,6 +212,39 @@ base::Value ConvertExtensionEventToValue(
     event.SetIntKey(
         kInstallCreationStage,
         extension_install_report_log_event.install_creation_stage());
+  }
+
+  if (extension_install_report_log_event.has_download_cache_status()) {
+    event.SetIntKey(kDownloadCacheStatus,
+                    extension_install_report_log_event.download_cache_status());
+  }
+
+  if (extension_install_report_log_event.has_unpacker_failure_reason()) {
+    event.SetIntKey(
+        kUnpackerFailureReason,
+        extension_install_report_log_event.unpacker_failure_reason());
+  }
+
+  if (extension_install_report_log_event.has_manifest_invalid_error()) {
+    event.SetIntKey(
+        kManifestInvalidError,
+        extension_install_report_log_event.manifest_invalid_error());
+  }
+
+  if (extension_install_report_log_event.has_fetch_error_code()) {
+    event.SetIntKey(kFetchErrorCode,
+                    extension_install_report_log_event.fetch_error_code());
+  }
+
+  if (extension_install_report_log_event.has_fetch_tries()) {
+    event.SetIntKey(kFetchTries,
+                    extension_install_report_log_event.fetch_tries());
+  }
+
+  if (extension_install_report_log_event.has_crx_install_error_detail()) {
+    event.SetIntKey(
+        kCrxInstallErrorDetail,
+        extension_install_report_log_event.crx_install_error_detail());
   }
 
   base::Value wrapper(base::Value::Type::DICTIONARY);

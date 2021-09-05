@@ -180,7 +180,6 @@ PageSchedulerImpl::PageSchedulerImpl(
       audio_state_(AudioState::kSilent),
       is_frozen_(false),
       reported_background_throttling_since_navigation_(false),
-      opted_out_from_all_throttling_(false),
       opted_out_from_aggressive_throttling_(false),
       nested_runloop_(false),
       is_main_frame_local_(false),
@@ -343,6 +342,8 @@ void PageSchedulerImpl::SetPageBackForwardCached(
 
   if (!is_stored_in_back_forward_cache_) {
     set_ipc_posted_handler_task_.Cancel();
+    has_ipc_detection_enabled_ = false;
+    main_thread_scheduler_->UpdateIpcTracking();
     for (FrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
       frame_scheduler->DetachOnIPCTaskPostedWhileInBackForwardCacheHandler();
     }
@@ -363,6 +364,8 @@ void PageSchedulerImpl::SetPageBackForwardCached(
 
 void PageSchedulerImpl::SetUpIPCTaskDetection() {
   DCHECK(is_stored_in_back_forward_cache_);
+  has_ipc_detection_enabled_ = true;
+  main_thread_scheduler_->UpdateIpcTracking();
   for (FrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
     frame_scheduler->SetOnIPCTaskPostedWhileInBackForwardCacheHandler();
   }
@@ -522,10 +525,6 @@ bool PageSchedulerImpl::IsExemptFromBudgetBasedThrottling() const {
   return opted_out_from_aggressive_throttling_;
 }
 
-bool PageSchedulerImpl::OptedOutFromAllThrottling() const {
-  return opted_out_from_all_throttling_;
-}
-
 bool PageSchedulerImpl::OptedOutFromAggressiveThrottlingForTest() const {
   return OptedOutFromAggressiveThrottling();
 }
@@ -558,28 +557,20 @@ bool PageSchedulerImpl::IsCPUTimeThrottled() const {
 }
 
 void PageSchedulerImpl::OnThrottlingStatusUpdated() {
-  bool opted_out_from_all_throttling = false;
   bool opted_out_from_aggressive_throttling = false;
   for (FrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
-    opted_out_from_all_throttling |=
-        frame_scheduler->opted_out_from_all_throttling();
     opted_out_from_aggressive_throttling |=
         frame_scheduler->opted_out_from_aggressive_throttling();
   }
-  DCHECK(!opted_out_from_all_throttling ||
-         opted_out_from_aggressive_throttling);
 
-  if (opted_out_from_all_throttling_ != opted_out_from_all_throttling ||
-      opted_out_from_aggressive_throttling_ !=
-          opted_out_from_aggressive_throttling) {
-    opted_out_from_all_throttling_ = opted_out_from_all_throttling;
+  if (opted_out_from_aggressive_throttling_ !=
+      opted_out_from_aggressive_throttling) {
     opted_out_from_aggressive_throttling_ =
         opted_out_from_aggressive_throttling;
     base::sequence_manager::LazyNow lazy_now(
         main_thread_scheduler_->tick_clock());
     UpdateCPUTimeBudgetPool(&lazy_now);
     UpdateWakeUpBudgetPools(&lazy_now);
-    NotifyFrames();
   }
 }
 
@@ -633,7 +624,7 @@ void PageSchedulerImpl::AddQueueToWakeUpBudgetPool(
     FrameOriginType frame_origin_type,
     base::sequence_manager::LazyNow* lazy_now) {
   GetWakeUpBudgetPool(task_queue, frame_origin_type)
-      ->AddQueue(lazy_now->Now(), task_queue);
+      ->AddQueue(lazy_now->Now(), task_queue->GetTaskQueue());
 }
 
 void PageSchedulerImpl::RemoveQueueFromWakeUpBudgetPool(
@@ -641,7 +632,7 @@ void PageSchedulerImpl::RemoveQueueFromWakeUpBudgetPool(
     FrameOriginType frame_origin_type,
     base::sequence_manager::LazyNow* lazy_now) {
   GetWakeUpBudgetPool(task_queue, frame_origin_type)
-      ->RemoveQueue(lazy_now->Now(), task_queue);
+      ->RemoveQueue(lazy_now->Now(), task_queue->GetTaskQueue());
 }
 
 WakeUpBudgetPool* PageSchedulerImpl::GetWakeUpBudgetPool(

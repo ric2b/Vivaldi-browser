@@ -41,7 +41,6 @@
 #include "content/browser/storage_partition_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/input_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -56,6 +55,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "skia/ext/skia_utils_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
@@ -527,7 +527,8 @@ class RenderWidgetHostTest : public testing::Test {
     command_line->AppendSwitch(switches::kValidateInputEventStream);
     browser_context_ = std::make_unique<TestBrowserContext>();
     delegate_ = std::make_unique<MockRenderWidgetHostDelegate>();
-    process_ = new RenderWidgetHostProcess(browser_context_.get());
+    process_ =
+        std::make_unique<RenderWidgetHostProcess>(browser_context_.get());
     agent_scheduling_group_host_ =
         std::make_unique<AgentSchedulingGroupHost>(*process_);
     sink_ = &process_->sink();
@@ -586,7 +587,9 @@ class RenderWidgetHostTest : public testing::Test {
     view_.reset();
     host_.reset();
     delegate_.reset();
-    process_ = nullptr;
+    process_->Cleanup();
+    agent_scheduling_group_host_.reset();
+    process_.reset();
     browser_context_.reset();
 
 #if defined(USE_AURA)
@@ -774,8 +777,7 @@ class RenderWidgetHostTest : public testing::Test {
   BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<TestBrowserContext> browser_context_;
-  RenderWidgetHostProcess* process_ =
-      nullptr;  // Deleted automatically by the widget.
+  std::unique_ptr<RenderWidgetHostProcess> process_;
   std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_host_;
   std::unique_ptr<MockRenderWidgetHostDelegate> delegate_;
   testing::NiceMock<MockRenderWidgetHostOwnerDelegate> mock_owner_delegate_;
@@ -1103,7 +1105,9 @@ TEST_F(RenderWidgetHostTest, RootWindowSegments) {
       DisplayFeature::Orientation::kVertical,
       /* offset */ screen_rect.width() / 2 - kDisplayFeatureLength / 2,
       /* mask_length */ kDisplayFeatureLength};
-  view_->SetDisplayFeatureForTesting(emulated_display_feature);
+  RenderWidgetHostViewBase* render_widget_host_view = view_.get();
+  render_widget_host_view->SetDisplayFeatureForTesting(
+      &emulated_display_feature);
 
   ClearScreenRects();
 
@@ -1148,7 +1152,7 @@ TEST_F(RenderWidgetHostTest, RootWindowSegments) {
   // resized the widget and causes a pending ack. This is unrelated to what
   // we're testing here so ignore the pending ack by using
   // |SynchronizeVisualPropertiesIgnoringPendingAck()|.
-  view_->SetDisplayFeatureForTesting(base::nullopt);
+  render_widget_host_view->SetDisplayFeatureForTesting(nullptr);
   host_->SynchronizeVisualPropertiesIgnoringPendingAck();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, widget_.ReceivedVisualProperties().size());
@@ -1164,7 +1168,8 @@ TEST_F(RenderWidgetHostTest, RootWindowSegments) {
       DisplayFeature::Orientation::kHorizontal,
       /* offset */ screen_rect.height() / 2 - kDisplayFeatureLength / 2,
       /* mask_length */ kDisplayFeatureLength};
-  view_->SetDisplayFeatureForTesting(emulated_display_feature);
+  render_widget_host_view->SetDisplayFeatureForTesting(
+      &emulated_display_feature);
   host_->SynchronizeVisualPropertiesIgnoringPendingAck();
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, widget_.ReceivedVisualProperties().size());
@@ -2116,31 +2121,6 @@ TEST_F(RenderWidgetHostTest, NavigateInBackgroundShowsBlank) {
   EXPECT_TRUE(host_->new_content_rendering_timeout_fired());
 }
 
-TEST_F(RenderWidgetHostTest, RendererHangRecordsMetrics) {
-  base::SimpleTestTickClock clock;
-  host_->set_clock_for_testing(&clock);
-  base::HistogramTester tester;
-
-  // RenderWidgetHost makes private the methods it overrides from
-  // InputRouterClient. Call them through the base class.
-  InputRouterClient* input_router_client = host_.get();
-
-  // Do a 3s hang. This shouldn't affect metrics.
-  input_router_client->IncrementInFlightEventCount();
-  clock.Advance(base::TimeDelta::FromSeconds(3));
-  input_router_client->DecrementInFlightEventCount(
-      blink::mojom::InputEventResultSource::kUnknown);
-  tester.ExpectTotalCount("Renderer.Hung.Duration", 0u);
-
-  // Do a 17s hang. This should affect metrics.
-  input_router_client->IncrementInFlightEventCount();
-  clock.Advance(base::TimeDelta::FromSeconds(17));
-  input_router_client->DecrementInFlightEventCount(
-      blink::mojom::InputEventResultSource::kUnknown);
-  tester.ExpectTotalCount("Renderer.Hung.Duration", 1u);
-  tester.ExpectUniqueSample("Renderer.Hung.Duration", 17000, 1);
-}
-
 TEST_F(RenderWidgetHostTest, PendingUserActivationTimeout) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitWithFeatures(
@@ -2301,6 +2281,37 @@ TEST_F(RenderWidgetHostTest, OnVerticalScrollDirectionChanged) {
   EXPECT_EQ(2, delegate_->GetOnVerticalScrollDirectionChangedCallCount());
   EXPECT_EQ(viz::VerticalScrollDirection::kDown,
             delegate_->GetLastVerticalScrollDirection());
+}
+
+TEST_F(RenderWidgetHostTest, SetCursorWithBitmap) {
+  ui::Cursor cursor;
+
+  SkBitmap bitmap;
+  bitmap.allocN32Pixels(1, 1);
+  bitmap.eraseColor(SK_ColorGREEN);
+  cursor.set_custom_bitmap(bitmap);
+
+  host_->SetCursor(cursor);
+  EXPECT_EQ(WebCursor(cursor), view_->last_cursor());
+}
+
+TEST_F(RenderWidgetHostTest, SetCursorWithInvalidBitmap) {
+  ui::Cursor cursor;
+
+  SkBitmap badbitmap;
+  badbitmap.allocPixels(
+      SkImageInfo::Make(1, 1, kARGB_4444_SkColorType, kPremul_SkAlphaType));
+  badbitmap.eraseColor(SK_ColorGREEN);
+
+  SkBitmap n32bitmap;
+  EXPECT_TRUE(skia::SkBitmapToN32OpaqueOrPremul(badbitmap, &n32bitmap));
+
+  // A non-N32 32bpp bitmap will be converted on receipt from IPC.
+  cursor.set_custom_bitmap(badbitmap);
+  host_->SetCursor(cursor);
+  // Compare to the `n32bitmap`.
+  cursor.set_custom_bitmap(n32bitmap);
+  EXPECT_EQ(WebCursor(cursor), view_->last_cursor());
 }
 
 }  // namespace content

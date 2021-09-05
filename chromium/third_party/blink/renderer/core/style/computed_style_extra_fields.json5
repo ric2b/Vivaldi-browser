@@ -221,7 +221,7 @@
     {
       name: "PseudoBits",
       field_template: "primitive",
-      field_size: 8,
+      field_size: 9,
       default_value: "kPseudoIdNone",
       type_name: "unsigned",
       custom_copy: true,
@@ -428,7 +428,7 @@
       field_template: "primitive",
       include_paths: ["third_party/blink/renderer/platform/graphics/touch_action.h"],
       type_name: "TouchAction",
-      field_size: 6,
+      field_size: 7,
       default_value: "TouchAction::kAuto",
       field_group: "*",
       computed_style_custom_functions: ["getter", "setter"],

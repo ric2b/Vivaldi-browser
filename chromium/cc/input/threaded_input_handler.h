@@ -88,7 +88,7 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
       ui::LatencyInfo* latency) override;
   std::unique_ptr<EventsMetricsManager::ScopedMonitor>
   GetScopedEventMetricsMonitor(
-      std::unique_ptr<EventMetrics> event_metrics) override;
+      EventsMetricsManager::ScopedMonitor::DoneCallback done_callback) override;
   ScrollElasticityHelper* CreateScrollElasticityHelper() override;
   bool GetScrollOffsetForLayer(ElementId element_id,
                                gfx::ScrollOffset* offset) override;
@@ -117,7 +117,7 @@ class CC_EXPORT ThreadedInputHandler : public InputHandler,
                               ScrollbarOrientation orientation) override;
   void ScrollOffsetAnimationFinished() override;
   bool IsCurrentlyScrolling() const override;
-  bool IsActivelyPrecisionScrolling() const override;
+  ActivelyScrollingType GetActivelyScrollingType() const override;
 
   // =========== Public Interface
 

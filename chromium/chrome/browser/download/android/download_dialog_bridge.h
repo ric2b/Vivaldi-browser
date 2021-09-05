@@ -14,6 +14,8 @@
 #include "components/download/public/common/download_schedule.h"
 #include "ui/gfx/native_widget_types.h"
 
+#include "chrome/browser/download/download_item_model.h"
+
 // Contains all the user selection from download dialogs.
 struct DownloadDialogResult {
   DownloadDialogResult();
@@ -65,6 +67,14 @@ class DownloadDialogBridge {
   bool is_dialog_showing_;
   base::android::ScopedJavaGlobalRef<jobject> java_obj_;
   DialogCallback dialog_callback_;
+
+  // Vivaldi - External download manager support
+  public:
+  virtual bool DownloadWithExternalDownloadManager(gfx::NativeWindow native_window,
+                          DownloadLocationDialogType dialog_type,
+                          const base::FilePath& suggested_path,
+                          download::DownloadItem* download,
+                          DialogCallback dialog_callback);
 };
 
 #endif  // CHROME_BROWSER_DOWNLOAD_ANDROID_DOWNLOAD_DIALOG_BRIDGE_H_

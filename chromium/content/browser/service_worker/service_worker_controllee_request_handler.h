@@ -22,12 +22,10 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
-#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
 
 namespace content {
 
-class ResourceContext;
 class ServiceWorkerContainerHost;
 class ServiceWorkerContextCore;
 class ServiceWorkerRegistration;
@@ -45,7 +43,7 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
   ServiceWorkerControlleeRequestHandler(
       base::WeakPtr<ServiceWorkerContextCore> context,
       base::WeakPtr<ServiceWorkerContainerHost> container_host,
-      blink::mojom::ResourceType resource_type,
+      network::mojom::RequestDestination destination,
       bool skip_service_worker,
       ServiceWorkerAccessedCallback service_worker_accessed_callback);
   ~ServiceWorkerControlleeRequestHandler();
@@ -58,7 +56,6 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
   void MaybeCreateLoader(
       const network::ResourceRequest& tentative_request,
       BrowserContext* browser_context,
-      ResourceContext* resource_context,
       ServiceWorkerLoaderCallback callback,
       NavigationLoaderInterceptor::FallbackCallback fallback_callback);
   // Returns params with the ControllerServiceWorkerInfoPtr if we have found
@@ -108,14 +105,13 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
 
   const base::WeakPtr<ServiceWorkerContextCore> context_;
   const base::WeakPtr<ServiceWorkerContainerHost> container_host_;
-  const blink::mojom::ResourceType resource_type_;
+  const network::mojom::RequestDestination destination_;
 
   // If true, service workers are bypassed for request interception.
   const bool skip_service_worker_;
 
   std::unique_ptr<ServiceWorkerMainResourceLoaderWrapper> loader_wrapper_;
   BrowserContext* browser_context_;
-  ResourceContext* resource_context_;
   GURL stripped_url_;
   bool force_update_started_;
   base::TimeTicks registration_lookup_start_time_;

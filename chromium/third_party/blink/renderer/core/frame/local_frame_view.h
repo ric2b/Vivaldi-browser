@@ -31,6 +31,7 @@
 #include "base/callback_forward.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
@@ -39,13 +40,16 @@
 #include "third_party/blink/renderer/core/frame/overlay_interstitial_ad_detector.h"
 #include "third_party/blink/renderer/core/frame/sticky_ad_detector.h"
 #include "third_party/blink/renderer/core/layout/depth_ordered_layout_object_list.h"
+#include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/paint/compositing/compositing_update_type.h"
 #include "third_party/blink/renderer/core/paint/layout_object_counter.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/geometry/layout_size.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
+#include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
+#include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
 #include "third_party/blink/renderer/platform/graphics/paint_invalidation_reason.h"
 #include "third_party/blink/renderer/platform/graphics/subtree_paint_property_update_reason.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -57,8 +61,8 @@ class AnimationHost;
 class Layer;
 class PaintOpBuffer;
 enum class PaintHoldingCommitTrigger;
-
 using PaintRecord = PaintOpBuffer;
+struct PaintBenchmarkResult;
 }
 
 namespace ui {
@@ -87,9 +91,8 @@ class LayoutShiftTracker;
 class LayoutSVGRoot;
 class LayoutView;
 class LocalFrame;
+class MobileFriendlinessChecker;
 class Page;
-class PaintArtifactCompositor;
-class PaintController;
 class PaintLayer;
 class PaintLayerScrollableArea;
 class PaintTimingDetector;
@@ -104,6 +107,7 @@ class LocalFrameUkmAggregator;
 class WebPluginContainerImpl;
 struct AnnotatedRegionValue;
 struct IntrinsicSizingInfo;
+struct MobileFriendliness;
 struct PhysicalOffset;
 struct PhysicalRect;
 
@@ -226,7 +230,6 @@ class CORE_EXPORT LocalFrameView final
   void ForceUpdateViewportIntersections();
 
   void SetPaintArtifactCompositorNeedsUpdate();
-  void SetForeignLayerListNeedsUpdate();
 
   // Marks this frame, and ancestor frames, as needing a mandatory compositing
   // update. This overrides throttling for one frame, up to kCompositingClean.
@@ -352,12 +355,15 @@ class CORE_EXPORT LocalFrameView final
 
   // Run all needed lifecycle stages. After calling this method, all frames will
   // be in the lifecycle state PaintClean.  If lifecycle throttling is allowed
-  // (see DocumentLifecycle::AllowThrottlingScope), some frames may skip the
-  // lifecycle update (e.g., based on visibility) and will not end up being
-  // PaintClean. Set |reason| to indicate the reason for this update,
-  // for metrics purposes.
+  // (see AllowThrottlingScope), some frames may skip the lifecycle update
+  // (e.g., based on visibility) and will not end up being PaintClean. Set
+  // |reason| to indicate the reason for this update, for metrics purposes.
   // Returns whether the lifecycle was successfully updated to PaintClean.
   bool UpdateAllLifecyclePhases(DocumentUpdateReason reason);
+
+  // Runs UpdateAllLifecyclePhases(DocumentUpdateReason::kTest) followed by
+  // RunPostLifecycleSteps(), which is what a full BeginMainFrame() would do.
+  bool UpdateAllLifecyclePhasesForTest();
 
   // Computes the style, layout, compositing and pre-paint lifecycle stages
   // if needed.
@@ -407,6 +413,14 @@ class CORE_EXPORT LocalFrameView final
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 
   bool InvalidateViewportConstrainedObjects();
+
+  // Perform a hit test on the frame with throttling allowed. Normally, a hit
+  // test will do a synchronous lifecycle update to kPrePaintClean with
+  // throttling disabled. This will do the same lifecycle update, but with
+  // throttling enabled.
+  HitTestResult HitTestWithThrottlingAllowed(
+      const HitTestLocation&,
+      HitTestRequest::HitTestRequestType) const;
 
   void IncrementLayoutObjectCount() { layout_object_counter_.Increment(); }
   void IncrementVisuallyNonEmptyCharacterCount(unsigned);
@@ -458,6 +472,8 @@ class CORE_EXPORT LocalFrameView final
   const ScrollableAreaSet* AnimatingScrollableAreas() const {
     return animating_scrollable_areas_.Get();
   }
+
+  void ServiceScriptedAnimations(base::TimeTicks);
 
   void ScheduleAnimation(base::TimeDelta = base::TimeDelta());
 
@@ -551,6 +567,10 @@ class CORE_EXPORT LocalFrameView final
                                        const GlobalPaintFlags,
                                        const CullRect&);
 
+  // For testing paint with an optional custom cull rect. In pre-CAP, this
+  // paints the contents of the main GraphicsLayer only.
+  void PaintContentsForTest(const CullRect&);
+
   // Get the PaintRecord based on the cached paint artifact generated during
   // the last paint in lifecycle update. For CompositeAfterPaint only.
   sk_sp<cc::PaintRecord> GetPaintRecord() const;
@@ -585,8 +605,13 @@ class CORE_EXPORT LocalFrameView final
 
   LayoutAnalyzer* GetLayoutAnalyzer() { return analyzer_.get(); }
 
+  bool LocalFrameTreeAllowsThrottling() const;
+
   // Returns true if this frame should not render or schedule visual updates.
   bool ShouldThrottleRendering() const;
+
+  // Same as ShouldThrottleRendering, but with an AllowThrottlingScope in scope.
+  bool ShouldThrottleRenderingForTest() const;
 
   bool CanThrottleRendering() const override;
   void UpdateRenderThrottlingStatus(bool hidden_for_throttling,
@@ -676,10 +701,6 @@ class CORE_EXPORT LocalFrameView final
 
   const cc::Layer* RootCcLayer() const;
 
-  // Should be called whenever this LocalFrameView adds or removes a
-  // scrollable area, or gains/loses a composited layer.
-  void ScrollableAreasDidChange();
-
   ScrollingCoordinatorContext* GetScrollingContext() const;
   cc::AnimationHost* GetCompositorAnimationHost() const;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const;
@@ -688,6 +709,11 @@ class CORE_EXPORT LocalFrameView final
   PaintTimingDetector& GetPaintTimingDetector() const {
     return *paint_timing_detector_;
   }
+
+  MobileFriendlinessChecker& GetMobileFriendlinessChecker() const {
+    return *mobile_friendliness_checker_;
+  }
+  void DidChangeMobileFriendliness(const MobileFriendliness& mf);
 
   // Return the UKM aggregator for this frame, creating it if necessary.
   LocalFrameUkmAggregator& EnsureUkmAggregator();
@@ -729,13 +755,19 @@ class CORE_EXPORT LocalFrameView final
 
   PaintLayer* GetFullScreenOverlayLayer() const;
 
+  void RunPaintBenchmark(int repeat_count, cc::PaintBenchmarkResult& result);
+
+  PaintController& GetPaintControllerForTesting() {
+    return EnsurePaintController();
+  }
+
  protected:
   void FrameRectsChanged(const IntRect&) override;
   void SelfVisibleChanged() override;
   void ParentVisibleChanged() override;
   void NotifyFrameRectsChangedIfNeeded();
-  void SetViewportIntersection(
-      const ViewportIntersectionState& intersection_state) override {}
+  void SetViewportIntersection(const mojom::blink::ViewportIntersectionState&
+                                   intersection_state) override;
   void VisibilityForThrottlingChanged() override;
   bool LifecycleUpdatesThrottled() const override {
     return lifecycle_updates_throttled_;
@@ -759,6 +791,45 @@ class CORE_EXPORT LocalFrameView final
     LocalFrameView* local_frame_view_;
   };
 #endif
+
+  // Throttling is disabled by default. Instantiating this class allows
+  // throttling (e.g., during BeginMainFrame). If a script needs to run inside
+  // this scope, DisallowThrottlingScope should be used to let the script
+  // perform a synchronous layout if necessary.
+  class AllowThrottlingScope {
+    STACK_ALLOCATED();
+
+   public:
+    explicit AllowThrottlingScope(const LocalFrameView&);
+    AllowThrottlingScope(const AllowThrottlingScope&) = delete;
+    AllowThrottlingScope& operator=(const AllowThrottlingScope&) = delete;
+    ~AllowThrottlingScope() = default;
+
+   private:
+    base::AutoReset<bool> value_;
+  };
+
+  class DisallowThrottlingScope {
+    STACK_ALLOCATED();
+
+   public:
+    explicit DisallowThrottlingScope(const LocalFrameView& frame_view);
+    DisallowThrottlingScope(const DisallowThrottlingScope&) = delete;
+    DisallowThrottlingScope& operator=(const DisallowThrottlingScope&) = delete;
+    ~DisallowThrottlingScope() = default;
+
+   private:
+    base::AutoReset<bool> value_;
+  };
+
+  friend class AllowThrottlingScope;
+  friend class DisallowThrottlingScope;
+
+  PaintController& EnsurePaintController() {
+    if (!paint_controller_)
+      paint_controller_ = std::make_unique<PaintController>();
+    return *paint_controller_;
+  }
 
   // A paint preview is a copy of the visual contents of a webpage recorded as
   // a set of SkPictures. This sends an IPC to the browser to trigger a
@@ -803,13 +874,12 @@ class CORE_EXPORT LocalFrameView final
       DocumentLifecycle::LifecycleState target_state);
   bool RunPrePaintLifecyclePhase(
       DocumentLifecycle::LifecycleState target_state);
-  void RunPaintLifecyclePhase();
+  void RunPaintLifecyclePhase(PaintBenchmarkMode = PaintBenchmarkMode::kNormal);
 
-  void PaintTree(HashSet<const GraphicsLayer*>& repainted_layers);
   void UpdateStyleAndLayoutIfNeededRecursive();
 
-  void PushPaintArtifactToCompositor(
-      const HashSet<const GraphicsLayer*>& repainted_layers);
+  bool PaintTree(PaintBenchmarkMode);
+  void PushPaintArtifactToCompositor(bool repainted);
 
   void ClearLayoutSubtreeRootsAndMarkContainingBlocks();
 
@@ -868,8 +938,10 @@ class CORE_EXPORT LocalFrameView final
   template <typename Function>
   void ForAllChildLocalFrameViews(const Function&);
 
+  enum TraversalOrder { kPreOrder, kPostOrder };
   template <typename Function>
-  void ForAllNonThrottledLocalFrameViews(const Function&);
+  void ForAllNonThrottledLocalFrameViews(const Function&,
+                                         TraversalOrder = kPreOrder);
 
   template <typename Function>
   void ForAllThrottledLocalFrameViews(const Function&);
@@ -897,8 +969,6 @@ class CORE_EXPORT LocalFrameView final
   // This is a recursive helper for determining intersection observations which
   // need to happen in post-layout.
   void ComputePostLayoutIntersections(unsigned parent_flags);
-
-  PaintController* GetPaintController() { return paint_controller_.get(); }
 
   // Returns true if the root object was laid out. Returns false if the layout
   // was prevented (e.g. by ancestor display-lock) or not needed.
@@ -998,6 +1068,9 @@ class CORE_EXPORT LocalFrameView final
   // updates (after render-blocking resources have loaded).
   bool lifecycle_updates_throttled_;
 
+  // Used by AllowThrottlingScope and DisallowThrottlingScope
+  bool allow_throttling_ = false;
+
   // This is set on the local root frame view only.
   DocumentLifecycle::LifecycleState
       current_update_lifecycle_phases_target_state_;
@@ -1047,6 +1120,7 @@ class CORE_EXPORT LocalFrameView final
   // frame updates and repaints.
   std::unique_ptr<PaintController> paint_controller_;
   std::unique_ptr<PaintArtifactCompositor> paint_artifact_compositor_;
+  Vector<PreCompositedLayerInfo> pre_composited_layers_;
 
   MainThreadScrollingReasons main_thread_scrolling_reasons_;
 
@@ -1060,17 +1134,11 @@ class CORE_EXPORT LocalFrameView final
   UniqueObjectId unique_id_;
   Member<LayoutShiftTracker> layout_shift_tracker_;
   Member<PaintTimingDetector> paint_timing_detector_;
+  Member<MobileFriendlinessChecker> mobile_friendliness_checker_;
 
   HeapHashSet<WeakMember<LifecycleNotificationObserver>> lifecycle_observers_;
 
   HeapHashSet<WeakMember<HTMLVideoElement>> fullscreen_video_elements_;
-
-  // If set, this indicates that the rendering throttling status for the local
-  // root frame has changed. In this scenario, if we have become unthrottled,
-  // this is a no-op since we run paint anyway. However, if we have become
-  // throttled, this will force the lifecycle to reach the paint phase so that
-  // it can clear the painted output.
-  bool need_paint_phase_after_throttling_ = false;
 
   std::unique_ptr<OverlayInterstitialAdDetector>
       overlay_interstitial_ad_detector_;
@@ -1084,8 +1152,6 @@ class CORE_EXPORT LocalFrameView final
   bool is_updating_descendant_dependent_flags_;
 #endif
 
-  FRIEND_TEST_ALL_PREFIXES(WebViewTest, DeviceEmulationResetScrollbars);
-  FRIEND_TEST_ALL_PREFIXES(FrameThrottlingTest, GraphicsLayerCollection);
   FRIEND_TEST_ALL_PREFIXES(FrameThrottlingTest, ForAllThrottledLocalFrameViews);
 };
 

@@ -11,7 +11,7 @@
 #include "ash/ash_export.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "base/macros.h"
-#include "ui/views/controls/button/button.h"
+#include "ui/views/view.h"
 
 namespace ash {
 
@@ -23,7 +23,6 @@ class OverviewGrid;
 // A bar that resides at the top portion of the overview mode's ShieldView,
 // which contains the virtual desks mini_views, as well as the new desk button.
 class ASH_EXPORT DesksBarView : public views::View,
-                                public views::ButtonListener,
                                 public DesksController::Observer {
  public:
   explicit DesksBarView(OverviewGrid* overview_grid);
@@ -88,15 +87,13 @@ class ASH_EXPORT DesksBarView : public views::View,
   void Layout() override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  void OnThemeChanged() override;
 
   // Returns true if the width of the DesksBarView is below a defined
   // threshold or the contents no longer fit within this object's bounds in
   // default mode, suggesting a compact small screens layout should be used for
   // both itself and its children.
   bool UsesCompactLayout() const;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // DesksController::Observer:
   void OnDeskAdded(const Desk* desk) override;

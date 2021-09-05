@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/inspector/protocol/Emulation.h"
 #include "third_party/blink/renderer/core/loader/frame_loader_types.h"
 #include "third_party/blink/renderer/core/timezone/timezone_controller.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 
 namespace blink {
@@ -22,7 +23,6 @@ class ResourceRequest;
 class WebLocalFrameImpl;
 class WebViewImpl;
 enum class ResourceType : uint8_t;
-struct FetchInitiatorInfo;
 
 namespace protocol {
 namespace DOM {
@@ -85,6 +85,9 @@ class CORE_EXPORT InspectorEmulationAgent final
       protocol::Maybe<protocol::Emulation::UserAgentMetadata>
           ua_metadata_override) override;
   protocol::Response setLocaleOverride(protocol::Maybe<String>) override;
+  protocol::Response setDisabledImageTypes(
+      std::unique_ptr<protocol::Array<protocol::Emulation::DisabledImageType>>)
+      override;
 
   // InspectorInstrumentation API
   void ApplyAcceptLanguageOverride(String* accept_lang);
@@ -94,8 +97,9 @@ class CORE_EXPORT InspectorEmulationAgent final
   void FrameStartedLoading(LocalFrame*);
   void PrepareRequest(DocumentLoader*,
                       ResourceRequest&,
-                      const FetchInitiatorInfo&,
+                      ResourceLoaderOptions&,
                       ResourceType);
+  void GetDisabledImageTypes(HashSet<String>* result);
   void WillCommitLoad(LocalFrame*, DocumentLoader*);
 
   // InspectorBaseAgent overrides.
@@ -103,6 +107,8 @@ class CORE_EXPORT InspectorEmulationAgent final
   void Restore() override;
 
   void Trace(Visitor*) const override;
+
+  static AtomicString OverrideAcceptImageHeader(const HashSet<String>*);
 
  private:
   WebViewImpl* GetWebViewImpl();
@@ -152,6 +158,7 @@ class CORE_EXPORT InspectorEmulationAgent final
   InspectorAgentState::Boolean wait_for_navigation_;
   InspectorAgentState::Boolean emulate_focus_;
   InspectorAgentState::String timezone_id_override_;
+  InspectorAgentState::BooleanMap disabled_image_types_;
   DISALLOW_COPY_AND_ASSIGN(InspectorEmulationAgent);
 };
 

@@ -14,6 +14,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/devtools/devtools_window.h"
+#include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
@@ -24,7 +25,7 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/api/runtime/runtime_api.h"
+#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/base/escape.h"
@@ -179,10 +180,9 @@ void VivaldiAddLinkItems(SimpleMenuModel* menu,
       }
       menu->InsertItemWithStringIdAt(++index, IDC_VIV_ADD_LINK_TO_WEBPANEL,
                                      IDS_VIV_ADD_LINK_TO_WEBPANEL);
-      if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
-                                                        "calendar_mail_feeds")) {
-      // Text under context menu is always auto selected on mac so we can not
-      // test for selected text to determine behavior in that OS.
+      if (vivaldi_runtime_feature::IsEnabled(profile, "calendar_mail_feeds")) {
+        // Text under context menu is always auto selected on mac so we can not
+        // test for selected text to determine behavior in that OS.
 #if !defined(OS_MAC)
         if (params.selection_text.empty()) {
 #endif
@@ -250,8 +250,7 @@ void VivaldiAddCopyItems(SimpleMenuModel* menu,
   if (IsVivaldiRunning() && WebViewGuest::FromWebContents(web_contents) &&
       !IsVivaldiWebPanel(web_contents) && !profile->IsGuestSession()) {
     menu->AddItemWithStringId(IDC_VIV_COPY_TO_NOTE, IDS_VIV_COPY_TO_NOTE);
-    if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
-                                                      "calendar_mail_feeds")) {
+    if (vivaldi_runtime_feature::IsEnabled(profile, "calendar_mail_feeds")) {
       menu->AddItemWithStringId(IDC_VIV_SEND_SELECTION_BY_MAIL,
                                 IDS_VIV_SEND_BY_MAIL);
       menu->AddItemWithStringId(IDC_VIV_ADD_AS_EVENT, IDS_VIV_ADD_AS_EVENT);
@@ -274,21 +273,26 @@ void VivaldiAddPageItems(SimpleMenuModel* menu,
     }
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_ADD_PAGE_TO_WEBPANEL,
                                    IDS_VIV_ADD_PAGE_TO_WEBPANEL);
-    if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
-                                                      "calendar_mail_feeds")) {
+    if (vivaldi_runtime_feature::IsEnabled(profile, "calendar_mail_feeds")) {
       menu->InsertItemWithStringIdAt(++index, IDC_VIV_SEND_PAGE_BY_MAIL,
                                     IDS_VIV_SEND_BY_MAIL);
     }
     menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
-    index = menu->GetIndexOfCommandId(IDC_ROUTE_MEDIA);
+    if (media_router::MediaRouterEnabled(web_contents->GetBrowserContext())) {
+      index = menu->GetIndexOfCommandId(IDC_ROUTE_MEDIA);
+    } else {
+      index = menu->GetIndexOfCommandId(IDC_PRINT);
+    }
     DCHECK_GE(index, 0);
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_COPY_PAGE_ADDRESS,
                                    IDS_VIV_COPY_PAGE_ADDRESS);
   } else if (IsVivaldiWebPanel(web_contents)) {
     // Casting is only available from tab-contents.
-    int index = menu->GetIndexOfCommandId(IDC_ROUTE_MEDIA);
-    DCHECK_GE(index, 0);
-    menu->RemoveItemAt(index);
+    if (media_router::MediaRouterEnabled(web_contents->GetBrowserContext())) {
+      int index = menu->GetIndexOfCommandId(IDC_ROUTE_MEDIA);
+      DCHECK_GE(index, 0);
+      menu->RemoveItemAt(index);
+    }
   }
 }
 

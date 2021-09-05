@@ -8,7 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
@@ -28,10 +28,6 @@
 // that allow it.
 #include "fuchsia/engine/switches.h"
 #include "media/filters/fuchsia/fuchsia_video_decoder.h"
-#endif
-
-#if BUILDFLAG(ENABLE_LIBAOM)
-#include "media/filters/aom_video_decoder.h"
 #endif
 
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
@@ -63,7 +59,7 @@ DefaultDecoderFactory::DefaultDecoderFactory(
 DefaultDecoderFactory::~DefaultDecoderFactory() = default;
 
 void DefaultDecoderFactory::CreateAudioDecoders(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     MediaLog* media_log,
     std::vector<std::unique_ptr<AudioDecoder>>* audio_decoders) {
   base::AutoLock auto_lock(shutdown_lock_);
@@ -91,7 +87,7 @@ void DefaultDecoderFactory::CreateAudioDecoders(
 }
 
 void DefaultDecoderFactory::CreateVideoDecoders(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     GpuVideoAcceleratorFactories* gpu_factories,
     MediaLog* media_log,
     RequestOverlayInfoCB request_overlay_info_cb,
@@ -133,9 +129,7 @@ void DefaultDecoderFactory::CreateVideoDecoders(
     //
     // TODO(crbug.com/580386): Handle context loss properly.
     if (context_provider) {
-      video_decoders->push_back(
-          CreateFuchsiaVideoDecoder(gpu_factories->SharedImageInterface(),
-                                    context_provider->ContextSupport()));
+      video_decoders->push_back(CreateFuchsiaVideoDecoder(context_provider));
     } else {
       DLOG(ERROR)
           << "Can't create FuchsiaVideoDecoder due to GPU context loss.";
@@ -163,8 +157,6 @@ void DefaultDecoderFactory::CreateVideoDecoders(
 #if BUILDFLAG(ENABLE_DAV1D_DECODER)
     video_decoders->push_back(
         std::make_unique<OffloadingDav1dVideoDecoder>(media_log));
-#elif BUILDFLAG(ENABLE_LIBAOM)
-    video_decoders->push_back(std::make_unique<AomVideoDecoder>(media_log));
 #endif
   }
 

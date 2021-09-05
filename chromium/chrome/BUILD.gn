@@ -7,6 +7,7 @@ import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
+import("//build/config/python.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
 import("//build/config/win/console_app.gni")
@@ -40,6 +41,8 @@ if (is_android) {
   import("//build/config/mac/symbols.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
+  import("//chrome/browser/buildflags.gni")
+  import("//chrome/updater/branding.gni")
   import("//content/public/app/mac_helpers.gni")
   import("//media/cdm/library_cdm/cdm_paths.gni")
   import("//third_party/icu/config.gni")
@@ -52,13 +55,6 @@ if (defined(is_vivaldi) && is_vivaldi) {
     import("//vivaldi/installer/widevine.gni")
   }
 }
-
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 declare_args() {
   # Indicates whether keystone registration framework should be enabled (see
@@ -74,7 +70,8 @@ if (enable_resource_allowlist_generation) {
 }
 
 if (is_win) {
-  action("reorder_imports") {
+  # TODO(crbug.com/1112471): Get this to run cleanly under Python 3.
+  python2_action("reorder_imports") {
     script = "//build/win/reorder-imports.py"
 
     # See comment in chrome_dll.gypi in the hardlink_to_output
@@ -145,13 +142,12 @@ if (!is_android && !is_mac) {
     defines = []
     public_deps = []
     deps = [ "//printing/buildflags" ]
-
     data = [ "$root_out_dir/resources.pak" ]
-    if (is_linux || is_chromeos || is_win) {
-      data_deps = [ "//chrome:packed_resources" ]
-    }
-
     data_deps = []
+
+    if (chromeos_is_browser_only && also_build_ash_chrome) {
+      data_deps += [ "//chrome:chrome(//build/toolchain/linux:ash_clang_x64)" ]
+    }
 
     if (is_win) {
       sources += [
@@ -219,10 +215,13 @@ if (!is_android && !is_mac) {
       ]
 
       if (current_cpu == "x86") {
-        # Increase the initial stack size. The default is 1MB, this is 1.5MB.
-        # To mitigate address space pressure, |CreateThreadInternal| sets the
-        # default back to 1MB for non-main threads.
-        ldflags = [ "/STACK:0x180000" ]
+        # Set the initial stack size to 0.5MiB, instead of the 1.5MiB needed by
+        # Chrome's main thread. This saves significant memory on threads (like
+        # those in the Windows thread pool, and others) whose stack size we can
+        # only control through this setting. Because Chrome's main thread needs
+        # a minimum 1.5 MiB stack, the main thread (in 32-bit builds only) uses
+        # fibers to switch to a 1.5 MiB stack before running any other code.
+        ldflags = [ "/STACK:0x80000" ]
       } else {
         # Increase the initial stack size. The default is 1MB, this is 8MB.
         ldflags = [ "/STACK:0x800000" ]
@@ -271,7 +270,7 @@ if (!is_android && !is_mac) {
         ldflags += [ "-Wl,--long-plt" ]
       }
 
-      if (is_desktop_linux && !is_component_build && !using_sanitizer) {
+      if (is_linux && !is_component_build && !using_sanitizer) {
         version_script = "//build/linux/chrome.map"
         inputs = [ version_script ]
         ldflags += [ "-Wl,--version-script=" +
@@ -748,6 +747,20 @@ if (is_win) {
         public_deps +=
             [ ":verify_libraries_chrome_helper_app_${helper_params[0]}" ]
       }
+    }
+
+    if (enable_chromium_updater) {
+      # A stable updater from CIPD is bundled with official builds only. For
+      # local builds, a locally built updater will be bundled into the app.
+      # TODO(crbug.com/1134642): Add ChromiumUpdater app to CIPD for use in
+      # official builds.
+      sources += [ "$root_out_dir/${updater_product_full_name}.app" ]
+
+      public_deps += [
+        "//chrome/updater/mac:browser_install_script",
+        "//chrome/updater/mac:updater_bundle",
+        "//chrome/updater/mac:updater_install_script",
+      ]
     }
 
     if (is_asan) {
@@ -1364,16 +1377,18 @@ group("extra_resources") {
 
   if (!is_android) {
     public_deps += [
-      "//chrome/browser/resources:bookmarks_resources",
       "//chrome/browser/resources:component_extension_resources",
       "//chrome/browser/resources:dev_ui_paks",
-      "//chrome/browser/resources:downloads_resources",
       "//chrome/browser/resources:gaia_auth_host_resources",
-      "//chrome/browser/resources:history_resources",
       "//chrome/browser/resources:local_ntp_resources",
       "//chrome/browser/resources:new_tab_page_resources",
-      "//chrome/browser/resources:read_later_resources",
-      "//chrome/browser/resources:settings_resources",
+      "//chrome/browser/resources/bookmarks:bookmarks_resources",
+      "//chrome/browser/resources/commander:commander_resources",
+      "//chrome/browser/resources/downloads:downloads_resources",
+      "//chrome/browser/resources/history:history_resources",
+      "//chrome/browser/resources/read_later:read_later_resources",
+      "//chrome/browser/resources/settings:settings_resources",
+      "//chrome/browser/resources/tab_search:tab_search_resources",
     ]
   }
 
@@ -1381,41 +1396,37 @@ group("extra_resources") {
     public_deps += [
       "//chrome/browser/resources:bluetooth_pairing_dialog_resources",
       "//chrome/browser/resources:multidevice_internals_resources",
-      "//chrome/browser/resources:nearby_internals_resources",
-      "//chrome/browser/resources:nearby_share_dialog_resources",
-      "//chrome/browser/resources:nearby_shared_resources",
-      "//chrome/browser/resources:nearby_shared_resources_v3",
-      "//chrome/browser/resources:os_settings_resources",
       "//chrome/browser/resources/chromeos:cellular_setup_resources",
       "//chrome/browser/resources/chromeos:multidevice_setup_resources",
       "//chrome/browser/resources/chromeos/accessibility:build",
+      "//chrome/browser/resources/nearby_internals:nearby_internals_resources",
+      "//chrome/browser/resources/nearby_share:nearby_share_dialog_resources",
+      "//chrome/browser/resources/settings/chromeos:os_settings_resources",
       "//third_party/ink:ink_resources",
     ]
   }
 
+  if (is_linux || is_chromeos) {
+    public_deps += [ "//chrome/browser/resources/webui_js_exception:webui_js_exception_resources" ]
+  }
+
   if (!is_android && !is_chromeos) {
     public_deps += [
-      "//chrome/browser/resources:profile_picker_resources",
-      "//chrome/browser/resources:welcome_resources",
+      "//chrome/browser/resources/signin/profile_picker:profile_picker_resources",
+      "//chrome/browser/resources/welcome:welcome_resources",
     ]
   }
 
   if (enable_extensions) {
     public_deps += [
-      "//chrome/browser/resources:extensions_resources",
       "//chrome/browser/resources:sync_file_system_internals_resources",
+      "//chrome/browser/resources/extensions:extensions_resources",
     ]
   }
 
   if (enable_print_preview) {
-    public_deps += [
-      "//chrome/browser/resources:print_preview_pdf_resources",
-      "//chrome/browser/resources:print_preview_resources",
-    ]
-  }
-
-  if (enable_tab_search) {
-    public_deps += [ "//chrome/browser/resources:tab_search_resources" ]
+    public_deps +=
+        [ "//chrome/browser/resources/print_preview:print_preview_resources" ]
   }
 }
 
@@ -1524,7 +1535,8 @@ if (is_android) {
   }
 
   java_cpp_enum("context_menu_image_format_enum_javagen") {
-    sources = [ "browser/android/context_menu/chrome_context_menu_populator.h" ]
+    sources =
+        [ "browser/android/context_menu/context_menu_native_delegate_impl.h" ]
   }
 
   source_set("chrome_android_core") {

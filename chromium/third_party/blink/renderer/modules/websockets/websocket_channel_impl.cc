@@ -467,6 +467,10 @@ void WebSocketChannelImpl::OnOpeningHandshakeStarted(
   handshake_request_ = std::move(request);
 }
 
+void WebSocketChannelImpl::OnFailure(const WTF::String& message,
+                                     int net_error,
+                                     int response_code) {}
+
 void WebSocketChannelImpl::OnConnectionEstablished(
     mojo::PendingRemote<network::mojom::blink::WebSocket> websocket,
     mojo::PendingReceiver<network::mojom::blink::WebSocketClient>
@@ -810,7 +814,7 @@ void WebSocketChannelImpl::DidFinishLoadingBlob(DOMArrayBuffer* buffer) {
   // We replace it with the loaded blob.
   messages_.front() =
       Message(base::make_span(static_cast<const char*>(buffer->Data()),
-                              buffer->ByteLengthAsSizeT()),
+                              buffer->ByteLength()),
               base::OnceClosure(), Message::DidCallSendMessage(false));
 
   ProcessSendQueue();

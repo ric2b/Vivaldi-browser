@@ -1,0 +1,24 @@
+# Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+source_set("content_injection") {
+  sources = [
+    "content_injection_provider.cc",
+    "content_injection_provider.h",
+    "content_injection_service_factory.cc",
+    "content_injection_service_factory.h",
+    "content_injection_service.cc",
+    "content_injection_service.h",
+    "content_injection_service_impl.cc",
+    "content_injection_service_impl.h",
+    "content_injection_types.cc",
+    "content_injection_types.h",
+    "frame_injection_helper.cc",
+    "frame_injection_helper.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//content/public/common",
+    "//vivaldi_mojom/components/content_injection/mojom"
+  ]
+}

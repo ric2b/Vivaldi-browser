@@ -40,15 +40,16 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -61,6 +62,7 @@ import org.chromium.chrome.browser.tasks.pseudotab.TabAttributeCache;
 import org.chromium.chrome.browser.tasks.tab_groups.EmptyTabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupUtils;
+import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
@@ -166,6 +168,28 @@ class TabListMediator {
     }
 
     /**
+     * Provides capability to asynchronously acquire {@link ShoppingPersistedTabData}
+     */
+    static class ShoppingPersistedTabDataFetcher {
+        protected Tab mTab;
+
+        /**
+         * @param tab {@link Tab} {@link ShoppingPersistedTabData} will be acquired for
+         */
+        ShoppingPersistedTabDataFetcher(Tab tab) {
+            mTab = tab;
+        }
+
+        /**
+         * Asynchronously acquire {@link ShoppingPersistedTabData}
+         * @param callback {@link Callback} to pass {@link ShoppingPersistedTabData} back in
+         */
+        public void fetch(Callback<ShoppingPersistedTabData> callback) {
+            ShoppingPersistedTabData.from(mTab, (res) -> { callback.onResult(res); });
+        }
+    }
+
+    /**
      * The object to set to {@link TabProperties#THUMBNAIL_FETCHER} for the TabGridViewBinder to
      * obtain the thumbnail asynchronously.
      */
@@ -238,8 +262,9 @@ class TabListMediator {
         /**
          * Run additional actions on tab selection.
          * @param tabId The ID of selected {@link Tab}.
+         * @param fromActionButton Whether it is called from the Action button on the card.
          */
-        void onTabSelecting(int tabId);
+        void onTabSelecting(int tabId, boolean fromActionButton);
     }
 
     @IntDef({TabClosedFrom.TAB_STRIP, TabClosedFrom.GRID_TAB_SWITCHER,
@@ -258,6 +283,7 @@ class TabListMediator {
 
     private final Context mContext;
     private final TabListModel mModel;
+    private final @TabListMode int mMode;
     private final TabModelSelector mTabModelSelector;
     private final TabActionListener mTabClosedListener;
     private final PseudoTab.TitleProvider mTitleProvider;
@@ -302,7 +328,8 @@ class TabListMediator {
                 recordUserSwitchedTab(currentTab, newlySelectedTab);
             }
             if (mGridCardOnClickListenerProvider != null) {
-                mGridCardOnClickListenerProvider.onTabSelecting(tabId);
+                mGridCardOnClickListenerProvider.onTabSelecting(
+                        tabId, true /* fromActiionButton */);
             } else {
                 mTabModelSelector.getCurrentModel().setIndex(
                         TabModelUtils.getTabIndexById(mTabModelSelector.getCurrentModel(), tabId),
@@ -364,7 +391,7 @@ class TabListMediator {
     private final TabObserver mTabObserver = new EmptyTabObserver() {
         @Override
         public void onDidStartNavigation(Tab tab, NavigationHandle navigationHandle) {
-            if (NewTabPage.isNTPUrl(tab.getUrlString())) return;
+            if (UrlUtilities.isNTPUrl(tab.getUrlString())) return;
             if (navigationHandle.isSameDocument() || !navigationHandle.isInMainFrame()) return;
             if (mModel.indexFromId(tab.getId()) == TabModel.INVALID_TAB_INDEX) return;
             mModel.get(mModel.indexFromId(tab.getId()))
@@ -427,6 +454,7 @@ class TabListMediator {
      * ChromeActivity.
      * @param context The context used to get some configuration information.
      * @param model The Model to keep state about a list of {@link Tab}s.
+     * @param mode The {@link TabListMode}
      * @param tabModelSelector {@link TabModelSelector} that will provide and receive signals about
      *                                                 the tabs concerned.
      * @param thumbnailProvider {@link ThumbnailProvider} to provide screenshot related details.
@@ -442,8 +470,8 @@ class TabListMediator {
      * @param componentName This is a unique string to identify different components.
      * @param uiType The type of UI this mediator should be building.
      */
-    public TabListMediator(Context context, TabListModel model, TabModelSelector tabModelSelector,
-            @Nullable ThumbnailProvider thumbnailProvider,
+    public TabListMediator(Context context, TabListModel model, @TabListMode int mode,
+            TabModelSelector tabModelSelector, @Nullable ThumbnailProvider thumbnailProvider,
             @Nullable PseudoTab.TitleProvider titleProvider,
             TabListFaviconProvider tabListFaviconProvider, boolean actionOnRelatedTabs,
             @Nullable SelectionDelegateProvider selectionDelegateProvider,
@@ -454,6 +482,7 @@ class TabListMediator {
         mTabModelSelector = tabModelSelector;
         mThumbnailProvider = thumbnailProvider;
         mModel = model;
+        mMode = mode;
         mTabListFaviconProvider = tabListFaviconProvider;
         mComponentName = componentName;
         mTitleProvider = titleProvider;
@@ -818,7 +847,7 @@ class TabListMediator {
                 for (int i = 0; i < mModel.size(); i++) {
                     if (mModel.get(i).model.get(CARD_TYPE) != TAB) continue;
                     mModel.get(i).model.set(
-                            TabProperties.SEARCH_CHIP_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
+                            TabProperties.PAGE_INFO_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
                 }
             };
             TemplateUrlServiceFactory.get().addObserver(mTemplateUrlObserver);
@@ -960,11 +989,9 @@ class TabListMediator {
             tabsList = new ArrayList<>(tabs);
             Collections.sort(tabsList, LAST_SHOWN_COMPARATOR);
         }
-
         mVisible = tabsList != null;
         if (areTabsUnchanged(tabsList)) {
             if (tabsList == null) return true;
-
             for (int i = 0; i < tabsList.size(); i++) {
                 PseudoTab tab = tabsList.get(i);
                 boolean isSelected = mTabModelSelector.getCurrentTabId() == tab.getId();
@@ -1040,6 +1067,8 @@ class TabListMediator {
         mModel.get(index).model.set(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener);
         mModel.get(index).model.set(TabProperties.IS_SELECTED, isSelected);
         mModel.get(index).model.set(TabProperties.TITLE, getLatestTitleForTab(pseudoTab));
+        mModel.get(index).model.set(
+                TabProperties.TAB_CLOSED_LISTENER, isRealTab ? mTabClosedListener : null);
         updateDescriptionString(pseudoTab, mModel.get(index).model);
         if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
             updateCloseButtonDescriptionString(pseudoTab, mModel.get(index).model);
@@ -1052,11 +1081,20 @@ class TabListMediator {
                 && isRealTab) {
             mModel.get(index).model.set(
                     TabProperties.SEARCH_QUERY, getLastSearchTerm(pseudoTab.getTab()));
-            mModel.get(index).model.set(TabProperties.SEARCH_LISTENER,
+            mModel.get(index).model.set(TabProperties.PAGE_INFO_LISTENER,
                     SearchTermChipUtils.getSearchQueryListener(
                             pseudoTab.getTab(), mTabSelectedListener));
             mModel.get(index).model.set(
-                    TabProperties.SEARCH_CHIP_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
+                    TabProperties.PAGE_INFO_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
+        }
+
+        if (TabUiFeatureUtilities.ENABLE_PRICE_TRACKING.getValue() && mMode == TabListMode.GRID
+                && pseudoTab.hasRealTab() && !pseudoTab.isIncognito() && isSignedIn()
+                && PriceTrackingUtilities.isTrackPricesOnTabsEnabled()) {
+            mModel.get(index).model.set(TabProperties.SHOPPING_PERSISTED_TAB_DATA_FETCHER,
+                    new ShoppingPersistedTabDataFetcher(pseudoTab.getTab()));
+        } else {
+            mModel.get(index).model.set(TabProperties.SHOPPING_PERSISTED_TAB_DATA_FETCHER, null);
         }
 
         updateFaviconForTab(pseudoTab, null);
@@ -1069,6 +1107,15 @@ class TabListMediator {
                             forceUpdate && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
             mModel.get(index).model.set(TabProperties.THUMBNAIL_FETCHER, callback);
         }
+    }
+
+    // TODO(crbug.com/1150712) move to ShoppingPersistedTabData. Only possible when
+    // IdentityServicesProvider is modularized.
+    @VisibleForTesting
+    protected boolean isSignedIn() {
+        return IdentityServicesProvider.get()
+                .getIdentityManager(Profile.getLastUsedRegularProfile())
+                .hasPrimaryAccount();
     }
 
     /**
@@ -1113,7 +1160,10 @@ class TabListMediator {
             public int getSpanSize(int position) {
                 int itemType = mModel.get(position).type;
 
-                if (itemType == TabProperties.UiType.MESSAGE) return manager.getSpanCount();
+                if (itemType == TabProperties.UiType.MESSAGE
+                        || itemType == TabProperties.UiType.PRICE_WELCOME) {
+                    return manager.getSpanCount();
+                }
                 return 1;
             }
         });
@@ -1261,16 +1311,17 @@ class TabListMediator {
                         .with(TabProperties.TABSTRIP_FAVICON_BACKGROUND_COLOR_ID,
                                 tabstripFaviconBackgroundDrawableId)
                         .with(TabProperties.ACCESSIBILITY_DELEGATE, mAccessibilityDelegate)
+                        .with(TabProperties.PRICE_DROP, null)
                         .with(CARD_TYPE, TAB)
                         .build();
 
         if (TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue() && mUiType == UiType.CLOSABLE
                 && isRealTab) {
             tabInfo.set(TabProperties.SEARCH_QUERY, getLastSearchTerm(pseudoTab.getTab()));
-            tabInfo.set(TabProperties.SEARCH_LISTENER,
+            tabInfo.set(TabProperties.PAGE_INFO_LISTENER,
                     SearchTermChipUtils.getSearchQueryListener(
                             pseudoTab.getTab(), mTabSelectedListener));
-            tabInfo.set(TabProperties.SEARCH_CHIP_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
+            tabInfo.set(TabProperties.PAGE_INFO_ICON_DRAWABLE_ID, mSearchChipIconDrawableId);
         }
 
         if (mUiType == UiType.SELECTABLE) {
@@ -1537,7 +1588,7 @@ class TabListMediator {
      */
     void removeSpecialItemFromModel(@UiType int uiType, int itemIdentifier) {
         int index = TabModel.INVALID_TAB_INDEX;
-        if (uiType == UiType.MESSAGE) {
+        if (uiType == UiType.MESSAGE || uiType == UiType.PRICE_WELCOME) {
             if (itemIdentifier == MessageService.MessageType.ALL) {
                 while (mModel.lastIndexForMessageItem() != TabModel.INVALID_TAB_INDEX) {
                     index = mModel.lastIndexForMessageItem();
@@ -1557,7 +1608,7 @@ class TabListMediator {
     }
 
     private boolean validateItemAt(int index, @UiType int uiType, int itemIdentifier) {
-        if (uiType == UiType.MESSAGE) {
+        if (uiType == UiType.MESSAGE || uiType == UiType.PRICE_WELCOME) {
             return mModel.get(index).type == uiType
                     && mModel.get(index).model.get(MESSAGE_TYPE) == itemIdentifier;
         } else if (uiType == UiType.NEW_TAB_TILE) {

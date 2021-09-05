@@ -11,15 +11,14 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
-#include "base/macros.h"
 #include "base/notreached.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
@@ -29,6 +28,7 @@
 #include "chrome/browser/web_applications/components/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/test_app_registrar.h"
 #include "chrome/browser/web_applications/test/test_data_retriever.h"
 #include "chrome/browser/web_applications/test/test_install_finalizer.h"
@@ -39,7 +39,6 @@
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/prefs/pref_service.h"
@@ -97,6 +96,10 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
  public:
   explicit TestPendingAppInstallFinalizer(TestAppRegistrar* registrar)
       : registrar_(registrar) {}
+  TestPendingAppInstallFinalizer(const TestPendingAppInstallFinalizer&) =
+      delete;
+  TestPendingAppInstallFinalizer& operator=(
+      const TestPendingAppInstallFinalizer&) = delete;
   ~TestPendingAppInstallFinalizer() override = default;
 
   // Returns what would be the AppId if an app is installed with |url|.
@@ -259,18 +262,16 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
   std::map<GURL, std::pair<AppId, bool>>
       next_uninstall_external_web_app_results_;
 
-  DISALLOW_COPY_AND_ASSIGN(TestPendingAppInstallFinalizer);
 };
 
 }  // namespace
 
 class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
  public:
-  PendingAppInstallTaskTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {}, {features::kDesktopPWAsWithoutExtensions});
-  }
-
+  PendingAppInstallTaskTest() = default;
+  PendingAppInstallTaskTest(const PendingAppInstallTaskTest&) = delete;
+  PendingAppInstallTaskTest& operator=(const PendingAppInstallTaskTest&) =
+      delete;
   ~PendingAppInstallTaskTest() override = default;
 
   void SetUp() override {
@@ -359,8 +360,6 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
   WebAppInstallManager* install_manager_ = nullptr;
   TestAppRegistrar* registrar_ = nullptr;
   TestDataRetriever* data_retriever_ = nullptr;
@@ -368,7 +367,6 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
   TestWebAppUiManager* ui_manager_ = nullptr;
   TestOsIntegrationManager* os_integration_manager_ = nullptr;
 
-  DISALLOW_COPY_AND_ASSIGN(PendingAppInstallTaskTest);
 };
 
 class PendingAppInstallTaskWithRunOnOsLoginTest

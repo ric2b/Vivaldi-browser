@@ -203,7 +203,7 @@ void WebApkUpdateDataFetcher::OnGotIconMurmur2Hashes(
       base::android::ConvertUTF8ToJavaString(
           env, (*hashes)[info_.best_primary_icon_url.spec()].hash);
   ScopedJavaLocalRef<jobject> java_primary_icon =
-      gfx::ConvertToJavaBitmap(&primary_icon_);
+      gfx::ConvertToJavaBitmap(primary_icon_);
   jboolean java_is_primary_icon_maskable = is_primary_icon_maskable_;
   ScopedJavaLocalRef<jstring> java_splash_icon_url =
       base::android::ConvertUTF8ToJavaString(env,
@@ -213,7 +213,7 @@ void WebApkUpdateDataFetcher::OnGotIconMurmur2Hashes(
           env, (*hashes)[info_.splash_image_url.spec()].hash);
   ScopedJavaLocalRef<jobject> java_splash_icon;
   if (!splash_icon_.drawsNothing())
-    java_splash_icon = gfx::ConvertToJavaBitmap(&splash_icon_);
+    java_splash_icon = gfx::ConvertToJavaBitmap(splash_icon_);
   ScopedJavaLocalRef<jobjectArray> java_icon_urls =
       base::android::ToJavaArrayOfStrings(env, info_.icon_urls);
 
@@ -235,10 +235,10 @@ void WebApkUpdateDataFetcher::OnGotIconMurmur2Hashes(
 
     java_share_params_is_method_post =
         (info_.share_target->method ==
-         blink::Manifest::ShareTarget::Method::kPost);
+         blink::mojom::ManifestShareTarget_Method::kPost);
     java_share_params_is_enctype_multipart =
         (info_.share_target->enctype ==
-         blink::Manifest::ShareTarget::Enctype::kMultipartFormData);
+         blink::mojom::ManifestShareTarget_Enctype::kMultipartFormData);
 
     std::vector<base::string16> file_names;
     std::vector<std::vector<base::string16>> accepts;

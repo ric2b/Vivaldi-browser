@@ -134,8 +134,8 @@ void VersionUpdater::GetEolInfo(EolInfoCallback callback) {
   UpdateEngineClient* update_engine_client =
       DBusThreadManager::Get()->GetUpdateEngineClient();
   // Request the End of Life (Auto Update Expiration) status. Bind to a weak_ptr
-  // bound method rather than passing |callback| directly so that |callback|
-  // does not outlive |this|.
+  // bound method rather than passing `callback` directly so that `callback`
+  // does not outlive `this`.
   update_engine_client->GetEolInfo(
       base::BindOnce(&VersionUpdater::OnGetEolInfo,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -282,33 +282,30 @@ void VersionUpdater::RefreshTimeLeftEstimation() {
 
 void VersionUpdater::OnPortalDetectionCompleted(
     const NetworkState* network,
-    const NetworkPortalDetector::CaptivePortalState& state) {
+    const NetworkPortalDetector::CaptivePortalStatus status) {
   VLOG(1) << "VersionUpdater::OnPortalDetectionCompleted(): "
           << "network=" << (network ? network->path() : "") << ", "
-          << "state.status=" << state.status << ", "
-          << "state.response_code=" << state.response_code;
+          << "status=" << status;
 
   // Wait for sane detection results.
   if (network &&
-      state.status == NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN) {
+      status == NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_UNKNOWN) {
     return;
   }
 
   // Restart portal detection for the first notification about offline state.
   if ((!network ||
-       state.status == NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_OFFLINE) &&
+       status == NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_OFFLINE) &&
       is_first_detection_notification_) {
     is_first_detection_notification_ = false;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce([]() {
-          network_portal_detector::GetInstance()->StartPortalDetection(
-              false /* force */);
+          network_portal_detector::GetInstance()->StartPortalDetection();
         }));
     return;
   }
   is_first_detection_notification_ = false;
 
-  NetworkPortalDetector::CaptivePortalStatus status = state.status;
   if (update_info_.state == State::STATE_ERROR) {
     // In the case of online state hide error message and proceed to
     // the update stage. Otherwise, update error message content.

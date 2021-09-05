@@ -14,7 +14,6 @@
 <translation id="1221825588892235038">Numai selecția</translation>
 <translation id="1244303850296295656">Eroare de extensie</translation>
 <translation id="125220115284141797">Implicit</translation>
-<translation id="1274977772557788323">Setări privind stocarea Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destinație</translation>
 <translation id="1303101771013849280">Fișier HTML cu semne de carte</translation>
 <translation id="1430915738399379752">Tipărește</translation>
@@ -53,7 +52,6 @@
 <translation id="2177950615300672361">Filă incognito: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Modúl de client nativ: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">de ex. 1-5, 8, 11-13</translation>
-<translation id="2263497240924215535">Dezactivat</translation>
 <translation id="2277255602909579701">Toate cookie-urile și toate datele site-urilor web</translation>
 <translation id="2280486287150724112">Marginea din dreapta</translation>
 <translation id="2282146716419988068">Proces GPU</translation>
@@ -94,7 +92,6 @@
 <translation id="3013291976881901233">Dispozitive MIDI</translation>
 <translation id="3021678814754966447">&amp;Vizualizează sursa cadrului</translation>
 <translation id="3036546437875325427">Activează Flash</translation>
-<translation id="3038675903128704560">Nu permite niciunui site web să folosească pluginuri pentru a vă accesa calculatorul</translation>
 <translation id="3046910703532196514">Pagina web, completă</translation>
 <translation id="3080207940057008665">Un alt program de pe calculator a adăugat o temă care poate schimba modul în care funcționează Vivaldi.</translation>
 <translation id="3084548735795614657">Plasați aici pentru instalare</translation>
@@ -115,10 +112,8 @@
 <translation id="3360297538363969800">Tipărirea a eșuat. Verificați imprimanta și încercați din nou.</translation>
 <translation id="3378572629723696641">Este posibil ca această extensie să fie deteriorată.</translation>
 <translation id="3432227430032737297">Elimină toate cookie-urile arătate</translation>
-<translation id="3440761377721825626">Întreabă atunci când un site web vrea să folosească un plugin pentru a vă accesa calculatorul</translation>
 <translation id="3494769164076977169">Întreabă atunci când un site web încearcă să descarce automat fișiere după primul fișier (recomandat)</translation>
 <translation id="3505030558724226696">Revocă accesul la dispozitiv</translation>
-<translation id="3523642406908660543">Întreabă atunci când un site web vrea să folosească un plugin pentru a vă accesa calculatorul (recomandat)</translation>
 <translation id="3560034655160545939">&amp;Verificare ortografică</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; dorește să partajeze o imprimantă &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; cu un grup pe care îl dețineți: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Dacă acceptați, toți membrii grupului vor putea tipări la imprimantă.</translation>
 <translation id="3587482841069643663">Toate</translation>
@@ -164,7 +159,6 @@
 <translation id="4394049700291259645">Dezactivează</translation>
 <translation id="4409697491990005945">Margini</translation>
 <translation id="4434045419905280838">Ferestre pop-up și redirecționări</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Nu se poate proiecta <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Accesează <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicațiile și extensiile pot fi modificate numai de administrator (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -221,7 +215,6 @@
 <translation id="5828633471261496623">Se tipărește...</translation>
 <translation id="583281660410589416">Necunoscut</translation>
 <translation id="5867841422488265304">Căutați sau introduceți adresa web</translation>
-<translation id="5908769186679515905">Împiedică site-urile web să ruleze Flash</translation>
 <translation id="5956585768868398362">Aceasta este pagina de căutare la care vă așteptați?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maximum <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">De asemenea controlează ce pagină să fie afișată la clic pe butonul Pagina inițială sau la căutare din Omnibox.</translation>
@@ -271,7 +264,6 @@
 <translation id="7270858098575133036">Întreabă când un site web intenționează să folosească mesaje rezervate sistemului pentru accesarea dispozitivelor MIDI</translation>
 <translation id="7287143125007575591">Acces refuzat.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7311079019872751559">Acces pluginuri scoase din sandbox</translation>
 <translation id="7385854874724088939">Ceva nu a funcționat când s-a încercat tipărirea. Verificați imprimanta și încercați din nou.</translation>
 <translation id="7421925624202799674">&amp;Vizualizează sursa paginii</translation>
 <translation id="7423098979219808738">Mai întâi întreabă</translation>

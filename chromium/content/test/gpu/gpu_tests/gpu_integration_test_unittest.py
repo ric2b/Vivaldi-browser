@@ -126,7 +126,11 @@ class GpuIntegrationTestUnittest(unittest.TestCase):
       temp_file.close()
       try:
         test_argv = [
-            test_name, '--write-full-results-to=%s' % temp_file.name
+            test_name,
+            '--write-full-results-to=%s' % temp_file.name,
+            # We don't want the underlying typ-based tests to report their
+            # results to ResultDB.
+            '--disable-resultsink',
         ] + extra_args
         processed_args = run_gpu_integration_test.ProcessArgs(test_argv)
         telemetry_args = browser_test_runner.ProcessConfig(
@@ -158,7 +162,7 @@ class GpuIntegrationTestUnittest(unittest.TestCase):
     tag_set = _GenerateNvidiaExampleTagsForTestClassAndArgs(test_class, args)
     self.assertTrue(
         set([
-            'win', 'win10', 'd3d9', 'release', 'nvidia', 'nvidia-0x1cb3',
+            'win', 'win10', 'angle-d3d9', 'release', 'nvidia', 'nvidia-0x1cb3',
             'no-passthrough'
         ]).issubset(tag_set))
     return tag_set
@@ -201,9 +205,8 @@ class GpuIntegrationTestUnittest(unittest.TestCase):
     self.assertEqual(
         _GetTagsToTest(browser),
         set([
-            'win', 'win10', 'release', 'nvidia', 'nvidia-0x1cb3', 'd3d9',
-            'no-passthrough', 'no-swiftshader-gl', 'no-use-vulkan',
-            'no-skia-renderer'
+            'win', 'win10', 'release', 'nvidia', 'nvidia-0x1cb3', 'angle-d3d9',
+            'no-passthrough', 'no-swiftshader-gl', 'skia-renderer-disabled'
         ]))
 
   def testGenerateVendorTagUsingVendorString(self):
@@ -218,8 +221,8 @@ class GpuIntegrationTestUnittest(unittest.TestCase):
         _GetTagsToTest(browser),
         set([
             'mac', 'mojave', 'release', 'imagination',
-            'imagination-PowerVR-SGX-554', 'opengles', 'passthrough',
-            'no-swiftshader-gl', 'no-use-vulkan', 'no-skia-renderer'
+            'imagination-PowerVR-SGX-554', 'angle-opengles', 'passthrough',
+            'no-swiftshader-gl', 'skia-renderer-disabled'
         ]))
 
   def testGenerateVendorTagUsingDeviceString(self):
@@ -232,8 +235,8 @@ class GpuIntegrationTestUnittest(unittest.TestCase):
         _GetTagsToTest(browser),
         set([
             'mac', 'mojave', 'release', 'imagination',
-            'imagination-Triangle-Monster-3000', 'no-angle', 'no-passthrough',
-            'no-swiftshader-gl', 'no-use-vulkan', 'no-skia-renderer'
+            'imagination-Triangle-Monster-3000', 'angle-disabled',
+            'no-passthrough', 'no-swiftshader-gl', 'skia-renderer-disabled'
         ]))
 
   def testSimpleIntegrationTest(self):
@@ -425,11 +428,16 @@ class GpuIntegrationTestUnittest(unittest.TestCase):
       # list. Then we pass it directly to run_browser_tests.RunTests. If
       # we called browser_test_runner.Run, then it would spawn another
       # subprocess which is less efficient.
-      args = browser_test_runner.ProcessConfig(config, [
-          test_args.test_name,
-          '--write-full-results-to=%s' % test_results_path,
-          '--test-state-json-path=%s' % test_state_path
-      ] + test_args.additional_args)
+      args = browser_test_runner.ProcessConfig(
+          config,
+          [
+              test_args.test_name,
+              '--write-full-results-to=%s' % test_results_path,
+              '--test-state-json-path=%s' % test_state_path,
+              # We don't want the underlying typ-based tests to report their
+              # results to ResultDB.
+              '--disable-resultsink',
+          ] + test_args.additional_args)
       run_browser_tests.RunTests(args)
       with open(test_results_path) as f:
         self._test_result = json.load(f)

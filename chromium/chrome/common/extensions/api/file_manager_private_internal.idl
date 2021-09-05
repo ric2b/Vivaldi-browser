@@ -85,7 +85,7 @@ namespace fileManagerPrivateInternal {
     static void getFileTasks(DOMString[] urls,
                              GetFileTasksCallback callback);
     static void getDownloadUrl(DOMString url, GetUrlCallback callback);
-    static void copyImageToClipboard(DOMString url, SimpleCallback callback);
+    static void copyImageToClipboard(DOMString url, BooleanCallback callback);
     static void startCopy(DOMString url,
                           DOMString parentUrl,
                           DOMString newName,
@@ -116,9 +116,17 @@ namespace fileManagerPrivateInternal {
     static void installLinuxPackage(DOMString url,
                                     InstallLinuxPackageCallback callback);
     static void importCrostiniImage(DOMString url);
-    static void getThumbnail(DOMString url,
-                             boolean cropToSquare,
-                             GetThumbnailCallback callback);
+    static void getDriveThumbnail(DOMString url,
+                                  boolean cropToSquare,
+                                  GetThumbnailCallback callback);
+    static void getPdfThumbnail(DOMString url,
+                                long width,
+                                long height,
+                                GetThumbnailCallback callback);
+    static void getArcDocumentsProviderThumbnail(DOMString url,
+                                                 long widthHint,
+                                                 long heightHint,
+                                                 GetThumbnailCallback callback);
     static void sharesheetHasTargets(DOMString[] urls, BooleanCallback callback);
     static void invokeSharesheet(DOMString[] urls, SimpleCallback callback);
     static void toggleAddedToHoldingSpace(DOMString[] urls, boolean add,

@@ -21,6 +21,7 @@
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/navigation_initiator.mojom-shared.h"
+#include "third_party/blink/public/mojom/frame/policy_container.mojom-forward.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/web_common.h"
@@ -29,6 +30,7 @@
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_impression.h"
 #include "third_party/blink/public/platform/web_navigation_body_loader.h"
+#include "third_party/blink/public/platform/web_policy_container.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_source_location.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -172,8 +174,8 @@ struct BLINK_EXPORT WebNavigationInfo {
       network::mojom::IPAddressSpace::kUnknown;
 
   // The frame policy specified by the frame owner element.
-  // Should be base::nullopt for top level navigations
-  base::Optional<FramePolicy> frame_policy;
+  // For top-level window with no opener, this is the default lax FramePolicy.
+  FramePolicy frame_policy;
 };
 
 // This structure holds all information provided by the embedder that is
@@ -196,14 +198,6 @@ struct BLINK_EXPORT WebNavigationParams {
   static std::unique_ptr<WebNavigationParams> CreateWithHTMLString(
       base::span<const char> html,
       const WebURL& base_url);
-
-  // Shortcut for loading an error page html.
-  static std::unique_ptr<WebNavigationParams> CreateForErrorPage(
-      WebDocumentLoader* failed_document_loader,
-      base::span<const char> html,
-      const WebURL& base_url,
-      const WebURL& unreachable_url,
-      int error_code);
 
 #if INSIDE_BLINK
   // Shortcut for loading html with "text/html" mime type and "UTF8" encoding.
@@ -413,6 +407,10 @@ struct BLINK_EXPORT WebNavigationParams {
 
   // A list of additional content security policies to be enforced by blink.
   WebVector<WebString> forced_content_security_policies;
+
+  // Blink's copy of the policy container containing security policies to be
+  // enforced on the document created by this navigation.
+  std::unique_ptr<WebPolicyContainer> policy_container;
 };
 
 }  // namespace blink

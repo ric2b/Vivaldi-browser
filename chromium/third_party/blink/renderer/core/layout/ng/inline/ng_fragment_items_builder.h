@@ -98,8 +98,8 @@ class CORE_EXPORT NGFragmentItemsBuilder {
   // When |stop_at_dirty| is true, this function checks reusability of previous
   // items and stops copying before the first dirty line.
   AddPreviousItemsResult AddPreviousItems(
+      const NGPhysicalBoxFragment& container,
       const NGFragmentItems& items,
-      const PhysicalSize& container_size,
       NGBoxFragmentBuilder* container_builder = nullptr,
       const NGFragmentItem* end_item = nullptr,
       wtf_size_t max_lines = 0);
@@ -125,6 +125,9 @@ class CORE_EXPORT NGFragmentItemsBuilder {
 
   // Find |LogicalOffset| of the first |NGFragmentItem| for |LayoutObject|.
   base::Optional<LogicalOffset> LogicalOffsetFor(const LayoutObject&) const;
+
+  // Moves all the |NGFragmentItem|s by |offset| in the block-direction.
+  void MoveChildrenInBlockDirection(LayoutUnit offset);
 
   // Converts the |NGFragmentItem| vector to the physical coordinate space and
   // returns the result. This should only be used for determining the inline

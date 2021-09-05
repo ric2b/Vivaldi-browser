@@ -109,17 +109,17 @@ bool IsColorSpaceSupportedByPCVR(const avifImage* image) {
   SkYUVColorSpace yuv_color_space;
   if (!GetColorSpace(image).ToSkYUVColorSpace(image->depth, &yuv_color_space))
     return false;
-  if (!image->alphaPlane) {
-    return yuv_color_space == kJPEG_Full_SkYUVColorSpace ||
-           yuv_color_space == kRec601_Limited_SkYUVColorSpace ||
-           yuv_color_space == kRec709_Limited_SkYUVColorSpace ||
-           yuv_color_space == kBT2020_8bit_Limited_SkYUVColorSpace;
-  }
+  const bool color_space_is_supported =
+      yuv_color_space == kJPEG_Full_SkYUVColorSpace ||
+      yuv_color_space == kRec601_Limited_SkYUVColorSpace ||
+      yuv_color_space == kRec709_Limited_SkYUVColorSpace ||
+      yuv_color_space == kBT2020_8bit_Limited_SkYUVColorSpace;
   // libyuv supports the alpha channel only with the I420 pixel format, which is
-  // 8-bit YUV 4:2:0 with kRec601_Limited_SkYUVColorSpace.
-  return image->depth == 8 && image->yuvFormat == AVIF_PIXEL_FORMAT_YUV420 &&
-         yuv_color_space == kRec601_Limited_SkYUVColorSpace &&
-         image->alphaRange == AVIF_RANGE_FULL;
+  // 8-bit YUV 4:2:0.
+  return color_space_is_supported &&
+         (!image->alphaPlane ||
+          (image->depth == 8 && image->yuvFormat == AVIF_PIXEL_FORMAT_YUV420 &&
+           image->alphaRange == AVIF_RANGE_FULL));
 }
 
 media::VideoPixelFormat AvifToVideoPixelFormat(avifPixelFormat fmt, int depth) {
@@ -463,10 +463,17 @@ bool AVIFImageDecoder::ImageHasBothStillAndAnimatedSubImages() const {
 
   // TODO(wtc): We should rely on libavif to tell us if the file has both an
   // image and an animation track instead of just checking the major brand.
-  constexpr base::StringPiece kAnimationType = "avis";
-  char buf[kAnimationType.size() + 1] = {0};
-  image_data_->copyRange(8, kAnimationType.size(), &buf);
-  return kAnimationType == buf;
+  //
+  // An AVIF image begins with a file‐type box 'ftyp':
+  //   unsigned int(32) size;
+  //   unsigned int(32) type = boxtype;  // boxtype is 'ftyp'
+  //   unsigned int(32) major_brand;
+  //   ...
+  FastSharedBufferReader fast_reader(data_);
+  char buf[4];
+  const char* major_brand = fast_reader.GetConsecutiveData(8, 4, buf);
+  // The brand 'avis' is an AVIF image sequence (animation) brand.
+  return memcmp(major_brand, "avis", 4) == 0;
 }
 
 // static
@@ -607,8 +614,18 @@ bool AVIFImageDecoder::MaybeCreateDemuxer() {
     return false;
   }
 
-  avifROData raw_data = {image_data_->bytes(), image_data_->size()};
-  auto ret = avifDecoderParse(decoder_.get(), &raw_data);
+  // Chrome doesn't use XMP and Exif metadata. Ignoring XMP and Exif will ensure
+  // avifDecoderParse() isn't waiting for some tiny Exif payload hiding at the
+  // end of a file.
+  decoder_->ignoreXMP = AVIF_TRUE;
+  decoder_->ignoreExif = AVIF_TRUE;
+  auto ret = avifDecoderSetIOMemory(decoder_.get(), image_data_->bytes(),
+                                    image_data_->size());
+  if (ret != AVIF_RESULT_OK) {
+    DVLOG(1) << "avifDecoderSetIOMemory failed: " << avifResultToString(ret);
+    return false;
+  }
+  ret = avifDecoderParse(decoder_.get());
   if (ret != AVIF_RESULT_OK) {
     DVLOG(1) << "avifDecoderParse failed: " << avifResultToString(ret);
     return false;

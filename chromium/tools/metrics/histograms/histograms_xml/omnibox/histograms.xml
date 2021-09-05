@@ -221,7 +221,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.CutOrCopyAllText" units="count"
-    expires_after="2021-01-30">
+    expires_after="2021-04-04">
   <owner>jdonnelly@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -232,7 +232,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.DocumentSuggest.Requests"
-    enum="OmniboxDocumentSuggestRequests" expires_after="M88">
+    enum="OmniboxDocumentSuggestRequests" expires_after="M95">
+  <owner>manukh@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>skare@chromium.org</owner>
@@ -243,7 +244,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.DocumentSuggest.ResultCount" units="count"
-    expires_after="M88">
+    expires_after="M95">
+  <owner>manukh@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>skare@chromium.org</owner>
@@ -255,6 +257,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Omnibox.ElisionConfig" enum="OmniboxElisionConfig"
     expires_after="M88">
+  <obsolete>
+    Removed 2020-10.
+  </obsolete>
   <owner>livvielin@chromium.org</owner>
   <owner>tommycli@chromium.org</owner>
   <summary>
@@ -269,7 +274,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.EnteredKeywordMode2" enum="OmniboxEnteredKeywordMode2"
-    expires_after="2021-01-30">
+    expires_after="2021-04-04">
   <owner>jdonnelly@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -345,6 +350,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Omnibox.IconOrFaviconShown" enum="SuggestionIconOrFaviconType"
     expires_after="M83">
+  <obsolete>
+    Removed 2020-10.
+  </obsolete>
   <owner>ender@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
@@ -480,7 +488,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.MatchStability.AsyncMatchChange2" units="position"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>tommycli@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <summary>
@@ -510,7 +518,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.MatchStability.AsyncMatchChangedInAnyPosition"
-    enum="BooleanChanged" expires_after="2021-03-01">
+    enum="BooleanChanged" expires_after="2021-05-02">
   <owner>tommycli@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <summary>
@@ -573,7 +581,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.OnDeviceHeadSuggest.ResultCount" units="count"
-    expires_after="2021-03-09">
+    expires_after="2021-05-09">
   <owner>cch@chromium.org</owner>
   <owner>suggest-2g@google.com</owner>
   <summary>
@@ -602,7 +610,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Omnibox.PasteAndGo" units="count" expires_after="2021-02-07">
+<histogram name="Omnibox.PasteAndGo" units="count" expires_after="2021-04-11">
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <summary>
@@ -674,7 +682,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.SearchProviderMatches" units="units"
-    expires_after="2021-01-30">
+    expires_after="2021-04-04">
   <owner>jdonnelly@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -707,6 +715,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Omnibox.ShowFullUrlsEnabled" enum="BooleanEnabled"
     expires_after="M88">
+  <obsolete>
+    Removed 2020-10.
+  </obsolete>
   <owner>livvielin@chromium.org</owner>
   <owner>tommycli@chromium.org</owner>
   <summary>
@@ -862,7 +873,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.SuggestRequest.Failure.GoogleResponseTime" units="ms"
-    expires_after="2021-03-09">
+    expires_after="2021-05-09">
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>cch@chromium.org</owner>
@@ -874,7 +885,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.SuggestRequest.Success.GoogleResponseTime" units="ms"
-    expires_after="2021-03-09">
+    expires_after="2021-05-09">
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>cch@chromium.org</owner>
@@ -897,7 +908,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.SuggestRequests" enum="OmniboxSuggestRequests"
-    expires_after="2021-03-09">
+    expires_after="2021-05-09">
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>cch@chromium.org</owner>
@@ -982,7 +993,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.ZeroSuggest.Eligible.OnFocusV2"
-    enum="ZeroSuggestEligibleOnFocus" expires_after="2021-01-31">
+    enum="ZeroSuggestEligibleOnFocus" expires_after="2021-04-04">
   <owner>mpearson@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <summary>
@@ -1042,7 +1053,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Omnibox.ZeroSuggestRequests" enum="OmniboxZeroSuggestRequests"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>ender@chromium.org</owner>
   <owner>tommycli@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>

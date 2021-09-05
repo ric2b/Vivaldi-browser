@@ -33,13 +33,34 @@ public class PlayerFrameBitmapStateController {
         mViewport = viewport;
         mContentSize = contentSize;
         mCompositorDelegate = compositorDelegate;
+        if (mCompositorDelegate != null) {
+            mCompositorDelegate.addMemoryPressureListener(this::onMemoryPressure);
+        }
         mMediatorDelegate = mediatorDelegate;
         mTaskRunner = taskRunner;
+    }
+
+    void destroy() {
+        if (mLoadingBitmapState != null) {
+            mLoadingBitmapState.destroy();
+            mLoadingBitmapState = null;
+        }
+        if (mVisibleBitmapState != null) {
+            mVisibleBitmapState.destroy();
+            mVisibleBitmapState = null;
+        }
     }
 
     @VisibleForTesting
     void swapForTest() {
         swap(mLoadingBitmapState);
+    }
+
+    void onMemoryPressure() {
+        if (mVisibleBitmapState == null) return;
+
+        mVisibleBitmapState.releaseNotVisibleTiles();
+        stateUpdated(mVisibleBitmapState);
     }
 
     /**
@@ -53,10 +74,9 @@ public class PlayerFrameBitmapStateController {
                 (mLoadingBitmapState == null) ? mVisibleBitmapState : mLoadingBitmapState;
         if (scaleUpdated || activeLoadingState == null) {
             invalidateLoadingBitmaps();
-            mLoadingBitmapState =
-                    new PlayerFrameBitmapState(mGuid, Math.round(mViewport.getWidth() / 2.0f),
-                            Math.round(mViewport.getHeight() / 2.0f), mViewport.getScale(),
-                            mContentSize, mCompositorDelegate, this, mTaskRunner);
+            mLoadingBitmapState = new PlayerFrameBitmapState(mGuid, mViewport.getWidth(),
+                    Math.round(mViewport.getHeight() / 2.0f), mViewport.getScale(), mContentSize,
+                    mCompositorDelegate, this, mTaskRunner);
             if (mVisibleBitmapState == null) {
                 mLoadingBitmapState.skipWaitingForVisibleBitmaps();
                 swap(mLoadingBitmapState);
@@ -76,7 +96,7 @@ public class PlayerFrameBitmapStateController {
         assert mLoadingBitmapState == newState;
         // Clear the state to stop potential stragling updates.
         if (mVisibleBitmapState != null) {
-            mVisibleBitmapState.clear();
+            mVisibleBitmapState.destroy();
         }
         mVisibleBitmapState = newState;
         mLoadingBitmapState = null;
@@ -119,7 +139,7 @@ public class PlayerFrameBitmapStateController {
         // Invalidate an in-progress load if there is one. We only want one new scale factor fetched
         // at a time. NOTE: we clear then null as the bitmap callbacks still hold a reference to the
         // state so it won't be GC'd right away.
-        mLoadingBitmapState.clear();
+        mLoadingBitmapState.destroy();
         mLoadingBitmapState = null;
     }
 }

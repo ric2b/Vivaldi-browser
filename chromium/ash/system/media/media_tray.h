@@ -39,13 +39,13 @@ class ASH_EXPORT MediaTray : public MediaNotificationProviderObserver,
 
   // Pin button showed in media tray bubble's title view and media controls
   // detailed view's title view.
-  class PinButton : public TopShortcutButton, public ButtonListener {
+  class PinButton : public TopShortcutButton {
    public:
     PinButton();
     ~PinButton() override = default;
 
-    // views::ButtonListener implementation.
-    void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+   private:
+    void ButtonPressed();
   };
 
   explicit MediaTray(Shelf* shelf);
@@ -64,6 +64,7 @@ class ASH_EXPORT MediaTray : public MediaNotificationProviderObserver,
   void CloseBubble() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
+  void AnchorUpdated() override;
 
   // SessionObserver implementation.
   void OnLockStateChanged(bool locked) override;
@@ -79,8 +80,16 @@ class ASH_EXPORT MediaTray : public MediaNotificationProviderObserver,
  private:
   friend class MediaTrayTest;
 
+  // TrayBubbleView::Delegate implementation.
+  base::string16 GetAccessibleNameForBubble() override;
+
+  // Called when theme change, set colors for media notification view.
+  void SetNotificationColorTheme();
+
   // Called when global media controls pin pref is changed.
   void OnGlobalMediaControlsPinPrefChanged();
+
+  void ShowEmptyState();
 
   // Ptr to pin button in the dialog, owned by the view hierarchy.
   views::Button* pin_button_ = nullptr;
@@ -90,6 +99,11 @@ class ASH_EXPORT MediaTray : public MediaNotificationProviderObserver,
 
   // Weak pointer, will be parented by TrayContainer for its lifetime.
   views::ImageView* icon_;
+
+  views::View* content_view_ = nullptr;
+  views::View* empty_state_view_ = nullptr;
+
+  bool bubble_has_shown_ = false;
 };
 
 }  // namespace ash

@@ -10,13 +10,14 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
+#include "build/chromeos_buildflags.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
@@ -38,7 +39,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/data_decoder/public/mojom/ble_scan_parser.mojom.h"
@@ -77,7 +78,7 @@ int GetDeviceIndexByAddress(const BluetoothAdapter::DeviceList& devices,
   return -1;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 class FakeBleScanParserImpl : public data_decoder::mojom::BleScanParser {
  public:
   FakeBleScanParserImpl() = default;
@@ -159,7 +160,7 @@ class BluetoothBlueZTest : public testing::Test {
     dbus_setter->SetBluetoothGattServiceClient(
         std::make_unique<bluez::FakeBluetoothGattServiceClient>());
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     device::BluetoothAdapterFactory::SetBleScanParserCallback(
         base::BindLambdaForTesting([&]() {
           mojo::PendingRemote<data_decoder::mojom::BleScanParser>
@@ -178,7 +179,7 @@ class BluetoothBlueZTest : public testing::Test {
   }
 
   void TearDown() override {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     device::BluetoothAdapterFactory::SetBleScanParserCallback(
         base::NullCallback());
 #endif
@@ -2375,10 +2376,6 @@ TEST_F(BluetoothBlueZTest, ForgetUnpairedDevice) {
   ASSERT_TRUE(device->IsConnected());
   ASSERT_FALSE(device->IsConnecting());
 
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
-
   // Make sure the trusted property has been set to true.
   bluez::FakeBluetoothDeviceClient::Properties* properties =
       fake_bluetooth_device_client_->GetProperties(dbus::ObjectPath(
@@ -2428,10 +2425,6 @@ TEST_F(BluetoothBlueZTest, ConnectPairedDevice) {
 
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
-
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, ConnectUnpairableDevice) {
@@ -2461,10 +2454,6 @@ TEST_F(BluetoothBlueZTest, ConnectUnpairableDevice) {
 
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
-
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 
   // Make sure the trusted property has been set to true.
   bluez::FakeBluetoothDeviceClient::Properties* properties =
@@ -2497,10 +2486,6 @@ TEST_F(BluetoothBlueZTest, ConnectConnectedDevice) {
 
   ASSERT_TRUE(device->IsConnected());
 
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
-
   // Connect again; since the device is already Connected, this shouldn't do
   // anything to initiate the connection.
   TestBluetoothAdapterObserver observer(adapter_);
@@ -2518,10 +2503,6 @@ TEST_F(BluetoothBlueZTest, ConnectConnectedDevice) {
 
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
-
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(2, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(2, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, ConnectDeviceFails) {
@@ -2549,10 +2530,6 @@ TEST_F(BluetoothBlueZTest, ConnectDeviceFails) {
 
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
-
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 // Tests that discovery is unpaused if the device gets removed during a
@@ -2568,9 +2545,6 @@ TEST_F(BluetoothBlueZTest, RemoveDeviceDuringConnection) {
   device->Connect(nullptr, GetCallback(),
                   base::BindOnce(&BluetoothBlueZTest::ConnectErrorCallback,
                                  base::Unretained(this)));
-  // We pause discovery before connecting.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 
   EXPECT_EQ(0, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
@@ -2586,10 +2560,6 @@ TEST_F(BluetoothBlueZTest, RemoveDeviceDuringConnection) {
   EXPECT_EQ(0, error_callback_count_);
 
   EXPECT_EQ(1, observer.device_removed_count());
-
-  // If the device gets removed, we should still unpause discovery.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, DisconnectDevice) {
@@ -2610,10 +2580,6 @@ TEST_F(BluetoothBlueZTest, DisconnectDevice) {
 
   ASSERT_TRUE(device->IsConnected());
   ASSERT_FALSE(device->IsConnecting());
-
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 
   // Disconnect the device, we should see the observer method fire and the
   // device get dropped.
@@ -2769,10 +2735,6 @@ TEST_F(BluetoothBlueZTest, PairLegacyAutopair) {
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
 
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
-
   EXPECT_TRUE(device->IsPaired());
 
   // Verify is a HID device and is connectable.
@@ -2825,10 +2787,6 @@ TEST_F(BluetoothBlueZTest, PairDisplayPinCode) {
 
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
-
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 
   EXPECT_TRUE(device->IsPaired());
 
@@ -2903,10 +2861,6 @@ TEST_F(BluetoothBlueZTest, PairDisplayPasskey) {
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
 
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
-
   EXPECT_TRUE(device->IsPaired());
 
   // Verify is a HID device.
@@ -2960,10 +2914,6 @@ TEST_F(BluetoothBlueZTest, PairRequestPinCode) {
 
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
-
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 
   EXPECT_TRUE(device->IsPaired());
 
@@ -3020,10 +2970,6 @@ TEST_F(BluetoothBlueZTest, PairConfirmPasskey) {
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
 
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
-
   EXPECT_TRUE(device->IsPaired());
 
   // Non HID devices are always connectable.
@@ -3075,10 +3021,6 @@ TEST_F(BluetoothBlueZTest, PairRequestPasskey) {
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
 
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
-
   EXPECT_TRUE(device->IsPaired());
 
   // Non HID devices are always connectable.
@@ -3126,10 +3068,6 @@ TEST_F(BluetoothBlueZTest, PairJustWorks) {
   EXPECT_TRUE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
 
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
-
   EXPECT_TRUE(device->IsPaired());
 
   // Non HID devices are always connectable.
@@ -3174,10 +3112,6 @@ TEST_F(BluetoothBlueZTest, PairUnpairableDeviceFails) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingFails) {
@@ -3213,10 +3147,6 @@ TEST_F(BluetoothBlueZTest, PairingFails) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingFailsAtConnection) {
@@ -3255,10 +3185,6 @@ TEST_F(BluetoothBlueZTest, PairingFailsAtConnection) {
 
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
-
-  // Connect after pair.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 
   EXPECT_TRUE(device->IsPaired());
 
@@ -3306,10 +3232,6 @@ TEST_F(BluetoothBlueZTest, PairingRejectedAtPinCode) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingCancelledAtPinCode) {
@@ -3348,10 +3270,6 @@ TEST_F(BluetoothBlueZTest, PairingCancelledAtPinCode) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingRejectedAtPasskey) {
@@ -3390,10 +3308,6 @@ TEST_F(BluetoothBlueZTest, PairingRejectedAtPasskey) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingCancelledAtPasskey) {
@@ -3432,10 +3346,6 @@ TEST_F(BluetoothBlueZTest, PairingCancelledAtPasskey) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingRejectedAtConfirmation) {
@@ -3474,10 +3384,6 @@ TEST_F(BluetoothBlueZTest, PairingRejectedAtConfirmation) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingCancelledAtConfirmation) {
@@ -3516,10 +3422,6 @@ TEST_F(BluetoothBlueZTest, PairingCancelledAtConfirmation) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, PairingCancelledInFlight) {
@@ -3557,10 +3459,6 @@ TEST_F(BluetoothBlueZTest, PairingCancelledInFlight) {
   EXPECT_FALSE(device->IsConnected());
   EXPECT_FALSE(device->IsConnecting());
   EXPECT_FALSE(device->IsPaired());
-
-  // No connection.
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(0, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, IncomingPairRequestPinCode) {
@@ -4080,10 +3978,6 @@ TEST_F(BluetoothBlueZTest, GetConnectionInfoForConnectedDevice) {
   EXPECT_EQ(-10, conn_info.rssi);
   EXPECT_EQ(3, conn_info.transmit_power);
   EXPECT_EQ(4, conn_info.max_transmit_power);
-
-  // Pause discovery to connect without pair.
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetPauseCount());
-  EXPECT_EQ(1, fake_bluetooth_adapter_client_->GetUnpauseCount());
 }
 
 TEST_F(BluetoothBlueZTest, GetDiscoverableTimeout) {

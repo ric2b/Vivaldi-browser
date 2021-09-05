@@ -11,6 +11,7 @@
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "media/base/decode_status.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "media/base/test_data_util.h"
 #include "media/base/test_helpers.h"
 #include "media/base/video_frame.h"
@@ -25,7 +26,8 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -193,7 +195,7 @@ class VideoDecoderBrokerTest : public testing::Test {
     // that simulate gpu-accelerated decode.
     interface_factory_ = std::make_unique<FakeInterfaceFactory>();
     EXPECT_TRUE(
-        execution_context.GetBrowserInterfaceBroker().SetBinderForTesting(
+        Platform::Current()->GetBrowserInterfaceBroker()->SetBinderForTesting(
             media::mojom::InterfaceFactory::Name_,
             WTF::BindRepeating(&FakeInterfaceFactory::BindRequest,
                                base::Unretained(interface_factory_.get()))));
@@ -219,7 +221,7 @@ class VideoDecoderBrokerTest : public testing::Test {
 
   void ConstructDecoder(ExecutionContext& execution_context) {
     decoder_broker_ = std::make_unique<VideoDecoderBroker>(
-        execution_context, gpu_factories_.get());
+        execution_context, gpu_factories_.get(), &null_media_log_);
   }
 
   void InitializeDecoder(media::VideoDecoderConfig config) {
@@ -273,6 +275,7 @@ class VideoDecoderBrokerTest : public testing::Test {
   int GetMaxDecodeRequests() { return decoder_broker_->GetMaxDecodeRequests(); }
 
  protected:
+  media::NullMediaLog null_media_log_;
   std::unique_ptr<VideoDecoderBroker> decoder_broker_;
   std::vector<scoped_refptr<media::VideoFrame>> output_frames_;
   std::unique_ptr<media::MockGpuVideoAcceleratorFactories> gpu_factories_;

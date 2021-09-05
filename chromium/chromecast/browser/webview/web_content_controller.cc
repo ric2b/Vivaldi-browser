@@ -11,6 +11,7 @@
 #include "chromecast/base/version.h"
 #include "chromecast/browser/cast_web_contents.h"
 #include "chromecast/browser/webview/proto/webview.pb.h"
+#include "chromecast/browser/webview/webview_input_method_observer.h"
 #include "chromecast/browser/webview/webview_navigation_throttle.h"
 #include "chromecast/graphics/cast_focus_client_aura.h"
 #include "content/public/browser/browser_context.h"
@@ -25,11 +26,39 @@
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/constants.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 
 namespace chromecast {
+
+WebContentController::WebviewWindowVisibilityObserver::
+    WebviewWindowVisibilityObserver(aura::Window* window,
+                                    WebContentController* controller)
+    : window_(window), controller_(controller) {
+  DCHECK(window_);
+  DCHECK(controller_);
+  window_->AddObserver(this);
+}
+
+void WebContentController::WebviewWindowVisibilityObserver::
+    OnWindowVisibilityChanged(aura::Window* window, bool visible) {
+  if (window == window_ && visible && window->CanFocus())
+    controller_->OnVisible(window);
+}
+
+void WebContentController::WebviewWindowVisibilityObserver::OnWindowDestroyed(
+    aura::Window* window) {
+  if (window == window_)
+    window_ = nullptr;
+}
+
+WebContentController::WebviewWindowVisibilityObserver::
+    ~WebviewWindowVisibilityObserver() {
+  if (window_)
+    window_->RemoveObserver(this);
+}
 
 WebContentController::WebContentController(Client* client) : client_(client) {
   js_channels_ = std::make_unique<WebContentJsChannels>(client_);
@@ -149,6 +178,11 @@ void WebContentController::ProcessRequest(
 }
 
 void WebContentController::AttachTo(aura::Window* window, int window_id) {
+  // Register our observer on the window so we can act later once it
+  // becomes visible.
+  window_visibility_observer_ =
+      std::make_unique<WebviewWindowVisibilityObserver>(window, this);
+
   content::WebContents* contents = GetWebContents();
   auto* contents_window = contents->GetNativeView();
   contents_window->set_id(window_id);
@@ -168,6 +202,15 @@ void WebContentController::AttachTo(aura::Window* window, int window_id) {
   surface_->SetEmbeddedSurfaceId(base::BindRepeating(
       &WebContentController::GetSurfaceId, base::Unretained(this)));
   HandleResize(contents_window->bounds().size());
+}
+
+void WebContentController::OnVisible(aura::Window* window) {
+  // Acquire initial focus.
+  GetWebContents()->SetInitialFocus();
+
+  // Register for IME events
+  input_method_observer_ = std::make_unique<WebviewInputMethodObserver>(
+      this, window->GetHost()->GetInputMethod());
 }
 
 void WebContentController::ProcessInputEvent(const webview::InputEvent& ev) {

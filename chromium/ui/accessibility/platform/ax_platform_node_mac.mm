@@ -106,6 +106,8 @@ RoleMap BuildRoleMap() {
       {ax::mojom::Role::kDocNoteRef, NSAccessibilityLinkRole},
       {ax::mojom::Role::kDocNotice, NSAccessibilityGroupRole},
       {ax::mojom::Role::kDocPageBreak, NSAccessibilitySplitterRole},
+      {ax::mojom::Role::kDocPageFooter, NSAccessibilityGroupRole},
+      {ax::mojom::Role::kDocPageHeader, NSAccessibilityGroupRole},
       {ax::mojom::Role::kDocPageList, NSAccessibilityGroupRole},
       {ax::mojom::Role::kDocPart, NSAccessibilityGroupRole},
       {ax::mojom::Role::kDocPreface, NSAccessibilityGroupRole},
@@ -752,7 +754,7 @@ bool AlsoUseShowMenuActionForDefaultAction(const ui::AXNodeData& data) {
         _node->GetIntAttribute(ax::mojom::IntAttribute::kCheckedState));
     return checkedState == ax::mojom::CheckedState::kTrue ? @1 : @0;
   }
-  return [self getStringAttribute:ax::mojom::StringAttribute::kValue];
+  return base::SysUTF16ToNSString(_node->GetValueForControl());
 }
 
 - (NSNumber*)AXEnabled {

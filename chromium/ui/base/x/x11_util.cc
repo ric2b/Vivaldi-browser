@@ -22,6 +22,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/environment.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
@@ -67,9 +68,7 @@
 #include "ui/gfx/x/screensaver.h"
 #include "ui/gfx/x/shm.h"
 #include "ui/gfx/x/sync.h"
-#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_atom_cache.h"
-#include "ui/gfx/x/x11_error_tracker.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xproto_util.h"
 
@@ -93,33 +92,6 @@ namespace {
 constexpr int kNetWMStateAdd = 1;
 constexpr int kNetWMStateRemove = 0;
 
-int DefaultX11ErrorHandler(XDisplay* d, XErrorEvent* e) {
-  // This callback can be invoked by drivers very late in thread destruction,
-  // when Chrome TLS is no longer usable. https://crbug.com/849225.
-  if (TLSDestructionCheckerForX11::HasBeenDestroyed())
-    return 0;
-
-  if (base::CurrentThread::Get()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&x11::LogErrorEventDescription, e->serial, e->error_code,
-                       e->request_code, e->minor_code));
-  } else {
-    LOG(ERROR) << "X error received: "
-               << "serial " << e->serial << ", "
-               << "error_code " << static_cast<int>(e->error_code) << ", "
-               << "request_code " << static_cast<int>(e->request_code) << ", "
-               << "minor_code " << static_cast<int>(e->minor_code);
-  }
-  return 0;
-}
-
-int DefaultX11IOErrorHandler(XDisplay* d) {
-  // If there's an IO error it likely means the X server has gone away
-  LOG(ERROR) << "X IO error received (X server probably went away)";
-  _exit(1);
-}
-
 bool SupportsEWMH() {
   static bool supports_ewmh = false;
   static bool supports_ewmh_cached = false;
@@ -142,13 +114,11 @@ bool SupportsEWMH() {
     // _NET_SUPPORTING_WM_CHECK property pointing to itself (to avoid a stale
     // property referencing an ID that's been recycled for another window), so
     // we check that too.
-    gfx::X11ErrorTracker err_tracker;
     x11::Window wm_window_property = x11::Window::None;
-    bool result =
+    supports_ewmh =
         GetProperty(wm_window, gfx::GetAtom("_NET_SUPPORTING_WM_CHECK"),
-                    &wm_window_property);
-    supports_ewmh = !err_tracker.FoundNewError() && result &&
-                    wm_window_property == wm_window;
+                    &wm_window_property) &&
+        wm_window_property == wm_window;
   }
 
   return supports_ewmh;
@@ -165,9 +135,7 @@ bool GetWindowManagerName(std::string* wm_name) {
     return false;
   }
 
-  gfx::X11ErrorTracker err_tracker;
-  bool result = GetStringProperty(wm_window, "_NET_WM_NAME", wm_name);
-  return !err_tracker.FoundNewError() && result;
+  return GetStringProperty(wm_window, "_NET_WM_NAME", wm_name);
 }
 
 // Returns whether the X11 Screen Saver Extension can be used to disable the
@@ -186,6 +154,15 @@ bool IsX11ScreenSaverAvailable() {
   return version && (version->server_major_version > 1 ||
                      (version->server_major_version == 1 &&
                       version->server_minor_version >= 1));
+}
+
+// Must be in sync with the copy in //content/browser/gpu/gpu_internals_ui.cc.
+base::Value NewDescriptionValuePair(base::StringPiece desc,
+                                    base::StringPiece value) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey("description", base::Value(desc));
+  dict.SetKey("value", base::Value(value));
+  return dict;
 }
 
 }  // namespace
@@ -243,13 +220,13 @@ void WithdrawWindow(x11::Window window) {
 }
 
 void RaiseWindow(x11::Window window) {
-  x11::Connection::Get()->ConfigureWindow(
-      {.window = window, .stack_mode = x11::StackMode::Above});
+  x11::Connection::Get()->ConfigureWindow(x11::ConfigureWindowRequest{
+      .window = window, .stack_mode = x11::StackMode::Above});
 }
 
 void LowerWindow(x11::Window window) {
-  x11::Connection::Get()->ConfigureWindow(
-      {.window = window, .stack_mode = x11::StackMode::Below});
+  x11::Connection::Get()->ConfigureWindow(x11::ConfigureWindowRequest{
+      .window = window, .stack_mode = x11::StackMode::Below});
 }
 
 void DefineCursor(x11::Window window, x11::Cursor cursor) {
@@ -258,14 +235,15 @@ void DefineCursor(x11::Window window, x11::Cursor cursor) {
   // timing on BookmarkBarViewTest8.DNDBackToOriginatingMenu on
   // linux-chromeos-rel, causing it to flake.
   x11::Connection::Get()
-      ->ChangeWindowAttributes({.window = window, .cursor = cursor})
+      ->ChangeWindowAttributes(x11::ChangeWindowAttributesRequest{
+          .window = window, .cursor = cursor})
       .Sync();
 }
 
 x11::Window CreateDummyWindow(const std::string& name) {
   auto* connection = x11::Connection::Get();
   auto window = connection->GenerateId<x11::Window>();
-  connection->CreateWindow({
+  connection->CreateWindow(x11::CreateWindowRequest{
       .wid = window,
       .parent = connection->default_root(),
       .x = -100,
@@ -487,6 +465,8 @@ bool GetInnerWindowBounds(x11::Window window, gfx::Rect* rect) {
   auto translate_coords = connection->TranslateCoordinates({x11_window, root});
 
   // Sync after making both requests so only one round-trip is made.
+  // Flush so all requests are sent before waiting on any replies.
+  connection->Flush();
   auto geometry = get_geometry.Sync();
   auto coords = translate_coords.Sync();
 
@@ -583,7 +563,7 @@ bool WindowContainsPoint(x11::Window window, gfx::Point screen_loc) {
 
 bool PropertyExists(x11::Window window, const std::string& property_name) {
   auto response = x11::Connection::Get()
-                      ->GetProperty({
+                      ->GetProperty(x11::GetPropertyRequest{
                           .window = static_cast<x11::Window>(window),
                           .property = gfx::GetAtom(property_name),
                           .long_length = 1,
@@ -596,7 +576,7 @@ bool GetRawBytesOfProperty(x11::Window window,
                            x11::Atom property,
                            scoped_refptr<base::RefCountedMemory>* out_data,
                            x11::Atom* out_type) {
-  auto future = x11::Connection::Get()->GetProperty({
+  auto future = x11::Connection::Get()->GetProperty(x11::GetPropertyRequest{
       .window = static_cast<x11::Window>(window),
       .property = property,
       // Don't limit the amount of returned data.
@@ -792,12 +772,6 @@ bool IsWmTiling(WindowManagerName window_manager) {
 
 bool GetWindowDesktop(x11::Window window, int* desktop) {
   return GetIntProperty(window, "_NET_WM_DESKTOP", desktop);
-}
-
-std::string GetX11ErrorString(XDisplay* display, int err) {
-  char buffer[256];
-  XGetErrorText(display, err, buffer, base::size(buffer));
-  return buffer;
 }
 
 // Returns true if |window| is a named window.
@@ -1011,10 +985,6 @@ bool IsCompositingManagerPresent() {
   return is_compositing_manager_present;
 }
 
-void SetDefaultX11ErrorHandlers() {
-  SetX11ErrorHandlers(nullptr, nullptr);
-}
-
 bool IsX11WindowFullScreen(x11::Window window) {
   // If _NET_WM_STATE_FULLSCREEN is in _NET_SUPPORTED, use the presence or
   // absence of _NET_WM_STATE_FULLSCREEN in _NET_WM_STATE to determine
@@ -1046,6 +1016,31 @@ void SuspendX11ScreenSaver(bool suspend) {
     return;
 
   x11::Connection::Get()->screensaver().Suspend({suspend});
+}
+
+base::Value GpuExtraInfoAsListValue(unsigned long system_visual,
+                                    unsigned long rgba_visual) {
+  base::Value result(base::Value::Type::LIST);
+  result.Append(
+      NewDescriptionValuePair("Window manager", ui::GuessWindowManagerName()));
+  {
+    std::unique_ptr<base::Environment> env(base::Environment::Create());
+    std::string value;
+    const char kXDGCurrentDesktop[] = "XDG_CURRENT_DESKTOP";
+    if (env->GetVar(kXDGCurrentDesktop, &value))
+      result.Append(NewDescriptionValuePair(kXDGCurrentDesktop, value));
+    const char kGDMSession[] = "GDMSESSION";
+    if (env->GetVar(kGDMSession, &value))
+      result.Append(NewDescriptionValuePair(kGDMSession, value));
+    result.Append(NewDescriptionValuePair(
+        "Compositing manager",
+        ui::IsCompositingManagerPresent() ? "Yes" : "No"));
+  }
+  result.Append(NewDescriptionValuePair("System visual ID",
+                                        base::NumberToString(system_visual)));
+  result.Append(NewDescriptionValuePair("RGBA visual ID",
+                                        base::NumberToString(rgba_visual)));
+  return result;
 }
 
 bool WmSupportsHint(x11::Atom atom) {
@@ -1148,13 +1143,6 @@ x11::Future<void> SendClientMessage(x11::Window window,
   return SendEvent(event, target, event_mask);
 }
 
-void SetX11ErrorHandlers(XErrorHandler error_handler,
-                         XIOErrorHandler io_error_handler) {
-  XSetErrorHandler(error_handler ? error_handler : DefaultX11ErrorHandler);
-  XSetIOErrorHandler(io_error_handler ? io_error_handler
-                                      : DefaultX11IOErrorHandler);
-}
-
 bool IsVulkanSurfaceSupported() {
   static const char* extensions[] = {
       "DRI3",         // open source driver.
@@ -1167,6 +1155,22 @@ bool IsVulkanSurfaceSupported() {
       return true;
   }
   return false;
+}
+
+bool DoesVisualHaveAlphaForTest() {
+  // testing/xvfb.py runs xvfb and xcompmgr.
+  std::unique_ptr<base::Environment> env(base::Environment::Create());
+
+  uint8_t depth = 0;
+  bool visual_has_alpha = false;
+  ui::XVisualManager::GetInstance()->ChooseVisualForWindow(
+      env->HasVar("_CHROMIUM_INSIDE_XVFB"), nullptr, &depth, nullptr,
+      &visual_has_alpha);
+
+  if (visual_has_alpha)
+    DCHECK_EQ(32, depth);
+
+  return visual_has_alpha;
 }
 
 // static

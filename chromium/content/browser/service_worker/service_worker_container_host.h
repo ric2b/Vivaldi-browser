@@ -23,6 +23,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/cookies/site_for_cookies.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container.mojom.h"
@@ -229,8 +230,8 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   blink::mojom::ServiceWorkerObjectInfoPtr CreateServiceWorkerObjectInfoToSend(
       scoped_refptr<ServiceWorkerVersion> version);
 
-  // Returns a ServiceWorkerObjectHost instance for |version| for this provider
-  // host. A new instance is created if one does not already exist.
+  // Returns a ServiceWorkerObjectHost instance for |version| for this
+  // container host. A new instance is created if one does not already exist.
   // ServiceWorkerObjectHost will have an ownership of the |version|.
   base::WeakPtr<ServiceWorkerObjectHost> GetOrCreateServiceWorkerObjectHost(
       scoped_refptr<ServiceWorkerVersion> version);
@@ -266,7 +267,8 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
       int container_frame_id,
       const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
-          coep_reporter);
+          coep_reporter,
+      ukm::SourceId document_ukm_source_id);
 
   // For service worker window clients. Called after the navigation commits to a
   // render frame host. At this point, the previous ServiceWorkerContainerHost
@@ -279,7 +281,8 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   // After this is called, is_response_committed() and is_execution_ready()
   // return true.
   void CompleteWebWorkerPreparation(
-      const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy);
+      const network::CrossOriginEmbedderPolicy& cross_origin_embedder_policy,
+      ukm::SourceId worker_ukm_source_id);
 
   // Sets |url_|, |site_for_cookies_| and |top_frame_origin_|. For service
   // worker clients, updates the client uuid if it's a cross-origin transition.
@@ -376,7 +379,7 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   // If non-empty, |script_url| is the script the service worker will run.
   bool AllowServiceWorker(const GURL& scope, const GURL& script_url);
 
-  // Returns whether this provider host is secure enough to have a service
+  // Returns whether this container host is secure enough to have a service
   // worker controller.
   // Analogous to Blink's Document::IsSecureContext. Because of how service
   // worker intercepts main resource requests, this check must be done
@@ -384,7 +387,7 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   // ServiceWorkerNetworkProviderForFrame::Create). This function uses
   // |url_| and |is_parent_frame_secure_| to determine context security, so they
   // must be set properly before calling this function.
-  bool IsContextSecureForServiceWorker() const;
+  bool IsEligibleForServiceWorkerController() const;
 
   // For service worker clients. True if the response for the main resource load
   // was committed to the renderer. When this is false, the client's URL may
@@ -445,7 +448,22 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
   void EnterBackForwardCacheForTesting() { is_in_back_forward_cache_ = true; }
   void LeaveBackForwardCacheForTesting() { is_in_back_forward_cache_ = false; }
 
+  // For service worker clients. Returns the URL that is used for scope matching
+  // algorithm. This can be different from url() in the case of blob URL
+  // workers. In that case, url() may be like "blob://https://a.test" and the
+  // scope matching URL is "https://a.test", inherited from the parent container
+  // host.
+  const GURL& GetUrlForScopeMatch() const;
+
+  // For service worker clients that are dedicated workers. Inherits the
+  // controller of the creator document or worker. Used when the client was
+  // created with a blob URL.
+  void InheritControllerFrom(ServiceWorkerContainerHost& creator_host,
+                             const GURL& blob_url);
+
   base::WeakPtr<ServiceWorkerContainerHost> GetWeakPtr();
+
+  ukm::SourceId ukm_source_id() const { return ukm_source_id_; }
 
  private:
   friend class ServiceWorkerContainerHostTest;
@@ -618,7 +636,7 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
       std::map<size_t, scoped_refptr<ServiceWorkerRegistration>>;
   // Contains all living registrations whose scope this client's URL starts
   // with, used for .ready and claim(). It is empty if
-  // IsContextSecureForServiceWorker() is false. See also
+  // IsEligibleForServiceWorkerController() is false. See also
   // AddMatchingRegistration().
   ServiceWorkerRegistrationMap matching_registrations_;
 
@@ -648,6 +666,13 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
 
   // The type of client.
   const base::Optional<ServiceWorkerClientInfo> client_info_;
+
+  // The source id of the client's ExecutionContext, set on response commit.
+  ukm::SourceId ukm_source_id_ = ukm::kInvalidSourceId;
+
+  // The URL used for service worker scope matching. It is empty except in the
+  // case of a service worker client with a blob URL.
+  GURL scope_match_url_for_blob_client_;
 
   // For window clients only ---------------------------------------------------
 

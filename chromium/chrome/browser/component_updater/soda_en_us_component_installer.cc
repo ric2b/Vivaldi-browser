@@ -8,6 +8,7 @@
 #include "base/files/file_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/component_updater/soda_component_installer.h"
 #include "chrome/common/pref_names.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/crx_file/id_util.h"
@@ -83,7 +84,8 @@ update_client::CrxInstaller::Result
 SodaEnUsComponentInstallerPolicy::OnCustomInstall(
     const base::DictionaryValue& manifest,
     const base::FilePath& install_dir) {
-  return update_client::CrxInstaller::Result(0);  // Nothing custom here.
+  return SODAComponentInstallerPolicy::SetComponentDirectoryPermission(
+      install_dir);
 }
 
 void SodaEnUsComponentInstallerPolicy::OnCustomUninstall() {}
@@ -135,12 +137,6 @@ void RegisterSodaEnUsComponent(ComponentUpdateService* cus,
                                PrefService* prefs,
                                base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (base::FeatureList::IsEnabled(media::kUseSodaForLiveCaption)) {
-    if (!prefs->GetBoolean(prefs::kLiveCaptionEnabled) ||
-        !base::FeatureList::IsEnabled(media::kLiveCaption)) {
-      return;
-    }
-
     auto installer = base::MakeRefCounted<ComponentInstaller>(
         std::make_unique<SodaEnUsComponentInstallerPolicy>(base::BindRepeating(
             [](ComponentUpdateService* cus, PrefService* prefs,
@@ -153,12 +149,6 @@ void RegisterSodaEnUsComponent(ComponentUpdateService* cus,
             cus, prefs)));
 
     installer->Register(cus, std::move(callback));
-  }
 }
 
-bool UninstallSodaEnUsComponent(ComponentUpdateService* cus,
-                                PrefService* prefs) {
-  return cus->UnregisterComponent(
-      SodaEnUsComponentInstallerPolicy::GetExtensionId());
-}
 }  // namespace component_updater

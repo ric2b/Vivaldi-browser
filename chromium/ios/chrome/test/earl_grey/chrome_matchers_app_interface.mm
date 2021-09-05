@@ -48,8 +48,8 @@
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
-#import "ios/chrome/browser/ui/tab_grid/grid/grid_constants.h"
-#import "ios/chrome/browser/ui/tab_grid/tab_grid_constants.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
@@ -128,6 +128,12 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 }  // namespace
 
 @implementation ChromeMatchersAppInterface
+
++ (id<GREYMatcher>)windowWithNumber:(int)windowNumber {
+  return grey_allOf(
+      grey_accessibilityLabel([NSString stringWithFormat:@"%d", windowNumber]),
+      grey_kindOfClass([UIWindow class]), nil);
+}
 
 + (id<GREYMatcher>)buttonWithAccessibilityLabel:(NSString*)label {
   return grey_allOf(grey_accessibilityLabel(label),
@@ -466,9 +472,18 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
   return grey_accessibilityID(kSyncSettingsConfirmButtonId);
 }
 
++ (id<GREYMatcher>)addressesAndMoreButton {
+  return [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:(IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE)];
+}
+
 + (id<GREYMatcher>)paymentMethodsButton {
   return [ChromeMatchersAppInterface
       buttonWithAccessibilityLabelID:(IDS_AUTOFILL_PAYMENT_METHODS)];
+}
+
++ (id<GREYMatcher>)languagesButton {
+  return grey_accessibilityID(kSettingsLanguagesCellId);
 }
 
 + (id<GREYMatcher>)addCreditCardView {
@@ -548,14 +563,9 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 }
 
 + (id<GREYMatcher>)googleServicesSettingsButton {
-  NSString* syncAndGoogleServicesTitle =
-      l10n_util::GetNSStringWithFixup(IDS_IOS_GOOGLE_SERVICES_SETTINGS_TITLE);
-  id<GREYMatcher> mainTextLabelMatcher =
-      grey_allOf(grey_accessibilityLabel(syncAndGoogleServicesTitle),
-                 grey_sufficientlyVisible(), nil);
-  return grey_allOf(grey_kindOfClass([UITableViewCell class]),
-                    grey_sufficientlyVisible(),
-                    grey_descendant(mainTextLabelMatcher), nil);
+  return grey_allOf(
+      grey_kindOfClass([UITableViewCell class]), grey_sufficientlyVisible(),
+      grey_accessibilityID(kSettingsGoogleSyncAndServicesCellId), nil);
 }
 
 + (id<GREYMatcher>)googleServicesSettingsView {

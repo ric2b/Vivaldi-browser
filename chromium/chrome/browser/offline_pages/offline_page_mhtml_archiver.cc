@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
@@ -100,8 +100,6 @@ void OfflinePageMHTMLArchiver::GenerateMHTML(
   params.remove_popup_overlay = create_archive_params.remove_popup_overlay;
   params.use_page_problem_detectors =
       create_archive_params.use_page_problem_detectors;
-  params.compute_contents_hash =
-      create_archive_params.use_on_the_fly_hash_computation;
 
   web_contents->GenerateMHTMLWithResult(
       params,

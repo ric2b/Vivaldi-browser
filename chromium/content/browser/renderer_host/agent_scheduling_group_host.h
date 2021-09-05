@@ -7,12 +7,15 @@
 
 #include <stdint.h>
 
+#include "base/containers/id_map.h"
 #include "content/common/agent_scheduling_group.mojom.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_export.h"
 #include "content/common/renderer.mojom-forward.h"
+#include "content/common/state_transitions.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -56,17 +59,10 @@ class CONTENT_EXPORT AgentSchedulingGroupHost
   explicit AgentSchedulingGroupHost(RenderProcessHost& process);
   ~AgentSchedulingGroupHost() override;
 
-  // RenderProcessHostObserver:
-  void RenderProcessExited(RenderProcessHost* host,
-                           const ChildProcessTerminationInfo& info) override;
-  void RenderProcessHostDestroyed(RenderProcessHost* host) override;
-
   RenderProcessHost* GetProcess();
-  // Ensure that the process this AgentSchedulingGroupHost belongs to is alive,
-  // that the renderer-side AgentSchedulingGroup exists, and that the
-  // mojom::AgentSchedulingGroup/Host interfaces are bound and connected.
+  // Ensure that the process this AgentSchedulingGroupHost belongs to is alive.
   // Returns |false| if any part of the initialization failed.
-  bool InitProcessAndMojos();
+  bool Init();
 
   // IPC and mojo messages to be forwarded to the RenderProcessHost, for now. In
   // the future they will be handled directly by the AgentSchedulingGroupHost.
@@ -80,7 +76,8 @@ class CONTENT_EXPORT AgentSchedulingGroupHost
   mojom::RouteProvider* GetRemoteRouteProvider();
   void CreateFrame(mojom::CreateFrameParamsPtr params);
   void CreateView(mojom::CreateViewParamsPtr params);
-  void DestroyView(int32_t routing_id);
+  void DestroyView(int32_t routing_id,
+                   mojom::AgentSchedulingGroup::DestroyViewCallback callback);
   void CreateFrameProxy(
       int32_t routing_id,
       int32_t render_view_routing_id,
@@ -91,6 +88,24 @@ class CONTENT_EXPORT AgentSchedulingGroupHost
       const base::UnguessableToken& devtools_frame_token);
 
  private:
+  enum class LifecycleState {
+    // Just instantiated, no route assigned yet.
+    kNewborn,
+
+    // Bound mojo connection to the renderer.
+    kBound,
+
+    // Intermediate state between renderer process exit and rebinding mojo
+    // connections.
+    kRenderProcessExited,
+
+    // RenderProcessHost is destroyed, and `this` is pending for deletion.
+    // kRenderProcessHostDestroyed is the terminal state of the state machine.
+    kRenderProcessHostDestroyed,
+  };
+  friend StateTransitions<LifecycleState>;
+  friend std::ostream& operator<<(std::ostream& os, LifecycleState state);
+
   // `MaybeAssociatedReceiver` and `MaybeAssociatedRemote` are temporary helper
   // classes that allow us to switch between using associated and non-associated
   // mojo interfaces. This behavior is controlled by the
@@ -172,13 +187,25 @@ class CONTENT_EXPORT AgentSchedulingGroupHost
       mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
           receiver) override;
 
+  // RenderProcessHostObserver:
+  void RenderProcessExited(RenderProcessHost* host,
+                           const ChildProcessTerminationInfo& info) override;
+  void RenderProcessHostDestroyed(RenderProcessHost* host) override;
+
   void ResetMojo();
   void SetUpMojoIfNeeded();
+
+  void SetState(LifecycleState state);
+
+  IPC::Listener* GetListener(int32_t routing_id);
 
   // The RenderProcessHost this AgentSchedulingGroup is assigned to.
   RenderProcessHost& process_;
 
   const bool should_associate_;
+
+  // Map of registered IPC listeners.
+  base::IDMap<IPC::Listener*> listener_map_;
 
   // Implementation of `mojom::AgentSchedulingGroupHost`, used for responding to
   // calls from the (renderer-side) `AgentSchedulingGroup`.
@@ -187,7 +214,25 @@ class CONTENT_EXPORT AgentSchedulingGroupHost
   // Remote stub of `mojom::AgentSchedulingGroup`, used for sending calls to the
   // (renderer-side) `AgentSchedulingGroup`.
   MaybeAssociatedRemote mojo_remote_;
+
+  // The `mojom::RouteProvider` mojo pair to setup
+  // `blink::AssociatedInterfaceProvider` routes between this and the
+  // renderer-side `AgentSchedulingGroup`.
+  mojo::AssociatedRemote<mojom::RouteProvider> remote_route_provider_;
+  mojo::AssociatedReceiver<mojom::RouteProvider> route_provider_receiver_{this};
+
+  // The `blink::mojom::AssociatedInterfaceProvider` receiver set that *all*
+  // renderer-side `blink::AssociatedInterfaceProvider` objects own a remote to.
+  // `AgentSchedulingGroupHost` will be responsible for routing each associated
+  // interface request to the appropriate renderer host object.
+  mojo::AssociatedReceiverSet<blink::mojom::AssociatedInterfaceProvider,
+                              int32_t>
+      associated_interface_provider_receivers_;
+  LifecycleState state_{LifecycleState::kNewborn};
 };
+
+std::ostream& operator<<(std::ostream& os,
+                         AgentSchedulingGroupHost::LifecycleState state);
 
 }  // namespace content
 

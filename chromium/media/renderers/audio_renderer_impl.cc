@@ -389,9 +389,9 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
 
 #if !defined(OS_ANDROID)
   if (speech_recognition_client_) {
-    speech_recognition_client_->SetOnReadyCallback(
+    speech_recognition_client_->SetOnReadyCallback(BindToCurrentLoop(
         base::BindOnce(&AudioRendererImpl::EnableSpeechRecognition,
-                       weak_factory_.GetWeakPtr()));
+                       weak_factory_.GetWeakPtr())));
   }
 #endif
 }
@@ -959,7 +959,7 @@ bool AudioRendererImpl::HandleDecodedBuffer_Locked(
       first_packet_timestamp_ = buffer->timestamp();
 
 #if !defined(OS_ANDROID)
-    if (transcribe_audio_callback_)
+    if (transcribe_audio_callback_ && volume_ > 0)
       transcribe_audio_callback_.Run(buffer);
 #endif
 

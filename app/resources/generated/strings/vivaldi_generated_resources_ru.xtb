@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Только выбранные</translation>
 <translation id="1244303850296295656">Ошибка расширения</translation>
 <translation id="125220115284141797">По умолчанию</translation>
-<translation id="1274977772557788323">Настройки хранилища Adobe Flash Player</translation>
 <translation id="1297175357211070620">Принтер</translation>
 <translation id="1303101771013849280">HTML-файл закладок</translation>
 <translation id="1380436189840894976">Закрыть приватное окно?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Вставить как обычный текст</translation>
 <translation id="2249605167705922988">Например: 1–5, 8, 11–13</translation>
 <translation id="225240747099314620">Разрешить идентификаторы для защищённого содержимого (может понадобиться перезагрузка)</translation>
-<translation id="2263497240924215535">(Отключено)</translation>
 <translation id="2277255602909579701">Все файлы cookie и данные сайта</translation>
 <translation id="2280486287150724112">Правое поле</translation>
 <translation id="2282146716419988068">Процесс GPU</translation>
@@ -101,9 +99,10 @@
 <translation id="2550212893339833758">Память подкачки</translation>
 <translation id="2553440850688409052">Скрыть этот плагин</translation>
 <translation id="26224892172169984">Запретить обработку протоколов на всех сайтах</translation>
-<translation id="2662876636500006917">Интернет-магазин Vivaldi</translation>
+<translation id="2662876636500006917">Интернет-магазин</translation>
 <translation id="2678063897982469759">Включить снова</translation>
 <translation id="2721037002783622288">&amp;Найти картинку в <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Создать ярлык...</translation>
 <translation id="2785873697295365461">Дескрипторы файлов</translation>
 <translation id="2809586584051668049">и ещё <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Не показывать картинки</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">MIDI-устройства</translation>
 <translation id="3021678814754966447">&amp;Просмотр кода фрейма</translation>
 <translation id="3036546437875325427">Включить флэш</translation>
-<translation id="3038675903128704560">Запретить сайтам использовать плагин для доступа к компьютеру</translation>
 <translation id="3046910703532196514">Веб-страница полностью</translation>
 <translation id="3067198360141518313">Запустить этот плагин</translation>
 <translation id="3080207940057008665">Одна из программ на вашем компьютере установила тему, которая может влиять на работу Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Это расширение могло быть повреждено.</translation>
 <translation id="3387614642886316601">Расширенная проверка правописания</translation>
 <translation id="3432227430032737297">Удалить все видимые</translation>
-<translation id="3440761377721825626">Предупреждать о попытках доступа к компьютеру с помощью плагинов</translation>
 <translation id="345693547134384690">Открыть &amp;картинку в новой вкладке</translation>
 <translation id="3494769164076977169">Предупреждать о попытках автоматической загрузки файлов (рекомендуется)</translation>
 <translation id="3505030558724226696">Запретить доступ к устройствам</translation>
 <translation id="3511307672085573050">&amp;Копировать адрес ссылки</translation>
-<translation id="3523642406908660543">Предупреждать о попытках доступа к компьютеру с помощью плагинов (рекомендуется)</translation>
 <translation id="354068948465830244">Возможно чтение и изменение данных сайта</translation>
 <translation id="3560034655160545939">&amp;Проверка правописания</translation>
 <translation id="3574917942258583917">Закрыть приватное окно?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; хочет открыть доступ к принтеру &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; для вашей группы &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Если вы примете приглашение, то все участники группы смогут пользоваться этим принтером.</translation>
 <translation id="3587482841069643663">Все</translation>
 <translation id="3627588569887975815">Открыть ссылку в &amp;приватном окне</translation>
+<translation id="3627879631695760395">Установить приложение "<ph name="APP" />"...</translation>
 <translation id="3668823961463113931">Обработчики</translation>
 <translation id="3678156199662914018">Расширение: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Запрос доступа к экрану от <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Восстановить настройки</translation>
 <translation id="4434045419905280838">Всплывающие окна и переадресация</translation>
 <translation id="4478664379124702289">Сохранить &amp;ссылку как...</translation>
-<translation id="4552089082226364758">Флэш</translation>
 <translation id="4579581181964204535">Трансляция с сайта <ph name="HOST_NAME" /> невозможна.</translation>
 <translation id="4593021220803146968">&amp;Перейти к <ph name="URL" /></translation>
 <translation id="4595560905247879544">Изменять приложения и расширения может только менеджер (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Неизвестен</translation>
 <translation id="5860491529813859533">Включить</translation>
 <translation id="5867841422488265304">Ввести адрес или поисковый запрос</translation>
-<translation id="5908769186679515905">Блокировать флэш на сайтах</translation>
 <translation id="5910363049092958439">&amp;Сохранить изображение как...</translation>
 <translation id="5956585768868398362">Установить новую поисковую систему по умолчанию?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (макс. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Доступ запрещён.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Показать &amp;управление</translation>
-<translation id="7311079019872751559">Доступ к плагинам вне тестовой среды</translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7412226954991670867">Память GPU</translation>
 <translation id="7421925624202799674">&amp;Просмотр кода страницы</translation>
@@ -476,6 +470,7 @@
 <translation id="9027459031423301635">Открыть ссылку в новой &amp;вкладке</translation>
 <translation id="9056810968620647706">Ничего не найдено.</translation>
 <translation id="9137916601698928395">Открыть ссылку как <ph name="USER" /></translation>
+<translation id="91568222606626347">Создать ярлык...</translation>
 <translation id="916607977885256133">Картинка в картинке</translation>
 <translation id="9170848237812810038">&amp;Отменить</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" добавлено</translation>

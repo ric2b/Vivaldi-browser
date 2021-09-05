@@ -41,9 +41,11 @@ RootCompositorFrameSinkImpl::Create(
   // First create an output surface.
   mojo::Remote<mojom::DisplayClient> display_client(
       std::move(params->display_client));
+  auto display_controller = output_surface_provider->CreateGpuDependency(
+      params->gpu_compositing, params->widget, params->renderer_settings);
   auto output_surface = output_surface_provider->CreateOutputSurface(
       params->widget, params->gpu_compositing, display_client.get(),
-      params->renderer_settings, debug_settings);
+      display_controller.get(), params->renderer_settings, debug_settings);
 
   // Creating output surface failed. The host can send a new request, possibly
   // with a different compositing mode.
@@ -127,16 +129,22 @@ RootCompositorFrameSinkImpl::Create(
 #if !defined(OS_APPLE)
   auto* output_surface_ptr = output_surface.get();
 #endif
+  gpu::SharedImageInterface* sii = nullptr;
+  if (output_surface->context_provider())
+    sii = output_surface->context_provider()->SharedImageInterface();
+  else if (display_controller)
+    sii = display_controller->shared_image_interface();
 
   auto overlay_processor = OverlayProcessorInterface::CreateOverlayProcessor(
-      output_surface.get(), output_surface_provider->GetSharedImageManager(),
-      params->renderer_settings, debug_settings);
+      output_surface.get(), output_surface->GetSurfaceHandle(),
+      output_surface->capabilities(),
+      display_controller.get(), sii, params->renderer_settings, debug_settings);
 
   auto display = std::make_unique<Display>(
       frame_sink_manager->shared_bitmap_manager(), params->renderer_settings,
-      debug_settings, params->frame_sink_id, std::move(output_surface),
-      std::move(overlay_processor), std::move(scheduler),
-      std::move(task_runner));
+      debug_settings, params->frame_sink_id, std::move(display_controller),
+      std::move(output_surface), std::move(overlay_processor),
+      std::move(scheduler), std::move(task_runner));
 
   if (external_begin_frame_source_mojo)
     external_begin_frame_source_mojo->SetDisplay(display.get());

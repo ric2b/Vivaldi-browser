@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "components/sync/engine/non_blocking_sync_common.h"
+#include "components/sync/engine/commit_and_get_updates_types.h"
 #include "sync/notes/synced_note_tracker.h"
 
 namespace vivaldi {

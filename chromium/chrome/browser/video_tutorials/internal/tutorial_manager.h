@@ -22,10 +22,10 @@ class TutorialManager {
   virtual void GetTutorials(GetTutorialsCallback callback) = 0;
 
   // Returns a list of languages for which video tutorials are available.
-  virtual const std::vector<Language>& GetSupportedLanguages() = 0;
+  virtual const std::vector<std::string>& GetSupportedLanguages() = 0;
 
   // Returns the preferred locale for the video tutorials.
-  virtual std::string GetPreferredLocale() = 0;
+  virtual base::Optional<std::string> GetPreferredLocale() = 0;
 
   // Sets the user preferred locale for watching the video tutorials. This
   // doesn't update the cached tutorials. GetTutorials must be called for the
@@ -34,8 +34,8 @@ class TutorialManager {
 
   // Saves a fresh set of video tutorials into database. Called after a network
   // fetch.
-  virtual void SaveGroups(std::unique_ptr<std::vector<TutorialGroup>> groups,
-                          SuccessCallback callback) = 0;
+  virtual void SaveGroups(
+      std::unique_ptr<std::vector<TutorialGroup>> groups) = 0;
 
   virtual ~TutorialManager() = default;
 

@@ -175,15 +175,11 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       bool is_new_browsing_instance,
       bool has_user_gesture,
       SessionStorageNamespace* session_storage_namespace) override;
-  void CreateNewWidget(AgentSchedulingGroupHost& agent_scheduling_group,
-                       int32_t route_id,
-                       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
-                           blink_widget_host,
-                       mojo::PendingAssociatedRemote<blink::mojom::Widget>
-                           blink_widget) override;
-  void CreateNewFullscreenWidget(
+  RenderWidgetHostImpl* CreateNewPopupWidget(
       AgentSchedulingGroupHost& agent_scheduling_group,
       int32_t route_id,
+      mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
+          blink_popup_widget_host,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget)
@@ -196,7 +192,6 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
   void ShowCreatedWidget(int process_id,
                          int route_id,
                          const gfx::Rect& initial_rect) override;
-  void ShowCreatedFullscreenWidget(int process_id, int route_id) override;
   void SaveFrameWithHeaders(const GURL& url,
                             const Referrer& referrer,
                             const std::string& headers,

@@ -14,6 +14,7 @@
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/controls/scroll_view.h"
 
 namespace views {
 namespace metadata {
@@ -83,6 +84,13 @@ base::string16 TypeConverter<gfx::Range>::ToString(
     const gfx::Range& source_value) {
   return base::ASCIIToUTF16(base::StringPrintf(
       "{%i, %i}", source_value.GetMin(), source_value.GetMax()));
+}
+
+base::string16 TypeConverter<gfx::Insets>::ToString(
+    const gfx::Insets& source_value) {
+  return base::ASCIIToUTF16(base::StringPrintf(
+      "{%d, %d, %d, %d}", source_value.top(), source_value.left(),
+      source_value.bottom(), source_value.right()));
 }
 
 base::Optional<int8_t> TypeConverter<int8_t>::FromString(
@@ -247,6 +255,21 @@ base::Optional<gfx::Range> TypeConverter<gfx::Range>::FromString(
   return base::nullopt;
 }
 
+base::Optional<gfx::Insets> TypeConverter<gfx::Insets>::FromString(
+    const base::string16& source_value) {
+  const auto values =
+      base::SplitStringPiece(source_value, base::ASCIIToUTF16("{,,,}"),
+                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  int top, left, bottom, right;
+  if ((values.size() == 4) && base::StringToInt(values[0], &top) &&
+      base::StringToInt(values[1], &left) &&
+      base::StringToInt(values[2], &bottom) &&
+      base::StringToInt(values[3], &right)) {
+    return gfx::Insets(top, left, bottom, right);
+  }
+  return base::nullopt;
+}
+
 }  // namespace metadata
 }  // namespace views
 
@@ -331,6 +354,14 @@ DEFINE_ENUM_CONVERTERS(ui::MenuSeparatorType,
                         base::ASCIIToUTF16("VERTICAL_SEPARATOR")},
                        {ui::MenuSeparatorType::PADDED_SEPARATOR,
                         base::ASCIIToUTF16("PADDED_SEPARATOR")})
+
+DEFINE_ENUM_CONVERTERS(views::ScrollView::ScrollBarMode,
+                       {views::ScrollView::ScrollBarMode::kDisabled,
+                        base::ASCIIToUTF16("kDisabled")},
+                       {views::ScrollView::ScrollBarMode::kHiddenButEnabled,
+                        base::ASCIIToUTF16("kHiddenButEnabled")},
+                       {views::ScrollView::ScrollBarMode::kEnabled,
+                        base::ASCIIToUTF16("kEnabled")})
 
 #define OP(enum_name) \
   { ui::NativeTheme::enum_name, base::ASCIIToUTF16(#enum_name) }

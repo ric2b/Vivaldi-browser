@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -74,8 +74,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateAddMountFunction::Run() {
       chromeos::MOUNT_ACCESS_MODE_READ_WRITE);
 
   // Pass back the actual source path of the mount point.
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(path.AsUTF8Unsafe())));
+  return RespondNow(OneArgument(base::Value(path.AsUTF8Unsafe())));
 }
 
 ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {

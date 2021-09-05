@@ -248,9 +248,11 @@ class ReferrerPolicyTest : public InProcessBrowserTest {
       mouse_event.button = button;
       mouse_event.SetPositionInWidget(15, 15);
       mouse_event.click_count = 1;
-      tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+      tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+          mouse_event);
       mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
-      tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
+      tab->GetMainFrame()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+          mouse_event);
     }
 
     if (disposition == WindowOpenDisposition::CURRENT_TAB) {
@@ -540,7 +542,8 @@ IN_PROC_BROWSER_TEST_F(ReferrerPolicyTest, History) {
       blink::WebMouseEvent::Button::kLeft, EXPECT_ORIGIN_AS_REFERRER);
 
   // Navigate to C.
-  ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL("/"));
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/title1.html"));
 
   base::string16 expected_title =
       GetExpectedTitle(start_url, EXPECT_ORIGIN_AS_REFERRER);

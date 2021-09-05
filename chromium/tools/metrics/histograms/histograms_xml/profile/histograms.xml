@@ -58,7 +58,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.AndroidAccountManagementMenu"
-    enum="ProfileAndroidAccountManagementMenu" expires_after="2020-10-26">
+    enum="ProfileAndroidAccountManagementMenu" expires_after="2021-04-26">
   <owner>bsazonov@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -73,7 +73,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.Avatar" enum="ProfileAvatar"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>jkrcal@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>The frequency of selection of each avatar.</summary>
@@ -85,7 +85,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.BrowserActive.PerProfile" enum="Profile"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>msarda@chromium.org</owner>
   <owner>tangltom@chromium.org</owner>
   <summary>
@@ -102,13 +102,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Profile.ColorsUniqueness" enum="ProfileColorsUniqueness"
+    expires_after="2021-05-30">
+  <owner>jkrcal@chromium.org</owner>
+  <owner>droger@chromium.org</owner>
+  <summary>
+    Records how profile colors are unique on all profiles of the installation.
+    Recorded every 24 hours (or at the soonest moment after that when Chrome is
+    started again).
+  </summary>
+</histogram>
+
 <histogram name="Profile.CookiesSize" units="MB" expires_after="2018-08-30">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <summary>Size of the cookies database.</summary>
 </histogram>
 
 <histogram name="Profile.CreateResult" enum="ProfileCreateResult"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>treib@chromium.org</owner>
   <owner>rogerta@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
@@ -141,7 +152,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.DeleteProfileAction" enum="ProfileDeleteAction"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <owner>anthonyvd@chromium.org</owner>
@@ -162,6 +173,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     This histogram tracks the context of profile deletion whenever a profile is
     scheduled for deletion (from user action in the UI). Only recorded if the
     profile has a valid entry in ProfileAttributesStorage.
+  </summary>
+</histogram>
+
+<histogram name="Profile.Destroyer.OffTheRecord" enum="ProfileDestructionType"
+    expires_after="M95">
+  <owner>rhalavati@chromium.org</owner>
+  <owner>chrome-privacy-core@google.com</owner>
+  <summary>
+    Track if the off-the-record profile was immidiately destroyed when asked to
+    be destroyed, or was scheduled for a delayed destruction, and possibly was
+    not destroyed properly after the delay and was crashed.
   </summary>
 </histogram>
 
@@ -201,6 +223,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Profile.Incognito.MainFrameNavigationsPerSession"
+    units="navigations" expires_after="2021-06-01">
+  <owner>rhalavati@chromium.org</owner>
+  <owner>chrome-privacy-core@google.com</owner>
+  <summary>
+    This histogram records the number of mainframe navigations that have been
+    done during one Incognito session. It is recorded once an off the record
+    profile for an incognito session is closed.
+  </summary>
+</histogram>
+
 <histogram name="Profile.Menu.ClickedActionableItem"
     enum="ProfileMenuActionableItem" expires_after="2021-06-30">
   <owner>droger@chromium.org</owner>
@@ -213,7 +246,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.Menu.OpenedAfterAvatarAnimation" units="ms"
-    expires_after="2020-09-27">
+    expires_after="2021-04-15">
   <owner>droger@chromium.org</owner>
   <owner>jkrcal@chromium.org</owner>
   <summary>
@@ -235,7 +268,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.NetUserCount" enum="ProfileNetUserCount"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>rogerta@chromium.org</owner>
   <summary>
     Counts of users added and deleted. Percentages are not meaningful. Please
@@ -244,7 +277,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.NumberOfAccountsPerProfile" units="units"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>
@@ -306,7 +339,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.NumberOfProfilesAtProfileSwitch" units="profiles"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>jkrcal@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>
@@ -378,6 +411,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Profile.ProfileError" enum="ProfileErrorType"
     expires_after="M85">
+  <obsolete>
+    Removed on 2020-11 (crbug.com/1089331).
+  </obsolete>
   <owner>tnagel@chromium.org</owner>
   <summary>
     The error with the current user profile that caused an error dialog to be
@@ -387,7 +423,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.SessionDuration.PerProfile" enum="Profile"
-    expires_after="2021-01-03">
+    expires_after="2021-04-11">
   <owner>msarda@chromium.org</owner>
   <owner>tangltom@chromium.org</owner>
   <summary>
@@ -471,7 +507,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.SyncCustomize" enum="ProfileSyncCustomize"
-    expires_after="M85">
+    expires_after="M92">
   <owner>msalama@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <summary>
@@ -483,7 +519,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Profile.TimeToOpenUserManagerUpTo1min" units="ms"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>
@@ -589,7 +625,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ProfileChooser.HasProfilesShown" enum="BooleanShown"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>vasilii@chromium.org</owner>
   <owner>ewald@chromium.org</owner>
   <summary>

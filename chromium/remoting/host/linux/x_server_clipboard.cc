@@ -14,7 +14,6 @@
 #include "remoting/base/logging.h"
 #include "remoting/base/util.h"
 #include "ui/gfx/x/extension_manager.h"
-#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xproto_util.h"
 
@@ -28,15 +27,6 @@ void XServerClipboard::Init(x11::Connection* connection,
                             const ClipboardChangedCallback& callback) {
   connection_ = connection;
   callback_ = callback;
-
-  // If any of these X API calls fail, an X Error will be raised, crashing the
-  // process.  This is unlikely to occur in practice, and even if it does, it
-  // would mean the X server is in a bad state, so it's not worth trying to
-  // trap such errors here.
-
-  // TODO(lambroslambrou): Consider using ScopedXErrorHandler here, or consider
-  // placing responsibility for handling X Errors outside this class, since
-  // X Error handlers are global to all X connections.
 
   if (!connection_->xfixes().present()) {
     HOST_LOG << "X server does not support XFixes.";
@@ -94,7 +84,7 @@ void XServerClipboard::Init(x11::Connection* connection,
 
 void XServerClipboard::SetClipboard(const std::string& mime_type,
                                     const std::string& data) {
-  DCHECK(connection_->display());
+  DCHECK(connection_->Ready());
 
   if (clipboard_window_ == x11::Window::None)
     return;
@@ -342,15 +332,9 @@ bool XServerClipboard::HandleSelectionTargetsEvent(
   auto selection = event.selection;
   if (event.property == targets_atom_) {
     if (data && format == 32) {
-      // The XGetWindowProperty man-page specifies that the returned
-      // property data will be an array of |long|s in the case where
-      // |format| == 32.  Although the items are 32-bit values (as stored and
-      // sent over the X protocol), Xlib presents the data to the client as an
-      // array of |long|s, with zero-padding on a 64-bit system where |long|
-      // is bigger than 32 bits.
-      const long* targets = static_cast<const long*>(data);
+      const uint32_t* targets = static_cast<const uint32_t*>(data);
       for (int i = 0; i < item_count; i++) {
-        if (targets[i] == static_cast<long>(utf8_string_atom_)) {
+        if (targets[i] == static_cast<uint32_t>(utf8_string_atom_)) {
           RequestSelectionString(selection, utf8_string_atom_);
           return false;
         }
@@ -387,8 +371,7 @@ void XServerClipboard::NotifyClipboardText(const std::string& text) {
 
 void XServerClipboard::RequestSelectionTargets(x11::Atom selection) {
   connection_->ConvertSelection({clipboard_window_, selection, targets_atom_,
-                                 selection_string_atom_,
-                                 x11::Time::CurrentTime});
+                                 targets_atom_, x11::Time::CurrentTime});
 }
 
 void XServerClipboard::RequestSelectionString(x11::Atom selection,

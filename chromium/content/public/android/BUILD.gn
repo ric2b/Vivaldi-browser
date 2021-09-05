@@ -6,6 +6,7 @@ import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
 import("//device/vr/buildflags/buildflags.gni")
+import("//tools/grit/grit_rule.gni")
 
 android_aidl("common_aidl") {
   interface_file = "java/src/org/chromium/content/common/common.aidl"
@@ -56,6 +57,9 @@ android_resources("content_java_resources") {
 }
 
 action_with_pydeps("generate_sandboxed_service_srcjar") {
+  # TODO(crbug.com/1112471): Get this to run cleanly under Python 3.
+  run_under_python2 = true
+
   script = "//content/public/android/generate_child_service.py"
 
   _srcjar_path = "${target_gen_dir}/${target_name}.srcjar"
@@ -79,6 +83,7 @@ android_library("content_java") {
     "//base:jni_java",
     "//components/download/public/common:public_java",
     "//components/payments/mojom:mojom_java",
+    "//content/public/common:trust_tokens_mojo_bindings_java",
     "//device/bluetooth:java",
     "//device/gamepad:java",
     "//media/base/android:media_java",
@@ -124,6 +129,7 @@ android_library("content_java") {
     ":generate_sandboxed_service_srcjar",
     ":is_ready_to_pay_service_aidl",
     "//content/browser/accessibility:content_browser_accessibility_java_enums_srcjar",
+    "//content/browser/sms:sms_provider_gms_backend_enum",
     "//content/public/browser:bluetooth_chooser_event_javagen",
     "//ui/touch_selection:ui_touch_handle_orientation_srcjar",
     "//ui/touch_selection:ui_touch_selection_enums_srcjar",
@@ -262,6 +268,7 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/selection/SmartSelectionClient.java",
     "java/src/org/chromium/content/browser/selection/SmartSelectionMetricsLogger.java",
     "java/src/org/chromium/content/browser/selection/SmartSelectionProvider.java",
+    "java/src/org/chromium/content/browser/sms/SmsProviderGms.java",
     "java/src/org/chromium/content/browser/sms/SmsUserConsentReceiver.java",
     "java/src/org/chromium/content/browser/sms/SmsVerificationReceiver.java",
     "java/src/org/chromium/content/browser/sms/Wrappers.java",
@@ -323,6 +330,7 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/browser/WebContentsInternals.java",
     "java/src/org/chromium/content_public/browser/WebContentsObserver.java",
     "java/src/org/chromium/content_public/browser/WebContentsStatics.java",
+    "java/src/org/chromium/content_public/browser/trusttokens/TrustTokenFulfillerManager.java",
     "java/src/org/chromium/content_public/common/ContentProcessInfo.java",
     "java/src/org/chromium/content_public/common/ContentUrlConstants.java",
     "java/src/org/chromium/content_public/common/Referrer.java",
@@ -413,8 +421,7 @@ generate_jni("content_jni_headers") {
     "java/src/org/chromium/content/browser/input/TextSuggestionHost.java",
     "java/src/org/chromium/content/browser/selection/SelectionPopupControllerImpl.java",
     "java/src/org/chromium/content/browser/selection/SmartSelectionClient.java",
-    "java/src/org/chromium/content/browser/sms/SmsUserConsentReceiver.java",
-    "java/src/org/chromium/content/browser/sms/SmsVerificationReceiver.java",
+    "java/src/org/chromium/content/browser/sms/SmsProviderGms.java",
     "java/src/org/chromium/content/browser/webcontents/WebContentsImpl.java",
     "java/src/org/chromium/content/browser/webcontents/WebContentsObserverProxy.java",
     "java/src/org/chromium/content/common/ServiceManagerConnectionImpl.java",
@@ -564,7 +571,6 @@ junit_binary("content_junit_tests") {
     "junit/src/org/chromium/content/browser/ScreenOrientationProviderImplTest.java",
     "junit/src/org/chromium/content/browser/SpareChildConnectionTest.java",
     "junit/src/org/chromium/content/browser/UiThreadTaskTraitsImplTest.java",
-    "junit/src/org/chromium/content/browser/accessibility/BrowserAccessibilityStateTest.java",
     "junit/src/org/chromium/content/browser/androidoverlay/DialogOverlayCoreTest.java",
     "junit/src/org/chromium/content/browser/input/InputMethodManagerWrapperImplTest.java",
     "junit/src/org/chromium/content/browser/input/RangeTest.java",

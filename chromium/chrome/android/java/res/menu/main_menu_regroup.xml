@@ -92,6 +92,35 @@
         <item android:id="@+id/recent_tabs_menu_id"
             android:title="@string/menu_recent_tabs"
             android:icon="@drawable/devices_black_24dp" />
+        <item android:id="@+id/add_to_divider_line_id"
+            android:title="@null" />
+        <item android:id="@+id/add_to_menu_id"
+            android:title="@string/menu_add_to"
+            android:icon="@drawable/ic_add" >
+          <menu>
+                <item android:id="@+id/add_to_bookmarks_menu_id"
+                    android:title="@string/menu_bookmarks"
+                    android:icon="@drawable/btn_star" />
+                <item android:id="@+id/add_to_reading_list_menu_id"
+                    android:title="@string/reading_list_title"
+                    android:icon="@drawable/ic_reading_list_folder" />
+                <item android:id="@+id/add_to_downloads_menu_id"
+                    android:title="@string/menu_downloads"
+                    android:icon="@drawable/ic_file_download_white_24dp" />
+                <item android:id="@+id/add_to_homescreen_menu_id"
+                    android:title="@string/menu_homescreen"
+                    android:icon="@drawable/ic_add_to_home_screen" />
+          </menu>
+        </item>
+        <!-- Duplicating add_to_homescreen/install_app/open_webapk is for
+             the purpose of experiment, one of them will be removed once the
+             experiments are done. -->
+        <item android:id="@+id/install_app_id"
+            android:title="@string/menu_add_to_homescreen"
+            android:icon="@drawable/ic_add_to_home_screen" />
+        <item android:id="@+id/menu_open_webapk_id"
+            android:title="@string/menu_open_webapk"
+            android:icon="@drawable/ic_add_to_home_screen" />
         <item android:id="@id/divider_line_id"
             android:title="@null" />
         <item android:id="@+id/share_row_menu_id"
@@ -172,6 +201,17 @@
         <item android:id="@+id/menu_group_tabs"
             android:title="@string/menu_group_tabs"
             android:icon="@drawable/ic_widgets" />
+        <item android:id="@+id/track_prices_row_menu_id"
+            android:title="@null">
+          <menu>
+              <item android:id="@+id/track_prices_id"
+                android:title="@string/menu_track_prices"
+                android:icon="@drawable/ic_trending_down_black" />
+              <item android:id="@+id/track_prices_check_id"
+                android:title="@null"
+                android:checkable="true" />
+          </menu>
+        </item>
         <item android:id="@id/preferences_id"
             android:title="@string/menu_settings"
             android:icon="@drawable/settings_cog" />
@@ -211,6 +251,17 @@
         <item android:id="@id/menu_group_tabs"
             android:title="@string/menu_group_tabs"
             android:icon="@drawable/ic_widgets" />
+        <item android:id="@id/track_prices_row_menu_id"
+            android:title="@null">
+          <menu>
+              <item android:id="@id/track_prices_id"
+                android:title="@string/menu_track_prices"
+                android:icon="@drawable/ic_trending_down_black" />
+              <item android:id="@id/track_prices_check_id"
+                android:title="@null"
+                android:checkable="true" />
+          </menu>
+        </item>
         <item android:id="@id/preferences_id"
             android:title="@string/menu_settings"
             android:icon="@drawable/settings_cog" />

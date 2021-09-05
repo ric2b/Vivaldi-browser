@@ -23,7 +23,6 @@
 #include "content/public/common/main_function_params.h"
 #include "ipc/ipc_sender.h"
 #include "ppapi/proxy/plugin_globals.h"
-#include "ppapi/proxy/proxy_module.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -68,6 +67,11 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
   const base::CommandLine& command_line = parameters.command_line;
 
 #if defined(OS_WIN)
+  // https://crbug.com/1139752 Premature unload of shell32 caused process to
+  // crash during process shutdown.
+  HMODULE shell32_pin = ::LoadLibrary(L"shell32.dll");
+  UNREFERENCED_PARAMETER(shell32_pin);
+
   g_target_services = parameters.sandbox_info->target_services;
 #endif
 
@@ -129,9 +133,8 @@ int PpapiPluginMain(const MainFunctionParams& parameters) {
 
   ChildProcess ppapi_process;
   base::RunLoop run_loop;
-  ppapi_process.set_main_thread(new PpapiThread(run_loop.QuitClosure(),
-                                                parameters.command_line,
-                                                false /* Not a broker */));
+  ppapi_process.set_main_thread(
+      new PpapiThread(run_loop.QuitClosure(), parameters.command_line));
 
 #if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MAC)
   // Startup tracing is usually enabled earlier, but if we forked from a zygote,

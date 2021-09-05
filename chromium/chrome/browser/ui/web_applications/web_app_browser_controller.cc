@@ -4,8 +4,9 @@
 
 #include "chrome/browser/ui/web_applications/web_app_browser_controller.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
@@ -56,6 +58,14 @@ bool WebAppBrowserController::HasMinimalUiButtons() const {
 
 bool WebAppBrowserController::IsHostedApp() const {
   return true;
+}
+
+bool WebAppBrowserController::IsWindowControlsOverlayEnabled() const {
+  if (!base::FeatureList::IsEnabled(features::kWebAppWindowControlsOverlay))
+    return false;
+
+  DisplayMode display = registrar().GetAppEffectiveDisplayMode(GetAppId());
+  return display == DisplayMode::kWindowControlsOverlay;
 }
 
 #if defined(OS_CHROMEOS)

@@ -87,6 +87,9 @@ void SetNodeDescription(BookmarkModel* model,
 void SetNodeSpeeddial(BookmarkModel* model,
                       const BookmarkNode* node,
                       bool speeddial);
+void SetNodeThumbnail(BookmarkModel* model,
+                      const BookmarkNode* node,
+                      const std::string& path);
 
 }  // namespace vivaldi_bookmark_kit
 

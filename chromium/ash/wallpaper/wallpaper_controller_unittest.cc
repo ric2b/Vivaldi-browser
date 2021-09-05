@@ -33,7 +33,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_observer.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/time/time_override.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -44,6 +44,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/aura/window.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/layer_animator_test_controller.h"
 #include "ui/display/display.h"
@@ -353,15 +354,18 @@ class WallpaperControllerTest : public AshTestBase {
   }
 
   // Runs AnimatingWallpaperWidgetController's animation to completion.
-  // TODO(bshe): Don't require tests to run animations; it's slow.
   void RunDesktopControllerAnimation() {
     WallpaperWidgetController* controller =
         Shell::Get()
             ->GetPrimaryRootWindowController()
             ->wallpaper_widget_controller();
     ASSERT_TRUE(controller);
-    ASSERT_NO_FATAL_FAILURE(
-        RunAnimationForLayer(controller->wallpaper_view()->layer()));
+
+    ui::LayerTreeOwner* owner = controller->old_layer_tree_owner_for_testing();
+    if (!owner)
+      return;
+
+    ASSERT_NO_FATAL_FAILURE(RunAnimationForLayer(owner->root()));
   }
 
   // Convenience function to ensure ShouldCalculateColors() returns true.
@@ -519,7 +523,7 @@ class WallpaperControllerTest : public AshTestBase {
     return controller_->decode_requests_for_testing_;
   }
 
-  void SetBypassDecode() { controller_->bypass_decode_for_testing_ = true; }
+  void SetBypassDecode() { controller_->set_bypass_decode_for_testing(); }
 
   void ClearWallpaperCount() { controller_->wallpaper_count_for_testing_ = 0; }
 
@@ -684,8 +688,7 @@ TEST_F(WallpaperControllerTest, ChangeWallpaperQuick) {
   controller->CreateEmptyWallpaperForTesting();
 
   // Run wallpaper show animation to completion.
-  ASSERT_NO_FATAL_FAILURE(
-      RunAnimationForLayer(widget_controller->wallpaper_view()->layer()));
+  RunDesktopControllerAnimation();
 
   EXPECT_FALSE(widget_controller->IsAnimating());
 }
@@ -1468,6 +1471,12 @@ TEST_F(WallpaperControllerTest, IgnoreWallpaperRequestInKioskMode) {
       controller_->GetUserWallpaperInfo(account_id_1, &wallpaper_info));
 }
 
+// Disable the wallpaper setting for public session since it is ephemeral.
+TEST_F(WallpaperControllerTest, NotShowWallpaperSettingInPublicSession) {
+  SimulateUserLogin("public_session", user_manager::USER_TYPE_PUBLIC_ACCOUNT);
+  EXPECT_FALSE(controller_->ShouldShowWallpaperSetting());
+}
+
 TEST_F(WallpaperControllerTest, IgnoreWallpaperRequestWhenPolicyIsEnforced) {
   SetBypassDecode();
   gfx::ImageSkia image = CreateImage(640, 480, kWallpaperColor);
@@ -1981,8 +1990,7 @@ TEST_F(WallpaperControllerTest, LockDuringOverview) {
                              ->wallpaper_view();
 
   // Make sure that wallpaper still have blur.
-  ASSERT_EQ(30, wallpaper_view->property().blur_sigma);
-  ASSERT_EQ(1, wallpaper_view->property().opacity);
+  ASSERT_EQ(30, wallpaper_view->blur_sigma());
 }
 
 TEST_F(WallpaperControllerTest, OnlyShowDevicePolicyWallpaperOnLoginScreen) {
@@ -2601,7 +2609,7 @@ TEST_F(WallpaperControllerTest, ShowOneShotWallpaper) {
   EXPECT_EQ(kOneShotWallpaperColor, GetWallpaperColor());
   EXPECT_EQ(WallpaperType::ONE_SHOT, controller_->GetWallpaperType());
   EXPECT_FALSE(controller_->IsBlurAllowedForLockState());
-  EXPECT_FALSE(controller_->ShouldApplyDimming());
+  EXPECT_FALSE(controller_->ShouldApplyColorFilter());
 
   // Verify that we can reload wallpaer without losing it.
   // This is important for screen rotation.
@@ -2611,7 +2619,7 @@ TEST_F(WallpaperControllerTest, ShowOneShotWallpaper) {
   EXPECT_EQ(kOneShotWallpaperColor, GetWallpaperColor());
   EXPECT_EQ(WallpaperType::ONE_SHOT, controller_->GetWallpaperType());
   EXPECT_FALSE(controller_->IsBlurAllowedForLockState());
-  EXPECT_FALSE(controller_->ShouldApplyDimming());
+  EXPECT_FALSE(controller_->ShouldApplyColorFilter());
 
   // Verify the user wallpaper info is unaffected, and the one-shot wallpaper
   // can be replaced by the user wallpaper.

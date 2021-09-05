@@ -77,13 +77,17 @@ struct GpuPreferences {
   bool watchdog_starts_backgrounded;
   GrContextType gr_context_type;
   VulkanImplementationName use_vulkan;
+  bool enable_vulkan_protected_memory;
   bool enforce_vulkan_protected_memory;
   bool disable_vulkan_surface;
   bool disable_vulkan_fallback_to_gl_for_testing;
+  uint32 vulkan_heap_memory_limit;
+  uint32 vulkan_sync_cpu_memory_limit;
   bool enable_metal;
   bool enable_gpu_benchmarking_extension;
   bool enable_webgpu;
   bool enable_dawn_backend_validation;
+  bool disable_dawn_robustness;
   bool enable_gpu_blocked_time_metric;
   bool enable_perf_data_collection;
 

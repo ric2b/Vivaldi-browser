@@ -48,9 +48,8 @@ NotifierStateTracker::NotifierStateTracker(Profile* profile)
       prefs::kMessageCenterDisabledExtensionIds, &disabled_extension_ids_);
 
   disabled_extension_id_pref_.Init(
-      prefs::kMessageCenterDisabledExtensionIds,
-      profile_->GetPrefs(),
-      base::Bind(
+      prefs::kMessageCenterDisabledExtensionIds, profile_->GetPrefs(),
+      base::BindRepeating(
           &NotifierStateTracker::OnStringListPrefChanged,
           base::Unretained(this),
           base::Unretained(prefs::kMessageCenterDisabledExtensionIds),
@@ -90,6 +89,14 @@ bool NotifierStateTracker::IsNotifierEnabled(
     case message_center::NotifierType::CROSTINI_APPLICATION:
 #if defined(OS_CHROMEOS)
       // Disabling Crostini notifications is not supported yet.
+      return true;
+#else
+      NOTREACHED();
+      break;
+#endif
+    case message_center::NotifierType::PHONE_HUB:
+#if defined(OS_CHROMEOS)
+      // PhoneHub notifications are controlled in their own settings.
       return true;
 #else
       break;

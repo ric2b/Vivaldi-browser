@@ -8,7 +8,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
-#include "chromeos/constants/chromeos_switches.h"
 
 namespace ash {
 namespace features {
@@ -28,6 +27,9 @@ const base::Feature kContextualNudges{"ContextualNudges",
 const base::Feature kDarkLightMode{"DarkLightMode",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kDesksRestore{"DesksRestore",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kDisplayAlignAssist{"DisplayAlignAssist",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -41,7 +43,10 @@ const base::Feature kDragToSnapInClamshellMode{
     "DragToSnapInClamshellMode", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnhancedDeskAnimations{"EnhancedDeskAnimations",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kFullRestore{"FullRestore",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLimitAltTabToActiveDesk{"LimitAltTabToActiveDesk",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -119,6 +124,9 @@ const base::Feature kHideShelfControlsInTabletMode{
     "HideShelfControlsInTabletMode", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kReverseScrollGestures{"EnableReverseScrollGestures",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kFullscreenAlertBubble{"EnableFullscreenBubble",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kSystemTrayMicGainSetting{"SystemTrayMicGainSetting",
@@ -127,17 +135,14 @@ const base::Feature kSystemTrayMicGainSetting{"SystemTrayMicGainSetting",
 const base::Feature kWebUITabStripTabDragIntegration{
     "WebUITabStripTabDragIntegration", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kShelfAppScaling{"ShelfAppScaling",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kNotificationsInContextMenu{
     "NotificationsInContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kMaintainShelfStateWhenEnteringOverview{
-    "MaintainShelfStateWhenEnteringOverview", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kTemporaryHoldingSpace{"TemporaryHoldingSpace",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kTemporaryHoldingSpacePreviews{
+    "TemporaryHoldingSpacePreviews", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kDragUnpinnedAppToPin{"DragUnpinnedAppToPin",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
@@ -168,6 +173,10 @@ bool IsDarkLightModeEnabled() {
 
 bool IsEnhancedDeskAnimations() {
   return base::FeatureList::IsEnabled(kEnhancedDeskAnimations);
+}
+
+bool IsFullRestoreEnabled() {
+  return base::FeatureList::IsEnabled(kFullRestore);
 }
 
 bool IsHideArcMediaNotificationsEnabled() {
@@ -212,6 +221,10 @@ bool IsPipRoundedCornersEnabled() {
   return base::FeatureList::IsEnabled(kPipRoundedCorners);
 }
 
+bool IsDesksRestoreEnabled() {
+  return base::FeatureList::IsEnabled(kDesksRestore);
+}
+
 bool IsSeparateNetworkIconsEnabled() {
   return base::FeatureList::IsEnabled(kSeparateNetworkIcons);
 }
@@ -240,25 +253,20 @@ bool IsBackgroundBlurEnabled() {
 #endif
 }
 
-bool IsDragFromShelfToHomeOrOverviewEnabled() {
-  // The kDragFromShelfToHomeOrOverview feature is only enabled on the devices
-  // that have hotseat enabled.
-  return chromeos::switches::ShouldShowShelfHotseat();
-}
-
 bool IsReduceDisplayNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kReduceDisplayNotifications);
 }
 
 bool IsHideShelfControlsInTabletModeEnabled() {
-  if (!IsDragFromShelfToHomeOrOverviewEnabled())
-    return false;
-
   return base::FeatureList::IsEnabled(kHideShelfControlsInTabletMode);
 }
 
 bool IsReverseScrollGesturesEnabled() {
   return base::FeatureList::IsEnabled(kReverseScrollGestures);
+}
+
+bool IsFullscreenAlertBubbleEnabled() {
+  return base::FeatureList::IsEnabled(kFullscreenAlertBubble);
 }
 
 bool AreContextualNudgesEnabled() {
@@ -287,21 +295,17 @@ bool IsMovablePartialScreenshotEnabled() {
   return base::FeatureList::IsEnabled(kMovablePartialScreenshot);
 }
 
-bool IsAppScalingEnabled() {
-  return base::FeatureList::IsEnabled(kShelfAppScaling) &&
-         chromeos::switches::ShouldShowShelfHotseat();
-}
-
 bool IsNotificationsInContextMenuEnabled() {
   return base::FeatureList::IsEnabled(kNotificationsInContextMenu);
 }
 
-bool IsMaintainShelfStateWhenEnteringOverviewEnabled() {
-  return base::FeatureList::IsEnabled(kMaintainShelfStateWhenEnteringOverview);
-}
-
 bool IsTemporaryHoldingSpaceEnabled() {
   return base::FeatureList::IsEnabled(kTemporaryHoldingSpace);
+}
+
+bool IsTemporaryHoldingSpacePreviewsEnabled() {
+  return base::FeatureList::IsEnabled(kTemporaryHoldingSpace) &&
+         base::FeatureList::IsEnabled(kTemporaryHoldingSpacePreviews);
 }
 
 bool IsDragUnpinnedAppToPinEnabled() {

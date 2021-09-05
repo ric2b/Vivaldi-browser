@@ -354,6 +354,9 @@ void SetProviderPolicy(MockConfigurationPolicyProvider* provider,
                        const base::Value& policies,
                        PolicyLevel level) {
   PolicyMap policy_map;
+#if defined(OS_CHROMEOS)
+  SetEnterpriseUsersDefaults(&policy_map);
+#endif  // defined(OS_CHROMEOS)
   for (const auto& it : policies.DictItems()) {
     const PolicyDetails* policy_details = GetChromePolicyDetails(it.first);
     ASSERT_TRUE(policy_details);
@@ -400,7 +403,7 @@ void VerifyAllPoliciesHaveATestCase(const base::FilePath& test_case_path) {
     LOG_IF(WARNING, !has_test_case_for_this_os)
         << "Policy " << policy->first
         << " is marked as supported on this OS in policy_templates.json but "
-        << "have a test for this platform in policy_test_cases.json.";
+        << "there is no test for this platform in policy_test_cases.json.";
   }
 }
 

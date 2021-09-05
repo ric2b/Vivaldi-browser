@@ -13,7 +13,7 @@
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class GURL;
@@ -34,6 +34,7 @@ namespace web_app {
 class AppRegistrarObserver;
 class WebAppRegistrar;
 class WebApp;
+class OsIntegrationManager;
 
 enum class ExternalInstallSource;
 
@@ -142,6 +143,8 @@ class AppRegistrar {
   virtual WebAppRegistrar* AsWebAppRegistrar() = 0;
   virtual extensions::BookmarkAppRegistrar* AsBookmarkAppRegistrar();
 
+  void SetSubsystems(OsIntegrationManager* os_integration_manager);
+
   // Returns the "scope" field from the app manifest, or infers a scope from the
   // "start_url" field if unavailable. Returns an invalid GURL iff the |app_id|
   // does not refer to an installed web app.
@@ -206,8 +209,14 @@ class AppRegistrar {
   void NotifyWebAppInstallTimeChanged(const AppId& app_id,
                                       const base::Time& time);
 
+  // Notify when OS hooks installation is finished during Web App installation.
+  void NotifyWebAppInstalledWithOsHooks(const AppId& app_id);
+
  protected:
   Profile* profile() const { return profile_; }
+  OsIntegrationManager& os_integration_manager() {
+    return *os_integration_manager_;
+  }
 
   void NotifyWebAppProfileWillBeDeleted(const AppId& app_id);
   void NotifyAppRegistrarShutdown();
@@ -216,6 +225,7 @@ class AppRegistrar {
   Profile* const profile_;
 
   base::ObserverList<AppRegistrarObserver, /*check_empty=*/true> observers_;
+  OsIntegrationManager* os_integration_manager_ = nullptr;
 };
 
 }  // namespace web_app

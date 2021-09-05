@@ -27,7 +27,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
@@ -82,6 +81,7 @@
 #include "net/dns/host_resolver_mdns_listener_impl.h"
 #include "net/dns/host_resolver_mdns_task.h"
 #include "net/dns/host_resolver_proc.h"
+#include "net/dns/https_record_rdata.h"
 #include "net/dns/httpssvc_metrics.h"
 #include "net/dns/mdns_client.h"
 #include "net/dns/public/dns_protocol.h"
@@ -461,6 +461,36 @@ void NetLogHostCacheEntry(const NetLogWithSource& net_log,
   net_log.AddEntry(type, phase, [&] { return results.NetLogParams(); });
 }
 
+void SaveMetricsForAdditionalHttpsRecord(const RecordParsed& record,
+                                         bool is_unsolicited) {
+  const HttpsRecordRdata* rdata = record.rdata<HttpsRecordRdata>();
+
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class UnsolicitedHttpsRecordStatus {
+    kMalformed = 0,
+    kAlias = 1,
+    kService = 2,
+    kMaxValue = kService
+  } status;
+
+  if (!rdata || rdata->IsMalformed()) {
+    status = UnsolicitedHttpsRecordStatus::kMalformed;
+  } else if (rdata->IsAlias()) {
+    status = UnsolicitedHttpsRecordStatus::kAlias;
+  } else {
+    status = UnsolicitedHttpsRecordStatus::kService;
+  }
+
+  if (is_unsolicited) {
+    UMA_HISTOGRAM_ENUMERATION("Net.DNS.DnsTask.AdditionalHttps.Unsolicited",
+                              status);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("Net.DNS.DnsTask.AdditionalHttps.Requested",
+                              status);
+  }
+}
+
 }  // namespace
 
 //-----------------------------------------------------------------------------
@@ -576,12 +606,12 @@ class HostResolverManager::RequestImpl
     return results_ ? results_.value().hostnames() : *nullopt_result;
   }
 
-  const base::Optional<std::vector<bool>>& GetIntegrityResultsForTesting()
+  const base::Optional<std::vector<bool>>& GetExperimentalResultsForTesting()
       const override {
     DCHECK(complete_);
     static const base::NoDestructor<base::Optional<std::vector<bool>>>
         nullopt_result;
-    return results_ ? results_.value().integrity_data() : *nullopt_result;
+    return results_ ? results_.value().experimental_results() : *nullopt_result;
   }
 
   net::ResolveErrorInfo GetResolveErrorInfo() const override {
@@ -1093,7 +1123,8 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
           SecureDnsMode secure_dns_mode,
           Delegate* delegate,
           const NetLogWithSource& job_net_log,
-          const base::TickClock* tick_clock)
+          const base::TickClock* tick_clock,
+          bool fallback_available)
       : client_(client),
         hostname_(hostname),
         resolve_context_(resolve_context),
@@ -1103,7 +1134,8 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
         net_log_(job_net_log),
         num_completed_transactions_(0),
         tick_clock_(tick_clock),
-        task_start_time_(tick_clock_->NowTicks()) {
+        task_start_time_(tick_clock_->NowTicks()),
+        fallback_available_(fallback_available) {
     DCHECK(client_);
     if (secure_)
       DCHECK(client_->CanUseSecureDnsTransactions());
@@ -1122,15 +1154,15 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
       const bool is_httpssvc_control_domain =
           httpssvc_domain_cache_.IsControl(hostname);
       if (base::FeatureList::IsEnabled(features::kDnsHttpssvc) &&
-          features::kDnsHttpssvcUseIntegrity.Get() &&
           (secure_ || features::kDnsHttpssvcEnableQueryOverInsecure.Get()) &&
           (is_httpssvc_experiment_domain || is_httpssvc_control_domain)) {
-        // We should not be configured to query HTTPSSVC *and* INTEGRITY.
-        DCHECK(!features::kDnsHttpssvcUseHttpssvc.Get());
-
         httpssvc_metrics_.emplace(
             is_httpssvc_experiment_domain /* expect_intact */);
-        transactions_needed_.push(DnsQueryType::INTEGRITY);
+
+        if (features::kDnsHttpssvcUseIntegrity.Get())
+          transactions_needed_.push(DnsQueryType::INTEGRITY);
+        if (features::kDnsHttpssvcUseHttpssvc.Get())
+          transactions_needed_.push(DnsQueryType::HTTPS);
       }
     }
     num_needed_transactions_ = transactions_needed_.size();
@@ -1186,29 +1218,36 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
             base::BindOnce(&DnsTask::OnTransactionComplete,
                            base::Unretained(this), tick_clock_->NowTicks(),
                            dns_query_type),
-            net_log_, secure_, secure_dns_mode_, resolve_context_);
+            net_log_, secure_, secure_dns_mode_, resolve_context_,
+            fallback_available_ /* fast_timeout */);
     trans->SetRequestPriority(delegate_->priority());
     return trans;
   }
 
-  void OnExperimentalQueryTimeout(uint16_t qtype,
-                                  base::Optional<std::string> doh_provider_id) {
-    // The experimental query timer is only started when all other transactions
-    // have completed.
-    DCHECK(TaskIsCompleteOrOnlyQtypeTransactionsRemain(qtype));
+  void OnExperimentalQueryTimeout(base::Optional<std::string> doh_provider_id) {
+    for (std::unique_ptr<DnsTransaction>& transaction : transactions_started_) {
+      DCHECK(httpssvc_metrics_);
+      base::TimeDelta elapsed_time = tick_clock_->NowTicks() - task_start_time_;
+
+      switch (transaction->GetType()) {
+        case dns_protocol::kExperimentalTypeIntegrity:
+          httpssvc_metrics_->SaveForIntegrity(
+              doh_provider_id, HttpssvcDnsRcode::kTimedOut, {}, elapsed_time);
+          break;
+        case dns_protocol::kTypeHttps:
+          httpssvc_metrics_->SaveForHttps(
+              doh_provider_id, HttpssvcDnsRcode::kTimedOut, {}, elapsed_time);
+          break;
+        default:
+          // The experimental query timer is only started when all other
+          // transactions have completed.
+          NOTREACHED();
+      }
+    }
 
     num_completed_transactions_ += transactions_started_.size();
     DCHECK(num_completed_transactions_ == num_needed_transactions());
     transactions_started_.clear();
-
-    if (qtype == dns_protocol::kExperimentalTypeIntegrity) {
-      DCHECK(httpssvc_metrics_);
-
-      // Record that this INTEGRITY query timed out in the metrics.
-      base::TimeDelta elapsed_time = tick_clock_->NowTicks() - task_start_time_;
-      httpssvc_metrics_->SaveForIntegrity(
-          doh_provider_id, HttpssvcDnsRcode::kTimedOut, {}, elapsed_time);
-    }
 
     ProcessResultsOnCompletion();
   }
@@ -1251,8 +1290,9 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
 
     if (net_error != OK && !(net_error == ERR_NAME_NOT_RESOLVED && response &&
                              response->IsValid())) {
-      if (dns_query_type == DnsQueryType::INTEGRITY) {
-        // Do not allow an INTEGRITY query to fail the whole DnsTask.
+      if (dns_query_type == DnsQueryType::INTEGRITY ||
+          dns_query_type == DnsQueryType::HTTPS) {
+        // Do not allow an experimental query to fail the whole DnsTask.
         response = nullptr;
       } else {
         OnFailure(net_error, DnsResponse::DNS_PARSE_OK, base::nullopt);
@@ -1284,6 +1324,9 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
         // Parse the INTEGRITY records, condensing them into a vector<bool>.
         parse_result = ParseIntegrityDnsResponse(response, &results);
         break;
+      case DnsQueryType::HTTPS:
+        parse_result = ParseHttpsDnsResponse(response, &results);
+        break;
     }
     DCHECK_LT(parse_result, DnsResponse::DNS_PARSE_RESULT_MAX);
 
@@ -1293,17 +1336,23 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
     }
 
     if (httpssvc_metrics_) {
-      if (dns_query_type != DnsQueryType::INTEGRITY) {
-        httpssvc_metrics_->SaveForNonIntegrity(doh_provider_id, elapsed_time,
-                                               rcode_for_httpssvc);
-      } else {
+      if (dns_query_type == DnsQueryType::INTEGRITY) {
         const base::Optional<std::vector<bool>>& condensed =
-            results.integrity_data();
+            results.experimental_results();
         CHECK(condensed.has_value());
         // INTEGRITY queries can time out the normal way (here), or when the
         // experimental query timer runs out (OnExperimentalQueryTimeout).
         httpssvc_metrics_->SaveForIntegrity(doh_provider_id, rcode_for_httpssvc,
                                             *condensed, elapsed_time);
+      } else if (dns_query_type == DnsQueryType::HTTPS) {
+        const base::Optional<std::vector<bool>>& condensed =
+            results.experimental_results();
+        CHECK(condensed.has_value());
+        httpssvc_metrics_->SaveForHttps(doh_provider_id, rcode_for_httpssvc,
+                                        *condensed, elapsed_time);
+      } else {
+        httpssvc_metrics_->SaveForAddressQuery(doh_provider_id, elapsed_time,
+                                               rcode_for_httpssvc);
       }
     }
 
@@ -1326,6 +1375,8 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
               std::move(results), std::move(saved_results_).value());
           break;
         case DnsQueryType::INTEGRITY:
+        case DnsQueryType::HTTPS:
+          // No particular importance to order.
           results = HostCache::Entry::MergeEntries(
               std::move(results), std::move(saved_results_).value());
           break;
@@ -1389,7 +1440,7 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
                                               HostCache::Entry* out_results) {
     DCHECK(response);
     AddressList addresses;
-    base::TimeDelta ttl;
+    base::Optional<base::TimeDelta> ttl;
     DnsResponse::Result parse_result =
         response->ParseToAddressList(&addresses, &ttl);
 
@@ -1497,7 +1548,8 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
                                                 HostCache::Entry* out_results) {
     base::Optional<base::TimeDelta> response_ttl;
     const HostCache::Entry default_entry(
-        OK, std::vector<bool>(), HostCache::Entry::SOURCE_DNS, response_ttl);
+        ERR_NAME_NOT_RESOLVED, std::vector<bool>(),
+        HostCache::Entry::SOURCE_DNS, response_ttl);
 
     if (response == nullptr) {
       *out_results = default_entry;
@@ -1523,8 +1575,52 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
       condensed_results.push_back(rdata.IsIntact());
     }
 
-    *out_results = HostCache::Entry(OK, std::move(condensed_results),
-                                    HostCache::Entry::SOURCE_DNS, response_ttl);
+    *out_results =
+        HostCache::Entry(ERR_NAME_NOT_RESOLVED, std::move(condensed_results),
+                         HostCache::Entry::SOURCE_DNS, response_ttl);
+    DCHECK_EQ(parse_result, DnsResponse::DNS_PARSE_OK);
+    return parse_result;
+  }
+
+  DnsResponse::Result ParseHttpsDnsResponse(const DnsResponse* response,
+                                            HostCache::Entry* out_results) {
+    base::Optional<base::TimeDelta> response_ttl;
+    HostCache::Entry default_entry(ERR_NAME_NOT_RESOLVED, std::vector<bool>(),
+                                   HostCache::Entry::SOURCE_DNS, response_ttl);
+
+    // As HTTPS is currently only used for experimental queries, request
+    // failures are not treated as critical, and flow may reach here without a
+    // response.
+    //
+    // TODO(crbug.com/1138620): As HTTPS becomes less experimental, reevaluate
+    // request failures and consider making having a response required to call
+    // this method.
+    if (response == nullptr) {
+      *out_results = std::move(default_entry);
+      return DnsResponse::Result::DNS_PARSE_OK;
+    }
+
+    std::vector<std::unique_ptr<const RecordParsed>> records;
+    DnsResponse::Result parse_result = ParseAndFilterResponseRecords(
+        response, dns_protocol::kTypeHttps, &records, &response_ttl);
+
+    // If the response couldn't be parsed, assume no HTTPS records.
+    if (parse_result != DnsResponse::DNS_PARSE_OK) {
+      *out_results = std::move(default_entry);
+      return DnsResponse::Result::DNS_PARSE_OK;
+    }
+
+    // Condense results into a list of booleans. We do not cache the results,
+    // but this enables us to write some unit tests.
+    std::vector<bool> condensed_results;
+    for (const auto& record : records) {
+      const HttpsRecordRdata& rdata = *record->rdata<HttpsRecordRdata>();
+      condensed_results.push_back(!rdata.IsMalformed());
+    }
+
+    *out_results =
+        HostCache::Entry(ERR_NAME_NOT_RESOLVED, std::move(condensed_results),
+                         HostCache::Entry::SOURCE_DNS, response_ttl);
     DCHECK_EQ(parse_result, DnsResponse::DNS_PARSE_OK);
     return parse_result;
   }
@@ -1622,6 +1718,39 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
       }
     }
 
+    // For NXDOMAIN or NODATA (NOERROR with 0 answers), attempt to find a TTL
+    // via an SOA record.
+    if (response->rcode() == dns_protocol::kRcodeNXDOMAIN ||
+        (response->answer_count() == 0 &&
+         response->rcode() == dns_protocol::kRcodeNOERROR)) {
+      bool soa_found = false;
+      for (unsigned i = 0; i < response->authority_count(); ++i) {
+        DnsResourceRecord record;
+        if (parser.ReadRecord(&record) &&
+            record.type == dns_protocol::kTypeSOA) {
+          soa_found = true;
+          base::TimeDelta ttl = base::TimeDelta::FromSeconds(record.ttl);
+          *out_response_ttl =
+              std::min(out_response_ttl->value_or(base::TimeDelta::Max()), ttl);
+        }
+      }
+
+      // Per RFC2308, section 5, never cache negative results unless an SOA
+      // record is found.
+      if (!soa_found)
+        out_response_ttl->reset();
+    }
+
+    for (unsigned i = 0; i < response->additional_answer_count(); ++i) {
+      std::unique_ptr<const RecordParsed> record =
+          RecordParsed::CreateFrom(&parser, base::Time::Now());
+      if (record && record->klass() == dns_protocol::kClassIN &&
+          record->type() == dns_protocol::kTypeHttps) {
+        bool is_unsolicited = filter_dns_type != dns_protocol::kTypeHttps;
+        SaveMetricsForAdditionalHttpsRecord(*record, is_unsolicited);
+      }
+    }
+
     return DnsResponse::DNS_PARSE_OK;
   }
 
@@ -1655,29 +1784,14 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
                  DnsResponse::Result parse_result,
                  base::Optional<base::TimeDelta> ttl) {
     if (httpssvc_metrics_)
-      httpssvc_metrics_->SaveNonIntegrityFailure();
+      httpssvc_metrics_->SaveAddressQueryFailure();
 
     DCHECK_NE(OK, net_error);
-    HostCache::Entry results(net_error, HostCache::Entry::SOURCE_UNKNOWN);
+    HostCache::Entry results(net_error, HostCache::Entry::SOURCE_UNKNOWN, ttl);
 
     net_log_.EndEvent(NetLogEventType::HOST_RESOLVER_IMPL_DNS_TASK, [&] {
       return NetLogDnsTaskFailedParams(results, parse_result);
     });
-
-    // If we have a TTL from a previously completed transaction, use it.
-    base::TimeDelta previous_transaction_ttl;
-    if (saved_results_ && saved_results_.value().has_ttl() &&
-        saved_results_.value().ttl() <
-            base::TimeDelta::FromSeconds(
-                std::numeric_limits<uint32_t>::max())) {
-      previous_transaction_ttl = saved_results_.value().ttl();
-      if (ttl)
-        results.set_ttl(std::min(ttl.value(), previous_transaction_ttl));
-      else
-        results.set_ttl(previous_transaction_ttl);
-    } else if (ttl) {
-      results.set_ttl(ttl.value());
-    }
 
     delegate_->OnDnsTaskComplete(task_start_time_, results, secure_);
   }
@@ -1692,7 +1806,8 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
   // |qtype|. (In particular, this is the case if all transactions are
   // complete.) Used for logging and starting the experimental query timer (see
   // MaybeStartExperimentalQueryTimer).
-  bool TaskIsCompleteOrOnlyQtypeTransactionsRemain(uint16_t qtype) const {
+  bool TaskIsCompleteOrOnlyQtypeTransactionsRemain(
+      std::initializer_list<uint16_t> qtypes) const {
     // Since DoH runs all transactions concurrently and experimental types are
     // only queried over DoH, this method only needs to check the transactions
     // in transactions_started_ because transactions_needed_ is empty from the
@@ -1701,12 +1816,13 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
 
     return std::all_of(
         transactions_started_.begin(), transactions_started_.end(),
-        [&](const std::unique_ptr<DnsTransaction>& p) {
-          DCHECK(p);
-          return p->GetType() == qtype;
+        [&](const std::unique_ptr<DnsTransaction>& transaction) {
+          DCHECK(transaction);
+          return std::any_of(qtypes.begin(), qtypes.end(), [&](uint16_t qtype) {
+            return transaction->GetType() == qtype;
+          });
         });
   }
-
 
   void MaybeStartExperimentalQueryTimer(
       base::Optional<std::string> doh_provider_id) {
@@ -1721,7 +1837,8 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
 
     if (!experimental_query_cancellation_timer_.IsRunning() &&
         TaskIsCompleteOrOnlyQtypeTransactionsRemain(
-            dns_protocol::kExperimentalTypeIntegrity)) {
+            {dns_protocol::kExperimentalTypeIntegrity,
+             dns_protocol::kTypeHttps})) {
       const base::TimeDelta kExtraTimeAbsolute =
           features::dns_httpssvc_experiment::GetExtraTimeAbsolute();
       const int kExtraTimePercent =
@@ -1731,14 +1848,16 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
           tick_clock_->NowTicks() - task_start_time_;
       base::TimeDelta relative_timeout =
           total_time_for_other_transactions * kExtraTimePercent / 100;
+      // Use at least 1ms to ensure timeout doesn't occur immediately in tests.
+      relative_timeout =
+          std::max(relative_timeout, base::TimeDelta::FromMilliseconds(1));
 
       base::TimeDelta timeout = std::min(kExtraTimeAbsolute, relative_timeout);
 
       experimental_query_cancellation_timer_.Start(
           FROM_HERE, timeout,
-          base::BindOnce(
-              &DnsTask::OnExperimentalQueryTimeout, base::Unretained(this),
-              dns_protocol::kExperimentalTypeIntegrity, doh_provider_id));
+          base::BindOnce(&DnsTask::OnExperimentalQueryTimeout,
+                         base::Unretained(this), doh_provider_id));
     }
   }
 
@@ -1774,6 +1893,11 @@ class HostResolverManager::DnsTask : public base::SupportsWeakPtr<DnsTask> {
   // Timer for early abort of experimental queries. See comments describing the
   // timeout parameters in net/base/features.h.
   base::OneShotTimer experimental_query_cancellation_timer_;
+
+  // If true, there are still significant fallback options available if this
+  // task completes unsuccessfully. Used as a signal that underlying
+  // transactions should timeout more quickly.
+  bool fallback_available_;
 
   DISALLOW_COPY_AND_ASSIGN(DnsTask);
 };
@@ -2290,7 +2414,8 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
     // running it, as a "started" job needs a task to be properly cleaned up.
     dns_task_.reset(new DnsTask(resolver_->dns_client_.get(), hostname_,
                                 query_type_, resolve_context_, secure,
-                                secure_dns_mode_, this, net_log_, tick_clock_));
+                                secure_dns_mode_, this, net_log_, tick_clock_,
+                                !tasks_.empty() /* fallback_available */));
     dns_task_->StartNextTransaction();
     // Schedule a second transaction, if needed. DoH queries can bypass the
     // dispatcher and start all of their transactions immediately.

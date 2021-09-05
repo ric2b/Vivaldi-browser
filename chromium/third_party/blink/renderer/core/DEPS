@@ -17,7 +17,7 @@ include_rules = [
     "+base/synchronization/waitable_event.h",
     "+base/values.h",
     "+base/task/sequence_manager/task_time_observer.h",
-    "+base/test/bind_test_util.h",
+    "+base/test/bind.h",
     "+base/test/simple_test_tick_clock.h",
     "+base/time",
     "+base/unguessable_token.h",
@@ -29,6 +29,7 @@ include_rules = [
     "+cc/animation/scroll_offset_animation_curve.h",
     "+cc/animation/scroll_state.h",
     "+cc/animation/scroll_timeline.h",
+    "+cc/base/features.h",
     "+cc/base/region.h",
     "+cc/input/browser_controls_state.h",
     "+cc/input/event_listener_properties.h",
@@ -83,6 +84,7 @@ include_rules = [
     "+services/service_manager/public",
     "+skia/public/mojom",
     "+skia/ext/image_operations.h",
+    "+skia/ext/legacy_display_globals.h",
     "+skia/ext/skia_utils_mac.h",
     "+third_party/blink/public/common",
     "+third_party/blink/public/mojom",
@@ -159,9 +161,6 @@ specific_include_rules = {
     ],
     "element_test.cc": [
         "+third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
-    ],
-    "frame.cc": [
-        "+third_party/blink/renderer/core/exported/web_remote_frame_impl.h"
     ],
     "html_canvas_painter_test.cc": [
         "+components/viz/test/test_context_provider.h",

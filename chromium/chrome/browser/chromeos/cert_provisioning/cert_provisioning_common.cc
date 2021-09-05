@@ -4,10 +4,12 @@
 
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_common.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_impl.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
@@ -15,7 +17,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
-#include "chromeos/dbus/cryptohome/cryptohome_client.h"
+#include "chromeos/dbus/attestation/attestation_client.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
 
@@ -41,6 +44,35 @@ base::Optional<AccountId> GetAccountId(CertScope scope, Profile* profile) {
 
   NOTREACHED();
 }
+
+// This function implements `DeleteVaKey()` and `DeleteVaKeysByPrefix()`, both
+// of which call this function with a proper match behavior.
+void DeleteVaKeysWithMatchBehavior(
+    CertScope scope,
+    Profile* profile,
+    ::attestation::DeleteKeysRequest::MatchBehavior match_behavior,
+    const std::string& label_match,
+    DeleteVaKeyCallback callback) {
+  auto account_id = GetAccountId(scope, profile);
+  if (!account_id.has_value()) {
+    std::move(callback).Run(false);
+    return;
+  }
+  ::attestation::DeleteKeysRequest request;
+  request.set_username(
+      cryptohome::CreateAccountIdentifierFromAccountId(account_id.value())
+          .account_id());
+  request.set_key_label_match(label_match);
+  request.set_match_behavior(match_behavior);
+
+  auto wrapped_callback = [](DeleteVaKeyCallback cb,
+                             const ::attestation::DeleteKeysReply& reply) {
+    std::move(cb).Run(reply.status() == ::attestation::STATUS_SUCCESS);
+  };
+  AttestationClient::Get()->DeleteKeys(
+      request, base::BindOnce(wrapped_callback, std::move(callback)));
+}
+
 }  // namespace
 
 bool IsFinalState(CertProvisioningWorkerState state) {
@@ -170,14 +202,8 @@ void DeleteVaKey(CertScope scope,
                  Profile* profile,
                  const std::string& key_name,
                  DeleteVaKeyCallback callback) {
-  auto account_id = GetAccountId(scope, profile);
-  if (!account_id.has_value()) {
-    return;
-  }
-
-  CryptohomeClient::Get()->TpmAttestationDeleteKey(
-      GetVaKeyType(scope),
-      cryptohome::CreateAccountIdentifierFromAccountId(account_id.value()),
+  DeleteVaKeysWithMatchBehavior(
+      scope, profile, ::attestation::DeleteKeysRequest::MATCH_BEHAVIOR_EXACT,
       key_name, std::move(callback));
 }
 
@@ -185,14 +211,8 @@ void DeleteVaKeysByPrefix(CertScope scope,
                           Profile* profile,
                           const std::string& key_prefix,
                           DeleteVaKeyCallback callback) {
-  auto account_id = GetAccountId(scope, profile);
-  if (!account_id.has_value()) {
-    return;
-  }
-
-  CryptohomeClient::Get()->TpmAttestationDeleteKeysByPrefix(
-      GetVaKeyType(scope),
-      cryptohome::CreateAccountIdentifierFromAccountId(account_id.value()),
+  DeleteVaKeysWithMatchBehavior(
+      scope, profile, ::attestation::DeleteKeysRequest::MATCH_BEHAVIOR_PREFIX,
       key_prefix, std::move(callback));
 }
 
@@ -219,6 +239,19 @@ platform_keys::PlatformKeysService* GetPlatformKeysService(CertScope scope,
     case CertScope::kDevice:
       return platform_keys::PlatformKeysServiceFactory::GetInstance()
           ->GetDeviceWideService();
+  }
+}
+
+platform_keys::KeyPermissionsManager* GetKeyPermissionsManager(
+    CertScope scope,
+    Profile* profile) {
+  switch (scope) {
+    case CertScope::kUser:
+      return platform_keys::KeyPermissionsManagerImpl::
+          GetUserPrivateTokenKeyPermissionsManager(profile);
+    case CertScope::kDevice:
+      return platform_keys::KeyPermissionsManagerImpl::
+          GetSystemTokenKeyPermissionsManager();
   }
 }
 

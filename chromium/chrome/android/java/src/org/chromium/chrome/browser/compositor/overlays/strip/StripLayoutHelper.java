@@ -28,14 +28,14 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton;
 import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton.CompositorOnClickHandler;
-import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackScroller;
 import org.chromium.chrome.browser.compositor.overlays.strip.TabLoadTracker.TabLoadTrackerCallback;
+import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
+import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -48,6 +48,7 @@ import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * This class handles managing the positions and behavior of all tabs in a tab strip.  It is
@@ -1653,6 +1654,9 @@ public class StripLayoutHelper implements StripLayoutTab.StripLayoutTabDelegate 
                 -(tabView.getHeight()
                         - (int) mContext.getResources().getDimension(R.dimen.tab_strip_height))
                 - ((MarginLayoutParams) tabView.getLayoutParams()).topMargin;
+        // Vivaldi - Note(nagamani@vivaldi.com): Don't apply vertical offset when address bar is at
+        // the bottom
+        if (!VivaldiUtils.isTopToolbarOn()) verticalOffset = 0;
         mTabMenu.setVerticalOffset(verticalOffset);
 
         // 4. Set the horizontal offset to align the tab menu with the right side of the tab

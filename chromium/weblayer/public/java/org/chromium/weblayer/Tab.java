@@ -18,6 +18,7 @@ import org.json.JSONObject;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.IClientNavigation;
+import org.chromium.weblayer_private.interfaces.IContextMenuParams;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFullscreenCallbackClient;
 import org.chromium.weblayer_private.interfaces.IGoogleAccountsCallbackClient;
@@ -56,6 +57,7 @@ public class Tab {
     private FullscreenCallbackClientImpl mFullscreenCallbackClient;
     private NewTabCallback mNewTabCallback;
     private final ObserverList<ScrollOffsetCallback> mScrollOffsetCallbacks;
+    private @Nullable ActionModeCallback mActionModeCallback;
     // Id from the remote side.
     private final int mId;
 
@@ -126,6 +128,35 @@ public class Tab {
 
     void setBrowser(Browser browser) {
         mBrowser = browser;
+    }
+
+    /**
+     * Returns true if this Tab has been destroyed.
+     */
+    public boolean isDestroyed() {
+        ThreadCheck.ensureOnUiThread();
+        return mImpl == null;
+    }
+
+    /**
+     * Returns whether the tab will automatically reload after its renderer process is lost.
+     *
+     * This returns true if the tab is known not to be visible, specifically if the tab is not
+     * active in its browser or its Fragment is not started. When a tab in this state loses its
+     * renderer process to a crash (or due to system memory reclamation), it will automatically
+     * reload next the time it becomes possibly visible.
+     */
+    public boolean willAutomaticallyReloadAfterCrash() {
+        ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
+        if (WebLayer.getSupportedMajorVersionInternal() < 88) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mImpl.willAutomaticallyReloadAfterCrash();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
     }
 
     @NonNull
@@ -732,10 +763,98 @@ public class Tab {
         }
     }
 
+    /**
+     * Allow controlling and overriding custom items in the floating seleciton menu.
+     * Note floating action mode is available on M and up.
+     * @param actionModeItemTypes a bit field of values in ActionModeItemType.
+     * @param callback can be null if actionModeItemTypes is 0.
+     *
+     * @since 88
+     */
+    public void setFloatingActionModeOverride(
+            int actionModeItemTypes, @Nullable ActionModeCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
+        if (WebLayer.getSupportedMajorVersionInternal() < 88) {
+            throw new UnsupportedOperationException();
+        }
+        mActionModeCallback = callback;
+        try {
+            mImpl.setFloatingActionModeOverride(actionModeItemTypes);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Turns on desktop user agent if enable is true, otherwise reverts back to mobile user agent.
+     * The selected user agent will be used for future navigations until this method is called
+     * again. Each navigation saves the user agent mode it was navigated with and will reuse that on
+     * back/forward navigations. The tab will be reloaded with the new user agent.
+     * @param enable if true requests desktop site, otherwise mobile site.
+     *
+     * @since 88
+     */
+    public void setDesktopUserAgentEnabled(boolean enable) {
+        if (WebLayer.getSupportedMajorVersionInternal() < 88) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.setDesktopUserAgentEnabled(enable);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Returns true if the currently loaded page used a desktop user agent.
+     *
+     * @since 88
+     */
+    public boolean isDesktopUserAgentEnabled() {
+        if (WebLayer.getSupportedMajorVersionInternal() < 88) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mImpl.isDesktopUserAgentEnabled();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Downloads the item linked to from the context menu. This could be an image/video or link.
+     * This will request the WRITE_EXTERNAL_STORAGE permission if it's not granted to the app.
+     *
+     * @throws IllegalArgumentException if {@link ContextMenuParams.canDownload} is false or if
+     *         the ContextMenuParams object parameter wasn't constructed by WebLayer.
+     *
+     * @since 88
+     */
+    public void download(ContextMenuParams contextMenuParams) {
+        if (WebLayer.getSupportedMajorVersionInternal() < 88) {
+            throw new UnsupportedOperationException();
+        }
+        if (!contextMenuParams.canDownload) {
+            throw new IllegalArgumentException("ContextMenuParams not downloadable.");
+        }
+        if (contextMenuParams.mContextMenuParams == null) {
+            throw new IllegalArgumentException("ContextMenuParams not constructed by WebLayer.");
+        }
+
+        try {
+            mImpl.download(contextMenuParams.mContextMenuParams);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     // Called by Browser when removed.
     void onRemovedFromBrowser() {
         if (mDestroyOnRemove) {
-            unregisterTab(this);
+            // If this is destroyed as part of destroying the browser, then the tab has already been
+            // unregistered.
+            if (getTabById(mId) == this) unregisterTab(this);
             mDestroyOnRemove = false;
             mImpl = null;
         }
@@ -801,9 +920,9 @@ public class Tab {
 
         @Override
         public void onTabDestroyed() {
-            // Prior to 87 this was called *before* onTabRemoved(). Post 87 this is called after
-            // onTabRemoved(). onTabRemoved() needs the Tab to be registered, so unregisterTab()
-            // should only be called in >= 87 (in < 87 it is called from
+            // Prior to 87 this was potentially called *before* onTabRemoved(). Post 87 this is
+            // called after onTabRemoved(). onTabRemoved() needs the Tab to be registered, so
+            // unregisterTab() should only be called in >= 87 (in < 87 it is called from
             // Browser.prepareForDestroy()).
             if (WebLayer.getSupportedMajorVersionInternal() >= 87) {
                 unregisterTab(Tab.this);
@@ -811,7 +930,12 @@ public class Tab {
                 // into the implementation via this Tab.
                 mImpl = null;
             } else {
+                // This Tab should not have been destroyed yet.
+                assert mImpl != null;
                 mDestroyOnRemove = true;
+                // If the tab isn't registered, it means the Browser fragment was destroyed, in
+                // which case there is no call to onTabRemoved().
+                if (getTabById(mId) == null) onRemovedFromBrowser();
             }
         }
 
@@ -826,6 +950,15 @@ public class Tab {
         @Override
         public void showContextMenu(IObjectWrapper pageUrl, IObjectWrapper linkUrl,
                 IObjectWrapper linkText, IObjectWrapper titleOrAltText, IObjectWrapper srcUrl) {
+            showContextMenu2(
+                    pageUrl, linkUrl, linkText, titleOrAltText, srcUrl, false, false, false, null);
+        }
+
+        @Override
+        public void showContextMenu2(IObjectWrapper pageUrl, IObjectWrapper linkUrl,
+                IObjectWrapper linkText, IObjectWrapper titleOrAltText, IObjectWrapper srcUrl,
+                boolean isImage, boolean isVideo, boolean canDownload,
+                IContextMenuParams contextMenuParams) {
             StrictModeWorkaround.apply();
             String pageUrlString = ObjectWrapper.unwrap(pageUrl, String.class);
             String linkUrlString = ObjectWrapper.unwrap(linkUrl, String.class);
@@ -834,7 +967,8 @@ public class Tab {
                     linkUrlString != null ? Uri.parse(linkUrlString) : null,
                     ObjectWrapper.unwrap(linkText, String.class),
                     ObjectWrapper.unwrap(titleOrAltText, String.class),
-                    srcUrlString != null ? Uri.parse(srcUrlString) : null);
+                    srcUrlString != null ? Uri.parse(srcUrlString) : null, isImage, isVideo,
+                    canDownload, contextMenuParams);
             for (TabCallback callback : mCallbacks) {
                 callback.showContextMenu(params);
             }
@@ -887,6 +1021,16 @@ public class Tab {
             StrictModeWorkaround.apply();
             for (ScrollOffsetCallback callback : mScrollOffsetCallbacks) {
                 callback.onVerticalScrollOffsetChanged(value);
+            }
+        }
+
+        @Override
+        public void onActionItemClicked(
+                int actionModeItemType, IObjectWrapper selectedStringWrapper) {
+            StrictModeWorkaround.apply();
+            String selectedString = ObjectWrapper.unwrap(selectedStringWrapper, String.class);
+            if (mActionModeCallback != null) {
+                mActionModeCallback.onActionItemClicked(actionModeItemType, selectedString);
             }
         }
     }

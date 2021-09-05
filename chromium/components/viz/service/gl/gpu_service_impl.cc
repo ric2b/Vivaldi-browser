@@ -329,7 +329,7 @@ GpuServiceImpl::GpuServiceImpl(
     const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
     const base::Optional<gpu::GpuFeatureInfo>&
         gpu_feature_info_for_hardware_gpu,
-    const gpu::GpuExtraInfo& gpu_extra_info,
+    const gfx::GpuExtraInfo& gpu_extra_info,
     gpu::VulkanImplementation* vulkan_implementation,
     base::OnceCallback<void(base::Optional<ExitCode>)> exit_callback)
     : main_runner_(base::ThreadTaskRunnerHandle::Get()),
@@ -372,7 +372,8 @@ GpuServiceImpl::GpuServiceImpl(
     // If GL is using a real GPU, the gpu_info will be passed in and vulkan will
     // use the same GPU.
     vulkan_context_provider_ = VulkanInProcessContextProvider::Create(
-        vulkan_implementation_, context_options,
+        vulkan_implementation_, gpu_preferences_.vulkan_heap_memory_limit,
+        gpu_preferences_.vulkan_sync_cpu_memory_limit,
         (is_native_vulkan && is_native_gl) ? &gpu_info : nullptr);
     if (vulkan_context_provider_) {
       // If Vulkan is supported, then OOP-R is supported.
@@ -398,10 +399,10 @@ GpuServiceImpl::GpuServiceImpl(
   }
 #endif
 
-#if BUILDFLAG(USE_VAAPI)
+#if BUILDFLAG(USE_VAAPI_IMAGE_CODECS)
   image_decode_accelerator_worker_ =
       media::VaapiImageDecodeAcceleratorWorker::Create();
-#endif
+#endif  // BUILDFLAG(USE_VAAPI_IMAGE_CODECS)
 
 #if defined(OS_APPLE)
   if (gpu_feature_info_.status_values[gpu::GPU_FEATURE_TYPE_METAL] ==
@@ -433,16 +434,18 @@ GpuServiceImpl::~GpuServiceImpl() {
   GetLogMessageManager()->ShutdownLogging();
 
   // Destroy the receiver on the IO thread.
-  base::WaitableEvent wait;
-  auto destroy_receiver_task = base::BindOnce(
-      [](mojo::Receiver<mojom::GpuService>* receiver,
-         base::WaitableEvent* wait) {
-        receiver->reset();
-        wait->Signal();
-      },
-      &receiver_, &wait);
-  if (io_runner_->PostTask(FROM_HERE, std::move(destroy_receiver_task)))
-    wait.Wait();
+  {
+    base::WaitableEvent wait;
+    auto destroy_receiver_task = base::BindOnce(
+        [](mojo::Receiver<mojom::GpuService>* receiver,
+           base::WaitableEvent* wait) {
+          receiver->reset();
+          wait->Signal();
+        },
+        &receiver_, base::Unretained(&wait));
+    if (io_runner_->PostTask(FROM_HERE, std::move(destroy_receiver_task)))
+      wait.Wait();
+  }
 
   if (watchdog_thread_)
     watchdog_thread_->OnGpuProcessTearDown();
@@ -454,6 +457,26 @@ GpuServiceImpl::~GpuServiceImpl() {
 #endif
 
   gpu_channel_manager_.reset();
+
+  // Destroy |gpu_memory_buffer_factory_| on the IO thread since its weakptrs
+  // are checked there.
+  {
+    base::WaitableEvent wait;
+    auto destroy_gmb_factory = base::BindOnce(
+        [](std::unique_ptr<gpu::GpuMemoryBufferFactory> gmb_factory,
+           base::WaitableEvent* wait) {
+          gmb_factory.reset();
+          wait->Signal();
+        },
+        std::move(gpu_memory_buffer_factory_), base::Unretained(&wait));
+
+    if (io_runner_->PostTask(FROM_HERE, std::move(destroy_gmb_factory))) {
+      // |gpu_memory_buffer_factory_| holds a raw pointer to
+      // |vulkan_context_provider_|. Waiting here enforces the correct order
+      // of destruction.
+      wait.Wait();
+    }
+  }
 
   // Scheduler must be destroyed before sync point manager is destroyed.
   scheduler_.reset();
@@ -1018,6 +1041,19 @@ void GpuServiceImpl::DisplayRemoved() {
 
   if (!in_host_process())
     ui::GpuSwitchingManager::GetInstance()->NotifyDisplayRemoved();
+}
+
+void GpuServiceImpl::DisplayMetricsChanged() {
+  if (io_runner_->BelongsToCurrentThread()) {
+    main_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&GpuServiceImpl::DisplayMetricsChanged, weak_ptr_));
+    return;
+  }
+  DVLOG(1) << "GPU: Display Metrics changed";
+
+  if (!in_host_process())
+    ui::GpuSwitchingManager::GetInstance()->NotifyDisplayMetricsChanged();
 }
 
 void GpuServiceImpl::DestroyAllChannels() {

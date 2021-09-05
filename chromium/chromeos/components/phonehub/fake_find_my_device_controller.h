@@ -15,13 +15,21 @@ class FakeFindMyDeviceController : public FindMyDeviceController {
   FakeFindMyDeviceController();
   ~FakeFindMyDeviceController() override;
 
+  void SetPhoneRingingState(Status status);
+
   // FindMyDeviceController:
-  bool IsPhoneRinging() const override;
   void SetIsPhoneRingingInternal(bool is_phone_ringing) override;
   void RequestNewPhoneRingingState(bool ringing) override;
+  Status GetPhoneRingingStatus() override;
+
+  void SetShouldRequestFail(bool is_request_fail);
 
  private:
-  bool is_phone_ringing_ = false;
+  Status phone_ringing_status_ = Status::kRingingOff;
+
+  // Indicates if the connection to the phone is working correctly. If it is
+  // true, there is a problem and the phone cannot change its state.
+  bool should_request_fail_ = false;
 };
 
 }  // namespace phonehub

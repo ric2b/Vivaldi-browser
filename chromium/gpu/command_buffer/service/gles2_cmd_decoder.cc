@@ -20,7 +20,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
@@ -3955,8 +3954,7 @@ gpu::ContextResult GLES2DecoderImpl::Initialize(
   // always enabled and there is no way to disable it.
   // Therefore, it seems OK to also always enable it on top of Desktop GL for
   // both ES2 and ES3 contexts.
-  if (!workarounds().disable_texture_cube_map_seamless &&
-      gl_version_info().IsAtLeastGL(3, 2)) {
+  if (gl_version_info().IsAtLeastGL(3, 2)) {
     api()->glEnableFn(GL_TEXTURE_CUBE_MAP_SEAMLESS);
   }
 
@@ -6404,18 +6402,12 @@ void GLES2DecoderImpl::OnUseFramebuffer() const {
                         state_.viewport_width, state_.viewport_height);
   }
 
-  if (workarounds().restore_scissor_on_fbo_change || supports_dc_layers_) {
+  if (supports_dc_layers_) {
     // The driver forgets the correct scissor when modifying the FBO binding.
     gfx::Vector2d scissor_offset = GetBoundFramebufferDrawOffset();
     api()->glScissorFn(state_.scissor_x + scissor_offset.x(),
                        state_.scissor_y + scissor_offset.y(),
                        state_.scissor_width, state_.scissor_height);
-  }
-
-  if (workarounds().restore_scissor_on_fbo_change) {
-    // crbug.com/222018 - Also on QualComm, the flush here avoids flicker,
-    // it's unclear how this bug works.
-    api()->glFlushFn();
   }
 
   if (workarounds().force_update_scissor_state_when_binding_fbo0 &&
@@ -18548,7 +18540,7 @@ void GLES2DecoderImpl::CopySubTextureHelper(const char* function_name,
       source_type, dest_binding_target, dest_level, dest_internal_format,
       unpack_flip_y == GL_TRUE, unpack_premultiply_alpha == GL_TRUE,
       unpack_unmultiply_alpha == GL_TRUE, dither == GL_TRUE);
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
+#if BUILDFLAG(IS_ASH) && defined(ARCH_CPU_X86_FAMILY)
   // glDrawArrays is faster than glCopyTexSubImage2D on IA Mesa driver,
   // although opposite in Android.
   // TODO(dshwang): After Mesa fixes this issue, remove this hack.
@@ -20338,6 +20330,7 @@ error::Error GLES2DecoderImpl::HandleSetActiveURLCHROMIUM(
 // we can easily edit the non-auto generated parts right here in this file
 // instead of having to edit some template or the code generator.
 #include "base/macros.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_autogen.h"
 
 }  // namespace gles2

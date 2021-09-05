@@ -21,6 +21,8 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "build/config/compiler/compiler_buildflags.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/buildflags.h"
@@ -72,6 +74,10 @@
 #include "base/win/windows_version.h"
 #include "chrome/browser/shell_integration_win.h"
 #endif  // defined(OS_WIN)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/cpp/crosapi_constants.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace {
 
@@ -131,6 +137,38 @@ enum UMATouchEventFeatureDetectionState {
   UMA_TOUCH_EVENT_FEATURE_DETECTION_STATE_COUNT
 };
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// These values are written to logs.  New enum values can be added, but existing
+// enums must never be renumbered or deleted and reused.
+enum class ChromeOSChannel {
+  kUnknown = 0,
+  kCanary = 1,
+  kDev = 2,
+  kBeta = 3,
+  kStable = 4,
+  kMaxValue = kStable,
+};
+
+// Records the underlying Chrome OS release channel, which may be different than
+// the Lacros browser's release channel.
+void RecordChromeOSChannel() {
+  ChromeOSChannel os_channel = ChromeOSChannel::kUnknown;
+  std::string release_track;
+  if (base::SysInfo::GetLsbReleaseValue(crosapi::kChromeOSReleaseTrack,
+                                        &release_track)) {
+    if (release_track == crosapi::kReleaseChannelStable)
+      os_channel = ChromeOSChannel::kStable;
+    else if (release_track == crosapi::kReleaseChannelBeta)
+      os_channel = ChromeOSChannel::kBeta;
+    else if (release_track == crosapi::kReleaseChannelDev)
+      os_channel = ChromeOSChannel::kDev;
+    else if (release_track == crosapi::kReleaseChannelCanary)
+      os_channel = ChromeOSChannel::kCanary;
+  }
+  base::UmaHistogramEnumeration("ChromeOS.Lacros.OSChannel", os_channel);
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
 void RecordMicroArchitectureStats() {
 #if defined(ARCH_CPU_X86_FAMILY)
   base::CPU cpu;
@@ -151,12 +189,6 @@ bool IsApplockerRunning();
 void RecordStartupMetrics() {
 #if defined(OS_WIN)
   const base::win::OSInfo& os_info = *base::win::OSInfo::GetInstance();
-  base::UmaHistogramEnumeration("Windows.GetVersionExVersion",
-                                os_info.version(),
-                                base::win::Version::WIN_LAST);
-  base::UmaHistogramEnumeration("Windows.Kernel32Version",
-                                os_info.Kernel32Version(),
-                                base::win::Version::WIN_LAST);
   int patch = os_info.version_number().patch;
   int build = os_info.version_number().build;
   int patch_level = 0;
@@ -165,6 +197,14 @@ void RecordStartupMetrics() {
     patch_level = MAKELONG(patch, build);
   DCHECK(patch_level) << "Windows version too high!";
   base::UmaHistogramSparse("Windows.PatchLevel", patch_level);
+
+  int kernel32_patch = os_info.Kernel32VersionNumber().patch;
+  int kernel32_build = os_info.Kernel32VersionNumber().build;
+  int kernel32_patch_level = 0;
+  if (kernel32_patch < 65536 && kernel32_build < 65536)
+    kernel32_patch_level = MAKELONG(kernel32_patch, kernel32_build);
+  DCHECK(kernel32_patch_level) << "Windows kernel32.dll version too high!";
+  base::UmaHistogramSparse("Windows.PatchLevelKernel32", kernel32_patch_level);
 
   base::UmaHistogramBoolean("Windows.HasHighResolutionTimeTicks",
                             base::TimeTicks::IsHighResolution());
@@ -183,6 +223,10 @@ void RecordStartupMetrics() {
                                 shell_integration::NUM_DEFAULT_STATES);
 
   authenticator_utility::ReportUVPlatformAuthenticatorAvailability();
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  RecordChromeOSChannel();
+#endif
 }
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -470,6 +514,7 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
 
   // Records whether or not the Segment heap is in use.
 #if defined(OS_WIN)
+
   if (base::win::GetVersion() >= base::win::Version::WIN10_20H1) {
     ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial("WinSegmentHeap",
 #if BUILDFLAG(ENABLE_SEGMENT_HEAP)
@@ -492,7 +537,18 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
                                                             "Disabled"
 #endif
   );
+
 #endif  // defined(OS_WIN)
+
+  // Records whether or not PartitionAlloc is used as the default allocator.
+  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+      "PartitionAllocEverywhere",
+#if BUILDFLAG(USE_PARTITION_ALLOC_EVERYWHERE)
+      "Enabled"
+#else
+      "Disabled"
+#endif
+  );
 }
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {

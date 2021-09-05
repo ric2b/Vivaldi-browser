@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "components/sync/base/weak_handle.h"
 #include "components/sync/engine/sync_engine.h"
+#include "components/sync/engine/sync_status.h"
 
 namespace syncer {
 
@@ -58,12 +59,9 @@ class FakeSyncEngine : public SyncEngine {
 
   void ConfigureDataTypes(ConfigureParams params) override;
 
-  void EnableEncryptEverything() override;
-
-  void ActivateNonBlockingDataType(
-      ModelType type,
-      std::unique_ptr<DataTypeActivationResponse>) override;
-  void DeactivateNonBlockingDataType(ModelType type) override;
+  void ActivateDataType(ModelType type,
+                        std::unique_ptr<DataTypeActivationResponse>) override;
+  void DeactivateDataType(ModelType type) override;
 
   void ActivateProxyDataType(ModelType type) override;
   void DeactivateProxyDataType(ModelType type) override;
@@ -73,13 +71,8 @@ class FakeSyncEngine : public SyncEngine {
   void HasUnsyncedItemsForTest(
       base::OnceCallback<void(bool)> cb) const override;
 
-  void GetModelSafeRoutingInfo(ModelSafeRoutingInfo* out) const override;
-
   void RequestBufferedProtocolEventsAndEnableForwarding() override;
   void DisableProtocolEventForwarding() override;
-
-  void EnableDirectoryTypeDebugInfoForwarding() override;
-  void DisableDirectoryTypeDebugInfoForwarding() override;
 
   void OnCookieJarChanged(bool account_mismatch,
                           bool empty_jar,

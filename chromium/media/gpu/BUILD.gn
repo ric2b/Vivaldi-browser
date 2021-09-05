@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//gpu/vulkan/features.gni")
@@ -16,6 +17,7 @@ buildflag_header("buildflags") {
 
   flags = [
     "USE_VAAPI=$use_vaapi",
+    "USE_VAAPI_IMAGE_CODECS=$use_vaapi_image_codecs",
     "USE_V4L2_CODEC=$use_v4l2_codec",
     "USE_LIBV4L2=$use_v4lplugin",
   ]
@@ -27,22 +29,22 @@ component("gpu") {
   # Only local test code, GPU-related IPC code in the media layer, and
   # media-related content code should access //media/gpu.
   visibility = [
+    ":*",
     "//chrome/gpu",
     "//chromecast/*",
     "//components/arc/mojom:media",
     "//components/arc/mojom:media_mojolpm",
     "//components/arc/video_accelerator:common",
-    "//components/mirroring/service:mirroring_service",
     "//components/chromeos_camera/*",
+    "//components/mirroring/service:mirroring_service",
     "//components/viz/service/main",
     "//content/gpu:*",
     "//content/renderer:*",
     "//media/gpu/ipc/*",
-    "//media/gpu/vaapi/*",
     "//media/gpu/test/*",
+    "//media/gpu/vaapi/*",
     "//media/mojo/*",
     "//remoting/codec:encoder",
-    ":*",
   ]
 
   if (is_mac) {
@@ -268,6 +270,15 @@ source_set("common") {
     "vp9_reference_frame_vector.h",
   ]
 
+  if (proprietary_codecs && enable_platform_hevc) {
+    sources += [
+      "h265_decoder.cc",
+      "h265_decoder.h",
+      "h265_dpb.cc",
+      "h265_dpb.h",
+    ]
+  }
+
   visibility = [
     ":gpu",
     "//media/gpu/*",
@@ -289,6 +300,7 @@ source_set("common") {
   deps = [
     ":buildflags",
     "//base",
+    "//build:chromeos_buildflags",
     "//media",
     "//media/parsers",
     "//ui/gfx:buffer_types",
@@ -437,6 +449,7 @@ if (use_v4l2_codec || use_vaapi || is_mac || is_win) {
       "test:helpers",
       "//base",
       "//base/test:test_support",
+      "//build:chromeos_buildflags",
       "//media:test_support",
       "//media/gpu",
       "//media/gpu/test:test_helpers",
@@ -494,8 +507,10 @@ source_set("unit_tests") {
     "//ui/gl:test_support",
   ]
   sources = [ "h264_decoder_unittest.cc" ]
-
-  if (use_v4l2_codec || use_vaapi) {
+  if (proprietary_codecs && enable_platform_hevc) {
+    sources += [ "h265_decoder_unittest.cc" ]
+  }
+  if (is_ash && (use_v4l2_codec || use_vaapi)) {
     deps += [ "//media/gpu/chromeos:unit_tests" ]
   }
   if (use_vaapi) {
@@ -513,6 +528,7 @@ source_set("unit_tests") {
     sources += [
       "windows/d3d11_copying_texture_wrapper_unittest.cc",
       "windows/d3d11_decoder_configurator_unittest.cc",
+      "windows/d3d11_picture_buffer_unittest.cc",
       "windows/d3d11_texture_selector_unittest.cc",
       "windows/d3d11_texture_wrapper_unittest.cc",
       "windows/d3d11_video_decoder_unittest.cc",
@@ -589,6 +605,17 @@ if (use_v4l2_codec || use_vaapi) {
       "test:video_encoder_test_environment",
       "//media:test_support",
       "//testing/gtest",
+    ]
+  }
+}
+
+if (proprietary_codecs && enable_platform_hevc) {
+  fuzzer_test("media_h265_decoder_fuzzer") {
+    sources = [ "h265_decoder_fuzzertest.cc" ]
+    deps = [
+      ":gpu",
+      "//base",
+      "//media",
     ]
   }
 }

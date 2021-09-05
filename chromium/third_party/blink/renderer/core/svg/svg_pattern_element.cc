@@ -115,8 +115,12 @@ void SVGPatternElement::BuildPendingResource() {
     resource_->AddClient(EnsureSVGResourceClient());
 
   InvalidatePattern(layout_invalidation_reason::kSvgResourceInvalidated);
-  if (auto* layout_object = GetLayoutObject())
-    SVGResourcesCache::ResourceReferenceChanged(*layout_object);
+  if (auto* layout_object = GetLayoutObject()) {
+    if (!layout_object->Parent())
+      return;
+    SVGResourcesCache::UpdateResources(*layout_object);
+    InvalidateDependentPatterns();
+  }
 }
 
 void SVGPatternElement::ClearResourceReferences() {
@@ -196,8 +200,17 @@ void SVGPatternElement::ChildrenChanged(const ChildrenChange& change) {
 
 void SVGPatternElement::InvalidatePattern(
     LayoutInvalidationReasonForTracing reason) {
-  if (auto* layout_object = ToLayoutSVGResourceContainer(GetLayoutObject()))
+  if (auto* layout_object = To<LayoutSVGResourceContainer>(GetLayoutObject()))
     layout_object->InvalidateCacheAndMarkForLayout(reason);
+}
+
+void SVGPatternElement::InvalidateDependentPatterns() {
+  NotifyIncomingReferences([](SVGElement& element) {
+    if (auto* pattern = DynamicTo<SVGPatternElement>(element)) {
+      pattern->InvalidatePattern(
+          layout_invalidation_reason::kSvgResourceInvalidated);
+    }
+  });
 }
 
 LayoutObject* SVGPatternElement::CreateLayoutObject(const ComputedStyle&,
@@ -219,7 +232,7 @@ static void SetPatternAttributes(const SVGPatternElement& element,
   if (!attributes.HasHeight() && element.height()->IsSpecified())
     attributes.SetHeight(element.height()->CurrentValue());
 
-  if (!attributes.HasViewBox() && element.HasValidViewBox())
+  if (!attributes.HasViewBox() && element.viewBox()->CurrentValue()->IsValid())
     attributes.SetViewBox(element.viewBox()->CurrentValue()->Value());
 
   if (!attributes.HasPreserveAspectRatio() &&

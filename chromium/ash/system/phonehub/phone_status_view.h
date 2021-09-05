@@ -10,11 +10,11 @@
 #include "ash/system/tray/tri_view.h"
 #include "ash/system/unified/top_shortcut_button.h"
 #include "chromeos/components/phonehub/phone_model.h"
-#include "ui/views/controls/button/button.h"
 
 namespace views {
 class ImageView;
 class Label;
+class Separator;
 }  // namespace views
 
 namespace ash {
@@ -23,16 +23,19 @@ namespace ash {
 // status (wifi, volime, etc.).
 class ASH_EXPORT PhoneStatusView
     : public TriView,
-      public views::ButtonListener,
       public chromeos::phonehub::PhoneModel::Observer {
  public:
-  explicit PhoneStatusView(chromeos::phonehub::PhoneModel* phone_model);
+  class Delegate {
+   public:
+    virtual bool CanOpenConnectedDeviceSettings() = 0;
+    virtual void OpenConnectedDevicesSettings() = 0;
+  };
+
+  PhoneStatusView(chromeos::phonehub::PhoneModel* phone_model,
+                  Delegate* delegate);
   ~PhoneStatusView() override;
   PhoneStatusView(PhoneStatusView&) = delete;
   PhoneStatusView operator=(PhoneStatusView&) = delete;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // chromeos::phonehub::PhoneHubModel::Observer:
   void OnModelChanged() override;
@@ -40,6 +43,7 @@ class ASH_EXPORT PhoneStatusView
  private:
   FRIEND_TEST_ALL_PREFIXES(PhoneStatusViewTest, MobileProviderVisibility);
   FRIEND_TEST_ALL_PREFIXES(PhoneStatusViewTest, PhoneStatusLabelsContent);
+  FRIEND_TEST_ALL_PREFIXES(PhoneStatusViewTest, ClickOnSettings);
 
   // Update the labels and icons in the view to display current phone status.
   void Update();
@@ -47,6 +51,7 @@ class ASH_EXPORT PhoneStatusView
   void UpdateMobileStatus();
   void UpdateBatteryStatus();
   PowerStatus::BatteryImageInfo CalculateBatteryInfo();
+  void SetBatteryTooltipText();
 
   // Clear the existing labels and icons for the phone status.
   void ClearExistingStatus();
@@ -54,13 +59,14 @@ class ASH_EXPORT PhoneStatusView
   void ConfigureTriViewContainer(TriView::Container container);
 
   chromeos::phonehub::PhoneModel* phone_model_ = nullptr;
+  Delegate* delegate_ = nullptr;
 
   // Owned by views hierarchy.
   views::Label* phone_name_label_ = nullptr;
   views::ImageView* signal_icon_ = nullptr;
-  views::Label* mobile_provider_label_ = nullptr;
   views::ImageView* battery_icon_ = nullptr;
   views::Label* battery_label_ = nullptr;
+  views::Separator* separator_ = nullptr;
   TopShortcutButton* settings_button_ = nullptr;
 };
 

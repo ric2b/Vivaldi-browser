@@ -18,6 +18,7 @@
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/policy/core/common/features.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
@@ -25,6 +26,7 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/values_util.h"
 #include "components/policy/policy_constants.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "components/policy/core/common/android/policy_service_android.h"
@@ -79,6 +81,76 @@ void RemapProxyPolicies(PolicyMap* policies) {
   }
 }
 
+// Maps the separate policies for proxy settings into a single Dictionary
+// policy. This allows to keep the logic of merging policies from different
+// sources simple, as all separate proxy policies should be considered as a
+// single whole during merging.
+void RemapRenamedPolicies(PolicyMap* policies) {
+  // For all renamed policies we need to explicitly merge the value of the
+  // old policy with the new one or else merging will not be carried over
+  // if desired.
+  base::Value* merge_list =
+      policies->GetMutableValue(key::kPolicyListMultipleSourceMergeList);
+  base::flat_set<std::string> policy_lists_to_merge =
+      policy::ValueToStringSet(merge_list);
+  const std::vector<std::pair<const char*, const char*>> renamed_policies = {{
+      {policy::key::kSafeBrowsingWhitelistDomains,
+       policy::key::kSafeBrowsingAllowlistDomains},
+      {policy::key::kSpellcheckLanguageBlacklist,
+       policy::key::kSpellcheckLanguageBlocklist},
+      {policy::key::kURLBlacklist, policy::key::kURLBlocklist},
+      {policy::key::kURLWhitelist, policy::key::kURLAllowlist},
+#if !defined(OS_ANDROID)
+      {policy::key::kAutoplayWhitelist, policy::key::kAutoplayAllowlist},
+#endif  // !defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+      {policy::key::kExtensionInstallBlacklist,
+       policy::key::kExtensionInstallBlocklist},
+      {policy::key::kExtensionInstallWhitelist,
+       policy::key::kExtensionInstallAllowlist},
+      {policy::key::kNativeMessagingBlacklist,
+       policy::key::kNativeMessagingBlocklist},
+      {policy::key::kNativeMessagingWhitelist,
+       policy::key::kNativeMessagingAllowlist},
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#if defined(OS_CHROMEOS)
+      {policy::key::kAttestationExtensionWhitelist,
+       policy::key::kAttestationExtensionAllowlist},
+      {policy::key::kExternalPrintServersWhitelist,
+       policy::key::kExternalPrintServersAllowlist},
+      {policy::key::kNativePrintersBulkBlacklist,
+       policy::key::kPrintersBulkBlocklist},
+      {policy::key::kNativePrintersBulkWhitelist,
+       policy::key::kPrintersBulkAllowlist},
+      {policy::key::kPerAppTimeLimitsWhitelist,
+       policy::key::kPerAppTimeLimitsAllowlist},
+      {policy::key::kQuickUnlockModeWhitelist,
+       policy::key::kQuickUnlockModeAllowlist},
+      {policy::key::kNoteTakingAppsLockScreenWhitelist,
+       policy::key::kNoteTakingAppsLockScreenAllowlist},
+#if defined(USE_CUPS)
+      {policy::key::kPrintingAPIExtensionsWhitelist,
+       policy::key::kPrintingAPIExtensionsAllowlist},
+#endif  // defined(USE_CUPS)
+#endif  // defined(OS_CHROMEOS)
+  }};
+  for (const auto& policy_pair : renamed_policies) {
+    PolicyMap::Entry* old_policy = policies->GetMutable(policy_pair.first);
+    const PolicyMap::Entry* new_policy = policies->Get(policy_pair.second);
+    if (old_policy &&
+        (!new_policy || old_policy->has_higher_priority_than(*new_policy))) {
+      PolicyMap::Entry policy_entry = old_policy->DeepCopy();
+      // TODO(pastarmovj): Re-add the policy errors in a way that does not
+      // depend on resources being loaded that early.
+      policies->Set(policy_pair.second, std::move(policy_entry));
+    }
+    if (policy_lists_to_merge.contains(policy_pair.first) &&
+        !policy_lists_to_merge.contains(policy_pair.second)) {
+      merge_list->Append(base::Value(policy_pair.second));
+    }
+  }
+}
+
 // Returns the string values of |policy|. Returns an empty set if the values are
 // not strings.
 base::flat_set<std::string> GetStringListPolicyItems(
@@ -102,14 +174,11 @@ PolicyServiceImpl::PolicyServiceImpl(Providers providers,
       migrators_(std::move(migrators)),
       initialization_throttled_(initialization_throttled) {
   for (int domain = 0; domain < POLICY_DOMAIN_SIZE; ++domain)
-    initialization_complete_[domain] = true;
-  for (auto* provider : providers_) {
+    policy_domain_status_[domain] = PolicyDomainStatus::kUninitialized;
+
+  for (auto* provider : providers_)
     provider->AddObserver(this);
-    for (int domain = 0; domain < POLICY_DOMAIN_SIZE; ++domain) {
-      initialization_complete_[domain] &=
-          provider->IsInitializationComplete(static_cast<PolicyDomain>(domain));
-    }
-  }
+  CheckPolicyDomainStatus();
   // There are no observers yet, but calls to GetPolicies() should already get
   // the processed policy values.
   MergeAndTriggerUpdates();
@@ -178,9 +247,15 @@ const PolicyMap& PolicyServiceImpl::GetPolicies(
 bool PolicyServiceImpl::IsInitializationComplete(PolicyDomain domain) const {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(domain >= 0 && domain < POLICY_DOMAIN_SIZE);
-  if (initialization_throttled_)
-    return false;
-  return initialization_complete_[domain];
+  return !initialization_throttled_ &&
+         policy_domain_status_[domain] != PolicyDomainStatus::kUninitialized;
+}
+
+bool PolicyServiceImpl::IsFirstPolicyLoadComplete(PolicyDomain domain) const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(domain >= 0 && domain < POLICY_DOMAIN_SIZE);
+  return !initialization_throttled_ &&
+         policy_domain_status_[domain] == PolicyDomainStatus::kPolicyReady;
 }
 
 void PolicyServiceImpl::RefreshPolicies(base::OnceClosure callback) {
@@ -222,7 +297,7 @@ void PolicyServiceImpl::UnthrottleInitialization() {
 
   initialization_throttled_ = false;
   for (int domain = 0; domain < POLICY_DOMAIN_SIZE; ++domain)
-    MaybeNotifyInitializationComplete(static_cast<PolicyDomain>(domain));
+    MaybeNotifyPolicyDomainStatusChange(static_cast<PolicyDomain>(domain));
 }
 
 void PolicyServiceImpl::OnUpdatePolicy(ConfigurationPolicyProvider* provider) {
@@ -276,6 +351,7 @@ void PolicyServiceImpl::MergeAndTriggerUpdates() {
     PolicyBundle provided_bundle;
     provided_bundle.CopyFrom(provider->policies());
     RemapProxyPolicies(&provided_bundle.Get(chrome_namespace));
+    RemapRenamedPolicies(&provided_bundle.Get(chrome_namespace));
     bundle.MergeFrom(provided_bundle);
   }
 
@@ -357,46 +433,56 @@ void PolicyServiceImpl::MergeAndTriggerUpdates() {
   for (; it_old != end_old; ++it_old)
     NotifyNamespaceUpdated(it_old->first, *it_old->second, kEmpty);
 
-  CheckInitializationComplete();
+  CheckPolicyDomainStatus();
   CheckRefreshComplete();
   NotifyProviderUpdatesPropagated();
 }
 
-void PolicyServiceImpl::CheckInitializationComplete() {
+void PolicyServiceImpl::CheckPolicyDomainStatus() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Check if all the providers just became initialized for each domain; if so,
-  // notify that domain's observers.
+  // notify that domain's observers. If they were initialized, check if they had
+  // their first policies loaded.
   for (int domain = 0; domain < POLICY_DOMAIN_SIZE; ++domain) {
-    if (initialization_complete_[domain])
+    PolicyDomain policy_domain = static_cast<PolicyDomain>(domain);
+    if (policy_domain_status_[domain] == PolicyDomainStatus::kPolicyReady)
       continue;
 
-    PolicyDomain policy_domain = static_cast<PolicyDomain>(domain);
+    PolicyDomainStatus new_status = PolicyDomainStatus::kPolicyReady;
 
-    bool all_complete = true;
     for (auto* provider : providers_) {
       if (!provider->IsInitializationComplete(policy_domain)) {
-        all_complete = false;
+        new_status = PolicyDomainStatus::kUninitialized;
         break;
+      } else if (!provider->IsFirstPolicyLoadComplete(policy_domain)) {
+        new_status = PolicyDomainStatus::kInitialized;
       }
     }
-    if (all_complete) {
-      initialization_complete_[domain] = true;
-      MaybeNotifyInitializationComplete(policy_domain);
-    }
+
+    if (new_status == policy_domain_status_[domain])
+      continue;
+
+    policy_domain_status_[domain] = new_status;
+    MaybeNotifyPolicyDomainStatusChange(policy_domain);
   }
 }
-
-void PolicyServiceImpl::MaybeNotifyInitializationComplete(
+void PolicyServiceImpl::MaybeNotifyPolicyDomainStatusChange(
     PolicyDomain policy_domain) {
-  if (initialization_throttled_)
+  if (initialization_throttled_ || policy_domain_status_[policy_domain] ==
+                                       PolicyDomainStatus::kUninitialized) {
     return;
-  if (!initialization_complete_[policy_domain])
-    return;
+  }
+
   auto iter = observers_.find(policy_domain);
-  if (iter != observers_.end()) {
-    for (auto& observer : *iter->second)
-      observer.OnPolicyServiceInitialized(policy_domain);
+  if (iter == observers_.end())
+    return;
+
+  for (auto& observer : *iter->second) {
+    observer.OnPolicyServiceInitialized(policy_domain);
+    if (policy_domain_status_[policy_domain] ==
+        PolicyDomainStatus::kPolicyReady)
+      observer.OnFirstPoliciesLoaded(policy_domain);
   }
 }
 

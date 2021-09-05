@@ -37,7 +37,14 @@ enum class VerificationStatus {
   kObserved = 3,
   // The user used the autofill settings to verify and store this token.
   kUserVerified = 4,
+  // The token was parsed by the server.
+  kServerParsed = 5,
 };
+
+// Returns true if |left| has a less significant verification status compared to
+// |right|.
+bool IsLessSignificantVerificationStatus(VerificationStatus left,
+                                         VerificationStatus right);
 
 // The merge mode defines if and how two components are merged.
 enum MergeMode {
@@ -57,8 +64,7 @@ enum MergeMode {
   kUseNewerIfDifferent = 1 << 5,
   // If the newer component contains one token more, apply a recursive strategy
   // to merge the tokens.
-  kRecursivelyMergeSingleTokenSubset =
-      1 << 6 | kRecursivelyMergeTokenEquivalentValues,
+  kRecursivelyMergeSingleTokenSubset = 1 << 6,
   // If one is a substring use the most recent one.
   kUseMostRecentSubstring = 1 << 7,
   // Merge the child nodes and reformat the node from its children after merge.
@@ -334,6 +340,11 @@ class AddressComponent {
   bool GetIsValueForTypeValidIfPossible(const std::string& field_type_name,
                                         bool* validity_status,
                                         bool wipe_if_not = false);
+
+  // Deletes the stored structure if it contains strings that are not a
+  // substring of the unstructured representation.
+  // Return true if a wipe operation was performed.
+  virtual bool WipeInvalidStructure();
 
 #ifdef UNIT_TEST
   // Initiates the formatting of the values from the subcomponents.

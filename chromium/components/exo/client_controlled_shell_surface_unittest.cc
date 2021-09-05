@@ -8,11 +8,7 @@
 #include "ash/frame/header_view.h"
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/frame/wide_frame_view.h"
-#include "ash/public/cpp/caption_buttons/caption_button_model.h"
-#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/public/cpp/test/shell_test_api.h"
-#include "ash/public/cpp/window_pin_type.h"
-#include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/wm/drag_window_resizer.h"
@@ -33,6 +29,10 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "cc/paint/display_item_list.h"
+#include "chromeos/ui/base/window_pin_type.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/frame/caption_buttons/caption_button_model.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
 #include "components/exo/pointer.h"
@@ -62,6 +62,8 @@
 #include "ui/wm/core/shadow_controller.h"
 #include "ui/wm/core/shadow_types.h"
 
+using chromeos::WindowStateType;
+
 namespace exo {
 namespace {
 using ClientControlledShellSurfaceTest = test::ExoTestBase;
@@ -72,10 +74,10 @@ bool HasBackdrop() {
 }
 
 bool IsWidgetPinned(views::Widget* widget) {
-  ash::WindowPinType type =
-      widget->GetNativeWindow()->GetProperty(ash::kWindowPinTypeKey);
-  return type == ash::WindowPinType::kPinned ||
-         type == ash::WindowPinType::kTrustedPinned;
+  chromeos::WindowPinType type =
+      widget->GetNativeWindow()->GetProperty(chromeos::kWindowPinTypeKey);
+  return type == chromeos::WindowPinType::kPinned ||
+         type == chromeos::WindowPinType::kTrustedPinned;
 }
 
 int GetShadowElevation(aura::Window* window) {
@@ -121,16 +123,16 @@ TEST_F(ClientControlledShellSurfaceTest, SetPinned) {
   auto shell_surface(
       exo_test_helper()->CreateClientControlledShellSurface(surface.get()));
 
-  shell_surface->SetPinned(ash::WindowPinType::kTrustedPinned);
+  shell_surface->SetPinned(chromeos::WindowPinType::kTrustedPinned);
   EXPECT_TRUE(IsWidgetPinned(shell_surface->GetWidget()));
 
-  shell_surface->SetPinned(ash::WindowPinType::kNone);
+  shell_surface->SetPinned(chromeos::WindowPinType::kNone);
   EXPECT_FALSE(IsWidgetPinned(shell_surface->GetWidget()));
 
-  shell_surface->SetPinned(ash::WindowPinType::kPinned);
+  shell_surface->SetPinned(chromeos::WindowPinType::kPinned);
   EXPECT_TRUE(IsWidgetPinned(shell_surface->GetWidget()));
 
-  shell_surface->SetPinned(ash::WindowPinType::kNone);
+  shell_surface->SetPinned(chromeos::WindowPinType::kNone);
   EXPECT_FALSE(IsWidgetPinned(shell_surface->GetWidget()));
 }
 
@@ -1061,7 +1063,7 @@ TEST_F(ClientControlledShellSurfaceTest, SnapWindowInSplitViewModeTest) {
   ash::WindowState* window_state1 = ash::WindowState::Get(window1);
   ash::ClientControlledState* state1 = static_cast<ash::ClientControlledState*>(
       ash::WindowState::TestApi::GetStateImpl(window_state1));
-  EXPECT_EQ(window_state1->GetStateType(), ash::WindowStateType::kMaximized);
+  EXPECT_EQ(window_state1->GetStateType(), WindowStateType::kMaximized);
 
   // Snap window to left.
   ash::SplitViewController* split_view_controller =
@@ -1071,7 +1073,7 @@ TEST_F(ClientControlledShellSurfaceTest, SnapWindowInSplitViewModeTest) {
   window1->SetBounds(split_view_controller->GetSnappedWindowBoundsInScreen(
       ash::SplitViewController::LEFT, window1));
   state1->set_bounds_locally(false);
-  EXPECT_EQ(window_state1->GetStateType(), ash::WindowStateType::kLeftSnapped);
+  EXPECT_EQ(window_state1->GetStateType(), WindowStateType::kLeftSnapped);
   EXPECT_EQ(shell_surface1->GetWidget()->GetWindowBoundsInScreen(),
             split_view_controller->GetSnappedWindowBoundsInScreen(
                 ash::SplitViewController::LEFT,
@@ -1085,7 +1087,7 @@ TEST_F(ClientControlledShellSurfaceTest, SnapWindowInSplitViewModeTest) {
   window1->SetBounds(split_view_controller->GetSnappedWindowBoundsInScreen(
       ash::SplitViewController::RIGHT, window1));
   state1->set_bounds_locally(false);
-  EXPECT_EQ(window_state1->GetStateType(), ash::WindowStateType::kRightSnapped);
+  EXPECT_EQ(window_state1->GetStateType(), WindowStateType::kRightSnapped);
   EXPECT_EQ(shell_surface1->GetWidget()->GetWindowBoundsInScreen(),
             split_view_controller->GetSnappedWindowBoundsInScreen(
                 ash::SplitViewController::RIGHT,
@@ -1288,7 +1290,7 @@ TEST_F(ClientControlledShellSurfaceDragTest, DragWindowFromTopInTabletMode) {
   shell->overview_controller()->EndOverview();
   SendGestureEvents(window, gfx::Point(0, 210));
   EXPECT_EQ(ash::WindowState::Get(window)->GetStateType(),
-            ash::WindowStateType::kLeftSnapped);
+            WindowStateType::kLeftSnapped);
 }
 
 namespace {
@@ -1319,8 +1321,8 @@ class ClientControlledShellSurfaceDisplayTest : public test::ExoTestBase {
   }
 
   void OnBoundsChangeEvent(ClientControlledShellSurface* shell_surface,
-                           ash::WindowStateType current_state,
-                           ash::WindowStateType requested_state,
+                           WindowStateType current_state,
+                           WindowStateType requested_state,
                            int64_t display_id,
                            const gfx::Rect& bounds_in_display,
                            bool is_resize,
@@ -1501,7 +1503,7 @@ TEST_F(ClientControlledShellSurfaceTest, CaptionButtonModel) {
   ash::NonClientFrameViewAsh* frame_view =
       static_cast<ash::NonClientFrameViewAsh*>(
           shell_surface->GetWidget()->non_client_view()->frame_view());
-  ash::FrameCaptionButtonContainerView* container =
+  chromeos::FrameCaptionButtonContainerView* container =
       static_cast<ash::HeaderView*>(frame_view->GetHeaderView())
           ->caption_button_container();
 
@@ -1509,7 +1511,7 @@ TEST_F(ClientControlledShellSurfaceTest, CaptionButtonModel) {
   for (auto visible : kAllButtons) {
     uint32_t visible_buttons = 1 << visible;
     shell_surface->SetFrameButtons(visible_buttons, 0);
-    const ash::CaptionButtonModel* model = container->model();
+    const chromeos::CaptionButtonModel* model = container->model();
     for (auto not_visible : kAllButtons) {
       if (not_visible != visible)
         EXPECT_FALSE(model->IsVisible(not_visible));
@@ -1522,7 +1524,7 @@ TEST_F(ClientControlledShellSurfaceTest, CaptionButtonModel) {
   for (auto enabled : kAllButtons) {
     uint32_t enabled_buttons = 1 << enabled;
     shell_surface->SetFrameButtons(kAllButtonMask, enabled_buttons);
-    const ash::CaptionButtonModel* model = container->model();
+    const chromeos::CaptionButtonModel* model = container->model();
     for (auto not_enabled : kAllButtons) {
       if (not_enabled != enabled)
         EXPECT_FALSE(model->IsEnabled(not_enabled));
@@ -1937,8 +1939,8 @@ TEST_F(ClientControlledShellSurfaceTest, AdjustBoundsLocally) {
       exo_test_helper()->CreateClientControlledShellSurface(surface.get());
   gfx::Rect requested_bounds;
   shell_surface->set_bounds_changed_callback(base::BindRepeating(
-      [](gfx::Rect* dst, ash::WindowStateType current_state,
-         ash::WindowStateType requested_state, int64_t display_id,
+      [](gfx::Rect* dst, WindowStateType current_state,
+         WindowStateType requested_state, int64_t display_id,
          const gfx::Rect& bounds, bool is_resize,
          int bounds_change) { *dst = bounds; },
       base::Unretained(&requested_bounds)));
@@ -1979,7 +1981,7 @@ TEST_F(ClientControlledShellSurfaceTest, SnappedInTabletMode) {
 
   ash::WMEvent event(ash::WM_EVENT_SNAP_LEFT);
   window_state->OnWMEvent(&event);
-  EXPECT_EQ(window_state->GetStateType(), ash::WindowStateType::kLeftSnapped);
+  EXPECT_EQ(window_state->GetStateType(), WindowStateType::kLeftSnapped);
 
   ash::NonClientFrameViewAsh* frame_view =
       static_cast<ash::NonClientFrameViewAsh*>(
@@ -2040,8 +2042,8 @@ TEST_F(ClientControlledShellSurfaceDisplayTest,
       ash::WindowState::Get(shell_surface->GetWidget()->GetNativeWindow());
   int64_t display_id = window_state->GetDisplay().id();
 
-  shell_surface->OnBoundsChangeEvent(ash::WindowStateType::kNormal,
-                                     ash::WindowStateType::kNormal, display_id,
+  shell_surface->OnBoundsChangeEvent(WindowStateType::kNormal,
+                                     WindowStateType::kNormal, display_id,
                                      gfx::Rect(10, 10, 100, 100), 0);
   ASSERT_EQ(1, bounds_change_count());
 
@@ -2051,14 +2053,14 @@ TEST_F(ClientControlledShellSurfaceDisplayTest,
   surface->Commit();
 
   EXPECT_TRUE(shell_surface->GetWidget()->IsMinimized());
-  shell_surface->OnBoundsChangeEvent(ash::WindowStateType::kMinimized,
-                                     ash::WindowStateType::kMinimized,
-                                     display_id, gfx::Rect(0, 0, 100, 100), 0);
+  shell_surface->OnBoundsChangeEvent(WindowStateType::kMinimized,
+                                     WindowStateType::kMinimized, display_id,
+                                     gfx::Rect(0, 0, 100, 100), 0);
   ASSERT_EQ(1, bounds_change_count());
 
   // Send bounds change when exiting minmized.
-  shell_surface->OnBoundsChangeEvent(ash::WindowStateType::kMinimized,
-                                     ash::WindowStateType::kNormal, display_id,
+  shell_surface->OnBoundsChangeEvent(WindowStateType::kMinimized,
+                                     WindowStateType::kNormal, display_id,
                                      gfx::Rect(0, 0, 100, 100), 0);
   ASSERT_EQ(2, bounds_change_count());
 
@@ -2068,9 +2070,9 @@ TEST_F(ClientControlledShellSurfaceDisplayTest,
           shell_surface->GetWidget()->non_client_view()->frame_view());
   surface->SetFrame(SurfaceFrameType::NORMAL);
   surface->Commit();
-  shell_surface->OnBoundsChangeEvent(ash::WindowStateType::kMinimized,
-                                     ash::WindowStateType::kRightSnapped,
-                                     display_id, gfx::Rect(0, 0, 100, 100), 0);
+  shell_surface->OnBoundsChangeEvent(WindowStateType::kMinimized,
+                                     WindowStateType::kRightSnapped, display_id,
+                                     gfx::Rect(0, 0, 100, 100), 0);
   EXPECT_EQ(3, bounds_change_count());
   EXPECT_EQ(
       frame_view->GetClientBoundsForWindowBounds(gfx::Rect(0, 0, 100, 100)),
@@ -2079,9 +2081,9 @@ TEST_F(ClientControlledShellSurfaceDisplayTest,
 
   // Snapped, in tablet mode.
   EnableTabletMode(true);
-  shell_surface->OnBoundsChangeEvent(ash::WindowStateType::kMinimized,
-                                     ash::WindowStateType::kRightSnapped,
-                                     display_id, gfx::Rect(0, 0, 100, 100), 0);
+  shell_surface->OnBoundsChangeEvent(WindowStateType::kMinimized,
+                                     WindowStateType::kRightSnapped, display_id,
+                                     gfx::Rect(0, 0, 100, 100), 0);
   EXPECT_EQ(4, bounds_change_count());
   EXPECT_EQ(gfx::Rect(0, 0, 100, 100), requested_bounds().back());
 }
@@ -2253,7 +2255,7 @@ TEST_F(ClientControlledShellSurfaceTest, DoNotReplayWindowStateRequest) {
       exo_test_helper()->CreateClientControlledShellSurface(surface.get());
 
   shell_surface->set_state_changed_callback(
-      base::BindRepeating([](ash::WindowStateType, ash::WindowStateType) {
+      base::BindRepeating([](WindowStateType, WindowStateType) {
         // This callback must not be called when a widget is created.
         EXPECT_TRUE(false);
       }));
@@ -2424,8 +2426,8 @@ class ClientControlledShellSurfaceScaleTest : public test::ExoTestBase {
   }
 
   void OnBoundsChangeEvent(ClientControlledShellSurface* shell_surface,
-                           ash::WindowStateType current_state,
-                           ash::WindowStateType requested_state,
+                           WindowStateType current_state,
+                           WindowStateType requested_state,
                            int64_t display_id,
                            const gfx::Rect& bounds_in_display,
                            bool is_resize,
@@ -2609,6 +2611,74 @@ TEST_F(ClientControlledShellSurfaceScaleTest,
   // the window is snapped. Changing the scale will change its bounds in DP,
   // even if the position of the window as visible to the user does not change.
   EXPECT_GE(bounds_change_count(), 1);
+}
+
+TEST_F(ClientControlledShellSurfaceTest, SnappedClientBounds) {
+  UpdateDisplay("800x600");
+
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+
+  std::unique_ptr<Surface> surface(new Surface);
+  auto shell_surface =
+      exo_test_helper()->CreateClientControlledShellSurface(surface.get());
+
+  // Clear insets so that it won't affects the bounds.
+  shell_surface->SetSystemUiVisibility(true);
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  ash::Shell::Get()->display_manager()->UpdateWorkAreaOfDisplay(
+      display_id, gfx::Insets(0, 0, 0, 0));
+
+  gfx::Rect requested_bounds;
+  shell_surface->set_bounds_changed_callback(base::BindRepeating(
+      [](gfx::Rect* dst, WindowStateType current_state,
+         WindowStateType requested_state, int64_t display_id,
+         const gfx::Rect& bounds, bool is_resize,
+         int bounds_change) { *dst = bounds; },
+      base::Unretained(&requested_bounds)));
+
+  surface->Attach(buffer.get());
+  surface->Commit();
+  views::Widget* widget = shell_surface->GetWidget();
+  aura::Window* window = widget->GetNativeWindow();
+
+  // Normal state -> Snap.
+  shell_surface->SetGeometry(gfx::Rect(50, 100, 200, 300));
+  surface->SetFrame(SurfaceFrameType::NORMAL);
+  surface->Commit();
+  EXPECT_EQ(gfx::Rect(50, 68, 200, 332), widget->GetWindowBoundsInScreen());
+
+  ash::WMEvent event(ash::WM_EVENT_SNAP_LEFT);
+  ash::WindowState::Get(window)->OnWMEvent(&event);
+  EXPECT_EQ(gfx::Rect(0, 32, 400, 568), requested_bounds);
+
+  // Maximized -> Snap.
+  shell_surface->SetMaximized();
+  shell_surface->SetGeometry(gfx::Rect(0, 0, 800, 568));
+  surface->Commit();
+  EXPECT_TRUE(widget->IsMaximized());
+
+  ash::WindowState::Get(window)->OnWMEvent(&event);
+  EXPECT_EQ(gfx::Rect(0, 32, 400, 568), requested_bounds);
+  shell_surface->SetSnappedToLeft();
+  shell_surface->SetGeometry(gfx::Rect(0, 0, 400, 568));
+  surface->Commit();
+
+  // Clamshell mode -> tablet mode. The bounds start from top-left corner.
+  EnableTabletMode(true);
+  EXPECT_EQ(gfx::Rect(0, 0, 396, 564), requested_bounds);
+  shell_surface->SetGeometry(gfx::Rect(0, 0, 396, 568));
+  surface->SetFrame(SurfaceFrameType::AUTOHIDE);
+  surface->Commit();
+
+  // Tablet mode -> clamshell mode. Top caption height should be reserved.
+  EnableTabletMode(false);
+  EXPECT_EQ(gfx::Rect(0, 32, 396, 568), requested_bounds);
+
+  // Clean up state.
+  shell_surface->SetSnappedToLeft();
+  surface->Commit();
 }
 
 }  // namespace exo

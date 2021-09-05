@@ -45,9 +45,10 @@ TEST_F(NGInlineLayoutAlgorithmTest, BreakToken) {
   NGInlineNode inline_node(block_flow);
   LogicalSize size(LayoutUnit(50), LayoutUnit(20));
 
-  NGConstraintSpaceBuilder builder(WritingMode::kHorizontalTb,
-                                   WritingMode::kHorizontalTb,
-                                   /* is_new_fc */ false);
+  NGConstraintSpaceBuilder builder(
+      WritingMode::kHorizontalTb,
+      {WritingMode::kHorizontalTb, TextDirection::kLtr},
+      /* is_new_fc */ false);
   builder.SetAvailableSize(size);
   NGConstraintSpace constraint_space = builder.ToConstraintSpace();
 
@@ -108,7 +109,7 @@ TEST_F(NGInlineLayoutAlgorithmTest,
   )HTML");
   auto* block_flow =
       To<LayoutBlockFlow>(GetLayoutObjectByElementId("container"));
-  const NGPhysicalBoxFragment* container = block_flow->CurrentFragment();
+  const NGPhysicalBoxFragment* container = block_flow->GetPhysicalFragment(0);
   ASSERT_TRUE(container);
   EXPECT_EQ(LayoutUnit(), container->Size().height);
 
@@ -319,7 +320,7 @@ TEST_F(NGInlineLayoutAlgorithmTest, TextFloatsAroundInlineFloatThatFitsOnLine) {
 
   auto* block_flow =
       To<LayoutBlockFlow>(GetLayoutObjectByElementId("container"));
-  const NGPhysicalBoxFragment* block_box = block_flow->CurrentFragment();
+  const NGPhysicalBoxFragment* block_box = block_flow->GetPhysicalFragment(0);
   ASSERT_TRUE(block_box);
 
   // Two lines.
@@ -451,7 +452,8 @@ TEST_F(NGInlineLayoutAlgorithmTest, InkOverflow) {
   auto* block_flow =
       To<LayoutBlockFlow>(GetLayoutObjectByElementId("container"));
   const NGPaintFragment* paint_fragment = block_flow->PaintFragment();
-  const NGPhysicalBoxFragment& box_fragment = *block_flow->CurrentFragment();
+  const NGPhysicalBoxFragment& box_fragment =
+      *block_flow->GetPhysicalFragment(0);
   if (paint_fragment)
     ASSERT_EQ(&paint_fragment->PhysicalFragment(), &box_fragment);
   EXPECT_EQ(LayoutUnit(10), box_fragment.Size().height);

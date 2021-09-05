@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -48,7 +47,6 @@
 #include "media/blink/texttrack_impl.h"
 #include "media/blink/url_index.h"
 #include "media/blink/video_decode_stats_reporter.h"
-#include "media/blink/watch_time_reporter.h"
 #include "media/blink/webcontentdecryptionmodule_impl.h"
 #include "media/blink/webinbandtexttrack_impl.h"
 #include "media/blink/webmediasource_impl.h"
@@ -60,7 +58,7 @@
 #include "media/remoting/remoting_constants.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/data_url.h"
-#include "third_party/blink/public/platform/media/webmediaplayer_delegate.h"
+#include "third_party/blink/public/common/media/watch_time_reporter.h"
 #include "third_party/blink/public/platform/web_encrypted_media_types.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
 #include "third_party/blink/public/platform/web_media_player_client.h"
@@ -512,6 +510,7 @@ WebMediaPlayerImpl::~WebMediaPlayerImpl() {
 
   delegate_->PlayerGone(delegate_id_);
   delegate_->RemoveObserver(delegate_id_);
+  delegate_ = nullptr;
 
   // Finalize any watch time metrics before destroying the pipeline.
   watch_time_reporter_.reset();
@@ -730,28 +729,26 @@ void WebMediaPlayerImpl::OnHasNativeControlsChanged(bool has_native_controls) {
     watch_time_reporter_->OnNativeControlsDisabled();
 }
 
-void WebMediaPlayerImpl::OnDisplayTypeChanged(
-    WebMediaPlayer::DisplayType display_type) {
+void WebMediaPlayerImpl::OnDisplayTypeChanged(blink::DisplayType display_type) {
   if (surface_layer_for_video_enabled_) {
     vfc_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(
-            &VideoFrameCompositor::SetForceSubmit,
-            base::Unretained(compositor_.get()),
-            display_type == WebMediaPlayer::DisplayType::kPictureInPicture));
+        base::BindOnce(&VideoFrameCompositor::SetForceSubmit,
+                       base::Unretained(compositor_.get()),
+                       display_type == blink::DisplayType::kPictureInPicture));
   }
 
   if (!watch_time_reporter_)
     return;
 
   switch (display_type) {
-    case WebMediaPlayer::DisplayType::kInline:
+    case blink::DisplayType::kInline:
       watch_time_reporter_->OnDisplayTypeInline();
       break;
-    case WebMediaPlayer::DisplayType::kFullscreen:
+    case blink::DisplayType::kFullscreen:
       watch_time_reporter_->OnDisplayTypeFullscreen();
       break;
-    case WebMediaPlayer::DisplayType::kPictureInPicture:
+    case blink::DisplayType::kPictureInPicture:
       watch_time_reporter_->OnDisplayTypePictureInPicture();
 
       // Resumes playback if it was paused when hidden.
@@ -1023,6 +1020,11 @@ void WebMediaPlayerImpl::DoSeek(base::TimeDelta time, bool time_updated) {
   // recorded by the reporter.
   if (watch_time_reporter_)
     watch_time_reporter_->OnSeeking();
+
+  // Send the seek updates only when the seek pipeline hasn't started,
+  // OnPipelineSeeked is not called yet.
+  if (!seeking_)
+    delegate_->DidSeek(delegate_id_);
 
   // TODO(sandersd): Move |seeking_| to PipelineController.
   // TODO(sandersd): Do we want to reset the idle timer here?
@@ -1388,14 +1390,10 @@ void WebMediaPlayerImpl::Paint(cc::PaintCanvas* canvas,
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl:paint");
 
-  // We can't copy from protected frames.
-  if (cdm_context_ref_)
-    return;
-
   scoped_refptr<VideoFrame> video_frame = GetCurrentFrameFromCompositor();
 
   gfx::Rect gfx_rect(rect);
-  if (video_frame.get() && video_frame->HasTextures()) {
+  if (video_frame && video_frame->HasTextures()) {
     if (!raster_context_provider_)
       return;  // Unable to get/create a shared main thread context.
     if (!raster_context_provider_->GrContext())
@@ -1414,6 +1412,10 @@ void WebMediaPlayerImpl::Paint(cc::PaintCanvas* canvas,
       video_frame, canvas, gfx::RectF(gfx_rect), flags,
       pipeline_metadata_.video_decoder_config.video_transformation(),
       raster_context_provider_.get());
+}
+
+scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrame() {
+  return GetCurrentFrameFromCompositor();
 }
 
 bool WebMediaPlayerImpl::WouldTaintOrigin() const {
@@ -1480,14 +1482,11 @@ bool WebMediaPlayerImpl::CopyVideoTextureToPlatformTexture(
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl:copyVideoTextureToPlatformTexture");
 
-  // We can't copy from protected frames.
-  if (cdm_context_ref_)
-    return false;
-
   scoped_refptr<VideoFrame> video_frame = GetCurrentFrameFromCompositor();
-  if (!video_frame.get() || !video_frame->HasTextures()) {
+  if (!video_frame || !video_frame->HasTextures()) {
     return false;
   }
+
   if (out_metadata) {
     // WebGL last-uploaded-frame-metadata API is enabled.
     // https://crbug.com/639174
@@ -2066,6 +2065,22 @@ void WebMediaPlayerImpl::OnMetadata(const PipelineMetadata& metadata) {
   delegate_->DidMediaMetadataChange(
       delegate_id_, delegate_has_audio_, HasVideo(),
       DurationToMediaContentType(GetPipelineMediaDuration()));
+
+  // It could happen that the demuxer successfully completed initialization
+  // (implying it had determined media metadata), but then removed all audio and
+  // video streams and the ability to demux any A/V before |metadata| was
+  // constructed and passed to us. One example is, with MSE-in-Workers, the
+  // worker owning the MediaSource could have been terminated, or the app could
+  // have explicitly removed all A/V SourceBuffers. That termination/removal
+  // could race the construction of |metadata|. Regardless of load-type, we
+  // shouldn't allow playback of a resource that has neither audio nor video.
+  // We treat lack of A/V as if there were an error in the demuxer before
+  // reaching HAVE_METADATA.
+  if (!HasVideo() && !HasAudio()) {
+    DVLOG(1) << __func__ << ": no audio and no video -> error";
+    OnError(PipelineStatus::DEMUXER_ERROR_COULD_NOT_OPEN);
+    return;  // Do not transition to HAVE_METADATA.
+  }
 
   // TODO(dalecurtis): Don't create these until kReadyStateHaveFutureData; when
   // we create them early we just increase the chances of needing to throw them
@@ -3041,6 +3056,10 @@ scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor()
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   TRACE_EVENT0("media", "WebMediaPlayerImpl::GetCurrentFrameFromCompositor");
 
+  // We can't copy from protected frames.
+  if (cdm_context_ref_)
+    return nullptr;
+
   // Can be null.
   scoped_refptr<VideoFrame> video_frame =
       compositor_->GetCurrentFrameOnAnyThread();
@@ -3460,7 +3479,7 @@ void WebMediaPlayerImpl::CreateWatchTimeReporter() {
   }
 
   // Create the watch time reporter and synchronize its initial state.
-  watch_time_reporter_ = std::make_unique<WatchTimeReporter>(
+  watch_time_reporter_ = std::make_unique<blink::WatchTimeReporter>(
       mojom::PlaybackProperties::New(
           pipeline_metadata_.has_audio, has_video, false, false,
           !!chunk_demuxer_, is_encrypted_, embedded_media_experience_enabled_),
@@ -3484,14 +3503,14 @@ void WebMediaPlayerImpl::CreateWatchTimeReporter() {
   else
     watch_time_reporter_->OnNativeControlsDisabled();
 
-  switch (client_->DisplayType()) {
-    case WebMediaPlayer::DisplayType::kInline:
+  switch (client_->GetDisplayType()) {
+    case blink::DisplayType::kInline:
       watch_time_reporter_->OnDisplayTypeInline();
       break;
-    case WebMediaPlayer::DisplayType::kFullscreen:
+    case blink::DisplayType::kFullscreen:
       watch_time_reporter_->OnDisplayTypeFullscreen();
       break;
-    case WebMediaPlayer::DisplayType::kPictureInPicture:
+    case blink::DisplayType::kPictureInPicture:
       watch_time_reporter_->OnDisplayTypePictureInPicture();
       break;
   }
@@ -3919,8 +3938,7 @@ void WebMediaPlayerImpl::RecordEncryptionScheme(
 
 bool WebMediaPlayerImpl::IsInPictureInPicture() const {
   DCHECK(client_);
-  return client_->DisplayType() ==
-         WebMediaPlayer::DisplayType::kPictureInPicture;
+  return client_->GetDisplayType() == blink::DisplayType::kPictureInPicture;
 }
 
 void WebMediaPlayerImpl::OnPictureInPictureAvailabilityChanged(bool available) {

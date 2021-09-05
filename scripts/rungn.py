@@ -52,6 +52,7 @@ parser.add_argument("--static", action="store_true");
 parser.add_argument("--goma", action="store_true");
 parser.add_argument("--no-hermetic", action="store_true");
 parser.add_argument("--args-gn")
+parser.add_argument("--filter-project")
 parser.add_argument("args", nargs=argparse.REMAINDER);
 
 args = parser.parse_args()
@@ -292,7 +293,9 @@ if args.refresh or not args.args:
         "--ide="+ide_kind,
         #"--no-deps",
         ]
-      if not (args.ide_all or use_gn_ide_all):
+      if args.filter_project:
+        ide_args.append('--filters='+args.filter_project)
+      elif not (args.ide_all or use_gn_ide_all):
         ide_args.append('--filters=:vivaldi')
 
       name = ide_profile_name+"_"+os.path.basename(target)
@@ -318,9 +321,9 @@ def fix_arg(x):
   if x.startswith('--args="'):
     if x[-1] != '"':
       return x
-    return x[:8]+include_arg+ x[8:-1]+ gn_defines+'"'
+    return x + " " + gn_defines+'"'
   if x.startswith('--args='):
-    return x[:7]+include_arg+ x[7:]+ gn_defines
+    return x + " " + gn_defines
   return x
 
 args_updated = [fix_arg(x) for x in args.args]

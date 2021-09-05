@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
@@ -23,7 +23,6 @@
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/accessibility/dump_accessibility_browsertest_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/public/browser/accessibility_tree_formatter.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/accessibility_notification_waiter.h"
@@ -31,11 +30,13 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+#include "ui/accessibility/platform/inspect/tree_formatter.h"
 
 namespace content {
 
-typedef AccessibilityTreeFormatter::PropertyFilter PropertyFilter;
+using ui::AXPropertyFilter;
+using ui::AXTreeFormatter;
 
 // See content/test/data/accessibility/readme.md for an overview.
 //
@@ -72,16 +73,16 @@ typedef AccessibilityTreeFormatter::PropertyFilter PropertyFilter;
 class DumpAccessibilityEventsTest : public DumpAccessibilityTestBase {
  public:
   void AddDefaultFilters(
-      std::vector<PropertyFilter>* property_filters) override {
+      std::vector<AXPropertyFilter>* property_filters) override {
     // Suppress spurious focus events on the document object.
-    property_filters->push_back(
-        PropertyFilter("EVENT_OBJECT_FOCUS*DOCUMENT*", PropertyFilter::DENY));
-    property_filters->push_back(PropertyFilter(
-        "AutomationFocusChanged*document*", PropertyFilter::DENY));
+    property_filters->push_back(AXPropertyFilter("EVENT_OBJECT_FOCUS*DOCUMENT*",
+                                                 AXPropertyFilter::DENY));
+    property_filters->push_back(AXPropertyFilter(
+        "AutomationFocusChanged*document*", AXPropertyFilter::DENY));
     // Implementing IRawElementProviderAdviseEvents causes Win7 to fire
     // spurious focus events (regardless of what the implementation does).
-    property_filters->push_back(PropertyFilter(
-        "AutomationFocusChanged on role=region", PropertyFilter::DENY));
+    property_filters->push_back(AXPropertyFilter(
+        "AutomationFocusChanged on role=region", AXPropertyFilter::DENY));
   }
 
   std::vector<std::string> Dump(std::vector<std::string>& run_until) override;
@@ -193,10 +194,10 @@ std::vector<std::string> DumpAccessibilityEventsTest::Dump(
     // so these tests shouldn't be used to make assertions about event order.
     std::sort(event_logs.begin(), event_logs.end());
 
-    for (size_t i = 0; i < event_logs.size(); ++i) {
-      if (AccessibilityTreeFormatter::MatchesPropertyFilters(
-              property_filters_, event_logs[i], true)) {
-        result.push_back(event_logs[i]);
+    for (auto& event_log : event_logs) {
+      if (AXTreeFormatter::MatchesPropertyFilters(property_filters_, event_log,
+                                                  true)) {
+        result.push_back(event_log);
       }
     }
 
@@ -263,8 +264,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("aria-button-expand.html"));
 }
 
+// crbug.com/1142637: disabled due to missing invalidation causing flakiness.
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAriaComboBoxCollapse) {
+                       DISABLED_AccessibilityEventsAriaComboBoxCollapse) {
   RunEventTest(FILE_PATH_LITERAL("aria-combo-box-collapse.html"));
 }
 
@@ -283,8 +285,9 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("aria-controls-changed.html"));
 }
 
+// TODO(nektar): Re-enable this test after kValueChanged is removed from Blink.
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAriaComboBoxUneditable) {
+                       DISABLED_AccessibilityEventsAriaComboBoxUneditable) {
   RunEventTest(FILE_PATH_LITERAL("aria-combo-box-uneditable.html"));
 }
 
@@ -388,13 +391,15 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("aria-treeitem-focus.html"));
 }
 
+// crbug.com/1141579: disabled due to missing invalidation causing flakiness.
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAriaComboBoxFocus) {
+                       DISABLED_AccessibilityEventsAriaComboBoxFocus) {
   RunEventTest(FILE_PATH_LITERAL("aria-combo-box-focus.html"));
 }
 
-// TODO(835455): Fails on Windows.
-#if defined(OS_WIN)
+// TODO(crbug.com/835455): Fails on Windows.
+// TODO(crbug.com/945193): Flaky on Mac.
+#if defined(OS_WIN) || defined(OS_MAC)
 #define MAYBE_AccessibilityEventsAriaComboBoxDelayAddList \
   DISABLED_AccessibilityEventsAriaComboBoxDelayAddList
 #else
@@ -631,6 +636,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsFocusListboxMultiselect) {
   RunEventTest(FILE_PATH_LITERAL("focus-listbox-multiselect.html"));
 }
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsInnerHtmlChange) {
   RunEventTest(FILE_PATH_LITERAL("inner-html-change.html"));
@@ -817,6 +823,21 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsStyleChanged) {
   RunEventTest(FILE_PATH_LITERAL("style-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsSubtreeReparentedIgnoredChanged) {
+  RunEventTest(FILE_PATH_LITERAL("subtree-reparented-ignored-changed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsSubtreeReparentedViaAppendChild) {
+  RunEventTest(FILE_PATH_LITERAL("subtree-reparented-via-append-child.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsSubtreeReparentedViaAriaOwns) {
+  RunEventTest(FILE_PATH_LITERAL("subtree-reparented-via-aria-owns.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,

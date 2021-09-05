@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Nadagdag na ang site ng <ph name="SITE_NAME" /></translation>
 <translation id="1383876407941801731">Hanapin</translation>
 <translation id="1384959399684842514">Na-pause ang pag-download</translation>
+<translation id="1415402041810619267">Naputol ang URL</translation>
 <translation id="1431402976894535801">I-block ang mga site na malaman kapag aktibo ka</translation>
 <translation id="1446450296470737166">Payagan ganap na kontrol sa MIDI device</translation>
 <translation id="1509960214886564027">Posibleng masira ang mga feature sa maraming site</translation>
 <translation id="1620510694547887537">Camera</translation>
-<translation id="1647391597548383849">I-access ang iyong camera</translation>
 <translation id="1660204651932907780">Payagan ang mga site na mag-play ng tunog (inirerekomenda)</translation>
 <translation id="1677097821151855053">Ginagamit ang cookies at iba pang data ng site para tandaan ka, halimbawa para i-sign in ka o i-personalize ang mga ad. Para mapamahalaan ang cookies para sa lahat ng site, tingnan ang <ph name="BEGIN_LINK" />Mga Setting<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">I-clear ang data ng site?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">URL ng site</translation>
 <translation id="2025115093177348061">Augmented reality</translation>
 <translation id="2030769033451695672">Mag-tap para bumalik sa <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">Ang iyong presensya</translation>
 <translation id="2079545284768500474">I-undo</translation>
 <translation id="2091887806945687916">Tunog</translation>
 <translation id="2107397443965016585">Magtanong bago pahintulutan ang mga site na mag-play ng pinoprotektahang content (inirerekomenda)</translation>
 <translation id="2146738493024040262">Buksan ang Instant App</translation>
 <translation id="2148716181193084225">Ngayon</translation>
 <translation id="2182457891543959921">Magtanong bago payagan ang mga site na gumawa ng 3D na mapa ng iyong kapaligiran o subaybayan ang posisyon ng camera (inirerekomenda)</translation>
-<translation id="2187243482123994665">Pagiging aktibo ng user</translation>
 <translation id="2212565012507486665">Payagan ang cookies</translation>
 <translation id="2228071138934252756">Para payagan ang <ph name="APP_NAME" /> na i-access ang iyong camera, i-on din ang camera sa <ph name="BEGIN_LINK" />Mga Setting ng Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Isang beses lang</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{Pinapayagan ang <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, at <ph name="NUM_MORE" /> pa}one{Pinapayagan ang <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, at <ph name="NUM_MORE" /> pa}other{Pinapayagan ang <ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, at <ph name="NUM_MORE" /> pa}}</translation>
 <translation id="2434158240863470628">Tapos nang mag-download <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Access sa lokasyon</translation>
 <translation id="2482878487686419369">Mga Abiso</translation>
 <translation id="2490684707762498678">Pinapamahalaan ng <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Tulong at feedback</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Mikropono</translation>
 <translation id="3277252321222022663">Payagan ang mga site na i-access ang mga sensor (inirerekomenda)</translation>
 <translation id="3295602654194328831">Itago ang Impormasyon</translation>
+<translation id="3328801116991980348">Impormasyon ng site</translation>
 <translation id="3333961966071413176">Lahat ng contact</translation>
 <translation id="3386292677130313581">Magtanong bago payagan ang mga site na malaman ang iyong lokasyon (inirerekomenda)</translation>
 <translation id="3538390592868664640">I-block ang mga site sa paggawa ng 3D na mapa ng iyong kapaligiran o pagsubaybay sa posisyon ng camera</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Pahintulutan ang mga site na mag-play ng pinoprotektahang content</translation>
 <translation id="4468959413250150279">I-mute ang tunog para sa isang partikular na site.</translation>
 <translation id="4479647676395637221">Magtanong muna bago payagan ang mga site na gamitin ang iyong camera (inirerekomenda)</translation>
+<translation id="4505788138578415521">Na-expand ang URL</translation>
 <translation id="4534723447064627427">Para payagan ang <ph name="APP_NAME" /> na i-access ang iyong mikropono, i-on din ang mikropono sa <ph name="BEGIN_LINK" />Mga Setting ng Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Mga Detalye</translation>
 <translation id="4645575059429386691">Pinamamahalaan ng iyong magulang</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, at <ph name="NUM_MORE" /> pa}one{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, at <ph name="NUM_MORE" /> pa}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" />, at <ph name="NUM_MORE" /> pa}}</translation>
 <translation id="913657688200966289">I-on ang mga pahintulot para sa <ph name="APP_NAME" /> sa <ph name="BEGIN_LINK" />Mga Setting ng Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">I-access ang iyong mikropono</translation>
 <translation id="965817943346481315">I-block kung nagpapakita ang site ng mga nakakasagabal o nakakapanlinlang na ad (inirerekomenda)</translation>
 <translation id="967624055006145463">Naka-store na data</translation>
 </translationbundle>

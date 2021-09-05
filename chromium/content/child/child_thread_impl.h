@@ -161,12 +161,6 @@ class CONTENT_EXPORT ChildThreadImpl : public IPC::Listener,
 
   bool IsInBrowserProcess() const;
 
-  void GetAssociatedInterface(
-      int32_t routing_id,
-      const std::string& name,
-      mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
-          receiver);
-
  private:
   // TODO(crbug.com/1111231): This class is a friend so that it can call our
   // private mojo implementation methods, acting as a pass-through. This is only

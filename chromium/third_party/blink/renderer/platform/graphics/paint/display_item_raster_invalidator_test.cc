@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_raster_invalidator.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller_test.h"
@@ -24,13 +24,14 @@ class DisplayItemRasterInvalidatorTest : public PaintControllerTestBase,
   Vector<RasterInvalidationInfo> GenerateRasterInvalidations() {
     GetPaintController().CommitNewDisplayItems();
     invalidator_.Generate(
-        base::DoNothing(), GetPaintController().GetPaintArtifactShared(),
+        base::DoNothing(),
+        PaintChunkSubset(GetPaintController().GetPaintArtifactShared()),
         // The layer rect is big enough not to clip display item raster
-        // invalidation rects.
+        // invalidation rects in the tests.
         IntRect(0, 0, 20000, 20000), PropertyTreeState::Root());
     GetPaintController().FinishCycle();
-    GetPaintController().ClearPropertyTreeChangedStateTo(
-        PropertyTreeState::Root());
+    for (auto& chunk : GetPaintController().PaintChunks())
+      chunk.properties.ClearChangedTo(PropertyTreeState::Root());
 
     if (invalidator_.GetTracking())
       return invalidator_.GetTracking()->Invalidations();

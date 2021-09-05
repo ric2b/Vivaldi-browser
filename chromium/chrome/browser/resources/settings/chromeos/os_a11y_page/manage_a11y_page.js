@@ -169,14 +169,6 @@ Polymer({
       }
     },
 
-    /** @private */
-    enableLiveCaption_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableLiveCaption');
-      },
-    },
-
     /**
      * Whether a setting for enabling shelf navigation buttons in tablet mode
      * should be displayed in the accessibility settings.
@@ -265,7 +257,6 @@ Polymer({
         chromeos.settings.mojom.Setting.kMonoAudio,
         chromeos.settings.mojom.Setting.kStartupSound,
         chromeos.settings.mojom.Setting.kEnableSwitchAccess,
-        chromeos.settings.mojom.Setting.kLiveCaptions,
         chromeos.settings.mojom.Setting.kEnableCursorColor,
       ]),
     },
@@ -513,21 +504,11 @@ Polymer({
         enabled);
   },
 
-  /**
-   * @param {!Event} event
-   * @private
-   */
-  onA11yLiveCaptionChange_(event) {
-    const a11yLiveCaptionOn = event.target.checked;
-    chrome.metricsPrivate.recordBoolean(
-        'Accessibility.LiveCaption.ToggleEnabled', a11yLiveCaptionOn);
-  },
-
   /** @private */
   onA11yCursorColorChange_() {
     // Custom cursor color is enabled when the color is not set to black.
     const a11yCursorColorOn =
-        this.get('prefs.settings.a11y.cursor_color.value') !=
+        this.get('prefs.settings.a11y.cursor_color.value') !==
         DEFAULT_BLACK_CURSOR_COLOR;
     this.set(
         'prefs.settings.a11y.cursor_color_enabled.value', a11yCursorColorOn);

@@ -35,7 +35,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
@@ -47,7 +47,6 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/scriptable_document_parser.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -242,8 +241,7 @@ void ScriptController::ExecuteJavaScriptURL(
 
   DCHECK_EQ(&window_->GetScriptController(), this);
   v8::HandleScope handle_scope(GetIsolate());
-  v8::Local<v8::Value> v8_result =
-      script->RunScriptAndReturnValue(window_->GetFrame());
+  v8::Local<v8::Value> v8_result = script->RunScriptAndReturnValue(window_);
   UseCounter::Count(window_.Get(), WebFeature::kExecutedJavaScriptURL);
 
   // If executing script caused this frame to be removed from the page, we

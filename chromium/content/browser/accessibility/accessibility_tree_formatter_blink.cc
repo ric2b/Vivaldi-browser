@@ -160,7 +160,7 @@ AccessibilityTreeFormatterBlink::AccessibilityTreeFormatterBlink()
 AccessibilityTreeFormatterBlink::~AccessibilityTreeFormatterBlink() {}
 
 void AccessibilityTreeFormatterBlink::AddDefaultFilters(
-    std::vector<PropertyFilter>* property_filters) {
+    std::vector<AXPropertyFilter>* property_filters) {
   // Noisy, perhaps add later:
   //   editable, focus*, horizontal, linked, richlyEditable, vertical
   // Too flaky: hovered, offscreen
@@ -172,7 +172,7 @@ void AccessibilityTreeFormatterBlink::AddDefaultFilters(
   AddPropertyFilter(property_filters, "required");
   AddPropertyFilter(property_filters, "select*");
   AddPropertyFilter(property_filters, "selectedFromFocus=*",
-                    PropertyFilter::DENY);
+                    AXPropertyFilter::DENY);
   AddPropertyFilter(property_filters, "visited");
   // Other attributes
   AddPropertyFilter(property_filters, "busy=true");
@@ -189,12 +189,12 @@ void AccessibilityTreeFormatterBlink::AddDefaultFilters(
   AddPropertyFilter(property_filters, "invalidState=*");
   AddPropertyFilter(property_filters, "ignored*");
   AddPropertyFilter(property_filters, "invalidState=false",
-                    PropertyFilter::DENY);  // Don't show false value
+                    AXPropertyFilter::DENY);  // Don't show false value
   AddPropertyFilter(property_filters, "roleDescription=*");
   AddPropertyFilter(property_filters, "errormessageId=*");
 }
 // static
-std::unique_ptr<AccessibilityTreeFormatter>
+std::unique_ptr<ui::AXTreeFormatter>
 AccessibilityTreeFormatterBlink::CreateBlink() {
   return std::make_unique<AccessibilityTreeFormatterBlink>();
 }
@@ -214,18 +214,16 @@ AccessibilityTreeFormatterBlink::BuildAccessibilityTree(
   return dict;
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForWindow(
-    gfx::AcceleratedWidget widget) {
+base::Value AccessibilityTreeFormatterBlink::BuildTreeForWindow(
+    gfx::AcceleratedWidget widget) const {
   NOTREACHED();
-  return nullptr;
+  return base::Value(base::Value::Type::DICTIONARY);
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterBlink::BuildAccessibilityTreeForSelector(
-    const TreeSelector& selector) {
+base::Value AccessibilityTreeFormatterBlink::BuildTreeForSelector(
+    const AXTreeSelector& selector) const {
   NOTREACHED();
-  return nullptr;
+  return base::Value(base::Value::Type::DICTIONARY);
 }
 
 void AccessibilityTreeFormatterBlink::RecursiveBuildAccessibilityTree(
@@ -602,31 +600,6 @@ std::string AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
   }
 
   return line;
-}
-
-base::FilePath::StringType
-AccessibilityTreeFormatterBlink::GetExpectedFileSuffix() {
-  return FILE_PATH_LITERAL("-expected-blink.txt");
-}
-
-const std::string AccessibilityTreeFormatterBlink::GetAllowEmptyString() {
-  return "@BLINK-ALLOW-EMPTY:";
-}
-
-const std::string AccessibilityTreeFormatterBlink::GetAllowString() {
-  return "@BLINK-ALLOW:";
-}
-
-const std::string AccessibilityTreeFormatterBlink::GetDenyString() {
-  return "@BLINK-DENY:";
-}
-
-const std::string AccessibilityTreeFormatterBlink::GetDenyNodeString() {
-  return "@BLINK-DENY-NODE:";
-}
-
-const std::string AccessibilityTreeFormatterBlink::GetRunUntilEventString() {
-  return "@BLINK-RUN-UNTIL-EVENT:";
 }
 
 }  // namespace content

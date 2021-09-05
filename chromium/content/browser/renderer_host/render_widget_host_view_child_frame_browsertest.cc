@@ -5,10 +5,10 @@
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
@@ -18,8 +18,6 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -30,6 +28,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
+#include "content/test/mock_display_feature.h"
 #include "content/test/portal/portal_created_observer.h"
 #include "content/test/test_content_browser_client.h"
 #include "net/dns/mock_host_resolver.h"
@@ -145,7 +144,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest, Screen) {
   // Load cross-site page into iframe.
   GURL cross_site_url(
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
   int main_frame_screen_width =
       ExecuteScriptAndGetValue(shell()->web_contents()->GetMainFrame(),
@@ -229,7 +228,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   {
     GURL cross_site_url(
         embedded_test_server()->GetURL("c.com", "/title2.html"));
-    NavigateFrameToURL(root->child_at(0), cross_site_url);
+    EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
     // Wait to see the size sent to the child RenderWidget.
     while (true) {
@@ -245,7 +244,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   {
     GURL cross_site_url(
         embedded_test_server()->GetURL("c.com", "/title2.html"));
-    NavigateFrameToURL(nested_root->child_at(0), cross_site_url);
+    EXPECT_TRUE(
+        NavigateToURLFromRenderer(nested_root->child_at(0), cross_site_url));
 
     // Wait to see the size sent to the child RenderWidget.
     while (true) {
@@ -386,7 +386,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
   // Load cross-site page into iframe.
   GURL cross_site_url(
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
   auto* child_rwh_impl =
       root->child_at(0)->current_frame_host()->GetRenderWidgetHost();
@@ -492,7 +492,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
 
   // Navigate a frame to b.com, which we already have a process for.
   GURL same_site_url(embedded_test_server()->GetURL("b.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), same_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), same_site_url));
 
   // The navigated frame sees the correct (non-default) value.
   EXPECT_EQ(true,
@@ -501,7 +501,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
 
   // Navigate the frame to c.com, which we don't have a process for.
   GURL cross_site_url(embedded_test_server()->GetURL("c.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
   // The navigated frame sees the correct (non-default) value.
   EXPECT_EQ(true,
@@ -511,8 +511,17 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
 
 // Validate that the root widget's window segments are correctly propagated
 // via the SynchronizeVisualProperties cascade.
+// Flaky on Mac, Linux and Android (http://crbug/1089994).
+#if defined(OS_MAC) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_ANDROID)
+#define MAYBE_VisualPropertiesPropagation_RootWindowSegments \
+  DISABLED_VisualPropertiesPropagation_RootWindowSegments
+#else
+#define MAYBE_VisualPropertiesPropagation_RootWindowSegments \
+  VisualPropertiesPropagation_RootWindowSegments
+#endif
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
-                       VisualPropertiesPropagation_RootWindowSegments) {
+                       MAYBE_VisualPropertiesPropagation_RootWindowSegments) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(c),a)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -566,7 +575,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
     // to the descendant (at which point we're done and can validate the
     // values).
 
-    root_view->SetDisplayFeatureForTesting(emulated_display_feature);
+    MockDisplayFeature mock_display_feature(root_view);
+    mock_display_feature.SetDisplayFeature(&emulated_display_feature);
     root_widget->SynchronizeVisualProperties();
 
     while (true) {
@@ -601,7 +611,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
     // re-using the existing RenderProcessHost from c.com (aka
     // |oopdescendant_rph|).
     GURL new_frame_url(embedded_test_server()->GetURL("c.com", "/title2.html"));
-    NavigateFrameToURL(root->child_at(1), new_frame_url);
+    EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(1), new_frame_url));
 
     while (true) {
       base::Optional<blink::VisualProperties> properties =
@@ -614,7 +624,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameBrowserTest,
       // when the frame is added in that process). So we need to wait for
       // the outgoing VisualProperties triggered from the parent renderer
       // and comes in via the CrossProcessFrameConnector, which can happen
-      // after NavigateFrameToURL completes.
+      // after NavigateToURLFromRenderer completes.
       if (properties &&
           properties->root_widget_window_segments == expected_segments)
         break;

@@ -48,7 +48,7 @@ TEST_F(MediaStringViewTest, ShowMediaTitleAndArtist) {
 
   SimulateMediaMetadataChanged(metadata);
 
-  const base::string16 expected_text = base::UTF8ToUTF16("title \u00B7 artist");
+  const base::string16 expected_text = base::UTF8ToUTF16("title \u2022 artist");
   EXPECT_EQ(GetMediaStringViewTextLabel()->GetText(), expected_text);
 }
 
@@ -226,7 +226,7 @@ TEST_F(MediaStringViewTest, ShouldStartAndStopAnimationWhenTextChanges) {
       GetMediaStringViewTextLabel()->layer()->GetAnimator()->is_animating());
 }
 
-TEST_F(MediaStringViewTest, PauseMediaWillStopAnimationWithLongText) {
+TEST_F(MediaStringViewTest, PauseMediaWillNotStopAnimationWithLongText) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
 
@@ -253,7 +253,7 @@ TEST_F(MediaStringViewTest, PauseMediaWillStopAnimationWithLongText) {
   SimulateMediaPlaybackStateChanged(
       media_session::mojom::MediaPlaybackState::kPaused);
   EXPECT_FALSE(GetMediaStringView()->GetVisible());
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       GetMediaStringViewTextLabel()->layer()->GetAnimator()->is_animating());
 }
 
@@ -370,7 +370,7 @@ TEST_F(MediaStringViewTest, DoNotShowOnLockScreenIfPrefIsDisabled) {
   pref->SetBoolean(prefs::kLockScreenMediaControlsEnabled, false);
   // Simulates Ambient Mode shown on lock-screen.
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   // Simulates active and playing media session.

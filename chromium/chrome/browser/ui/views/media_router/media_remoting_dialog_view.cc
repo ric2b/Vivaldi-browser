@@ -82,13 +82,6 @@ bool MediaRemotingDialogView::IsShowing() {
   return instance_ != nullptr;
 }
 
-gfx::Size MediaRemotingDialogView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
 MediaRemotingDialogView::MediaRemotingDialogView(
     views::View* anchor_view,
     PrefService* pref_service,
@@ -112,6 +105,9 @@ MediaRemotingDialogView::MediaRemotingDialogView(
                                    base::Unretained(this), true));
   SetCancelCallback(base::BindOnce(&MediaRemotingDialogView::ReportPermission,
                                    base::Unretained(this), false));
+
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));

@@ -9,12 +9,13 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/process/process_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/synchronization/atomic_flag.h"
 #include "chrome/browser/memory/memory_kills_histogram.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace memory {
@@ -47,12 +48,18 @@ void MemoryKillsMonitor::Initialize() {
 }
 
 // static
-void MemoryKillsMonitor::LogLowMemoryKill(
-    const std::string& type, int estimated_freed_kb) {
+void MemoryKillsMonitor::LogLowMemoryKill(const std::string& type,
+                                          int estimated_freed_kb) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   g_memory_kills_monitor_instance.Get().LogLowMemoryKillImpl(
       type, estimated_freed_kb);
+}
+
+// static
+void MemoryKillsMonitor::LogArcOOMKill(unsigned long current_oom_kills) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  g_memory_kills_monitor_instance.Get().LogArcOOMKillImpl(current_oom_kills);
 }
 
 void MemoryKillsMonitor::LoggedInStateChanged() {
@@ -80,8 +87,9 @@ void MemoryKillsMonitor::StartMonitoring() {
 
   // Insert a zero kill record at the begining of each login session for easy
   // comparison to those with non-zero kill sessions.
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Arc.OOMKills.Count", 0, 1, 1000, 1001);
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Arc.LowMemoryKiller.Count", 0, 1, 1000, 1001);
+  base::UmaHistogramCustomCounts("Memory.OOMKills.Count", 0, 1, 1000, 1001);
+  base::UmaHistogramCustomCounts("Memory.LowMemoryKiller.Count", 0, 1, 1000,
+                                 1001);
 
   monitoring_started_.Set();
 
@@ -107,20 +115,20 @@ void MemoryKillsMonitor::CheckOOMKill() {
 void MemoryKillsMonitor::CheckOOMKillImpl(unsigned long current_oom_kills) {
   DCHECK(monitoring_started_.IsSet());
 
-  unsigned long oom_kills_increased = current_oom_kills - last_oom_kills_count_;
-  if (oom_kills_increased == 0)
+  unsigned long oom_kills_delta = current_oom_kills - last_oom_kills_count_;
+  if (oom_kills_delta == 0)
     return;
 
-  VLOG(1) << "OOM_KILLS " << oom_kills_increased << " times";
+  VLOG(1) << "OOM_KILLS " << oom_kills_delta << " times";
 
-  for (int i = 0; i < oom_kills_increased; ++i) {
+  for (int i = 0; i < oom_kills_delta; ++i) {
     ++oom_kills_count_;
 
     // Report the cumulative count of killed process in one login session. For
     // example if there are 3 processes killed, it would report 1 for the first
     // kill, 2 for the second kill, then 3 for the final kill.
-    UMA_HISTOGRAM_CUSTOM_COUNTS("Arc.OOMKills.Count", oom_kills_count_, 1, 1000,
-                                1001);
+    base::UmaHistogramCustomCounts("Memory.OOMKills.Count", oom_kills_count_, 1,
+                                   1000, 1001);
   }
   last_oom_kills_count_ = current_oom_kills;
 }
@@ -141,17 +149,34 @@ void MemoryKillsMonitor::LogLowMemoryKillImpl(const std::string& type,
   const base::TimeDelta time_delta = last_low_memory_kill_time_.is_null()
                                          ? kMaxMemoryKillTimeDelta
                                          : (now - last_low_memory_kill_time_);
-  UMA_HISTOGRAM_MEMORY_KILL_TIME_INTERVAL("Arc.LowMemoryKiller.TimeDelta",
+  UMA_HISTOGRAM_MEMORY_KILL_TIME_INTERVAL("Memory.LowMemoryKiller.TimeDelta",
                                           time_delta);
   last_low_memory_kill_time_ = now;
 
   ++low_memory_kills_count_;
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Arc.LowMemoryKiller.Count",
-                              low_memory_kills_count_, 1, 1000, 1001);
+  base::UmaHistogramCustomCounts("Memory.LowMemoryKiller.Count",
+                                 low_memory_kills_count_, 1, 1000, 1001);
 
-  UMA_HISTOGRAM_MEMORY_KB("Arc.LowMemoryKiller.FreedSize", estimated_freed_kb);
+  base::UmaHistogramMemoryKB("Memory.LowMemoryKiller.FreedSize",
+                             estimated_freed_kb);
 }
 
+void MemoryKillsMonitor::LogArcOOMKillImpl(unsigned long current_oom_kills) {
+  DCHECK(monitoring_started_.IsSet());
+  unsigned long oom_kills_delta = current_oom_kills - last_arc_oom_kills_count_;
+  if (oom_kills_delta == 0)
+    return;
+
+  VLOG(1) << "ARC_OOM_KILLS " << oom_kills_delta << " times";
+
+  for (int i = 0; i < oom_kills_delta; ++i) {
+    ++oom_kills_count_;
+    // Report cumulative count of killed processes in one login session.
+    base::UmaHistogramCustomCounts("Memory.OOMKills.Count", oom_kills_count_, 1,
+                                   1000, 1001);
+  }
+  last_arc_oom_kills_count_ = current_oom_kills;
+}
 MemoryKillsMonitor* MemoryKillsMonitor::GetForTesting() {
   return g_memory_kills_monitor_instance.Pointer();
 }

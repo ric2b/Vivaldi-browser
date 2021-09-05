@@ -17,6 +17,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/numerics/ranges.h"
+#include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
@@ -59,6 +60,11 @@ const float kSnapToExistingTilingRatio = 1.2f;
 // Renderer4.IdealContentsScale UMA (deprecated) for distribution of content
 // scales.
 const float kMaxIdealContentsScale = 10000.f;
+
+// We try to avoid raster scale adjustment for will-change:transform for
+// performance, unless the scale is too small compared to the ideal scale and
+// the native scale.
+const float kMinScaleRatioForWillChangeTransform = 0.25f;
 
 // Intersect rects which may have right() and bottom() that overflow integer
 // boundaries. This code is similar to gfx::Rect::Intersect with the exception
@@ -1104,6 +1110,15 @@ bool PictureLayerImpl::ShouldDirectlyCompositeImage(float raster_scale) const {
   if (raster_scale < 0.1f)
     return true;
 
+#if defined(OS_FUCHSIA)
+  // Always downscale images on low-end devices to save memory. This is a
+  // temporary fix to work around crbug.com/1161327 .
+  // TODO(crbug.com/1161327): Implement proper solution that works on all
+  // devices.
+  if (base::SysInfo::IsLowEndDevice() && raster_scale > 1.0)
+    return false;
+#endif  // defined(OS_FUCHSIA)
+
   // If the results of scaling the bounds by the expected raster scale
   // would end up with a content rect whose width/height are more than one
   // pixel different from the layer bounds, don't directly composite the image
@@ -1343,9 +1358,10 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
   }
 
   // Don't update will-change: transform layers if the raster contents scale is
-  // at least the native scale (otherwise, we'd need to clamp it).
+  // bigger than the minimum scale.
   if (HasWillChangeTransformHint() &&
-      raster_contents_scale_ >= raster_page_scale_ * raster_device_scale_) {
+      raster_contents_scale_ >=
+          MinimumRasterContentsScaleForWillChangeTransform()) {
     return false;
   }
 
@@ -1436,81 +1452,13 @@ void PictureLayerImpl::RecalculateRasterScales() {
         raster_contents_scale_ / raster_device_scale_ / raster_source_scale_;
   }
 
-  // We rasterize at the maximum scale that will occur during the animation, if
-  // the maximum scale is known. However we want to avoid excessive memory use.
-  // If the scale is smaller than what we would choose otherwise, then it's
-  // always better off for us memory-wise. But otherwise, we don't choose a
-  // scale at which this layer's rastered content would become larger than the
-  // viewport.
-  if (draw_properties().screen_space_transform_is_animating) {
-    bool can_raster_at_maximum_scale = false;
-    bool should_raster_at_starting_scale = false;
-    CombinedAnimationScale animation_scales =
-        layer_tree_impl()->property_trees()->GetAnimationScales(
-            transform_tree_index(), layer_tree_impl());
-    float maximum_scale = animation_scales.maximum_animation_scale;
-    float starting_scale = animation_scales.starting_animation_scale;
-    if (maximum_scale != kNotScaled) {
-      gfx::Size bounds_at_maximum_scale =
-          gfx::ScaleToCeiledSize(raster_source_->GetSize(), maximum_scale);
-      int64_t maximum_area =
-          static_cast<int64_t>(bounds_at_maximum_scale.width()) *
-          static_cast<int64_t>(bounds_at_maximum_scale.height());
-      gfx::Size viewport = layer_tree_impl()->GetDeviceViewport().size();
+  if (draw_properties().screen_space_transform_is_animating)
+    AdjustRasterScaleForTransformAnimation(preserved_raster_contents_scale);
 
-      // Use the square of the maximum viewport dimension direction, to
-      // compensate for viewports with different aspect ratios.
-      int64_t max_viewport_dimension =
-          std::max(static_cast<int64_t>(viewport.width()),
-                   static_cast<int64_t>(viewport.height()));
-      int64_t squared_viewport_area =
-          max_viewport_dimension * max_viewport_dimension;
-
-      if (maximum_area <= squared_viewport_area)
-        can_raster_at_maximum_scale = true;
-    }
-    if (starting_scale != kNotScaled && starting_scale > maximum_scale) {
-      gfx::Size bounds_at_starting_scale =
-          gfx::ScaleToCeiledSize(raster_source_->GetSize(), starting_scale);
-      int64_t start_area =
-          static_cast<int64_t>(bounds_at_starting_scale.width()) *
-          static_cast<int64_t>(bounds_at_starting_scale.height());
-      gfx::Size viewport = layer_tree_impl()->GetDeviceViewport().size();
-      int64_t viewport_area = static_cast<int64_t>(viewport.width()) *
-                              static_cast<int64_t>(viewport.height());
-      if (start_area <= viewport_area)
-        should_raster_at_starting_scale = true;
-    }
-
-    // Use the computed scales for the raster scale directly, do not try to use
-    // the ideal scale here. The current ideal scale may be way too large in the
-    // case of an animation with scale, and will be constantly changing.
-    float animation_desired_scale;
-    if (should_raster_at_starting_scale)
-      animation_desired_scale = starting_scale;
-    else if (can_raster_at_maximum_scale)
-      animation_desired_scale = maximum_scale;
-    else
-      animation_desired_scale = 1.f * ideal_page_scale_ * ideal_device_scale_;
-
-    if (HasWillChangeTransformHint()) {
-      // If we have a will-change: transform hint, do not shrink the content
-      // raster scale, otherwise we will end up throwing away larger tiles we
-      // may need again.
-      raster_contents_scale_ =
-          std::max(preserved_raster_contents_scale, animation_desired_scale);
-    } else {
-      raster_contents_scale_ = animation_desired_scale;
-    }
-  }
-
-  // Clamp will-change: transform layers to be at least the native scale.
   if (HasWillChangeTransformHint()) {
-    float min_desired_scale = raster_device_scale_ * raster_page_scale_;
-    if (raster_contents_scale_ < min_desired_scale) {
-      raster_contents_scale_ = min_desired_scale;
-      raster_page_scale_ = 1.f;
-    }
+    raster_contents_scale_ =
+        std::max(raster_contents_scale_,
+                 MinimumRasterContentsScaleForWillChangeTransform());
   }
 
   raster_contents_scale_ =
@@ -1541,6 +1489,55 @@ void PictureLayerImpl::RecalculateRasterScales() {
   DCHECK_LE(low_res_raster_contents_scale_, MaximumContentsScale());
 }
 
+void PictureLayerImpl::AdjustRasterScaleForTransformAnimation(
+    float preserved_raster_contents_scale) {
+  DCHECK(draw_properties().screen_space_transform_is_animating);
+
+  CombinedAnimationScale animation_scales =
+      layer_tree_impl()->property_trees()->GetAnimationScales(
+          transform_tree_index(), layer_tree_impl());
+  float maximum_scale = animation_scales.maximum_animation_scale;
+  float starting_scale = animation_scales.starting_animation_scale;
+  // Adjust raster scale only if the animation scale is known.
+  if (maximum_scale == kNotScaled && starting_scale == kNotScaled) {
+    // Use at least the native scale if the animation scale is unknown.
+    raster_contents_scale_ = std::max(raster_contents_scale_,
+                                      ideal_page_scale_ * ideal_device_scale_);
+  } else {
+    // We rasterize at the maximum scale that will occur during the animation.
+    raster_contents_scale_ = std::max(maximum_scale, starting_scale);
+  }
+  DCHECK_NE(raster_contents_scale_, kNotScaled);
+
+  // We will cap the adjusted scale with the viewport area, which is impossible
+  // if the viewport is empty.
+  gfx::Size viewport = layer_tree_impl()->GetDeviceViewport().size();
+  if (viewport.IsEmpty())
+    return;
+
+  // However we want to avoid excessive memory use. Choose a scale at which this
+  // layer's rastered content is not larger than the viewport.
+  float max_viewport_dimension = std::max(viewport.width(), viewport.height());
+  DCHECK(max_viewport_dimension);
+  // Use square to compensate for viewports with different aspect ratios.
+  float squared_viewport_area = max_viewport_dimension * max_viewport_dimension;
+  gfx::Size bounds_at_maximum_scale =
+      gfx::ScaleToCeiledSize(raster_source_->GetSize(), raster_contents_scale_);
+  float maximum_area = static_cast<float>(bounds_at_maximum_scale.width()) *
+                       bounds_at_maximum_scale.height();
+  // Clamp the scale to make the rastered content not larger than the viewport.
+  if (UNLIKELY(maximum_area > squared_viewport_area))
+    raster_contents_scale_ /= std::sqrt(maximum_area / squared_viewport_area);
+
+  if (HasWillChangeTransformHint()) {
+    // If we have a will-change: transform hint, do not shrink the content
+    // raster scale, otherwise we will end up throwing away larger tiles we
+    // may need again.
+    raster_contents_scale_ =
+        std::max(preserved_raster_contents_scale, raster_contents_scale_);
+  }
+}
+
 void PictureLayerImpl::CleanUpTilingsOnActiveLayer(
     const std::vector<PictureLayerTiling*>& used_tilings) {
   DCHECK(layer_tree_impl()->IsActiveTree());
@@ -1568,6 +1565,21 @@ void PictureLayerImpl::CleanUpTilingsOnActiveLayer(
                            twin_set);
   DCHECK_GT(tilings_->num_tilings(), 0u);
   SanityCheckTilingState();
+}
+
+float PictureLayerImpl::MinimumRasterContentsScaleForWillChangeTransform()
+    const {
+  DCHECK(HasWillChangeTransformHint());
+  float native_scale = ideal_device_scale_ * ideal_page_scale_;
+  // Clamp will-change: transform layers to be at least the native scale,
+  // unless the scale is too small to avoid too many tiles using too much tile
+  // memory.
+  if (ideal_contents_scale_ <
+      native_scale * kMinScaleRatioForWillChangeTransform) {
+    // Don't let the scale too small compared to the ideal scale.
+    return ideal_contents_scale_ * kMinScaleRatioForWillChangeTransform;
+  }
+  return native_scale;
 }
 
 bool PictureLayerImpl::CalculateRasterTranslation(
@@ -1631,24 +1643,13 @@ bool PictureLayerImpl::CalculateRasterTranslation(
 }
 
 float PictureLayerImpl::MinimumContentsScale() const {
-  float setting_min = layer_tree_impl()->settings().minimum_contents_scale;
-
   // If the contents scale is less than 1 / width (also for height),
   // then it will end up having less than one pixel of content in that
   // dimension.  Bump the minimum contents scale up in this case to prevent
   // this from happening.
   int min_dimension = std::min(raster_source_->GetSize().width(),
                                raster_source_->GetSize().height());
-  if (!min_dimension)
-    return setting_min;
-
-  // Directly composited images may result in contents scales that are
-  // less than the configured setting. We allow this lower scale so that we
-  // can raster at the intrinsic image size.
-  const float inverse_min_dimension = 1.f / min_dimension;
-  return (directly_composited_image_size_.has_value())
-             ? inverse_min_dimension
-             : std::max(inverse_min_dimension, setting_min);
+  return min_dimension ? 1.f / min_dimension : 1.f;
 }
 
 float PictureLayerImpl::MaximumContentsScale() const {

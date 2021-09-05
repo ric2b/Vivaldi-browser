@@ -26,13 +26,12 @@
 #include "chrome/browser/web_applications/components/web_app_prefs_utils.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_installation_utils.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -330,9 +329,7 @@ void WebAppInstallFinalizer::Shutdown() {
 void WebAppInstallFinalizer::UninstallWebApp(const AppId& app_id,
                                              UninstallWebAppCallback callback) {
   registrar().NotifyWebAppUninstalled(app_id);
-  WebAppProviderBase::GetProviderBase(profile_)
-      ->os_integration_manager()
-      .UninstallAllOsHooks(app_id, base::DoNothing());
+  os_integration_manager().UninstallAllOsHooks(app_id, base::DoNothing());
 
   ScopedRegistryUpdate update(registry_controller().AsWebAppSyncBridge());
   update->DeleteApp(app_id);
@@ -468,9 +465,7 @@ void WebAppInstallFinalizer::OnDatabaseCommitCompletedForUpdate(
     return;
   }
 
-  WebAppProviderBase::GetProviderBase(profile_)
-      ->os_integration_manager()
-      .UpdateOsHooks(app_id, old_name, web_app_info);
+  os_integration_manager().UpdateOsHooks(app_id, old_name, web_app_info);
 
   registrar().NotifyWebAppManifestUpdated(app_id, old_name);
   std::move(callback).Run(app_id, InstallResultCode::kSuccessAlreadyInstalled);

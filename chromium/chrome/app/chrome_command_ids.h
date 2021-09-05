@@ -210,6 +210,7 @@
 #define IDC_CLOSE_SIGN_IN_PROMO        40258
 #define IDC_SHOW_FULL_URLS             40259
 #define IDC_CARET_BROWSING_TOGGLE      40260
+#define IDC_TOGGLE_COMMANDER     40261
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.
@@ -417,6 +418,7 @@
 
 // Tab Search
 #define IDC_TAB_SEARCH 52500
+#define IDC_TAB_SEARCH_CLOSE 52501
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

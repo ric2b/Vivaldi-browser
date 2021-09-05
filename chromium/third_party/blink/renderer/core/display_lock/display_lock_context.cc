@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
+#include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_recalc.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
@@ -26,6 +27,7 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
@@ -143,6 +145,10 @@ void DisplayLockContext::SetRequestedState(EContentVisibility state) {
 
   // Since our state changed, check if we need to create a scoped force update
   // object.
+  // Note that creating this forced object may cause us to dirty style, which is
+  // fine since we are in a style update for this subtree anyway.
+  StyleEngine::AllowMarkStyleDirtyFromRecalcScope scope(
+      element_->GetDocument().GetStyleEngine());
   element_->GetDocument().GetDisplayLockDocumentState().ForceLockIfNeeded(
       element_.Get());
 }
@@ -315,15 +321,7 @@ void DisplayLockContext::Lock() {
   if (!element_->GetLayoutObject())
     return;
 
-  // GraphicsLayer collection would normally skip layers if paint is blocked
-  // by display-locking (see: CollectDrawableLayersForLayerListRecursively
-  // in LocalFrameView). However, if we don't trigger this collection, then
-  // we might use the cached result instead. In order to ensure we skip the
-  // newly locked layers, we need to set |need_graphics_layer_collection_|
-  // before marking the layer for repaint.
-  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    needs_graphics_layer_collection_ = true;
-  MarkPaintLayerNeedsRepaint();
+  MarkNeedsRepaintAndPaintArtifactCompositorUpdate();
 }
 
 // Should* and Did* function for the lifecycle phases. These functions control
@@ -367,6 +365,7 @@ bool DisplayLockContext::ShouldLayoutChildren() const {
 void DisplayLockContext::DidLayoutChildren() {
   // Since we did layout on children already, we'll clear this.
   child_layout_was_blocked_ = false;
+  had_lifecycle_update_since_last_unlock_ = true;
 }
 
 bool DisplayLockContext::ShouldPrePaintChildren() const {
@@ -512,6 +511,7 @@ void DisplayLockContext::NotifyForcedUpdateScopeEnded() {
 void DisplayLockContext::Unlock() {
   DCHECK(IsLocked());
   is_locked_ = false;
+  had_lifecycle_update_since_last_unlock_ = false;
   UpdateDocumentBookkeeping(true, !activatable_mask_, false,
                             !activatable_mask_);
 
@@ -552,7 +552,7 @@ void DisplayLockContext::Unlock() {
   // reach the rest of the phases as well.
   MarkForLayoutIfNeeded();
   MarkAncestorsForPrePaintIfNeeded();
-  MarkPaintLayerNeedsRepaint();
+  MarkNeedsRepaintAndPaintArtifactCompositorUpdate();
 }
 
 void DisplayLockContext::AddToWhitespaceReattachSet(Element& element) {
@@ -675,20 +675,24 @@ bool DisplayLockContext::MarkAncestorsForPrePaintIfNeeded() {
       // update.
       layout_object->MarkEffectiveAllowedTouchActionChanged();
     }
+    if (needs_blocking_wheel_event_handler_update_ ||
+        layout_object->BlockingWheelEventHandlerChanged() ||
+        layout_object->DescendantBlockingWheelEventHandlerChanged()) {
+      // Note that although the object itself should have up to date value, in
+      // order to force recalc of the whole subtree, we mark it as needing an
+      // update.
+      layout_object->MarkBlockingWheelEventHandlerChanged();
+    }
     return true;
   }
   return compositing_dirtied;
 }
 
-bool DisplayLockContext::MarkPaintLayerNeedsRepaint() {
+bool DisplayLockContext::MarkNeedsRepaintAndPaintArtifactCompositorUpdate() {
   DCHECK(ConnectedToView());
   if (auto* layout_object = element_->GetLayoutObject()) {
     layout_object->PaintingLayer()->SetNeedsRepaint();
-    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-        needs_graphics_layer_collection_) {
-      document_->View()->SetForeignLayerListNeedsUpdate();
-      needs_graphics_layer_collection_ = false;
-    }
+    document_->View()->SetPaintArtifactCompositorNeedsUpdate();
     return true;
   }
   return false;
@@ -724,6 +728,19 @@ bool DisplayLockContext::MarkForCompositingUpdatesIfNeeded() {
       layout_box->Layer()->SetNeedsGraphicsLayerRebuild();
     needs_graphics_layer_rebuild_ = false;
 
+    if (forced_graphics_layer_update_blocked_) {
+      // We only add an extra dirty bit to the compositing state, which is safe
+      // since we do this before updating the compositing state.
+      DisableCompositingQueryAsserts disabler;
+
+      auto* compositing_parent =
+          layout_box->Layer()->EnclosingLayerWithCompositedLayerMapping(
+              kIncludeSelf);
+      compositing_parent->GetCompositedLayerMapping()
+          ->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
+    }
+    forced_graphics_layer_update_blocked_ = false;
+
     return true;
   }
   return false;
@@ -755,6 +772,7 @@ bool DisplayLockContext::IsElementDirtyForPrePaint() const {
            PrePaintTreeWalk::ObjectRequiresTreeBuilderContext(*layout_object) ||
            needs_prepaint_subtree_walk_ ||
            needs_effective_allowed_touch_action_update_ ||
+           needs_blocking_wheel_event_handler_update_ ||
            needs_compositing_requirements_update_ ||
            (layout_box && layout_box->HasSelfPaintingLayer() &&
             layout_box->Layer()->ChildNeedsCompositingInputsUpdate());

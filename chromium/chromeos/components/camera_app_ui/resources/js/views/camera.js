@@ -31,6 +31,7 @@ import {
   ViewName,
 } from '../type.js';
 import * as util from '../util.js';
+import {windowController} from '../window_controller/window_controller.js';
 
 import {Layout} from './camera/layout.js';
 import {   // eslint-disable-line no-unused-vars
@@ -43,6 +44,7 @@ import {Options} from './camera/options.js';
 import {Preview} from './camera/preview.js';
 import * as timertick from './camera/timertick.js';
 import {View} from './view.js';
+import {WarningType} from './warning.js';
 
 /**
  * Thrown when app window suspended during stream reconfiguration.
@@ -180,6 +182,11 @@ export class Camera extends View {
     this.take_ = null;
 
     /**
+     * @type {!HTMLElement}
+     */
+    this.banner_ = dom.get('#banner', HTMLElement);
+
+    /**
      * Gets type of ways to trigger shutter from click event.
      * @param {!MouseEvent} e
      * @return {!metrics.ShutterType}
@@ -237,6 +244,11 @@ export class Camera extends View {
       offLabel: 'record_video_pause_button',
     });
 
+    dom.get('#banner-close', HTMLButtonElement)
+        .addEventListener('click', () => {
+          util.animateCancel(this.banner_);
+        });
+
     // Monitor the states to stop camera when locked/minimized.
     browserProxy.addOnLockListener((isLocked) => {
       this.locked_ = isLocked;
@@ -245,7 +257,7 @@ export class Camera extends View {
       }
     });
 
-    browserProxy.addOnMinimizedListener(() => {
+    windowController.addOnMinimizedListener(() => {
       this.start();
     });
 
@@ -324,7 +336,7 @@ export class Camera extends View {
    * @return {boolean}
    */
   isSuspended() {
-    return this.locked_ || browserProxy.isMinimized() ||
+    return this.locked_ || windowController.isMinimized() ||
         state.get(state.State.SUSPEND) || this.screenOff_ ||
         this.isTabletBackground_();
   }
@@ -333,9 +345,22 @@ export class Camera extends View {
    * @override
    */
   focus() {
-    // Avoid focusing invisible shutters.
-    dom.getAll('button.shutter', HTMLButtonElement)
-        .forEach((btn) => btn.offsetParent && btn.focus());
+    const focusOnShutterButton = () => {
+      // Avoid focusing invisible shutters.
+      dom.getAll('button.shutter', HTMLButtonElement)
+          .forEach((btn) => btn.offsetParent && btn.focus());
+    };
+    (async () => {
+      const values =
+          await browserProxy.localStorageGet({isFolderChangeMsgShown: false});
+      await this.configuring_;
+      if (!values['isFolderChangeMsgShown']) {
+        browserProxy.localStorageSet({isFolderChangeMsgShown: true});
+        util.animateOnce(this.banner_, focusOnShutterButton);
+      } else {
+        focusOnShutterButton();
+      }
+    })();
   }
 
   /**
@@ -493,7 +518,7 @@ export class Camera extends View {
           await this.endTake_();
         }
       } finally {
-        this.preview_.stop();
+        await this.preview_.stop();
       }
       return this.start_();
     })();
@@ -542,7 +567,7 @@ export class Camera extends View {
           await this.modes_.updateModeSelectionUI(deviceId);
           await this.modes_.updateMode(
               mode, stream, this.facingMode_, deviceId, captureR);
-          nav.close(ViewName.WARNING, 'no-camera');
+          nav.close(ViewName.WARNING, WarningType.NO_CAMERA);
           return true;
         } catch (e) {
           this.preview_.stop();
@@ -609,7 +634,7 @@ export class Camera extends View {
       this.activeDeviceId_ = null;
       if (!(error instanceof CameraSuspendedError)) {
         console.error(error);
-        nav.open(ViewName.WARNING, 'no-camera');
+        nav.open(ViewName.WARNING, WarningType.NO_CAMERA);
       }
       // Schedule to retry.
       if (this.retryStartTimeout_) {

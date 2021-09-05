@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -17,9 +18,11 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/declarative_net_request/action_tracker.h"
+#include "extensions/browser/api/declarative_net_request/composite_matcher.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_manager.h"
+#include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_source.h"
 #include "extensions/browser/api/declarative_net_request/utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -332,31 +335,35 @@ bool DeclarativeNetRequestGetMatchedRulesFunction::ShouldSkipQuotaLimiting()
   return user_gesture() || disable_throttling_for_test_;
 }
 
-DeclarativeNetRequestSetActionCountAsBadgeTextFunction::
-    DeclarativeNetRequestSetActionCountAsBadgeTextFunction() = default;
-DeclarativeNetRequestSetActionCountAsBadgeTextFunction::
-    ~DeclarativeNetRequestSetActionCountAsBadgeTextFunction() = default;
+DeclarativeNetRequestSetExtensionActionOptionsFunction::
+    DeclarativeNetRequestSetExtensionActionOptionsFunction() = default;
+DeclarativeNetRequestSetExtensionActionOptionsFunction::
+    ~DeclarativeNetRequestSetExtensionActionOptionsFunction() = default;
 
 ExtensionFunction::ResponseAction
-DeclarativeNetRequestSetActionCountAsBadgeTextFunction::Run() {
-  using Params = dnr_api::SetActionCountAsBadgeText::Params;
+DeclarativeNetRequestSetExtensionActionOptionsFunction::Run() {
+  using Params = dnr_api::SetExtensionActionOptions::Params;
 
   base::string16 error;
   std::unique_ptr<Params> params(Params::Create(*args_, &error));
   EXTENSION_FUNCTION_VALIDATE(params);
   EXTENSION_FUNCTION_VALIDATE(error.empty());
 
+  bool use_action_count_as_badge_text =
+      params->options.display_action_count_as_badge_text;
   ExtensionPrefs* prefs = ExtensionPrefs::Get(browser_context());
-  if (params->enable == prefs->GetDNRUseActionCountAsBadgeText(extension_id()))
+  if (use_action_count_as_badge_text ==
+      prefs->GetDNRUseActionCountAsBadgeText(extension_id()))
     return RespondNow(NoArguments());
 
-  prefs->SetDNRUseActionCountAsBadgeText(extension_id(), params->enable);
+  prefs->SetDNRUseActionCountAsBadgeText(extension_id(),
+                                         use_action_count_as_badge_text);
 
   // If the preference is switched on, update the extension's badge text with
   // the number of actions matched for this extension. Otherwise, clear the
   // action count for the extension's icon and show the default badge text if
   // set.
-  if (params->enable) {
+  if (use_action_count_as_badge_text) {
     declarative_net_request::RulesMonitorService* rules_monitor_service =
         declarative_net_request::RulesMonitorService::Get(browser_context());
     DCHECK(rules_monitor_service);
@@ -409,6 +416,67 @@ DeclarativeNetRequestIsRegexSupportedFunction::Run() {
 
   return RespondNow(
       ArgumentList(dnr_api::IsRegexSupported::Results::Create(result)));
+}
+
+DeclarativeNetRequestGetAvailableStaticRuleCountFunction::
+    DeclarativeNetRequestGetAvailableStaticRuleCountFunction() = default;
+DeclarativeNetRequestGetAvailableStaticRuleCountFunction::
+    ~DeclarativeNetRequestGetAvailableStaticRuleCountFunction() = default;
+
+ExtensionFunction::ResponseAction
+DeclarativeNetRequestGetAvailableStaticRuleCountFunction::Run() {
+  auto* rules_monitor_service =
+      declarative_net_request::RulesMonitorService::Get(browser_context());
+  DCHECK(rules_monitor_service);
+
+  declarative_net_request::CompositeMatcher* composite_matcher =
+      rules_monitor_service->ruleset_manager()->GetMatcherForExtension(
+          extension_id());
+
+  // First get the total enabled static rule count for the extension.
+  size_t enabled_static_rule_count =
+      GetEnabledStaticRuleCount(composite_matcher);
+  size_t static_rule_limit =
+      static_cast<size_t>(declarative_net_request::GetMaximumRulesPerRuleset());
+  DCHECK_LE(enabled_static_rule_count, static_rule_limit);
+
+  size_t available_static_rule_count = 0;
+  if (!base::FeatureList::IsEnabled(
+          declarative_net_request::kDeclarativeNetRequestGlobalRules)) {
+    available_static_rule_count = static_rule_limit - enabled_static_rule_count;
+    DCHECK_GE(static_rule_limit, available_static_rule_count);
+
+    return RespondNow(OneArgument(
+        base::Value(static_cast<int>(available_static_rule_count))));
+  }
+
+  const declarative_net_request::GlobalRulesTracker& global_rules_tracker =
+      rules_monitor_service->global_rules_tracker();
+
+  size_t available_allocation =
+      global_rules_tracker.GetAvailableAllocation(extension_id());
+  size_t guaranteed_static_minimum =
+      declarative_net_request::GetStaticGuaranteedMinimumRuleCount();
+
+  // If an extension's rule count is below the guaranteed minimum, include the
+  // difference.
+  if (enabled_static_rule_count < guaranteed_static_minimum) {
+    available_static_rule_count =
+        (guaranteed_static_minimum - enabled_static_rule_count) +
+        available_allocation;
+  } else {
+    size_t used_global_allocation =
+        enabled_static_rule_count - guaranteed_static_minimum;
+    DCHECK_GE(available_allocation, used_global_allocation);
+
+    available_static_rule_count = available_allocation - used_global_allocation;
+  }
+
+  // Ensure conversion to int below doesn't underflow.
+  DCHECK_LE(available_static_rule_count,
+            static_cast<size_t>(std::numeric_limits<int>::max()));
+  return RespondNow(
+      OneArgument(base::Value(static_cast<int>(available_static_rule_count))));
 }
 
 }  // namespace extensions

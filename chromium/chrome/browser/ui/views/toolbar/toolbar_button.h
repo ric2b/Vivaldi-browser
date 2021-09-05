@@ -8,14 +8,16 @@
 #include <memory>
 
 #include "base/optional.h"
+#include "chrome/browser/ui/views/chrome_views_export.h"
 #include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/context_menu_controller.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/metadata/metadata_header_macros.h"
+#include "ui/views/metadata/view_factory.h"
 
 class TabStripModel;
 
@@ -38,16 +40,18 @@ class MenuRunner;
 class ToolbarButton : public views::LabelButton,
                       public views::ContextMenuController {
  public:
+  METADATA_HEADER(ToolbarButton);
+
   // More convenient form of the ctor below, when |model| and |tab_strip_model|
   // are both nullptr.
-  explicit ToolbarButton(views::ButtonListener* listener);
+  explicit ToolbarButton(PressedCallback callback = PressedCallback());
 
-  // |listener| and |tab_strip_model| must outlive this class.
+  // |tab_strip_model| must outlive this class.
   // |model| can be null if no menu is to be shown.
   // |tab_strip_model| is only needed if showing the menu with |model| requires
   // an active tab. There may be no active tab in |tab_strip_model| during
   // shutdown.
-  ToolbarButton(views::ButtonListener* listener,
+  ToolbarButton(PressedCallback callback,
                 std::unique_ptr<ui::MenuModel> model,
                 TabStripModel* tab_strip_model,
                 bool trigger_menu_on_long_press = true);
@@ -83,8 +87,9 @@ class ToolbarButton : public views::LabelButton,
   // icon state changes, e.g. in response to theme or touch mode changes.
   virtual void UpdateIcon() {}
 
-  // Sets |layout_insets_|, see comment there.
-  void SetLayoutInsets(const gfx::Insets& insets);
+  // Gets/Sets |layout_insets_|, see comment there.
+  base::Optional<gfx::Insets> GetLayoutInsets() const;
+  void SetLayoutInsets(const base::Optional<gfx::Insets>& insets);
 
   // views::LabelButton:
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
@@ -223,9 +228,6 @@ class ToolbarButton : public views::LabelButton,
   // Callback for MenuModelAdapter.
   void OnMenuClosed();
 
-  // views::ImageButton:
-  const char* GetClassName() const override;
-
   // views::LabelButton:
   // This is private to avoid a foot-shooter. Callers should use SetHighlight()
   // instead which sets an optional color as well.
@@ -286,5 +288,11 @@ class ToolbarButton : public views::LabelButton,
   // A factory for tasks that show the dropdown context menu for the button.
   base::WeakPtrFactory<ToolbarButton> show_menu_factory_{this};
 };
+
+BEGIN_VIEW_BUILDER(CHROME_VIEWS_EXPORT, ToolbarButton, views::LabelButton)
+VIEW_BUILDER_PROPERTY(base::Optional<gfx::Insets>, LayoutInsets)
+END_VIEW_BUILDER
+
+DEFINE_VIEW_BUILDER(CHROME_VIEWS_EXPORT, ToolbarButton)
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_TOOLBAR_BUTTON_H_

@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Միայն նշված մասը</translation>
 <translation id="1244303850296295656">Ընդլայնման սխալ</translation>
 <translation id="125220115284141797">Ստանդարտ</translation>
-<translation id="1274977772557788323">Adobe Flash Player-ի պահոցի կարգավորումներ</translation>
 <translation id="1297175357211070620">Վերջնակետ</translation>
 <translation id="1303101771013849280">Էջանիշերի HTML ֆայլ</translation>
 <translation id="1380436189840894976">Այնուամենայնիվ դո՞ւրս գալ գաղտնի ռեժիմից։</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Փակցնել որպես պարզ տեքստ</translation>
 <translation id="2249605167705922988">օր.՝ 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Թույլ տալ իդենտիֆիկատորներ պաշտպանված բովանդակության համար (կարող է պահանջվել համակարգչի վերագործարկում)</translation>
-<translation id="2263497240924215535">(Անջատված է)</translation>
 <translation id="2277255602909579701">Բոլոր քուքիներն ու կայքերի տվյալները</translation>
 <translation id="2280486287150724112">Աջ լուսանցք</translation>
 <translation id="2282146716419988068">GPU գործընթաց</translation>
@@ -125,7 +123,6 @@
 <translation id="3013291976881901233">MIDI սարքեր</translation>
 <translation id="3021678814754966447">&amp;Դիտել ֆրեյմի կոդը</translation>
 <translation id="3036546437875325427">Միացնել Flash-ը</translation>
-<translation id="3038675903128704560">Թույլ չտալ որևէ կայքի, որ օգտագործելով փլագին մուտք ստանա Ձեր համակարգչին</translation>
 <translation id="3046910703532196514">Վեբ էջ, ամբողջական</translation>
 <translation id="3067198360141518313">Աշխատեցնել այս փլագինը</translation>
 <translation id="3080207940057008665">Ձեր համակարգչի մեկ այլ ծրագիր ավելացրել է ոճ, որը կարող է ազդել Vivaldi-ի աշխատանքի վրա ու փոխել այն։</translation>
@@ -139,6 +136,7 @@
 <translation id="3222066309010235055">Նախնական ռենդեր. <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Խոսափող</translation>
 <translation id="3241680850019875542">Ընտրեք արմատային պանակը՝ ընդլայնումը փաթեթավորելու համար։ Ընդլայնումը թարմացնելու համար ընտրեք նաև մասնավոր բանալիի ֆայլը՝ վերօգտագործելու համար։</translation>
+<translation id="3266179261140759675">Արգելափակել տվյալների ուղարկումն ու ստացումը փակված կայքերի կողմից</translation>
 <translation id="3280237271814976245">Պահպանել &amp;որպես…</translation>
 <translation id="3285322247471302225">Նոր &amp;ներդիր</translation>
 <translation id="3288047731229977326">Մշակողի ռեժիմում աշխատող ընդլայնումները կարող են վնասել Ձեր համակարգչին։ Եթե Դուք մշակող չեք, ապա անջատեք այդ ընդլայնումներն ապահովության համար։</translation>
@@ -154,18 +152,17 @@
 <translation id="3378572629723696641">Այս ընդլայնումը կարող է վնասված լինել։</translation>
 <translation id="3387614642886316601">Ուղղագրության ընդլայնված ստուգում</translation>
 <translation id="3432227430032737297">Հեռացնել բոլոր ցուցադրվողները</translation>
-<translation id="3440761377721825626">Հարցնել, երբ որևէ կայք ուզում է փլագինի օգտագործմամբ մուտք ստանալ Ձեր համակարգչին</translation>
 <translation id="345693547134384690">Բացել պա&amp;տկերը նոր ներդիրում</translation>
 <translation id="3494769164076977169">Հարցնել, երբ կայքը փորձում է ավտոմատ ներբեռնել ֆայլեր առաջին ֆայլից հետո (խորհուրդ է տրվում)</translation>
 <translation id="3505030558724226696">Արգելել մոտեցումը սարքերին</translation>
 <translation id="3511307672085573050">Պատճենել հղման հաս&amp;ցեն</translation>
-<translation id="3523642406908660543">Հարցնել, երբ կայքն ուզում է օգտագործել փլագին՝ Ձեր համակարգիչ մուտք ստանալու համար (խորհուրդ է տրվում)</translation>
 <translation id="354068948465830244">Կարող է կարդալ և փոփոխել կայքի տեղեկույթը</translation>
 <translation id="3560034655160545939">Ո&amp;ւղղագրության ստուգում</translation>
 <translation id="3574917942258583917">Այնուամենայնիվ դո՞ւրս գալ գաղտնի ռեժիմից։</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;-ն ուզում է &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; տպիչն ընդհանրացնել Ձեզ պատկանող &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt; խմբի հետ։ Եթե հաստատեք, խմբի բոլոր անդամները կկարողանան տպել այդ տպիչով։</translation>
 <translation id="3587482841069643663">Բոլորը</translation>
 <translation id="3627588569887975815">Բացել հղումը &amp;գաղտնի պատուհանում</translation>
+<translation id="3627879631695760395">Տեղակայել «<ph name="APP" />» հավելվածը…</translation>
 <translation id="3668823961463113931">Մշակիչներ</translation>
 <translation id="3678156199662914018">Ընդլայնում. <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Էկրանի ընդհանրացման հարցում <ph name="APP_NAME" />-ից</translation>
@@ -218,7 +215,6 @@
 <translation id="4423376891418188461">Վերականգնել կարգավորումները</translation>
 <translation id="4434045419905280838">Թռուցիկներ և վերահասցեավորումներ</translation>
 <translation id="4478664379124702289">Պահպանել հղու&amp;մը որպես…</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Հնարավոր չէ հեռարձակել <ph name="HOST_NAME" />-ը։</translation>
 <translation id="4593021220803146968">&amp;Գնալ <ph name="URL" /></translation>
 <translation id="4595560905247879544">Հավելվածներն ու ընդլայնումները կարող է փոփոխել միայն մենեջերը (<ph name="CUSTODIAN_NAME" />)։</translation>
@@ -299,7 +295,6 @@
 <translation id="583281660410589416">Անհայտ է</translation>
 <translation id="5860491529813859533">Միացնել</translation>
 <translation id="5867841422488265304">Որոնեք, կամ մուտքագրեք հասցե</translation>
-<translation id="5908769186679515905">Արգելափակել կայքերում Flash-ի աշխատեցումը</translation>
 <translation id="5910363049092958439">Պահպանել պատկերը որպե&amp;ս…</translation>
 <translation id="5956585768868398362">Արդյոք սա՞ է Ձեր ակնկալած որոնիչը։</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (մաքս. <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -372,7 +367,6 @@
 <translation id="7287143125007575591">Մուտքն արգելված է։</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Ցույց տալ կա&amp;ռավարման տարրերը</translation>
-<translation id="7311079019872751559">Փլագինի աշխատանք փորձնական միջավայրից դուրս</translation>
 <translation id="7385854874724088939">Տպել փորձելիս ինչ-որ սխալ տեղի ունեցավ։ Խնդրում ենք ստուգեք Ձեր տպիչն ու փորձեք նորից։</translation>
 <translation id="7412226954991670867">GPU-ի հիշողություն</translation>
 <translation id="7421925624202799674">&amp;Դիտել էջի կոդը</translation>

@@ -346,7 +346,7 @@ void TestRead(const V8TestingScope& scope,
       V8Uint8Array::ToImplWithTypeCheck(scope.GetIsolate(), v8array);
   ASSERT_TRUE(u8array);
 
-  ASSERT_EQ(u8array->byteLengthAsSizeT(), 1u);
+  ASSERT_EQ(u8array->byteLength(), 1u);
   EXPECT_EQ(reinterpret_cast<char*>(u8array->Data())[0], 'B');
 }
 
@@ -382,7 +382,7 @@ TEST(BidirectionalStreamTest, IncomingStreamCleanClose) {
   scoped_quic_transport.Stub()->InputProducer().reset();
 
   auto* script_state = scope.GetScriptState();
-  auto* reader = bidirectional_stream->readable()->getReader(
+  auto* reader = bidirectional_stream->readable()->GetDefaultReaderForTesting(
       script_state, ASSERT_NO_EXCEPTION);
 
   ScriptPromise read_promise = reader->read(script_state, ASSERT_NO_EXCEPTION);

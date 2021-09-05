@@ -69,6 +69,7 @@ if (current_toolchain == default_toolchain) {
 tool_versions =
     exec_script("get_tool_mtime.py",
                 rebase_path([
+                              "//build/apple/swiftc.py",
                               "//build/config/ios/compile_xcassets.py",
                               "//build/toolchain/mac/filter_libtool.py",
                               "//build/toolchain/mac/linker_driver.py",
@@ -265,20 +266,12 @@ template("mac_toolchain") {
       script =
           rebase_path("//build/toolchain/mac/filter_libtool.py", root_build_dir)
 
-      # Note about -filelist: Apple's linker reads the file list file and
-      # interprets each newline-separated chunk of text as a file name. It
-      # doesn't do the things one would expect from the shell like unescaping
-      # or handling quotes. In contrast, when Ninja finds a file name with
-      # spaces, it single-quotes them in $inputs_newline as it would normally
-      # do for command-line arguments. Thus any source names with spaces, or
-      # label names with spaces (which GN bases the output paths on) will be
-      # corrupted by this process. Don't use spaces for source files or labels.
       rspfile = "{{output}}.rsp"
-      rspfile_content = "{{inputs_newline}}"
+      rspfile_content = "{{inputs}}"
 
       # Specify explicit path for libtool.
       libtool = mac_bin_path + "libtool"
-      command = "rm -f {{output}} && TOOL_VERSION=${tool_versions.filter_libtool} python $script $libtool -static -D {{arflags}} -o {{output}} -filelist $rspfile"
+      command = "rm -f {{output}} && TOOL_VERSION=${tool_versions.filter_libtool} python $script $libtool -static -D {{arflags}} -o {{output}} \"@$rspfile\""
       description = "LIBTOOL-STATIC {{output}}"
       outputs = [ "{{output_dir}}/{{target_output_name}}{{output_extension}}" ]
       default_output_dir = "{{target_out_dir}}"
@@ -478,8 +471,13 @@ template("mac_toolchain") {
         partial_outputs = [ "$_objects_dir/{{source_name_part}}.o" ]
       }
 
+      _env_vars = "TOOL_VERSION=${tool_versions.swiftc}"
+      if (is_ios && ios_sdk_developer_dir != "") {
+        _env_vars += " DEVELOPER_DIR=$ios_sdk_developer_dir"
+      }
+
       command =
-          "$_tool -module-name {{module_name}} " +
+          "$_env_vars $_tool -module-name {{module_name}} " +
           "-object-dir $_objects_dir " +
           "-module-path {{target_gen_dir}}/{{module_name}}.swiftmodule " +
           "-header-path {{target_gen_dir}}/{{module_name}}.h " +
@@ -603,6 +601,21 @@ mac_toolchain("clang_x64_v8_mips64el") {
 }
 
 if (is_ios) {
+  mac_toolchain("ios_clang_arm64") {
+    toolchain_args = {
+      current_cpu = "arm64"
+      current_os = "ios"
+    }
+  }
+
+  mac_toolchain("ios_clang_arm64_14_0") {
+    toolchain_args = {
+      current_cpu = "arm64"
+      current_os = "ios"
+      ios_deployment_target = "14.0"
+    }
+  }
+
   mac_toolchain("ios_clang_arm") {
     toolchain_args = {
       current_cpu = "arm"
@@ -610,10 +623,27 @@ if (is_ios) {
     }
   }
 
-  mac_toolchain("ios_clang_arm64") {
+  mac_toolchain("ios_clang_arm_fat") {
     toolchain_args = {
-      current_cpu = "arm64"
+      current_cpu = "arm"
       current_os = "ios"
+      is_fat_secondary_toolchain = true
+      primary_fat_toolchain_name = "//build/toolchain/mac:ios_clang_arm64"
+    }
+  }
+
+  mac_toolchain("ios_clang_x64") {
+    toolchain_args = {
+      current_cpu = "x64"
+      current_os = "ios"
+    }
+  }
+
+  mac_toolchain("ios_clang_x64_14_0") {
+    toolchain_args = {
+      current_cpu = "x64"
+      current_os = "ios"
+      ios_deployment_target = "14.0"
     }
   }
 
@@ -624,10 +654,12 @@ if (is_ios) {
     }
   }
 
-  mac_toolchain("ios_clang_x64") {
+  mac_toolchain("ios_clang_x86_fat") {
     toolchain_args = {
-      current_cpu = "x64"
+      current_cpu = "x86"
       current_os = "ios"
+      is_fat_secondary_toolchain = true
+      primary_fat_toolchain_name = "//build/toolchain/mac:ios_clang_x64"
     }
   }
 }

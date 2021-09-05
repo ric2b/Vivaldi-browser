@@ -82,7 +82,9 @@ namespace content {
 
 namespace {
 
-ShellContentBrowserClient* g_browser_client;
+ShellContentBrowserClient* g_browser_client = nullptr;
+
+bool g_enable_expect_ct_for_testing = false;
 
 #if defined(OS_ANDROID)
 int GetCrashSignalFD(const base::CommandLine& command_line) {
@@ -288,9 +290,16 @@ void ShellContentBrowserClient::OverrideWebkitPrefs(
     blink::web_pref::WebPreferences* prefs) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForceDarkMode)) {
-    prefs->preferred_color_scheme = blink::PreferredColorScheme::kDark;
+    prefs->preferred_color_scheme = blink::mojom::PreferredColorScheme::kDark;
   } else {
-    prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
+    prefs->preferred_color_scheme = blink::mojom::PreferredColorScheme::kLight;
+  }
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForceHighContrast)) {
+    prefs->preferred_contrast = blink::mojom::PreferredContrast::kMore;
+  } else {
+    prefs->preferred_contrast = blink::mojom::PreferredContrast::kNoPreference;
   }
 
   if (override_web_preferences_callback_)
@@ -454,6 +463,11 @@ ShellBrowserContext*
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
 
+void ShellContentBrowserClient::set_enable_expect_ct_for_testing(
+    bool enable_expect_ct_for_testing) {
+  g_enable_expect_ct_for_testing = enable_expect_ct_for_testing;
+}
+
 void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
     BrowserContext* context,
     network::mojom::NetworkContextParams* context_params,
@@ -467,6 +481,29 @@ void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
           "cors_exempt_header_list");
   if (!exempt_header.empty())
     context_params->cors_exempt_header_list.push_back(exempt_header);
+
+  if (g_enable_expect_ct_for_testing) {
+    context_params->enforce_chrome_ct_policy = true;
+    context_params->ct_log_update_time = base::Time::Now();
+    context_params->enable_expect_ct_reporting = true;
+  }
+}
+
+void ShellContentBrowserClient::GetHyphenationDictionary(
+    base::OnceCallback<void(const base::FilePath&)> callback) {
+  // If we have the source tree, return the dictionary files in the tree.
+  base::FilePath dir;
+  if (base::PathService::Get(base::DIR_SOURCE_ROOT, &dir)) {
+    dir = dir.AppendASCII("third_party")
+              .AppendASCII("hyphenation-patterns")
+              .AppendASCII("hyb");
+    std::move(callback).Run(dir);
+  }
+  // No need to callback if there were no dictionaries.
+}
+
+bool ShellContentBrowserClient::HasErrorPage(int http_status_code) {
+  return http_status_code >= 400 && http_status_code < 600;
 }
 
 }  // namespace content

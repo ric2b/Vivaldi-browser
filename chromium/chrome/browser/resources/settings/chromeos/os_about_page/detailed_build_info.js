@@ -30,6 +30,9 @@ Polymer({
     showChannelSwitcherDialog_: Boolean,
 
     /** @private */
+    showEditHostnameDialog_: Boolean,
+
+    /** @private */
     canChangeChannel_: Boolean,
 
     eolMessageWithMonthAndYear: {
@@ -47,6 +50,15 @@ Polymer({
         chromeos.settings.mojom.Setting.kChangeChromeChannel,
         chromeos.settings.mojom.Setting.kCopyDetailedBuildInfo,
       ]),
+    },
+
+    /** @private */
+    isHostnameSettingEnabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isHostnameSettingEnabled');
+      },
+      readOnly: true,
     },
   },
 
@@ -132,6 +144,15 @@ Polymer({
   },
 
   /**
+   * @param {!Event} e
+   * @private
+   */
+  onEditHostnameTap_(e) {
+    e.preventDefault();
+    this.showEditHostnameDialog_ = true;
+  },
+
+  /**
    * @return {boolean}
    * @private
    */
@@ -177,5 +198,12 @@ Polymer({
     this.showChannelSwitcherDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.$$('cr-button')));
     this.updateChannelInfo_();
+  },
+
+  /** @private */
+  onEditHostnameDialogClosed_() {
+    this.showEditHostnameDialog_ = false;
+    cr.ui.focusWithoutInk(assert(this.$$('cr-button')));
+    // TODO(jhawkins): Verify hostname property updated at this point.
   },
 });

@@ -207,6 +207,17 @@ void KaleidoscopeDataProviderImpl::SetMediaFeedsConsent(
   }
 }
 
+void KaleidoscopeDataProviderImpl::GetAutoSelectMediaFeedsConsent(
+    GetAutoSelectMediaFeedsConsentCallback cb) {
+  auto* prefs = profile_->GetPrefs();
+  if (!prefs) {
+    std::move(cb).Run(false);
+    return;
+  }
+  std::move(cb).Run(prefs->GetBoolean(
+      kaleidoscope::prefs::kKaleidoscopeAutoSelectMediaFeeds));
+}
+
 void KaleidoscopeDataProviderImpl::GetHighWatchTimeOrigins(
     GetHighWatchTimeOriginsCallback cb) {
   GetMediaHistoryService()->GetHighWatchTimeOrigins(kProviderHighWatchTimeMin,
@@ -271,6 +282,35 @@ void KaleidoscopeDataProviderImpl::GetCollections(const std::string& request,
   GetCredentials(base::BindOnce(
       &KaleidoscopeDataProviderImpl::OnGotCredentialsForCollections,
       weak_ptr_factory.GetWeakPtr(), request, std::move(cb)));
+}
+
+void KaleidoscopeDataProviderImpl::GetSignedOutProviders(
+    GetSignedOutProvidersCallback cb) {
+  DCHECK(!identity_manager_->HasPrimaryAccount(
+      signin::ConsentLevel::kNotRequired));
+
+  auto* providers = profile_->GetPrefs()->GetList(
+      kaleidoscope::prefs::kKaleidoscopeSignedOutProviders);
+  std::vector<std::string> providers_copy;
+  for (auto& provider : providers->GetList()) {
+    providers_copy.push_back(provider.GetString());
+  }
+
+  std::move(cb).Run(providers_copy);
+}
+
+void KaleidoscopeDataProviderImpl::SetSignedOutProviders(
+    const std::vector<std::string>& providers) {
+  DCHECK(!identity_manager_->HasPrimaryAccount(
+      signin::ConsentLevel::kNotRequired));
+
+  auto providers_copy = std::make_unique<base::Value>(base::Value::Type::LIST);
+  for (auto& provider : providers) {
+    providers_copy->Append(provider);
+  }
+
+  profile_->GetPrefs()->Set(
+      kaleidoscope::prefs::kKaleidoscopeSignedOutProviders, *providers_copy);
 }
 
 void KaleidoscopeDataProviderImpl::OnGotCredentialsForCollections(

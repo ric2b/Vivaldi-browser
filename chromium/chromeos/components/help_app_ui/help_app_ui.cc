@@ -9,10 +9,9 @@
 #include "chromeos/components/help_app_ui/help_app_page_handler.h"
 #include "chromeos/components/help_app_ui/help_app_untrusted_ui.h"
 #include "chromeos/components/help_app_ui/url_constants.h"
-#include "chromeos/components/local_search_service/local_search_service_proxy.h"
-#include "chromeos/components/local_search_service/local_search_service_proxy_factory.h"
-#include "chromeos/components/local_search_service/mojom/types.mojom.h"
-#include "chromeos/components/web_applications/manifest_request_filter.h"
+#include "chromeos/components/local_search_service/local_search_service_sync_proxy.h"
+#include "chromeos/components/local_search_service/local_search_service_sync_proxy_factory.h"
+#include "chromeos/components/local_search_service/public/mojom/types.mojom.h"
 #include "chromeos/grit/chromeos_help_app_resources.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -92,9 +91,9 @@ void HelpAppUI::BindInterface(
 }
 
 void HelpAppUI::BindInterface(
-    mojo::PendingReceiver<chromeos::local_search_service::mojom::IndexProxy>
+    mojo::PendingReceiver<chromeos::local_search_service::mojom::IndexSyncProxy>
         index_receiver) {
-  chromeos::local_search_service::LocalSearchServiceProxyFactory::
+  chromeos::local_search_service::LocalSearchServiceSyncProxyFactory::
       GetForBrowserContext(web_ui()->GetWebContents()->GetBrowserContext())
           ->GetIndex(chromeos::local_search_service::IndexId::kHelpApp,
                      chromeos::local_search_service::Backend::kInvertedIndex,

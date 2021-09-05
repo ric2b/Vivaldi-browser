@@ -86,6 +86,7 @@ class UpdaterImpl
   UpdaterImpl& operator=(const UpdaterImpl&) = delete;
 
   // Overrides for IUpdater.
+  IFACEMETHODIMP GetVersion(BSTR* version) override;
   IFACEMETHODIMP CheckForUpdate(const base::char16* app_id) override;
   IFACEMETHODIMP Register(const base::char16* app_id,
                           const base::char16* brand_code,
@@ -112,8 +113,9 @@ class UpdaterControlImpl
   UpdaterControlImpl& operator=(const UpdaterControlImpl&) = delete;
 
   // Overrides for IUpdaterControl.
-  IFACEMETHODIMP Run(IUpdaterObserver* observer) override;
-  IFACEMETHODIMP InitializeUpdateService(IUpdaterObserver* observer) override;
+  IFACEMETHODIMP Run(IUpdaterControlCallback* callback) override;
+  IFACEMETHODIMP InitializeUpdateService(
+      IUpdaterControlCallback* callback) override;
 
  private:
   ~UpdaterControlImpl() override = default;

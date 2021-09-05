@@ -22,8 +22,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/mock_password_form_manager_for_ui.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -81,12 +81,23 @@ ManagePasswordsTest::ManagePasswordsTest() {
 ManagePasswordsTest::~ManagePasswordsTest() = default;
 
 void ManagePasswordsTest::SetUpOnMainThread() {
-  PasswordStoreFactory::GetInstance()->SetTestingFactory(
-      browser()->profile(),
-      base::BindRepeating(
-          &password_manager::BuildPasswordStore<
-              content::BrowserContext, password_manager::TestPasswordStore>));
   AddTabAtIndex(0, GURL(kTestOrigin), ui::PAGE_TRANSITION_TYPED);
+}
+
+void ManagePasswordsTest::SetUpInProcessBrowserTestFixture() {
+  InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+  create_services_subscription_ =
+      BrowserContextDependencyManager::GetInstance()
+          ->RegisterCreateServicesCallbackForTesting(
+              base::BindRepeating([](content::BrowserContext* context) {
+                // Overwrite the password store early before it's accessed by
+                // safe browsing.
+                PasswordStoreFactory::GetInstance()->SetTestingFactory(
+                    context,
+                    base::BindRepeating(&password_manager::BuildPasswordStore<
+                                        content::BrowserContext,
+                                        password_manager::TestPasswordStore>));
+              }));
 }
 
 void ManagePasswordsTest::ExecuteManagePasswordsCommand() {
@@ -99,7 +110,7 @@ void ManagePasswordsTest::ExecuteManagePasswordsCommand() {
 }
 
 void ManagePasswordsTest::SetupManagingPasswords() {
-  std::vector<const autofill::PasswordForm*> forms;
+  std::vector<const password_manager::PasswordForm*> forms;
   for (auto* form : {&password_form_, &federated_form_}) {
     forms.push_back(form);
     GetController()->OnPasswordAutofilled(forms, url::Origin::Create(form->url),
@@ -116,15 +127,14 @@ void ManagePasswordsTest::SetupAutomaticPassword() {
 }
 
 void ManagePasswordsTest::SetupAutoSignin(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials) {
+    std::vector<std::unique_ptr<password_manager::PasswordForm>>
+        local_credentials) {
   ASSERT_FALSE(local_credentials.empty());
   url::Origin origin = url::Origin::Create(local_credentials[0]->url);
   GetController()->OnAutoSignin(std::move(local_credentials), origin);
 }
 
 void ManagePasswordsTest::SetupSafeState() {
-  DCHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kCompromisedPasswordsReengagement));
   browser()->profile()->GetPrefs()->SetDouble(
       password_manager::prefs::kLastTimePasswordCheckCompleted,
       (base::Time::Now() - base::TimeDelta::FromMinutes(1)).ToDoubleT());
@@ -139,8 +149,6 @@ void ManagePasswordsTest::SetupSafeState() {
 }
 
 void ManagePasswordsTest::SetupMoreToFixState() {
-  DCHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kCompromisedPasswordsReengagement));
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
@@ -161,8 +169,6 @@ void ManagePasswordsTest::SetupMoreToFixState() {
 }
 
 void ManagePasswordsTest::SetupUnsafeState() {
-  DCHECK(base::FeatureList::IsEnabled(
-      password_manager::features::kCompromisedPasswordsReengagement));
   scoped_refptr<password_manager::PasswordStore> password_store =
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
@@ -197,12 +203,14 @@ void ManagePasswordsTest::SetupMovingPasswords() {
       testing::NiceMock<password_manager::MockPasswordFormManagerForUI>>();
   password_manager::MockPasswordFormManagerForUI* form_manager_ptr =
       form_manager.get();
-  std::vector<const autofill::PasswordForm*> best_matches = {test_form()};
+  std::vector<const password_manager::PasswordForm*> best_matches = {
+      test_form()};
   EXPECT_CALL(*form_manager, GetBestMatches).WillOnce(ReturnRef(best_matches));
   ON_CALL(*form_manager, GetPendingCredentials)
       .WillByDefault(ReturnRef(*test_form()));
   ON_CALL(*form_manager, GetFederatedMatches)
-      .WillByDefault(Return(std::vector<const autofill::PasswordForm*>{}));
+      .WillByDefault(
+          Return(std::vector<const password_manager::PasswordForm*>{}));
   ON_CALL(*form_manager, GetURL).WillByDefault(ReturnRef(test_form()->url));
   GetController()->OnShowMoveToAccountBubble(std::move(form_manager));
   // Clearing the mock here ensures that |GetBestMatches| won't be called with a

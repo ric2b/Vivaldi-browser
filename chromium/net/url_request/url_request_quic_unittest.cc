@@ -3,14 +3,14 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "net/base/features.h"
@@ -236,10 +236,10 @@ class URLRequestQuicTest
 
     // Now set up index so that it pushes kitten and favicon.
     quic::QuicBackendResponse::ServerPushInfo push_info1(
-        quic::QuicUrl(UrlFromPath(kKittenPath)), spdy::SpdyHeaderBlock(),
+        quic::QuicUrl(UrlFromPath(kKittenPath)), spdy::Http2HeaderBlock(),
         spdy::kV3LowestPriority, kKittenBodyValue);
     quic::QuicBackendResponse::ServerPushInfo push_info2(
-        quic::QuicUrl(UrlFromPath(kFaviconPath)), spdy::SpdyHeaderBlock(),
+        quic::QuicUrl(UrlFromPath(kFaviconPath)), spdy::Http2HeaderBlock(),
         spdy::kV3LowestPriority, kFaviconBodyValue);
     memory_cache_backend_.AddSimpleResponseWithServerPushResources(
         kTestServerHost, kIndexPath, kIndexStatus, kIndexBodyValue,

@@ -4,7 +4,9 @@
 
 #include "third_party/blink/renderer/modules/manifest/manifest_parser.h"
 
+#include "base/feature_list.h"
 #include "net/base/mime_util.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "third_party/blink/public/platform/web_icon_sizes_parser.h"
@@ -19,6 +21,7 @@
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "url/url_constants.h"
 
 namespace blink {
 
@@ -79,12 +82,15 @@ void ManifestParser::Parse() {
 
   manifest_->name = ParseName(root_object.get());
   manifest_->short_name = ParseShortName(root_object.get());
+  manifest_->description = ParseDescription(root_object.get());
+  manifest_->categories = ParseCategories(root_object.get());
   manifest_->start_url = ParseStartURL(root_object.get());
   manifest_->scope = ParseScope(root_object.get(), manifest_->start_url);
   manifest_->display = ParseDisplay(root_object.get());
   manifest_->display_override = ParseDisplayOverride(root_object.get());
   manifest_->orientation = ParseOrientation(root_object.get());
   manifest_->icons = ParseIcons(root_object.get());
+  manifest_->screenshots = ParseScreenshots(root_object.get());
 
   auto share_target = ParseShareTarget(root_object.get());
   if (share_target.has_value())
@@ -92,7 +98,7 @@ void ManifestParser::Parse() {
 
   manifest_->file_handlers = ParseFileHandlers(root_object.get());
   manifest_->protocol_handlers = ParseProtocolHandlers(root_object.get());
-
+  manifest_->url_handlers = ParseUrlHandlers(root_object.get());
   manifest_->related_applications = ParseRelatedApplications(root_object.get());
   manifest_->prefer_related_applications =
       ParsePreferRelatedApplications(root_object.get());
@@ -264,6 +270,33 @@ String ManifestParser::ParseShortName(const JSONObject* object) {
   return short_name.has_value() ? *short_name : String();
 }
 
+String ManifestParser::ParseDescription(const JSONObject* object) {
+  base::Optional<String> description = ParseString(object, "description", Trim);
+  return description.has_value() ? *description : String();
+}
+
+Vector<String> ManifestParser::ParseCategories(const JSONObject* object) {
+  Vector<String> categories;
+
+  JSONValue* json_value = object->Get("categories");
+  if (!json_value)
+    return categories;
+
+  JSONArray* categories_list = object->GetArray("categories");
+  if (!categories_list) {
+    AddErrorInfo("property 'categories' ignored, type array expected.");
+    return categories;
+  }
+
+  for (wtf_size_t i = 0; i < categories_list->size(); ++i) {
+    String category_string;
+    categories_list->at(i)->AsString(&category_string);
+    categories.push_back(category_string.StripWhiteSpace().LowerASCII());
+  }
+
+  return categories;
+}
+
 KURL ManifestParser::ParseStartURL(const JSONObject* object) {
   return ParseURL(object, "start_url", manifest_url_,
                   ParseURLRestrictions::kSameOriginOnly);
@@ -302,8 +335,18 @@ blink::mojom::DisplayMode ManifestParser::ParseDisplay(
 
   blink::mojom::DisplayMode display_enum =
       DisplayModeFromString(display->Utf8());
-  if (display_enum == blink::mojom::DisplayMode::kUndefined)
+
+  if (display_enum == mojom::blink::DisplayMode::kUndefined) {
     AddErrorInfo("unknown 'display' value ignored.");
+    return display_enum;
+  }
+
+  // Ignore "enhanced" display modes.
+  if (!IsBasicDisplayMode(display_enum)) {
+    display_enum = mojom::blink::DisplayMode::kUndefined;
+    AddErrorInfo("inapplicable 'display' value ignored.");
+  }
+
   return display_enum;
 }
 
@@ -332,6 +375,11 @@ Vector<mojom::blink::DisplayMode> ManifestParser::ParseDisplayOverride(
     display_enum_string = display_enum_string.StripWhiteSpace();
     mojom::blink::DisplayMode display_enum =
         DisplayModeFromString(display_enum_string.Utf8());
+
+    if (!RuntimeEnabledFeatures::WebAppWindowControlsOverlayEnabled() &&
+        display_enum == mojom::blink::DisplayMode::kWindowControlsOverlay) {
+      display_enum = mojom::blink::DisplayMode::kUndefined;
+    }
 
     if (display_enum != mojom::blink::DisplayMode::kUndefined)
       display_override.push_back(display_enum);
@@ -439,14 +487,25 @@ ManifestParser::ParseIconPurpose(const JSONObject* icon) {
 
 Vector<mojom::blink::ManifestImageResourcePtr> ManifestParser::ParseIcons(
     const JSONObject* object) {
+  return ParseImageResource("icons", object);
+}
+
+Vector<mojom::blink::ManifestImageResourcePtr> ManifestParser::ParseScreenshots(
+    const JSONObject* object) {
+  return ParseImageResource("screenshots", object);
+}
+
+Vector<mojom::blink::ManifestImageResourcePtr>
+ManifestParser::ParseImageResource(const String& key,
+                                   const JSONObject* object) {
   Vector<mojom::blink::ManifestImageResourcePtr> icons;
-  JSONValue* json_value = object->Get("icons");
+  JSONValue* json_value = object->Get(key);
   if (!json_value)
     return icons;
 
-  JSONArray* icons_list = object->GetArray("icons");
+  JSONArray* icons_list = object->GetArray(key);
   if (!icons_list) {
-    AddErrorInfo("property 'icons' ignored, type array expected.");
+    AddErrorInfo("property '" + key + "' ignored, type array expected.");
     return icons;
   }
 
@@ -989,6 +1048,80 @@ ManifestParser::ParseProtocolHandler(const JSONObject* object) {
   }
 
   return std::move(protocol_handler);
+}
+
+Vector<mojom::blink::ManifestUrlHandlerPtr> ManifestParser::ParseUrlHandlers(
+    const JSONObject* from) {
+  Vector<mojom::blink::ManifestUrlHandlerPtr> url_handlers;
+  if (!base::FeatureList::IsEnabled(
+          blink::features::kWebAppEnableUrlHandlers) ||
+      !from->Get("url_handlers")) {
+    return url_handlers;
+  }
+  JSONArray* handlers_list = from->GetArray("url_handlers");
+  if (!handlers_list) {
+    AddErrorInfo("property 'url_handlers' ignored, type array expected.");
+    return url_handlers;
+  }
+  for (wtf_size_t i = 0; i < handlers_list->size(); ++i) {
+    const JSONObject* handler_object = JSONObject::Cast(handlers_list->at(i));
+    if (!handler_object) {
+      AddErrorInfo("url_handlers entry ignored, type object expected.");
+      continue;
+    }
+
+    base::Optional<mojom::blink::ManifestUrlHandlerPtr> url_handler =
+        ParseUrlHandler(handler_object);
+    if (!url_handler) {
+      continue;
+    }
+    url_handlers.push_back(std::move(url_handler.value()));
+  }
+  return url_handlers;
+}
+
+base::Optional<mojom::blink::ManifestUrlHandlerPtr>
+ManifestParser::ParseUrlHandler(const JSONObject* object) {
+  DCHECK(
+      base::FeatureList::IsEnabled(blink::features::kWebAppEnableUrlHandlers));
+  if (!object->Get("origin")) {
+    AddErrorInfo(
+        "url_handlers entry ignored, required property 'origin' is missing.");
+    return base::nullopt;
+  }
+  const base::Optional<String> origin_string =
+      ParseString(object, "origin", Trim);
+  if (!origin_string.has_value()) {
+    AddErrorInfo(
+        "url_handlers entry ignored, required property 'origin' is invalid.");
+    return base::nullopt;
+  }
+
+  // TODO(crbug.com/1072058): pre-process for sub-domain wildcard
+  // prefix before parsing as origin. Add a boolean value to indicate the
+  // presence of a sub-domain wildcard prefix so the browser process does not
+  // have to parse it.
+
+  // TODO(crbug.com/1072058): pre-process for input without scheme.
+  // (eg. example.com instead of https://example.com) because we can always
+  // assume the use of https for URL handling. Remove this TODO if we decide
+  // to require fully specified https scheme in this origin input.
+
+  auto origin = SecurityOrigin::CreateFromString(*origin_string);
+  if (!origin || origin->IsOpaque()) {
+    AddErrorInfo(
+        "url_handlers entry ignored, required property 'origin' is invalid.");
+    return base::nullopt;
+  }
+  if (origin->Protocol() != url::kHttpsScheme) {
+    AddErrorInfo(
+        "url_handlers entry ignored, required property 'origin' must use the "
+        "https scheme.");
+    return base::nullopt;
+  }
+  auto url_handler = mojom::blink::ManifestUrlHandler::New();
+  url_handler->origin = origin;
+  return std::move(url_handler);
 }
 
 String ManifestParser::ParseRelatedApplicationPlatform(

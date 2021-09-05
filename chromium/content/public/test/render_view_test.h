@@ -17,23 +17,24 @@
 #include "build/build_config.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/main_function_params.h"
-#include "content/public/common/page_state.h"
 #include "content/public/test/mock_render_thread.h"
 #include "mojo/core/embedder/scoped_ipc_support.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/web_frame.h"
 
 namespace blink {
+class PageState;
 namespace scheduler {
 class WebThreadScheduler;
 }
 struct VisualProperties;
+class WebFrameWidget;
 class WebGestureEvent;
 class WebInputElement;
 class WebMouseEvent;
-class WebWidget;
 }
 
 namespace gfx {
@@ -47,7 +48,6 @@ class ContentClient;
 class ContentRendererClient;
 class CompositorDependencies;
 class FakeRenderWidgetHost;
-class PageState;
 class RendererMainPlatformDelegate;
 class RendererBlinkPlatformImpl;
 class RendererBlinkPlatformImplTestOverrideImpl;
@@ -117,12 +117,12 @@ class RenderViewTest : public testing::Test {
 
   // Returns the current PageState.
   // In OOPIF enabled modes, this returns a PageState object for the main frame.
-  PageState GetCurrentPageState();
+  blink::PageState GetCurrentPageState();
 
   // Navigates the main frame back or forward in session history and commits.
   // The caller must capture a PageState for the target page.
-  void GoBack(const GURL& url, const PageState& state);
-  void GoForward(const GURL& url, const PageState& state);
+  void GoBack(const GURL& url, const blink::PageState& state);
+  void GoForward(const GURL& url, const blink::PageState& state);
 
   // Sends one native key event over IPC.
   void SendNativeKeyEvent(const NativeWebKeyboardEvent& key_event);
@@ -162,6 +162,9 @@ class RenderViewTest : public testing::Test {
   // Simulates |element| being focused.
   void SetFocused(const blink::WebElement& element);
 
+  // Simulates a null element being focused in |document|.
+  void ChangeFocusToNull(const blink::WebDocument& document);
+
   // Simulates a navigation with a type of reload to the given url.
   void Reload(const GURL& url);
 
@@ -187,7 +190,7 @@ class RenderViewTest : public testing::Test {
   // Enables to use zoom for device scale.
   void SetUseZoomForDSFEnabled(bool zoom_for_dsf);
 
-  blink::WebWidget* GetWebWidget();
+  blink::WebFrameWidget* GetWebFrameWidget();
 
   // Allows a subclass to override the various content client implementations.
   virtual ContentClient* CreateContentClient();
@@ -240,7 +243,7 @@ class RenderViewTest : public testing::Test {
 #endif
 
  private:
-  void GoToOffset(int offset, const GURL& url, const PageState& state);
+  void GoToOffset(int offset, const GURL& url, const blink::PageState& state);
   void SendInputEvent(const blink::WebInputEvent& input_event);
 };
 

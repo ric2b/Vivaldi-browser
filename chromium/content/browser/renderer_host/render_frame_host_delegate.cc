@@ -8,8 +8,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "ipc/ipc_message.h"
@@ -31,6 +31,7 @@ const GURL& RenderFrameHostDelegate::GetMainFrameLastCommittedURL() {
 }
 
 bool RenderFrameHostDelegate::DidAddMessageToConsole(
+    RenderFrameHost* source_frame,
     blink::mojom::ConsoleMessageLevel log_level,
     const base::string16& message,
     int32_t line_no,
@@ -172,6 +173,16 @@ bool RenderFrameHostDelegate::HasSeenRecentScreenOrientationChange() {
 
 bool RenderFrameHostDelegate::IsTransientAllowFullscreenActive() const {
   return false;
+}
+
+RenderWidgetHostImpl* RenderFrameHostDelegate::CreateNewPopupWidget(
+    AgentSchedulingGroupHost& agent_scheduling_group,
+    int32_t route_id,
+    mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
+        blink_popup_widget_host,
+    mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {
+  return nullptr;
 }
 
 bool RenderFrameHostDelegate::ShowPopupMenu(

@@ -29,12 +29,22 @@ WebFakeThreadScheduler::DefaultTaskRunner() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 WebFakeThreadScheduler::CompositorTaskRunner() {
+  return base::ThreadTaskRunnerHandle::Get();
+}
+
+std::unique_ptr<WebAgentGroupScheduler>
+WebFakeThreadScheduler::CreateAgentGroupScheduler() {
   return nullptr;
 }
 
 std::unique_ptr<WebWidgetScheduler>
 WebFakeThreadScheduler::CreateWidgetScheduler() {
   return std::make_unique<WebFakeWidgetScheduler>();
+}
+
+WebAgentGroupScheduler*
+WebFakeThreadScheduler::GetCurrentAgentGroupScheduler() {
+  return nullptr;
 }
 
 std::unique_ptr<WebRenderWidgetSchedulingState>

@@ -11,17 +11,18 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/chromeos/scanning/zeroconf_scanner_detector.h"
 #include "chrome/browser/chromeos/scanning/zeroconf_scanner_detector_utils.h"
 #include "chrome/browser/local_discovery/service_discovery_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_lorgnette_manager_client.h"
 #include "chromeos/dbus/lorgnette/lorgnette_service.pb.h"
+#include "chromeos/dbus/lorgnette_manager/fake_lorgnette_manager_client.h"
 #include "chromeos/scanning/scanner.h"
 #include "net/base/ip_address.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
@@ -43,20 +44,27 @@ constexpr char kLorgnetteUsbDeviceName[] = "test:04A91752_94370B";
 // A scanner name that does not correspond to a known scanner.
 constexpr char kUnknownScannerName[] = "Unknown Scanner";
 
-// Returns a ScannerInfo object with the given |name|.
-lorgnette::ScannerInfo CreateLorgnetteScanner(std::string name) {
+// Model which contains the manufacturer.
+constexpr char kModelContainingManufacturer[] = "TEST Model X";
+
+// Returns a ScannerInfo object with the given |name| and |model|, if provided.
+lorgnette::ScannerInfo CreateLorgnetteScanner(
+    std::string name,
+    const std::string& model = "MX3100") {
   lorgnette::ScannerInfo scanner;
   scanner.set_name(name);
   scanner.set_manufacturer("Test");
-  scanner.set_model("MX3100");
+  scanner.set_model(model);
   scanner.set_type("Flatbed");
   return scanner;
 }
 
 // Returns a ListScannersResponse containing a single ScannerInfo object created
-// with the given |name|.
-lorgnette::ListScannersResponse CreateListScannersResponse(std::string name) {
-  lorgnette::ScannerInfo scanner = CreateLorgnetteScanner(name);
+// with the given |name| and |model|, if provided.
+lorgnette::ListScannersResponse CreateListScannersResponse(
+    std::string name,
+    const std::string& model = "MX3100") {
+  lorgnette::ScannerInfo scanner = CreateLorgnetteScanner(name, model);
   lorgnette::ListScannersResponse response;
   *response.add_scanners() = std::move(scanner);
   return response;
@@ -164,10 +172,18 @@ class LorgnetteScannerManagerTest : public testing::Test {
   void Scan(const std::string& scanner_name,
             const lorgnette::ScanSettings& settings) {
     lorgnette_scanner_manager_->Scan(
-        scanner_name, settings,
+        scanner_name, settings, base::NullCallback(),
         base::BindRepeating(&LorgnetteScannerManagerTest::PageCallback,
                             base::Unretained(this)),
         base::Bind(&LorgnetteScannerManagerTest::ScanCallback,
+                   base::Unretained(this)));
+  }
+
+  // Calls LorgnetteScannerManager::CancelScan() and binds a callback to process
+  // the result.
+  void CancelScan() {
+    lorgnette_scanner_manager_->CancelScan(
+        base::Bind(&LorgnetteScannerManagerTest::CancelScanCallback,
                    base::Unretained(this)));
   }
 
@@ -194,6 +210,7 @@ class LorgnetteScannerManagerTest : public testing::Test {
 
   std::vector<std::string> scan_data() const { return scan_data_; }
   bool scan_success() const { return scan_success_; }
+  bool cancel_scan_success() const { return cancel_scan_success_; }
 
  private:
   // Handles the result of calling LorgnetteScannerManager::GetScannerNames().
@@ -220,6 +237,12 @@ class LorgnetteScannerManagerTest : public testing::Test {
     run_loop_->Quit();
   }
 
+  // Handles completion of LorgnetteScannerManager::CancelScan().
+  void CancelScanCallback(bool success) {
+    cancel_scan_success_ = success;
+    run_loop_->Quit();
+  }
+
   base::test::TaskEnvironment task_environment_;
 
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -231,6 +254,7 @@ class LorgnetteScannerManagerTest : public testing::Test {
   std::vector<std::string> scanner_names_;
   base::Optional<lorgnette::ScannerCapabilities> scanner_capabilities_;
   bool scan_success_ = false;
+  bool cancel_scan_success_ = false;
   std::vector<std::string> scan_data_;
 };
 
@@ -302,6 +326,18 @@ TEST_F(LorgnetteScannerManagerTest, LorgnetteUSBScanner) {
   std::string scanner_name =
       scanner.manufacturer() + " " + scanner.model() + " (USB)";
   EXPECT_THAT(scanner_names(), ElementsAreArray({scanner_name}));
+}
+
+// Test that a lorgnette scanner whose model includes the manufacturer doesn't
+// duplicate the manufacturer in the display name.
+TEST_F(LorgnetteScannerManagerTest, LorgnetteScannerNoDuplicatedManufacturer) {
+  lorgnette::ListScannersResponse response = CreateListScannersResponse(
+      kLorgnetteNetworkIpDeviceName, kModelContainingManufacturer);
+  GetLorgnetteManagerClient()->SetListScannersResponse(response);
+  GetScannerNames();
+  WaitForResult();
+  const auto& scanner = response.scanners()[0];
+  EXPECT_THAT(scanner_names(), ElementsAreArray({scanner.model()}));
 }
 
 // Test that two lorgnette scanners with the same manufacturer and model are
@@ -473,6 +509,19 @@ TEST_F(LorgnetteScannerManagerTest, ScanMultiplePages) {
   EXPECT_EQ(scan_data()[1], "TestPageTwo");
   EXPECT_EQ(scan_data()[2], "TestPageThree");
   EXPECT_TRUE(scan_success());
+}
+
+// Test that requesting to cancel the current scan job returns the success
+// result.
+TEST_F(LorgnetteScannerManagerTest, CancelScan) {
+  auto scanner = CreateZeroconfScanner();
+  fake_zeroconf_scanner_detector()->AddDetections({scanner});
+  CompleteTasks();
+  GetScannerNames();
+  WaitForResult();
+  CancelScan();
+  WaitForResult();
+  EXPECT_TRUE(cancel_scan_success());
 }
 
 }  // namespace chromeos

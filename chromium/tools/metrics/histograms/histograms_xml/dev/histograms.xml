@@ -89,6 +89,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="DevTools.ComputedStyleGrouping"
     enum="DevToolsComputedStyleGrouping" expires_after="M87">
+  <obsolete>
+    Removed in M88 because it is no longer needed for analysis.
+  </obsolete>
   <owner>changhaohan@chromium.org</owner>
   <owner>yangguo@chromium.org</owner>
   <owner>mathias@chromium.org</owner>
@@ -239,6 +242,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Measures the time until a given tool is interactive during a cold start of
     the DevTools.
+  </summary>
+</histogram>
+
+<histogram name="DevTools.OpenedByAction" enum="DevToolsOpenedByAction"
+    expires_after="2021-07-31">
+  <owner>changhaohan@chromium.org</owner>
+  <owner>yangguo@chromium.org</owner>
+  <owner>mathias@chromium.org</owner>
+  <summary>
+    Recorded when a particular action was taken to launch DevTools.
   </summary>
 </histogram>
 

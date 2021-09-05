@@ -103,12 +103,6 @@ if (is_linux || is_chromeos) {
   net_configs += [ "//build/config/linux:libresolv" ]
 }
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): Remove this when migration is done.
-set_sources_assignment_filter([])
-
 source_set("constants") {
   sources = [ "base/trace_constants.h" ]
   deps = [ "//base" ]
@@ -163,6 +157,8 @@ component("net") {
     "base/rand_callback.h",
     "base/registry_controlled_domains/registry_controlled_domain.cc",
     "base/registry_controlled_domains/registry_controlled_domain.h",
+    "base/schemeful_site.cc",
+    "base/schemeful_site.h",
     "base/sockaddr_storage.cc",
     "base/sockaddr_storage.h",
     "base/sys_addrinfo.h",
@@ -188,8 +184,6 @@ component("net") {
     "cert/ct_policy_enforcer.h",
     "cert/ct_policy_status.h",
     "cert/ct_verifier.h",
-    "cert/ct_verify_result.cc",
-    "cert/ct_verify_result.h",
     "cert/do_nothing_ct_verifier.cc",
     "cert/do_nothing_ct_verifier.h",
     "cert/internal/cert_error_id.cc",
@@ -445,6 +439,7 @@ component("net") {
       "base/host_mapping_rules.cc",
       "base/host_mapping_rules.h",
       "base/http_user_agent_settings.h",
+      "base/idempotency.h",
       "base/isolation_info.cc",
       "base/isolation_info.h",
       "base/load_flags.h",
@@ -933,7 +928,6 @@ component("net") {
       "quic/quic_crypto_client_stream_factory.h",
       "quic/quic_event_logger.cc",
       "quic/quic_event_logger.h",
-      "quic/quic_flags_list.h",
       "quic/quic_http3_logger.cc",
       "quic/quic_http3_logger.h",
       "quic/quic_http_stream.cc",
@@ -952,13 +946,9 @@ component("net") {
       "quic/quic_transport_client.h",
       "quic/quic_transport_error.cc",
       "quic/quic_transport_error.h",
-      "quiche/common/platform/impl/quiche_arraysize_impl.h",
-      "quiche/common/platform/impl/quiche_endian_impl.h",
       "quiche/common/platform/impl/quiche_export_impl.h",
       "quiche/common/platform/impl/quiche_logging_impl.h",
       "quiche/common/platform/impl/quiche_map_util_impl.h",
-      "quiche/common/platform/impl/quiche_optional_impl.h",
-      "quiche/common/platform/impl/quiche_ptr_util_impl.h",
       "quiche/common/platform/impl/quiche_str_cat_impl.h",
       "quiche/common/platform/impl/quiche_string_piece_impl.h",
       "quiche/common/platform/impl/quiche_text_utils_impl.h",
@@ -1042,9 +1032,7 @@ component("net") {
       "spdy/multiplexed_session.h",
       "spdy/platform/impl/spdy_bug_tracker_impl.h",
       "spdy/platform/impl/spdy_containers_impl.h",
-      "spdy/platform/impl/spdy_endianness_util_impl.h",
       "spdy/platform/impl/spdy_estimate_memory_usage_impl.h",
-      "spdy/platform/impl/spdy_flags_impl.cc",
       "spdy/platform/impl/spdy_flags_impl.h",
       "spdy/platform/impl/spdy_logging_impl.h",
       "spdy/platform/impl/spdy_macros_impl.h",
@@ -4165,6 +4153,7 @@ test("net_unittests") {
     "base/registry_controlled_domains/registry_controlled_domain_unittest.cc",
     "base/scheme_host_port_matcher_rule_unittest.cc",
     "base/scheme_host_port_matcher_unittest.cc",
+    "base/schemeful_site_unittest.cc",
     "base/test_completion_callback_unittest.cc",
     "base/test_proxy_delegate.cc",
     "base/test_proxy_delegate.h",

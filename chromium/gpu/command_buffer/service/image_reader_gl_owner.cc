@@ -10,8 +10,10 @@
 
 #include "base/android/android_hardware_buffer_compat.h"
 #include "base/android/android_image_reader_compat.h"
+#include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/android/scoped_hardware_buffer_fence_sync.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
@@ -20,8 +22,9 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "gpu/command_buffer/service/abstract_texture.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/ipc/common/android/android_image_reader_utils.h"
-#include "ui/gl/android/android_surface_control_compat.h"
+#include "ui/gfx/android/android_surface_control_compat.h"
 #include "ui/gl/gl_fence_android_native_fence_sync.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/scoped_binders.h"
@@ -62,11 +65,10 @@ bool IsSurfaceControl(TextureOwner::Mode mode) {
 uint32_t NumRequiredMaxImages(TextureOwner::Mode mode) {
   if (IsSurfaceControl(mode) ||
       mode == TextureOwner::Mode::kAImageReaderInsecureMultithreaded) {
-    DCHECK(!base::android::AndroidImageReader::LimitAImageReaderMaxSizeToOne());
+    DCHECK(!features::LimitAImageReaderMaxSizeToOne());
     return 3;
   }
-  return base::android::AndroidImageReader::LimitAImageReaderMaxSizeToOne() ? 1
-                                                                            : 2;
+  return features::LimitAImageReaderMaxSizeToOne() ? 1 : 2;
 }
 
 }  // namespace
@@ -152,12 +154,16 @@ ImageReaderGLOwner::ImageReaderGLOwner(
   media_status_t return_code = loader_.AImageReader_newWithUsage(
       width, height, format, usage, max_images_, &reader);
   if (return_code != AMEDIA_OK) {
-    LOG(ERROR) << " Image reader creation failed.";
-    if (return_code == AMEDIA_ERROR_INVALID_PARAMETER)
+    LOG(ERROR) << " Image reader creation failed on device model : "
+               << base::android::BuildInfo::GetInstance()->model()
+               << ". maxImages used is : " << max_images_;
+    base::debug::DumpWithoutCrashing();
+    if (return_code == AMEDIA_ERROR_INVALID_PARAMETER) {
       LOG(ERROR) << "Either reader is null, or one or more of width, height, "
                     "format, maxImages arguments is not supported";
-    else
+    } else {
       LOG(ERROR) << "unknown error";
+    }
     return;
   }
   DCHECK(reader);
@@ -244,7 +250,9 @@ gl::ScopedJavaSurface ImageReaderGLOwner::CreateJavaSurface() const {
   DCHECK(j_surface);
 
   // Get the scoped java surface that is owned externally.
-  return gl::ScopedJavaSurface::AcquireExternalSurface(j_surface);
+  // TODO(1146071): use of JavaParamRef temporary to try to debug crash.
+  return gl::ScopedJavaSurface::AcquireExternalSurface(
+      base::android::JavaParamRef<jobject>(env, j_surface));
 }
 
 void ImageReaderGLOwner::UpdateTexImage() {

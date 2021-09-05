@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/search/omnibox_mojo_utils.h"
 #include "chrome/browser/ui/search/omnibox_utils.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -57,12 +58,14 @@
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/prefs/pref_service.h"
+#include "components/search/ntp_features.h"
 #include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_provider_logos/logo_service.h"
 #include "components/search_provider_logos/switches.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/storage_partition.h"
+#include "net/cookies/cookie_util.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -71,8 +74,6 @@
 namespace {
 
 const int64_t kMaxDownloadBytes = 1024 * 1024;
-
-constexpr char kModulesVisiblePrefName[] = "NewTabPage.ModulesVisible";
 
 new_tab_page::mojom::ThemePtr MakeTheme(const NtpTheme& ntp_theme) {
   auto theme = new_tab_page::mojom::Theme::New();
@@ -389,7 +390,7 @@ NewTabPageHandler::NewTabPageHandler(
   promo_service_observer_.Add(promo_service_);
   one_google_bar_service_observer_.Add(one_google_bar_service_);
   logger_->SetModulesVisible(
-      profile_->GetPrefs()->GetBoolean(kModulesVisiblePrefName));
+      profile_->GetPrefs()->GetBoolean(prefs::kNtpModulesVisible));
 }
 
 NewTabPageHandler::~NewTabPageHandler() {
@@ -402,11 +403,14 @@ NewTabPageHandler::~NewTabPageHandler() {
   for (auto bitmap_request_id : bitmap_request_ids_) {
     bitmap_fetcher_service_->CancelRequest(bitmap_request_id);
   }
+  if (select_file_dialog_) {
+    select_file_dialog_->ListenerDestroyed();
+  }
 }
 
 // static
 void NewTabPageHandler::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(kModulesVisiblePrefName, true);
+  registry->RegisterBooleanPref(prefs::kNtpModulesVisible, true);
 }
 
 void NewTabPageHandler::AddMostVisitedTile(
@@ -676,13 +680,13 @@ void NewTabPageHandler::OnRestoreModule(const std::string& module_id) {
 }
 
 void NewTabPageHandler::SetModulesVisible(bool visible) {
-  profile_->GetPrefs()->SetBoolean(kModulesVisiblePrefName, visible);
+  profile_->GetPrefs()->SetBoolean(prefs::kNtpModulesVisible, visible);
   UpdateModulesVisible();
 }
 
 void NewTabPageHandler::UpdateModulesVisible() {
   page_->SetModulesVisible(
-      profile_->GetPrefs()->GetBoolean(kModulesVisiblePrefName));
+      profile_->GetPrefs()->GetBoolean(prefs::kNtpModulesVisible));
 }
 
 void NewTabPageHandler::OnPromoDataUpdated() {
@@ -723,6 +727,11 @@ void NewTabPageHandler::OnPromoServiceShuttingDown() {
   promo_service_ = nullptr;
 }
 
+void NewTabPageHandler::OnAppRendered(double time) {
+  logger_->LogEvent(NTP_APP_RENDERED,
+                    base::Time::FromJsTime(time) - ntp_navigation_start_time_);
+}
+
 void NewTabPageHandler::OnMostVisitedTilesRendered(
     std::vector<new_tab_page::mojom::MostVisitedTilePtr> tiles,
     double time) {
@@ -751,8 +760,34 @@ void NewTabPageHandler::OnPromoRendered(double time,
 
 void NewTabPageHandler::OnMostVisitedTileNavigation(
     new_tab_page::mojom::MostVisitedTilePtr tile,
-    uint32_t index) {
+    uint32_t index,
+    uint8_t mouse_button,
+    bool alt_key,
+    bool ctrl_key,
+    bool meta_key,
+    bool shift_key) {
   logger_->LogMostVisitedNavigation(MakeNTPTileImpression(*tile, index));
+
+  if (!base::FeatureList::IsEnabled(
+          ntp_features::kNtpHandleMostVisitedNavigationExplicitly))
+    return;
+
+  WindowOpenDisposition disposition = ui::DispositionFromClick(
+      /*middle_button=*/mouse_button == 1, alt_key, ctrl_key, meta_key,
+      shift_key);
+  // Clicks on the MV tiles should be treated as if the user clicked on a
+  // bookmark. This is consistent with Android's native implementation and
+  // ensures the visit count for the MV entry is updated.
+  // Use a link transition for query tiles, e.g., repeatable queries, so that
+  // their visit count is not updated by this navigation. Otherwise duplicate
+  // query tiles could also be offered as most visited.
+  // |is_query_tile| can be true only when ntp_features::kNtpRepeatableQueries
+  // is enabled.
+  web_contents_->OpenURL(content::OpenURLParams(
+      tile->url, content::Referrer(), disposition,
+      tile->is_query_tile ? ui::PAGE_TRANSITION_LINK
+                          : ui::PAGE_TRANSITION_AUTO_BOOKMARK,
+      false));
 }
 
 void NewTabPageHandler::OnCustomizeDialogAction(
@@ -1066,6 +1101,14 @@ void NewTabPageHandler::OpenAutocompleteMatch(
                                                   ui::PAGE_TRANSITION_TYPED)) {
     navigation_metrics::RecordOmniboxURLNavigation(match.destination_url);
   }
+  // The following histogram should be recorded for both TYPED and pasted
+  // URLs, but should still exclude reloads.
+  if (ui::PageTransitionTypeIncludingQualifiersIs(match.transition,
+                                                  ui::PAGE_TRANSITION_TYPED) ||
+      ui::PageTransitionTypeIncludingQualifiersIs(match.transition,
+                                                  ui::PAGE_TRANSITION_LINK)) {
+    net::cookie_util::RecordCookiePortOmniboxHistograms(match.destination_url);
+  }
 
   SuggestionAnswer::LogAnswerUsed(match.answer);
 
@@ -1126,7 +1169,7 @@ void NewTabPageHandler::OpenAutocompleteMatch(
       /*elapsed_time_since_last_change_to_default_match=*/
       elapsed_time_since_last_change_to_default_match,
       /*result=*/autocomplete_controller_->result());
-  autocomplete_controller_->AddProvidersInfo(&log.providers_info);
+  autocomplete_controller_->AddProviderAndTriggeringLogs(&log);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);
 
@@ -1176,6 +1219,8 @@ void NewTabPageHandler::NtpThemeChanged(const NtpTheme& ntp_theme) {
 
 void NewTabPageHandler::MostVisitedInfoChanged(
     const InstantMostVisitedInfo& info) {
+  auto* template_url_service =
+      TemplateURLServiceFactory::GetForProfile(profile_);
   std::vector<new_tab_page::mojom::MostVisitedTilePtr> list;
   auto result = new_tab_page::mojom::MostVisitedInfo::New();
   for (auto& tile : info.items) {
@@ -1192,6 +1237,11 @@ void NewTabPageHandler::MostVisitedInfoChanged(
     value->source = static_cast<int32_t>(tile.source);
     value->title_source = static_cast<int32_t>(tile.title_source);
     value->data_generation_time = tile.data_generation_time;
+    value->is_query_tile =
+        base::FeatureList::IsEnabled(ntp_features::kNtpRepeatableQueries) &&
+        template_url_service &&
+        template_url_service->IsSearchResultsPageFromDefaultSearchProvider(
+            tile.url);
     list.push_back(std::move(value));
   }
   result->custom_links_enabled = !info.use_most_visited;

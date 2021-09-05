@@ -13,8 +13,8 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
@@ -67,7 +67,6 @@
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/page_state.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
 
@@ -211,9 +210,9 @@ class SessionRestoreImpl : public BrowserListObserver {
 
     bool use_new_window = disposition == WindowOpenDisposition::NEW_WINDOW;
 
-    Browser* browser = use_new_window
-                           ? new Browser(Browser::CreateParams(profile_, true))
-                           : browser_;
+    Browser* browser =
+        use_new_window ? Browser::Create(Browser::CreateParams(profile_, true))
+                       : browser_;
 
     RecordAppLaunchForTab(browser, tab, selected_index);
 
@@ -223,7 +222,7 @@ class SessionRestoreImpl : public BrowserListObserver {
       web_contents = chrome::ReplaceRestoredTab(
           browser, tab.navigations, selected_index, true, tab.extension_app_id,
           nullptr, tab.user_agent_override, true /* from_session_restore */,
-          tab.ext_data);
+          tab.page_action_overrides, tab.ext_data);
     } else {
       int tab_index =
           use_new_window ? 0 : browser->tab_strip_model()->active_index() + 1;
@@ -233,7 +232,7 @@ class SessionRestoreImpl : public BrowserListObserver {
           disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB,  // selected
           tab.pinned, true, base::TimeTicks(), nullptr, tab.user_agent_override,
           true /* from_session_restore */,
-          tab.ext_data);
+          tab.page_action_overrides, tab.ext_data);
       // Start loading the tab immediately.
       web_contents->GetController().LoadIfNecessary();
     }
@@ -289,7 +288,7 @@ class SessionRestoreImpl : public BrowserListObserver {
     if (!created_tabbed_browser && always_create_tabbed_browser_) {
       Browser::CreateParams params(profile_, false);
       params.is_vivaldi = vivaldi::IsVivaldiRunning();
-      browser = new Browser(params);
+      browser = Browser::Create(params);
       if (urls_to_open_.empty()) {
         // No tab browsers were created and no URLs were supplied on the command
         // line. Open the new tab page.
@@ -458,14 +457,12 @@ class SessionRestoreImpl : public BrowserListObserver {
 
       // 6. Tabs will be grouped appropriately in RestoreTabsToBrowser. Now
       //    restore the groups' visual data.
-      if (base::FeatureList::IsEnabled(features::kTabGroups)) {
-        TabGroupModel* group_model = browser->tab_strip_model()->group_model();
-        for (auto& session_tab_group : (*i)->tab_groups) {
-          TabGroup* model_tab_group =
-              group_model->GetTabGroup(session_tab_group->id);
-          DCHECK(model_tab_group);
-          model_tab_group->SetVisualData(session_tab_group->visual_data);
-        }
+      TabGroupModel* group_model = browser->tab_strip_model()->group_model();
+      for (auto& session_tab_group : (*i)->tab_groups) {
+        TabGroup* model_tab_group =
+            group_model->GetTabGroup(session_tab_group->id);
+        DCHECK(model_tab_group);
+        model_tab_group->SetVisualData(session_tab_group->visual_data);
       }
 
       // 7. Notify SessionService of restored tabs, so they can be saved to the
@@ -623,22 +620,19 @@ class SessionRestoreImpl : public BrowserListObserver {
               ->RecreateSessionStorage(tab.session_storage_persistent_id);
     }
 
-    // Apply the stored group if tab groups are enabled.
-    base::Optional<tab_groups::TabGroupId> group;
-    if (base::FeatureList::IsEnabled(features::kTabGroups))
-      group = tab.group;
-
+    // Apply the stored group.
     WebContents* web_contents = chrome::AddRestoredTab(
         browser, tab.navigations, tab_index, selected_index,
-        tab.extension_app_id, group, is_selected_tab, tab.pinned, true,
+        tab.extension_app_id, tab.group, is_selected_tab, tab.pinned, true,
         last_active_time, session_storage_namespace.get(),
         tab.user_agent_override, true /* from_session_restore */,
-        tab.ext_data);
+        tab.page_action_overrides, tab.ext_data);
 
     DCHECK(web_contents);
 
     RestoredTab restored_tab(web_contents, is_selected_tab,
-                             tab.extension_app_id.empty(), tab.pinned, group);
+                             tab.extension_app_id.empty(), tab.pinned,
+                             tab.group);
     created_contents->push_back(restored_tab);
 
     // If this isn't the selected tab, there's nothing else to do.
@@ -677,7 +671,7 @@ class SessionRestoreImpl : public BrowserListObserver {
     params.is_session_restore = true;
     params.is_vivaldi =
         vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
-    return new Browser(params);
+    return Browser::Create(params);
   }
 
   void ShowBrowser(Browser* browser, int selected_tab_index) {

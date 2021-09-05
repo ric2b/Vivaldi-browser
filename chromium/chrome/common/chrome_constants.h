@@ -39,6 +39,7 @@ extern const base::FilePath::CharType kStatusTrayWindowClass[];
 
 extern const char kInitialProfile[];
 extern const char kMultiProfileDirPrefix[];
+extern const char kEphemeralGuestProfileDirPrefix[];
 extern const base::FilePath::CharType kGuestProfileDir[];
 extern const base::FilePath::CharType kSystemProfileDir[];
 
@@ -81,9 +82,6 @@ extern const base::FilePath::CharType kReportingAndNelStoreFilename[];
 #if defined(OS_WIN)
 extern const base::FilePath::CharType kJumpListIconDirname[];
 #endif
-
-// File name of the Pepper Flash plugin on different platforms.
-extern const base::FilePath::CharType kPepperFlashPluginFilename[];
 
 // directory names
 #if defined(OS_WIN)

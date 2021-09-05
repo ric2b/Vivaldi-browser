@@ -9,16 +9,16 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 
 namespace autofill {
 struct PasswordFormFillData;
 }  // namespace autofill
 
 namespace password_manager {
+class PasswordFormMetricsRecorder;
 class PasswordManagerClient;
 class PasswordManagerDriver;
-class PasswordFormMetricsRecorder;
+struct PasswordForm;
 
 // Enum detailing the browser process' best belief what kind of credential
 // filling is used in the renderer for a given password form.
@@ -46,6 +46,7 @@ LikelyFormFilling SendFillInformationToRenderer(
     const std::vector<const PasswordForm*>& best_matches,
     const std::vector<const PasswordForm*>& federated_matches,
     const PasswordForm* preferred_match,
+    bool blocked_by_user,
     PasswordFormMetricsRecorder* metrics_recorder);
 
 // Create a PasswordFormFillData structure in preparation for filling a form

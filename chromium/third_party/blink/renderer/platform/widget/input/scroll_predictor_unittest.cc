@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/platform/widget/input/scroll_predictor.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -58,7 +58,7 @@ class ScrollPredictorTest : public testing::Test {
 
     original_events_.emplace_back(std::make_unique<WebCoalescedInputEvent>(
                                       gesture->Clone(), ui::LatencyInfo()),
-                                  base::NullCallback());
+                                  nullptr, base::NullCallback());
 
     return gesture;
   }
@@ -78,11 +78,10 @@ class ScrollPredictorTest : public testing::Test {
 
   void HandleResampleScrollEvents(std::unique_ptr<WebInputEvent>& event,
                                   double time_delta_in_milliseconds = 0) {
-    std::unique_ptr<EventWithCallback> event_with_callback =
-        std::make_unique<EventWithCallback>(
-            std::make_unique<WebCoalescedInputEvent>(std::move(event),
-                                                     ui::LatencyInfo()),
-            base::TimeTicks(), base::NullCallback());
+    auto event_with_callback = std::make_unique<EventWithCallback>(
+        std::make_unique<WebCoalescedInputEvent>(std::move(event),
+                                                 ui::LatencyInfo()),
+        base::TimeTicks(), base::NullCallback(), nullptr);
     event_with_callback->original_events() = std::move(original_events_);
 
     event_with_callback = scroll_predictor_->ResampleScrollEvents(

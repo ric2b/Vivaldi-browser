@@ -32,37 +32,36 @@ import org.chromium.chrome.browser.AfterStartupTaskUtils;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeActivitySessionTracker;
 import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.chrome.browser.ChromeBackupAgent;
+import org.chromium.chrome.browser.ChromeBackupAgentImpl;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.DevToolsServer;
+import org.chromium.chrome.browser.app.video_tutorials.VideoTutorialShareHelper;
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
 import org.chromium.chrome.browser.content_capture.ContentCaptureHistoryDeletionObserver;
 import org.chromium.chrome.browser.crash.CrashUploadCountStore;
 import org.chromium.chrome.browser.crash.LogcatExtractionRunnable;
-import org.chromium.chrome.browser.crash.MinidumpUploadService;
+import org.chromium.chrome.browser.crash.MinidumpUploadServiceImpl;
 import org.chromium.chrome.browser.download.DownloadController;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.OfflineContentAvailabilityStatusProvider;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.firstrun.ForcedSigninProcessor;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryDeletionBridge;
 import org.chromium.chrome.browser.homepage.HomepageManager;
-import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
-import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerator;
 import org.chromium.chrome.browser.incognito.IncognitoTabLauncher;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.media.MediaCaptureNotificationService;
+import org.chromium.chrome.browser.media.MediaCaptureNotificationServiceImpl;
 import org.chromium.chrome.browser.media.MediaViewerUtils;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.PackageMetrics;
 import org.chromium.chrome.browser.metrics.WebApkUma;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.DecoderService;
 import org.chromium.chrome.browser.policy.EnterpriseInfo;
@@ -75,6 +74,8 @@ import org.chromium.chrome.browser.share.clipboard.ClipboardImageFileProvider;
 import org.chromium.chrome.browser.sharing.shared_clipboard.SharedClipboardShareActivity;
 import org.chromium.chrome.browser.signin.SigninHelper;
 import org.chromium.chrome.browser.sync.SyncController;
+import org.chromium.chrome.browser.uid.UniqueIdentificationGeneratorFactory;
+import org.chromium.chrome.browser.uid.UuidBasedUniqueIdentificationGenerator;
 import org.chromium.chrome.browser.webapps.WebApkVersionManager;
 import org.chromium.chrome.browser.webapps.WebappRegistry;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
@@ -83,6 +84,8 @@ import org.chromium.components.browser_ui.photo_picker.DecoderServiceHost;
 import org.chromium.components.browser_ui.photo_picker.PhotoPickerDialog;
 import org.chromium.components.browser_ui.share.ShareImageFileUtils;
 import org.chromium.components.browser_ui.util.ConversionUtils;
+import org.chromium.components.content_capture.ContentCaptureController;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.components.signin.AccountManagerFacadeImpl;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
@@ -213,6 +216,7 @@ public class ProcessInitializationHandler {
         ChromeActivitySessionTracker.getInstance().initializeWithNative();
         ProfileManagerUtils.removeSessionCookiesForAllProfiles();
         AppBannerManager.setAppDetailsDelegate(AppHooks.get().createAppDetailsDelegate());
+        AppBannerManager.setTrackerFromProfileFactory(TrackerFactory::getTrackerForProfile);
         ChromeLifetimeController.initialize();
         Clipboard.getInstance().setImageFileProvider(new ClipboardImageFileProvider());
 
@@ -259,8 +263,8 @@ public class ProcessInitializationHandler {
                 });
 
         SearchWidgetProvider.initialize();
-        HistoryDeletionBridge.getInstance().addObserver(
-                new ContentCaptureHistoryDeletionObserver());
+        HistoryDeletionBridge.getInstance().addObserver(new ContentCaptureHistoryDeletionObserver(
+                () -> ContentCaptureController.getInstance()));
     }
 
     /**
@@ -303,7 +307,7 @@ public class ProcessInitializationHandler {
                                 String homepageUrl = HomepageManager.getHomepageUri();
                                 LaunchMetrics.recordHomePageLaunchMetrics(
                                         HomepageManager.isHomepageEnabled(),
-                                        NewTabPage.isNTPUrl(homepageUrl), homepageUrl);
+                                        UrlUtilities.isNTPUrl(homepageUrl), homepageUrl);
                             }
                         });
 
@@ -323,7 +327,7 @@ public class ProcessInitializationHandler {
             @Override
             public void run() {
                 // Clear any media notifications that existed when Chrome was last killed.
-                MediaCaptureNotificationService.clearMediaNotifications();
+                MediaCaptureNotificationServiceImpl.clearMediaNotifications();
 
                 startModerateBindingManagementIfNeeded();
 
@@ -341,8 +345,6 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                HomepageManager.recordHomeButtonPreferenceState();
-                HomepageManager.recordHomepageIsCustomized(HomepageManager.isHomepageCustomized());
                 HomepageManager.recordHomepageLocationTypeIfEnabled();
             }
         });
@@ -359,7 +361,7 @@ public class ProcessInitializationHandler {
             @Override
             public void run() {
                 // Record the saved restore state in a histogram
-                ChromeBackupAgent.recordRestoreHistogram();
+                ChromeBackupAgentImpl.recordRestoreHistogram();
             }
         });
 
@@ -433,6 +435,8 @@ public class ProcessInitializationHandler {
                 () -> OfflineContentAvailabilityStatusProvider.getInstance());
         deferredStartupHandler.addDeferredTask(
                 () -> EnterpriseInfo.getInstance().logDeviceEnterpriseInfo());
+        deferredStartupHandler.addDeferredTask(
+                () -> VideoTutorialShareHelper.saveUrlsToSharedPrefs());
     }
 
     private void initChannelsAsync() {
@@ -512,7 +516,7 @@ public class ProcessInitializationHandler {
                 // Chrome activity is not running, and hence regular metrics reporting is not
                 // possible. Instead, metrics are temporarily written to prefs; export those prefs
                 // to UMA metrics here.
-                MinidumpUploadService.storeBreakpadUploadStatsInUma(
+                MinidumpUploadServiceImpl.storeBreakpadUploadStatsInUma(
                         CrashUploadCountStore.getInstance());
 
                 // Likewise, this is a good time to process and clean up any pending or stale crash
@@ -528,14 +532,14 @@ public class ProcessInitializationHandler {
 
                 // Now, upload all pending crash reports that are not still in need of logcat data.
                 File[] minidumps = crashFileManager.getMinidumpsReadyForUpload(
-                        MinidumpUploadService.MAX_TRIES_ALLOWED);
+                        MinidumpUploadServiceImpl.MAX_TRIES_ALLOWED);
                 if (minidumps.length > 0) {
                     Log.i(TAG, "Attempting to upload %d accumulated crash dumps.",
                             minidumps.length);
-                    if (MinidumpUploadService.shouldUseJobSchedulerForUploads()) {
-                        MinidumpUploadService.scheduleUploadJob();
+                    if (MinidumpUploadServiceImpl.shouldUseJobSchedulerForUploads()) {
+                        MinidumpUploadServiceImpl.scheduleUploadJob();
                     } else {
-                        MinidumpUploadService.tryUploadAllCrashDumps();
+                        MinidumpUploadServiceImpl.tryUploadAllCrashDumps();
                     }
                 }
 

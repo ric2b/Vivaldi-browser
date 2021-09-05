@@ -120,7 +120,16 @@
 
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/kythe.gni")
-import("//third_party/closure_compiler/compile_js.gni")
+
+declare_args() {
+  # Allows subprojects to omit javascript dependencies (e.g.) closure_compiler
+  # and google-closure-library.
+  enable_js_protobuf = true
+}
+
+if (enable_js_protobuf) {
+  import("//third_party/closure_compiler/compile_js.gni")
+}
 
 if (host_os == "win") {
   _host_executable_suffix = ".exe"
@@ -135,12 +144,6 @@ _protoc_path = get_label_info(_protoc_label, "root_out_dir") + "/protoc" +
 template("proto_library") {
   assert(defined(invoker.sources), "Need sources for proto_library")
   proto_sources = invoker.sources
-
-  # Don't apply OS-specific sources filtering to the assignments later on.
-  # Platform files should have gotten filtered out in the sources assignment
-  # when this template was invoked. If they weren't, it was on purpose and
-  # this template shouldn't re-apply the filter.
-  set_sources_assignment_filter([])
 
   if (defined(invoker.generate_cc)) {
     generate_cc = invoker.generate_cc
@@ -297,13 +300,23 @@ template("proto_library") {
   # Generate protobuf stubs.
   action(action_name) {
     visibility = [
-      ":$source_set_name",
       ":$javascript_name",
+      ":$source_set_name",
     ]
-    script = "//tools/protoc_wrapper/protoc_wrapper.py"
+    if ((defined(invoker.run_under_python2) && invoker.run_under_python2) ||
+        true) {
+      # TODO(crbug.com/1112471) - get all users of this to run cleanly under
+      # Python 3 and then remove this option.
+      script = "//build/util/python2_action.py"
+      args = [ rebase_path("//tools/protoc_wrapper/protoc_wrapper.py",
+                           root_build_dir) ] + protos
+    } else {
+      script = "//tools/protoc_wrapper/protoc_wrapper.py"
+      args = protos
+    }
+
     sources = proto_sources
     outputs = get_path_info(protogens + protogens_cc + protogens_js, "abspath")
-    args = protos
 
     if (defined(invoker.testonly)) {
       testonly = invoker.testonly
@@ -371,9 +384,15 @@ template("proto_library") {
     }
 
     if (generate_descriptor != "") {
+      depfile =
+          "$root_gen_dir/" + proto_out_dir + "/" + generate_descriptor + ".d"
+      rel_depfile = rebase_path(depfile, root_build_dir)
+
       args += [
         "--descriptor-set-out",
         rel_descriptor_out,
+        "--descriptor-set-dependency-file",
+        rel_depfile,
       ]
     }
 

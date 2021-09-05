@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/callback_list.h"
 #include "base/cancelable_callback.h"
 #include "base/gtest_prod_util.h"
@@ -24,16 +24,12 @@
 #include "build/build_config.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
-
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 #include "components/password_manager/core/browser/hash_password_manager.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_reuse_detector_consumer.h"
-#endif
 
 class PrefService;
 
@@ -51,11 +47,11 @@ using StateSubscription =
 
 namespace password_manager {
 
+struct PasswordForm;
+
 using IsAccountStore = util::StrongAlias<class IsAccountStoreTag, bool>;
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 using metrics_util::GaiaPasswordHashChange;
-#endif
 
 class AffiliatedMatchHelper;
 class PasswordStoreConsumer;
@@ -66,9 +62,7 @@ struct FieldInfo;
 struct InteractionsStats;
 struct CompromisedCredentials;
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 using PasswordHashDataList = base::Optional<std::vector<PasswordHashData>>;
-#endif
 
 // Interface for storing form passwords in a platform-specific secure way.
 // The login request/manipulation API is not threadsafe and must be used
@@ -379,7 +373,6 @@ class PasswordStore : protected PasswordStoreSync,
 
   void SetSyncTaskTimeoutForTest(base::TimeDelta timeout);
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Immediately called after |Init()| to retrieve password hash data for
   // reuse detection.
   void PreparePasswordHashData(const std::string& sync_username,
@@ -448,12 +441,9 @@ class PasswordStore : protected PasswordStoreSync,
   // These URLs are used in enterprise password reuse detection.
   void ScheduleEnterprisePasswordURLUpdate();
 
-#endif
-
  protected:
   friend class base::RefCountedThreadSafe<PasswordStore>;
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Represents a single CheckReuse() request. Implements functionality to
   // listen to reuse events and propagate them to |consumer| on the sequence on
   // which CheckReuseRequest is created.
@@ -478,7 +468,6 @@ class PasswordStore : protected PasswordStoreSync,
 
     DISALLOW_COPY_AND_ASSIGN(CheckReuseRequest);
   };
-#endif
 
   // Status of PasswordStore::Init().
   enum class InitStatus {
@@ -628,7 +617,6 @@ class PasswordStore : protected PasswordStoreSync,
   void InvokeAndNotifyAboutCompromisedPasswordsChange(
       base::OnceCallback<bool()> callback);
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Saves |username| and a hash of |password| for password reuse checking.
   // |is_gaia_password| indicates if it is a Gaia account. |event| is used for
   // metric logging. |is_primary_account| is whether account belong to the
@@ -671,7 +659,6 @@ class PasswordStore : protected PasswordStoreSync,
 
   // Synchronous implementation of ClearAllNonGmailPasswordHash().
   void ClearAllNonGmailPasswordHashImpl();
-#endif
 
   scoped_refptr<base::SequencedTaskRunner> main_task_runner() const {
     return main_task_runner_;
@@ -894,14 +881,13 @@ class PasswordStore : protected PasswordStoreSync,
   std::unique_ptr<AffiliatedMatchHelper> affiliated_match_helper_;
 
   PrefService* prefs_ = nullptr;
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
+
   // PasswordReuseDetector can be only destroyed on the background sequence. It
   // can't be owned by PasswordStore because PasswordStore can be destroyed on
   // the UI thread and DestroyOnBackgroundThread isn't guaranteed to be called.
   PasswordReuseDetector* reuse_detector_ = nullptr;
   std::unique_ptr<PasswordStoreSigninNotifier> notifier_;
   HashPasswordManager hash_password_manager_;
-#endif
 
   std::unique_ptr<UnsyncedCredentialsDeletionNotifier> deletion_notifier_;
 
@@ -922,9 +908,15 @@ class PasswordStore : protected PasswordStoreSync,
   DISALLOW_COPY_AND_ASSIGN(PasswordStore);
 };
 
-// For logging only.
-std::ostream& operator<<(std::ostream& os,
-                         const PasswordStore::FormDigest& digest);
+// For testing only.
+#if defined(UNIT_TEST)
+inline std::ostream& operator<<(std::ostream& os,
+                                const PasswordStore::FormDigest& digest) {
+  return os << "FormDigest(scheme: " << digest.scheme
+            << ", signon_realm: " << digest.signon_realm
+            << ", url: " << digest.url << ")";
+}
+#endif
 
 }  // namespace password_manager
 

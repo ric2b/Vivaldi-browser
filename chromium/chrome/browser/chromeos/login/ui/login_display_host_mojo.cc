@@ -34,6 +34,7 @@
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_password_changed_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_creation_screen_handler.h"
 #include "chromeos/login/auth/user_context.h"
@@ -43,12 +44,11 @@
 #include "components/user_manager/user_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/aura/window.h"
+#include "ui/views/view.h"
 
 namespace chromeos {
 
 namespace {
-
-constexpr char kLoginDisplay[] = "login";
 
 CertificateProviderService* GetLoginScreenCertProviderService() {
   DCHECK(ProfileHelper::IsSigninProfileInitialized());
@@ -69,7 +69,7 @@ LoginDisplayHostMojo::LoginDisplayHostMojo(DisplayedScreen displayed_screen)
     : login_display_(std::make_unique<LoginDisplayMojo>(this)),
       user_board_view_mojo_(std::make_unique<UserBoardViewMojo>()),
       user_selection_screen_(
-          std::make_unique<ChromeUserSelectionScreen>(kLoginDisplay)),
+          std::make_unique<ChromeUserSelectionScreen>(displayed_screen)),
       system_info_updater_(std::make_unique<MojoSystemInfoDispatcher>()),
       displayed_screen_(displayed_screen) {
   user_selection_screen_->SetView(user_board_view_mojo_.get());
@@ -329,8 +329,7 @@ void LoginDisplayHostMojo::HideOobeDialog() {
   const bool no_users =
       !login_display_->IsSigninInProgress() && user_count_ == 0;
   if (no_users || GetOobeUI()->current_screen() == GaiaView::kScreenId) {
-    GaiaScreen* gaia_screen =
-        GaiaScreen::Get(GetWizardController()->screen_manager());
+    GaiaScreen* gaia_screen = GetWizardController()->GetScreen<GaiaScreen>();
     gaia_screen->LoadOnline(EmptyAccountId());
     if (no_users)
       return;
@@ -354,6 +353,19 @@ void LoginDisplayHostMojo::UpdateAddUserButtonStatus() {
 
 void LoginDisplayHostMojo::RequestSystemInfoUpdate() {
   system_info_updater_->StartRequest();
+}
+
+bool LoginDisplayHostMojo::HasUserPods() {
+  return user_count_ > 0;
+}
+
+void LoginDisplayHostMojo::AddObserver(LoginDisplayHost::Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void LoginDisplayHostMojo::RemoveObserver(
+    LoginDisplayHost::Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 void LoginDisplayHostMojo::OnCancelPasswordChangedFlow() {
@@ -380,6 +392,10 @@ void LoginDisplayHostMojo::HandleAuthenticateUserWithPasswordOrPin(
   user_context.SetKey(
       Key(chromeos::Key::KEY_TYPE_PASSWORD_PLAIN, "" /*salt*/, password));
   user_context.SetPasswordKey(Key(password));
+  user_context.SetLoginInputMethodUsed(input_method::InputMethodManager::Get()
+                                           ->GetActiveIMEState()
+                                           ->GetCurrentInputMethod()
+                                           .id());
 
   if (account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY) {
     if (user_context.GetUserType() !=
@@ -501,6 +517,18 @@ void LoginDisplayHostMojo::OnDestroyingOobeUI() {
   StopObservingOobeUI();
 }
 
+// views::ViewObserver:
+void LoginDisplayHostMojo::OnViewBoundsChanged(views::View* observed_view) {
+  DCHECK(scoped_observer_.IsObserving(observed_view));
+  for (auto& observer : observers_)
+    observer.WebDialogViewBoundsChanged(observed_view->GetBoundsInScreen());
+}
+
+void LoginDisplayHostMojo::OnViewIsDeleting(views::View* observed_view) {
+  DCHECK(scoped_observer_.IsObserving(observed_view));
+  scoped_observer_.Remove(observed_view);
+}
+
 bool LoginDisplayHostMojo::IsOobeUIDialogVisible() const {
   return dialog_ && dialog_->IsVisible();
 }
@@ -512,6 +540,9 @@ void LoginDisplayHostMojo::LoadOobeDialog() {
   dialog_ = new OobeUIDialogDelegate(weak_factory_.GetWeakPtr());
   dialog_->GetOobeUI()->signin_screen_handler()->SetDelegate(
       login_display_.get());
+
+  views::View* web_dialog_view = dialog_->GetWebDialogView();
+  scoped_observer_.Add(web_dialog_view);
 }
 
 void LoginDisplayHostMojo::OnChallengeResponseKeysPrepared(

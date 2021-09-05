@@ -220,7 +220,7 @@ void WebrtcLoggingPrivateFunctionWithUploadCallback::FireCallback(
   if (success) {
     api::webrtc_logging_private::UploadResult result;
     result.report_id = report_id;
-    Respond(OneArgument(result.ToValue()));
+    Respond(OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
   } else {
     Respond(Error(error_message));
   }
@@ -241,7 +241,7 @@ void WebrtcLoggingPrivateFunctionWithRecordingDoneCallback::FireCallback(
   result.prefix_path = prefix_path;
   result.did_stop = did_stop;
   result.did_manual_stop = did_manual_stop;
-  Respond(OneArgument(result.ToValue()));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
 }
 
 ExtensionFunction::ResponseAction
@@ -561,7 +561,7 @@ void WebrtcLoggingPrivateStartEventLoggingFunction::FireCallback(
     DCHECK(error_message.empty());
     api::webrtc_logging_private::StartEventLoggingResult result;
     result.log_id = log_id;
-    Respond(OneArgument(result.ToValue()));
+    Respond(OneArgument(base::Value::FromUniquePtrValue(result.ToValue())));
   } else {
     DCHECK(log_id.empty());
     DCHECK(!error_message.empty());
@@ -606,7 +606,7 @@ void WebrtcLoggingPrivateGetLogsDirectoryFunction::FireCallback(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("fileSystemId", filesystem_id);
   dict->SetString("baseName", base_name);
-  Respond(OneArgument(std::move(dict)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 void WebrtcLoggingPrivateGetLogsDirectoryFunction::FireErrorCallback(

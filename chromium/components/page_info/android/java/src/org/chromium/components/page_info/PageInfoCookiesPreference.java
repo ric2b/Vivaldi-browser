@@ -3,18 +3,18 @@
 // found in the LICENSE file.
 package org.chromium.components.page_info;
 
+import android.app.Dialog;
 import android.os.Bundle;
 import android.text.format.Formatter;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceFragmentCompat;
 
 import org.chromium.base.Callback;
-import org.chromium.components.browser_ui.settings.ButtonPreference;
-import org.chromium.components.browser_ui.settings.ChromeBasePreference;
+import org.chromium.components.browser_ui.settings.ChromeImageViewPreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.site_settings.SiteSettingsPreferenceFragment;
 import org.chromium.components.content_settings.CookieControlsStatus;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
@@ -22,15 +22,16 @@ import org.chromium.ui.text.SpanApplier;
 /**
  * View showing a toggle and a description for third-party cookie blocking for a site.
  */
-public class PageInfoCookiesPreference extends PreferenceFragmentCompat {
+public class PageInfoCookiesPreference extends SiteSettingsPreferenceFragment {
     private static final String COOKIE_SUMMARY_PREFERENCE = "cookie_summary";
     private static final String COOKIE_SWITCH_PREFERENCE = "cookie_switch";
     private static final String COOKIE_IN_USE_PREFERENCE = "cookie_in_use";
     private static final String CLEAR_BUTTON_PREFERENCE = "clear_button";
 
     private ChromeSwitchPreference mCookieSwitch;
-    private ChromeBasePreference mCookieInUse;
+    private ChromeImageViewPreference mCookieInUse;
     private Runnable mOnClearCallback;
+    private Dialog mConfirmationDialog;
 
     /**  Parameters to configure the cookie controls view. */
     public static class PageInfoCookiesViewParams {
@@ -44,9 +45,22 @@ public class PageInfoCookiesPreference extends PreferenceFragmentCompat {
 
     @Override
     public void onCreatePreferences(Bundle bundle, String s) {
+        // Remove this Preference if it is restored without SiteSettingsClient.
+        if (getSiteSettingsClient() == null) {
+            getParentFragmentManager().beginTransaction().remove(this).commit();
+            return;
+        }
         SettingsUtils.addPreferencesFromResource(this, R.xml.page_info_cookie_preference);
         mCookieSwitch = findPreference(COOKIE_SWITCH_PREFERENCE);
         mCookieInUse = findPreference(COOKIE_IN_USE_PREFERENCE);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (mConfirmationDialog != null) {
+            mConfirmationDialog.dismiss();
+        }
     }
 
     public void setParams(PageInfoCookiesViewParams params) {
@@ -66,26 +80,31 @@ public class PageInfoCookiesPreference extends PreferenceFragmentCompat {
 
         mCookieInUse.setIcon(
                 SettingsUtils.getTintedIcon(getContext(), R.drawable.permission_cookie));
+        if (!params.disableCookieDeletion) {
+            mCookieInUse.setImageView(
+                    R.drawable.ic_delete_white_24dp, R.string.page_info_cookies_clear, null);
+            mCookieInUse.setImageColor(R.color.default_icon_color_blue);
+            // Disabling enables passthrough of clicks to the main preference.
+            mCookieInUse.setImageViewEnabled(false);
+            mCookieInUse.setOnPreferenceClickListener(preference -> {
+                showClearCookiesConfirmation();
+                return true;
+            });
+        }
 
         mOnClearCallback = params.onClearCallback;
-        ButtonPreference clearButton = findPreference(CLEAR_BUTTON_PREFERENCE);
-        clearButton.setOnPreferenceClickListener(preference -> {
-            showClearCookiesConfirmation();
-            return true;
-        });
-        if (params.disableCookieDeletion) {
-            clearButton.setEnabled(false);
-        }
     }
 
     private void showClearCookiesConfirmation() {
-        new AlertDialog.Builder(getActivity(), R.style.Theme_Chromium_AlertDialog)
-                .setTitle(R.string.page_info_cookies_clear)
-                .setMessage(R.string.page_info_cookies_clear_confirmation)
-                .setPositiveButton(R.string.page_info_cookies_clear_confirmation_button,
-                        (dialog, which) -> mOnClearCallback.run())
-                .setNegativeButton(R.string.cancel, null)
-                .show();
+        mConfirmationDialog =
+                new AlertDialog.Builder(getActivity(), R.style.Theme_Chromium_AlertDialog)
+                        .setTitle(R.string.page_info_cookies_clear)
+                        .setMessage(R.string.page_info_cookies_clear_confirmation)
+                        .setPositiveButton(R.string.page_info_cookies_clear_confirmation_button,
+                                (dialog, which) -> mOnClearCallback.run())
+                        .setNegativeButton(
+                                R.string.cancel, (dialog, which) -> mConfirmationDialog = null)
+                        .show();
     }
 
     public void setCookieBlockingStatus(@CookieControlsStatus int status, boolean isEnforced) {

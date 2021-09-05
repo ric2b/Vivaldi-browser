@@ -29,7 +29,6 @@
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/test/hotseat_state_watcher.h"
-#include "ash/shelf/test/overview_animation_waiter.h"
 #include "ash/shelf/test/shelf_layout_manager_test_base.h"
 #include "ash/shelf/test/widget_animation_smoothness_inspector.h"
 #include "ash/shelf/test/widget_animation_waiter.h"
@@ -45,7 +44,6 @@
 #include "ash/wm/work_area_insets.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/assistant/public/cpp/assistant_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
@@ -71,34 +69,24 @@ class HotseatWidgetTest
       public testing::WithParamInterface<
           std::tuple<ShelfAutoHideBehavior,
                      /*is_assistant_enabled*/ bool,
-                     /*navigation_buttons_shown_in_tablet_mode*/ bool,
-                     /*should_maintain_shelf_state_for_overview*/ bool>> {
+                     /*navigation_buttons_shown_in_tablet_mode*/ bool>> {
  public:
   HotseatWidgetTest()
       : ShelfLayoutManagerTestBase(
             base::test::TaskEnvironment::TimeSource::MOCK_TIME),
         shelf_auto_hide_behavior_(std::get<0>(GetParam())),
         is_assistant_enabled_(std::get<1>(GetParam())),
-        navigation_buttons_shown_in_tablet_mode_(std::get<2>(GetParam())),
-        should_maintain_shelf_state_for_overview_(std::get<3>(GetParam())) {
+        navigation_buttons_shown_in_tablet_mode_(std::get<2>(GetParam())) {
     if (is_assistant_enabled_)
       assistant_test_api_ = AssistantTestApi::Create();
 
     std::vector<base::Feature> enabled_features;
     std::vector<base::Feature> disabled_features;
 
-    enabled_features.push_back(chromeos::features::kShelfHotseat);
     if (navigation_buttons_shown_in_tablet_mode_) {
       disabled_features.push_back(features::kHideShelfControlsInTabletMode);
     } else {
       enabled_features.push_back(features::kHideShelfControlsInTabletMode);
-    }
-    if (should_maintain_shelf_state_for_overview_) {
-      enabled_features.push_back(
-          features::kMaintainShelfStateWhenEnteringOverview);
-    } else {
-      disabled_features.push_back(
-          features::kMaintainShelfStateWhenEnteringOverview);
     }
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
@@ -130,9 +118,6 @@ class HotseatWidgetTest
   }
   bool is_assistant_enabled() const { return is_assistant_enabled_; }
   AssistantTestApi* assistant_test_api() { return assistant_test_api_.get(); }
-  bool should_maintain_shelf_state_for_overview() const {
-    return should_maintain_shelf_state_for_overview_;
-  }
 
   void ShowShelfAndActivateAssistant() {
     if (shelf_auto_hide_behavior() == ShelfAutoHideBehavior::kAlways)
@@ -225,7 +210,6 @@ class HotseatWidgetTest
   const ShelfAutoHideBehavior shelf_auto_hide_behavior_;
   const bool is_assistant_enabled_;
   const bool navigation_buttons_shown_in_tablet_mode_;
-  const bool should_maintain_shelf_state_for_overview_;
   std::unique_ptr<AssistantTestApi> assistant_test_api_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -336,7 +320,6 @@ INSTANTIATE_TEST_SUITE_P(
     HotseatWidgetTest,
     testing::Combine(testing::Values(ShelfAutoHideBehavior::kNever,
                                      ShelfAutoHideBehavior::kAlways),
-                     testing::Bool(),
                      testing::Bool(),
                      testing::Bool()));
 
@@ -832,30 +815,15 @@ TEST_P(HotseatWidgetTest, ObserverCallsMatch) {
   // kShownHomeLauncher.
   StartOverview();
   EXPECT_TRUE(Shell::Get()->overview_controller()->IsInStartAnimation());
-  if (should_maintain_shelf_state_for_overview()) {
-    // No animations should have been started so no animations are in progress
-    // or aborted.
-    EXPECT_TRUE(observer.ObserverCountsEqual());
-    EXPECT_EQ(0, observer.AnimationAbortedCalls());
-  } else {
-    // Overview triggers two animations for hotseat state changes, thus one of
-    // them is cancelled.
-    EXPECT_FALSE(observer.ObserverCountsEqual());
-    EXPECT_EQ(1, observer.AnimationAbortedCalls());
-  }
+  // No animations should have been started so no animations are in progress
+  // or aborted.
+  EXPECT_TRUE(observer.ObserverCountsEqual());
+  EXPECT_EQ(0, observer.AnimationAbortedCalls());
 
   EndOverview();
 
-  if (should_maintain_shelf_state_for_overview()) {
-    // No animations should have been started or aborted.
-    EXPECT_EQ(0, observer.AnimationAbortedCalls());
-  } else {
-    // Observer should only wait if animations are expected.
-    observer.Wait();
-    // We cancelled the StartOverviewAnimation while it was running, so we
-    // expect the total number of aborted calls were 3.
-    EXPECT_EQ(3, observer.AnimationAbortedCalls());
-  }
+  // No animations should have been started or aborted.
+  EXPECT_EQ(0, observer.AnimationAbortedCalls());
   EXPECT_TRUE(observer.ObserverCountsEqual());
   ASSERT_EQ(HotseatState::kShownHomeLauncher,
             GetShelfLayoutManager()->hotseat_state());
@@ -864,15 +832,8 @@ TEST_P(HotseatWidgetTest, ObserverCallsMatch) {
   // Go to overview. Hotseat state should be kExtended.
   StartOverview();
 
-  // Observer should only wait if animations are expected.
-  if (should_maintain_shelf_state_for_overview()) {
-    ASSERT_EQ(HotseatState::kShownHomeLauncher,
-              GetShelfLayoutManager()->hotseat_state());
-  } else {
-    observer.Wait();
-    ASSERT_EQ(HotseatState::kExtended,
-              GetShelfLayoutManager()->hotseat_state());
-  }
+  ASSERT_EQ(HotseatState::kShownHomeLauncher,
+            GetShelfLayoutManager()->hotseat_state());
   EXPECT_TRUE(observer.ObserverCountsEqual());
 }
 
@@ -886,17 +847,15 @@ TEST_P(HotseatWidgetTest, DisableBlurDuringOverviewMode) {
 
   // Go into overview and check that at the end of the animation, background
   // blur is disabled.
-  OverviewAnimationWaiter enter_overview_waiter;
   StartOverview();
-  enter_overview_waiter.Wait();
+  WaitForOverviewAnimation(/*enter=*/true);
   EXPECT_EQ(
       0, GetShelfWidget()->hotseat_widget()->GetHotseatBackgroundBlurForTest());
 
   // Exit overview and check that at the end of the animation, background
   // blur is enabled again.
-  OverviewAnimationWaiter exit_overview_waiter;
   EndOverview();
-  exit_overview_waiter.Wait();
+  WaitForOverviewAnimation(/*enter=*/false);
   EXPECT_EQ(
       ShelfConfig::Get()->shelf_blur_radius(),
       GetShelfWidget()->hotseat_widget()->GetHotseatBackgroundBlurForTest());
@@ -1017,14 +976,9 @@ TEST_P(HotseatWidgetTest, HomeToOverviewChangesStateOnce) {
   // First, try with no windows open.
   {
     HotseatStateWatcher watcher(GetShelfLayoutManager());
-    OverviewAnimationWaiter waiter;
     StartOverview();
-    waiter.Wait();
-    if (should_maintain_shelf_state_for_overview()) {
-      watcher.CheckEqual({/* shelf state should not change*/});
-    } else {
-      watcher.CheckEqual({HotseatState::kExtended});
-    }
+    WaitForOverviewAnimation(/*enter=*/true);
+    watcher.CheckEqual({/* shelf state should not change*/});
   }
 
   // Open a window, then open the home launcher.
@@ -1037,15 +991,10 @@ TEST_P(HotseatWidgetTest, HomeToOverviewChangesStateOnce) {
   // Activate overview and expect the hotseat only changes state to extended.
   {
     HotseatStateWatcher watcher(GetShelfLayoutManager());
-    OverviewAnimationWaiter waiter;
     StartOverview();
-    waiter.Wait();
+    WaitForOverviewAnimation(/*enter=*/true);
 
-    if (should_maintain_shelf_state_for_overview()) {
-      watcher.CheckEqual({/* shelf state should not change*/});
-    } else {
-      watcher.CheckEqual({HotseatState::kExtended});
-    }
+    watcher.CheckEqual({/* shelf state should not change*/});
   }
 }
 
@@ -1072,19 +1021,10 @@ TEST_P(HotseatWidgetTest, VerifyShelfAnimationWhenEnteringOverview) {
   ASSERT_FALSE(hotseat_layer_animator->is_animating());
   ASSERT_FALSE(status_area_layer_animator->is_animating());
 
-  OverviewAnimationWaiter waiter;
   StartOverview();
-  if (should_maintain_shelf_state_for_overview()) {
-    EXPECT_FALSE(hotseat_layer_animator->is_animating());
-    EXPECT_FALSE(status_area_layer_animator->is_animating());
-    ASSERT_EQ(HotseatState::kShownHomeLauncher, hotseat_widget->state());
-
-  } else {
-    EXPECT_TRUE(hotseat_layer_animator->is_animating());
-    EXPECT_TRUE(status_area_layer_animator->is_animating());
-    waiter.Wait();
-    ASSERT_EQ(HotseatState::kExtended, hotseat_widget->state());
-  }
+  EXPECT_FALSE(hotseat_layer_animator->is_animating());
+  EXPECT_FALSE(status_area_layer_animator->is_animating());
+  ASSERT_EQ(HotseatState::kShownHomeLauncher, hotseat_widget->state());
 }
 
 // Tests that home -> in-app results in only one state change.
@@ -1183,13 +1123,7 @@ TEST_P(HotseatWidgetTest, HomeToOverviewAndBack) {
         ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
     StartOverview();
 
-    // hotseat should transition to extended state if maintain shelf state for
-    // overview is switched off.
-    if (should_maintain_shelf_state_for_overview()) {
-      watcher.CheckEqual({/*Hotseat state should not change*/});
-    } else {
-      watcher.CheckEqual({HotseatState::kExtended});
-    }
+    watcher.CheckEqual({/*Hotseat state should not change*/});
   }
 
   OverviewController* overview_controller = Shell::Get()->overview_controller();
@@ -1201,12 +1135,7 @@ TEST_P(HotseatWidgetTest, HomeToOverviewAndBack) {
   EXPECT_FALSE(overview_controller->InOverviewSession());
   EXPECT_FALSE(ShelfConfig::Get()->is_in_app());
 
-  if (should_maintain_shelf_state_for_overview()) {
-    watcher.CheckEqual({/*Hotseat state should not change*/});
-  } else {
-    watcher.CheckEqual(
-        {HotseatState::kExtended, HotseatState::kShownHomeLauncher});
-  }
+  watcher.CheckEqual({/*Hotseat state should not change*/});
 }
 
 TEST_P(HotseatWidgetTest, InAppToOverviewAndBack) {
@@ -1310,17 +1239,14 @@ TEST_P(HotseatWidgetTest, InAppToOverviewChangesStateOnceAutohiddenShelf) {
   {
     HotseatStateWatcher watcher(GetShelfLayoutManager());
     // Enter overview by using the controller.
-    OverviewAnimationWaiter waiter;
     Shell::Get()->overview_controller()->StartOverview();
-    waiter.Wait();
+    WaitForOverviewAnimation(/*enter=*/true);
 
     watcher.CheckEqual({HotseatState::kExtended});
   }
-  {
-    OverviewAnimationWaiter waiter;
-    Shell::Get()->overview_controller()->EndOverview();
-    waiter.Wait();
-  }
+
+  Shell::Get()->overview_controller()->EndOverview();
+  WaitForOverviewAnimation(/*enter=*/false);
 
   // Test in-app -> overview again with the autohide shown shelf.
   EXPECT_TRUE(ShelfConfig::Get()->is_in_app());
@@ -1330,9 +1256,8 @@ TEST_P(HotseatWidgetTest, InAppToOverviewChangesStateOnceAutohiddenShelf) {
   {
     HotseatStateWatcher watcher(GetShelfLayoutManager());
     // Enter overview by using the controller.
-    OverviewAnimationWaiter waiter;
     Shell::Get()->overview_controller()->StartOverview();
-    waiter.Wait();
+    WaitForOverviewAnimation(/*enter=*/true);
 
     watcher.CheckEqual({});
     EXPECT_EQ(HotseatState::kExtended,
@@ -1347,20 +1272,12 @@ TEST_P(HotseatWidgetTest,
   TabletModeControllerTestApi().EnterTabletMode();
   DisplayWorkAreaChangeCounter counter;
 
-  {
-    OverviewAnimationWaiter waiter;
-    Shell::Get()->overview_controller()->StartOverview();
-    waiter.Wait();
-  }
-
+  Shell::Get()->overview_controller()->StartOverview();
+  WaitForOverviewAnimation(/*enter=*/true);
   EXPECT_EQ(0, counter.count());
 
-  {
-    OverviewAnimationWaiter waiter;
-    Shell::Get()->overview_controller()->EndOverview();
-    waiter.Wait();
-  }
-
+  Shell::Get()->overview_controller()->StartOverview();
+  WaitForOverviewAnimation(/*enter=*/true);
   EXPECT_EQ(0, counter.count());
 }
 
@@ -1376,20 +1293,12 @@ TEST_P(HotseatWidgetTest,
   ASSERT_EQ(1, counter.count());
   ShowShelfAndGoHome();
 
-  {
-    OverviewAnimationWaiter waiter;
-    StartOverview();
-    waiter.Wait();
-  }
-
+  StartOverview();
+  WaitForOverviewAnimation(/*enter=*/true);
   EXPECT_EQ(1, counter.count());
 
-  {
-    OverviewAnimationWaiter waiter;
-    EndOverview();
-    waiter.Wait();
-  }
-
+  EndOverview();
+  WaitForOverviewAnimation(/*enter=*/false);
   EXPECT_EQ(1, counter.count());
 }
 
@@ -1427,12 +1336,8 @@ TEST_P(HotseatWidgetTest, WorkAreaDoesNotUpdateOpenWindowToFromOverview) {
 
   // Go to overview, there should not be a work area update.
   DisplayWorkAreaChangeCounter counter;
-  {
-    OverviewAnimationWaiter waiter;
-    StartOverview();
-    waiter.Wait();
-  }
-
+  StartOverview();
+  WaitForOverviewAnimation(/*enter=*/true);
   EXPECT_EQ(0, counter.count());
 
   // Go back to the app, there should not be a work area update.

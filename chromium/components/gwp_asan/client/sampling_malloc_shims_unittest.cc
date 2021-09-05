@@ -10,7 +10,7 @@
 #include <string>
 
 #include "base/allocator/allocator_shim.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/process/process_metrics.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/gtest_util.h"
@@ -28,17 +28,17 @@
 
 #if defined(OS_WIN)
 #include <malloc.h>
-static size_t GetAllocatedSize(void* mem) {
+static size_t GetUsableSize(void* mem) {
   return _msize(mem);
 }
 #elif defined(OS_APPLE)
 #include <malloc/malloc.h>
-static size_t GetAllocatedSize(void* mem) {
+static size_t GetUsableSize(void* mem) {
   return malloc_size(mem);
 }
 #elif defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <malloc.h>
-static size_t GetAllocatedSize(void* mem) {
+static size_t GetUsableSize(void* mem) {
   return malloc_usable_size(mem);
 }
 #endif
@@ -257,7 +257,7 @@ MULTIPROCESS_TEST_MAIN_WITH_SETUP(
     std::unique_ptr<void, decltype(&free)> alloc(malloc(kAllocationSize), free);
     CHECK_NE(alloc.get(), nullptr);
 
-    size_t alloc_sz = GetAllocatedSize(alloc.get());
+    size_t alloc_sz = GetUsableSize(alloc.get());
     if (GetMallocGpaForTesting().PointerIsMine(alloc.get()))
       CHECK_EQ(alloc_sz, kAllocationSize);
     else

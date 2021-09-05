@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Tylko zaznaczenie</translation>
 <translation id="1244303850296295656">Błąd rozszerzenia</translation>
 <translation id="125220115284141797">Domyślne</translation>
-<translation id="1274977772557788323">Ustawienia pamięci Adobe Flash Playera</translation>
 <translation id="1297175357211070620">Drukarka</translation>
 <translation id="1303101771013849280">Plik HTML z zakładkami</translation>
 <translation id="1380436189840894976">Czy na pewno chcesz zamknąć tryb prywatny?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Wklej jako zwykły tekst</translation>
 <translation id="2249605167705922988">np. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Zezwalaj na identyfikatory treści chronionych (może wymagać restartu komputera)</translation>
-<translation id="2263497240924215535">(wyłączono)</translation>
 <translation id="2277255602909579701">Wszystkie ciasteczka i dane stron</translation>
 <translation id="2280486287150724112">Prawy margines</translation>
 <translation id="2282146716419988068">Proces GPU</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Włącz ponownie</translation>
 <translation id="2721037002783622288">&amp;Szukaj obrazu w <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Utwórz skrót...</translation>
 <translation id="2785873697295365461">Deskryptory plików</translation>
 <translation id="2809586584051668049">i <ph name="NUMBER_ADDITIONAL_DISABLED" /> więcej</translation>
 <translation id="2812989263793994277">Nie pokazuj żadnych obrazów</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">Urządzenia MIDI</translation>
 <translation id="3021678814754966447">&amp;Wyświetl źródło ramki</translation>
 <translation id="3036546437875325427">Włącz Flasha</translation>
-<translation id="3038675903128704560">Nie zezwalaj żadnym stronom na dostęp do komputera przez wtyczkę</translation>
 <translation id="3046910703532196514">Strona internetowa, kompletna</translation>
 <translation id="3067198360141518313">Uruchom wtyczkę</translation>
 <translation id="3080207940057008665">Inny program na twoim komputerze dodał motyw, który może zmienić działanie Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">To rozszerzenie może być uszkodzone.</translation>
 <translation id="3387614642886316601">Używaj ulepszonego sprawdzania pisowni</translation>
 <translation id="3432227430032737297">Usuń wszystkie wyświetlone</translation>
-<translation id="3440761377721825626">Pytaj gdy strona chce uzyskać dostęp do komputera przez wtyczkę</translation>
 <translation id="345693547134384690">Otwórz &amp;obraz w nowej karcie</translation>
 <translation id="3494769164076977169">Pytaj gdy strona próbuje automatycznie pobrać pliki po pobraniu pierwszego (zalecane)</translation>
 <translation id="3505030558724226696">Cofnij dostęp do urządzeń</translation>
 <translation id="3511307672085573050">Kopiuj adr&amp;es linku</translation>
-<translation id="3523642406908660543">Pytaj gdy strona chce uzyskać dostęp do komputera przez wtyczkę (zalecane)</translation>
 <translation id="354068948465830244">Może odczytywać i modyfikować dane stron</translation>
 <translation id="3560034655160545939">&amp;Sprawdzanie pisowni</translation>
 <translation id="3574917942258583917">Czy na pewno chcesz zamknąć tryb prywatny?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce udostępnić drukarkę &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; należącej do ciebie grupie: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jeśli się na to zgodzisz, wszyscy członkowie grupy będą mogli na niej drukować.</translation>
 <translation id="3587482841069643663">Wszystkie</translation>
 <translation id="3627588569887975815">Otwórz link w oknie &amp;prywatnym</translation>
+<translation id="3627879631695760395">Zainstaluj <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Moduły obsługi</translation>
 <translation id="3678156199662914018">Rozszerzenie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Żądanie udostępnienia ekranu od <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Przywróć ustawienia</translation>
 <translation id="4434045419905280838">Wyskakujące okna i przekierowania</translation>
 <translation id="4478664379124702289">Zapisz link ja&amp;ko...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Nie można przesłać <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Przejdź do strony <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikacje i rozszerzenia może zmieniać tylko menedżer (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Nieznany</translation>
 <translation id="5860491529813859533">Włącz</translation>
 <translation id="5867841422488265304">Wyszukaj lub wpisz adres internetowy</translation>
-<translation id="5908769186679515905">Zablokuj uruchamianie Flasha na stronach</translation>
 <translation id="5910363049092958439">Zapisz &amp;obraz jako...</translation>
 <translation id="5956585768868398362">Czy to oczekiwana strona wyszukiwania?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (max: <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Odmowa dostępu.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Pokaż elementy sterują&amp;ce</translation>
-<translation id="7311079019872751559">Dostęp przez wtyczkę spoza piaskownicy</translation>
 <translation id="7385854874724088939">Wystąpił błąd przy próbie drukowania. Sprawdź drukarkę i spróbuj ponownie.</translation>
 <translation id="7412226954991670867">Pamięć GPU</translation>
 <translation id="7421925624202799674">&amp;Wyświetl źródło strony</translation>
@@ -476,6 +470,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="9027459031423301635">Otwórz link w nowej &amp;karcie</translation>
 <translation id="9056810968620647706">Nie znaleziono żadnych dopasowań.</translation>
 <translation id="9137916601698928395">Otwórz link jako <ph name="USER" /></translation>
+<translation id="91568222606626347">Utwórz skrót...</translation>
 <translation id="916607977885256133">Obraz w obrazie</translation>
 <translation id="9170848237812810038">&amp;Cofnij</translation>
 <translation id="9215293857209265904">Dodano "<ph name="EXTENSION_NAME" />"</translation>

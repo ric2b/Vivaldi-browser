@@ -476,6 +476,9 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   LayoutUnit FirstLineBoxBaseline() const override;
   LayoutUnit InlineBlockBaseline(LineDirectionMode) const override;
+  base::Optional<LayoutUnit> FirstLineBoxBaselineOverride() const;
+  base::Optional<LayoutUnit> InlineBlockBaselineOverride(
+      LineDirectionMode) const;
 
   bool HitTestOverflowControl(
       HitTestResult&,
@@ -500,7 +503,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   virtual void SimplifiedNormalFlowLayout();
 
  private:
-  void AddVisualOverflowFromBlockChildren();
   void AddLayoutOverflowFromPositionedObjects();
   void AddLayoutOverflowFromBlockChildren();
 
@@ -512,6 +514,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
 
   virtual void AddLayoutOverflowFromChildren();
   void AddVisualOverflowFromChildren();
+  virtual void AddVisualOverflowFromBlockChildren();
 
   void AddOutlineRects(Vector<PhysicalRect>&,
                        const PhysicalOffset& additional_offset,

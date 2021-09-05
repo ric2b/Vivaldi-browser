@@ -37,8 +37,6 @@ component("service") {
     "gpu_memory_buffer_factory.h",
     "gpu_watchdog_thread.cc",
     "gpu_watchdog_thread.h",
-    "gpu_watchdog_thread_v2.cc",
-    "gpu_watchdog_thread_v2.h",
     "image_decode_accelerator_stub.cc",
     "image_decode_accelerator_stub.h",
     "image_decode_accelerator_worker.h",
@@ -74,6 +72,7 @@ component("service") {
   ]
   deps = [
     "//base/third_party/dynamic_annotations",
+    "//build:chromeos_buildflags",
 
     # crbug.com/799267: crash_key needs to be added explicitly for Windows and
     # Mac even though it's not directly referenced, because it's being

@@ -7,7 +7,6 @@
 #include "content/browser/service_worker/service_worker_resource_ops.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "mojo/public/cpp/bindings/self_owned_receiver.h"
 
 namespace content {
 
@@ -88,12 +87,8 @@ ServiceWorkerStorageControlImpl::~ServiceWorkerStorageControlImpl() = default;
 void ServiceWorkerStorageControlImpl::Bind(
     mojo::PendingReceiver<storage::mojom::ServiceWorkerStorageControl>
         receiver) {
-  // There should be one connection at most for now because this class hasn't
-  // moved to the storage service yet.
-  DCHECK(receivers_.empty())
-      << "ServiceWorkerStorageControl doesn't support multiple connections yet";
-
-  receivers_.Add(this, std::move(receiver));
+  DCHECK(!receiver_.is_bound());
+  receiver_.Bind(std::move(receiver));
 }
 
 void ServiceWorkerStorageControlImpl::OnNoLiveVersion(int64_t version_id) {
@@ -115,6 +110,21 @@ void ServiceWorkerStorageControlImpl::Disable() {
 
 void ServiceWorkerStorageControlImpl::Delete(DeleteCallback callback) {
   storage_->DeleteAndStartOver(std::move(callback));
+}
+
+void ServiceWorkerStorageControlImpl::Recover(
+    std::vector<storage::mojom::ServiceWorkerLiveVersionInfoPtr> versions,
+    RecoverCallback callback) {
+  for (auto& version : versions) {
+    DCHECK(!base::Contains(live_versions_, version->id));
+    auto reference = std::make_unique<ServiceWorkerLiveVersionRefImpl>(
+        weak_ptr_factory_.GetWeakPtr(), version->id);
+    reference->Add(std::move(version->reference));
+    reference->set_purgeable_resources(version->purgeable_resources);
+    live_versions_[version->id] = std::move(reference);
+  }
+
+  std::move(callback).Run();
 }
 
 void ServiceWorkerStorageControlImpl::GetRegisteredOrigins(
@@ -253,29 +263,20 @@ void ServiceWorkerStorageControlImpl::GetNewResourceId(
 void ServiceWorkerStorageControlImpl::CreateResourceReader(
     int64_t resource_id,
     mojo::PendingReceiver<storage::mojom::ServiceWorkerResourceReader> reader) {
-  DCHECK_NE(resource_id, blink::mojom::kInvalidServiceWorkerResourceId);
-  mojo::MakeSelfOwnedReceiver(storage_->CreateResourceReader(resource_id),
-                              std::move(reader));
+  storage_->CreateResourceReader(resource_id, std::move(reader));
 }
 
 void ServiceWorkerStorageControlImpl::CreateResourceWriter(
     int64_t resource_id,
     mojo::PendingReceiver<storage::mojom::ServiceWorkerResourceWriter> writer) {
-  DCHECK_NE(resource_id, blink::mojom::kInvalidServiceWorkerResourceId);
-  mojo::MakeSelfOwnedReceiver(std::make_unique<ServiceWorkerResourceWriterImpl>(
-                                  storage_->CreateResponseWriter(resource_id)),
-                              std::move(writer));
+  storage_->CreateResourceWriter(resource_id, std::move(writer));
 }
 
 void ServiceWorkerStorageControlImpl::CreateResourceMetadataWriter(
     int64_t resource_id,
     mojo::PendingReceiver<storage::mojom::ServiceWorkerResourceMetadataWriter>
         writer) {
-  DCHECK_NE(resource_id, blink::mojom::kInvalidServiceWorkerResourceId);
-  mojo::MakeSelfOwnedReceiver(
-      std::make_unique<ServiceWorkerResourceMetadataWriterImpl>(
-          storage_->CreateResponseMetadataWriter(resource_id)),
-      std::move(writer));
+  storage_->CreateResourceMetadataWriter(resource_id, std::move(writer));
 }
 
 void ServiceWorkerStorageControlImpl::StoreUncommittedResourceId(
@@ -369,6 +370,26 @@ void ServiceWorkerStorageControlImpl::ApplyPolicyUpdates(
     const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>
         policy_updates) {
   storage_->ApplyPolicyUpdates(std::move(policy_updates));
+}
+
+void ServiceWorkerStorageControlImpl::GetPurgingResourceIdsForTest(
+    GetPurgeableResourceIdsForTestCallback callback) {
+  storage_->GetPurgingResourceIdsForTest(std::move(callback));  // IN-TEST
+}
+
+void ServiceWorkerStorageControlImpl::GetPurgeableResourceIdsForTest(
+    GetPurgeableResourceIdsForTestCallback callback) {
+  storage_->GetPurgeableResourceIdsForTest(std::move(callback));  // IN-TEST
+}
+
+void ServiceWorkerStorageControlImpl::GetUncommittedResourceIdsForTest(
+    GetPurgeableResourceIdsForTestCallback callback) {
+  storage_->GetUncommittedResourceIdsForTest(std::move(callback));  // IN-TEST
+}
+
+void ServiceWorkerStorageControlImpl::SetPurgingCompleteCallbackForTest(
+    SetPurgingCompleteCallbackForTestCallback callback) {
+  storage_->SetPurgingCompleteCallbackForTest(std::move(callback));  // IN-TEST
 }
 
 void ServiceWorkerStorageControlImpl::DidFindRegistration(

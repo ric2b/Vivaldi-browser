@@ -3,6 +3,7 @@
 <translationbundle lang="km">
 <translation id="1276998909102132017">រូបភាព​ក្នុងសាលរូបភាព</translation>
 <translation id="1430915738399379752">បោះពុម្ព</translation>
+<translation id="1473110567575736769">កម្មវិធីកំណត់ម៉ោងរាប់ថយក្រោយ 3 វិនាទី</translation>
 <translation id="1620510694547887537">កាមេរ៉ា</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">មិនបានថត​អ្វី​សោះ</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">កម្រិតច្បាស់កាមេរ៉ា</translation>
 <translation id="3517926952904427380">មិនអាច​ថតរូប​បញ្ឈរ​បានទេ</translation>
 <translation id="3569311554794739032">តើអ្នកពិតជា​ចង់លុប <ph name="FILE" /> មែនឬ?</translation>
+<translation id="3750315947605636967">កម្មវិធីផ្សេងទៀតកំពុងប្រើកាមេរ៉ារបស់អ្នក</translation>
 <translation id="3810838688059735925">វីដេអូ</translation>
+<translation id="4000398125663085899">រូបថត និងវីដេអូថ្មីនឹងរក្សាទុកក្នុងថតនៅក្នុងកម្មវិធី Files ឥឡូវនេះ៖ ឯកសារខ្ញុំ &gt; កាមេរ៉ា</translation>
 <translation id="4118525110028899586">ផ្អាក​ការថត</translation>
 <translation id="4279490309300973883">កំពុងឆ្លុះ</translation>
 <translation id="4329152592498422850">ប្ដូរទៅ​ថតរូប​ទម្រង់ការ៉េ</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">កាមេរ៉ារបស់អ្នកមិន​អាច​ប្រើបានទេនៅពេលនេះ។
         សូមពិនិត្យមើល​ថាតើ​កាមេរ៉ា​ត្រូវបាន​ភ្ជាប់​ត្រឹមត្រូវ​ឬអត់។</translation>
 <translation id="5152121255775685072">ចូលទៅ​កាន់សាលរូបភាព</translation>
+<translation id="5422455049771430511">រូបថត និងវីដេអូរបស់អ្នកមានកន្លែង​ទុក​ថ្មី</translation>
 <translation id="5671277269877808209">ការ៉េ</translation>
 <translation id="5775960006311140197">មុខងារអ្នកជំនាញ</translation>
 <translation id="5869546221129391014">ក្រឡា</translation>
+<translation id="6040143037577758943">បិទ</translation>
 <translation id="6073451960410192870">បញ្ឈប់ការថត</translation>
 <translation id="6197807149213783179">រក្សាទុក​ទិន្នន័យ​មេតា</translation>
 <translation id="6233780560267770709">3 គុណ​នឹង 3</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">យល់ព្រម</translation>
 <translation id="698156982839284926">3 វិនាទី</translation>
 <translation id="712848772518857951">តើអ្នក​ពិតជា​ចង់​លុប​ធាតុ <ph name="COUNT" /> មែនឬ?</translation>
+<translation id="7134221860976209830">កម្មវិធីកំណត់ម៉ោងរាប់ថយក្រោយ 10 វិនាទី</translation>
 <translation id="7243947652761655814">កម្រិតច្បាស់នៃ​វីដេអូ</translation>
 <translation id="7337660886763914220">បញ្ហា​ប្រព័ន្ធ​ឯកសារ។</translation>
 <translation id="7557677699350329807">ប្ដូរទៅ​កាមេរ៉ាបន្ទាប់</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">ជំនួយ</translation>
 <translation id="7658239707568436148">បដិសេធ</translation>
 <translation id="7670511624014457267">60 FPS</translation>
-<translation id="8049189770492311300">ឧបករណ៍កំណត់ពេល</translation>
 <translation id="8067883171444229417">ចាក់​វីដេអូ</translation>
 <translation id="8131740175452115882">អះអាង</translation>
 <translation id="8145038249676204903">ប្ដូរទៅថតរូប</translation>

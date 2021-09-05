@@ -36,13 +36,13 @@ class CopyingFileInputStream : public google::protobuf::io::CopyingInputStream {
   base::File file_;
 };
 
-FlocId ApplySortingLshOnBackgroundThread(const FlocId& raw_floc_id,
-                                         const base::FilePath& file_path) {
-  DCHECK(raw_floc_id.IsValid());
+base::Optional<uint64_t> ApplySortingLshOnBackgroundThread(
+    uint64_t sim_hash,
+    const base::FilePath& file_path) {
   base::File sorting_lsh_clusters_file(
       file_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
   if (!sorting_lsh_clusters_file.IsValid())
-    return FlocId();
+    return base::nullopt;
 
   CopyingFileInputStream copying_stream(std::move(sorting_lsh_clusters_file));
   google::protobuf::io::CopyingInputStreamAdaptor zero_copy_stream_adaptor(
@@ -51,51 +51,70 @@ FlocId ApplySortingLshOnBackgroundThread(const FlocId& raw_floc_id,
   google::protobuf::io::CodedInputStream input_stream(
       &zero_copy_stream_adaptor);
 
-  // The file should contain a list of integers within the range [0,
-  // MaxNumberOfBitsInFloc]. Suppose the list is l, then 2^(l[i]) represents the
-  // the number of hashes that can be associated with this floc id. The
-  // cumulative sum of 2^(l[i]) represents the boundary floc values in
-  // |raw_floc_id|'s space. We will use the higher index to encode
-  // |raw_floc_id|, i.e. if raw_floc_id is within range
-  // [CumSum(2^(l[i-1])), CumSum(2^(l[i]))), |i| will be output floc.
+  // The file should contain a list of integers. The 7th-order bit represents
+  // whether the cohort should be blocked. The number represented by the 1st-6th
+  // bits should be within the range [0, MaxNumberOfBitsInFloc]. Suppose the
+  // list is l, then S(i) = 2^(l[i] & 0b111111) represents the the number of
+  // hashes that can be associated with this floc id. The cumulative sum of S(i)
+  // represents the boundary sim_hash values. We will use the higher index to
+  // encode |sim_hash|, i.e. if sim_hash is within range
+  // [CumSum(S(i-1)), CumSum(S(i))), |i| will be output floc.
   //
   // 0 is always an implicit CumSum boundary, i.e. if
-  // 0 <= |raw_floc_id| < 2^(l[0]), then the index 0 will be the output floc.
+  // 0 <= |sim_hash| < 2^(l[0]), then the index 0 will be the output floc.
   //
+  // However, if the is_blocked bit (i.e. l[i] & 0b1000000) indicates that the
+  // cohort should be blocked, we will output an invalid floc id.
+
   // Input sanitization: As we compute on the fly, we will check to make sure
-  // each encountered entry is within [0, MaxNumberOfBitsInFloc]. Besides, the
-  // cumulative sum should be no greater than 2^MaxNumberOfBitsInFloc at any
-  // given time. If we cannot find an index i, it means the the final cumulative
-  // sum is less than 2^MaxNumberOfBitsInFloc, while we expect it to be exactly
+  // each encountered entry, after dropping the is_blocked bit, is within
+  // [0, MaxNumberOfBitsInFloc]. Besides, the cumulative sum should be no
+  // greater than 2^MaxNumberOfBitsInFloc at any given time. If we cannot find
+  // an index i, it means the the final cumulative sum is less than
+  // 2^MaxNumberOfBitsInFloc, while we expect it to be exactly
   // 2^MaxNumberOfBitsInFloc, and we should also fail in this case. When some
-  // check fails, we will output an invalid floc id.
+  // check fails, we will also output an invalid floc id.
   //
   // A stricter sanitization would be to always stream all numbers and check
   // properties. We skip doing this to save some computation cost.
-  uint64_t raw_floc_id_as_int = raw_floc_id.ToUint64();
   const uint64_t kExpectedFinalCumulativeSum = (1ULL << kMaxNumberOfBitsInFloc);
-  DCHECK(raw_floc_id_as_int < kExpectedFinalCumulativeSum);
+  DCHECK_LT(sim_hash, kExpectedFinalCumulativeSum);
 
   uint64_t cumulative_sum = 0;
-  uint32_t next;
+  uint32_t next_combined;
 
-  // TODO: Add metrics for when we return an invalid floc, which indicates a
-  // wrong/corrupted file.
+  // TODO(yaoxia): Add metrics for when the file has unexpected format.
 
-  for (uint64_t index = 0; input_stream.ReadVarint32(&next); ++index) {
+  for (uint64_t index = 0; input_stream.ReadVarint32(&next_combined); ++index) {
+    // Sanitizing error: the entry used more than |kSortingLshMaxBits| bits.
+    if ((next_combined >> kSortingLshMaxBits) > 0)
+      return base::nullopt;
+
+    bool is_blocked = next_combined & kSortingLshBlockedMask;
+    uint32_t next = next_combined & kSortingLshSizeMask;
+
+    // Sanitizing error
     if (next > kMaxNumberOfBitsInFloc)
-      return FlocId();
+      return base::nullopt;
 
     cumulative_sum += (1ULL << next);
 
+    // Sanitizing error
     if (cumulative_sum > kExpectedFinalCumulativeSum)
-      return FlocId();
+      return base::nullopt;
 
-    if (cumulative_sum > raw_floc_id_as_int)
-      return FlocId(index);
+    // Found the sim-hash upper bound. Use the index as the new floc.
+    if (cumulative_sum > sim_hash) {
+      if (is_blocked)
+        return base::nullopt;
+
+      return index;
+    }
   }
 
-  return FlocId();
+  // Sanitizing error: we didn't find a sim-hash upper bound, but we expect to
+  // always find it after finish iterating through the list.
+  return base::nullopt;
 }
 
 }  // namespace
@@ -116,29 +135,45 @@ void FlocSortingLshClustersService::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
+bool FlocSortingLshClustersService::IsSortingLshClustersFileReady() const {
+  return first_file_ready_seen_;
+}
+
+void FlocSortingLshClustersService::OnSortingLshClustersFileReady(
+    const base::FilePath& file_path,
+    const base::Version& version) {
+  sorting_lsh_clusters_file_path_ = file_path;
+  sorting_lsh_clusters_version_ = version;
+  first_file_ready_seen_ = true;
+
+  for (auto& observer : observers_)
+    observer.OnSortingLshClustersFileReady();
+}
+
+void FlocSortingLshClustersService::ApplySortingLsh(
+    uint64_t sim_hash,
+    ApplySortingLshCallback callback) {
+  DCHECK(first_file_ready_seen_);
+
+  base::PostTaskAndReplyWithResult(
+      background_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&ApplySortingLshOnBackgroundThread, sim_hash,
+                     sorting_lsh_clusters_file_path_),
+      base::BindOnce(&FlocSortingLshClustersService::DidApplySortingLsh,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+                     sorting_lsh_clusters_version_));
+}
+
 void FlocSortingLshClustersService::SetBackgroundTaskRunnerForTesting(
     scoped_refptr<base::SequencedTaskRunner> background_task_runner) {
   background_task_runner_ = background_task_runner;
 }
 
-void FlocSortingLshClustersService::ApplySortingLsh(
-    const FlocId& raw_floc_id,
-    ApplySortingLshCallback callback) {
-  DCHECK(raw_floc_id.IsValid());
-  DCHECK(sorting_lsh_clusters_file_path_.has_value());
-  base::PostTaskAndReplyWithResult(
-      background_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&ApplySortingLshOnBackgroundThread, raw_floc_id,
-                     sorting_lsh_clusters_file_path_.value()),
-      std::move(callback));
-}
-
-void FlocSortingLshClustersService::OnSortingLshClustersFileReady(
-    const base::FilePath& file_path) {
-  sorting_lsh_clusters_file_path_ = file_path;
-
-  for (auto& observer : observers_)
-    observer.OnSortingLshClustersFileReady();
+void FlocSortingLshClustersService::DidApplySortingLsh(
+    ApplySortingLshCallback callback,
+    base::Version version,
+    base::Optional<uint64_t> final_hash) {
+  std::move(callback).Run(std::move(final_hash), std::move(version));
 }
 
 }  // namespace federated_learning

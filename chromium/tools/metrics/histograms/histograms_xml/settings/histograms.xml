@@ -40,7 +40,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.GivenShowHomeButton_HomePageIsNewTabPage"
-    enum="Boolean" expires_after="2021-03-01">
+    enum="Boolean" expires_after="2021-05-02">
   <owner>mpearson@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -85,6 +85,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Settings.HomePageIsCustomized" enum="Boolean"
     expires_after="2020-08-28">
+  <obsolete>
+    Expired and removed from code as of 10/2020.
+  </obsolete>
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -162,7 +165,10 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="SafetyCheckChromeCleanerStatus" expires_after="M90">
   <owner>rainhard@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
-  <summary>Resulting state of the safety check Chrome cleaner check.</summary>
+  <summary>
+    Resulting state of the safety check Chrome cleaner check. Value 4-9 got
+    added with M88.
+  </summary>
 </histogram>
 
 <histogram name="Settings.SafetyCheck.ExtensionsResult"
@@ -179,7 +185,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>anaudrey@chromium.org</owner>
   <summary>
     Which user actions were taken in safety check. Recorded every time a user
-    does an interaction in safety check. Value 5 and 6 got added with M86.
+    does an interaction in safety check. Value 5 and 6 got added with M86, 7-9
+    with M87, and 10 with M88.
   </summary>
 </histogram>
 
@@ -257,7 +264,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.ShowHomeButton" enum="BooleanEnabled"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>mpearson@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -268,6 +275,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Settings.ShowHomeButtonPreferenceState" enum="BooleanEnabled"
     expires_after="M85">
+  <obsolete>
+    Expired and removed from code as of 10/2020.
+  </obsolete>
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -283,6 +293,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Settings.ShowHomeButtonPreferenceStateChanged"
     enum="BooleanEnabled" expires_after="M88">
+  <obsolete>
+    Removed from code as of 10/2020.
+  </obsolete>
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -293,6 +306,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Settings.ShowHomeButtonPreferenceStateManaged"
     enum="HomeButtonPreferenceStateType" expires_after="M88">
+  <obsolete>
+    Removed from code as of 10/2020.
+  </obsolete>
   <owner>twellington@chromium.org</owner>
   <owner>tedchoc@chromium.org</owner>
   <summary>
@@ -327,7 +343,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.StartupPageLoadSettings" enum="SessionStartupPref"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>mpearson@chromium.org</owner>
   <owner>ramyan@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>

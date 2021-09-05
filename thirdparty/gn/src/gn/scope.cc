@@ -390,23 +390,6 @@ bool Scope::NonRecursiveMergeTo(Scope* dest,
                                      "<SHOULDN'T HAPPEN>", err);
   }
 
-  // Sources assignment filter.
-  if (sources_assignment_filter_) {
-    if (!options.clobber_existing) {
-      if (dest->GetSourcesAssignmentFilter()) {
-        // Sources assignment filter present in both the source and the dest.
-        std::string desc_string(desc_for_err);
-        *err = Err(node_for_err, "Assignment filter collision.",
-                   "The " + desc_string +
-                       " contains a sources_assignment_filter "
-                       "which\nwould clobber the one in your current scope.");
-        return false;
-      }
-    }
-    dest->sources_assignment_filter_ =
-        std::make_unique<PatternList>(*sources_assignment_filter_);
-  }
-
   // Templates.
   for (const auto& pair : templates_) {
     const std::string& current_name = pair.first;
@@ -491,14 +474,6 @@ const Scope* Scope::GetTargetDefaults(const std::string& target_type) const {
     return found->second.get();
   if (containing())
     return containing()->GetTargetDefaults(target_type);
-  return nullptr;
-}
-
-const PatternList* Scope::GetSourcesAssignmentFilter() const {
-  if (sources_assignment_filter_)
-    return sources_assignment_filter_.get();
-  if (containing())
-    return containing()->GetSourcesAssignmentFilter();
   return nullptr;
 }
 

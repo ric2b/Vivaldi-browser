@@ -34,6 +34,7 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -261,9 +262,9 @@ ArcAccessibilityHelperBridge::ArcAccessibilityHelperBridge(
 
   for (const char* const pref_name : kCaptionStylePrefsToObserve) {
     pref_change_registrar_->Add(
-        pref_name,
-        base::Bind(&ArcAccessibilityHelperBridge::UpdateCaptionSettings,
-                   base::Unretained(this)));
+        pref_name, base::BindRepeating(
+                       &ArcAccessibilityHelperBridge::UpdateCaptionSettings,
+                       base::Unretained(this)));
   }
 
   arc_bridge_service_->accessibility_helper()->SetHost(this);
@@ -629,7 +630,10 @@ ArcAccessibilityHelperBridge::GetFilterTypeForProfile(Profile* profile) {
 
   if (accessibility_manager->IsSelectToSpeakEnabled() ||
       accessibility_manager->IsSwitchAccessEnabled() ||
-      accessibility_manager->IsSpokenFeedbackEnabled()) {
+      accessibility_manager->IsSpokenFeedbackEnabled() ||
+      (features::IsMagnifierNewFocusFollowingEnabled() &&
+       (magnification_manager->IsMagnifierEnabled() ||
+        magnification_manager->IsDockedMagnifierEnabled()))) {
     return arc::mojom::AccessibilityFilterType::ALL;
   }
 
@@ -746,9 +750,11 @@ void ArcAccessibilityHelperBridge::UpdateEnabledFeature() {
   if (!accessibility_manager || !magnification_manager)
     return;
 
-  is_focus_event_enabled_ = magnification_manager->IsMagnifierEnabled() ||
-                            magnification_manager->IsDockedMagnifierEnabled() ||
-                            accessibility_manager->IsFocusHighlightEnabled();
+  is_focus_event_enabled_ =
+      (!features::IsMagnifierNewFocusFollowingEnabled() &&
+       (magnification_manager->IsMagnifierEnabled() ||
+        magnification_manager->IsDockedMagnifierEnabled())) ||
+      accessibility_manager->IsFocusHighlightEnabled();
 
   use_full_focus_mode_ = accessibility_manager->IsSwitchAccessEnabled() ||
                          accessibility_manager->IsSpokenFeedbackEnabled();

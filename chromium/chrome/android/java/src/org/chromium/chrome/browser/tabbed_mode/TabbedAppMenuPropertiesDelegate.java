@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -44,9 +45,11 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
             TabModelSelector tabModelSelector, ToolbarManager toolbarManager, View decorView,
             AppMenuDelegate appMenuDelegate,
             OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
-            ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier) {
+            ObservableSupplier<BookmarkBridge> bookmarkBridgeSupplier,
+            ModalDialogManager modalDialogManager) {
         super(context, activityTabProvider, multiWindowModeStateDispatcher, tabModelSelector,
-                toolbarManager, decorView, overviewModeBehaviorSupplier, bookmarkBridgeSupplier);
+                toolbarManager, decorView, overviewModeBehaviorSupplier, bookmarkBridgeSupplier,
+                modalDialogManager);
         mAppMenuDelegate = appMenuDelegate;
         // Vivaldi
         mVivaldiBookmarkBridgeSupplier = bookmarkBridgeSupplier;
@@ -120,7 +123,9 @@ public class TabbedAppMenuPropertiesDelegate extends AppMenuPropertiesDelegateIm
     @Override
     public boolean shouldShowIconBeforeItem() {
         if (ChromeApplication.isVivaldi()) return true;
-        return CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS);
+        return CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS)
+                || CachedFeatureFlags.isEnabled(
+                        ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR);
     }
 
     private boolean canShowDataReductionItem(int maxMenuHeight) {

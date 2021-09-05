@@ -90,18 +90,22 @@ void VideoTutorialServiceBridge::GetTutorial(
                      ScopedJavaGlobalRef<jobject>(jcallback)));
 }
 
-ScopedJavaLocalRef<jobject> VideoTutorialServiceBridge::GetSupportedLanguages(
+ScopedJavaLocalRef<jobjectArray>
+VideoTutorialServiceBridge::GetSupportedLanguages(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller) {
-  return TutorialConversionBridge::CreateJavaLanguages(
+  return base::android::ToJavaArrayOfStrings(
       env, video_tutorial_service_->GetSupportedLanguages());
 }
 
 ScopedJavaLocalRef<jstring> VideoTutorialServiceBridge::GetPreferredLocale(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller) {
-  std::string locale = video_tutorial_service_->GetPreferredLocale();
-  return base::android::ConvertUTF8ToJavaString(env, locale);
+  base::Optional<std::string> locale =
+      video_tutorial_service_->GetPreferredLocale();
+  return locale.has_value()
+             ? base::android::ConvertUTF8ToJavaString(env, locale.value())
+             : ScopedJavaLocalRef<jstring>();
 }
 
 void VideoTutorialServiceBridge::SetPreferredLocale(

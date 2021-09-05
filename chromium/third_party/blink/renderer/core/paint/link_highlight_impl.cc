@@ -159,8 +159,7 @@ gfx::Rect LinkHighlightImpl::LinkHighlightFragment::PaintableRegion() {
 }
 
 scoped_refptr<cc::DisplayItemList>
-LinkHighlightImpl::LinkHighlightFragment::PaintContentsToDisplayList(
-    PaintingControlSetting painting_control) {
+LinkHighlightImpl::LinkHighlightFragment::PaintContentsToDisplayList() {
   auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
 
   PaintRecorder recorder;
@@ -323,7 +322,7 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
     auto bounding_rect = EnclosingIntRect(new_path.BoundingRect());
     new_path.Translate(-FloatSize(ToIntSize(bounding_rect.Location())));
 
-    auto* layer = link_highlight_fragment.Layer();
+    cc::Layer* layer = link_highlight_fragment.Layer();
     DCHECK(layer);
     if (link_highlight_fragment.GetPath() != new_path) {
       link_highlight_fragment.SetPath(new_path);
@@ -346,11 +345,8 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
 
 void LinkHighlightImpl::SetPaintArtifactCompositorNeedsUpdate() {
   DCHECK(node_);
-  if (auto* frame_view = node_->GetDocument().View()) {
+  if (auto* frame_view = node_->GetDocument().View())
     frame_view->SetPaintArtifactCompositorNeedsUpdate();
-    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-      frame_view->SetForeignLayerListNeedsUpdate();
-  }
 }
 
 void LinkHighlightImpl::UpdateOpacity(float opacity) {

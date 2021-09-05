@@ -28,6 +28,10 @@ build_recipe = _recipe_for_package(
 )
 
 build_recipe(
+    name = "recipe:android/androidx_packager",
+)
+
+build_recipe(
     name = "recipe:android/avd_packager",
 )
 
@@ -94,10 +98,6 @@ build_recipe(
 )
 
 build_recipe(
-    name = "recipe:closure_compilation",
-)
-
-build_recipe(
     name = "recipe:cronet",
 )
 
@@ -131,6 +131,10 @@ build_recipe(
 
 build_recipe(
     name = "recipe:tricium_metrics",
+)
+
+build_recipe(
+    name = "recipe:tricium_simple",
 )
 
 build_recipe(

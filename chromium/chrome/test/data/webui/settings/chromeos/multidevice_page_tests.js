@@ -6,7 +6,7 @@
 // #import 'chrome://os-settings/chromeos/os_settings.js';
 
 // #import {TestLifetimeBrowserProxy} from './test_os_lifetime_browser_proxy.m.js';
-// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, MultiDeviceBrowserProxyImpl, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
+// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, MultiDeviceBrowserProxyImpl, PhoneHubNotificationAccessStatus, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 // #import {TestOsResetBrowserProxy} from './test_os_reset_browser_proxy.m.js';
 // #import {assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
 // #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -72,9 +72,12 @@ suite('Multidevice', function() {
    * @param {boolean} accessGranted
    */
   function setPhoneHubNotificationAccessGranted(accessGranted) {
+    const accessState = accessGranted ?
+        settings.PhoneHubNotificationAccessStatus.ACCESS_GRANTED :
+        settings.PhoneHubNotificationAccessStatus.AVAILABLE_BUT_NOT_GRANTED;
     setPageContentData(Object.assign(
         {}, multidevicePage.pageContentData,
-        {isNotificationAccessGranted: accessGranted}));
+        {notificationAccessStatus: accessState}));
   }
 
   /**
@@ -110,8 +113,10 @@ suite('Multidevice', function() {
       const accessDialog = multidevicePage.$$(
           'settings-multidevice-notification-access-setup-dialog');
       assertEquals(
-          !accessDialog,
-          multidevicePage.pageContentData.isNotificationAccessGranted);
+          !!accessDialog,
+          multidevicePage.pageContentData.notificationAccessStatus ===
+              settings.PhoneHubNotificationAccessStatus
+                  .AVAILABLE_BUT_NOT_GRANTED);
       return;
     }
 
@@ -179,6 +184,40 @@ suite('Multidevice', function() {
     assertEquals(
         deepLinkElement, getDeepActiveElement(),
         'Setup multidevice button should be focused for settingId=200.');
+  });
+
+  test('Open notification access setup dialog route param', async () => {
+    settings.Router.getInstance().navigateTo(
+        settings.routes.MULTIDEVICE_FEATURES,
+        new URLSearchParams('showNotificationAccessSetupDialog=true'));
+
+    PolymerTest.clearBody();
+    browserProxy = new multidevice.TestMultideviceBrowserProxy();
+    settings.MultiDeviceBrowserProxyImpl.instance_ = browserProxy;
+    browserProxy.data.notificationAccessStatus =
+        settings.PhoneHubNotificationAccessStatus.AVAILABLE_BUT_NOT_GRANTED;
+
+    multidevicePage = document.createElement('settings-multidevice-page');
+    assertTrue(!!multidevicePage);
+
+    document.body.appendChild(multidevicePage);
+    await browserProxy.whenCalled('getPageContentData');
+
+    Polymer.dom.flush();
+    assertTrue(!!multidevicePage.$$(
+        'settings-multidevice-notification-access-setup-dialog'));
+
+    // Close the dialog.
+    multidevicePage.showNotificationAccessSetupDialog_ = false;
+    Polymer.dom.flush();
+
+    // A change in pageContentData will not cause the notification access
+    // setup dialog to reappaear
+    setPageContentData({});
+    Polymer.dom.flush();
+
+    assertFalse(!!multidevicePage.$$(
+        'settings-multidevice-notification-access-setup-dialog'));
   });
 
   test('headings render based on mode and host', function() {

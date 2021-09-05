@@ -17,6 +17,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -32,6 +33,7 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/native_cursor.h"
 #include "ui/views/selection_controller.h"
 
@@ -108,6 +110,14 @@ void Label::SetText(const base::string16& new_text) {
 
 int Label::GetTextContext() const {
   return text_context_;
+}
+
+void Label::SetTextContext(int text_context) {
+  if (text_context == text_context_)
+    return;
+  text_context_ = text_context;
+  UpdateColorsFromTheme();
+  OnPropertyChanged(&text_context_, views::kPropertyEffectsPaint);
 }
 
 int Label::GetTextStyle() const {
@@ -213,6 +223,21 @@ void Label::SetSubpixelRenderingEnabled(bool subpixel_rendering_enabled) {
   subpixel_rendering_enabled_ = subpixel_rendering_enabled;
   ApplyTextColors();
   OnPropertyChanged(&subpixel_rendering_enabled_, kPropertyEffectsPaint);
+}
+
+bool Label::GetSkipSubpixelRenderingOpacityCheck() const {
+  return skip_subpixel_rendering_opacity_check_;
+}
+
+void Label::SetSkipSubpixelRenderingOpacityCheck(
+    bool skip_subpixel_rendering_opacity_check) {
+  if (skip_subpixel_rendering_opacity_check_ ==
+      skip_subpixel_rendering_opacity_check)
+    return;
+  skip_subpixel_rendering_opacity_check_ =
+      skip_subpixel_rendering_opacity_check;
+  OnPropertyChanged(&skip_subpixel_rendering_opacity_check_,
+                    kPropertyEffectsNone);
 }
 
 gfx::HorizontalAlignment Label::GetHorizontalAlignment() const {
@@ -471,6 +496,14 @@ void Label::SelectRange(const gfx::Range& range) {
     SchedulePaint();
 }
 
+std::vector<gfx::Rect> Label::GetSubstringBounds(const gfx::Range& range) {
+  auto substring_bounds = full_text_->GetSubstringBounds(range);
+  for (auto& bound : substring_bounds) {
+    bound.Offset(GetInsets().left(), GetInsets().top());
+  }
+  return substring_bounds;
+}
+
 views::PropertyChangedSubscription Label::AddTextChangedCallback(
     views::PropertyChangedCallback callback) {
   return AddPropertyChangedCallback(&full_text_ + kLabelText,
@@ -651,20 +684,34 @@ void Label::PaintText(gfx::Canvas* canvas) {
   if (display_text_)
     display_text_->Draw(canvas);
 
-#if DCHECK_IS_ON()
-  // Attempt to ensure that if we're using subpixel rendering, we're painting
-  // to an opaque background. What we don't want to find is an ancestor in the
-  // hierarchy that paints to a non-opaque layer.
-  if (!display_text_ || display_text_->subpixel_rendering_suppressed())
+#if DCHECK_IS_ON() && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
+  // TODO(crbug.com/1139395): Enable this DCHECK on ChromeOS and LaCrOS by
+  // fixing either this check (to correctly idenfify more paints-on-opaque
+  // cases), refactoring parents to use background() or by fixing
+  // subpixel-rendering issues that the DCHECK detects.
+  if (!display_text_ || display_text_->subpixel_rendering_suppressed() ||
+      skip_subpixel_rendering_opacity_check_)
     return;
 
+  // Ensure that, if we're using subpixel rendering, we're painted to an opaque
+  // region. Subpixel rendering will sample from the r,g,b color channels of the
+  // canvas. These values are incorrect when sampling from transparent pixels.
+  // Note that these checks may need to be amended for other methods of painting
+  // opaquely underneath the Label. For now, individual cases can skip this
+  // DCHECK by calling Label::SetSkipSubpixelRenderingOpacityCheck().
   for (View* view = this; view; view = view->parent()) {
+    // This is our approximation of being painted on an opaque region. If any
+    // parent has an opaque background we assume that that background covers the
+    // text bounds. This is not necessarily true as the background could be
+    // inset from the parent bounds, and get_color() does not imply that all of
+    // the background is painted with the same opaque color.
     if (view->background() && IsOpaque(view->background()->get_color()))
       break;
 
-    if (view->layer() && view->layer()->fills_bounds_opaquely()) {
-      DLOG(WARNING) << "Ancestor view has a non-opaque layer: "
-                    << view->GetClassName() << " with ID " << view->GetID();
+    if (view->layer()) {
+      // If we aren't painted to an opaque background, we must paint to an
+      // opaque layer.
+      DCHECK(view->layer()->fills_bounds_opaquely());
       break;
     }
   }
@@ -1136,6 +1183,7 @@ void Label::BuildContextMenuContents() {
 
 BEGIN_METADATA(Label, View)
 ADD_PROPERTY_METADATA(base::string16, Text)
+ADD_PROPERTY_METADATA(int, TextContext)
 ADD_PROPERTY_METADATA(int, TextStyle)
 ADD_PROPERTY_METADATA(bool, AutoColorReadabilityEnabled)
 ADD_PROPERTY_METADATA(SkColor, EnabledColor)
@@ -1144,6 +1192,7 @@ ADD_PROPERTY_METADATA(SkColor, BackgroundColor)
 ADD_PROPERTY_METADATA(SkColor, SelectionTextColor)
 ADD_PROPERTY_METADATA(SkColor, SelectionBackgroundColor)
 ADD_PROPERTY_METADATA(bool, SubpixelRenderingEnabled)
+ADD_PROPERTY_METADATA(bool, SkipSubpixelRenderingOpacityCheck)
 ADD_PROPERTY_METADATA(gfx::ShadowValues, Shadows)
 ADD_PROPERTY_METADATA(gfx::HorizontalAlignment, HorizontalAlignment)
 ADD_PROPERTY_METADATA(gfx::VerticalAlignment, VerticalAlignment)
@@ -1156,7 +1205,6 @@ ADD_PROPERTY_METADATA(base::string16, TooltipText)
 ADD_PROPERTY_METADATA(bool, HandlesTooltips)
 ADD_PROPERTY_METADATA(bool, CollapseWhenHidden)
 ADD_PROPERTY_METADATA(int, MaximumWidth)
-ADD_READONLY_PROPERTY_METADATA(int, TextContext)
 END_METADATA
 
 }  // namespace views

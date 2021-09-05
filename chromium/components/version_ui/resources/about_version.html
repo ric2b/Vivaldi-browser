@@ -7,6 +7,7 @@ about:version template page
 <html id="t" dir="$i18n{textdirection}" lang="$i18n{language}">
   <head>
     <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
     <title>$i18n{title}</title>
 <if expr="not is_android and not is_ios">
     <link rel="icon" type="image/png" sizes="32x32"
@@ -26,6 +27,7 @@ about:version template page
     <script src="chrome://resources/js/ios/web_ui.js"></script>
 </if>
 
+    <script src="chrome://resources/js/assert.js"></script>
     <script src="chrome://resources/js/promise_resolver.js"></script>
     <script src="chrome://resources/js/cr.js"></script>
     <script src="chrome://resources/js/load_time_data.js"></script>
@@ -126,11 +128,6 @@ about:version template page
             <span>$i18n{js_engine}</span>
             <span>$i18n{js_version}</span>
           </td>
-        </tr>
-</if>
-<if expr="not is_android and not is_ios">
-        <tr><td class="label">$i18n{flash_plugin}</td>
-          <td class="version" id="flash_version">$i18n{flash_version}</td>
         </tr>
 </if>
         <tr><td class="label">$i18n{user_agent_name}</td>

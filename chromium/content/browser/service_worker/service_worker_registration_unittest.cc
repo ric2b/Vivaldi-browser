@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/compiler_specific.h"
@@ -17,8 +16,7 @@
 #include "base/notreached.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/test/bind.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -78,16 +76,7 @@ void SaveStatusCallback(bool* called,
 
 class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
  public:
-  AllowServiceWorkerResult AllowServiceWorkerOnIO(
-      const GURL& scope,
-      const GURL& site_for_cookies,
-      const base::Optional<url::Origin>& top_frame_origin,
-      const GURL& script_url,
-      content::ResourceContext* context) override {
-    return AllowServiceWorkerResult::No();
-  }
-
-  AllowServiceWorkerResult AllowServiceWorkerOnUI(
+  AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
       const GURL& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin,

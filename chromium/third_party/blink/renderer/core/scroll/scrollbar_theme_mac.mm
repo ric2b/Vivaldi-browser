@@ -238,15 +238,17 @@ WebThemeEngine::ExtraParams GetPaintParams(const Scrollbar& scrollbar,
   }
 
   params.scrollbar_extra.scrollbar_theme =
-      (scrollbar.UsedColorScheme() == ColorScheme::kDark) ? kDark : kLight;
+      (scrollbar.UsedColorScheme() == mojom::blink::ColorScheme::kDark)
+          ? mojom::blink::ColorScheme::kDark
+          : mojom::blink::ColorScheme::kLight;
   params.scrollbar_extra.is_overlay = overlay;
 
   if (overlay) {
     params.scrollbar_extra.scrollbar_theme =
         (scrollbar.GetScrollbarOverlayColorTheme() ==
          kScrollbarOverlayColorThemeLight)
-            ? kDark
-            : kLight;
+            ? mojom::blink::ColorScheme::kDark
+            : mojom::blink::ColorScheme::kLight;
   }
 
   params.scrollbar_extra.is_hovering =
@@ -291,16 +293,17 @@ void ScrollbarThemeMac::PaintTrack(GraphicsContext& context,
           : WebThemeEngine::Part::kPartScrollbarVerticalTrack;
   Platform::Current()->ThemeEngine()->Paint(
       context.Canvas(), track_part, WebThemeEngine::State::kStateNormal,
-      WebRect(bounds), &params, params.scrollbar_extra.scrollbar_theme);
+      gfx::Rect(bounds), &params, params.scrollbar_extra.scrollbar_theme);
   if (opacity != 1)
     context.EndLayer();
 }
 
-void ScrollbarThemeMac::PaintScrollCorner(GraphicsContext& context,
-                                          const Scrollbar* vertical_scrollbar,
-                                          const DisplayItemClient& item,
-                                          const IntRect& rect,
-                                          ColorScheme color_scheme) {
+void ScrollbarThemeMac::PaintScrollCorner(
+    GraphicsContext& context,
+    const Scrollbar* vertical_scrollbar,
+    const DisplayItemClient& item,
+    const IntRect& rect,
+    mojom::blink::ColorScheme color_scheme) {
   if (!vertical_scrollbar) {
     ScrollbarTheme::PaintScrollCorner(context, vertical_scrollbar, item, rect,
                                       color_scheme);
@@ -319,7 +322,7 @@ void ScrollbarThemeMac::PaintScrollCorner(GraphicsContext& context,
       GetPaintParams(*vertical_scrollbar, UsesOverlayScrollbars());
   Platform::Current()->ThemeEngine()->Paint(
       context.Canvas(), WebThemeEngine::Part::kPartScrollbarCorner,
-      WebThemeEngine::State::kStateNormal, WebRect(bounds), &params,
+      WebThemeEngine::State::kStateNormal, gfx::Rect(bounds), &params,
       params.scrollbar_extra.scrollbar_theme);
 }
 
@@ -409,7 +412,7 @@ void ScrollbarThemeMac::PaintThumbInternal(GraphicsContext& context,
           : WebThemeEngine::Part::kPartScrollbarVerticalThumb;
   Platform::Current()->ThemeEngine()->Paint(
       context.Canvas(), thumb_part, WebThemeEngine::State::kStateNormal,
-      WebRect(bounds), &params, params.scrollbar_extra.scrollbar_theme);
+      gfx::Rect(bounds), &params, params.scrollbar_extra.scrollbar_theme);
   if (opacity != 1.0f)
     context.EndLayer();
 }

@@ -685,7 +685,7 @@ Vector<uint8_t> GetValueAsVector(ScriptState* script_state,
   }
 
   Vector<uint8_t> result;
-  result.Append(array->Data(), array->lengthAsSizeT());
+  result.Append(array->Data(), array->length());
   return result;
 }
 
@@ -701,7 +701,8 @@ TEST_F(QuicTransportTest, ReceiveDatagramBeforeRead) {
 
   auto* readable = quic_transport->receiveDatagrams();
   auto* script_state = scope.GetScriptState();
-  auto* reader = readable->getReader(script_state, ASSERT_NO_EXCEPTION);
+  auto* reader =
+      readable->GetDefaultReaderForTesting(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise result = reader->read(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromiseTester tester(script_state, result);
   tester.WaitUntilSettled();
@@ -716,7 +717,8 @@ TEST_F(QuicTransportTest, ReceiveDatagramDuringRead) {
       CreateAndConnectSuccessfully(scope, "quic-transport://example.com");
   auto* readable = quic_transport->receiveDatagrams();
   auto* script_state = scope.GetScriptState();
-  auto* reader = readable->getReader(script_state, ASSERT_NO_EXCEPTION);
+  auto* reader =
+      readable->GetDefaultReaderForTesting(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise result = reader->read(script_state, ASSERT_NO_EXCEPTION);
 
   const std::array<uint8_t, 1> chunk = {'A'};
@@ -749,7 +751,8 @@ TEST_F(QuicTransportTest, DatagramsAreDropped) {
 
   auto* readable = quic_transport->receiveDatagrams();
   auto* script_state = scope.GetScriptState();
-  auto* reader = readable->getReader(script_state, ASSERT_NO_EXCEPTION);
+  auto* reader =
+      readable->GetDefaultReaderForTesting(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise result1 = reader->read(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise result2 = reader->read(script_state, ASSERT_NO_EXCEPTION);
 
@@ -1123,8 +1126,8 @@ TEST_F(QuicTransportTest, CreateReceiveStream) {
   producer.reset();
   quic_transport->OnIncomingStreamClosed(/*stream_id=*/0, true);
 
-  auto* reader =
-      receive_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+  auto* reader = receive_stream->readable()->GetDefaultReaderForTesting(
+      script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise read_promise = reader->read(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromiseTester read_tester(script_state, read_promise);
   read_tester.WaitUntilSettled();
@@ -1140,7 +1143,7 @@ TEST_F(QuicTransportTest, CreateReceiveStream) {
       V8Uint8Array::ToImplWithTypeCheck(scope.GetIsolate(), value);
   ASSERT_TRUE(u8array);
   EXPECT_THAT(base::make_span(static_cast<uint8_t*>(u8array->Data()),
-                              u8array->byteLengthAsSizeT()),
+                              u8array->byteLength()),
               ElementsAre('w', 'h', 'a', 't'));
 }
 
@@ -1155,8 +1158,8 @@ TEST_F(QuicTransportTest, CreateReceiveStreamThenClose) {
 
   ReceiveStream* receive_stream = ReadReceiveStream(scope, quic_transport);
 
-  auto* reader =
-      receive_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+  auto* reader = receive_stream->readable()->GetDefaultReaderForTesting(
+      script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise read_promise = reader->read(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromiseTester read_tester(script_state, read_promise);
 
@@ -1186,8 +1189,8 @@ TEST_F(QuicTransportTest, CreateReceiveStreamThenRemoteClose) {
 
   ReceiveStream* receive_stream = ReadReceiveStream(scope, quic_transport);
 
-  auto* reader =
-      receive_stream->readable()->getReader(script_state, ASSERT_NO_EXCEPTION);
+  auto* reader = receive_stream->readable()->GetDefaultReaderForTesting(
+      script_state, ASSERT_NO_EXCEPTION);
   ScriptPromise read_promise = reader->read(script_state, ASSERT_NO_EXCEPTION);
   ScriptPromiseTester read_tester(script_state, read_promise);
 

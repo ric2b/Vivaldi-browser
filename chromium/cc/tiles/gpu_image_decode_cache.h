@@ -31,6 +31,8 @@ class RasterContextProvider;
 
 namespace cc {
 
+class RasterDarkModeFilter;
+
 // OVERVIEW:
 //
 // GpuImageDecodeCache handles the decode and upload of images that will
@@ -141,7 +143,8 @@ class CC_EXPORT GpuImageDecodeCache
                                SkColorType color_type,
                                size_t max_working_set_bytes,
                                int max_texture_size,
-                               PaintImage::GeneratorClientId client_id);
+                               PaintImage::GeneratorClientId client_id,
+                               RasterDarkModeFilter* const dark_mode_filter);
   ~GpuImageDecodeCache() override;
 
   // Returns the GL texture ID backing the given SkImage.
@@ -205,9 +208,11 @@ class CC_EXPORT GpuImageDecodeCache
   sk_sp<SkImage> GetSWImageDecodeForTesting(const DrawImage& image);
   sk_sp<SkImage> GetUploadedPlaneForTesting(const DrawImage& draw_image,
                                             YUVIndex index);
+  size_t GetDarkModeImageCacheSizeForTesting(const DrawImage& draw_image);
   size_t paint_image_entries_count_for_testing() const {
     return paint_image_entries_.size();
   }
+  bool NeedsDarkModeFilterForTesting(const DrawImage& draw_image);
 
  private:
   enum class DecodedDataMode { kGpu, kCpu, kTransferCache };
@@ -306,6 +311,17 @@ class CC_EXPORT GpuImageDecodeCache
     // Similar to |task|, but only is generated if there is no associated upload
     // generated for this task (ie, this is an out-of-raster request for decode.
     scoped_refptr<TileTask> stand_alone_task;
+
+    // Dark mode color filter cache.
+    struct SkIRectCompare {
+      bool operator()(const SkIRect& a, const SkIRect& b) const {
+        return a.fLeft < b.fLeft || a.fTop < b.fTop || a.fRight < b.fRight ||
+               a.fBottom < b.fBottom;
+      }
+    };
+
+    base::flat_map<SkIRect, sk_sp<SkColorFilter>, SkIRectCompare>
+        dark_mode_color_filter_cache;
 
    private:
     void ReportUsageStats() const;
@@ -506,6 +522,7 @@ class CC_EXPORT GpuImageDecodeCache
               bool do_hardware_accelerated_decode,
               bool is_yuv_format,
               SkYUVColorSpace yuv_cs,
+              SkYUVAInfo::PlanarConfig yuv_config,
               SkYUVAPixmapInfo::DataType yuv_dt);
 
     bool IsGpuOrTransferCache() const;
@@ -523,6 +540,7 @@ class CC_EXPORT GpuImageDecodeCache
     bool is_yuv;
     bool is_budgeted = false;
     base::Optional<SkYUVColorSpace> yuv_color_space;
+    base::Optional<SkYUVAInfo::PlanarConfig> yuv_planar_config;
     base::Optional<SkYUVAPixmapInfo::DataType> yuv_data_type;
 
     // If true, this image is no longer in our |persistent_cache_| and will be
@@ -607,16 +625,25 @@ class CC_EXPORT GpuImageDecodeCache
   void InsertTransferCacheEntry(
       const ClientImageTransferCacheEntry& image_entry,
       ImageData* image_data);
+  bool NeedsDarkModeFilter(const DrawImage& draw_image, ImageData* image_data);
+  void DecodeImageAndGenerateDarkModeFilterIfNecessary(
+      const DrawImage& draw_image,
+      ImageData* image_data,
+      TaskType task_type);
   void DecodeImageIfNecessary(const DrawImage& draw_image,
                               ImageData* image_data,
-                              TaskType task_type);
+                              TaskType task_type,
+                              bool needs_decode_for_dark_mode);
+  void GenerateDarkModeFilter(const DrawImage& draw_image,
+                              ImageData* image_data);
   sk_sp<SkImage> CreateImageFromYUVATexturesInternal(
       const SkImage* uploaded_y_image,
       const SkImage* uploaded_u_image,
       const SkImage* uploaded_v_image,
       const size_t image_width,
       const size_t image_height,
-      const SkYUVColorSpace& yuva_color_space,
+      const SkYUVAInfo::PlanarConfig yuva_planar_config,
+      const SkYUVColorSpace yuva_color_space,
       sk_sp<SkColorSpace> target_color_space,
       sk_sp<SkColorSpace> decoded_color_space) const;
 
@@ -718,6 +745,7 @@ class CC_EXPORT GpuImageDecodeCache
   bool allow_accelerated_jpeg_decodes_ = false;
   bool allow_accelerated_webp_decodes_ = false;
   SkYUVAPixmapInfo::SupportedDataTypes yuva_supported_data_types_;
+  const bool enable_clipped_image_scaling_;
 
   // All members below this point must only be accessed while holding |lock_|.
   // The exception are const members like |normal_max_cache_bytes_| that can
@@ -749,6 +777,8 @@ class CC_EXPORT GpuImageDecodeCache
   size_t working_set_bytes_ = 0;
   size_t working_set_items_ = 0;
   bool aggressively_freeing_resources_ = false;
+
+  RasterDarkModeFilter* const dark_mode_filter_;
 
   // We can't modify GPU backed SkImages without holding the context lock, so
   // we queue up operations to run the next time the lock is held.

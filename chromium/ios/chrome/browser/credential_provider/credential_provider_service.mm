@@ -36,7 +36,7 @@
 
 namespace {
 
-using autofill::PasswordForm;
+using password_manager::PasswordForm;
 using password_manager::AffiliatedMatchHelper;
 using password_manager::PasswordStore;
 using password_manager::PasswordStoreChange;
@@ -145,6 +145,7 @@ CredentialProviderService::CredentialProviderService(
   password_store_->AddObserver(this);
 
   DCHECK(authentication_service_);
+  authentication_service_->WaitUntilCacheIsPopulated();
   UpdateAccountValidationId();
 
   if (identity_manager_) {

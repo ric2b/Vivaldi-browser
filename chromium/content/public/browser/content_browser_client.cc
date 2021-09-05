@@ -9,7 +9,7 @@
 // declarations instead of including more headers. If that is infeasible, adjust
 // the limit. For more info, see
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
-#pragma clang max_tokens_here 890000
+#pragma clang max_tokens_here 910000
 
 #include <utility>
 
@@ -43,6 +43,7 @@
 #include "net/ssl/client_cert_store.h"
 #include "sandbox/policy/sandbox_type.h"
 #include "services/device/public/cpp/geolocation/location_provider.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -50,8 +51,8 @@
 #include "storage/browser/quota/quota_manager.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
-#include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "url/gurl.h"
@@ -148,8 +149,9 @@ bool ContentBrowserClient::DoesSiteRequireDedicatedProcess(
   return false;
 }
 
-bool ContentBrowserClient::ShouldLockProcess(BrowserContext* browser_context,
-                                             const GURL& effective_url) {
+bool ContentBrowserClient::ShouldLockProcessToSite(
+    BrowserContext* browser_context,
+    const GURL& effective_url) {
   DCHECK(browser_context);
   return true;
 }
@@ -198,6 +200,12 @@ bool ContentBrowserClient::IsWebUIAllowedToMakeNetworkRequests(
 }
 
 bool ContentBrowserClient::IsHandledURL(const GURL& url) {
+  return false;
+}
+
+bool ContentBrowserClient::HasCustomSchemeHandler(
+    content::BrowserContext* browser_context,
+    const std::string& scheme) {
   return false;
 }
 
@@ -337,16 +345,7 @@ bool ContentBrowserClient::AllowAppCache(
   return true;
 }
 
-AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorkerOnIO(
-    const GURL& scope,
-    const GURL& site_for_cookies,
-    const base::Optional<url::Origin>& top_frame_origin,
-    const GURL& script_url,
-    ResourceContext* context) {
-  return AllowServiceWorkerResult::Yes();
-}
-
-AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorkerOnUI(
+AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorker(
     const GURL& scope,
     const GURL& site_for_cookies,
     const base::Optional<url::Origin>& top_frame_origin,
@@ -390,7 +389,7 @@ bool ContentBrowserClient::IsDataSaverEnabled(BrowserContext* context) {
 
 void ContentBrowserClient::UpdateRendererPreferencesForWorker(
     BrowserContext* browser_context,
-    blink::mojom::RendererPreferences* out_prefs) {
+    blink::RendererPreferences* out_prefs) {
   // |browser_context| may be null (e.g. during shutdown of a service worker).
 }
 
@@ -762,8 +761,7 @@ ContentBrowserClient::CreateURLLoaderThrottles(
 
 void ContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
     int frame_tree_node_id,
-    base::UkmSourceId ukm_source_id,
-    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
+    ukm::SourceIdObj ukm_source_id,
     NonNetworkURLLoaderFactoryMap* factories) {}
 
 void ContentBrowserClient::
@@ -779,7 +777,6 @@ void ContentBrowserClient::
 void ContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
     int render_process_id,
     int render_frame_id,
-    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
     NonNetworkURLLoaderFactoryMap* factories) {}
 
 bool ContentBrowserClient::WillCreateURLLoaderFactory(
@@ -789,7 +786,7 @@ bool ContentBrowserClient::WillCreateURLLoaderFactory(
     URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     base::Optional<int64_t> navigation_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
@@ -1082,7 +1079,7 @@ void ContentBrowserClient::BlockBluetoothScanning(
     const url::Origin& requesting_origin,
     const url::Origin& embedding_origin) {}
 
-bool ContentBrowserClient::ShouldLoadExtraIcuDataFile() {
+bool ContentBrowserClient::ShouldLoadExtraIcuDataFile(std::string* split_name) {
   return false;
 }
 
@@ -1153,6 +1150,10 @@ ukm::UkmService* ContentBrowserClient::GetUkmService() {
   return nullptr;
 }
 
+void ContentBrowserClient::OnKeepaliveRequestStarted() {}
+
+void ContentBrowserClient::OnKeepaliveRequestFinished() {}
+
 #if defined(OS_MAC)
 bool ContentBrowserClient::SetupEmbedderSandboxParameters(
     sandbox::policy::SandboxType sandbox_type,
@@ -1160,5 +1161,12 @@ bool ContentBrowserClient::SetupEmbedderSandboxParameters(
   return false;
 }
 #endif  // defined(OS_MAC)
+
+void ContentBrowserClient::GetHyphenationDictionary(
+    base::OnceCallback<void(const base::FilePath&)>) {}
+
+bool ContentBrowserClient::HasErrorPage(int http_status_code) {
+  return false;
+}
 
 }  // namespace content

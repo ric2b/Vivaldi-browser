@@ -352,6 +352,9 @@ DWORD DoDeleteFile(const FilePath& path, bool recursive) {
              : ReturnLastErrorOrSuccessOnNotFound();
 }
 
+// Deletes the file/directory at |path| (recursively if |recursive| and |path|
+// names a directory), returning true on success. Sets the Windows last-error
+// code and returns false on failure.
 bool DeleteFileAndRecordMetrics(const FilePath& path, bool recursive) {
   static constexpr char kRecursive[] = "DeleteFile.Recursive";
   static constexpr char kNonRecursive[] = "DeleteFile.NonRecursive";
@@ -369,6 +372,8 @@ bool DeleteFileAndRecordMetrics(const FilePath& path, bool recursive) {
     return true;
 
   RecordFilesystemError(operation, error);
+
+  ::SetLastError(error);
   return false;
 }
 
@@ -553,8 +558,7 @@ File CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
   // Although it is nearly impossible to get a duplicate name with GUID, we
   // still use a loop here in case it happens.
   for (int i = 0; i < 100; ++i) {
-    temp_name =
-        dir.Append(UTF8ToWide(GenerateGUID()) + FILE_PATH_LITERAL(".tmp"));
+    temp_name = dir.Append(FormatTemporaryFileName(UTF8ToWide(GenerateGUID())));
     file.Initialize(temp_name, kFlags);
     if (file.IsValid())
       break;
@@ -581,6 +585,10 @@ File CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
 
 bool CreateTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
   return CreateAndOpenTemporaryFileInDir(dir, temp_file).IsValid();
+}
+
+FilePath FormatTemporaryFileName(FilePath::StringPieceType identifier) {
+  return FilePath(StrCat({identifier, FILE_PATH_LITERAL(".tmp")}));
 }
 
 ScopedFILE CreateAndOpenTemporaryStreamInDir(const FilePath& dir,

@@ -409,7 +409,8 @@ void ChromeAutofillClient::ConfirmSaveCreditCardLocally(
               /*upload=*/false, options, card, LegalMessageLines(),
               /*upload_save_card_callback=*/
               AutofillClient::UploadSaveCardPromptCallback(),
-              /*local_save_card_callback=*/std::move(callback), GetPrefs())));
+              /*local_save_card_callback=*/std::move(callback), GetPrefs()),
+          base::nullopt));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   SaveCardBubbleControllerImpl::CreateForWebContents(web_contents());
@@ -433,9 +434,30 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
               /*upload_save_card_callback=*/std::move(callback),
               /*local_save_card_callback=*/
               AutofillClient::LocalSaveCardPromptCallback(), GetPrefs());
+  bool sync_disabled_wallet_transport_enabled =
+      GetPersonalDataManager()->GetSyncSigninState() ==
+      autofill::AutofillSyncSigninState::kSignedInAndWalletSyncTransportEnabled;
+
+  base::Optional<AccountInfo> account_info = base::nullopt;
+  // AccountInfo data should be passed down only if the following conditions are
+  // satisfied:
+  // 1) Sync is off or the
+  //   kAutofillEnableInfoBarAccountIndicationFooterForSyncUsers flag is on.
+  // 2) User has multiple accounts or the
+  //   kAutofillEnableInfoBarAccountIndicationFooterForSingleAccountUsers is on.
+  if ((sync_disabled_wallet_transport_enabled ||
+       base::FeatureList::IsEnabled(
+           features::
+               kAutofillEnableInfoBarAccountIndicationFooterForSyncUsers)) &&
+      (IsMultipleAccountUser() ||
+       base::FeatureList::IsEnabled(
+           features::
+               kAutofillEnableInfoBarAccountIndicationFooterForSingleAccountUsers))) {
+    account_info = GetAccountInfo();
+  }
   InfoBarService::FromWebContents(web_contents())
       ->AddInfoBar(CreateSaveCardInfoBarMobile(
-          std::move(save_card_info_bar_delegate_mobile)));
+          std::move(save_card_info_bar_delegate_mobile), account_info));
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   SaveCardBubbleControllerImpl::CreateForWebContents(web_contents());
@@ -528,6 +550,12 @@ void ChromeAutofillClient::ShowAutofillPopup(
   popup_controller_->Show(open_args.suggestions,
                           open_args.autoselect_first_suggestion.value(),
                           open_args.popup_type);
+
+  // When testing, try to keep popup open when the reason to hide is from an
+  // external browser frame resize that is extraneous to our testing goals.
+  if (keep_popup_open_for_testing_ && popup_controller_.get()) {
+    popup_controller_->KeepPopupOpenForTesting();
+  }
 }
 
 void ChromeAutofillClient::UpdateAutofillPopupDataListValues(
@@ -737,6 +765,22 @@ Profile* ChromeAutofillClient::GetProfile() const {
   if (!web_contents())
     return nullptr;
   return Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+}
+
+base::Optional<AccountInfo> ChromeAutofillClient::GetAccountInfo() {
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(GetProfile());
+  CoreAccountId account_id =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kNotRequired);
+  return identity_manager
+      ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
+          account_id);
+}
+
+bool ChromeAutofillClient::IsMultipleAccountUser() {
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(GetProfile());
+  return identity_manager->GetAccountsWithRefreshTokens().size() > 1;
 }
 
 base::string16 ChromeAutofillClient::GetAccountHolderName() {

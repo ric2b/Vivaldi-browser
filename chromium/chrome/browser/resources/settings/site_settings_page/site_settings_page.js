@@ -229,14 +229,6 @@ function getCategoryItemMap() {
       icon: 'settings:pdf',
     },
     {
-      route: routes.SITE_SETTINGS_FLASH,
-      id: Id.PLUGINS,
-      label: 'siteSettingsFlash',
-      icon: 'cr:extension',
-      enabledLabel: 'siteSettingsFlashAskFirst',
-      disabledLabel: 'siteSettingsFlashBlock',
-    },
-    {
       route: routes.SITE_SETTINGS_POPUPS,
       id: Id.POPUPS,
       label: 'siteSettingsPopups',
@@ -282,14 +274,6 @@ function getCategoryItemMap() {
       icon: 'settings:volume-up',
       enabledLabel: 'siteSettingsSoundAllow',
       disabledLabel: 'siteSettingsSoundBlock',
-    },
-    {
-      route: routes.SITE_SETTINGS_UNSANDBOXED_PLUGINS,
-      id: Id.UNSANDBOXED_PLUGINS,
-      label: 'siteSettingsUnsandboxedPlugins',
-      icon: 'cr:extension',
-      enabledLabel: 'siteSettingsUnsandboxedPluginsAsk',
-      disabledLabel: 'siteSettingsUnsandboxedPluginsBlock',
     },
     {
       route: routes.SITE_SETTINGS_USB_DEVICES,
@@ -374,7 +358,6 @@ Polymer({
           permissionsAdvanced: buildItemListFromIds([
             Id.SENSORS,
             Id.AUTOMATIC_DOWNLOADS,
-            Id.UNSANDBOXED_PLUGINS,
             Id.PROTOCOL_HANDLERS,
             Id.MIDI_DEVICES,
             Id.USB_DEVICES,
@@ -394,7 +377,6 @@ Polymer({
           contentBasic: buildItemListFromIds([
             Id.COOKIES,
             Id.JAVASCRIPT,
-            Id.PLUGINS,
             Id.IMAGES,
             Id.POPUPS,
           ]),

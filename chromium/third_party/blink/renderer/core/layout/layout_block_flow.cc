@@ -533,9 +533,6 @@ void LayoutBlockFlow::UpdateBlockLayout(bool relayout_children) {
 
   UpdateAfterLayout();
 
-  if (IsA<HTMLDialogElement>(GetNode()) && IsOutOfFlowPositioned())
-    PositionDialog();
-
   ClearNeedsLayout();
   is_self_collapsing_ = CheckIfIsSelfCollapsingBlock();
 }
@@ -690,9 +687,13 @@ void LayoutBlockFlow::DetermineLogicalLeftPositionForChild(LayoutBox& child) {
   NOT_DESTROYED();
   LayoutUnit start_position = BorderStart() + PaddingStart();
   LayoutUnit initial_start_position = start_position;
-  start_position -= LogicalLeftScrollbarWidth();
   LayoutUnit total_available_logical_width =
       BorderAndPaddingLogicalWidth() + AvailableLogicalWidth();
+
+  if (ShouldPlaceBlockDirectionScrollbarOnLogicalLeft())
+    start_position -= LogicalLeftScrollbarWidth();
+  else
+    start_position += LogicalLeftScrollbarWidth();
 
   LayoutUnit child_margin_start = MarginStartForChild(child);
   LayoutUnit new_position = start_position + child_margin_start;
@@ -1069,7 +1070,7 @@ void LayoutBlockFlow::LayoutBlockChild(LayoutBox& child,
   if (child.IsLayoutMultiColumnSpannerPlaceholder()) {
     // The actual column-span:all element is positioned by this placeholder
     // child.
-    PositionSpannerDescendant(ToLayoutMultiColumnSpannerPlaceholder(child));
+    PositionSpannerDescendant(To<LayoutMultiColumnSpannerPlaceholder>(child));
   }
 }
 
@@ -1611,14 +1612,14 @@ void LayoutBlockFlow::LayoutBlockChildren(bool relayout_children,
   // should make this impossible. crbug.com/632848
   LayoutObject* first_child = FirstChild();
   CHECK(!first_child || first_child->IsBox());
-  LayoutBox* next = ToLayoutBox(first_child);
+  auto* next = To<LayoutBox>(first_child);
   LayoutBox* last_normal_flow_child = nullptr;
 
   while (next) {
     LayoutBox* child = next;
     LayoutObject* next_sibling = child->NextSibling();
     CHECK(!next_sibling || next_sibling->IsBox());
-    next = ToLayoutBox(next_sibling);
+    next = To<LayoutBox>(next_sibling);
 
     child->SetShouldCheckForPaintInvalidation();
 
@@ -1953,16 +1954,16 @@ LayoutUnit LayoutBlockFlow::CollapseMargins(
   if (logical_top < before_collapse_logical_top) {
     LayoutUnit old_logical_height = LogicalHeight();
     SetLogicalHeight(logical_top);
-    LayoutBlockFlow* previous_block_flow =
+    LayoutBlockFlow* previous_block_flow_in_fc =
         PreviousBlockFlowInFormattingContext(child);
-    while (previous_block_flow) {
-      auto lowest_float = previous_block_flow->LogicalTop() +
-                          previous_block_flow->LowestFloatLogicalBottom();
+    while (previous_block_flow_in_fc) {
+      auto lowest_float = previous_block_flow_in_fc->LogicalTop() +
+                          previous_block_flow_in_fc->LowestFloatLogicalBottom();
       if (lowest_float <= logical_top)
         break;
-      AddOverhangingFloats(previous_block_flow, false);
-      previous_block_flow =
-          PreviousBlockFlowInFormattingContext(*previous_block_flow);
+      AddOverhangingFloats(previous_block_flow_in_fc, false);
+      previous_block_flow_in_fc =
+          PreviousBlockFlowInFormattingContext(*previous_block_flow_in_fc);
     }
     SetLogicalHeight(old_logical_height);
   }
@@ -2441,7 +2442,7 @@ void LayoutBlockFlow::AddVisualOverflowFromFloats(
       continue;
 
     if (child->IsFloating()) {
-      AddVisualOverflowFromChild(ToLayoutBox(*child->GetLayoutObject()));
+      AddVisualOverflowFromChild(To<LayoutBox>(*child->GetLayoutObject()));
       continue;
     }
 
@@ -2473,13 +2474,6 @@ void LayoutBlockFlow::SetPaintFragment(
     const NGBlockBreakToken*,
     scoped_refptr<const NGPhysicalFragment>) {
   NOT_DESTROYED();
-}
-
-const NGFragmentItems* LayoutBlockFlow::FragmentItems() const {
-  NOT_DESTROYED();
-  if (const NGPhysicalBoxFragment* box_fragment = CurrentFragment())
-    return box_fragment->Items();
-  return nullptr;
 }
 
 void LayoutBlockFlow::ComputeVisualOverflow(bool recompute_floats) {
@@ -2590,14 +2584,11 @@ int LayoutBlockFlow::LineCount(
 
 LayoutUnit LayoutBlockFlow::FirstLineBoxBaseline() const {
   NOT_DESTROYED();
-  if (ShouldApplyLayoutContainment())
-    return LayoutUnit(-1);
-  // Orthogonal grid items can participante in baseline alignment along column
-  // axis.
-  if (IsWritingModeRoot() && !IsRubyRun() && !IsGridItem())
-    return LayoutUnit(-1);
   if (!ChildrenInline())
     return LayoutBlock::FirstLineBoxBaseline();
+  if (const base::Optional<LayoutUnit> baseline =
+          FirstLineBoxBaselineOverride())
+    return *baseline;
   if (FirstLineBox()) {
     const SimpleFontData* font_data = Style(true)->GetFont().PrimaryFont();
     DCHECK(font_data);
@@ -2619,7 +2610,7 @@ LayoutUnit LayoutBlockFlow::FirstLineBoxBaseline() const {
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
     if (const NGPaintFragment* paint_fragment = PaintFragment()) {
       NGBoxFragment box_fragment(
-          StyleRef().GetWritingMode(), StyleRef().Direction(),
+          StyleRef().GetWritingDirection(),
           To<NGPhysicalBoxFragment>(paint_fragment->PhysicalFragment()));
       if (const base::Optional<LayoutUnit> baseline = box_fragment.Baseline())
         return *baseline;
@@ -2632,16 +2623,11 @@ LayoutUnit LayoutBlockFlow::FirstLineBoxBaseline() const {
 LayoutUnit LayoutBlockFlow::InlineBlockBaseline(
     LineDirectionMode line_direction) const {
   NOT_DESTROYED();
-  if (UseLogicalBottomMarginEdgeForInlineBlockBaseline()) {
-    // We are not calling baselinePosition here because the caller should add
-    // the margin-top/margin-right, not us.
-    return line_direction == kHorizontalLine ? Size().Height() + MarginBottom()
-                                             : Size().Width() + MarginLeft();
-  }
-  if (IsWritingModeRoot() && !IsRubyRun())
-    return LayoutUnit(-1);
   if (!ChildrenInline())
     return LayoutBlock::InlineBlockBaseline(line_direction);
+  if (const base::Optional<LayoutUnit> baseline =
+          InlineBlockBaselineOverride(line_direction))
+    return *baseline;
   if (LastLineBox()) {
     const SimpleFontData* font_data =
         Style(LastLineBox() == FirstLineBox())->GetFont().PrimaryFont();
@@ -2965,9 +2951,8 @@ void LayoutBlockFlow::UpdateBlockChildDirtyBitsBeforeLayout(
     bool relayout_children,
     LayoutBox& child) {
   NOT_DESTROYED();
-  if (child.IsLayoutMultiColumnSpannerPlaceholder())
-    ToLayoutMultiColumnSpannerPlaceholder(child)
-        .MarkForLayoutIfObjectInFlowThreadNeedsLayout();
+  if (auto* placeholder = DynamicTo<LayoutMultiColumnSpannerPlaceholder>(child))
+    placeholder->MarkForLayoutIfObjectInFlowThreadNeedsLayout();
   LayoutBlock::UpdateBlockChildDirtyBitsBeforeLayout(relayout_children, child);
 }
 
@@ -2993,8 +2978,9 @@ void LayoutBlockFlow::SetStaticInlinePositionForChild(
 LayoutInline* LayoutBlockFlow::InlineElementContinuation() const {
   NOT_DESTROYED();
   LayoutBoxModelObject* continuation = Continuation();
-  return continuation && continuation->IsInline() ? ToLayoutInline(continuation)
-                                                  : nullptr;
+  return continuation && continuation->IsInline()
+             ? To<LayoutInline>(continuation)
+             : nullptr;
 }
 
 void LayoutBlockFlow::AddChild(LayoutObject* new_child,
@@ -3166,7 +3152,7 @@ void LayoutBlockFlow::RemoveChild(LayoutObject* old_child) {
         // |this|'s next continuation.
         LayoutBoxModelObject* next_continuation = Continuation();
         if (curr->IsLayoutInline())
-          ToLayoutInline(curr)->SetContinuation(next_continuation);
+          To<LayoutInline>(curr)->SetContinuation(next_continuation);
         else if (auto* curr_block_flow = DynamicTo<LayoutBlockFlow>(curr))
           curr_block_flow->SetContinuation(next_continuation);
         else
@@ -4202,7 +4188,7 @@ PhysicalOffset LayoutBlockFlow::AccumulateRelativePositionOffsets() const {
   for (const LayoutObject* p = InlineElementContinuation();
        p && p->IsLayoutInline(); p = p->Parent()) {
     if (p->IsInFlowPositioned())
-      offset += ToLayoutInline(p)->RelativePositionOffset();
+      offset += To<LayoutInline>(p)->RelativePositionOffset();
   }
   return offset;
 }
@@ -4552,14 +4538,6 @@ LayoutBlockFlow::LayoutBlockFlowRareData& LayoutBlockFlow::EnsureRareData() {
   return *rare_data_;
 }
 
-void LayoutBlockFlow::PositionDialog() {
-  NOT_DESTROYED();
-  base::Optional<LayoutUnit> y =
-      ComputeAbsoluteDialogYPosition(*this, Size().Height());
-  if (y.has_value())
-    SetY(y.value());
-}
-
 void LayoutBlockFlow::SimplifiedNormalFlowInlineLayout() {
   NOT_DESTROYED();
   DCHECK(ChildrenInline());
@@ -4570,8 +4548,8 @@ void LayoutBlockFlow::SimplifiedNormalFlowInlineLayout() {
     if (!o->IsOutOfFlowPositioned() &&
         (o->IsAtomicInlineLevel() || o->IsFloating())) {
       o->LayoutIfNeeded();
-      if (ToLayoutBox(o)->InlineBoxWrapper()) {
-        RootInlineBox& box = ToLayoutBox(o)->InlineBoxWrapper()->Root();
+      if (To<LayoutBox>(o)->InlineBoxWrapper()) {
+        RootInlineBox& box = To<LayoutBox>(o)->InlineBoxWrapper()->Root();
         line_boxes.insert(&box);
       }
     } else if (o->IsText() ||
@@ -4636,7 +4614,7 @@ void LayoutBlockFlow::RecalcInlineChildrenVisualOverflow() {
       RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
     for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
       if (const NGFragmentItems* items = fragment.Items()) {
-        NGInlineCursor cursor(*items);
+        NGInlineCursor cursor(fragment, *items);
         NGFragmentItem::RecalcInkOverflowForCursor(&cursor);
       }
       // Even if this turned out to be an inline formatting context with
@@ -4803,21 +4781,21 @@ PositionWithAffinity LayoutBlockFlow::PositionForPoint(
 
     if (closest_box->GetLineLayoutItem().IsAtomicInlineLevel()) {
       // We want to pass the original point other than a corrected one.
-      LayoutPoint point(point_in_logical_contents);
+      LayoutPoint adjusted_point(point_in_logical_contents);
       if (!IsHorizontalWritingMode())
-        point = point.TransposedPoint();
+        adjusted_point = adjusted_point.TransposedPoint();
       return PositionForPointRespectingEditingBoundaries(
           LineLayoutBox(closest_box->GetLineLayoutItem()),
-          FlipForWritingMode(point));
+          FlipForWritingMode(adjusted_point));
     }
 
     // pass the box a top position that is inside it
-    LayoutPoint point(point_in_logical_contents.X(),
-                      closest_box->Root().BlockDirectionPointInLine());
+    LayoutPoint adjusted_point(point_in_logical_contents.X(),
+                               closest_box->Root().BlockDirectionPointInLine());
     if (!IsHorizontalWritingMode())
-      point = point.TransposedPoint();
+      adjusted_point = adjusted_point.TransposedPoint();
     return closest_box->GetLineLayoutItem().PositionForPoint(
-        FlipForWritingMode(point));
+        FlipForWritingMode(adjusted_point));
   }
 
   if (last_root_box_with_children) {
@@ -4885,7 +4863,7 @@ void LayoutBlockFlow::AddOutlineRects(
     // FIXME: This is wrong for vertical writing-modes.
     // https://bugs.webkit.org/show_bug.cgi?id=46781
     bool prev_inline_has_line_box =
-        ToLayoutInline(inline_element_continuation->ContinuationRoot())
+        To<LayoutInline>(inline_element_continuation->ContinuationRoot())
             ->FirstLineBox();
     LayoutUnit top_margin =
         prev_inline_has_line_box ? CollapsedMarginBefore() : LayoutUnit();
@@ -4926,8 +4904,7 @@ void LayoutBlockFlow::AddOutlineRects(
     }
   }
 
-  if (const LayoutInline* inline_element_continuation =
-          InlineElementContinuation()) {
+  if (inline_element_continuation) {
     inline_element_continuation->AddOutlineRects(
         rects,
         additional_offset + (inline_element_continuation->ContainingBlock()

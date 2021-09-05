@@ -9,12 +9,14 @@
 #include <set>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/containers/flat_set.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_list_sorter.h"
@@ -226,9 +228,9 @@ InsecureCredentialsManager::InsecureCredentialsManager(
       account_store_(std::move(account_store)),
       compromised_credentials_reader_(profile_store_.get(),
                                       account_store_.get()) {
-  observed_compromised_credentials_reader_.Add(
+  observed_compromised_credentials_reader_.Observe(
       &compromised_credentials_reader_);
-  observed_saved_password_presenter_.Add(presenter_);
+  observed_saved_password_presenter_.Observe(presenter_);
 }
 
 InsecureCredentialsManager::~InsecureCredentialsManager() = default;
@@ -237,13 +239,15 @@ void InsecureCredentialsManager::Init() {
   compromised_credentials_reader_.Init();
 }
 
-void InsecureCredentialsManager::StartWeakCheck() {
+void InsecureCredentialsManager::StartWeakCheck(
+    base::OnceClosure on_check_done) {
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&BulkWeakCheck,
                      ExtractPasswords(presenter_->GetSavedPasswords())),
       base::BindOnce(&InsecureCredentialsManager::OnWeakCheckDone,
-                     weak_ptr_factory_.GetWeakPtr(), base::ElapsedTimer()));
+                     weak_ptr_factory_.GetWeakPtr(), base::ElapsedTimer())
+          .Then(std::move(on_check_done)));
 }
 
 void InsecureCredentialsManager::SaveCompromisedCredential(
@@ -338,16 +342,19 @@ void InsecureCredentialsManager::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void InsecureCredentialsManager::OnWeakCheckDone(
-    base::ElapsedTimer timer_since_weak_check_start,
-    base::flat_set<base::string16> weak_passwords) {
-  weak_passwords_ = std::move(weak_passwords);
-
+void InsecureCredentialsManager::UpdateInsecureCredentials() {
   credentials_to_forms_ = JoinInsecureCredentialsWithSavedPasswords(
       compromised_credentials_, weak_passwords_,
       presenter_->GetSavedPasswords());
+}
+
+void InsecureCredentialsManager::OnWeakCheckDone(
+    base::ElapsedTimer timer_since_weak_check_start,
+    base::flat_set<base::string16> weak_passwords) {
   base::UmaHistogramTimes("PasswordManager.WeakCheck.Time",
                           timer_since_weak_check_start.Elapsed());
+  weak_passwords_ = std::move(weak_passwords);
+  UpdateInsecureCredentials();
   NotifyWeakCredentialsChanged();
 }
 
@@ -356,11 +363,25 @@ void InsecureCredentialsManager::OnWeakCheckDone(
 void InsecureCredentialsManager::OnCompromisedCredentialsChanged(
     const std::vector<CompromisedCredentials>& compromised_credentials) {
   compromised_credentials_ = compromised_credentials;
-
-  credentials_to_forms_ = JoinInsecureCredentialsWithSavedPasswords(
-      compromised_credentials_, weak_passwords_,
-      presenter_->GetSavedPasswords());
+  UpdateInsecureCredentials();
   NotifyCompromisedCredentialsChanged();
+}
+
+void InsecureCredentialsManager::OnEdited(const PasswordForm& form) {
+  // The WeakCheck is a Desktop only feature for now. Disable on Mobile to avoid
+  // pulling in a big dependency on zxcvbn.
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  const base::string16& password = form.password_value;
+  if (weak_passwords_.contains(password) || !IsWeak(password)) {
+    // Either the password is already known to be weak, or it is not weak at
+    // all. In both cases there is nothing to do.
+    return;
+  }
+
+  weak_passwords_.insert(password);
+  UpdateInsecureCredentials();
+  NotifyWeakCredentialsChanged();
+#endif
 }
 
 // Re-computes the list of insecure credentials with passwords after obtaining a

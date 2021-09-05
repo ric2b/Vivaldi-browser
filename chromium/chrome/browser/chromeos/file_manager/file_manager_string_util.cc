@@ -4,11 +4,20 @@
 
 #include "chrome/browser/chromeos/file_manager/file_manager_string_util.h"
 
+#include "ash/public/cpp/ash_features.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/crostini/crostini_features.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_features.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
+#include "components/arc/arc_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -28,6 +37,10 @@ const char kGoogleDriveOverviewUrl[] =
 // Location of Google Drive specific help.
 const char kGoogleDriveHelpUrl[] =
     "https://support.google.com/chromebook/?p=filemanager_drivehelp";
+
+// Location of the help page about making Google Drive files available offline.
+const char kGoogleDriveOfflineHelpUrl[] =
+    "http://support.google.com/chromebook/?p=offline_files";
 
 // Location of Google Drive root.
 const char kGoogleDriveRootUrl[] = "https://drive.google.com";
@@ -426,6 +439,7 @@ std::unique_ptr<base::DictionaryValue> GetFileManagerStrings() {
              IDS_FILE_BROWSER_ADD_NEW_SERVICES_BUTTON_LABEL);
   SET_STRING("ALL_FILES_FILTER", IDS_FILE_BROWSER_ALL_FILES_FILTER);
   SET_STRING("ARCHIVE_MOUNT_FAILED", IDS_FILE_BROWSER_ARCHIVE_MOUNT_FAILED);
+  SET_STRING("ARCHIVE_MOUNT_MESSAGE", IDS_FILE_BROWSER_ARCHIVE_MOUNT_MESSAGE);
   SET_STRING("CALCULATING_SIZE", IDS_FILE_BROWSER_CALCULATING_SIZE);
   SET_STRING("CAMERA_DIRECTORY_LABEL", IDS_FILE_BROWSER_CAMERA_DIRECTORY_LABEL);
   SET_STRING("CANCEL_ACTIVITY_LABEL", IDS_FILE_BROWSER_CANCEL_ACTIVITY_LABEL);
@@ -735,6 +749,11 @@ std::unique_ptr<base::DictionaryValue> GetFileManagerStrings() {
   SET_STRING("OFFLINE_HEADER", IDS_FILE_BROWSER_OFFLINE_HEADER);
   SET_STRING("OFFLINE_MESSAGE", IDS_FILE_BROWSER_OFFLINE_MESSAGE);
   SET_STRING("OFFLINE_MESSAGE_PLURAL", IDS_FILE_BROWSER_OFFLINE_MESSAGE_PLURAL);
+  SET_STRING("OFFLINE_BANNER_MESSAGE", IDS_FILE_BROWSER_OFFLINE_BANNER_MESSAGE);
+  SET_STRING("OFFLINE_PROGRESS_MESSAGE",
+             IDS_FILE_BROWSER_OFFLINE_PROGRESS_MESSAGE);
+  SET_STRING("OFFLINE_PROGRESS_MESSAGE_PLURAL",
+             IDS_FILE_BROWSER_OFFLINE_PROGRESS_MESSAGE_PLURAL);
   SET_STRING("OK_LABEL", IDS_FILE_BROWSER_OK_LABEL);
   SET_STRING("ONE_DIRECTORY_SELECTED", IDS_FILE_BROWSER_ONE_DIRECTORY_SELECTED);
   SET_STRING("ONE_FILE_SELECTED", IDS_FILE_BROWSER_ONE_FILE_SELECTED);
@@ -936,6 +955,10 @@ std::unique_ptr<base::DictionaryValue> GetFileManagerStrings() {
   SET_STRING("TRANSFER_PROGRESS_SUMMARY",
              IDS_FILE_BROWSER_TRANSFER_PROGRESS_SUMMARY);
   SET_STRING("TYPE_COLUMN_LABEL", IDS_FILE_BROWSER_TYPE_COLUMN_LABEL);
+  SET_STRING("UNDO_DELETE_ACTION_LABEL",
+             IDS_FILE_BROWSER_UNDO_DELETE_ACTION_LABEL);
+  SET_STRING("UNDO_DELETE_ONE", IDS_FILE_BROWSER_UNDO_DELETE_ONE);
+  SET_STRING("UNDO_DELETE_SOME", IDS_FILE_BROWSER_UNDO_DELETE_SOME);
   SET_STRING("UNKNOWN_FILESYSTEM_WARNING",
              IDS_FILE_BROWSER_UNKNOWN_FILESYSTEM_WARNING);
   SET_STRING("UNMOUNT_DEVICE_BUTTON_LABEL",
@@ -980,6 +1003,7 @@ std::unique_ptr<base::DictionaryValue> GetFileManagerStrings() {
       "GOOGLE_DRIVE_ERROR_HELP_URL",
       base::StringPrintf(kHelpURLFormat, kGoogleDriveErrorHelpNumber));
   dict->SetString("GOOGLE_DRIVE_HELP_URL", kGoogleDriveHelpUrl);
+  dict->SetString("GOOGLE_DRIVE_OFFLINE_HELP_URL", kGoogleDriveOfflineHelpUrl);
   dict->SetString("GOOGLE_DRIVE_OVERVIEW_URL", kGoogleDriveOverviewUrl);
   dict->SetString("GOOGLE_DRIVE_ROOT_URL", kGoogleDriveRootUrl);
   dict->SetString(
@@ -990,4 +1014,57 @@ std::unique_ptr<base::DictionaryValue> GetFileManagerStrings() {
                                  dict.get());
 
   return dict;
+}
+
+void AddFileManagerFeatureStrings(const std::string& locale,
+                                  Profile* profile,
+                                  base::DictionaryValue* dict) {
+  DCHECK(profile);
+
+  dict->SetBoolean("HIDE_SPACE_INFO",
+                   chromeos::DemoSession::IsDeviceInDemoMode());
+  dict->SetBoolean("ARC_USB_STORAGE_UI_ENABLED",
+                   base::FeatureList::IsEnabled(arc::kUsbStorageUIFeature));
+  dict->SetBoolean("CROSTINI_ENABLED",
+                   crostini::CrostiniFeatures::Get()->IsEnabled(profile));
+  dict->SetBoolean("PLUGIN_VM_ENABLED",
+                   plugin_vm::PluginVmFeatures::Get()->IsEnabled(profile));
+  dict->SetBoolean(
+      "FILES_CAMERA_FOLDER_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kFilesCameraFolder));
+  dict->SetBoolean("FILES_NG_ENABLED",
+                   base::FeatureList::IsEnabled(chromeos::features::kFilesNG));
+  dict->SetBoolean("COPY_IMAGE_ENABLED",
+                   base::FeatureList::IsEnabled(
+                       chromeos::features::kEnableFilesAppCopyImage));
+  dict->SetBoolean(
+      "UNIFIED_MEDIA_VIEW_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kUnifiedMediaView));
+  dict->SetBoolean(
+      "FILES_TRANSFER_DETAILS_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kFilesTransferDetails));
+  dict->SetBoolean("FILES_TRASH_ENABLED", base::FeatureList::IsEnabled(
+                                              chromeos::features::kFilesTrash));
+  dict->SetBoolean("ZIP_MOUNT", base::FeatureList::IsEnabled(
+                                    chromeos::features::kFilesZipMount));
+  dict->SetBoolean("ZIP_PACK", base::FeatureList::IsEnabled(
+                                   chromeos::features::kFilesZipPack));
+  dict->SetBoolean("ZIP_UNPACK", base::FeatureList::IsEnabled(
+                                     chromeos::features::kFilesZipUnpack));
+  dict->SetBoolean(
+      "DRIVE_DSS_PIN_ENABLED",
+      base::FeatureList::IsEnabled(
+          chromeos::features::kDriveFsBidirectionalNativeMessaging));
+  dict->SetBoolean("SHARESHEET_ENABLED",
+                   base::FeatureList::IsEnabled(features::kSharesheet));
+  dict->SetBoolean(
+      "FILTERS_IN_RECENTS_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kFiltersInRecents));
+  dict->SetBoolean("HOLDING_SPACE_ENABLED",
+                   ash::features::IsTemporaryHoldingSpaceEnabled());
+  dict->SetBoolean("FILES_SINGLE_PARTITION_FORMAT_ENABLED",
+                   base::FeatureList::IsEnabled(
+                       chromeos::features::kFilesSinglePartitionFormat));
+
+  dict->SetString("UI_LOCALE", locale);
 }

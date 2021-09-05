@@ -29,6 +29,7 @@
 #include "net/base/network_isolation_key.h"
 #include "net/base/privacy_mode.h"
 #include "net/base/url_util.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
@@ -71,12 +72,6 @@ const size_t kMaxReadersPerQuicSession = 5;
 const size_t kWaitTimeForNewNetworkSecs = 10;
 
 const size_t kMinRetryTimeForDefaultNetworkSecs = 1;
-
-// Default value for maximum number of consecutive pings that can be sent
-// with aggressive initial retransmittable on wire timeout if there is no new
-// data received. After which, the timeout will be exponentially back off until
-// exceeds the default ping timeout.
-const int kDefaultMaxAggressiveRetransmittableOnWirePingCount = 200;
 
 // Maximum RTT time for this session when set initial timeout for probing
 // network.
@@ -132,6 +127,10 @@ void RecordConnectionCloseErrorCodeImpl(const std::string& histogram,
                                error);
     }
   }
+}
+
+void LogMigrateToSocketStatus(bool success) {
+  UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.MigrateToSocketSuccess", success);
 }
 
 void RecordConnectionCloseErrorCode(const quic::QuicConnectionCloseFrame& frame,
@@ -297,12 +296,13 @@ base::Value NetLogQuicClientSessionParams(
 }
 
 base::Value NetLogQuicPushPromiseReceivedParams(
-    const spdy::SpdyHeaderBlock* headers,
+    const spdy::Http2HeaderBlock* headers,
     spdy::SpdyStreamId stream_id,
     spdy::SpdyStreamId promised_stream_id,
     NetLogCaptureMode capture_mode) {
   base::DictionaryValue dict;
-  dict.SetKey("headers", ElideSpdyHeaderBlockForNetLog(*headers, capture_mode));
+  dict.SetKey("headers",
+              ElideHttp2HeaderBlockForNetLog(*headers, capture_mode));
   dict.SetInteger("id", stream_id);
   dict.SetInteger("promised_stream_id", promised_stream_id);
   return std::move(dict);
@@ -473,7 +473,7 @@ bool QuicChromiumClientSession::Handle::SharesSameSession(
 }
 
 int QuicChromiumClientSession::Handle::RendezvousWithPromised(
-    const spdy::SpdyHeaderBlock& headers,
+    const spdy::Http2HeaderBlock& headers,
     CompletionOnceCallback callback) {
   if (!session_)
     return ERR_CONNECTION_CLOSED;
@@ -581,9 +581,9 @@ bool QuicChromiumClientSession::Handle::WasEverUsed() const {
 }
 
 bool QuicChromiumClientSession::Handle::CheckVary(
-    const spdy::SpdyHeaderBlock& client_request,
-    const spdy::SpdyHeaderBlock& promise_request,
-    const spdy::SpdyHeaderBlock& promise_response) {
+    const spdy::Http2HeaderBlock& client_request,
+    const spdy::Http2HeaderBlock& promise_request,
+    const spdy::Http2HeaderBlock& promise_response) {
   HttpRequestInfo promise_request_info;
   ConvertHeaderBlockToHttpRequestHeaders(promise_request,
                                          &promise_request_info.extra_headers);
@@ -864,6 +864,8 @@ QuicChromiumClientSession::QuicChromiumClientSession(
       max_allowed_push_id_(max_allowed_push_id),
       attempted_zero_rtt_(false),
       num_pings_sent_(0),
+      num_migrations_(0),
+      last_key_update_reason_(quic::KeyUpdateReason::kInvalid),
       push_promise_index_(std::move(push_promise_index)) {
   // Make sure connection migration and goaway on path degrading are not turned
   // on at the same time.
@@ -904,13 +906,6 @@ QuicChromiumClientSession::QuicChromiumClientSession(
   if (!retransmittable_on_wire_timeout.IsZero()) {
     connection->set_initial_retransmittable_on_wire_timeout(
         retransmittable_on_wire_timeout);
-    if (GetQuicFlag(
-            FLAGS_quic_max_aggressive_retransmittable_on_wire_ping_count) ==
-        0) {
-      // Set a default value for this flag if no custom value is provided.
-      SetQuicFlag(FLAGS_quic_max_aggressive_retransmittable_on_wire_ping_count,
-                  kDefaultMaxAggressiveRetransmittableOnWirePingCount);
-    }
   }
 }
 
@@ -1046,7 +1041,7 @@ void QuicChromiumClientSession::Initialize() {
 
 size_t QuicChromiumClientSession::WriteHeadersOnHeadersStream(
     quic::QuicStreamId id,
-    spdy::SpdyHeaderBlock headers,
+    spdy::Http2HeaderBlock headers,
     bool fin,
     const spdy::SpdyStreamPrecedence& precedence,
     quic::QuicReferenceCountedPointer<quic::QuicAckListenerInterface>
@@ -1299,7 +1294,8 @@ bool QuicChromiumClientSession::GetSSLInfo(SSLInfo* ssl_info) const {
   ssl_info->pinning_failure_log = pinning_failure_log_;
   ssl_info->is_fatal_cert_error = is_fatal_cert_error_;
 
-  ssl_info->UpdateCertificateTransparencyInfo(*ct_verify_result_);
+  ssl_info->signed_certificate_timestamps = cert_verify_result_->scts;
+  ssl_info->ct_policy_compliance = cert_verify_result_->policy_compliance;
 
   const auto& crypto_params = crypto_stream_->crypto_negotiated_params();
   uint16_t cipher_suite;
@@ -1685,7 +1681,7 @@ void QuicChromiumClientSession::OnCryptoHandshakeMessageReceived(
     UMA_HISTOGRAM_CUSTOM_COUNTS("Net.QuicSession.RejectLength",
                                 message.GetSerialized().length(), 1000, 10000,
                                 50);
-    quiche::QuicheStringPiece proof;
+    absl::string_view proof;
     UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.RejectHasProof",
                           message.GetStringPiece(quic::kPROF, &proof));
   }
@@ -1873,6 +1869,62 @@ void QuicChromiumClientSession::OnConnectionClosed(
     UMA_HISTOGRAM_LONG_TIMES_100(
         "Net.QuicSession.ConnectionDuration",
         tick_clock_->NowTicks() - connect_timing_.connect_end);
+    UMA_HISTOGRAM_COUNTS_100("Net.QuicSession.NumMigrations", num_migrations_);
+    // These values are persisted to logs. Entries should not be renumbered
+    // and numeric values should never be reused.
+    enum class KeyUpdateSupported {
+      kInvalid = 0,
+      kUnsupported = 1,
+      kSupported = 2,
+      kSupportedLocallyOnly = 3,
+      kSupportedRemotelyOnly = 4,
+      kMaxValue = kSupportedRemotelyOnly,
+    };
+    KeyUpdateSupported key_update_supported = KeyUpdateSupported::kInvalid;
+    if (config()->KeyUpdateSupportedForConnection()) {
+      key_update_supported = KeyUpdateSupported::kSupported;
+    } else if (config()->KeyUpdateSupportedLocally()) {
+      key_update_supported = KeyUpdateSupported::kSupportedLocallyOnly;
+    } else if (config()->KeyUpdateSupportedRemotely()) {
+      key_update_supported = KeyUpdateSupported::kSupportedRemotelyOnly;
+    } else {
+      key_update_supported = KeyUpdateSupported::kUnsupported;
+    }
+    base::UmaHistogramEnumeration("Net.QuicSession.KeyUpdate.Supported",
+                                  key_update_supported);
+    if (config()->KeyUpdateSupportedForConnection()) {
+      base::UmaHistogramCounts100("Net.QuicSession.KeyUpdate.PerConnection2",
+                                  connection()->GetStats().key_update_count);
+      base::UmaHistogramCounts100(
+          "Net.QuicSession.KeyUpdate.PotentialPeerKeyUpdateAttemptCount",
+          connection()->PotentialPeerKeyUpdateAttemptCount());
+      if (last_key_update_reason_ != quic::KeyUpdateReason::kInvalid) {
+        std::string suffix =
+            last_key_update_reason_ == quic::KeyUpdateReason::kRemote ? "Remote"
+                                                                      : "Local";
+        // These values are persisted to logs. Entries should not be renumbered
+        // and numeric values should never be reused.
+        enum class KeyUpdateSuccess {
+          kInvalid = 0,
+          kSuccess = 1,
+          kFailedInitial = 2,
+          kFailedNonInitial = 3,
+          kMaxValue = kFailedNonInitial,
+        };
+        KeyUpdateSuccess value = KeyUpdateSuccess::kInvalid;
+        if (connection()->HaveSentPacketsInCurrentKeyPhaseButNoneAcked()) {
+          if (connection()->GetStats().key_update_count >= 2) {
+            value = KeyUpdateSuccess::kFailedNonInitial;
+          } else {
+            value = KeyUpdateSuccess::kFailedInitial;
+          }
+        } else {
+          value = KeyUpdateSuccess::kSuccess;
+        }
+        base::UmaHistogramEnumeration(
+            "Net.QuicSession.KeyUpdate.Success." + suffix, value);
+      }
+    }
   } else {
     if (error == quic::QUIC_PUBLIC_RESET) {
       RecordHandshakeFailureReason(HANDSHAKE_FAILURE_PUBLIC_RESET);
@@ -1892,6 +1944,9 @@ void QuicChromiumClientSession::OnConnectionClosed(
         connection()->GetStats().crypto_retransmit_count);
   }
 
+  base::UmaHistogramCounts1M(
+      "Net.QuicSession.UndecryptablePacketsReceivedWithDecrypter",
+      connection()->GetStats().num_failed_authentication_packets_received);
   base::UmaHistogramSparse("Net.QuicSession.QuicVersion",
                            connection()->transport_version());
   NotifyFactoryOfSessionGoingAway();
@@ -2176,10 +2231,13 @@ void QuicChromiumClientSession::OnProbeSucceeded(
   // be acquired by connection and used as default on success.
   if (!MigrateToSocket(std::move(socket), std::move(reader),
                        std::move(writer))) {
+    LogMigrateToSocketStatus(false);
     net_log_.AddEvent(
         NetLogEventType::QUIC_CONNECTION_MIGRATION_FAILURE_AFTER_PROBING);
     return;
   }
+
+  LogMigrateToSocketStatus(true);
 
   // Notify the connection that migration succeeds after probing.
   if (connection()->IsPathDegrading())
@@ -2188,6 +2246,7 @@ void QuicChromiumClientSession::OnProbeSucceeded(
   net_log_.AddEventWithInt64Params(
       NetLogEventType::QUIC_CONNECTION_MIGRATION_SUCCESS_AFTER_PROBING,
       "migrate_to_network", network);
+  num_migrations_++;
   HistogramAndLogMigrationSuccess(connection_id());
   if (network == default_network_) {
     DVLOG(1) << "Client successfully migrated to default network: "
@@ -2496,6 +2555,16 @@ void QuicChromiumClientSession::OnForwardProgressMadeAfterPathDegrading() {
     observer.OnSessionResumedPostPathDegrading(this, current_network);
 }
 
+void QuicChromiumClientSession::OnKeyUpdate(quic::KeyUpdateReason reason) {
+  net_log_.AddEventWithStringParams(NetLogEventType::QUIC_SESSION_KEY_UPDATE,
+                                    "reason",
+                                    quic::KeyUpdateReasonString(reason));
+
+  base::UmaHistogramEnumeration("Net.QuicSession.KeyUpdate.Reason", reason);
+
+  last_key_update_reason_ = reason;
+}
+
 void QuicChromiumClientSession::OnProofValid(
     const quic::QuicCryptoClientConfig::CachedState& cached) {
   DCHECK(cached.proof_valid());
@@ -2523,9 +2592,6 @@ void QuicChromiumClientSession::OnProofVerifyDetailsAvailable(
   cert_verify_result_.reset(
       new CertVerifyResult(verify_details_chromium->cert_verify_result));
   pinning_failure_log_ = verify_details_chromium->pinning_failure_log;
-  std::unique_ptr<ct::CTVerifyResult> ct_verify_result_copy(
-      new ct::CTVerifyResult(verify_details_chromium->ct_verify_result));
-  ct_verify_result_ = std::move(ct_verify_result_copy);
   logger_->OnCertificateVerified(*cert_verify_result_);
   pkp_bypassed_ = verify_details_chromium->pkp_bypassed;
   is_fatal_cert_error_ = verify_details_chromium->is_fatal_cert_error;
@@ -3317,7 +3383,7 @@ bool QuicChromiumClientSession::IsAuthorized(const std::string& hostname) {
 bool QuicChromiumClientSession::HandlePromised(
     quic::QuicStreamId id,
     quic::QuicStreamId promised_id,
-    const spdy::SpdyHeaderBlock& headers) {
+    const spdy::Http2HeaderBlock& headers) {
   bool result =
       quic::QuicSpdyClientSessionBase::HandlePromised(id, promised_id, headers);
   if (result) {

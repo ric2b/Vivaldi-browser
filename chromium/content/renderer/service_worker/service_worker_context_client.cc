@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
@@ -29,9 +29,7 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/worker_thread.h"
-#include "content/renderer/loader/child_url_loader_factory_bundle.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
-#include "content/renderer/loader/web_url_request_util.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/service_worker/embedded_worker_instance_client_impl.h"
 #include "content/renderer/service_worker/navigation_preload_request.h"
@@ -51,6 +49,7 @@
 #include "third_party/blink/public/mojom/service_worker/service_worker_client.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/platform/child_url_loader_factory_bundle.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_error.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/url_conversion.h"
@@ -95,7 +94,7 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
     const GURL& service_worker_scope,
     const GURL& script_url,
     bool is_starting_installed_worker,
-    blink::mojom::RendererPreferencesPtr renderer_preferences,
+    const blink::RendererPreferences& renderer_preferences,
     mojo::PendingReceiver<blink::mojom::ServiceWorker> service_worker_receiver,
     mojo::PendingReceiver<blink::mojom::ControllerServiceWorker>
         controller_receiver,
@@ -118,7 +117,7 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
       script_url_(script_url),
       is_starting_installed_worker_(is_starting_installed_worker),
       script_url_to_skip_throttling_(script_url_to_skip_throttling),
-      renderer_preferences_(std::move(renderer_preferences)),
+      renderer_preferences_(renderer_preferences),
       preference_watcher_receiver_(std::move(preference_watcher_receiver)),
       initiator_thread_task_runner_(std::move(initiator_thread_task_runner)),
       proxy_(nullptr),
@@ -153,8 +152,8 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
                        base::Unretained(this)));
   }
 
-  loader_factories_ = base::MakeRefCounted<ChildURLLoaderFactoryBundle>(
-      std::make_unique<ChildPendingURLLoaderFactoryBundle>(
+  loader_factories_ = base::MakeRefCounted<blink::ChildURLLoaderFactoryBundle>(
+      std::make_unique<blink::ChildPendingURLLoaderFactoryBundle>(
           std::move(subresource_loaders)));
 
   service_worker_provider_info_ = std::move(provider_info);
@@ -378,7 +377,7 @@ ServiceWorkerContextClient::CreateWorkerFetchContextOnInitiatorThread() {
           service_worker_provider_info_->script_loader_factory_remote));
 
   return base::MakeRefCounted<ServiceWorkerFetchContextImpl>(
-      *renderer_preferences_, script_url_, loader_factories_->PassInterface(),
+      renderer_preferences_, script_url_, loader_factories_->PassInterface(),
       std::move(pending_script_loader_factory), script_url_to_skip_throttling_,
       GetContentClient()->renderer()->CreateURLLoaderThrottleProvider(
           URLLoaderThrottleProviderType::kWorker),

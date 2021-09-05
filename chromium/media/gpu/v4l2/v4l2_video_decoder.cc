@@ -113,12 +113,19 @@ V4L2VideoDecoder::~V4L2VideoDecoder() {
 }
 
 void V4L2VideoDecoder::Initialize(const VideoDecoderConfig& config,
+                                  CdmContext* cdm_context,
                                   InitCB init_cb,
                                   const OutputCB& output_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
   DCHECK(config.IsValidConfig());
   DCHECK(state_ == State::kUninitialized || state_ == State::kDecoding);
   DVLOGF(3);
+
+  if (cdm_context || config.is_encrypted()) {
+    VLOGF(1) << "V4L2 decoder does not support encrypted stream";
+    std::move(init_cb).Run(StatusCode::kEncryptedContentUnsupported);
+    return;
+  }
 
   // Reset V4L2 device and queue if reinitializing decoder.
   if (state_ != State::kUninitialized) {
@@ -340,7 +347,8 @@ bool V4L2VideoDecoder::SetupOutputFormat(const gfx::Size& size,
   if (pool) {
     base::Optional<GpuBufferLayout> layout = pool->Initialize(
         fourcc, adjusted_size, visible_rect,
-        GetNaturalSize(visible_rect, pixel_aspect_ratio_), num_output_frames_);
+        GetNaturalSize(visible_rect, pixel_aspect_ratio_), num_output_frames_,
+        /*use_protected=*/false);
     if (!layout) {
       VLOGF(1) << "Failed to setup format to VFPool";
       return false;
@@ -681,7 +689,8 @@ void V4L2VideoDecoder::SetState(State new_state) {
   }
 
   if (new_state == State::kError) {
-    VLOGF(1) << "Error occurred.";
+    VLOGF(1) << "Error occurred, stopping queues.";
+    StopStreamV4L2Queue(true);
     if (backend_)
       backend_->ClearPendingRequests(DecodeStatus::DECODE_ERROR);
     return;

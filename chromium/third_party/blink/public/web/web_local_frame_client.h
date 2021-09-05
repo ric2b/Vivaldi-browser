@@ -56,6 +56,7 @@
 #include "third_party/blink/public/platform/blame_context.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_provider.h"
+#include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
@@ -116,6 +117,7 @@ class WebString;
 class WebURL;
 class WebURLResponse;
 struct FramePolicy;
+struct MobileFriendliness;
 struct WebConsoleMessage;
 struct WebContextMenuData;
 struct WebPluginParams;
@@ -184,6 +186,13 @@ class BLINK_EXPORT WebLocalFrameClient {
   // May return null.
   virtual std::unique_ptr<WebPrescientNetworking> CreatePrescientNetworking() {
     return nullptr;
+  }
+
+  // Create a notifier used to notify loading stats for this frame.
+  virtual std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+  CreateResourceLoadInfoNotifierWrapper() {
+    return std::make_unique<blink::ResourceLoadInfoNotifierWrapper>(
+        /*resource_load_info_notifier=*/nullptr);
   }
 
   // Services ------------------------------------------------------------
@@ -370,7 +379,7 @@ class BLINK_EXPORT WebLocalFrameClient {
 
   // Like |didFinishDocumentLoad|, except this method may run JavaScript
   // code (and possibly invalidate the frame).
-  virtual void RunScriptsAtDocumentReady(bool document_is_empty) {}
+  virtual void RunScriptsAtDocumentReady() {}
 
   // The frame's window.onload event is ready to fire. This method may delay
   // window.onload by incrementing LoadEventDelayCount.
@@ -388,6 +397,9 @@ class BLINK_EXPORT WebLocalFrameClient {
   virtual void DidFinishSameDocumentNavigation(const WebHistoryItem&,
                                                WebHistoryCommitType,
                                                bool content_initiated) {}
+
+  // Called when a RenderFrame's page lifecycle state gets updated.
+  virtual void DidSetPageLifecycleState() {}
 
   // Called upon update to scroll position, document state, and other
   // non-navigational events related to the data held by WebHistoryItem.
@@ -481,10 +493,6 @@ class BLINK_EXPORT WebLocalFrameClient {
   // Blink exhibited a certain loading behavior that the browser process will
   // use for segregated histograms.
   virtual void DidObserveLoadingBehavior(LoadingBehaviorFlag) {}
-  // Blink UseCounter should only track feature usage for non NTP activities.
-  // ShouldTrackUseCounter checks the url of a page's main frame is not a new
-  // tab page url.
-  virtual bool ShouldTrackUseCounter(const WebURL&) { return true; }
 
   // Blink hits the code path for a certain web feature for the first time on
   // this frame. As a performance optimization, features already hit on other
@@ -697,11 +705,24 @@ class BLINK_EXPORT WebLocalFrameClient {
   // compositor (thread) and submitted to the display compositor.
   virtual void DidCommitAndDrawCompositorFrame() {}
 
+  // Notification that MobileFriendliness metrics changed.
+  virtual void DidChangeMobileFriendliness(const MobileFriendliness&) {}
+
   // Inform the widget that it was hidden.
   virtual void WasHidden() {}
 
   // Inform the widget that it was shown.
   virtual void WasShown() {}
+
+  // Called after a navigation which set the shared memory region for
+  // tracking smoothness via UKM.
+  virtual void SetUpSharedMemoryForSmoothness(
+      base::ReadOnlySharedMemoryRegion shared_memory) {}
+
+  // Returns the last commited URL used for UKM. This is slightly different
+  // than the document's URL because it will contain a data URL if a base URL
+  // was used for its load or if an unreachable URL was used.
+  virtual WebURL LastCommittedUrlForUKM() { return WebURL(); }
 };
 
 }  // namespace blink

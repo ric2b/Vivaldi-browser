@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/system_media_controls/linux/buildflags/buildflags.h"
 
 namespace switches {
@@ -191,14 +192,6 @@ const char kOverrideHardwareSecureCodecsForTesting[] =
 const char kEnableLiveCaptionPrefForTesting[] =
     "enable-live-caption-pref-for-testing";
 
-#if defined(OS_CHROMEOS)
-// ChromeOS uses one of two VideoDecoder implementations based on SoC/board
-// specific configurations that are signalled via this command line flag.
-// TODO(b/159825227): remove when the "old" video decoder is fully launched.
-const char kPlatformDisallowsChromeOSDirectVideoDecoder[] =
-    "platform-disallows-chromeos-direct-video-decoder";
-#endif
-
 namespace autoplay {
 
 // Autoplay policy that requires a document user activation.
@@ -326,11 +319,6 @@ const base::Feature kD3D11VideoDecoderIgnoreWorkarounds{
 const base::Feature kD3D11VideoDecoderVP9Profile2{
     "D3D11VideoDecoderEnableVP9Profile2", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable D3D11VideoDecoder to copy pictures based on workarounds, rather
-// than binding them.
-const base::Feature kD3D11VideoDecoderCopyPictures{
-    "D3D11VideoDecoderCopyPictures", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Tell D3D11VideoDecoder not to switch the D3D11 device to multi-threaded mode.
 // This is to help us track down IGD crashes.
 const base::Feature kD3D11VideoDecoderSkipMultithreaded{
@@ -360,8 +348,8 @@ const base::Feature kGav1VideoDecoder{"Gav1VideoDecoder",
 // Show toolbar button that opens dialog for controlling media sessions.
 const base::Feature kGlobalMediaControls {
   "GlobalMediaControls",
-#if defined(OS_WIN) || defined(OS_MAC) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
+    BUILDFLAG(IS_LACROS)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -381,6 +369,19 @@ const base::Feature kGlobalMediaControlsForCast{
 const base::Feature kGlobalMediaControlsForChromeOS{
     "GlobalMediaControlsForChromeOS", base::FEATURE_DISABLED_BY_DEFAULT};
 
+constexpr base::FeatureParam<kCrosGlobalMediaControlsPinOptions>::Option
+    kCrosGlobalMediaControlsParamOptions[] = {
+        {kCrosGlobalMediaControlsPinOptions::kPin, "default-pinned"},
+        {kCrosGlobalMediaControlsPinOptions::kNotPin, "default-unpinned"},
+        {kCrosGlobalMediaControlsPinOptions::kHeuristic, "heuristic"}};
+
+constexpr base::FeatureParam<kCrosGlobalMediaControlsPinOptions>
+    kCrosGlobalMediaControlsPinParam(
+        &kGlobalMediaControlsForChromeOS,
+        "CrosGlobalMediaControlsPinParam",
+        kCrosGlobalMediaControlsPinOptions::kHeuristic,
+        &kCrosGlobalMediaControlsParamOptions);
+
 // Allow global media controls notifications to be dragged out into overlay
 // notifications. It is no-op if kGlobalMediaControls is not enabled.
 const base::Feature kGlobalMediaControlsOverlayControls{
@@ -389,8 +390,8 @@ const base::Feature kGlobalMediaControlsOverlayControls{
 // Show picture-in-picture button in Global Media Controls.
 const base::Feature kGlobalMediaControlsPictureInPicture {
   "GlobalMediaControlsPictureInPicture",
-#if defined(OS_WIN) || defined(OS_MAC) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
+    BUILDFLAG(IS_LACROS)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -427,6 +428,10 @@ const base::Feature kUseR16Texture{"use-r16-texture",
 const base::Feature kUnifiedAutoplay{"UnifiedAutoplay",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enable VA-API hardware decode acceleration for AV1.
+const base::Feature kVaapiAV1Decoder{"VaapiAV1Decoder",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enable VA-API hardware low power encoder for all codecs on intel Gen9x gpu.
 const base::Feature kVaapiLowPowerEncoderGen9x{
     "VaapiLowPowerEncoderGen9x", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -439,11 +444,11 @@ const base::Feature kVaapiVP8Encoder{"VaapiVP8Encoder",
 const base::Feature kVaapiVP9Encoder{"VaapiVP9Encoder",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
-#if defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
+#if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_ASH)
 // Enable VP9 k-SVC decoding with HW decoder for webrtc use case on ChromeOS.
 const base::Feature kVp9kSVCHWDecoding{"Vp9kSVCHWDecoding",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
-#endif  //  defined(ARCH_CPU_X86_FAMILY) && defined(OS_CHROMEOS)
+#endif  // defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_ASH)
 
 // Inform video blitter of video color space.
 const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
@@ -497,7 +502,7 @@ const base::Feature kWidevineAv1ForceSupportForTesting{
 // Enables handling of hardware media keys for controlling media.
 const base::Feature kHardwareMediaKeyHandling {
   "HardwareMediaKeyHandling",
-#if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MAC) || \
+#if BUILDFLAG(IS_ASH) || defined(OS_WIN) || defined(OS_MAC) || \
     BUILDFLAG(USE_MPRIS)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -603,13 +608,9 @@ const base::Feature kUseAudioLatencyFromHAL{"UseAudioLatencyFromHAL",
 // the GPU main thread during VideoFrame construction.
 const base::Feature kUsePooledSharedImageVideoProvider{
     "UsePooledSharedImageVideoProvider", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Used to enable/disable zero copy video path on webview for MCVD.
-const base::Feature kWebViewZeroCopyVideo{"WebViewZeroCopyVideo",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
 
-#if defined(OS_CHROMEOS) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#if BUILDFLAG(IS_ASH) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 // Enable the hardware-accelerated direct video decoder instead of the one
 // needing the VdaVideoDecoder adapter. This flag is used mainly as a
 // chrome:flag for developers debugging issues. TODO(b/159825227): remove when
@@ -624,7 +625,7 @@ const base::Feature kUseChromeOSDirectVideoDecoder{
 const base::Feature kUseAlternateVideoDecoderImplementation{
     "UseAlternateVideoDecoderImplementation",
     base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_CHROMEOS) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#endif  // BUILDFLAG(IS_ASH) && BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 #if defined(OS_WIN)
 // Does NV12->NV12 video copy on the main thread right before the texture's
@@ -675,7 +676,7 @@ const base::Feature MEDIA_EXPORT kAVFoundationCaptureV2{
 // Controls whether or not the V2 capturer exports IOSurfaces for zero-copy.
 // This feature only has any effect if kAVFoundationCaptureV2 is also enabled.
 const base::Feature MEDIA_EXPORT kAVFoundationCaptureV2ZeroCopy{
-    "AVFoundationCaptureV2ZeroCopy", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AVFoundationCaptureV2ZeroCopy", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature MEDIA_EXPORT kVideoToolboxVp9Decoding{
     "VideoToolboxVp9Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -740,10 +741,6 @@ const base::Feature kMediaFeedsBackgroundFetching{
 const base::Feature kMediaFeedsSafeSearch{"MediaFeedsSafeSearch",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Send events to devtools rather than to chrome://media-internals
-const base::Feature kMediaInspectorLogging{"MediaInspectorLogging",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Enables experimental local learning for media. Used in the context of media
 // capabilities only. Adds reporting only; does not change media behavior.
 const base::Feature kMediaLearningExperiment{"MediaLearningExperiment",
@@ -772,7 +769,7 @@ const base::Feature kMediaPowerExperiment{"MediaPowerExperiment",
 // has audio focus enabled.
 const base::Feature kAudioFocusDuckFlash {
   "AudioFocusDuckFlash",
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -827,7 +824,7 @@ bool IsVideoCaptureAcceleratedJpegDecodingEnabled() {
           switches::kUseFakeMjpegDecodeAccelerator)) {
     return true;
   }
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   return true;
 #endif
   return false;

@@ -213,7 +213,7 @@
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_MIRROR_PHONE_NOTIFICATIONS" desc="Tell the user that Better Together can automatically mirror notifications from their phone to their Chromebook.">
     Mirror notifications from your phone
   </message>
-  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_WIFI_SYNC" desc="Description of a feature that syncs Wi-Fi network configurations between Chrome OS devices and a connected Android phone" translateable="false">
+  <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_WIFI_SYNC" desc="Description of a feature that syncs Wi-Fi network configurations between Chrome OS devices and a connected Android phone">
     Sync Wi-Fi networks with your phone
   </message>
   <message name="IDS_MULTIDEVICE_SETUP_START_SETUP_PAGE_INSTALL_APPS_DESCRIPTION" desc="Tell the user that Better Together can automatically install apps on their Chromebook">
@@ -264,6 +264,9 @@
   <message name="IDS_CELLULAR_SETUP_NEXT_LABEL" desc="Label for button that advances to next step during cellular setup">
     Next
   </message>
+  <message name="IDS_CELLULAR_SETUP_SKIP_DISCOVERY_LABEL" desc="Label for button that skips the multiple profile selection step and sets up a new profile during eSIM cellular setup">
+    Skip &amp; Set up new profile
+  </message>
   <message name="IDS_CELLULAR_SETUP_ESIM_PAGE_ACTIVATION_CODE" desc="Label for activation code input box">
     Activation code
   </message>
@@ -312,8 +315,23 @@
   <message name="IDS_CELLULAR_SETUP_CELLULAR_SETUP_PAGE_ESIM_MESSAGE" desc="Message for electronic SIM (eSIM) setup flow card radio select button during cellular setup, informing the user to establish an internet connection before proceeding.">
     Establish an internet connection first
   </message>
+  <message name="IDS_CELLULAR_SETUP_PROFILE_LIST_PAGE_MESSAGE" desc="Label informing the user that they are able to select multiple eSIM profiles for downloading.">
+    We've found multiple profiles available to download. Select the ones you would like to download before proceeding.
+  </message>
   <message name="IDS_CELLULAR_SETUP_ESIM_PAGE_SCAN_QR_CODE" desc="Label for informing the user on ways to retrieve an eSim profile">
-    Scan QR code using device camera or enter activation code provided by your carrier
+    Scan QR code using device camera or enter activation code provided by your carrier.
+  </message>
+  <message name="IDS_CELLULAR_SETUP_ESIM_PAGE_USE_CAMERA" desc="Label for button that uses the camera to scan for QR codes when clicked.">
+    Use camera to scan QR code
+  </message>
+  <message name="IDS_CELLULAR_SETUP_ESIM_PAGE_SWITCH_CAMERA" desc="Label for button that toggles the camera between user-facing and environment-facing.">
+    Flip camera
+  </message>
+  <message name="IDS_CELLULAR_SETUP_ESIM_PAGE_SCAN_QR_CODE_SUCCESS" desc="Label informing the user that an an activation code was scanned successfully.">
+    Activation code detected
+  </message>
+  <message name="IDS_CELLULAR_SETUP_ESIM_PAGE_SCAN_QR_CODE_RETRY" desc="Label for button that uses the camera to rescan for QR codes when clicked.">
+    use camera again
   </message>
   <message name="IDS_CELLULAR_SETUP_ESTABLISH_NETWORK_CONNECTION" desc="Message, informing user that a network connection is being established during cellular setup">
     Establishing network connection ...
@@ -484,6 +502,9 @@
   </message>
   <message name="IDS_REMORA_CONFIRM_MESSAGE" desc="Remora confirm message on the first OOBE screen">
     Your Hangouts Meet hardware is ready to be set up.
+  </message>
+  <message name="IDS_OOBE_GENERIC_FATAL_ERROR_TITLE" desc="A generic title to be shown during OOBE to be used in error screens.">
+    Something went wrong
   </message>
   <message name="IDS_WELCOME_SCREEN_GREETING" desc="Greeting message on the OOBE welcome screen">
     Welcome!
@@ -772,22 +793,34 @@
     Set up this device for work or personal use
   </message>
   <message name="IDS_OOBE_USER_CREATION_CHILD_BUTTON_LABEL" desc="The label of the button that leads to set up device for child.">
-    Your child
+    A child
   </message>
   <message name="IDS_OOBE_USER_CREATION_CHILD_BUTTON_DESCRIPTION" desc="The description of the button that leads to set up device for child.">
-    Set digital ground rules to help your child learn, play, and explore
+    Set digital ground rules to help children play, explore and do schoolwork at home
   </message>
   <message name="IDS_OOBE_USER_CREATION_CHILD_SIGNIN_TITLE" desc="Title of the screen which allows users to choose signin method for child.">
-    Set up this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> for your child
+    Set up this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> for a child
   </message>
   <message name="IDS_OOBE_USER_CREATION_CHILD_SIGNIN_SUBTITLE" desc="Subtitle of the screen which allows users to choose signin method for child.">
-    To set up parental controls, your child must have a Google Account that you'll help manage. You can set screen time limits, approve or block websites, and more with the Family Link app.
+    To set up parental controls, a child must have a Google Account managed by a parent. <ph name="DEVICE_TYPE_PLURAL">$1<ex>Chromebooks</ex></ph> allow parents to set up screen limits, approve or block websites, and do more with the Family Link app. If the child needs to do schoolwork on sites like Google Classroom, a school account can be added later.
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_SIGNIN_LEARN_MORE" desc="Learn more link text in child account creation screen.">
+    Learn more
   </message>
   <message name="IDS_OOBE_USER_CREATION_CHILD_ACCOUNT_CREATION_BUTTON_LABEL" desc="The label of the button that leads to child account creation.">
-    Create a Google Account for your child
+    Create a Google Account for a child
   </message>
   <message name="IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_BUTTON_LABEL" desc="The label of the button that leads to child sign in using existing account.">
-    Sign in with your child's Google Account
+    Sign in with a child's Google Account
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_PARENT_NOTIFICATION_TEXT" desc="Text displayed to parent on child account creation screen.">
+    Parents, the next few steps are for you. You can hand the <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> back to the child after account setup.
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_LEARN_MORE_DIALOG_TITLE" desc="Title of the learn more dialog on child account creation screen.">
+    Add a school account later
+  </message>
+  <message name="IDS_OOBE_USER_CREATION_CHILD_SIGN_IN_LEARN_MORE_DIALOG_TEXT" desc="Text of the learn more dialog on child account creation screen.">
+    Parental controls are not supported for school accounts. To add a school account to access Google Classroom and other websites for schoolwork at home, sign in with the child's personal account first. You can add the school account later in setup.
   </message>
 
    <!-- Strings for the OOBE demo setup flow -->
@@ -939,6 +972,17 @@
     Please retry. If you see this error again please contact your support representative.
   </message>
 
+  <!-- Strings for parental handoff login screen -->
+  <message name="IDS_LOGIN_PARENTAL_HANDOFF_SCREEN_TITLE" desc="Title of screen which tells user that the parent can handoff the device to supervised user.">
+    Now it's <ph name="SUPERVISED_USER_NAME">$1<ex>Child 1</ex></ph>'s turn
+  </message>
+  <message name="IDS_LOGIN_PARENTAL_HANDOFF_SCREEN_SUBTITLE" desc="Subtitle of screen which tells user that the parent can handoff the device to supervised user.">
+    You can hand this Chromebook to <ph name="SUPERVISED_USER_NAME">$1<ex>Child 1</ex></ph>. Setup is almost done, then it's time to explore.
+  </message>
+  <message name="IDS_LOGIN_PARENTAL_HANDOFF_SCREEN_NEXT_BUTTON" desc="Next button of parental handoff screen">
+    Next
+  </message>
+
   <!-- Strings for family link notice screen -->
   <message name="IDS_LOGIN_FAMILY_LINK_NOTICE_SCREEN_TITLE" desc="Title of the screen which tells user they can add parental control later.">
     Add parental controls after setup
@@ -1081,24 +1125,6 @@
   </message>
   <message name="IDS_DISABLED_ADD_USER_TOOLTIP_ENTERPRISE" desc="Tooltip over disabled Add user button">
     The administrator of this device has disabled new users from being added
-  </message>
-  <message name="IDS_DISCOVER_WELCOME_TITLE" desc="A title of the dialog that starts initial device setup process.">
-    Welcome to your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>!
-  </message>
-  <message name="IDS_DISCOVER_WELCOME_SUBTITLE" desc="A subtitle title of the dialog that starts initial device setup process, explaining the benefits of going through this process.">
-    Set up your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> just as you want it and discover all the amazing capabilities at your fingertips.
-  </message>
-  <message name="IDS_DISCOVER_REDEEM_YOUR_OFFERS" desc="A label on the button that leads to the new web page where happy owner of the new device can redeem exclusive Google offers.">
-    Redeem your offers
-  </message>
-  <message name="IDS_DISCOVER_SYNC_MY_FILES" desc="A label on the button that leads to the new web page where owner of the new device can sync their data with other devices.">
-    Sync my files
-  </message>
-  <message name="IDS_DISCOVER_SET_WALLPAPER" desc="A label on the button that leads to the new web page where owner of the new device can set their desktop wallpaper.">
-    Set Wallpaper
-  </message>
-  <message name="IDS_DISCOVER_GET_HELP" desc="A label on the button that opens Help App.">
-    Get Help
   </message>
   <message name="IDS_DISCOVER_PIN_SETUP_TITLE1" desc="A title of the dialog that starts 'PIN-unlock' setup process, and asks user to type their pin.">
     Choose your PIN
@@ -1620,8 +1646,8 @@
   <message name="IDS_ONC_IPV4_GATEWAY" desc="ONC Property label for ipv4-Gateway">
     Gateway
   </message>
-  <message name="IDS_ONC_IPV4_ROUTING_PREFIX" desc="ONC Property label for ipv4-RoutingPrefix">
-    Routing prefix
+  <message name="IDS_ONC_IPV4_NETMASK" desc="ONC Property label for ipv4-netmask">
+    Subnet mask
   </message>
   <message name="IDS_ONC_IPV6_ADDRESS" desc="ONC Property label for ipv6-Address">
     IPv6 address
@@ -1761,17 +1787,29 @@
   <message name="IDS_ONC_EAP_USER_CERT" desc="ONC Property label for EAP User Certs">
     User certificate
   </message>
-  <message name="IDS_ONC_NOT_CONNECTED" desc="Settings > Internet, text in network summary when a network is not connecting or connected.">
-    Not Connected
-  </message>
   <message name="IDS_ONC_MAC_ADDRESS" desc="ONC Property label for MacAddress">
     MAC address
   </message>
   <message name="IDS_ONC_NAME" desc="ONC Property label for the network Name (displayed when configuring a VPN service name)">
     Service name
   </message>
-  <message name="IDS_ONC_RESTRICTED_CONNECTIVITY" desc="ONC Property label for RestrictedConnectivity">
-    Restricted IP
+  <message name="IDS_ONC_NOT_CONNECTED" desc="Settings > Internet, text in network summary when a network is not connecting or connected.">
+    Not Connected
+  </message>
+  <message name="IDS_ONC_PORTAL_STATE" desc="Settings > Internet, label in network details page for the captive portal state.">
+    Portal State
+  </message>
+  <message name="IDS_ONC_PORTAL_STATE_NO_INTERNET" desc="Settings > Internet, text in network details page when no internet connection is avialable.">
+    No internet
+  </message>
+  <message name="IDS_ONC_PORTAL_STATE_PORTAL" desc="Settings > Internet, text in network details page when a portal state was detected.">
+    Captive portal detected
+  </message>
+  <message name="IDS_ONC_PORTAL_STATE_PORTAL_SUSPECTED" desc="Settings > Internet, text in network details page when a portal state is suspected.">
+    Captive portal suspected
+  </message>
+  <message name="IDS_ONC_PORTAL_STATE_PROXY_AUTH" desc="Settings > Internet, text in network details page when a portal state was detected.">
+    Proxy authentication required
   </message>
   <message name="IDS_ONC_TETHER_BATTERY_PERCENTAGE" desc="Settings > Internet > Title of section which displays the battery percentage of another device which provides a tether hotspot for the current device to connect to.">
     Battery
@@ -2265,13 +2303,13 @@
     OK
   </message>
   <message name="IDS_RESET_SCREEN_WARNING_MSG" desc="Warning text shown on reset screen above the exclamation icon.">
-    Reset this <ph name="IDS_SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph> device
+    Reset this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
   </message>
   <message name="IDS_RESET_SCREEN_WARNING_POWERWASH_MSG" desc="Warning text shown on reset screen below the exclamation icon.">
-    Powerwash to reset your <ph name="IDS_SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph> device to be just like new.
+    Powerwash to reset your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> to be just like new.
   </message>
   <message name="IDS_RESET_SCREEN_WARNING_POWERWASH_AND_ROLLBACK_MSG" desc="Warning text shown on reset screen below the exclamation icon.">
-    Powerwash your <ph name="IDS_SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph> device and return to the previous version.
+    Powerwash your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> and return to the previous version.
   </message>
   <message name="IDS_RESET_SCREEN_WARNING_DETAILS_DATA" desc="Additional warning text shown on reset screen below the main warning.">
     All user accounts and local data will be removed.
@@ -2626,9 +2664,6 @@
   </message>
   <message name="IDS_LOGIN_ERROR_AUTHENTICATING_2ND_TIME" desc="Couldn't sign in because password is invalid for the 2nd time">
     Sorry, your password still could not be verified. Note: if you changed your password recently, your new password will be applied once you sign out, please use the old password here.
-  </message>
-  <message name="IDS_LOGIN_ERROR_AUTHENTICATING_2ND_TIME_SUPERVISED" desc="Supervised user couldn't sign in because password is invalid for the 2nd time">
-    Sorry, your password could not be verified. The manager of this supervised user may have changed the password recently. If so, the new password will be applied the next time you sign in. Try using your old password.
   </message>
   <message name="IDS_LOGIN_ERROR_AUTHENTICATING_NEW" desc="Couldn't sign in because username or password invalid">
     Sorry, your email or password could not be verified. Please try again.
@@ -2991,6 +3026,24 @@
   <message name="IDS_UPDATE_REQUIRED_EOL_ADMIN_MESSAGE" desc="The title of the message on the update required dialog on the login screen showing return instructions from the device administrator as the device has reached its end of life.">
     Instructions from your device administrator:
   </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_MESSAGE" desc="The message on the update required dialog on the login screen to inform the user that the data for all users on this device can be deleted by clicking on the included link.">
+    To delete all data from this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>, <ph name="BEGIN_LINK">&lt;a id="deleteDataLink"&gt;</ph>click here<ph name="END_LINK">&lt;/a&gt;</ph>.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_NO_USERS_DATA_MESSAGE" desc="The message on the update required dialog on the login screen to inform the user that the device has no user data.">
+    All files and local data for all users on this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has been permanently deleted.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_POPUP_MESSAGE" desc="The message on the confirmational popup over the update required dialog on the login screen asking the user to confirm that all users data on this device should be deleted.">
+    All files and local data for all users on this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will be permanently deleted.
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_POPUP_TITLE" desc="The title of the confirmational pop on top the update required dialog on the login screen asking the user to confirm that all users data on this device should be deleted.">
+    Delete all data?
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_CONFIRM" desc="The label for the confirm button on the confirmational pop-up on top of update required dialog on the login screen.">
+    Delete
+  </message>
+  <message name="IDS_UPDATE_REQUIRED_EOL_DELETE_USERS_DATA_CANCEL" desc="The label for the cancel button on the confirmational pop-up on top of update required dialog on the login screen.">
+    Cancel
+  </message>
 
   <!-- Update Required Notification Strings-->
   <message name="IDS_UPDATE_REQUIRED_NETWORK_LIMITATION_TITLE_DAYS" desc="The title of the notification dialog informing the user that the device is not connected to a network suitable for downloading updates and an update is required within one or more days.">
@@ -3035,9 +3088,6 @@
   <!-- Genius App -->
   <message name="IDS_GENIUS_APP_NAME" desc="Name of the genius app in the app shelf">
     Get Help
-  </message>
-  <message name="IDS_GENIUS_APP_DESCRIPTION" desc="Description of the genius app in the app shelf">
-    Get help with your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
   <message name="IDS_FILEMANAGER_APP_NAME" desc="Name for the File Manager app.">
     Files
@@ -3348,6 +3398,9 @@
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED" desc="Error message to show when the user tries to enroll a device, but administrator has not accepted TOS.">
     Your administrator must first accept the terms of service in the Admin console Chrome device list.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE" desc="Error message to show when the user tries to enroll a CBEdu device into non-EDU account.">
+    You must enroll this Chrome Education device into an education account. To sign up for a new account, please visit g.co/workspace/edusignup.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTE_ERROR" desc="Error message shown when successfully enrolled, but the device attribute update has failed.">
     Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> has successfully been enrolled for enterprise management, but failed to send its asset and location information. Please manually enter this information from your Admin console for this device.
@@ -3724,99 +3777,6 @@
   <message name="IDS_NETWORK_HEALTH_STATE_ONLINE" desc="Network State - Online. This state is when a network device is connected to a network and can access the internet.">
     Online
   </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_LAN_CONNECTIVITY" desc="Label for Network diagnostics `LAN connectivity` test. This test determines if the device is connected to a Local Area Network (LAN)">
-    Lan Connectivity
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SIGNAL_STRENGTH" desc="Label for Network diagnostics `signal strength` test. This test ensures that a WiFi signal is strong enough for a stable connection.">
-    Signal Strength
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_GATEWAY_CAN_BE_PINGED" desc="Label for Network diagnostics `gateway can be pinged` test. This test ensures that there is a connection to the network gateway.">
-    Gateway can be Pinged
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_HAS_SECURE_WIFI_CONNECTION" desc="Label for Network diagnostics `has secure WiFi connection` test. This test ensures that the WiFi connection is properly secure.">
-    Secure WiFi Connection
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLVER_PRESENT" desc="Label for Network diagnostics `DNS resolver present` test. This test ensures that the Domain Name Service (DNS) exists.">
-    DNS Resolver Present
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_LATENCY" desc="Label for Network diagnostics `DNS latency` test. This test makes sure the latency between the device and the Domain Name Server (DNS) is acceptable.">
-    DNS Latency
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLUTION" desc="Label for Network diagnostics `DNS resolution` test. This test ensures that the Domain Name Server (DNS) can resolve network requests.">
-    DNS Resolution
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_PASSED" desc="Label shown when a Network diagnostics routine passed">
-    Passed
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_FAILED" desc="Label shown when a Network diagnostics routine failed">
-    Failed
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_NOT_RUN" desc="Label shown when a Network diagnostics routine did not run">
-    Not Run
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_RUN" desc="Label for Network diagnostics run routine button">
-    Run
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_RUN_ALL" desc="Label for Network diagnostics run all routines button">
-    Run All Routines
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SEND_FEEDBACK" desc="Label for Network diagnostics send feedback report button">
-    Send Feedback Report
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SIGNAL_STRENGTH_PROBLEM_NOT_FOUND" desc="Error message shown when a WiFi signal could not be detected">
-    Signal not found
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SIGNAL_STRENGTH_PROBLEM_WEAK" desc="Error message shown when a only a weak WiFi signal could be detected">
-    Weak signal
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_GATEWAY_CAN_BE_PINGED_PROBLEM_UNREACHABLE" desc="Error message shown when a network gateway is not reachable">
-    Gateway is unreachable
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_GATEWAY_CAN_BE_PINGED_PROBLEM_PING_DEFAULT_FAILED" desc="Error message shown when the default network gateway cannot be pinged">
-    Failed to ping the default network gateway
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_GATEWAY_CAN_BE_PINGED_PROBLEM_DEFAULT_ABOVE_LATENCY" desc="Error message shown when the latency of the default network gateway is too high">
-    Default network above latency threshold
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_GATEWAY_CAN_BE_PINGED_PROBLEM_PING_NON_DEFAULT_FAILED" desc="Error message shown when the non-default network gateway cannot be pinged">
-    Failed to ping the non-default network gateway
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_GATEWAY_CAN_BE_PINGED_PROBLEM_NON_DEFAULT_ABOVE_LATENCY" desc="Error message shown when the latency of the non-default network gateway is too high">
-    Non-default network above latency threshold
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SECURE_WIFI_PROBLEM_NOT_SECURE" desc="Error message shown when the current WiFi network is not secure">
-    WiFi network is not secure
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SECURE_WIFI_PROBLEM_WEP_8021x" desc="Error message shown when the current WiFi network is secured with the weak protocol WEP 802.1x">
-    WiFi network is secured with weak protocol WEP 802.1x
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SECURE_WIFI_PROBLEM_WEP_PSK" desc="Error message shown when the current WiFi network is secured with the weak protocol WEP PSK">
-    WiFi network is secured with weak protocol WEP PSK
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_SECURE_WIFI_PROBLEM_UNKNOWN" desc="Error message shown when the current WiFi network is secured with an unknown protocol">
-    Unknown WiFi security protocol
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLVER_PROBLEM_NO_NAME_SERVERS" desc="Error message shown when the no domain name servers (DNS) are found">
-    No name servers found
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLVER_PROBLEM_MALFORMED_NAME_SERVERS" desc="Error message shown when the domain name servers (DNS) are malformed">
-    Malformed name servers
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLVER_PROBLEM_EMPTY_NAME_SERVERS" desc="Error message shown when the domain name servers (DNS) are empty">
-    Empty name servers
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_LATENCY_PROBLEM_FAILED_TO_RESOLVE_ALL_HOSTS" desc="Error message shown when the domain name servers (DNS) failed to resolve all hosts">
-    Failed to resolve all hosts
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_LATENCY_PROBLEM_SLIGHTLY_ABOVE_THRESHOLD" desc="Error message shown when the latency for the domain name server (DNS) is slightly above an allowable threshold">
-    DNS latency slightly above allowable threshold
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_LATENCY_PROBLEM_SIGNIFICANTLY_ABOVE_THRESHOLD" desc="Error message shown when the latency for the domain name server (DNS) is significantly above an allowable threshold">
-    DNS latency significantly above allowable threshold
-  </message>
-  <message name="IDS_NETWORK_DIAGNOSTICS_DNS_RESOLUTION_PROBLEM_FAILED_TO_RESOLVE_HOST" desc="Error message shown when the domain name server (DNS) failed to resolve a host">
-    Failed to resolve host
-  </message>
 
   <!-- Set time/date UI display strings -->
   <message name="IDS_SET_TIME_TITLE" desc="Title of the set time/date UI.">
@@ -4165,8 +4125,11 @@
   <message name="IDS_ARC_SIGN_IN_CLOUD_PROVISION_FLOW_TRANSIENT_ERROR" desc="Android transient sign-in error because of cloud provision flow failed">
     Something went wrong. Please try again or contact your device owner or administrator. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
   </message>
+  <message name="IDS_ARC_LOW_DISK_SPACE_ERROR" desc="Android sign-in failed due to low disk space">
+    Disk space is critically low. Please free up disk space.
+  </message>
   <message name="IDS_ARC_SIGN_IN_UNKNOWN_ERROR" desc="Android sign-in error because of unknown error">
-    Something went wrong
+    Something went wrong. Error code: <ph name="ERROR_CODE">$1<ex>7</ex></ph>.
   </message>
   <message name="IDS_ARC_SERVER_COMMUNICATION_ERROR" desc="Android sign-in error because of server communication error">
     Couldn’t connect with the server. Please check your network connection and try again. If the problem persists, restart your Chromebook.
@@ -4314,6 +4277,18 @@
   </message>
   <message name="IDS_ASSISTANT_READY_SCREEN_MESSAGE" desc="Message for Assistant ready screen.">
     When your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is set up, press the Assistant button or say "Ok Google" to get help anytime. Go to Assistant settings to make changes.
+  </message>
+  <message name="IDS_ASSISTANT_RELATED_INFO_SCREEN_TITLE" desc="Title for assistant related info screen.">
+    Just say or type what you need
+  </message>
+  <message name="IDS_ASSISTANT_RELATED_INFO_SCREEN_MESSAGE" desc="Message for assistant related info screen.">
+    Get better, quicker answers with Assistant
+  </message>
+  <message name="IDS_ASSISTANT_RELATED_INFO_SCREEN_RETURNED_USER_TITLE" desc="Title for assistant related info screen for returned users.">
+    Your Google Assistant works here too
+  </message>
+  <message name="IDS_ASSISTANT_RELATED_INFO_SCREEN_RETURNED_USER_MESSAGE" desc="Message for assistant related info screen for returned users.">
+    Looks like you've already set up Assistant on a different device. Get even more out of your Assistant by turning on the following setting.
   </message>
   <message name="IDS_ASSISTANT_CONTINUE_BUTTON" desc="Continue button for asssitant optin flow.">
     Continue
@@ -4509,7 +4484,7 @@
     Screenshot taken
   </message>
   <message name="IDS_SCREENSHOT_NOTIFICATION_TITLE_DISABLED" desc="The title of the notification when taking a screenshot failed because screenshots are disabled.">
-    Screenshots disabled
+    Screenshot is blocked
   </message>
   <message name="IDS_SCREENSHOT_NOTIFICATION_TITLE_FAIL" desc="The title of the notification when taking a screenshot failed.">
     An error occurred
@@ -4518,7 +4493,7 @@
     Show in folder
   </message>
   <message name="IDS_SCREENSHOT_NOTIFICATION_TEXT_DISABLED" desc="The text of the notification when taking a screenshot failed because screenshots are disabled by administrator policy.">
-    The ability to take screenshots has been disabled by your administrator.
+    The ability to take a screenshot of the content on your screen is blocked by your administrator.
   </message>
   <message name="IDS_SCREENSHOT_NOTIFICATION_TEXT_FAIL" desc="The text of the notification when taking a screenshot failed.">
     Failed to save screenshot
@@ -4561,9 +4536,6 @@
   </message>
   <message name="IDS_INTERNAL_APP_CONTINUOUS_READING" desc="The default title of Chrome browser to allow users to seamlessly continue reading a web page when they switch from phones or tablets to Chromebook.">
     Continue reading in Chrome
-  </message>
-  <message name="IDS_INTERNAL_APP_DISCOVER" desc="Name for the Discover app in the app list.">
-    Discover
   </message>
 
   <!-- Launcher Settings shortcuts -->
@@ -5170,16 +5142,16 @@
 
   <!-- Strings for Oobe fingerprint enrollment screen -->
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_TITLE" desc="The title of the dialog that allow users to register their fingerprint.">
-    Set up your fingerprint
-  </message>
-  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_LOCATION_TITLE" desc="The title of the dialog that shows where the fingerprint sensor is.">
-    Set up your fingerprint
+    Set up your fingerprint to unlock your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> faster
   </message>
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_POWER_BUTTON_DESCRIPTION" desc="The label that explains that the fingerprint sensor is in the power button.">
     Touch the power button with your finger
   </message>
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_SENSOR_GENERAL_DESCRIPTION" desc="The label that explains the location of the fingerprint sensor on the device.">
       Touch the fingerprint sensor with your finger
+  </message>
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_FOOTER" desc="Footer message for the fingerprint setup screen">
+      Your fingerprint data is stored securely and never leaves your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
   </message>
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_PROGRESS_TITLE" desc="The title of the dialog that shows where the fingerprint sensor is.">
     Lift, then touch again
@@ -5190,14 +5162,8 @@
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_ENROLLMENT_SUCCESS_DESCRIPTION" desc="The label that shows when fingerprint enrollment is successful.">
     When you see this icon, use your fingerprint for identification or to approve purchases.
   </message>
-  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_SKIP" desc="In fingerprint setup screen, button label to skip the fingerrint setup.">
+  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_SKIP" desc="In fingerprint setup screen, button label to skip the fingerprint setup.">
     Skip
-  </message>
-  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_LATER" desc="In fingerprint setup screen, button label to skip the fingerrint setup.">
-    Do it later
-  </message>
-  <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_NEXT" desc="In fingerprint setup screen, button label to proceed to the next step.">
-    Next
   </message>
   <message name="IDS_OOBE_FINGERPINT_SETUP_SCREEN_BUTTON_DONE" desc="Fingerprint setup is done, button label to exit the setup.">
     Done
@@ -5470,6 +5436,23 @@
   <message name="IDS_PLUGIN_VM_INSUFFICIENT_DISK_SPACE_MESSAGE" desc="Error message shown if Plugin VM installation fails because there is not enough free space on the device.">
       Your device is low on storage. At least <ph name="MINIMUM_SPACE">$1<ex>16GB</ex></ph> of free space is required to use <ph name="APP_NAME">$2<ex>Plugin VM</ex></ph>. To increase free space, delete files from device.
   </message>
+  <message name="IDS_PLUGIN_VM_APP_NAME_WINDOWS_SUFFIX" desc="Application name with ' (Windows)' suffix. Do not translate 'Windows'">
+    <ph name="APP_NAME">$1<ex>Notepad</ex></ph> (Windows)
+  </message>
+
+  <!-- Strings for camera/mic permission -->
+  <message name="IDS_CAMERA_NOTIFICATION_SOURCE" desc="The name of the source of a camera notification ">
+    Camera
+  </message>
+  <message name="IDS_MIC_NOTIFICATION_SOURCE" desc="The name of the source of a mic notification ">
+    Microphone
+  </message>
+  <message name="IDS_APP_USING_CAMERA_NOTIFICATION_MESSAGE" desc="Message shown in notification when an app is using the camera">
+    <ph name="APP_NAME">$1<ex>Parallels Desktop</ex></ph> is using your camera
+  </message>
+  <message name="IDS_APP_USING_MIC_NOTIFICATION_MESSAGE" desc="Message shown in notification when an app is using the microphone">
+    <ph name="APP_NAME">$1<ex>Parallels Desktop</ex></ph> is using your microphone
+  </message>
 
   <!-- Strings for Account Manager error screen -->
   <message name="IDS_ACCOUNT_MANAGER_SECONDARY_ACCOUNTS_DISABLED_TITLE" desc="Title for the Chrome OS Account Manager error screen when addition of secondary Google Accounts is disabled.">
@@ -5695,6 +5678,20 @@
     Get highlights from the latest update
   </message>
 
+  <!-- Strings for EDU Coexistence flow -->
+  <message name="IDS_EDU_COEXISTENCE_NETWORK_DOWN_HEADING" desc="Heading string shown in the EDU Coexistence flow when the network is not available.">
+    Can’t connect to the internet
+  </message>
+  <message name="IDS_EDU_COEXISTENCE_NETWORK_DOWN_DESCRIPTION" desc="Description shown in the EDU Coexistence flow when the network is not available.">
+    Check your internet connection
+  </message>
+  <message name="IDS_EDU_COEXISTENCE_ERROR_HEADING" desc="Heading string shown in the EDU Coexistence flow when an unrecoverable error occured.">
+    An error occurred
+  </message>
+  <message name="IDS_EDU_COEXISTENCE_ERROR_DESCRIPTION" desc="Description shown in the EDU Coexistence flow when an unrecoverable error occured.">
+    Please try again later
+  </message>
+
   <!-- Strings for Add Supervision screen -->
   <message name="IDS_ADD_SUPERVISION_PAGE_TITLE" desc="Title for the Chrome OS Add Supervision screen. Since the title bar is not visible, this string is only used by screen readers.">
     Set Up Parental Controls
@@ -5851,6 +5848,15 @@ You can manage this account’s settings by installing the Family Link app on yo
   <message name="IDS_SUGGESTION_INSERTED" desc="String announced by screenreader when a suggestion is inserted.">
     Suggestion inserted
   </message>
+  <message name="IDS_SUGGESTION_AUTOCORRECT_UNDONE" desc="String announced by screenreader when an autocorrected word is reverted. Example, user types 'hllo', system autocorrects to 'hello' but then that autocorrection is manually undone by the user.">
+    correction undone
+  </message>
+  <message name="IDS_SUGGESTION_AUTOCORRECT_UNDO_BUTTON" desc="String announced by screenreader when a button to undo an autocorrect is highlighted. Example, user types 'hllo', system autocorrects to 'hello', user then prepares to revert the autocorrect.">
+    Undo autocorrect button. Revert to <ph name="TYPED_WORD">$1<ex>hllo</ex></ph>.  Press enter to activate, escape to dismiss.
+  </message>
+  <message name="IDS_SUGGESTION_AUTOCORRECT_UNDO_WINDOW_SHOWN" desc="String announced by screenreader when a button to undo an autocorrect is shown. Example, user types 'hllo', system autocorrects to 'hello', user then prepares to revert the autocorrect.">
+    Autocorrect undo dialog is shown for <ph name="TYPED_WORD">$1<ex>hllo</ex></ph> corrected to <ph name="CORRECTED_WORD">$2<ex>hello</ex></ph>.  Press up arrow to access, escape to ignore.
+  </message>
 
   <!-- Strings for Custom Tab UI -->
   <message name="IDS_CUSTOM_TABS_ACTION_MENU_ACCESSIBLE_NAME" desc="Accessible name for the overflow menu of the Chrome Custom Tab toolbar.">
@@ -5888,6 +5894,42 @@ You can manage this account’s settings by installing the Family Link app on yo
   </message>
   <message name="IDS_SYSTEM_PROXY_AUTH_REQUIRED_NOTIFICATION_ERROR_TITLE" desc="Title of notification displayed when System-proxy requires new user credentials because the previous ones were incorrect.">
     Can’t connect to proxy, please sign in again
+  </message>
+
+  <!-- Strings for Security Token Sessions -->
+  <message name="IDS_SECURITY_TOKEN_SESSION_LOGOUT_NOTIFICATION_BUTTON_TITLE" desc="This belongs to a notification that informs the user that they will be logged out in a few seconds. This string is the title of a button with which the user can log out immediately.">
+    Sign out now
+  </message>
+  <message name="IDS_SECURITY_TOKEN_SESSION_LOGOUT_NOTIFICATION_TITLE" desc="This is the title of a notification informing the user that they will be logged out soon, unless they re-insert the smart card they used to log into the session. The notification appears when they remove this smart card.">
+    Insert smart card to stay signed in
+  </message>
+  <message name="IDS_SECURITY_TOKEN_SESSION_LOGOUT_NOTIFICATION_BODY" desc="This is the text of a notification informing the user that they will be logged out soon, unless they re-insert the smart card they used to log into the session. The notification appears when they remove this smart card.">
+{0, plural,
+=1 {You will be automatically signed out in # second.
+<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to keep your smart card inserted.}
+other {You will be automatically signed out in # seconds.
+<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to keep your smart card inserted.}}
+  </message>
+  <message name="IDS_SECURITY_TOKEN_SESSION_IMMEDIATE_LOGOUT_NOTIFICATION_BODY" desc="This is the text of a notification informing the user that they will be logged out now because they removed their smart card.">
+You will be automatically signed out now.
+<ph name="DOMAIN">{0}<ex>example.com</ex></ph> requires you to keep your smart card inserted.
+  </message>
+  <message name="IDS_SECURITY_TOKEN_SESSION_LOCK_NOTIFICATION_BUTTON_TITLE" desc="This belongs to a notification that informs the user that the session will be locked in a few seconds. This string is the title of a button with which the user can lock the session immediately.">
+    Lock now
+  </message>
+  <message name="IDS_SECURITY_TOKEN_SESSION_LOCK_NOTIFICATION_TITLE" desc="This is the title of a notification informing the user that the session will be locked soon, unless they re-insert the smart card they used to log into the session. The notification appears when they remove this smart card.">
+    Insert smart card to keep using your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
+  </message>
+  <message name="IDS_SECURITY_TOKEN_SESSION_LOCK_NOTIFICATION_BODY" desc="This is the text of a notification informing the user that the session will be locked soon, unless they re-insert the smart card they used to log into the session. The notification appears when they remove this smart card.">
+{0, plural,
+=1 {Your <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> will be locked automatically in # second.
+<ph name="DOMAIN">{2}<ex>example.com</ex></ph> requires you to keep your smart card inserted.}
+other {Your <ph name="DEVICE_TYPE">{1}<ex>Chromebook</ex></ph> will be locked automatically in # seconds.
+<ph name="DOMAIN">{2}<ex>example.com</ex></ph> requires you to keep your smart card inserted.}}
+  </message>
+  <message name="IDS_SECURITY_TOKEN_SESSION_IMMEDIATE_LOCK_NOTIFICATION_BODY" desc="This is the text of a notification informing the user that the session will be locked now because they removed their smart card.">
+Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
+<ph name="DOMAIN">{1}<ex>example.com</ex></ph> requires you to keep your smart card inserted.
   </message>
 
 </grit-part>

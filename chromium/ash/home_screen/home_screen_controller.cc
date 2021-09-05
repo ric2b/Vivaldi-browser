@@ -143,37 +143,6 @@ bool HomeScreenController::GoHome(int64_t display_id) {
       SplitViewController::Get(Shell::GetPrimaryRootWindow());
   const bool split_view_active = split_view_controller->InSplitViewMode();
 
-  if (!features::IsDragFromShelfToHomeOrOverviewEnabled()) {
-    if (home_launcher_gesture_handler_->ShowHomeLauncher(
-            Shell::Get()->display_manager()->GetDisplayForId(display_id))) {
-      return true;
-    }
-
-    if (overview_controller->InOverviewSession()) {
-      // End overview mode.
-      overview_controller->EndOverview(OverviewEnterExitType::kSlideOutExit);
-      return true;
-    }
-
-    if (split_view_active) {
-      // End split view mode.
-      split_view_controller->EndSplitView(
-          SplitViewController::EndReason::kHomeLauncherPressed);
-      return true;
-    }
-
-    // The home screen opens for the current active desk, there's no need to
-    // minimize windows in the inactive desks.
-    if (MinimizeAllWindows(
-            Shell::Get()->mru_window_tracker()->BuildWindowForCycleList(
-                kActiveDesk),
-            {} /*windows_to_ignore*/)) {
-      return true;
-    }
-
-    return false;
-  }
-
   // The home screen opens for the current active desk, there's no need to
   // minimize windows in the inactive desks.
   aura::Window::Windows windows =
@@ -343,17 +312,10 @@ void HomeScreenController::OnOverviewModeStarting() {
 
   const bool animate =
       IsHomeScreenVisible() &&
-      (overview_enter_type == OverviewEnterExitType::kSlideInEnter ||
-       overview_enter_type == OverviewEnterExitType::kFadeInEnter);
-  const bool use_scale_transition =
-      overview_enter_type == OverviewEnterExitType::kFadeInEnter ||
-      (features::IsDragFromShelfToHomeOrOverviewEnabled() &&
-       overview_enter_type != OverviewEnterExitType::kSlideInEnter);
-  const HomeScreenPresenter::TransitionType transition =
-      use_scale_transition ? HomeScreenPresenter::TransitionType::kScaleHomeOut
-                           : HomeScreenPresenter::TransitionType::kSlideHomeOut;
+      overview_enter_type == OverviewEnterExitType::kFadeInEnter;
 
-  home_screen_presenter_.ScheduleOverviewModeAnimation(transition, animate);
+  home_screen_presenter_.ScheduleOverviewModeAnimation(
+      HomeScreenPresenter::TransitionType::kScaleHomeOut, animate);
 }
 
 void HomeScreenController::OnOverviewModeEnding(
@@ -390,18 +352,11 @@ void HomeScreenController::OnOverviewModeEndingAnimationComplete(
   }
 
   const bool animate =
-      *overview_exit_type_ == OverviewEnterExitType::kSlideOutExit ||
       *overview_exit_type_ == OverviewEnterExitType::kFadeOutExit;
-  const bool use_scale_transition =
-      *overview_exit_type_ == OverviewEnterExitType::kFadeOutExit ||
-      (features::IsDragFromShelfToHomeOrOverviewEnabled() &&
-       *overview_exit_type_ != OverviewEnterExitType::kSlideOutExit);
-  const HomeScreenPresenter::TransitionType transition =
-      use_scale_transition ? HomeScreenPresenter::TransitionType::kScaleHomeIn
-                           : HomeScreenPresenter::TransitionType::kSlideHomeIn;
   overview_exit_type_ = base::nullopt;
 
-  home_screen_presenter_.ScheduleOverviewModeAnimation(transition, animate);
+  home_screen_presenter_.ScheduleOverviewModeAnimation(
+      HomeScreenPresenter::TransitionType::kScaleHomeIn, animate);
 
   // Make sure the window visibility is updated, in case it was previously
   // hidden due to overview being shown.

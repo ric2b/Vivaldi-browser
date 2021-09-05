@@ -6,6 +6,7 @@ package org.chromium.weblayer_private.interfaces;
 
 import java.util.List;
 
+import org.chromium.weblayer_private.interfaces.IContextMenuParams;
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFaviconFetcher;
@@ -75,5 +76,11 @@ interface ITab {
 
   // Added in 87
   void setScrollOffsetsEnabled(in boolean enabled) = 26;
+
+  // Added in 88
+  void setFloatingActionModeOverride(in int actionModeItemTypes) = 27;
   boolean willAutomaticallyReloadAfterCrash() = 28;
+  void setDesktopUserAgentEnabled(in boolean enable) = 29;
+  boolean isDesktopUserAgentEnabled() = 30;
+  void download(in IContextMenuParams contextMenuParams) = 31;
 }

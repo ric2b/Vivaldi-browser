@@ -23,9 +23,10 @@ const base::Feature kExtensionSettingsOverriddenDialogs{
 const base::Feature kExtensionsToolbarMenu{"ExtensionsToolbarMenu",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Force enables the legacy chrome://devices page. To be removed in M88.
-const base::Feature kForceEnableDevicesPage{"ForceEnableDevicesPage",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+// Force enables legacy privet printers that are already registered in Print
+// Preview. To be removed in M90.
+const base::Feature kForceEnablePrivetPrinting{
+    "ForceEnablePrivetPrinting", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the new profile picker.
 // https:://crbug.com/1063856
@@ -37,30 +38,26 @@ const base::Feature kNewProfilePicker{"NewProfilePicker",
 const base::Feature kNewTabstripAnimation{"NewTabstripAnimation",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables an experimental permission prompt that uses a chip in the location
-// bar.
-const base::Feature kPermissionChip{"PermissionChip",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables a more prominent active tab title in dark mode to aid with
 // accessibility.
 const base::Feature kProminentDarkModeActiveTabTitle{
     "ProminentDarkModeActiveTabTitle", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Allow users to save tabs for later. Enables a new button and menu for
-// accessing tabs saved for later. https://crbug.com/1109316
-const base::Feature kReadLater{"ReadLater", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables tabs to scroll in the tabstrip. https://crbug.com/951078
 const base::Feature kScrollableTabStrip{"ScrollableTabStrip",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables buttons to permanently appear on the tabstrip when
+// scrollable-tabstrip is enabled. https://crbug.com/1116118
+const base::Feature kScrollableTabStripButtons{
+    "ScrollableTabStripButtons", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Hosts some content in a side panel. https://crbug.com/1141224
+const base::Feature kSidePanel{"SidePanel", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Revamp of profiles. https://crbug.com/1108289
 const base::Feature kProfilesUIRevamp{"ProfilesUIRevamp",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables grouping tabs together in the tab strip. https://crbug.com/905491
-const base::Feature kTabGroups{"TabGroups", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Automatically create groups for users based on domain.
 // https://crbug.com/1128703
@@ -69,7 +66,7 @@ const base::Feature kTabGroupsAutoCreate{"TabGroupsAutoCreate",
 
 // Enables tab groups to be collapsed and expanded. https://crbug.com/1018230
 const base::Feature kTabGroupsCollapse{"TabGroupsCollapse",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables tabs to be frozen when collapsed. https://crbug.com/1110108
 const base::Feature kTabGroupsCollapseFreezing{
@@ -105,10 +102,6 @@ const base::Feature kTabSearch{"TabSearch", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kTabSearchFeedback{"TabSearchFeedback",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the tab search bubble having a fixed tab strip position.
-const base::Feature kTabSearchFixedEntrypoint{
-    "TabSearchFixedEntrypoint", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::FeatureParam<bool> kTabSearchSearchIgnoreLocation{
     &kTabSearch, "TabSearchSearchIgnoreLocation", true};
 
@@ -121,10 +114,8 @@ const base::FeatureParam<double> kTabSearchSearchThreshold{
 const base::FeatureParam<double> kTabSearchTitleToHostnameWeightRatio{
     &kTabSearch, "TabSearchTitleToHostnameWeightRatio", 2.0};
 
-// Enables showing text next to the 3-dot menu when an update is available.
-// See https://crbug.com/1001731
-const base::Feature kUseTextForUpdateButton{"UseTextForUpdateButton",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+const base::FeatureParam<bool> kTabSearchMoveActiveTabToBottom{
+    &kTabSearch, "TabSearchMoveActiveTabToBottom", true};
 
 // Enables a web-based separator that's only used for performance testing. See
 // https://crbug.com/993502.

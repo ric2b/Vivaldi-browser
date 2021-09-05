@@ -5,7 +5,6 @@
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -28,21 +27,7 @@ namespace content {
 
 namespace {
 
-// TODO(crbug/960012): Disabled on chromeos for now due to performance
-// regressions that need to be investigated.
-const base::Feature kCacheStorageSequenceFeature{
-  "CacheStorageSequence",
-#if defined(OS_CHROMEOS)
-      base::FEATURE_DISABLED_BY_DEFAULT
-};
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-};
-#endif
-
 scoped_refptr<base::SequencedTaskRunner> CreateSchedulerTaskRunner() {
-  if (!base::FeatureList::IsEnabled(kCacheStorageSequenceFeature))
-    return GetIOThreadTaskRunner({});
   return base::ThreadPool::CreateSequencedTaskRunner(
       {base::TaskPriority::USER_VISIBLE});
 }

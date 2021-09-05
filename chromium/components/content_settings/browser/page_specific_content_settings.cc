@@ -213,18 +213,6 @@ void PageSpecificContentSettings::WebContentsHandler::OnServiceWorkerAccessed(
     tscs->OnServiceWorkerAccessed(scope, allowed);
 }
 
-void PageSpecificContentSettings::WebContentsHandler::
-    RenderFrameForInterstitialPageCreated(
-        content::RenderFrameHost* render_frame_host) {
-  // We want to tell the renderer-side code to ignore content settings for this
-  // page.
-  mojo::AssociatedRemote<content_settings::mojom::ContentSettingsAgent>
-      content_settings_agent;
-  render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
-      &content_settings_agent);
-  content_settings_agent->SetAsInterstitial();
-}
-
 void PageSpecificContentSettings::WebContentsHandler::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!WillNavigationCreateNewPageSpecificContentSettingsOnCommit(
@@ -347,7 +335,7 @@ PageSpecificContentSettings::PageSpecificContentSettings(
           delegate_->GetIsDeletionDisabledCallback()),
       load_plugins_link_enabled_(true),
       microphone_camera_state_(MICROPHONE_CAMERA_NOT_ACCESSED) {
-  observer_.Add(map_);
+  observation_.Observe(map_);
 }
 
 PageSpecificContentSettings::~PageSpecificContentSettings() = default;
@@ -827,10 +815,9 @@ void PageSpecificContentSettings::SetPepperBrokerAllowed(bool allowed) {
 void PageSpecificContentSettings::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   const ContentSettingsDetails details(primary_pattern, secondary_pattern,
-                                       content_type, resource_identifier);
+                                       content_type);
   if (!details.update_all() &&
       // The visible URL is the URL in the URL field of a tab.
       // Currently this should be matched by the |primary_pattern|.
@@ -843,8 +830,8 @@ void PageSpecificContentSettings::OnContentSettingChanged(
     case ContentSettingsType::MEDIASTREAM_MIC:
     case ContentSettingsType::MEDIASTREAM_CAMERA: {
       const GURL media_origin = media_stream_access_origin();
-      ContentSetting setting = map_->GetContentSetting(
-          media_origin, media_origin, content_type, std::string());
+      ContentSetting setting =
+          map_->GetContentSetting(media_origin, media_origin, content_type);
 
       if (content_type == ContentSettingsType::MEDIASTREAM_MIC &&
           setting == CONTENT_SETTING_ALLOW) {
@@ -861,8 +848,8 @@ void PageSpecificContentSettings::OnContentSettingChanged(
       break;
     }
     case ContentSettingsType::GEOLOCATION: {
-      ContentSetting geolocation_setting = map_->GetContentSetting(
-          visible_url_, visible_url_, content_type, std::string());
+      ContentSetting geolocation_setting =
+          map_->GetContentSetting(visible_url_, visible_url_, content_type);
       if (geolocation_setting == CONTENT_SETTING_ALLOW)
         geolocation_was_just_granted_on_site_level_ = true;
       FALLTHROUGH;
@@ -879,8 +866,8 @@ void PageSpecificContentSettings::OnContentSettingChanged(
     case ContentSettingsType::SOUND:
     case ContentSettingsType::CLIPBOARD_READ_WRITE:
     case ContentSettingsType::SENSORS: {
-      ContentSetting setting = map_->GetContentSetting(
-          visible_url_, visible_url_, content_type, std::string());
+      ContentSetting setting =
+          map_->GetContentSetting(visible_url_, visible_url_, content_type);
       // If an indicator is shown and the content settings has changed, swap the
       // indicator for the one with the opposite meaning (allowed <=> blocked).
       if (setting == CONTENT_SETTING_BLOCK && status.allowed) {

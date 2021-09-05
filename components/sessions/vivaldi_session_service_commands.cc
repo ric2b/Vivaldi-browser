@@ -65,6 +65,48 @@ std::unique_ptr<SessionCommand> CreateSetTabExtDataCommand(
       new SessionCommand(command_id, pickle));
 }
 
+std::unique_ptr<SessionCommand> CreatePageActionOverrideCommand(
+    SessionID::id_type command_id,
+    SessionID tab_id,
+    const std::string& script_path,
+    bool is_enabled_override) {
+  // Use pickle to handle marshalling.
+  base::Pickle pickle;
+  pickle.WriteInt(tab_id.id());
+
+  // Enforce a max path length
+  static const SessionCommand::size_type max_path_size =
+      std::numeric_limits<SessionCommand::size_type>::max() - 1024;
+
+  int bytes_written = 0;
+
+  WriteStringToPickle(&pickle, &bytes_written, max_path_size, script_path);
+  pickle.WriteBool(is_enabled_override);
+
+  return std::unique_ptr<SessionCommand>(
+      new SessionCommand(command_id, pickle));
+}
+
+std::unique_ptr<SessionCommand> CreateRemovePageActionOverrideCommand(
+    SessionID::id_type command_id,
+    SessionID tab_id,
+    const std::string& script_path) {
+  // Use pickle to handle marshalling.
+  base::Pickle pickle;
+  pickle.WriteInt(tab_id.id());
+
+  // Enforce a max path length
+  static const SessionCommand::size_type max_path_size =
+      std::numeric_limits<SessionCommand::size_type>::max() - 1024;
+
+  int bytes_written = 0;
+
+  WriteStringToPickle(&pickle, &bytes_written, max_path_size, script_path);
+
+  return std::unique_ptr<SessionCommand>(
+      new SessionCommand(command_id, pickle));
+}
+
 std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
     SessionID::id_type command_id,
     SessionID window_id,
@@ -93,7 +135,34 @@ bool RestoreSetExtDataCommand(const SessionCommand& command,
     return false;
 
   base::PickleIterator iterator(*pickle);
-  return ReadSessionIdFromPickle(&iterator, tab_id) && iterator.ReadString(ext_data);
+  return ReadSessionIdFromPickle(&iterator, tab_id) &&
+         iterator.ReadString(ext_data);
+}
+
+bool RestorePageActionOverrideCommand(const SessionCommand& command,
+                                      SessionID* tab_id,
+                                      std::string* script_path,
+                                      bool* is_enabled_override) {
+  std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
+  if (!pickle.get())
+    return false;
+
+  base::PickleIterator iterator(*pickle);
+  return ReadSessionIdFromPickle(&iterator, tab_id) &&
+         iterator.ReadString(script_path) &&
+         iterator.ReadBool(is_enabled_override);
+}
+
+bool RestoreRemovePageActionOverrideCommand(const SessionCommand& command,
+                                            SessionID* tab_id,
+                                            std::string* script_path) {
+  std::unique_ptr<base::Pickle> pickle(command.PayloadAsPickle());
+  if (!pickle.get())
+    return false;
+
+  base::PickleIterator iterator(*pickle);
+  return ReadSessionIdFromPickle(&iterator, tab_id) &&
+         iterator.ReadString(script_path);
 }
 
 bool RestoreSetWindowExtDataCommand(const SessionCommand& command,
@@ -104,7 +173,8 @@ bool RestoreSetWindowExtDataCommand(const SessionCommand& command,
     return false;
 
   base::PickleIterator iterator(*pickle);
-  return ReadSessionIdFromPickle(&iterator, window_id) && iterator.ReadString(ext_data);
+  return ReadSessionIdFromPickle(&iterator, window_id) &&
+         iterator.ReadString(ext_data);
 }
 
 }  // namespace vivaldi

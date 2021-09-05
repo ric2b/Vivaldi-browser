@@ -25,8 +25,6 @@ extern const base::Feature kThrottleDelayable;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kDelayRequestsOnMultiplexedConnections;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kRequestInitiatorSiteLock;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kPauseBrowserInitiatedHeavyTrafficForP2P;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCORBProtectionSniffing;
@@ -40,6 +38,8 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyReportingOriginTrial;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginOpenerPolicyAccessReporting;
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::Feature kCrossOriginOpenerPolicyByDefault;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginEmbedderPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -59,17 +59,6 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature
     kDeriveOriginFromUrlForNeitherGetNorHeadRequestWhenHavingSpecialAccess;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kEmergencyLegacyCookieAccess;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const char kEmergencyLegacyCookieAccessParamName[];
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<std::string> kEmergencyLegacyCookieAccessParam;
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kCorbAllowlistAlsoAppliesToOorCors;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const char kCorbAllowlistAlsoAppliesToOorCorsParamName[];
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kRequestInitiatorSiteLockEnfocement;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCertVerifierService;
@@ -86,6 +75,8 @@ enum class TrustTokenOriginTrialSpec {
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<TrustTokenOriginTrialSpec>
     kTrustTokenOperationsRequiringOriginTrial;
+COMPONENT_EXPORT(NETWORK_CPP)
+extern const base::FeatureParam<bool> kPlatformProvidedTrustTokenIssuance;
 
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kOutOfBlinkCSPEE;

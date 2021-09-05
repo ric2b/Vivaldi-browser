@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -791,6 +791,7 @@ class AppCacheUpdateJobTest : public testing::Test,
   }
 
   void TearDown() override {
+    blink::TrialTokenValidator::ResetOriginTrialPolicyGetter();
     weak_partition_factory_.reset();
     browser_context_.reset();
 

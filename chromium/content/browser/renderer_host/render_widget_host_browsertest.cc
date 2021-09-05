@@ -6,7 +6,8 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
+#include "base/test/test_timeouts.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/input/input_router_impl.h"
@@ -17,8 +18,6 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -30,6 +29,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/content_browser_test_utils_internal.h"
+#include "content/test/mock_display_feature.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -528,6 +528,21 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
 // a FrameHostMsg_ShowPopup to ask the browser to build and display the actual
 // popup using native controls.
 #if !defined(OS_MAC) && !defined(OS_ANDROID)
+
+namespace {
+
+// Helper to use inside a loop instead of using RunLoop::RunUntilIdle() to avoid
+// the loop being a busy loop that prevents renderer from doing its job. Use
+// only when there is no better way to synchronize.
+void GiveItSomeTime(base::TimeDelta delta) {
+  base::RunLoop run_loop;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), delta);
+  run_loop.Run();
+}
+
+}  // namespace
+
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
                        BrowserClosesSelectPopup) {
   // Navigate to a page with a <select> element.
@@ -547,46 +562,19 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   event.text[0] = ' ';
 
-  // A class to wait for ViewHostMsg_ShowWidget.
-  class WaitForShowWidgetFilter : public ObserveMessageFilter {
-   public:
-    explicit WaitForShowWidgetFilter()
-        : ObserveMessageFilter(ViewMsgStart, ViewHostMsg_ShowWidget::ID) {}
-
-    bool OnMessageReceived(const IPC::Message& message) override {
-      IPC_BEGIN_MESSAGE_MAP(WaitForShowWidgetFilter, message)
-        IPC_MESSAGE_HANDLER(ViewHostMsg_ShowWidget, OnShowWidget)
-      IPC_END_MESSAGE_MAP()
-      return ObserveMessageFilter::OnMessageReceived(message);
-    }
-
-    int routing_id() const { return routing_id_; }
-
-   private:
-    ~WaitForShowWidgetFilter() override = default;
-
-    void OnShowWidget(int routing_id, const gfx::Rect& initial_rect) {
-      routing_id_ = routing_id;
-    }
-
-    int routing_id_ = 0;
-
-    DISALLOW_COPY_AND_ASSIGN(WaitForShowWidgetFilter);
-  };
-
   for (int i = 0; i < 2; ++i) {
     bool browser_closes = i == 0;
 
     // This focuses and opens the select box, creating a popup RenderWidget. We
     // wait for the RenderWidgetHost to be shown.
-    auto filter = base::MakeRefCounted<WaitForShowWidgetFilter>();
-    process->AddFilter(filter.get());
+    auto filter =
+        std::make_unique<ShowPopupWidgetWaiter>(contents, root_frame_host);
     EXPECT_TRUE(ExecuteScript(root_frame_host, "focusSelectMenu();"));
     root_frame_host->GetRenderWidgetHost()->ForwardKeyboardEvent(event);
     filter->Wait();
 
     // The popup RenderWidget will get its own routing id.
-    int popup_routing_id = filter->routing_id();
+    int popup_routing_id = filter->last_routing_id();
     EXPECT_TRUE(popup_routing_id);
     // Grab a pointer to the popup RenderWidget.
     RenderWidgetHost* popup_widget_host =
@@ -594,25 +582,25 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
     ASSERT_TRUE(popup_widget_host);
     ASSERT_NE(popup_widget_host, root_frame_host->GetRenderWidgetHost());
 
-    // A class to wait for WidgetHostMsg_Close_ACK.
-    auto close_filter = base::MakeRefCounted<ObserveMessageFilter>(
-        WidgetMsgStart, WidgetHostMsg_Close_ACK::ID);
-    process->AddFilter(close_filter.get());
-
+    auto* popup_widget_host_impl =
+        static_cast<RenderWidgetHostImpl*>(popup_widget_host);
     if (browser_closes) {
       // Close the popup RenderWidget from the browser side.
-      auto* popup_widget_host_impl =
-          static_cast<RenderWidgetHostImpl*>(popup_widget_host);
       popup_widget_host_impl->ShutdownAndDestroyWidget(true);
     } else {
+      base::WeakPtr<RenderWidgetHostImpl> popup_weak_ptr =
+          popup_widget_host_impl->GetWeakPtr();
+
       // Close the popup RenderWidget from the renderer side by removing focus.
       EXPECT_TRUE(
           ExecuteScript(root_frame_host, "document.activeElement.blur()"));
-    }
-    // In either case, wait until closing the popup RenderWidget is complete to
-    // know it worked by waiting for the WidgetHostMsg_Close_ACK.
-    close_filter->Wait();
 
+      // Ensure that the RenderWidgetHostImpl gets destroyed, which implies the
+      // close step has also been sent to the renderer process.
+      while (popup_weak_ptr) {
+        GiveItSomeTime(TestTimeouts::tiny_timeout());
+      }
+    }
     // Ensure the renderer didn't explode :).
     {
       base::string16 title_when_done[] = {base::UTF8ToUTF16("done 0"),
@@ -741,11 +729,12 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
 
   const gfx::Size root_view_size = view()->GetVisibleViewportSize();
   const int kDisplayFeatureLength = 10;
+  int offset = root_view_size.width() / 2 - kDisplayFeatureLength / 2;
   DisplayFeature emulated_display_feature{
-      DisplayFeature::Orientation::kVertical,
-      /* offset */ root_view_size.width() / 2 - kDisplayFeatureLength / 2,
+      DisplayFeature::Orientation::kVertical, offset,
       /* mask_length */ kDisplayFeatureLength};
-  view()->SetDisplayFeatureForTesting(emulated_display_feature);
+  MockDisplayFeature mock_display_feature(view());
+  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
   host()->SynchronizeVisualProperties();
 
   EXPECT_EQ(
@@ -773,9 +762,10 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
 
   emulated_display_feature.orientation =
       DisplayFeature::Orientation::kHorizontal;
-  emulated_display_feature.offset =
-      root_view_size.height() / 2 - kDisplayFeatureLength / 2,
-  view()->SetDisplayFeatureForTesting(emulated_display_feature);
+  offset = root_view_size.height() / 2 - kDisplayFeatureLength / 2;
+  emulated_display_feature.offset = offset;
+
+  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
   host()->SynchronizeVisualProperties();
 
   EXPECT_EQ(
@@ -801,7 +791,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
       "0.3",
       EvalJs(shell(), "getComputedStyle(target).opacity").ExtractString());
 
-  view()->SetDisplayFeatureForTesting(base::nullopt);
+  mock_display_feature.SetDisplayFeature(nullptr);
   host()->SynchronizeVisualProperties();
 
   EXPECT_EQ(
@@ -841,11 +831,12 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostFoldableCSSTest,
 
   const gfx::Size root_view_size = view()->GetVisibleViewportSize();
   const int kDisplayFeatureLength = 10;
+  const int offset = root_view_size.width() / 2 - kDisplayFeatureLength / 2;
   DisplayFeature emulated_display_feature{
-      DisplayFeature::Orientation::kVertical,
-      /* offset */ root_view_size.width() / 2 - kDisplayFeatureLength / 2,
+      DisplayFeature::Orientation::kVertical, offset,
       /* mask_length */ kDisplayFeatureLength};
-  view()->SetDisplayFeatureForTesting(emulated_display_feature);
+  MockDisplayFeature mock_display_feature(view());
+  mock_display_feature.SetDisplayFeature(&emulated_display_feature);
   host()->SynchronizeVisualProperties();
 
   EXPECT_EQ(
@@ -881,12 +872,14 @@ class RenderWidgetHostDelegatedInkMetadataTest
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
                        FlagGetsSetFromRenderFrameMetadata) {
   ASSERT_TRUE(ExecJs(shell()->web_contents(), R"(
-      let presenter = navigator.ink.requestPresenter('delegated-ink-trail');
+      let presenter = null;
+      navigator.ink.requestPresenter('delegated-ink-trail').then(e => {
+        presenter = e;
+      });
       let style = { color: 'green', diameter: 21 };
+
       window.addEventListener('pointermove' , evt => {
-        presenter.then( function(v) {
-          v.updateInkTrailStartPoint(evt, style);
-        });
+        presenter.updateInkTrailStartPoint(evt, style);
       });
       )"));
   SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 10, 10, 0,

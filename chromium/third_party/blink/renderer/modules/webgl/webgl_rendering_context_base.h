@@ -61,6 +61,7 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES3/gl31.h"
 #include "third_party/skia/include/core/SkData.h"
+#include "v8/include/v8-fast-api-calls.h"
 
 namespace cc {
 class Layer;
@@ -166,7 +167,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void activeTexture(GLenum texture);
   void attachShader(WebGLProgram*, WebGLShader*);
   void bindAttribLocation(WebGLProgram*, GLuint index, const String& name);
-  void bindBuffer(GLenum target, WebGLBuffer*);
+  void bindBuffer(GLenum target, WebGLBuffer* buffer);
   virtual void bindFramebuffer(GLenum target, WebGLFramebuffer*);
   void bindRenderbuffer(GLenum target, WebGLRenderbuffer*);
   void bindTexture(GLenum target, WebGLTexture*);
@@ -255,8 +256,40 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void detachShader(WebGLProgram*, WebGLShader*);
   void disable(GLenum cap);
   void disableVertexAttribArray(GLuint index);
-  void drawArrays(GLenum mode, GLint first, GLsizei count);
-  void drawElements(GLenum mode, GLsizei count, GLenum type, int64_t offset);
+
+  void drawArraysImpl(GLenum mode, GLint first, GLsizei count);
+  void drawArrays(GLenum mode, GLint first, GLsizei count) {
+    if (fast_call_.FlushDeferredEvents(this)) {
+      return;
+    }
+    drawArraysImpl(mode, first, count);
+  }
+  void drawArrays(GLenum mode,
+                  GLint first,
+                  GLsizei count,
+                  v8::FastApiCallbackOptions& options) {
+    auto scoped_call = fast_call_.EnterScoped(&options.fallback);
+    drawArraysImpl(mode, first, count);
+  }
+
+  void drawElementsImpl(GLenum mode,
+                        GLsizei count,
+                        GLenum type,
+                        int64_t offset);
+  void drawElements(GLenum mode, GLsizei count, GLenum type, int64_t offset) {
+    if (fast_call_.FlushDeferredEvents(this)) {
+      return;
+    }
+    drawElementsImpl(mode, count, type, offset);
+  }
+  void drawElements(GLenum mode,
+                    GLsizei count,
+                    GLenum type,
+                    int64_t offset,
+                    v8::FastApiCallbackOptions& options) {
+    auto scoped_call = fast_call_.EnterScoped(&options.fallback);
+    drawElementsImpl(mode, count, type, offset);
+  }
 
   void DrawArraysInstancedANGLE(GLenum mode,
                                 GLint first,
@@ -602,10 +635,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   scoped_refptr<StaticBitmapImage> GetImage() override;
   void SetFilterQuality(SkFilterQuality) override;
-  bool IsWebGL2OrHigher() {
-    return context_type_ == Platform::kWebGL2ContextType ||
-           context_type_ == Platform::kWebGL2ComputeContextType;
-  }
+  bool IsWebGL2() { return context_type_ == Platform::kWebGL2ContextType; }
 
   void getHTMLOrOffscreenCanvas(HTMLCanvasElementOrOffscreenCanvas&) const;
 
@@ -1129,7 +1159,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     // higher, since this should never happen for WebGL 1.0 (even though
     // the code could support it). If the image is null, that will be
     // signaled as an error later.
-    DCHECK(!*selecting_sub_rectangle || IsWebGL2OrHigher())
+    DCHECK(!*selecting_sub_rectangle || IsWebGL2())
         << "subRect = (" << sub_rect.Width() << " x " << sub_rect.Height()
         << ") @ (" << sub_rect.X() << ", " << sub_rect.Y() << "), image = ("
         << image_width << " x " << image_height << ")";
@@ -1472,7 +1502,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
       return false;
     }
     GLuint array_length;
-    if (!base::CheckedNumeric<GLuint>(v.lengthAsSizeT())
+    if (!base::CheckedNumeric<GLuint>(v.length())
              .AssignIfValid(&array_length)) {
       SynthesizeGLError(GL_INVALID_VALUE, function_name, "array is too big");
       return false;
@@ -1545,7 +1575,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   bool ExtractDataLengthIfValid(const char* function_name,
                                 MaybeShared<DOMArrayBufferView> data,
                                 T* data_length) {
-    if (base::CheckedNumeric<T>(data.View()->byteLengthAsSizeT())
+    if (base::CheckedNumeric<T>(data.View()->byteLength())
             .AssignIfValid(data_length)) {
       return true;
     }
@@ -1805,9 +1835,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                             bool* completed);
   static constexpr unsigned int kMaxProgramCompletionQueries = 128u;
   base::MRUCache<WebGLProgram*, GLuint> program_completion_queries_;
-
-  FrameOrWorkerScheduler::SchedulingAffectingFeatureHandle
-      feature_handle_for_scheduler_;
 
   int number_of_user_allocated_multisampled_renderbuffers_;
 

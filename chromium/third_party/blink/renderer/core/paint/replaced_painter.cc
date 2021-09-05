@@ -9,13 +9,13 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/paint/box_painter.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
+#include "third_party/blink/renderer/core/paint/highlight_painting_utils.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/paint/scoped_paint_state.h"
 #include "third_party/blink/renderer/core/paint/scrollable_area_painter.h"
-#include "third_party/blink/renderer/core/paint/selection_painting_utils.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_cache_skipper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scoped_paint_chunk_properties.h"
@@ -103,8 +103,10 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
     if (layout_replaced_.StyleRef().Visibility() == EVisibility::kVisible) {
       if (layout_replaced_.HasBoxDecorationBackground())
         should_paint_background = true;
-      if (layout_replaced_.HasEffectiveAllowedTouchAction())
+      if (layout_replaced_.HasEffectiveAllowedTouchAction() ||
+          layout_replaced_.InsideBlockingWheelEventHandler()) {
         should_paint_background = true;
+      }
     }
     if (should_paint_background) {
       if (layout_replaced_.HasLayer() &&
@@ -187,9 +189,9 @@ void ReplacedPainter::Paint(const PaintInfo& paint_info) {
     DrawingRecorder recorder(local_paint_info.context, layout_replaced_,
                              DisplayItem::kSelectionTint,
                              selection_painting_int_rect);
-    Color selection_bg = SelectionPaintingUtils::SelectionBackgroundColor(
+    Color selection_bg = HighlightPaintingUtils::HighlightBackgroundColor(
         layout_replaced_.GetDocument(), layout_replaced_.StyleRef(),
-        layout_replaced_.GetNode());
+        layout_replaced_.GetNode(), kPseudoIdSelection);
     local_paint_info.context.FillRect(selection_painting_int_rect,
                                       selection_bg);
   }

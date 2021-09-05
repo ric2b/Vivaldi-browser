@@ -1,0 +1,289 @@
+import("//vivaldi/gn/config/version.gni")
+import("//build/util/version.gni")
+
+wxwidgets_top =
+    "//vivaldi/thirdparty/winsparkle/3rdparty/wxWidgets"
+
+config("wxwidgets_common_config") {
+  include_dirs = [
+    "../wxWidgets_setup_h",
+    wxwidgets_top + "/include",
+  ]
+
+  # Disable enough warnings to compile wxWidgets include files.
+  cflags_cc = [
+    "-Wno-c++98-compat-extra-semi",
+    "-Wno-unused-local-typedef",
+  ]
+
+  # TODO(igor@vivaldi.com): Chromium uses -fcomplete-member-pointers to prevent
+  # subtle bugs due to LLVM not emulating presizely MSVC code generatiom. It
+  # should not matter here as everything is compiled with LLVM and is linked
+  # into the executable. Still consider patching wxWidgets not to depend on
+  # this compiler setting.
+  cflags_cc += [ "-fno-complete-member-pointers" ]
+
+  # Workaround for lack of #pragma support in LLVM for manifest dependencies.
+  # Note that chromium includes the necessary bits in all relevenat
+  # executables, see the usage of common_controls.manifest in the build system.
+  defines = [ "wxUSE_NO_MANIFEST=1" ]
+}
+
+static_library("wxwidgets") {
+  configs += [ ":wxwidgets_common_config" ]
+
+  # Disable chromium-style plugin to prevent errors on absence of override
+  # keywords, non-inline complex contructors etc.
+  if (is_clang) {
+    configs -= [ "//build/config/clang:find_bad_constructs" ]
+  }
+
+  # Disable all warnings that wxWidgets triggers.
+  cflags_cc = [
+    "-Wno-implicit-fallthrough",
+    "-Wno-extern-initializer",
+    "-Wno-parentheses-equality",
+    "-Wno-sign-compare",
+    "-Wno-unused-function",
+    "-Wno-macro-redefined",
+    "-Wno-unused-variable",
+    "-Wno-extra-semi",
+    "-Wno-unused-private-field",
+    "-Wno-misleading-indentation",
+    "-Wno-undefined-bool-conversion",
+  ]
+
+  # Workaround broken definition of __TDATE__ and __TTIME__ in wxWidgets
+  defines = [
+    "__TDATE__=\"2020-12-01\"",
+    "__TTIME__=\"00:00:00\"",
+  ]
+
+  sources = [
+    wxwidgets_top + "/src/common/any.cpp",
+    wxwidgets_top + "/src/common/appbase.cpp",
+    wxwidgets_top + "/src/common/appcmn.cpp",
+    wxwidgets_top + "/src/common/arrstr.cpp",
+    wxwidgets_top + "/src/common/artprov.cpp",
+    wxwidgets_top + "/src/common/bmpbase.cpp",
+    wxwidgets_top + "/src/common/btncmn.cpp",
+    wxwidgets_top + "/src/common/checkboxcmn.cpp",
+    wxwidgets_top + "/src/common/clntdata.cpp",
+    wxwidgets_top + "/src/common/cmdline.cpp",
+    wxwidgets_top + "/src/common/cmdproc.cpp",
+    wxwidgets_top + "/src/common/colourcmn.cpp",
+    wxwidgets_top + "/src/common/config.cpp",
+    wxwidgets_top + "/src/common/containr.cpp",
+    wxwidgets_top + "/src/common/convauto.cpp",
+    wxwidgets_top + "/src/common/ctrlcmn.cpp",
+    wxwidgets_top + "/src/common/ctrlsub.cpp",
+    wxwidgets_top + "/src/common/dcbase.cpp",
+    wxwidgets_top + "/src/common/dcbufcmn.cpp",
+    wxwidgets_top + "/src/common/dircmn.cpp",
+    wxwidgets_top + "/src/common/dlgcmn.cpp",
+    wxwidgets_top + "/src/common/dobjcmn.cpp",
+    wxwidgets_top + "/src/common/dpycmn.cpp",
+    wxwidgets_top + "/src/common/dynarray.cpp",
+    wxwidgets_top + "/src/common/dynlib.cpp",
+    wxwidgets_top + "/src/common/encconv.cpp",
+    wxwidgets_top + "/src/common/event.cpp",
+    wxwidgets_top + "/src/common/evtloopcmn.cpp",
+    wxwidgets_top + "/src/common/extended.c",
+    wxwidgets_top + "/src/common/file.cpp",
+    wxwidgets_top + "/src/common/fileback.cpp",
+    wxwidgets_top + "/src/common/filefn.cpp",
+    wxwidgets_top + "/src/common/filename.cpp",
+    wxwidgets_top + "/src/common/filesys.cpp",
+    wxwidgets_top + "/src/common/fmapbase.cpp",
+    wxwidgets_top + "/src/common/fontcmn.cpp",
+    wxwidgets_top + "/src/common/fontmap.cpp",
+    wxwidgets_top + "/src/common/framecmn.cpp",
+    wxwidgets_top + "/src/common/gaugecmn.cpp",
+    wxwidgets_top + "/src/common/gbsizer.cpp",
+    wxwidgets_top + "/src/common/gdicmn.cpp",
+    wxwidgets_top + "/src/common/hash.cpp",
+    wxwidgets_top + "/src/common/hashmap.cpp",
+    wxwidgets_top + "/src/common/iconbndl.cpp",
+    wxwidgets_top + "/src/common/imagbmp.cpp",
+    wxwidgets_top + "/src/common/image.cpp",
+    wxwidgets_top + "/src/common/init.cpp",
+    wxwidgets_top + "/src/common/intl.cpp",
+    wxwidgets_top + "/src/common/ipcbase.cpp",
+    wxwidgets_top + "/src/common/languageinfo.cpp",
+    wxwidgets_top + "/src/common/layout.cpp",
+    wxwidgets_top + "/src/common/list.cpp",
+    wxwidgets_top + "/src/common/longlong.cpp",
+    wxwidgets_top + "/src/common/matrix.cpp",
+    wxwidgets_top + "/src/common/menucmn.cpp",
+    wxwidgets_top + "/src/common/modalhook.cpp",
+    wxwidgets_top + "/src/common/module.cpp",
+    wxwidgets_top + "/src/common/mousemanager.cpp",
+    wxwidgets_top + "/src/common/msgout.cpp",
+    wxwidgets_top + "/src/common/numformatter.cpp",
+    wxwidgets_top + "/src/common/object.cpp",
+    wxwidgets_top + "/src/common/overlaycmn.cpp",
+    wxwidgets_top + "/src/common/panelcmn.cpp",
+    wxwidgets_top + "/src/common/platinfo.cpp",
+    wxwidgets_top + "/src/common/powercmn.cpp",
+    wxwidgets_top + "/src/common/process.cpp",
+    wxwidgets_top + "/src/common/quantize.cpp",
+    wxwidgets_top + "/src/common/rendcmn.cpp",
+    wxwidgets_top + "/src/common/rgncmn.cpp",
+    wxwidgets_top + "/src/common/settcmn.cpp",
+    wxwidgets_top + "/src/common/sizer.cpp",
+    wxwidgets_top + "/src/common/statbmpcmn.cpp",
+    wxwidgets_top + "/src/common/stattextcmn.cpp",
+    wxwidgets_top + "/src/common/stdpbase.cpp",
+    wxwidgets_top + "/src/common/stockitem.cpp",
+    wxwidgets_top + "/src/common/strconv.cpp",
+    wxwidgets_top + "/src/common/stream.cpp",
+    wxwidgets_top + "/src/common/string.cpp",
+    wxwidgets_top + "/src/common/stringimpl.cpp",
+    wxwidgets_top + "/src/common/strvararg.cpp",
+    wxwidgets_top + "/src/common/sysopt.cpp",
+    wxwidgets_top + "/src/common/textbuf.cpp",
+    wxwidgets_top + "/src/common/textcmn.cpp",
+    wxwidgets_top + "/src/common/textmeasurecmn.cpp",
+    wxwidgets_top + "/src/common/threadinfo.cpp",
+    wxwidgets_top + "/src/common/time.cpp",
+    wxwidgets_top + "/src/common/timercmn.cpp",
+    wxwidgets_top + "/src/common/timerimpl.cpp",
+    wxwidgets_top + "/src/common/tokenzr.cpp",
+    wxwidgets_top + "/src/common/toplvcmn.cpp",
+    wxwidgets_top + "/src/common/translation.cpp",
+    wxwidgets_top + "/src/common/txtstrm.cpp",
+    wxwidgets_top + "/src/common/unichar.cpp",
+    wxwidgets_top + "/src/common/uri.cpp",
+    wxwidgets_top + "/src/common/ustring.cpp",
+    wxwidgets_top + "/src/common/utilscmn.cpp",
+    wxwidgets_top + "/src/common/variant.cpp",
+    wxwidgets_top + "/src/common/webview.cpp",
+    wxwidgets_top + "/src/common/wfstream.cpp",
+    wxwidgets_top + "/src/common/wincmn.cpp",
+    wxwidgets_top + "/src/common/windowid.cpp",
+    wxwidgets_top + "/src/common/wrapsizer.cpp",
+    wxwidgets_top + "/src/common/wxcrt.cpp",
+    wxwidgets_top + "/src/generic/msgdlgg.cpp",
+    wxwidgets_top + "/src/generic/renderg.cpp",
+    wxwidgets_top + "/src/generic/scrlwing.cpp",
+    wxwidgets_top + "/src/generic/selstore.cpp",
+    wxwidgets_top + "/src/generic/statbmpg.cpp",
+    wxwidgets_top + "/src/generic/stattextg.cpp",
+    wxwidgets_top + "/src/generic/vscroll.cpp",
+    wxwidgets_top + "/src/msw/anybutton.cpp",
+    wxwidgets_top + "/src/msw/app.cpp",
+    wxwidgets_top + "/src/msw/artmsw.cpp",
+    wxwidgets_top + "/src/msw/basemsw.cpp",
+    wxwidgets_top + "/src/msw/bitmap.cpp",
+    wxwidgets_top + "/src/msw/brush.cpp",
+    wxwidgets_top + "/src/msw/button.cpp",
+    wxwidgets_top + "/src/msw/checkbox.cpp",
+    wxwidgets_top + "/src/msw/colour.cpp",
+    wxwidgets_top + "/src/msw/control.cpp",
+    wxwidgets_top + "/src/msw/cursor.cpp",
+    wxwidgets_top + "/src/msw/dc.cpp",
+    wxwidgets_top + "/src/msw/dcclient.cpp",
+    wxwidgets_top + "/src/msw/dcmemory.cpp",
+    wxwidgets_top + "/src/msw/dcscreen.cpp",
+    wxwidgets_top + "/src/msw/debughlp.cpp",
+    wxwidgets_top + "/src/msw/dialog.cpp",
+    wxwidgets_top + "/src/msw/dib.cpp",
+    wxwidgets_top + "/src/msw/dir.cpp",
+    wxwidgets_top + "/src/msw/display.cpp",
+    wxwidgets_top + "/src/msw/dlmsw.cpp",
+    wxwidgets_top + "/src/msw/evtloop.cpp",
+    wxwidgets_top + "/src/msw/evtloopconsole.cpp",
+    wxwidgets_top + "/src/msw/font.cpp",
+    wxwidgets_top + "/src/msw/fontutil.cpp",
+    wxwidgets_top + "/src/msw/frame.cpp",
+    wxwidgets_top + "/src/msw/gauge.cpp",
+    wxwidgets_top + "/src/msw/gdiimage.cpp",
+    wxwidgets_top + "/src/msw/icon.cpp",
+    wxwidgets_top + "/src/msw/imaglist.cpp",
+    wxwidgets_top + "/src/msw/main.cpp",
+    wxwidgets_top + "/src/msw/menu.cpp",
+    wxwidgets_top + "/src/msw/menuitem.cpp",
+    wxwidgets_top + "/src/msw/msgdlg.cpp",
+    wxwidgets_top + "/src/msw/mslu.cpp",
+    wxwidgets_top + "/src/msw/nativdlg.cpp",
+    wxwidgets_top + "/src/msw/nativewin.cpp",
+    wxwidgets_top + "/src/msw/nonownedwnd.cpp",
+    wxwidgets_top + "/src/msw/ole/activex.cpp",
+    wxwidgets_top + "/src/msw/ole/automtn.cpp",
+    wxwidgets_top + "/src/msw/ole/dataobj.cpp",
+    wxwidgets_top + "/src/msw/ole/oleutils.cpp",
+    wxwidgets_top + "/src/msw/ole/safearray.cpp",
+    wxwidgets_top + "/src/msw/ole/uuid.cpp",
+    wxwidgets_top + "/src/msw/panel.cpp",
+    wxwidgets_top + "/src/msw/pen.cpp",
+    wxwidgets_top + "/src/msw/power.cpp",
+    wxwidgets_top + "/src/msw/region.cpp",
+    wxwidgets_top + "/src/msw/registry.cpp",
+    wxwidgets_top + "/src/msw/renderer.cpp",
+    wxwidgets_top + "/src/msw/settings.cpp",
+    wxwidgets_top + "/src/msw/statbmp.cpp",
+    wxwidgets_top + "/src/msw/stattext.cpp",
+    wxwidgets_top + "/src/msw/stdpaths.cpp",
+    wxwidgets_top + "/src/msw/textmeasure.cpp",
+    wxwidgets_top + "/src/msw/thread.cpp",
+    wxwidgets_top + "/src/msw/timer.cpp",
+    wxwidgets_top + "/src/msw/toplevel.cpp",
+    wxwidgets_top + "/src/msw/utils.cpp",
+    wxwidgets_top + "/src/msw/utilsexc.cpp",
+    wxwidgets_top + "/src/msw/utilsgui.cpp",
+    wxwidgets_top + "/src/msw/utilswin.cpp",
+    wxwidgets_top + "/src/msw/uxtheme.cpp",
+    wxwidgets_top + "/src/msw/webview_ie.cpp",
+    wxwidgets_top + "/src/msw/window.cpp",
+
+    "../wxWidgets_setup_h/wx/setup.h",
+  ]
+}
+
+# Parts of WinSparkle that do not depend on wxWidgets
+source_set("winsparkle_no_gui") {
+  sources = [
+    "appcast.cc",
+    "appcast.h",
+    "config.cc",
+    "config.h",
+    "download.cc",
+    "download.h",
+    "error.cc",
+    "error.h",
+    "settings.cc",
+    "settings.h",
+    "threads.cc",
+    "threads.h",
+    "updatechecker.cc",
+    "updatechecker.h",
+    "updatedownloader.cc",
+    "updatedownloader.h",
+
+    # Track this here as the header does not depend on wxWidgets.
+    "ui.h",
+    "winsparkle-version.h",
+  ]
+  public_deps = [
+    "//base:base",
+    "//url:url",
+  ]
+}
+
+source_set("winsparkle") {
+  configs += [ ":wxwidgets_common_config" ]
+  if (is_clang) {
+    configs -= [ "//build/config/clang:find_bad_constructs" ]
+  }
+
+  sources = [
+    "ui.cc",
+  ]
+
+  deps = [
+    ":winsparkle_no_gui",
+    ":wxwidgets",
+    "../translations:resources",
+    "//vivaldi/app:resources",
+  ]
+}

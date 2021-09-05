@@ -18,7 +18,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/null_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
@@ -26,6 +26,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/trees/render_frame_metadata.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -56,8 +57,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view_aura.h"
 #include "content/common/input_messages.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -124,7 +123,7 @@
 #include "ui/gfx/selection_bound.h"
 #include "ui/wm/core/window_util.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/base/ime/input_method.h"
 #endif
 
@@ -132,10 +131,6 @@
 #include "ui/base/view_prop.h"
 #include "ui/base/win/window_event_target.h"
 #include "ui/display/win/test/scoped_screen_win.h"
-#endif
-
-#if defined(USE_X11)
-#include "ui/base/ui_base_features.h"
 #endif
 
 using testing::_;
@@ -215,14 +210,12 @@ class FakeWindowEventDispatcher : public aura::WindowEventDispatcher {
   FakeWindowEventDispatcher(aura::WindowTreeHost* host)
       : WindowEventDispatcher(host), processed_touch_event_count_(0) {}
 
-  void ProcessedTouchEvent(
-      uint32_t unique_event_id,
-      aura::Window* window,
-      ui::EventResult result,
-      bool is_source_touch_event_set_non_blocking) override {
+  void ProcessedTouchEvent(uint32_t unique_event_id,
+                           aura::Window* window,
+                           ui::EventResult result,
+                           bool is_source_touch_event_set_blocking) override {
     WindowEventDispatcher::ProcessedTouchEvent(
-        unique_event_id, window, result,
-        is_source_touch_event_set_non_blocking);
+        unique_event_id, window, result, is_source_touch_event_set_blocking);
     processed_touch_event_count_++;
   }
 
@@ -539,7 +532,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     aura_test_helper_->SetUp();
 
     browser_context_ = std::make_unique<TestBrowserContext>();
-    process_host_ = new MockRenderProcessHost(browser_context_.get());
+    process_host_ =
+        std::make_unique<MockRenderProcessHost>(browser_context_.get());
     process_host_->Init();
     agent_scheduling_group_host_ =
         std::make_unique<AgentSchedulingGroupHost>(*process_host_);
@@ -588,7 +582,6 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
   void TearDownEnvironment() {
     sink_ = nullptr;
-    process_host_ = nullptr;
     if (view_) {
       DestroyView(view_);
     } else if (widget_host_) {
@@ -600,8 +593,10 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     parent_view_->Destroy();
     delete parent_host_;
 
+    process_host_->Cleanup();
     agent_scheduling_group_host_ = nullptr;
     web_contents_ = nullptr;
+    process_host_ = nullptr;
     browser_context_ = nullptr;
     aura_test_helper_->TearDown();
 
@@ -690,7 +685,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   std::unique_ptr<BrowserContext> browser_context_;
   std::unique_ptr<WebContents> web_contents_;
   std::vector<std::unique_ptr<MockRenderWidgetHostDelegate>> delegates_;
-  MockRenderProcessHost* process_host_;
+  std::unique_ptr<MockRenderProcessHost> process_host_;
   std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_host_;
 
   // Tests should set these to nullptr if they've already triggered their
@@ -1189,7 +1184,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyFullscreenOnBlur) {
   view_ = nullptr;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Checks that a popup view is destroyed when a user clicks outside of the popup
 // view and focus does not change. This is the case when the user clicks on the
 // desktop background on Chrome OS.
@@ -1247,7 +1242,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupTapOutsidePopup) {
 }
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 // On Desktop Linux, select boxes need mouse capture in order to work. Test that
 // when a select box is opened via a mouse press that it retains mouse capture
 // after the mouse is released.
@@ -2350,7 +2345,7 @@ TEST_F(RenderWidgetHostViewAuraTest,
       blink::mojom::InputEventResultState::kConsumed);
 
   ui::GestureEventDetails gesture_tap_down_details(ui::ET_GESTURE_TAP_DOWN);
-  gesture_tap_down_details.set_is_source_touch_event_set_non_blocking(true);
+  gesture_tap_down_details.set_is_source_touch_event_set_blocking(true);
   gesture_tap_down_details.set_device_type(
       ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
   ui::GestureEvent gesture_tap_down(2, 2, 0, ui::EventTimeForNow(),
@@ -4922,7 +4917,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollResetsOnBlur) {
   ReleaseAndResetDispatchedMessages();
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Check that when accessibility virtual keyboard is enabled, windows are
 // shifted up when focused and restored when focus is lost.
 TEST_F(RenderWidgetHostViewAuraTest, VirtualKeyboardFocusEnsureCaretInRect) {
@@ -4960,7 +4955,7 @@ TEST_F(RenderWidgetHostViewAuraTest, VirtualKeyboardFocusEnsureCaretInRect) {
   // Window should be restored.
   EXPECT_EQ(view_->GetNativeView()->bounds(), orig_view_bounds);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Tests that invalid touch events are consumed and handled
 // synchronously.
@@ -5853,9 +5848,6 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
     views_.insert(views_.begin(),
                   {tab_view(), view_for_first_process_,
                    view_for_second_process_, view_for_third_process_});
-    processes_.insert(processes_.begin(),
-                      {tab_process(), tab_process(), second_process_host_,
-                       third_process_host_});
     widget_hosts_.insert(
         widget_hosts_.begin(),
         {tab_widget_host(), widget_host_for_first_process_,
@@ -5870,9 +5862,15 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
 
     view_for_second_process_->Destroy();
     delete widget_host_for_second_process_;
+    second_process_host_->Cleanup();
+    second_agent_scheduling_group_host_.reset();
+    second_process_host_.reset();
 
     view_for_third_process_->Destroy();
     delete widget_host_for_third_process_;
+    third_process_host_->Cleanup();
+    third_agent_scheduling_group_host_.reset();
+    third_process_host_.reset();
 
     RenderWidgetHostViewAuraTest::TearDown();
   }
@@ -5884,10 +5882,8 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
     return tab_view()->has_composition_text_;
   }
 
-  MockRenderProcessHost* CreateNewProcessHost() {
-    MockRenderProcessHost* process_host =
-        new MockRenderProcessHost(browser_context());
-    return process_host;
+  std::unique_ptr<MockRenderProcessHost> CreateNewProcessHost() {
+    return std::make_unique<MockRenderProcessHost>(browser_context());
   }
 
   MockRenderWidgetHostImpl* CreateRenderWidgetHostForAgentSchedulingGroup(
@@ -5911,7 +5907,7 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
     EXPECT_TRUE(has_composition_text());
   }
 
-  MockRenderProcessHost* tab_process() const { return process_host_; }
+  MockRenderProcessHost* tab_process() const { return process_host_.get(); }
 
   AgentSchedulingGroupHost& tab_agent_scheduling_group() const {
     return *agent_scheduling_group_host_;
@@ -5922,7 +5918,6 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
   MockRenderWidgetHostImpl* tab_widget_host() const { return widget_host_; }
 
   std::vector<RenderWidgetHostViewBase*> views_;
-  std::vector<MockRenderProcessHost*> processes_;
   std::vector<MockRenderWidgetHostImpl*> widget_hosts_;
   // A sequence of indices in [0, 3] which determines the index of a RWHV in
   // |views_|. This sequence is used in the tests to sequentially make a RWHV
@@ -5939,11 +5934,11 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
 
   MockRenderWidgetHostImpl* widget_host_for_first_process_;
   TestRenderWidgetHostView* view_for_first_process_;
-  MockRenderProcessHost* second_process_host_;
+  std::unique_ptr<MockRenderProcessHost> second_process_host_;
   std::unique_ptr<AgentSchedulingGroupHost> second_agent_scheduling_group_host_;
   MockRenderWidgetHostImpl* widget_host_for_second_process_;
   TestRenderWidgetHostView* view_for_second_process_;
-  MockRenderProcessHost* third_process_host_;
+  std::unique_ptr<MockRenderProcessHost> third_process_host_;
   std::unique_ptr<AgentSchedulingGroupHost> third_agent_scheduling_group_host_;
   MockRenderWidgetHostImpl* widget_host_for_third_process_;
   TestRenderWidgetHostView* view_for_third_process_;
@@ -6297,12 +6292,15 @@ TEST_F(InputMethodStateAuraTest, GetTextFromRange) {
   }
 }
 
-#if defined(USE_X11)
 // This test will verify that after selection, the selected text is written to
 // the clipboard from the focused widget.
 TEST_F(InputMethodStateAuraTest, SelectedTextCopiedToClipboard) {
-  if (features::IsUsingOzonePlatform())
+  // Skip test for platforms that do not support selection clipboard.
+  if (!ui::Clipboard::IsSupportedClipboardBuffer(
+          ui::ClipboardBuffer::kSelection)) {
     return;
+  }
+
   ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
   EXPECT_TRUE(!!clipboard);
   std::vector<std::string> texts = {"text0", "text1", "text2", "text3"};
@@ -6325,7 +6323,6 @@ TEST_F(InputMethodStateAuraTest, SelectedTextCopiedToClipboard) {
     EXPECT_EQ(expected_text, result_text);
   }
 }
-#endif
 
 // This test verifies that when any view on the page cancels an ongoing
 // composition, the RenderWidgetHostViewAura will receive the notification and

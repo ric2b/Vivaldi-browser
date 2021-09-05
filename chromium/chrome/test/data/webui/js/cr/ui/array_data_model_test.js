@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {ArrayDataModel} from 'chrome://resources/js/cr/ui/array_data_model.m.js';
+// #import {assertArrayEquals, assertEquals} from '../../../chai_assert.js';
+// clang-format on
+
 function testSlice() {
   var m = new cr.ui.ArrayDataModel([0, 1, 2]);
   assertArrayEquals([0, 1, 2], m.slice());
@@ -97,3 +102,12 @@ function testReplaceItem() {
   assertEquals(null, permutation);
   assertEquals(1, changeIndex);
 }
+
+Object.assign(window, {
+  testSlice,
+  testPush,
+  testSplice,
+  testPermutation,
+  testUpdateIndexes,
+  testReplaceItem,
+});

@@ -164,15 +164,18 @@ CSSValue* ConsumeTimeRange(CSSParserTokenRange& range,
 
 CSSValue* ConsumeDescriptor(StyleRule::RuleType rule_type,
                             AtRuleDescriptorID id,
-                            CSSParserTokenRange& range,
+                            const CSSTokenizedValue& tokenized_value,
                             const CSSParserContext& context) {
   using Parser = AtRuleDescriptorParser;
+  CSSParserTokenRange range = tokenized_value.range;
 
   switch (rule_type) {
     case StyleRule::kFontFace:
       return Parser::ParseFontFaceDescriptor(id, range, context);
     case StyleRule::kProperty:
-      return Parser::ParseAtPropertyDescriptor(id, range, context);
+      return Parser::ParseAtPropertyDescriptor(id, tokenized_value, context);
+    case StyleRule::kCounterStyle:
+      return Parser::ParseAtCounterStyleDescriptor(id, range, context);
     case StyleRule::kScrollTimeline:
       return Parser::ParseAtScrollTimelineDescriptor(id, range, context);
     case StyleRule::kCharset:
@@ -208,6 +211,13 @@ CSSValue* ConsumeAdvanceOverride(CSSParserTokenRange& range,
   if (!RuntimeEnabledFeatures::CSSFontFaceAdvanceOverrideEnabled())
     return nullptr;
   return css_parsing_utils::ConsumeNumber(range, context, kValueRangeAll);
+}
+
+CSSValue* ConsumeAdvanceProportionalOverride(CSSParserTokenRange& range,
+                                             const CSSParserContext& context) {
+  if (!RuntimeEnabledFeatures::CSSFontFaceAdvanceProportionalOverrideEnabled())
+    return nullptr;
+  return ConsumeFontMetricOverride(range, context);
 }
 
 }  // namespace
@@ -267,6 +277,9 @@ CSSValue* AtRuleDescriptorParser::ParseFontFaceDescriptor(
     case AtRuleDescriptorID::AdvanceOverride:
       parsed_value = ConsumeAdvanceOverride(range, context);
       break;
+    case AtRuleDescriptorID::AdvanceProportionalOverride:
+      parsed_value = ConsumeAdvanceProportionalOverride(range, context);
+      break;
     default:
       break;
   }
@@ -302,9 +315,10 @@ CSSValue* AtRuleDescriptorParser::ParseFontFaceDeclaration(
 
 CSSValue* AtRuleDescriptorParser::ParseAtPropertyDescriptor(
     AtRuleDescriptorID id,
-    CSSParserTokenRange& range,
+    const CSSTokenizedValue& tokenized_value,
     const CSSParserContext& context) {
   CSSValue* parsed_value = nullptr;
+  CSSParserTokenRange range = tokenized_value.range;
   switch (id) {
     case AtRuleDescriptorID::Syntax:
       range.ConsumeWhitespace();
@@ -313,7 +327,8 @@ CSSValue* AtRuleDescriptorParser::ParseAtPropertyDescriptor(
     case AtRuleDescriptorID::InitialValue: {
       // Note that we must retain leading whitespace here.
       return CSSVariableParser::ParseDeclarationValue(
-          g_null_atom, range, false /* is_animation_tainted */, context);
+          g_null_atom, tokenized_value, false /* is_animation_tainted */,
+          context);
     }
     case AtRuleDescriptorID::Inherits:
       range.ConsumeWhitespace();
@@ -365,10 +380,10 @@ CSSValue* AtRuleDescriptorParser::ParseAtScrollTimelineDescriptor(
 bool AtRuleDescriptorParser::ParseAtRule(
     StyleRule::RuleType rule_type,
     AtRuleDescriptorID id,
-    CSSParserTokenRange& range,
+    const CSSTokenizedValue& tokenized_value,
     const CSSParserContext& context,
     HeapVector<CSSPropertyValue, 256>& parsed_descriptors) {
-  CSSValue* result = ConsumeDescriptor(rule_type, id, range, context);
+  CSSValue* result = ConsumeDescriptor(rule_type, id, tokenized_value, context);
 
   if (!result)
     return false;

@@ -3,6 +3,7 @@
 <translationbundle lang="uk">
 <translation id="1276998909102132017">Зображення з галереї</translation>
 <translation id="1430915738399379752">Друк</translation>
+<translation id="1473110567575736769">Таймер на 3 секунди</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Нічого не записано</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Роздільна здатність камери</translation>
 <translation id="3517926952904427380">Не вдалося зробити портретне фото</translation>
 <translation id="3569311554794739032">Видалити файл "<ph name="FILE" />"?</translation>
+<translation id="3750315947605636967">Камеру зараз використовує інший додаток</translation>
 <translation id="3810838688059735925">Відео</translation>
+<translation id="4000398125663085899">Нові фотографії й відео тепер зберігатимуться в папці в додатку Файли: "Мої файли" &gt; "Камера"</translation>
 <translation id="4118525110028899586">Призупинити запис</translation>
 <translation id="4279490309300973883">Дзеркальне відображення</translation>
 <translation id="4329152592498422850">Перейти в режим квадратного фото</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">Камера зараз недоступна.
         Перевірте, чи правильно її під’єднано.</translation>
 <translation id="5152121255775685072">Перейти в галерею</translation>
+<translation id="5422455049771430511">Нове сховище для ваших фотографій і відео</translation>
 <translation id="5671277269877808209">Квадрат</translation>
 <translation id="5775960006311140197">Режим експерта</translation>
 <translation id="5869546221129391014">Сітка</translation>
+<translation id="6040143037577758943">Закрити</translation>
 <translation id="6073451960410192870">Припинити запис</translation>
 <translation id="6197807149213783179">Зберегти метадані</translation>
 <translation id="6233780560267770709">3 на 3</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">OK</translation>
 <translation id="698156982839284926">3 секунди</translation>
 <translation id="712848772518857951">Видалити елементи (<ph name="COUNT" />)?</translation>
+<translation id="7134221860976209830">Таймер на 10 секунд</translation>
 <translation id="7243947652761655814">Роздільна здатність відео</translation>
 <translation id="7337660886763914220">Помилки файлової системи.</translation>
 <translation id="7557677699350329807">Перемкнутися на наступну камеру</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">Довідка</translation>
 <translation id="7658239707568436148">Скасувати</translation>
 <translation id="7670511624014457267">60 кадрів/с</translation>
-<translation id="8049189770492311300">Таймер</translation>
 <translation id="8067883171444229417">Дивитися відео</translation>
 <translation id="8131740175452115882">Підтвердити</translation>
 <translation id="8145038249676204903">Перейти в режим фотозйомки</translation>

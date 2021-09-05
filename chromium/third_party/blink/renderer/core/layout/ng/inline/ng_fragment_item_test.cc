@@ -34,12 +34,6 @@ class NGFragmentItemTest : public NGLayoutTest,
     return To<LayoutBlockFlow>(GetLayoutObjectByElementId(id));
   }
 
-  const NGFragmentItems* GetFragmentItemsByElementId(const char* id) {
-    const auto* block_flow =
-        To<LayoutBlockFlow>(GetLayoutObjectByElementId("container"));
-    return block_flow->FragmentItems();
-  }
-
   Vector<NGInlineCursorPosition> GetLines(NGInlineCursor* cursor) {
     Vector<NGInlineCursorPosition> lines;
     for (cursor->MoveToFirstLine(); *cursor; cursor->MoveToNextLine())
@@ -60,11 +54,13 @@ class NGFragmentItemTest : public NGLayoutTest,
 
   void TestFirstDirtyLineIndex(const char* id, wtf_size_t expected_index) {
     LayoutBlockFlow* block_flow = GetLayoutBlockFlowByElementId(id);
-    const NGFragmentItems* items = block_flow->FragmentItems();
-    items->DirtyLinesFromNeedsLayout(block_flow);
-    const NGFragmentItem* end_reusable_item = items->EndOfReusableItems();
+    const NGPhysicalBoxFragment* fragment = block_flow->GetPhysicalFragment(0);
+    const NGFragmentItems* items = fragment->Items();
+    NGFragmentItems::DirtyLinesFromNeedsLayout(*block_flow);
+    const NGFragmentItem* end_reusable_item =
+        items->EndOfReusableItems(*fragment);
 
-    NGInlineCursor cursor(*items);
+    NGInlineCursor cursor(*fragment, *items);
     const auto lines = GetLines(&cursor);
     EXPECT_EQ(IndexOf(lines, end_reusable_item), expected_index);
   }
@@ -163,10 +159,10 @@ TEST_F(NGFragmentItemTest, BasicText) {
     </div>
   )HTML");
 
-  LayoutBlockFlow* container =
+  auto* container =
       To<LayoutBlockFlow>(GetLayoutObjectByElementId("container"));
-  LayoutText* layout_text = ToLayoutText(container->FirstChild());
-  const NGPhysicalBoxFragment* box = container->CurrentFragment();
+  auto* layout_text = To<LayoutText>(container->FirstChild());
+  const NGPhysicalBoxFragment* box = container->GetPhysicalFragment(0);
   EXPECT_NE(box, nullptr);
   const NGFragmentItems* items = box->Items();
   EXPECT_NE(items, nullptr);
@@ -209,11 +205,11 @@ TEST_F(NGFragmentItemTest, RtlText) {
     </div>
   )HTML");
 
-  LayoutBlockFlow* container =
+  auto* container =
       To<LayoutBlockFlow>(GetLayoutObjectByElementId("container"));
   LayoutObject* span = GetLayoutObjectByElementId("span");
-  LayoutText* layout_text = ToLayoutText(span->SlowFirstChild());
-  const NGPhysicalBoxFragment* box = container->CurrentFragment();
+  auto* layout_text = To<LayoutText>(span->SlowFirstChild());
+  const NGPhysicalBoxFragment* box = container->GetPhysicalFragment(0);
   EXPECT_NE(box, nullptr);
   const NGFragmentItems* items = box->Items();
   EXPECT_NE(items, nullptr);
@@ -360,9 +356,9 @@ TEST_F(NGFragmentItemTest, SelfPaintingInlineBox) {
 
   // Invalidate the ink overflow of a child in `#self_painting_inline_box`.
   auto* self_painting_inline_box =
-      ToLayoutInline(GetLayoutObjectByElementId("self_painting_inline_box"));
+      To<LayoutInline>(GetLayoutObjectByElementId("self_painting_inline_box"));
   ASSERT_TRUE(self_painting_inline_box->HasSelfPaintingLayer());
-  auto* text = ToLayoutText(self_painting_inline_box->FirstChild());
+  auto* text = To<LayoutText>(self_painting_inline_box->FirstChild());
   text->InvalidateVisualOverflow();
 
   // Mark the |PaintLayer| to need to recalc visual overflow.

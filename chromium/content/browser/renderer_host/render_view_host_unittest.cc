@@ -16,7 +16,6 @@
 #include "content/browser/renderer_host/render_widget_helper.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
@@ -254,7 +253,7 @@ TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   auto navigation1 =
       NavigationSimulatorImpl::CreateRendererInitiated(url, main_test_rfh());
   navigation1->set_page_state(
-      PageState::CreateForTesting(url, false, "data", &file_path));
+      blink::PageState::CreateForTesting(url, false, "data", &file_path));
   navigation1->Commit();
   EXPECT_EQ(1, process()->bad_msg_count());
 
@@ -263,7 +262,7 @@ TEST_F(RenderViewHostTest, NavigationWithBadHistoryItemFiles) {
   auto navigation2 =
       NavigationSimulatorImpl::CreateRendererInitiated(url, main_test_rfh());
   navigation2->set_page_state(
-      PageState::CreateForTesting(url, false, "data", &file_path));
+      blink::PageState::CreateForTesting(url, false, "data", &file_path));
   navigation2->Commit();
   EXPECT_EQ(1, process()->bad_msg_count());
 }

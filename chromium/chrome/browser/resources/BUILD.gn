@@ -16,6 +16,7 @@ assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 if (enable_js_type_check) {
   group("closure_compile") {
     deps = [
+      "accessibility:closure_compile",
       "components:closure_compile",
       "engagement:closure_compile",
       "interventions_internals:closure_compile",
@@ -27,6 +28,7 @@ if (enable_js_type_check) {
       deps += [
         "bluetooth_internals:closure_compile",
         "bookmarks:closure_compile",
+        "commander:closure_compile",
         "discards:closure_compile",
         "download_internals:closure_compile",
         "downloads:closure_compile",
@@ -50,6 +52,7 @@ if (enable_js_type_check) {
         "settings:closure_compile",
         "settings:closure_compile_module",
         "signin:closure_compile",
+        "tab_search:closure_compile",
         "usb_internals:closure_compile",
         "user_manager:closure_compile",
         "web_app_internals:closure_compile",
@@ -58,6 +61,9 @@ if (enable_js_type_check) {
     }
     if (is_win || is_android || is_linux || is_chromeos) {
       deps += [ "sandbox_internals:closure_compile" ]
+    }
+    if (is_linux || is_chromeos) {
+      deps += [ "webui_js_exception:closure_compile" ]
     }
     if (is_chromeos) {
       deps += [
@@ -70,9 +76,6 @@ if (enable_js_type_check) {
     }
     if (enable_nacl) {
       deps += [ "about_nacl:closure_compile" ]
-    }
-    if (enable_tab_search) {
-      deps += [ "tab_search:closure_compile" ]
     }
     if (enable_webui_tab_strip) {
       deps += [ "tab_strip:closure_compile" ]
@@ -91,7 +94,7 @@ if (enable_js_type_check) {
         "webapks:closure_compile",
       ]
     }
-    if (is_win || is_mac || is_desktop_linux) {
+    if (is_win || is_mac || is_linux) {
       deps += [ "browser_switch:closure_compile" ]
     }
 
@@ -106,39 +109,8 @@ if (enable_js_type_check) {
 }
 
 if (!is_android) {
-  grit("bookmarks_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    if (optimize_webui) {
-      source = "bookmarks/bookmarks_resources_vulcanized.grd"
-
-      deps = [ "//chrome/browser/resources/bookmarks:build" ]
-    } else {
-      source = "bookmarks/bookmarks_resources.grd"
-
-      deps = [ "//chrome/browser/resources/bookmarks:web_components" ]
-    }
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/bookmarks_resources.h",
-      "grit/bookmarks_resources_map.cc",
-      "grit/bookmarks_resources_map.h",
-      "bookmarks_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
   grit("component_extension_resources") {
     source = "component_extension_resources.grd"
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
 
     deps = [ "//chrome/browser/resources/pdf:web_components" ]
 
@@ -157,11 +129,6 @@ if (!is_android) {
   }
 
   grit("gaia_auth_host_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
     source = "gaia_auth_host/gaia_auth_host_resources.grd"
     deps = [ "//chrome/browser/resources/gaia_auth_host:modulize" ]
 
@@ -171,32 +138,6 @@ if (!is_android) {
       "grit/gaia_auth_host_resources_map.cc",
       "grit/gaia_auth_host_resources_map.h",
       "gaia_auth_host_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("history_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    if (optimize_webui) {
-      source = "history/history_resources_vulcanized.grd"
-
-      deps = [ "//chrome/browser/resources/history:build" ]
-    } else {
-      source = "history/history_resources.grd"
-
-      deps = [ "//chrome/browser/resources/history:web_components" ]
-    }
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/history_resources.h",
-      "grit/history_resources_map.cc",
-      "grit/history_resources_map.h",
-      "history_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }
@@ -220,20 +161,19 @@ if (!is_android) {
 
     deps = [
       "//chrome/browser/promo_browser_command:mojo_bindings_js",
-      "//chrome/browser/search/shopping_tasks:mojo_bindings_js",
+      "//chrome/browser/search/task_module:mojo_bindings_js",
       "//chrome/browser/ui/webui/new_tab_page:mojo_bindings_js",
       "//skia/public/mojom:mojom_js",
     ]
+    if (!is_official_build) {
+      deps += [ "//chrome/browser/ui/webui/new_tab_page/foo:mojo_bindings_js" ]
+    }
+
     if (optimize_webui) {
       deps += [ "//chrome/browser/resources/new_tab_page:optimized_js" ]
     } else {
       deps += [ "//chrome/browser/resources/new_tab_page:web_components" ]
     }
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
 
     defines = chrome_grit_defines + [ "is_official_build=$is_official_build" ]
     outputs = [
@@ -245,74 +185,14 @@ if (!is_android) {
     output_dir = "$root_gen_dir/chrome"
   }
 
-  grit("read_later_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-    source = "read_later/read_later_resources.grd"
-    deps = [
-      "//chrome/browser/resources/read_later:web_components",
-      "//chrome/browser/ui/webui/read_later:mojo_bindings_js",
-    ]
+  grit("preinstalled_web_apps_resources") {
+    source = "preinstalled_web_apps/resources.grd"
     defines = chrome_grit_defines
     outputs = [
-      "grit/read_later_resources.h",
-      "grit/read_later_resources_map.cc",
-      "grit/read_later_resources_map.h",
-      "read_later_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("settings_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    if (optimize_webui) {
-      source = "settings/settings_resources_vulcanized.grd"
-
-      deps = [ "//chrome/browser/resources/settings:build_polymer3" ]
-    } else {
-      source = "settings/settings_resources.grd"
-      deps = [ "//chrome/browser/resources/settings:polymer3_elements" ]
-    }
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/settings_resources.h",
-      "grit/settings_resources_map.cc",
-      "grit/settings_resources_map.h",
-      "settings_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("downloads_resources") {
-    if (optimize_webui) {
-      source = "downloads/downloads_resources_vulcanized.grd"
-
-      deps = [ "//chrome/browser/resources/downloads:build" ]
-    } else {
-      source = "downloads/downloads_resources.grd"
-
-      deps = [ "//chrome/browser/resources/downloads:web_components" ]
-    }
-    deps += [ "//chrome/browser/ui/webui/downloads:mojo_bindings_js" ]
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/downloads_resources.h",
-      "grit/downloads_resources_map.cc",
-      "grit/downloads_resources_map.h",
-      "downloads_resources.pak",
+      "grit/preinstalled_web_apps_resources.h",
+      "grit/preinstalled_web_apps_resources_map.cc",
+      "grit/preinstalled_web_apps_resources_map.h",
+      "preinstalled_web_apps_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }
@@ -322,11 +202,6 @@ if (is_chromeos) {
   grit("multidevice_internals_resources") {
     source =
         "chromeos/multidevice_internals/multidevice_internals_resources.grd"
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
 
     deps = [ "//chrome/browser/resources/chromeos/multidevice_internals:web_components" ]
 
@@ -340,145 +215,17 @@ if (is_chromeos) {
     output_dir = "$root_gen_dir/chrome"
   }
 
-  grit("nearby_internals_resources") {
-    source = "nearby_internals/nearby_internals_resources.grd"
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    deps = [ "//chrome/browser/resources/nearby_internals:web_components" ]
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/nearby_internals_resources.h",
-      "grit/nearby_internals_resources_map.cc",
-      "grit/nearby_internals_resources_map.h",
-      "nearby_internals_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("nearby_share_dialog_resources") {
-    source = "nearby_share/nearby_share_dialog_resources.grd"
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    deps = [
-      "//chrome/browser/resources/nearby_share:web_components",
-      "//chrome/browser/resources/nearby_share/shared:polymer3_elements",
-      "//chrome/browser/ui/webui/nearby_share:mojom_js",
-    ]
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/nearby_share_dialog_resources.h",
-      "grit/nearby_share_dialog_resources_map.cc",
-      "grit/nearby_share_dialog_resources_map.h",
-      "nearby_share_dialog_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("nearby_shared_resources") {
-    source = "nearby_share/shared/nearby_shared_resources.grd"
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    deps = [ "//chrome/browser/ui/webui/nearby_share:mojom_js" ]
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/nearby_shared_resources.h",
-      "grit/nearby_shared_resources_map.cc",
-      "grit/nearby_shared_resources_map.h",
-      "nearby_shared_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("nearby_shared_resources_v3") {
-    source = "nearby_share/shared/nearby_shared_resources_v3.grd"
-
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    deps = [
-      "//chrome/browser/resources/nearby_share/shared:polymer3_elements",
-      "//chrome/browser/ui/webui/nearby_share:mojom_js",
-    ]
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/nearby_shared_resources_v3.h",
-      "grit/nearby_shared_resources_v3_map.cc",
-      "grit/nearby_shared_resources_v3_map.h",
-      "nearby_shared_resources_v3.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("os_settings_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-    deps = [ "//chrome/browser/ui/webui/settings/chromeos:mojom_js" ]
-    if (optimize_webui) {
-      # Required due to flattenhtml="true" on a generated file.
-      enable_input_discovery_for_gn_analyze = false
-      source = "settings/os_settings_resources_vulcanized.grd"
-
-      deps += [
-        "//chrome/browser/resources/settings/chromeos:build",
-        "//chrome/browser/resources/settings/chromeos:build_polymer3",
-      ]
-    } else {
-      source = "settings/os_settings_resources.grd"
-      deps += [
-        "//chrome/browser/resources/settings/chromeos:polymer3_elements",
-        "//chrome/browser/ui/webui/settings/chromeos/search:mojo_bindings_js",
-      ]
-    }
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/os_settings_resources.h",
-      "grit/os_settings_resources_map.cc",
-      "grit/os_settings_resources_map.h",
-      "os_settings_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
   grit("bluetooth_pairing_dialog_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    defines = chrome_grit_defines
+
+    # These arguments are needed since the grd is generated at build time.
+    enable_input_discovery_for_gn_analyze = false
+    bluetooth_gen_dir = "$root_gen_dir/chrome/browser/resources/chromeos/bluetooth_pairing_dialog"
+    source = "$bluetooth_gen_dir/bluetooth_pairing_dialog_resources.grd"
+    deps = [
+      "//chrome/browser/resources/chromeos/bluetooth_pairing_dialog:build_grd",
     ]
 
-    if (optimize_webui) {
-      source = "chromeos/bluetooth_pairing_dialog/bluetooth_pairing_dialog_resources_vulcanized.grd"
-
-      deps = [
-        "//chrome/browser/resources/chromeos/bluetooth_pairing_dialog:build",
-      ]
-    } else {
-      source = "chromeos/bluetooth_pairing_dialog/bluetooth_pairing_dialog_resources.grd"
-
-      deps = [ "//chrome/browser/resources/chromeos/bluetooth_pairing_dialog:web_components" ]
-    }
-
-    defines = chrome_grit_defines
     outputs = [
       "grit/bluetooth_pairing_dialog_resources.h",
       "grit/bluetooth_pairing_dialog_resources_map.cc",
@@ -489,77 +236,7 @@ if (is_chromeos) {
   }
 }
 
-if (!is_android && !is_chromeos) {
-  grit("welcome_resources") {
-    source = "welcome/welcome_resources.grd"
-
-    deps = [ "//chrome/browser/resources/welcome:web_components" ]
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/welcome_resources.h",
-      "grit/welcome_resources_map.cc",
-      "grit/welcome_resources_map.h",
-      "welcome_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("profile_picker_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-    if (optimize_webui) {
-      source = "signin/profile_picker/profile_picker_resources_vulcanized.grd"
-      deps = [ "//chrome/browser/resources/signin/profile_picker:build" ]
-    } else {
-      source = "signin/profile_picker/profile_picker_resources.grd"
-      deps =
-          [ "//chrome/browser/resources/signin/profile_picker:web_components" ]
-    }
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/profile_picker_resources.h",
-      "grit/profile_picker_resources_map.cc",
-      "grit/profile_picker_resources_map.h",
-      "profile_picker_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-}
-
 if (enable_extensions) {
-  grit("extensions_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-    if (optimize_webui) {
-      source = "extensions/extensions_resources_vulcanized.grd"
-
-      deps = [ "//chrome/browser/resources/extensions:build" ]
-    } else {
-      source = "extensions/extensions_resources.grd"
-
-      deps = [ "//chrome/browser/resources/extensions:web_components" ]
-    }
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/extensions_resources.h",
-      "grit/extensions_resources_map.cc",
-      "grit/extensions_resources_map.h",
-      "extensions_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
   grit("sync_file_system_internals_resources") {
     source =
         "sync_file_system_internals/sync_file_system_internals_resources.grd"
@@ -569,97 +246,6 @@ if (enable_extensions) {
       "sync_file_system_internals_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
-  }
-}
-
-if (enable_print_preview) {
-  grit("print_preview_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    defines = chrome_grit_defines
-    if (optimize_webui) {
-      source = "print_preview/print_preview_resources_vulcanized.grd"
-      deps = [ "//chrome/browser/resources/print_preview:build" ]
-    } else {
-      # These arguments are needed since the grd is generated at build time.
-      enable_input_discovery_for_gn_analyze = false
-      defines += [ "SHARED_INTERMEDIATE_DIR=" +
-                   rebase_path(root_gen_dir, root_build_dir) ]
-      print_gen_dir = "$root_gen_dir/chrome/browser/resources/print_preview"
-      source = "$print_gen_dir/print_preview_resources.grd"
-      deps = [ "//chrome/browser/resources/print_preview:build_grd" ]
-    }
-
-    outputs = [
-      "grit/print_preview_resources.h",
-      "grit/print_preview_resources_map.cc",
-      "grit/print_preview_resources_map.h",
-      "print_preview_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-
-  grit("print_preview_pdf_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-
-    source = "print_preview/print_preview_pdf_resources.grd"
-    deps = [ "//chrome/browser/resources/pdf:web_components" ]
-
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/print_preview_pdf_resources.h",
-      "grit/print_preview_pdf_resources_map.cc",
-      "grit/print_preview_pdf_resources_map.h",
-      "print_preview_pdf_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-}
-
-if (enable_tab_search) {
-  grit("tab_search_resources") {
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
-    source = "tab_search/tab_search_resources.grd"
-    deps = [
-      "//chrome/browser/resources/tab_search:web_components",
-      "//chrome/browser/ui/webui/tab_search:mojo_bindings_js",
-    ]
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/tab_search_resources.h",
-      "grit/tab_search_resources_map.cc",
-      "grit/tab_search_resources_map.h",
-      "tab_search_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-}
-
-if (enable_webui_tab_strip) {
-  grit("tab_strip_resources") {
-    source = "tab_strip/tab_strip_resources.grd"
-    defines = chrome_grit_defines
-    deps = [ "tab_strip:web_components" ]
-    outputs = [
-      "grit/tab_strip_resources.h",
-      "grit/tab_strip_resources_map.cc",
-      "grit/tab_strip_resources_map.h",
-      "tab_strip_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-    grit_flags = [
-      "-E",
-      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
-    ]
   }
 }
 

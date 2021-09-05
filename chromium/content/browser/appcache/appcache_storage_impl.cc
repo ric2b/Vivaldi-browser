@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -307,12 +307,7 @@ void AppCacheStorageImpl::InitTask::RunCompleted() {
         kDelay);
   }
 
-  if (storage_->service()->quota_client()) {
-    GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(&AppCacheQuotaClient::NotifyAppCacheReady,
-                       base::RetainedRef(storage_->service()->quota_client())));
-  }
+  storage_->service()->NotifyStorageReady();
 }
 
 // DisableDatabaseTask -------

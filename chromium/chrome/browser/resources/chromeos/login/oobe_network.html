@@ -2,7 +2,11 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 
-<dom-module id="oobe-network">
+<link rel="import" href="/components/common_styles.html">
+<link rel="import" href="/components/hd_iron_icon.html">
+<link rel="import" href="/components/oobe_i18n_behavior.html">
+
+<dom-module id="oobe-network-element">
   <template>
     <style include="oobe-dialog-host"></style>
     <oobe-dialog id="networkDialog" role="dialog" on-show-dialog="onShown_"
@@ -22,10 +26,12 @@
             is-network-connected="{{isConnected_}}">
         </network-select-login>
       </div>
-      <div slot="bottom-buttons" class="layout horizontal justified">
+      <div slot="back-navigation">
         <oobe-back-button on-click="onBackClicked_"></oobe-back-button>
+      </div>
+      <div slot="bottom-buttons">
         <oobe-next-button id="nextButton" disabled="[[!isConnected_]]"
-            on-tap="onNextClicked_"></oobe-next-button>
+            on-click="onNextClicked_"></oobe-next-button>
       </div>
     </oobe-dialog>
   </template>

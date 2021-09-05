@@ -99,6 +99,11 @@ extern const base::Feature kCertDualVerificationTrialFeature;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kChangePictureVideoMode;
 
+#if defined(OS_WIN)
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kChromeCleanupScanCompletedNotification;
+#endif
+
 #if defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kClearOldBrowsingData;
@@ -112,6 +117,9 @@ extern const base::Feature kClientStorageAccessContextAuditing;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kContentSettingsRedesign;
+
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kCookiesPageRedesign;
 
 #if defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES)
@@ -205,6 +213,11 @@ COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kDownloadsLocationChange;
 #endif
 
+#if defined(OS_ANDROID)
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kEarlyLibraryLoad;
+#endif
+
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kEnableAllSystemWebApps;
 
@@ -214,14 +227,26 @@ extern const base::Feature kEnableAmbientAuthenticationInGuestSession;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kEnableAmbientAuthenticationInIncognito;
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
+#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || \
+    defined(OS_MAC)
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kEnableEphemeralGuestProfilesOnDesktop;
-#endif  // defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
+#endif  // defined(OS_WIN) || (defined(OS_LINUX) &6 !defined(OS_CHROMEOS)) ||
+        // defined(OS_MAC)
 
 #if defined(OS_WIN)
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kEnableIncognitoShortcutOnDesktop;
+#endif
+
+#if !defined(OS_ANDROID)
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kEnterpriseRealtimeExtensionRequest;
+#endif
+
+#if defined(OS_MAC)
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kEnterpriseReportingApiKeychainRecreation;
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -246,7 +271,7 @@ COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kFlocIdComputedEventLogging;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kFlocIdBlocklistFiltering;
+extern const base::Feature kFlocIdSortingLshBasedComputation;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kFocusMode;
@@ -272,6 +297,10 @@ extern const base::Feature kHappinessTrackingSurveysForDesktopSettings;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kHappinessTrackingSurveysForDesktopSettingsPrivacy;
+
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature
+    kHappinessTrackingSurveysForDesktopDevToolsIssuesCookiesSameSite;
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -394,7 +423,12 @@ extern const base::Feature kParentAccessCodeForOnlineLogin;
 
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kPerAppTimeLimits;
+#endif
 
+COMPONENT_EXPORT(CHROME_FEATURES)
+extern const base::Feature kPermissionPredictions;
+
+#if defined(OS_CHROMEOS)
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kPluginVm;
 #endif
@@ -405,10 +439,10 @@ extern const base::Feature kPredictivePrefetchingAllowedOnAllConnectionTypes;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kPrerenderFallbackToPreconnect;
 
-#if defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kPrivacyElevatedAndroid;
+extern const base::Feature kPrivacyAdvisor;
 
+#if defined(OS_ANDROID)
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kPrivacyReorderedAndroid;
 #endif
@@ -467,11 +501,6 @@ extern const base::Feature kSharesheet;
 COMPONENT_EXPORT(CHROME_FEATURES)
 extern const base::Feature kShow10_10ObsoleteInfobar;
 #endif  // defined(OS_MAC)
-
-#if defined(OS_ANDROID)
-COMPONENT_EXPORT(CHROME_FEATURES)
-extern const base::Feature kShowTrustedPublisherURL;
-#endif
 
 COMPONENT_EXPORT(CHROME_FEATURES) extern const base::Feature kSitePerProcess;
 

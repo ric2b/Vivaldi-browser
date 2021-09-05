@@ -20,6 +20,7 @@ const SubstitutionTypes GeneralSubstitutions = {
     &SubstitutionOutput,
     &SubstitutionLabel,
     &SubstitutionLabelName,
+    &SubstitutionLabelNoToolchain,
     &SubstitutionRootGenDir,
     &SubstitutionRootOutDir,
     &SubstitutionOutputDir,
@@ -72,6 +73,8 @@ const Substitution SubstitutionSourceTargetRelative = {
 // do not vary on a per-file basis.
 const Substitution SubstitutionLabel = {"{{label}}", "label"};
 const Substitution SubstitutionLabelName = {"{{label_name}}", "label_name"};
+const Substitution SubstitutionLabelNoToolchain = {"{{label_no_toolchain}}",
+                                                   "label_no_toolchain"};
 const Substitution SubstitutionRootGenDir = {"{{root_gen_dir}}",
                                              "root_gen_dir"};
 const Substitution SubstitutionRootOutDir = {"{{root_out_dir}}",
@@ -166,6 +169,7 @@ bool IsValidScriptArgsSubstitution(const Substitution* type) {
 bool IsValidToolSubstitution(const Substitution* type) {
   return type == &SubstitutionLiteral || type == &SubstitutionOutput ||
          type == &SubstitutionLabel || type == &SubstitutionLabelName ||
+         type == &SubstitutionLabelNoToolchain ||
          type == &SubstitutionRootGenDir || type == &SubstitutionRootOutDir ||
          type == &SubstitutionTargetGenDir ||
          type == &SubstitutionTargetOutDir ||

@@ -41,6 +41,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/themes/theme_syncable_service.h"
+#include "chrome/browser/ui/read_later/reading_list_model_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
@@ -64,7 +65,11 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
+#include "components/metrics/demographics/user_demographics.h"
 #include "components/password_manager/core/browser/password_store.h"
+#include "components/prefs/pref_service.h"
+#include "components/reading_list/core/reading_list_model.h"
+#include "components/reading_list/features/reading_list_switches.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
@@ -76,7 +81,6 @@
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/syncable_service_based_model_type_controller.h"
-#include "components/sync/engine/passive_model_worker.h"
 #include "components/sync/model/model_type_store.h"
 #include "components/sync/model/model_type_store_service.h"
 #include "components/sync/model_impl/forwarding_model_type_controller_delegate.h"
@@ -87,6 +91,7 @@
 #include "components/sync_user_events/user_event_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/storage_partition.h"
 #include "extensions/browser/api/storage/backend_task_runner.h"
 #include "extensions/buildflags/buildflags.h"
 
@@ -233,7 +238,9 @@ ChromeSyncClient::ChromeSyncClient(Profile* profile) : profile_(profile) {
   trusted_vault_client_ =
       std::make_unique<syncer::StandaloneTrustedVaultClient>(
           profile_->GetPath().Append(kTrustedVaultFilename),
-          IdentityManagerFactory::GetForProfile(profile_));
+          IdentityManagerFactory::GetForProfile(profile_),
+          content::BrowserContext::GetDefaultStoragePartition(profile_)
+              ->GetURLLoaderFactoryForBrowserProcess());
 #endif  // defined(OS_ANDROID)
 }
 
@@ -310,13 +317,18 @@ ChromeSyncClient::GetSendTabToSelfSyncService() {
   return SendTabToSelfSyncServiceFactory::GetForProfile(profile_);
 }
 
+sync_preferences::PrefServiceSyncable*
+ChromeSyncClient::GetPrefServiceSyncable() {
+  return PrefServiceSyncableFromProfile(profile_);
+}
+
 sync_sessions::SessionSyncService* ChromeSyncClient::GetSessionSyncService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return SessionSyncServiceFactory::GetForProfile(profile_);
 }
 
-base::Closure ChromeSyncClient::GetPasswordStateChangedCallback() {
-  return base::Bind(
+base::RepeatingClosure ChromeSyncClient::GetPasswordStateChangedCallback() {
+  return base::BindRepeating(
       &PasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged,
       base::Unretained(profile_));
 }
@@ -568,14 +580,6 @@ ChromeSyncClient::GetExtensionsActivity() {
 base::WeakPtr<syncer::SyncableService>
 ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   switch (type) {
-    case syncer::PREFERENCES:
-      return PrefServiceSyncableFromProfile(profile_)
-          ->GetSyncableService(syncer::PREFERENCES)
-          ->AsWeakPtr();
-    case syncer::PRIORITY_PREFERENCES:
-      return PrefServiceSyncableFromProfile(profile_)
-          ->GetSyncableService(syncer::PRIORITY_PREFERENCES)
-          ->AsWeakPtr();
     case syncer::SEARCH_ENGINES:
       return GetWeakPtrOrNull(
           TemplateURLServiceFactory::GetForProfile(profile_));
@@ -594,10 +598,6 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return ThemeServiceFactory::GetForProfile(profile_)->
           GetThemeSyncableService()->AsWeakPtr();
 #endif  // !defined(OS_ANDROID)
-    case syncer::HISTORY_DELETE_DIRECTIVES: {
-      history::HistoryService* history = GetHistoryService();
-      return history ? history->GetDeleteDirectivesSyncableService() : nullptr;
-    }
 #if BUILDFLAG(ENABLE_SPELLCHECK)
     case syncer::DICTIONARY: {
       SpellcheckService* spellcheck_service =
@@ -635,10 +635,13 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
 ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
-    case syncer::READING_LIST:
-      // Reading List is only supported on iOS at the moment.
-      NOTREACHED();
-      return base::WeakPtr<syncer::ModelTypeControllerDelegate>();
+    case syncer::READING_LIST: {
+      DCHECK(reading_list::switches::IsReadingListEnabled());
+      return ReadingListModelFactory::GetForBrowserContext(profile_)
+          ->GetModelTypeSyncBridge()
+          ->change_processor()
+          ->GetControllerDelegate();
+    }
 #if defined(OS_CHROMEOS)
     case syncer::PRINTERS:
       return chromeos::SyncedPrintersManagerFactory::GetForBrowserContext(
@@ -659,8 +662,6 @@ ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
           ->GetControllerDelegate();
     case syncer::USER_EVENTS:
       return browser_sync::UserEventServiceFactory::GetForProfile(profile_)
-          ->GetSyncBridge()
-          ->change_processor()
           ->GetControllerDelegate();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     case syncer::WEB_APPS: {
@@ -697,17 +698,6 @@ ChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   }
 }
 
-scoped_refptr<syncer::ModelSafeWorker>
-ChromeSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  switch (group) {
-    case syncer::GROUP_PASSIVE:
-      return new syncer::PassiveModelWorker();
-    default:
-      return nullptr;
-  }
-}
-
 syncer::SyncApiComponentFactory*
 ChromeSyncClient::GetSyncApiComponentFactory() {
   return component_factory_.get();
@@ -719,6 +709,10 @@ syncer::SyncTypePreferenceProvider* ChromeSyncClient::GetPreferenceProvider() {
 #else
   return nullptr;
 #endif
+}
+
+void ChromeSyncClient::OnLocalSyncTransportDataCleared() {
+  metrics::ClearDemographicsPrefs(profile_->GetPrefs());
 }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

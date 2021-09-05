@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
+#include "base/test/scoped_feature_list.h"
+#include "cc/base/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -40,11 +42,6 @@ class PrePaintTreeWalkTest : public PaintControllerPaintTest {
         ->FirstFragment()
         .PaintProperties()
         ->ScrollTranslation();
-  }
-
- protected:
-  PaintLayer* GetPaintLayerByElementId(const char* id) {
-    return ToLayoutBoxModelObject(GetLayoutObjectByElementId(id))->Layer();
   }
 
  private:
@@ -157,15 +154,12 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange) {
   )HTML");
 
   auto* parent = GetDocument().getElementById("parent");
-  auto* child = GetDocument().getElementById("child");
-  auto* child_paint_layer =
-      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  auto* child_paint_layer = GetPaintLayerByElementId("child");
   EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -184,15 +178,12 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChange2DTransform) {
   )HTML");
 
   auto* parent = GetDocument().getElementById("parent");
-  auto* child = GetDocument().getElementById("child");
-  auto* child_paint_layer =
-      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  auto* child_paint_layer = GetPaintLayerByElementId("child");
   EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -212,17 +203,14 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosAbs) {
   )HTML");
 
   auto* parent = GetDocument().getElementById("parent");
-  auto* child = GetDocument().getElementById("child");
-  auto* child_paint_layer =
-      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  auto* child_paint_layer = GetPaintLayerByElementId("child");
   EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -242,17 +230,14 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
   )HTML");
 
   auto* parent = GetDocument().getElementById("parent");
-  auto* child = GetDocument().getElementById("child");
-  auto* child_paint_layer =
-      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  auto* child_paint_layer = GetPaintLayerByElementId("child");
   EXPECT_FALSE(child_paint_layer->SelfNeedsRepaint());
   EXPECT_FALSE(child_paint_layer->NeedsPaintPhaseFloat());
 
   // This changes clips for absolute-positioned descendants of "child" but not
   // normal-position ones, which are already clipped to 50x50.
   parent->setAttribute(html_names::kClassAttr, "clip");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   EXPECT_TRUE(child_paint_layer->SelfNeedsRepaint());
 }
@@ -276,11 +261,9 @@ TEST_P(PrePaintTreeWalkTest, ClipChangeRepaintsDescendants) {
   )HTML");
 
   GetDocument().getElementById("parent")->removeAttribute("style");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
-  auto* greatgrandchild = GetLayoutObjectByElementId("greatgrandchild");
-  auto* paint_layer = ToLayoutBoxModelObject(greatgrandchild)->Layer();
+  auto* paint_layer = GetPaintLayerByElementId("greatgrandchild");
   EXPECT_TRUE(paint_layer->SelfNeedsRepaint());
 }
 
@@ -299,10 +282,9 @@ TEST_P(PrePaintTreeWalkTest, ClipChangeHasRadius) {
   )HTML");
 
   auto* target = GetDocument().getElementById("target");
-  auto* target_object = ToLayoutBoxModelObject(target->GetLayoutObject());
+  auto* target_object = To<LayoutBoxModelObject>(target->GetLayoutObject());
   target->setAttribute(html_names::kStyleAttr, "border-radius: 5px");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_TRUE(target_object->Layer()->SelfNeedsRepaint());
   // And should not trigger any assert failure.
   UpdateAllLifecyclePhasesForTest();
@@ -399,9 +381,9 @@ TEST_P(PrePaintTreeWalkTest, EffectiveTouchActionStyleUpdate) {
       DocumentUpdateReason::kTest);
   EXPECT_FALSE(ancestor.EffectiveAllowedTouchActionChanged());
   EXPECT_TRUE(touchaction.EffectiveAllowedTouchActionChanged());
-  EXPECT_FALSE(descendant.EffectiveAllowedTouchActionChanged());
+  EXPECT_TRUE(descendant.EffectiveAllowedTouchActionChanged());
   EXPECT_TRUE(ancestor.DescendantEffectiveAllowedTouchActionChanged());
-  EXPECT_FALSE(touchaction.DescendantEffectiveAllowedTouchActionChanged());
+  EXPECT_TRUE(touchaction.DescendantEffectiveAllowedTouchActionChanged());
   EXPECT_FALSE(descendant.DescendantEffectiveAllowedTouchActionChanged());
 
   UpdateAllLifecyclePhasesForTest();
@@ -411,6 +393,62 @@ TEST_P(PrePaintTreeWalkTest, EffectiveTouchActionStyleUpdate) {
   EXPECT_FALSE(ancestor.DescendantEffectiveAllowedTouchActionChanged());
   EXPECT_FALSE(touchaction.DescendantEffectiveAllowedTouchActionChanged());
   EXPECT_FALSE(descendant.DescendantEffectiveAllowedTouchActionChanged());
+}
+
+TEST_P(PrePaintTreeWalkTest, InsideBlockingWheelEventHandlerUpdate) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(::features::kWheelEventRegions);
+  SetBodyInnerHTML(R"HTML(
+    <div id='ancestor' style='width: 100px; height: 100px;'>
+      <div id='handler' style='width: 100px; height: 100px;'>
+        <div id='descendant' style='width: 100px; height: 100px;'>
+        </div>
+      </div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+  auto& ancestor = *GetLayoutObjectByElementId("ancestor");
+  auto& handler = *GetLayoutObjectByElementId("handler");
+  auto& descendant = *GetLayoutObjectByElementId("descendant");
+
+  EXPECT_FALSE(ancestor.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.BlockingWheelEventHandlerChanged());
+
+  EXPECT_FALSE(ancestor.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.DescendantBlockingWheelEventHandlerChanged());
+
+  EXPECT_FALSE(ancestor.InsideBlockingWheelEventHandler());
+  EXPECT_FALSE(handler.InsideBlockingWheelEventHandler());
+  EXPECT_FALSE(descendant.InsideBlockingWheelEventHandler());
+
+  PrePaintTreeWalkMockEventListener* callback =
+      MakeGarbageCollected<PrePaintTreeWalkMockEventListener>();
+  auto* handler_element = GetDocument().getElementById("handler");
+  handler_element->addEventListener(event_type_names::kWheel, callback);
+
+  EXPECT_FALSE(ancestor.BlockingWheelEventHandlerChanged());
+  EXPECT_TRUE(handler.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.BlockingWheelEventHandlerChanged());
+
+  EXPECT_TRUE(ancestor.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.DescendantBlockingWheelEventHandlerChanged());
+
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(ancestor.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.BlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.BlockingWheelEventHandlerChanged());
+
+  EXPECT_FALSE(ancestor.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(handler.DescendantBlockingWheelEventHandlerChanged());
+  EXPECT_FALSE(descendant.DescendantBlockingWheelEventHandlerChanged());
+
+  EXPECT_FALSE(ancestor.InsideBlockingWheelEventHandler());
+  EXPECT_TRUE(handler.InsideBlockingWheelEventHandler());
+  EXPECT_TRUE(descendant.InsideBlockingWheelEventHandler());
 }
 
 }  // namespace blink

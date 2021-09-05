@@ -17,7 +17,6 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/account_manager/account_manager_util.h"
 #include "chrome/browser/chromeos/login/reauth_stats.h"
-#include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/notifications/notification_common.h"
@@ -65,10 +64,11 @@ void HandleDeviceAccountReauthNotificationClick(
 }
 
 bool AreAllAccountsMigrated(
-    const chromeos::AccountManager* const account_manager,
-    const std::vector<chromeos::AccountManager::Account>& accounts) {
-  for (const auto& account : accounts) {
-    if (account_manager->HasDummyGaiaToken(account.key)) {
+    const std::vector<std::pair<account_manager::Account, bool>>&
+        account_dummy_token_list) {
+  for (const auto& account : account_dummy_token_list) {
+    if (account.second) {
+      // Account has a dummy Gaia token.
       return false;
     }
   }
@@ -77,13 +77,12 @@ bool AreAllAccountsMigrated(
 
 // Returns true if the child user has migrated at least one of their
 // secondary edu accounts to ARC++.
-bool IsSecondaryEduAccountMigratedForChildUser(
-    Profile* profile,
-    const std::vector<chromeos::AccountManager::Account>& accounts) {
+bool IsSecondaryEduAccountMigratedForChildUser(Profile* profile,
+                                               int accounts_size) {
   // If the profile is not a child then there is no migration required.
   // If the profile is child but has only one account on device, then there is
   // no migration required; i.e. there is no secondary edu account to migrate.
-  if (!profile->IsChild() || accounts.size() < 2) {
+  if (!profile->IsChild() || accounts_size < 2) {
     return true;
   }
 
@@ -167,17 +166,6 @@ void SigninErrorNotifier::OnErrorChanged() {
     return;
   }
 
-  if (user_manager::UserManager::IsInitialized()) {
-    chromeos::UserFlow* user_flow =
-        chromeos::ChromeUserManager::Get()->GetCurrentUserFlow();
-
-    // Check whether Chrome OS user flow allows launching browser.
-    // Example: Supervised user creation flow which handles token invalidation
-    // itself and notifications should be suppressed. http://crbug.com/359045
-    if (!user_flow->ShouldLaunchBrowser())
-      return;
-  }
-
   const AccountId account_id =
       multi_user_util::GetAccountIdFromProfile(profile_);
   if (!chromeos::IsAccountManagerAvailable(profile_)) {
@@ -202,7 +190,7 @@ void SigninErrorNotifier::OnErrorChanged() {
 
 void SigninErrorNotifier::HandleDeviceAccountError() {
   // If this error has occurred because a user's account has just been converted
-  // to a Family Link Supervised account, then suppress the notificaiton.
+  // to a Family Link Supervised account, then suppress the notification.
   SupervisedUserService* service =
       SupervisedUserServiceFactory::GetForProfile(profile_);
   if (service->signout_required_after_supervision_enabled())
@@ -225,7 +213,7 @@ void SigninErrorNotifier::HandleDeviceAccountError() {
       message_center::NotifierType::SYSTEM_COMPONENT,
       kProfileSigninNotificationId);
 
-  // Set |profile_id| for multi-user notification blocker.
+  // Set `profile_id` for multi-user notification blocker.
   notifier_id.profile_id =
       multi_user_util::GetAccountIdFromProfile(profile_).GetUserEmail();
 
@@ -251,24 +239,27 @@ void SigninErrorNotifier::HandleDeviceAccountError() {
 
 void SigninErrorNotifier::HandleSecondaryAccountError(
     const CoreAccountId& account_id) {
-  account_manager_->GetAccounts(base::BindOnce(
-      &SigninErrorNotifier::OnGetAccounts, weak_factory_.GetWeakPtr()));
+  account_manager_->CheckDummyGaiaTokenForAllAccounts(
+      base::BindOnce(&SigninErrorNotifier::OnCheckDummyGaiaTokenForAllAccounts,
+                     weak_factory_.GetWeakPtr()));
 }
 
-void SigninErrorNotifier::OnGetAccounts(
-    const std::vector<chromeos::AccountManager::Account>& accounts) {
+void SigninErrorNotifier::OnCheckDummyGaiaTokenForAllAccounts(
+    const std::vector<std::pair<account_manager::Account, bool>>&
+        account_dummy_token_list) {
   message_center::NotifierId notifier_id(
       message_center::NotifierType::SYSTEM_COMPONENT,
       kProfileSigninNotificationId);
-  // Set |profile_id| for multi-user notification blocker. Note the primary user
+  // Set `profile_id` for multi-user notification blocker. Note the primary user
   // account id is used to identify the profile for the blocker so it is used
   // instead of the secondary user account id.
   notifier_id.profile_id =
       multi_user_util::GetAccountIdFromProfile(profile_).GetUserEmail();
 
   const bool are_all_accounts_migrated =
-      AreAllAccountsMigrated(account_manager_, accounts) &&
-      IsSecondaryEduAccountMigratedForChildUser(profile_, accounts);
+      AreAllAccountsMigrated(account_dummy_token_list) &&
+      IsSecondaryEduAccountMigratedForChildUser(
+          profile_, account_dummy_token_list.size());
 
   const base::string16 message_title =
       are_all_accounts_migrated

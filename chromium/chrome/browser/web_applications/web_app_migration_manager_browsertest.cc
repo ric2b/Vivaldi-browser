@@ -11,7 +11,7 @@
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
@@ -106,6 +106,8 @@ class WebAppMigrationManagerBrowserTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
+    os_hooks_suppress_ =
+        OsIntegrationManager::ScopedSuppressOsHooksForTesting();
 
     // We use a URLLoaderInterceptor, rather than the EmbeddedTestServer, since
     // a stable app_id across tests requires stable origin, whereas
@@ -146,8 +148,6 @@ class WebAppMigrationManagerBrowserTest : public InProcessBrowserTest {
     chrome::SetAutoAcceptWebAppDialogForTesting(
         /*auto_accept=*/true,
         /*auto_open_in_window=*/true);
-
-    provider().os_integration_manager().SuppressOsHooksForTesting();
 
     AppId app_id;
     base::RunLoop run_loop;
@@ -201,6 +201,7 @@ class WebAppMigrationManagerBrowserTest : public InProcessBrowserTest {
  private:
   std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  ScopedOsHooksSuppress os_hooks_suppress_;
 };
 
 IN_PROC_BROWSER_TEST_F(WebAppMigrationManagerBrowserTest,

@@ -27,6 +27,7 @@
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/metrics/demographics/user_demographics.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/sync/base/report_unrecoverable_error.h"
@@ -34,8 +35,6 @@
 #include "components/sync/base/sync_util.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_service.h"
-#include "components/sync/engine/passive_model_worker.h"
-#include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/session_sync_service.h"
 #include "components/sync_user_events/user_event_service.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -162,14 +161,20 @@ history::HistoryService* IOSChromeSyncClient::GetHistoryService() {
       browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
 }
 
+sync_preferences::PrefServiceSyncable*
+IOSChromeSyncClient::GetPrefServiceSyncable() {
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  return browser_state_->GetSyncablePrefs();
+}
+
 sync_sessions::SessionSyncService*
 IOSChromeSyncClient::GetSessionSyncService() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   return SessionSyncServiceFactory::GetForBrowserState(browser_state_);
 }
 
-base::Closure IOSChromeSyncClient::GetPasswordStateChangedCallback() {
-  return base::Bind(
+base::RepeatingClosure IOSChromeSyncClient::GetPasswordStateChangedCallback() {
+  return base::BindRepeating(
       &IOSChromePasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged,
       base::Unretained(browser_state_));
 }
@@ -210,30 +215,6 @@ IOSChromeSyncClient::GetExtensionsActivity() {
   return nullptr;
 }
 
-base::WeakPtr<syncer::SyncableService>
-IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
-  switch (type) {
-    case syncer::PREFERENCES:
-      return browser_state_->GetSyncablePrefs()
-          ->GetSyncableService(syncer::PREFERENCES)
-          ->AsWeakPtr();
-    case syncer::PRIORITY_PREFERENCES:
-      return browser_state_->GetSyncablePrefs()
-          ->GetSyncableService(syncer::PRIORITY_PREFERENCES)
-          ->AsWeakPtr();
-    case syncer::HISTORY_DELETE_DIRECTIVES: {
-      history::HistoryService* history =
-          ios::HistoryServiceFactory::GetForBrowserState(
-              browser_state_, ServiceAccessType::EXPLICIT_ACCESS);
-      return history ? history->GetDeleteDirectivesSyncableService()
-                     : base::WeakPtr<syncer::SyncableService>();
-    }
-    default:
-      NOTREACHED();
-      return base::WeakPtr<syncer::SyncableService>();
-  }
-}
-
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
 IOSChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   switch (type) {
@@ -249,8 +230,6 @@ IOSChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
           ->GetControllerDelegate();
     case syncer::USER_EVENTS:
       return IOSUserEventServiceFactory::GetForBrowserState(browser_state_)
-          ->GetSyncBridge()
-          ->change_processor()
           ->GetControllerDelegate();
 
     // We don't exercise this function for certain datatypes, because their
@@ -272,17 +251,6 @@ IOSChromeSyncClient::GetControllerDelegateForModelType(syncer::ModelType type) {
   }
 }
 
-scoped_refptr<syncer::ModelSafeWorker>
-IOSChromeSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
-  DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  switch (group) {
-    case syncer::GROUP_PASSIVE:
-      return new syncer::PassiveModelWorker();
-    default:
-      return nullptr;
-  }
-}
-
 syncer::SyncApiComponentFactory*
 IOSChromeSyncClient::GetSyncApiComponentFactory() {
   return component_factory_.get();
@@ -291,4 +259,9 @@ IOSChromeSyncClient::GetSyncApiComponentFactory() {
 syncer::SyncTypePreferenceProvider*
 IOSChromeSyncClient::GetPreferenceProvider() {
   return nullptr;
+}
+
+void IOSChromeSyncClient::OnLocalSyncTransportDataCleared() {
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  metrics::ClearDemographicsPrefs(browser_state_->GetPrefs());
 }

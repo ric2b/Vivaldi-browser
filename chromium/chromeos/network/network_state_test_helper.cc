@@ -109,10 +109,8 @@ std::string NetworkStateTestHelper::ConfigureService(
     const std::string& shill_json_string) {
   last_created_service_path_.clear();
 
-  std::unique_ptr<base::DictionaryValue> shill_json_dict =
-      base::DictionaryValue::From(
-          onc::ReadDictionaryFromJson(shill_json_string));
-  if (!shill_json_dict) {
+  base::Value shill_json_dict = onc::ReadDictionaryFromJson(shill_json_string);
+  if (!shill_json_dict.is_dict()) {
     LOG(ERROR) << "Error parsing json: " << shill_json_string;
     return last_created_service_path_;
   }
@@ -123,7 +121,7 @@ std::string NetworkStateTestHelper::ConfigureService(
   // error cases, ConfigureCallback() will not run, resulting in "" being
   // returned from this function.
   ShillManagerClient::Get()->ConfigureService(
-      *shill_json_dict,
+      shill_json_dict,
       base::BindOnce(&NetworkStateTestHelper::ConfigureCallback,
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&FailErrorCallback));
@@ -139,12 +137,14 @@ void NetworkStateTestHelper::ConfigureCallback(const dbus::ObjectPath& result) {
 std::string NetworkStateTestHelper::GetServiceStringProperty(
     const std::string& service_path,
     const std::string& key) {
-  const base::DictionaryValue* properties =
+  const base::Value* properties =
       service_test_->GetServiceProperties(service_path);
-  std::string result;
-  if (properties)
-    properties->GetStringWithoutPathExpansion(key, &result);
-  return result;
+  if (properties) {
+    const std::string* result = properties->FindStringKey(key);
+    if (result)
+      return *result;
+  }
+  return std::string();
 }
 
 void NetworkStateTestHelper::SetServiceProperty(const std::string& service_path,

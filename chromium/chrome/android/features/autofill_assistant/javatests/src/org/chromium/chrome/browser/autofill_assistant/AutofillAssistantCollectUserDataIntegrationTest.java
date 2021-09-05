@@ -40,7 +40,6 @@ import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUi
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilKeyboardMatchesCondition;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 
-import android.support.test.InstrumentationRegistry;
 import android.widget.DatePicker;
 
 import androidx.test.espresso.matcher.ViewMatchers;
@@ -73,7 +72,6 @@ import org.chromium.chrome.browser.autofill_assistant.proto.DropdownSelectStrate
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto.Rectangle;
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementConditionProto;
-import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.IntList;
 import org.chromium.chrome.browser.autofill_assistant.proto.KeyboardValueFillStrategy;
 import org.chromium.chrome.browser.autofill_assistant.proto.ModelProto.ModelValue;
@@ -83,6 +81,7 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ProcessedActionStatu
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto.Choice;
 import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowCastProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowDetailsProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
@@ -94,7 +93,6 @@ import org.chromium.chrome.browser.autofill_assistant.proto.UseCreditCardProto.R
 import org.chromium.chrome.browser.autofill_assistant.proto.UserFormSectionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ValueProto;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
-import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.WebContents;
@@ -128,9 +126,10 @@ public class AutofillAssistantCollectUserDataIntegrationTest {
     @Before
     public void setUp() throws Exception {
         AutofillAssistantPreferencesUtil.setInitialPreferences(true);
-        mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
-                InstrumentationRegistry.getTargetContext(),
-                mTestRule.getTestServer().getURL(TEST_PAGE)));
+        mTestRule.startCustomTabActivityWithIntent(
+                AutofillAssistantUiTestUtil.createMinimalCustomTabIntentForAutobot(
+                        mTestRule.getTestServer().getURL(TEST_PAGE),
+                        /* startImmediately = */ true));
         mHelper = new AutofillAssistantCollectUserDataTestHelper();
     }
 
@@ -182,9 +181,15 @@ public class AutofillAssistantCollectUserDataIntegrationTest {
                         .setElement(SelectorProto.newBuilder().addFilters(
                                 SelectorProto.Filter.newBuilder().setCssSelector(
                                         "#js_dropdown_value")))
-                        .setOptionElementToClick(SelectorProto.newBuilder().addFilters(
-                                SelectorProto.Filter.newBuilder().setCssSelector(
-                                        "#js_dropdown_options li")))
+                        .setOptionElementToClick(
+                                SelectorProto.newBuilder()
+                                        .addFilters(
+                                                SelectorProto.Filter.newBuilder().setCssSelector(
+                                                        "#js_dropdown_options li"))
+                                        .addFilters(
+                                                SelectorProto.Filter.newBuilder().setBoundingBox(
+                                                        SelectorProto.BoundingBoxFilter
+                                                                .getDefaultInstance())))
                         .setClickType(ClickType.TAP)
                         .build();
         list.add((ActionProto) ActionProto.newBuilder()
@@ -223,6 +228,8 @@ public class AutofillAssistantCollectUserDataIntegrationTest {
         onView(withText("Continue")).perform(click());
         waitUntilViewMatchesCondition(withId(R.id.card_unmask_input), isCompletelyDisplayed());
         onView(withId(R.id.card_unmask_input)).perform(typeText("123"));
+        waitUntilViewMatchesCondition(
+                withId(R.id.positive_button), allOf(isDisplayed(), isEnabled()));
         onView(withId(R.id.positive_button)).perform(click());
         waitUntilViewMatchesCondition(withText("Prompt"), isCompletelyDisplayed(), 6000L);
         assertThat(getElementValue(getWebContents(), "name"), is("John Doe"));
@@ -318,16 +325,16 @@ public class AutofillAssistantCollectUserDataIntegrationTest {
      */
     @Test
     @MediumTest
-    public void testTermsAndConditionsWithFocusElement() throws Exception {
+    public void testTermsAndConditionsWithShowCast() throws Exception {
         String profileId = mHelper.addDummyProfile("John Doe", "johndoe@gmail.com");
         mHelper.addDummyCreditCard(profileId);
 
         ArrayList<ActionProto> list = new ArrayList<>();
         list.add(
                 (ActionProto) ActionProto.newBuilder()
-                        .setFocusElement(
-                                FocusElementProto.newBuilder()
-                                        .setElement(SelectorProto.newBuilder().addFilters(
+                        .setShowCast(
+                                ShowCastProto.newBuilder()
+                                        .setElementToPresent(SelectorProto.newBuilder().addFilters(
                                                 SelectorProto.Filter.newBuilder().setCssSelector(
                                                         "div.terms")))
                                         .setTouchableElementArea(ElementAreaProto.newBuilder().addTouchable(
@@ -365,7 +372,7 @@ public class AutofillAssistantCollectUserDataIntegrationTest {
                                                         "div#toggle_on"))
                                         .addFilters(
                                                 SelectorProto.Filter.newBuilder().setBoundingBox(
-                                                        SelectorProto.EmptyFilter
+                                                        SelectorProto.BoundingBoxFilter
                                                                 .getDefaultInstance()))))
                         .build();
         list.add((ActionProto) ActionProto.newBuilder()
@@ -505,8 +512,8 @@ public class AutofillAssistantCollectUserDataIntegrationTest {
     public void testIncompleteAddressOnCompleteCard() throws Exception {
         PersonalDataManager.AutofillProfile mockProfile = new PersonalDataManager.AutofillProfile(
                 /* guid= */ "",
-                /* origin= */ "https://www.example.com", "John Doe", /* companyName= */ "",
-                "Somestreet",
+                /* origin= */ "https://www.example.com", /* honorificPrefix= */ "", "John Doe",
+                /* companyName= */ "", "Somestreet",
                 /* region= */ "", "Switzerland", "", /* postalCode= */ "", /* sortingCode= */ "",
                 "CH", "+41 79 123 45 67", "johndoe@google.com", /* languageCode= */ "");
         String profileId = mHelper.setProfile(mockProfile);

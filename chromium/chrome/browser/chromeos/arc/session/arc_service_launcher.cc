@@ -41,6 +41,7 @@
 #include "chrome/browser/chromeos/arc/screen_capture/arc_screen_capture_bridge.h"
 #include "chrome/browser/chromeos/arc/session/arc_play_store_enabled_preference_handler.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/chromeos/arc/sharesheet/arc_sharesheet_bridge.h"
 #include "chrome/browser/chromeos/arc/tracing/arc_app_performance_tracing.h"
 #include "chrome/browser/chromeos/arc/tracing/arc_tracing_bridge.h"
 #include "chrome/browser/chromeos/arc/tts/arc_tts_service.h"
@@ -70,6 +71,7 @@
 #include "components/arc/midis/arc_midis_bridge.h"
 #include "components/arc/net/arc_net_host_impl.h"
 #include "components/arc/obb_mounter/arc_obb_mounter_bridge.h"
+#include "components/arc/pay/arc_digital_goods_bridge.h"
 #include "components/arc/pay/arc_payment_app_bridge.h"
 #include "components/arc/power/arc_power_bridge.h"
 #include "components/arc/property/arc_property_bridge.h"
@@ -186,6 +188,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcCertStoreBridge::GetForBrowserContext(profile);
   ArcClipboardBridge::GetForBrowserContext(profile);
   ArcCrashCollectorBridge::GetForBrowserContext(profile);
+  ArcDigitalGoodsBridge::GetForBrowserContext(profile);
   ArcDiskQuotaBridge::GetForBrowserContext(profile);
   ArcEnterpriseReportingService::GetForBrowserContext(profile);
   ArcFileSystemBridge::GetForBrowserContext(profile);
@@ -221,6 +224,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcScreenCaptureBridge::GetForBrowserContext(profile);
   ArcSensorBridge::GetForBrowserContext(profile);
   ArcSettingsService::GetForBrowserContext(profile);
+  ArcSharesheetBridge::GetForBrowserContext(profile);
   ArcSmartCardManagerBridge::GetForBrowserContext(profile);
   ArcTimerBridge::GetForBrowserContext(profile);
   ArcTracingBridge::GetForBrowserContext(profile);

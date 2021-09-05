@@ -47,11 +47,10 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/commander/commander.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
-#include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help.h"
-#include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
@@ -64,6 +63,8 @@
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
+#include "chrome/browser/ui/user_education/reopen_tab_in_product_help.h"
+#include "chrome/browser/ui/user_education/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
@@ -71,7 +72,6 @@
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/common/buildflags.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -109,7 +109,6 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/common/user_agent.h"
@@ -191,11 +190,11 @@ void CreateAndShowNewWindowWithContents(
     const Browser* original_browser) {
   Browser* new_browser = nullptr;
   if (original_browser->deprecated_is_app()) {
-    new_browser = new Browser(Browser::CreateParams::CreateForApp(
+    new_browser = Browser::Create(Browser::CreateParams::CreateForApp(
         original_browser->app_name(), original_browser->is_trusted_source(),
         gfx::Rect(), original_browser->profile(), true));
   } else {
-    new_browser = new Browser(Browser::CreateParams(
+    new_browser = Browser::Create(Browser::CreateParams(
         original_browser->type(), original_browser->profile(), true));
   }
   // Preserve the size of the original window. The new window has already
@@ -287,7 +286,7 @@ WebContents* GetTabAndRevertIfNecessaryHelper(Browser* browser,
       std::unique_ptr<WebContents> new_tab = current_tab->Clone();
       WebContents* raw_new_tab = new_tab.get();
       Browser* new_browser =
-          new Browser(Browser::CreateParams(browser->profile(), true));
+          Browser::Create(Browser::CreateParams(browser->profile(), true));
       new_browser->tab_strip_model()->AddWebContents(std::move(new_tab), -1,
                                                      ui::PAGE_TRANSITION_LINK,
                                                      TabStripModel::ADD_ACTIVE);
@@ -454,11 +453,9 @@ void NewEmptyWindow(Profile* profile) {
 }
 
 Browser* OpenEmptyWindow(Profile* profile) {
-  Browser* browser =
-      new Browser(Browser::CreateParams(Browser::TYPE_NORMAL, profile, true));
-
+  Browser* browser = Browser::Create(
+      Browser::CreateParams(Browser::TYPE_NORMAL, profile, true));
   AddTabAt(browser, GURL(), -1, true);
-
   browser->window()->Show();
   return browser;
 }
@@ -631,12 +628,12 @@ void NewWindow(Browser* browser) {
         blink::mojom::DisplayMode::kBrowser) {
       launch_container = apps::mojom::LaunchContainer::kLaunchContainerTab;
     }
-    const apps::AppLaunchParams params = apps::AppLaunchParams(
+    apps::AppLaunchParams params = apps::AppLaunchParams(
         app_id, launch_container, WindowOpenDisposition::NEW_WINDOW,
         apps::mojom::AppLaunchSource::kSourceKeyboard);
     apps::AppServiceProxyFactory::GetForProfile(profile)
         ->BrowserAppLauncher()
-        ->LaunchAppWithParams(params);
+        ->LaunchAppWithParams(std::move(params));
     return;
   }
 
@@ -673,10 +670,12 @@ void NewTab(Browser* browser) {
   UMA_HISTOGRAM_ENUMERATION("Tab.NewTab", TabStripModel::NEW_TAB_COMMAND,
                             TabStripModel::NEW_TAB_ENUM_COUNT);
 
+  if (!browser->is_vivaldi()) {
   // Notify IPH that new tab was opened.
   auto* reopen_tab_iph =
       ReopenTabInProductHelpFactory::GetForProfile(browser->profile());
   reopen_tab_iph->NewTabOpened();
+  } // !Vivaldi browser.
 
   if (browser->SupportsWindowFeature(Browser::FEATURE_TABSTRIP)) {
     AddTabAt(browser, GURL(), -1, true);
@@ -790,7 +789,7 @@ void MoveTabsToNewWindow(Browser* browser,
     return;
 
   Browser* new_browser =
-      new Browser(Browser::CreateParams(browser->profile(), true));
+      Browser::Create(Browser::CreateParams(browser->profile(), true));
 
   if (group.has_value()) {
     const tab_groups::TabGroupVisualData* old_visual_data =
@@ -974,7 +973,7 @@ void ConvertPopupToTabbedBrowser(Browser* browser) {
   TabStripModel* tab_strip = browser->tab_strip_model();
   std::unique_ptr<content::WebContents> contents =
       tab_strip->DetachWebContentsAt(tab_strip->active_index());
-  Browser* b = new Browser(Browser::CreateParams(browser->profile(), true));
+  Browser* b = Browser::Create(Browser::CreateParams(browser->profile(), true));
   b->tab_strip_model()->AppendWebContents(std::move(contents), true);
   b->window()->Show();
 }
@@ -1075,11 +1074,6 @@ bool MoveCurrentTabToReadLater(Browser* browser) {
     return false;
   model->AddEntry(url, base::UTF16ToUTF8(title),
                   reading_list::EntrySource::ADDED_VIA_CURRENT_APP);
-  // Close current tab.
-  int index = browser->tab_strip_model()->active_index();
-  browser->tab_strip_model()->CloseWebContentsAt(
-      index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB |
-                 TabStripModel::CLOSE_USER_GESTURE);
   return true;
 }
 
@@ -1320,6 +1314,10 @@ void ShowTabSearch(Browser* browser) {
   browser->window()->CreateTabSearchBubble();
 }
 
+void CloseTabSearch(Browser* browser) {
+  browser->window()->CloseTabSearchBubble();
+}
+
 bool CanCloseFind(Browser* browser) {
   WebContents* current_tab = browser->tab_strip_model()->GetActiveWebContents();
   if (!current_tab)
@@ -1381,12 +1379,14 @@ void FocusPreviousPane(Browser* browser) {
   browser->window()->RotatePaneFocus(false);
 }
 
-void ToggleDevToolsWindow(Browser* browser, DevToolsToggleAction action) {
+void ToggleDevToolsWindow(Browser* browser,
+                          DevToolsToggleAction action,
+                          DevToolsOpenedByAction opened_by) {
   if (action.type() == DevToolsToggleAction::kShowConsolePanel)
     base::RecordAction(UserMetricsAction("DevTools_ToggleConsole"));
   else
     base::RecordAction(UserMetricsAction("DevTools_ToggleWindow"));
-  DevToolsWindow::ToggleDevToolsWindow(browser, action);
+  DevToolsWindow::ToggleDevToolsWindow(browser, action, opened_by);
 }
 
 bool CanOpenTaskManager() {
@@ -1406,12 +1406,14 @@ void OpenTaskManager(Browser* browser) {
 #endif
 }
 
-void OpenFeedbackDialog(Browser* browser, FeedbackSource source) {
+void OpenFeedbackDialog(Browser* browser,
+                        FeedbackSource source,
+                        const std::string& description_template) {
   base::RecordAction(UserMetricsAction("Feedback"));
-  chrome::ShowFeedbackPage(
-      browser, source, std::string() /* description_template */,
-      std::string() /* description_placeholder_text */,
-      std::string() /* category_tag */, std::string() /* extra_diagnostics */);
+  chrome::ShowFeedbackPage(browser, source, description_template,
+                           std::string() /* description_placeholder_text */,
+                           std::string() /* category_tag */,
+                           std::string() /* extra_diagnostics */);
 }
 
 void ToggleBookmarkBar(Browser* browser) {
@@ -1424,7 +1426,6 @@ void ToggleShowFullURLs(Browser* browser) {
       omnibox::kPreventUrlElisionsInOmnibox);
   browser->profile()->GetPrefs()->SetBoolean(
       omnibox::kPreventUrlElisionsInOmnibox, !pref_enabled);
-  UMA_HISTOGRAM_BOOLEAN("Omnibox.ShowFullUrlsEnabled", !pref_enabled);
 }
 
 void ShowAppMenu(Browser* browser) {
@@ -1546,8 +1547,8 @@ Browser* OpenInChrome(Browser* hosted_app_browser) {
       chrome::FindTabbedBrowser(hosted_app_browser->profile(), false);
 
   if (!target_browser) {
-    target_browser =
-        new Browser(Browser::CreateParams(hosted_app_browser->profile(), true));
+    target_browser = Browser::Create(
+        Browser::CreateParams(hosted_app_browser->profile(), true));
   }
   if (target_browser->is_vivaldi() != hosted_app_browser->is_vivaldi()) {
     // We cannot move the tab over due
@@ -1631,6 +1632,10 @@ void ToggleCaretBrowsing(Browser* browser) {
 
 void PromptToNameWindow(Browser* browser) {
   chrome::ShowWindowNamePrompt(browser);
+}
+
+void ToggleCommander(Browser* browser) {
+  commander::Commander::Get()->ToggleForBrowser(browser);
 }
 
 #if !defined(TOOLKIT_VIEWS)

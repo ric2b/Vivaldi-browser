@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Berre utvalet</translation>
 <translation id="1244303850296295656">Utvidingsfeil</translation>
 <translation id="125220115284141797">Standard</translation>
-<translation id="1274977772557788323">Lagringsinnstillingar for Adobe Flash-spelaren</translation>
 <translation id="1297175357211070620">Mål</translation>
 <translation id="1303101771013849280">Bokmerke HTML-fil</translation>
 <translation id="1380436189840894976">Avslutta privatmodusen likevel?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Lim inn som rein tekst</translation>
 <translation id="2249605167705922988">t.d. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Tillat identifikatorar for verna innhald (du må kanskje starta om att datamaskina)</translation>
-<translation id="2263497240924215535">(Slått av)</translation>
 <translation id="2277255602909579701">Alle informasjonskapslane og nettstaddataa</translation>
 <translation id="2280486287150724112">Høgremarg</translation>
 <translation id="2282146716419988068">GPU-prosess</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome nettbutikk</translation>
 <translation id="2678063897982469759">Slå på att</translation>
 <translation id="2721037002783622288">Søk hos <ph name="SEARCH_ENGINE" /> etter &amp;bilde</translation>
+<translation id="2783321960289401138">Lag snarveg …</translation>
 <translation id="2785873697295365461">Fildeskriptorar</translation>
 <translation id="2809586584051668049">og <ph name="NUMBER_ADDITIONAL_DISABLED" /> fleire</translation>
 <translation id="2812989263793994277">Vis ikkje bilete</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">MIDI-einingar</translation>
 <translation id="3021678814754966447">Sy&amp;n rammekjelda</translation>
 <translation id="3036546437875325427">Slå på Flash</translation>
-<translation id="3038675903128704560">La ingen nettstad få lov til å bruka programtillegg for å få tilgang til maskina di</translation>
 <translation id="3046910703532196514">Nettside, komplett</translation>
 <translation id="3067198360141518313">Køyr dette programtillegget</translation>
 <translation id="3080207940057008665">Eit anna program på maskina di la til ei drakt som kanskje endrar måten Vivaldi oppfører seg på.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Denne utvidinga kan ha vorten øydelagd.</translation>
 <translation id="3387614642886316601">Bruk utvida stavekontroll</translation>
 <translation id="3432227430032737297">Fjern alt synleg</translation>
-<translation id="3440761377721825626">Spør om ein nettstad ønskjer å bruka programtillegg for å nå maskina di</translation>
 <translation id="345693547134384690">Opna &amp;bildet i ei ny fane</translation>
 <translation id="3494769164076977169">Spør om ein nettstad prøver å lasta ned filer automatisk etter den første (tilrådd)</translation>
 <translation id="3505030558724226696">Attendekall einingstilgangen</translation>
 <translation id="3511307672085573050">Kopier len&amp;kjeadressa</translation>
-<translation id="3523642406908660543">Spør om ein nettstad ønskjer å bruka programtillegg for å nå maskina di (tilrådd)</translation>
 <translation id="354068948465830244">Denne kan lesa og endra nettsidedata</translation>
 <translation id="3560034655160545939">&amp;Stavekontroll</translation>
 <translation id="3574917942258583917">Avslutta privatmodusen likevel?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ønskjer å dela skrivaren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med ei gruppe du eig: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Om du godtek dette, vil alle gruppemedlemmene kunna bruka skrivaren.</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Opna lenkja i eit privat&amp;vindauge</translation>
+<translation id="3627879631695760395">Installer <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Handterarar</translation>
 <translation id="3678156199662914018">Utviding: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> Skjermdelingsførespurnad</translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Før attende innstillingane</translation>
 <translation id="4434045419905280838">Sprettoppvindauge og vidaresendingar</translation>
 <translation id="4478664379124702289">Lagra &amp;lenkja som …</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Klarer ikkje å senda til <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Gå til <ph name="URL" /></translation>
 <translation id="4595560905247879544">Appar og utvidingar kan berre verta endra av styraren (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Ukjend</translation>
 <translation id="5860491529813859533">Slå på</translation>
 <translation id="5867841422488265304">Søk eller skriv inn ei adresse</translation>
-<translation id="5908769186679515905">Hindra sider i å køyra Flash</translation>
 <translation id="5910363049092958439">Lagra &amp;bildet som …</translation>
 <translation id="5956585768868398362">Er dette søkjesida du venta å finna?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> topp)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Tilgang avvist.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Syn &amp;kontrollar</translation>
-<translation id="7311079019872751559">Ikkje-isolert programtilleggstilgang</translation>
 <translation id="7385854874724088939">Utskrifta feila. Sjå over skrivaren din og prøv på nytt.</translation>
 <translation id="7412226954991670867">GPU-minne</translation>
 <translation id="7421925624202799674">S&amp;yn kjeldekoden</translation>
@@ -477,9 +471,10 @@ Ta godt vare på nøkkelfila. Du treng ho for å kunna laga nye utgåver av utvi
 <translation id="9027459031423301635">Opna lenkja i ei &amp;ny fane</translation>
 <translation id="9056810968620647706">Ingen treff.</translation>
 <translation id="9137916601698928395">Opna lenkja som <ph name="USER" /></translation>
+<translation id="91568222606626347">Lag snarveg …</translation>
 <translation id="916607977885256133">Bilde-i-bilde</translation>
 <translation id="9170848237812810038">&amp;Angra</translation>
-<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" lagt til</translation>
+<translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" er lagt til</translation>
 <translation id="9218430445555521422">Bruk som standard</translation>
 <translation id="9219103736887031265">Bilete</translation>
 <translation id="93766956588638423">Reparer utvidinga</translation>

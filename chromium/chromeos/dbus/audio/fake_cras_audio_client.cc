@@ -149,6 +149,11 @@ void FakeCrasAudioClient::GetNumberOfActiveOutputStreams(
   std::move(callback).Run(0);
 }
 
+void FakeCrasAudioClient::GetDeprioritizeBtWbsMic(
+    DBusMethodCallback<bool> callback) {
+  std::move(callback).Run(base::nullopt);
+}
+
 void FakeCrasAudioClient::SetOutputNodeVolume(uint64_t node_id,
                                               int32_t volume) {
   if (!notify_volume_change_with_delay_)
@@ -205,7 +210,6 @@ void FakeCrasAudioClient::SetHotwordModel(uint64_t node_id,
                                           VoidDBusMethodCallback callback) {}
 
 void FakeCrasAudioClient::SetFixA2dpPacketSize(bool enabled) {}
-void FakeCrasAudioClient::SetNextHandsfreeProfile(bool enabled) {}
 
 void FakeCrasAudioClient::AddActiveInputNode(uint64_t node_id) {
   for (size_t i = 0; i < node_list_.size(); ++i) {

@@ -18,20 +18,18 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelManager.PanelPriority;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
-import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.GestureHandler;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.OverlayPanelEventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
-import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
-import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.layouts.EventFilter;
+import org.chromium.chrome.browser.layouts.SceneOverlay;
+import org.chromium.chrome.browser.layouts.components.VirtualView;
+import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.content_public.browser.SelectionPopupController;
@@ -111,7 +109,7 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     }
 
     /** A layout manager for tracking changes in the active layout. */
-    private final LayoutManager mLayoutManager;
+    private final LayoutManagerImpl mLayoutManager;
 
     /** The observer that reacts to scene-change events. */
     private final SceneChangeObserver mSceneChangeObserver;
@@ -162,11 +160,11 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
 
     /**
      * @param context The current Android {@link Context}.
-     * @param layoutManager A {@link LayoutManager} for observing changes in the active layout.
+     * @param layoutManager A {@link LayoutManagerImpl} for observing changes in the active layout.
      * @param panelManager The {@link OverlayPanelManager} responsible for showing panels.
      */
     public OverlayPanel(
-            Context context, LayoutManager layoutManager, OverlayPanelManager panelManager) {
+            Context context, LayoutManagerImpl layoutManager, OverlayPanelManager panelManager) {
         super(context, layoutManager);
         mLayoutManager = layoutManager;
         mContentFactory = this;
@@ -386,12 +384,6 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
      */
     public boolean isActive() {
         return mPanelShown;
-    }
-
-    /** @return Whether we're using the new Overlay layout feature. */
-    public static boolean isNewLayout() {
-        return ChromeFeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.OVERLAY_NEW_LAYOUT);
     }
 
     // ============================================================================================
@@ -882,8 +874,8 @@ public class OverlayPanel extends OverlayPanelAnimation implements ActivityState
     // ============================================================================================
 
     @Override
-    public SceneOverlayLayer getUpdatedSceneOverlayTree(RectF viewport, RectF visibleViewport,
-            LayerTitleCache layerTitleCache, ResourceManager resourceManager, float yOffset) {
+    public SceneOverlayLayer getUpdatedSceneOverlayTree(
+            RectF viewport, RectF visibleViewport, ResourceManager resourceManager, float yOffset) {
         return null;
     }
 

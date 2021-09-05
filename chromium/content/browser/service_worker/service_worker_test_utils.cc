@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/time/time.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
@@ -27,6 +27,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/frame_messages.mojom.h"
 #include "content/public/common/child_process_host.h"
+#include "content/public/test/policy_container_utils.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -129,6 +130,7 @@ class FakeNavigationClient : public mojom::NavigationClient {
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           prefetch_loader_factory,
       const base::UnguessableToken& devtools_navigation_token,
+      blink::mojom::PolicyContainerPtr policy_container,
       CommitNavigationCallback callback) override {
     std::move(on_received_callback_).Run(std::move(container_info));
     std::move(callback).Run(nullptr, nullptr);
@@ -279,12 +281,13 @@ void ServiceWorkerRemoteContainerEndpoint::BindForWindow(
           },
           loop.QuitClosure(), &received_info)),
       navigation_client_.BindNewPipeAndPassReceiver());
+
   navigation_client_->CommitNavigation(
       CreateCommonNavigationParams(), CreateCommitNavigationParams(),
       network::mojom::URLResponseHead::New(),
       mojo::ScopedDataPipeConsumerHandle(), nullptr, nullptr, base::nullopt,
       nullptr, std::move(info), mojo::NullRemote(),
-      base::UnguessableToken::Create(),
+      base::UnguessableToken::Create(), CreateStubPolicyContainer(),
       base::BindOnce(
           [](std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params>
                  validated_params,
@@ -327,9 +330,9 @@ base::WeakPtr<ServiceWorkerContainerHost> CreateContainerHostForWindow(
 
   // In production code this is called from NavigationRequest in the browser
   // process right before navigation commit.
-  container_host->OnBeginNavigationCommit(process_id, 1 /* route_id */,
-                                          network::CrossOriginEmbedderPolicy(),
-                                          std::move(reporter));
+  container_host->OnBeginNavigationCommit(
+      process_id, 1 /* route_id */, network::CrossOriginEmbedderPolicy(),
+      std::move(reporter), ukm::kInvalidSourceId);
   return container_host;
 }
 

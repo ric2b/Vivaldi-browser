@@ -10,7 +10,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/extensions/input_method_event_router.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -63,8 +62,7 @@ class TestListener : public content::NotificationObserver {
       // background.
       InputMethodManager* manager = InputMethodManager::Get();
       manager->GetInputMethodUtil()->InitXkbInputMethodsForTesting(
-          *chromeos::input_method::InputMethodAllowlist()
-               .GetSupportedInputMethods());
+          *chromeos::input_method::allowlist::GetSupportedInputMethods());
 
       std::vector<std::string> keyboard_layouts;
       keyboard_layouts.push_back(

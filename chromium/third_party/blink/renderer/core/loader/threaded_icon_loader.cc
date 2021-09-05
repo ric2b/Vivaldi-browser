@@ -32,7 +32,7 @@ void ThreadedIconLoader::Start(
   DCHECK(!stopped_);
   DCHECK(resource_request.Url().IsValid());
   DCHECK_EQ(resource_request.GetRequestContext(),
-            mojom::RequestContextType::IMAGE);
+            mojom::blink::RequestContextType::IMAGE);
   DCHECK(!icon_callback_);
 
   icon_callback_ = std::move(callback);
@@ -104,8 +104,7 @@ void ThreadedIconLoader::DecodeAndResizeImageOnBackgroundThread(
   std::unique_ptr<ImageDecoder> decoder = ImageDecoder::Create(
       std::move(data), /* data_complete= */ true,
       ImageDecoder::kAlphaPremultiplied, ImageDecoder::kDefaultBitDepth,
-      ColorBehavior::TransformToSRGB(),
-      ImageDecoder::OverrideAllowDecodeToYuv::kDeny);
+      ColorBehavior::TransformToSRGB());
 
   if (!decoder) {
     notify_complete(-1.0);

@@ -23,16 +23,13 @@ class Message;
 }
 
 namespace blink {
-namespace mojom {
-class RendererPreferences;
-}
 namespace web_pref {
 struct WebPreferences;
 }
+struct RendererPreferences;
 }  // namespace blink
 
 namespace gfx {
-class Rect;
 class Size;
 }
 
@@ -94,12 +91,9 @@ class CONTENT_EXPORT RenderViewHostDelegate {
   // The page is trying to close the RenderView's representation in the client.
   virtual void Close(RenderViewHost* render_view_host) {}
 
-  // The page is trying to move the RenderView's representation in the client.
-  virtual void RequestSetBounds(const gfx::Rect& new_bounds) {}
-
   // Return a dummy RendererPreferences object that will be used by the renderer
   // associated with the owning RenderViewHost.
-  virtual blink::mojom::RendererPreferences GetRendererPrefs() const = 0;
+  virtual const blink::RendererPreferences& GetRendererPrefs() const = 0;
 
   // Notification from the renderer host that blocked UI event occurred.
   // This happens when there are tab-modal dialogs. In this case, the
@@ -113,16 +107,6 @@ class CONTENT_EXPORT RenderViewHostDelegate {
 
   // The contents' preferred size changed.
   virtual void UpdatePreferredSize(const gfx::Size& pref_size) {}
-
-  // Show the newly created widget with the specified bounds.
-  // The widget is identified by the route_id passed to CreateNewWidget.
-  virtual void ShowCreatedWidget(int process_id,
-                                 int widget_route_id,
-                                 const gfx::Rect& initial_rect) {}
-
-  // Show the newly created full screen widget. Similar to above.
-  virtual void ShowCreatedFullscreenWidget(int process_id,
-                                           int widget_route_id) {}
 
   // Returns the SessionStorageNamespace the render view should use. Might
   // create the SessionStorageNamespace on the fly.

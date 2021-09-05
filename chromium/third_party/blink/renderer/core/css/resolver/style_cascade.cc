@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/css/resolver/cascade_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
+#include "third_party/blink/renderer/core/css/scoped_css_value.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -78,6 +79,14 @@ const CSSValue* ValueAt(const MatchResult& result, uint32_t position) {
   const MatchedPropertiesVector& vector = result.GetMatchedProperties();
   const CSSPropertyValueSet* set = vector[matched_properties_index].properties;
   return &set->PropertyAt(declaration_index).Value();
+}
+
+const TreeScope& TreeScopeAt(const MatchResult& result, uint32_t position) {
+  size_t matched_properties_index = DecodeMatchedPropertiesIndex(position);
+  const MatchedProperties& properties =
+      result.GetMatchedProperties()[matched_properties_index];
+  DCHECK_EQ(properties.types_.origin, CascadeOrigin::kAuthor);
+  return result.ScopeFromTreeOrder(properties.types_.tree_order);
 }
 
 PropertyHandle ToPropertyHandle(const CSSProperty& property,
@@ -142,6 +151,7 @@ bool IsInterpolation(CascadePriority priority) {
 }  // namespace
 
 MatchResult& StyleCascade::MutableMatchResult() {
+  DCHECK(!generation_) << "Apply has already been called";
   needs_match_result_analyze_ = true;
   return match_result_;
 }
@@ -396,7 +406,14 @@ void StyleCascade::ApplyMatchResult(CascadeResolver& resolver) {
       *p = priority;
       CascadeOrigin origin = priority.GetOrigin();
       const CSSValue* value = Resolve(property, e.Value(), origin, resolver);
-      StyleBuilder::ApplyProperty(property, state_, *value);
+      // TODO(futhark): Use a user scope TreeScope to support tree-scoped names
+      // for animations in user stylesheets.
+      const TreeScope* tree_scope =
+          origin == CascadeOrigin::kAuthor
+              ? &match_result_.ScopeFromTreeOrder(e.TreeOrder())
+              : nullptr;
+      StyleBuilder::ApplyProperty(property, state_,
+                                  ScopedCSSValue(*value, tree_scope));
     }
   }
 }
@@ -519,10 +536,15 @@ void StyleCascade::LookupAndApplyDeclaration(const CSSProperty& property,
   DCHECK(priority.GetOrigin() < CascadeOrigin::kAnimation);
   const CSSValue* value = ValueAt(match_result_, priority.GetPosition());
   DCHECK(value);
-  value = Resolve(property, *value, priority.GetOrigin(), resolver);
+  CascadeOrigin origin = priority.GetOrigin();
+  value = Resolve(property, *value, origin, resolver);
   DCHECK(!value->IsVariableReferenceValue());
   DCHECK(!value->IsPendingSubstitutionValue());
-  StyleBuilder::ApplyProperty(property, state_, *value);
+  const TreeScope* tree_scope{nullptr};
+  if (origin == CascadeOrigin::kAuthor)
+    tree_scope = &TreeScopeAt(match_result_, priority.GetPosition());
+  StyleBuilder::ApplyProperty(property, state_,
+                              ScopedCSSValue(*value, tree_scope));
 }
 
 void StyleCascade::LookupAndApplyInterpolation(const CSSProperty& property,
@@ -600,19 +622,23 @@ void StyleCascade::ForceColors() {
   MaybeForceColor(GetCSSPropertyInternalVisitedTextEmphasisColor(),
                   style->InternalVisitedTextEmphasisColor());
 
-  auto* none = CSSIdentifierValue::Create(CSSValueID::kNone);
-  StyleBuilder::ApplyProperty(GetCSSPropertyTextShadow(), state_, *none);
-  StyleBuilder::ApplyProperty(GetCSSPropertyBoxShadow(), state_, *none);
-  if (!style->HasUrlBackgroundImage())
-    StyleBuilder::ApplyProperty(GetCSSPropertyBackgroundImage(), state_, *none);
+  ScopedCSSValue scoped_none(*CSSIdentifierValue::Create(CSSValueID::kNone),
+                             nullptr);
+  StyleBuilder::ApplyProperty(GetCSSPropertyTextShadow(), state_, scoped_none);
+  StyleBuilder::ApplyProperty(GetCSSPropertyBoxShadow(), state_, scoped_none);
+  if (!style->HasUrlBackgroundImage()) {
+    StyleBuilder::ApplyProperty(GetCSSPropertyBackgroundImage(), state_,
+                                scoped_none);
+  }
 
   // Preserve the author/user defined background alpha channel.
   style->SetBackgroundColor(
       StyleColor(style->BackgroundColor().ResolveWithAlpha(
-          style->GetCurrentColor(), ColorScheme::kLight, bg_color_alpha)));
+          style->GetCurrentColor(), mojom::blink::ColorScheme::kLight,
+          bg_color_alpha)));
   style->SetInternalVisitedBackgroundColor(
       StyleColor(style->InternalVisitedBackgroundColor().ResolveWithAlpha(
-          style->GetCurrentColor(), ColorScheme::kLight,
+          style->GetCurrentColor(), mojom::blink::ColorScheme::kLight,
           visited_bg_color_alpha)));
 }
 
@@ -626,7 +652,9 @@ void StyleCascade::MaybeForceColor(const CSSProperty& property,
     return;
 
   StyleBuilder::ApplyProperty(
-      property, state_, *GetForcedColorValue(property.GetCSSPropertyName()));
+      property, state_,
+      ScopedCSSValue(*GetForcedColorValue(property.GetCSSPropertyName()),
+                     nullptr));
 }
 
 const CSSValue* StyleCascade::GetForcedColorValue(CSSPropertyName name) {
@@ -684,14 +712,14 @@ StyleCascade::TokenSequence::BuildVariableData() {
 
 const CSSValue* StyleCascade::Resolve(const CSSProperty& property,
                                       const CSSValue& value,
-                                      CascadeOrigin origin,
+                                      CascadeOrigin& origin,
                                       CascadeResolver& resolver) {
   DCHECK(!property.IsSurrogate());
   if (IsRevert(value))
     return ResolveRevert(property, value, origin, resolver);
   resolver.CollectAuthorFlags(property, origin);
   if (const auto* v = DynamicTo<CSSCustomPropertyDeclaration>(value))
-    return ResolveCustomProperty(property, *v, origin, resolver);
+    return ResolveCustomProperty(property, *v, resolver);
   if (const auto* v = DynamicTo<CSSVariableReferenceValue>(value))
     return ResolveVariableReference(property, *v, resolver);
   if (const auto* v = DynamicTo<cssvalue::CSSPendingSubstitutionValue>(value))
@@ -702,7 +730,6 @@ const CSSValue* StyleCascade::Resolve(const CSSProperty& property,
 const CSSValue* StyleCascade::ResolveCustomProperty(
     const CSSProperty& property,
     const CSSCustomPropertyDeclaration& decl,
-    CascadeOrigin origin,
     CascadeResolver& resolver) {
   DCHECK(!property.IsSurrogate());
 
@@ -833,7 +860,7 @@ const CSSValue* StyleCascade::ResolvePendingSubstitution(
 
 const CSSValue* StyleCascade::ResolveRevert(const CSSProperty& property,
                                             const CSSValue& value,
-                                            CascadeOrigin origin,
+                                            CascadeOrigin& origin,
                                             CascadeResolver& resolver) {
   MaybeUseCountRevert(value);
 
@@ -849,10 +876,13 @@ const CSSValue* StyleCascade::ResolveRevert(const CSSProperty& property,
     case CascadeOrigin::kAnimation: {
       CascadePriority* p =
           map_.Find(property.GetCSSPropertyName(), target_origin);
-      if (!p)
+      if (!p) {
+        origin = CascadeOrigin::kNone;
         return cssvalue::CSSUnsetValue::Create();
+      }
+      origin = p->GetOrigin();
       return Resolve(property, *ValueAt(match_result_, p->GetPosition()),
-                     target_origin, resolver);
+                     origin, resolver);
     }
   }
 }

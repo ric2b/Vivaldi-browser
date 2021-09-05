@@ -345,11 +345,11 @@ bool NGPaintFragment::HasSelfPaintingLayer() const {
   return PhysicalFragment().HasSelfPaintingLayer();
 }
 
-bool NGPaintFragment::ShouldClipOverflowAlongEitherAxis() const {
+bool NGPaintFragment::ShouldClipOverflowAlongBothAxis() const {
   auto* box_physical_fragment =
       DynamicTo<NGPhysicalBoxFragment>(&PhysicalFragment());
   return box_physical_fragment &&
-         box_physical_fragment->ShouldClipOverflowAlongEitherAxis();
+         box_physical_fragment->ShouldClipOverflowAlongBothAxis();
 }
 
 // Populate descendants from NGPhysicalFragment tree.
@@ -502,7 +502,7 @@ void NGPaintFragment::LayoutObjectWillBeDestroyed() {
 const LayoutBox* NGPaintFragment::InkOverflowOwnerBox() const {
   const NGPhysicalFragment& fragment = PhysicalFragment();
   if (fragment.IsBox() && !fragment.IsInlineBox())
-    return ToLayoutBox(fragment.GetLayoutObject());
+    return To<LayoutBox>(fragment.GetLayoutObject());
   return nullptr;
 }
 
@@ -556,8 +556,7 @@ PhysicalRect NGPaintFragment::RecalcContentsInkOverflow() const {
     // A BFC root establishes a separate NGPaintFragment tree. Re-compute the
     // child tree using its LayoutObject, because it may not be NG.
     if (child_fragment.IsFormattingContextRoot()) {
-      LayoutBox* layout_box =
-          ToLayoutBox(child_fragment.GetMutableLayoutObject());
+      auto* layout_box = To<LayoutBox>(child_fragment.GetMutableLayoutObject());
       layout_box->RecalcVisualOverflow();
       child_rect = PhysicalRect(layout_box->VisualOverflowRect());
     } else {
@@ -734,7 +733,13 @@ PositionWithAffinity NGPaintFragment::PositionForPointInText(
   const auto& text_fragment = To<NGPhysicalTextFragment>(PhysicalFragment());
   if (text_fragment.IsGeneratedText())
     return PositionWithAffinity();
-  const unsigned text_offset = text_fragment.TextOffsetForPoint(point);
+  return PositionForPointInText(text_fragment.TextOffsetForPoint(point));
+}
+
+PositionWithAffinity NGPaintFragment::PositionForPointInText(
+    unsigned text_offset) const {
+  const auto& text_fragment = To<NGPhysicalTextFragment>(PhysicalFragment());
+  DCHECK(!text_fragment.IsGeneratedText());
   NGInlineCursor cursor;
   cursor.MoveTo(*this);
   const NGCaretPosition unadjusted_position{
@@ -754,10 +759,10 @@ PositionWithAffinity NGPaintFragment::PositionForPointInInlineLevelBox(
   DCHECK(PhysicalFragment().IsInline() || PhysicalFragment().IsLineBox());
   DCHECK(!PhysicalFragment().IsBlockFlow());
 
-  const LogicalOffset logical_point = point.ConvertToLogical(
-      Style().GetWritingMode(), Style().Direction(), Size(),
-      // |point| is actually a pixel with size 1x1.
-      PhysicalSize(LayoutUnit(1), LayoutUnit(1)));
+  const LogicalOffset logical_point =
+      point.ConvertToLogical(Style().GetWritingDirection(), Size(),
+                             // |point| is actually a pixel with size 1x1.
+                             PhysicalSize(LayoutUnit(1), LayoutUnit(1)));
   const LayoutUnit inline_point = logical_point.inline_offset;
 
   // Stores the closest child before |point| in the inline direction. Used if we
@@ -825,10 +830,10 @@ PositionWithAffinity NGPaintFragment::PositionForPointInInlineFormattingContext(
              .GetLayoutObject()
              ->ChildrenInline());
 
-  const LogicalOffset logical_point = point.ConvertToLogical(
-      Style().GetWritingMode(), Style().Direction(), Size(),
-      // |point| is actually a pixel with size 1x1.
-      PhysicalSize(LayoutUnit(1), LayoutUnit(1)));
+  const LogicalOffset logical_point =
+      point.ConvertToLogical(Style().GetWritingDirection(), Size(),
+                             // |point| is actually a pixel with size 1x1.
+                             PhysicalSize(LayoutUnit(1), LayoutUnit(1)));
   const LayoutUnit block_point = logical_point.block_offset;
 
   // Stores the closest line box child below |point| in the block direction.

@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "chromeos/dbus/cros_healthd/cros_healthd_client.h"
 #include "chromeos/dbus/cros_healthd/fake_cros_healthd_client.h"
@@ -209,6 +209,14 @@ class MockNetworkDiagnosticsRoutines : public NetworkDiagnosticsRoutines {
               HttpFirewall,
               (NetworkDiagnosticsRoutines::HttpFirewallCallback),
               (override));
+  MOCK_METHOD(void,
+              HttpsFirewall,
+              (NetworkDiagnosticsRoutines::HttpsFirewallCallback),
+              (override));
+  MOCK_METHOD(void,
+              HttpsLatency,
+              (NetworkDiagnosticsRoutines::HttpsLatencyCallback),
+              (override));
 
   mojo::PendingRemote<NetworkDiagnosticsRoutines> pending_remote() {
     if (receiver_.is_bound()) {
@@ -315,7 +323,6 @@ TEST_F(CrosHealthdServiceConnectionTest, RunBatteryCapacityRoutine) {
   FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
   bool callback_done = false;
   ServiceConnection::GetInstance()->RunBatteryCapacityRoutine(
-      /*low_mah=*/1001, /*high_mah=*/120345,
       base::BindOnce(
           [](bool* callback_done, mojom::RunRoutineResponsePtr response) {
             EXPECT_EQ(response, MakeRunRoutineResponse());
@@ -332,7 +339,6 @@ TEST_F(CrosHealthdServiceConnectionTest, RunBatteryHealthRoutine) {
   FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
   bool callback_done = false;
   ServiceConnection::GetInstance()->RunBatteryHealthRoutine(
-      /*maximum_cycle_count=*/2, /*percent_battery_wear_allowed=*/90,
       base::BindOnce(
           [](bool* callback_done, mojom::RunRoutineResponsePtr response) {
             EXPECT_EQ(response, MakeRunRoutineResponse());
@@ -528,12 +534,103 @@ TEST_F(CrosHealthdServiceConnectionTest, RunLanConnectivityRoutine) {
   run_loop.Run();
 }
 
+// Test that we can run the signal strength routine.
 TEST_F(CrosHealthdServiceConnectionTest, RunSignalStrengthRoutine) {
-  // Test that we can run the signal strength routine.
   auto response = MakeRunRoutineResponse();
   FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
   base::RunLoop run_loop;
   ServiceConnection::GetInstance()->RunSignalStrengthRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the gateway can be pinged routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunGatewayCanBePingedRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunGatewayCanBePingedRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the has secure wifi connection routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunHasSecureWiFiConnectionRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunHasSecureWiFiConnectionRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the DNS resolver present routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunDnsResolverPresentRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunDnsResolverPresentRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the DNS latency routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunDnsLatencyRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunDnsLatencyRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the DNS resolution routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunDnsResolutionRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunDnsResolutionRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the captive portal routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunCaptivePortalRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunCaptivePortalRoutine(
+      base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
+        EXPECT_EQ(response, MakeRunRoutineResponse());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+// Test that we can run the HTTP firewall routine.
+TEST_F(CrosHealthdServiceConnectionTest, RunHttpFirewallRoutine) {
+  auto response = MakeRunRoutineResponse();
+  FakeCrosHealthdClient::Get()->SetRunRoutineResponseForTesting(response);
+  base::RunLoop run_loop;
+  ServiceConnection::GetInstance()->RunHttpFirewallRoutine(
       base::BindLambdaForTesting([&](mojom::RunRoutineResponsePtr response) {
         EXPECT_EQ(response, MakeRunRoutineResponse());
         run_loop.Quit();

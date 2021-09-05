@@ -8,9 +8,7 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/system/audio/unified_volume_slider_controller.h"
 #include "ash/system/tray/tray_popup_utils.h"
-#include "ash/system/unified/unified_system_tray_view.h"
 #include "base/i18n/rtl.h"
 #include "base/stl_util.h"
 #include "components/vector_icons/vector_icons.h"
@@ -22,6 +20,7 @@
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_mask.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/box_layout.h"
@@ -54,10 +53,15 @@ const gfx::VectorIcon& GetVolumeIconForLevel(float level) {
   return *kVolumeLevelIcons[index];
 }
 
+SkColor GetBackgroundColorOfMoreButton() {
+  return AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
+}
+
 class MoreButton : public views::Button {
  public:
-  explicit MoreButton(views::ButtonListener* listener)
-      : views::Button(listener) {
+  explicit MoreButton(PressedCallback callback)
+      : views::Button(std::move(callback)) {
     SetLayoutManager(std::make_unique<views::BoxLayout>(
         views::BoxLayout::Orientation::kHorizontal,
         gfx::Insets((kTrayItemSize -
@@ -65,45 +69,22 @@ class MoreButton : public views::Button {
                     2),
         2));
 
-    const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kIconColorPrimary);
-
     if (!features::IsSystemTrayMicGainSettingEnabled()) {
-      auto* headset = new views::ImageView();
-      headset->SetCanProcessEventsWithinSubtree(false);
-      headset->SetImage(
-          CreateVectorIcon(vector_icons::kHeadsetIcon, icon_color));
-      AddChildView(headset);
+      headset_image_ = AddChildView(std::make_unique<views::ImageView>());
+      headset_image_->SetCanProcessEventsWithinSubtree(false);
     }
-    auto* more = new views::ImageView();
-    more->SetCanProcessEventsWithinSubtree(false);
-    auto icon_rotation = base::i18n::IsRTL()
-                             ? SkBitmapOperations::ROTATION_270_CW
-                             : SkBitmapOperations::ROTATION_90_CW;
-    more->SetImage(gfx::ImageSkiaOperations::CreateRotatedImage(
-        CreateVectorIcon(kUnifiedMenuExpandIcon, icon_color), icon_rotation));
-    AddChildView(more);
-
+    more_image_ = AddChildView(std::make_unique<views::ImageView>());
+    more_image_->SetCanProcessEventsWithinSubtree(false);
     SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_AUDIO));
     TrayPopupUtils::ConfigureTrayPopupButton(this);
 
     views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
                                                   kTrayItemCornerRadius);
-    focus_ring()->SetColor(UnifiedSystemTrayView::GetFocusRingColor());
+    SetBackground(views::CreateRoundedRectBackground(
+        GetBackgroundColorOfMoreButton(), kTrayItemCornerRadius));
   }
 
   ~MoreButton() override = default;
-
-  // views::Button:
-  void PaintButtonContents(gfx::Canvas* canvas) override {
-    gfx::RectF rect(GetContentsBounds());
-    cc::PaintFlags flags;
-    flags.setAntiAlias(true);
-    flags.setColor(AshColorProvider::Get()->GetControlsLayerColor(
-        AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive));
-    flags.setStyle(cc::PaintFlags::kFill_Style);
-    canvas->DrawRoundRect(rect, kTrayItemCornerRadius, flags);
-  }
 
   std::unique_ptr<views::InkDrop> CreateInkDrop() override {
     return TrayPopupUtils::CreateInkDrop(this);
@@ -122,17 +103,48 @@ class MoreButton : public views::Button {
 
   const char* GetClassName() const override { return "MoreButton"; }
 
+  void OnThemeChanged() override {
+    views::Button::OnThemeChanged();
+    auto* color_provider = AshColorProvider::Get();
+    const SkColor icon_color = color_provider->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kIconColorPrimary);
+    if (headset_image_) {
+      headset_image_->SetImage(
+          CreateVectorIcon(vector_icons::kHeadsetIcon, icon_color));
+    }
+    DCHECK(more_image_);
+    auto icon_rotation = base::i18n::IsRTL()
+                             ? SkBitmapOperations::ROTATION_270_CW
+                             : SkBitmapOperations::ROTATION_90_CW;
+    more_image_->SetImage(gfx::ImageSkiaOperations::CreateRotatedImage(
+        CreateVectorIcon(kUnifiedMenuExpandIcon, icon_color), icon_rotation));
+    focus_ring()->SetColor(color_provider->GetControlsLayerColor(
+        AshColorProvider::ControlsLayerType::kFocusRingColor));
+    background()->SetNativeControlColor(GetBackgroundColorOfMoreButton());
+  }
+
  private:
+  views::ImageView* headset_image_ = nullptr;
+  views::ImageView* more_image_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(MoreButton);
 };
 
 }  // namespace
 
-UnifiedVolumeView::UnifiedVolumeView(UnifiedVolumeSliderController* controller)
-    : UnifiedSliderView(controller,
+UnifiedVolumeView::UnifiedVolumeView(
+    UnifiedVolumeSliderController* controller,
+    UnifiedVolumeSliderController::Delegate* delegate)
+    : UnifiedSliderView(base::BindRepeating(
+                            &UnifiedVolumeSliderController::SliderButtonPressed,
+                            base::Unretained(controller)),
+                        controller,
                         kSystemMenuVolumeHighIcon,
                         IDS_ASH_STATUS_TRAY_VOLUME_SLIDER_LABEL),
-      more_button_(new MoreButton(controller)) {
+      more_button_(new MoreButton(
+          base::BindRepeating(&UnifiedVolumeSliderController::Delegate::
+                                  OnAudioSettingsButtonClicked,
+                              base::Unretained(delegate)))) {
   CrasAudioHandler::Get()->AddAudioObserver(this);
   AddChildView(more_button_);
   Update(false /* by_user */);

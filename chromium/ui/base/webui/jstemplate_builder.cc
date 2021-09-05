@@ -15,6 +15,7 @@
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/template_expressions.h"
+#include "ui/resources/grit/webui_generated_resources.h"
 #include "ui/resources/grit/webui_resources.h"
 
 namespace webui {
@@ -41,7 +42,7 @@ void AppendLoadTimeData(std::string* output) {
   // fetch and cache the pointer of the jstemplate resource source text.
   std::string load_time_data_src =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-          IDR_WEBUI_JS_LOAD_TIME_DATA);
+          IDR_WEBUI_JS_LOAD_TIME_DATA_JS);
 
   if (load_time_data_src.empty()) {
     NOTREACHED() << "Unable to get loadTimeData src";
@@ -58,7 +59,7 @@ void AppendJsTemplateSourceHtml(std::string* output) {
   // fetch and cache the pointer of the jstemplate resource source text.
   std::string jstemplate_src =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-          IDR_WEBUI_JSTEMPLATE_JS);
+          IDR_WEBUI_JS_JSTEMPLATE_COMPILED_JS);
 
   if (jstemplate_src.empty()) {
     NOTREACHED() << "Unable to get jstemplate src";

@@ -168,6 +168,11 @@
     margin-inline-end: 12px;
     width: 16px;
   }
+
+  cr-action-menu hr {
+    border: none;
+    border-top: var(--cr-separator-line);
+  }
 </style>
 <div id="toolbar">
   <div id="start">
@@ -186,6 +191,7 @@
     </viewer-page-selector>
     <span id="zoom-controls">
       <cr-icon-button iron-icon="pdf:remove" title="$i18n{tooltipZoomOut}"
+          disabled="[[isAtMinimumZoom_(zoomBounds.min, viewportZoomPercent_)]]"
           aria-label="$i18n{tooltipZoomOut}" on-click="onZoomOutClick_">
       </cr-icon-button>
       <input type="text" value="100%"
@@ -194,6 +200,7 @@
           on-blur="onZoomChange_">
       </input>
       <cr-icon-button iron-icon="pdf:add" title="$i18n{tooltipZoomIn}"
+          disabled="[[isAtMaximumZoom_(zoomBounds.max, viewportZoomPercent_)]]"
           aria-label="$i18n{tooltipZoomIn}" on-click="onZoomInClick_">
       </cr-icon-button>
     </span>
@@ -264,6 +271,15 @@
     </span>
     $i18n{annotationsShowToggle}
   </button>
+
+  <template is="dom-if" if="[[presentationModeEnabled]]">
+    <hr>
+    <button id="fullscreen-button" class="dropdown-item"
+        on-click="onFullscreenClick_">
+      <span class="check-container" aria-hidden="true"></span>
+      $i18n{fullscreen}
+    </button>
+  </template>
 </cr-action-menu>
 
 <if expr="chromeos">

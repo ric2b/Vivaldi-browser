@@ -42,7 +42,9 @@ class WorkerResourceFetcherProperties final : public ResourceFetcherProperties {
     return -1;
   }
   bool IsPaused() const override;
+  WebURLLoader::DeferType DeferType() const override;
   bool IsDetached() const override { return false; }
+  bool IsLoadDeferred() const override;
   bool IsLoadComplete() const override { return false; }
   bool ShouldBlockLoadingSubResource() const override { return false; }
   bool IsSubframeDeprioritizationEnabled() const override { return false; }

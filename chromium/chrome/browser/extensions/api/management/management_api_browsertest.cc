@@ -133,8 +133,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
   ExtensionTestMessageListener app_launched_listener("app_launched", false);
   ASSERT_TRUE(
       LoadExtension(test_data_dir_.AppendASCII("management/packaged_app")));
-  ASSERT_TRUE(
-      LoadExtension(test_data_dir_.AppendASCII("management/launch_app")));
+  ASSERT_TRUE(LoadExtensionWithParamFlags(
+      test_data_dir_.AppendASCII("management/launch_app")));
   ASSERT_TRUE(app_launched_listener.WaitUntilSatisfied());
 
   // Should still see 0 apps launched from the API in the histogram.
@@ -154,8 +154,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
   ExtensionTestMessageListener app_launched_listener("app_launched", false);
   ASSERT_TRUE(
       LoadExtension(test_data_dir_.AppendASCII("management/packaged_app")));
-  ASSERT_TRUE(
-      LoadExtension(test_data_dir_.AppendASCII("management/launch_app")));
+  ASSERT_TRUE(LoadExtensionWithParamFlags(
+      test_data_dir_.AppendASCII("management/launch_app")));
   ASSERT_TRUE(app_launched_listener.WaitUntilSatisfied());
 
   // Should see 1 app launched from the highlights app  in the histogram.
@@ -171,29 +171,45 @@ IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
   ExtensionTestMessageListener listener1("success", false);
   ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("management/packaged_app")));
-  ASSERT_TRUE(LoadExtension(
+  ASSERT_TRUE(LoadExtensionWithParamFlags(
       test_data_dir_.AppendASCII("management/launch_app_from_background")));
   ASSERT_TRUE(listener1.WaitUntilSatisfied());
 }
 
-IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
-                       SelfUninstall) {
+// TODO(https://crbug.com/1132581): This uninstall test is flaky for Service
+// Worker-based extensions. This should be an
+// ExtensionManagementApiTestWithBackgroundType test once that issue is
+// resolved.
+IN_PROC_BROWSER_TEST_F(ExtensionManagementApiBrowserTest, SelfUninstall) {
   ExtensionTestMessageListener listener1("success", false);
-  ASSERT_TRUE(LoadExtensionWithParamFlags(
+  ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("management/self_uninstall_helper")));
-  ASSERT_TRUE(LoadExtensionWithParamFlags(
-      test_data_dir_.AppendASCII("management/self_uninstall")));
+  ASSERT_TRUE(
+      LoadExtension(test_data_dir_.AppendASCII("management/self_uninstall")));
   ASSERT_TRUE(listener1.WaitUntilSatisfied());
 }
 
-IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,
+// TODO(https://crbug.com/1132581): This uninstall test is flaky for Service
+// Worker-based extensions. This should be an
+// ExtensionManagementApiTestWithBackgroundType test once that issue is
+// resolved.
+IN_PROC_BROWSER_TEST_F(ExtensionManagementApiBrowserTest,
                        SelfUninstallNoPermissions) {
   ExtensionTestMessageListener listener1("success", false);
-  ASSERT_TRUE(LoadExtensionWithParamFlags(
+  ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("management/self_uninstall_helper")));
-  ASSERT_TRUE(LoadExtensionWithParamFlags(
+  ASSERT_TRUE(LoadExtension(
       test_data_dir_.AppendASCII("management/self_uninstall_noperm")));
   ASSERT_TRUE(listener1.WaitUntilSatisfied());
+}
+
+IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType, Get) {
+  ExtensionTestMessageListener listener("success", false);
+  ASSERT_TRUE(
+      LoadExtension(test_data_dir_.AppendASCII("management/simple_extension")));
+  ASSERT_TRUE(LoadExtensionWithParamFlags(
+      test_data_dir_.AppendASCII("management/get")));
+  ASSERT_TRUE(listener.WaitUntilSatisfied());
 }
 
 IN_PROC_BROWSER_TEST_P(ExtensionManagementApiTestWithBackgroundType,

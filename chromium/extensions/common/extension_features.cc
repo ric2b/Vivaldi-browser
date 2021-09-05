@@ -14,7 +14,7 @@ const base::Feature kExtensionsCheckup{"ExtensionsCheckup",
 
 // Controls whether we disable extensions for malware.
 const base::Feature kDisableMalwareExtensionsRemotely{
-    "DisableMalwareExtensionsRemotely", base::FEATURE_DISABLED_BY_DEFAULT};
+    "DisableMalwareExtensionsRemotely", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Parameters for ExtensionsCheckup feature.
 const char kExtensionsCheckupEntryPointParameter[] = "entry_point";
@@ -47,6 +47,10 @@ const base::Feature kAllowWithholdingExtensionPermissionsOnInstall{
 // scripts.
 const base::Feature kContentScriptsMatchOriginAsFallback{
     "ContentScriptsMatchOriginAsFallback", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Whether Manifest Version 3-based extensions are supported.
+const base::Feature kMv3ExtensionsSupported{"Mv3ExtensionsSupported",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Reports Extensions.WebRequest.KeepaliveRequestFinished when enabled.
 const base::Feature kReportKeepaliveUkm{"ReportKeepaliveUkm",

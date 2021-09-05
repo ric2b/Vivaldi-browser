@@ -223,13 +223,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, BrowsersRememberFocus) {
 }
 
 // Tabs remember focus.
-#if defined(THREAD_SANITIZER)
-// TODO(crbug.com/995181): This test is flaky on Linux TSan.
-#define MAYBE_TabsRememberFocus DISABLED_TabsRememberFocus
-#else
-#define MAYBE_TabsRememberFocus TabsRememberFocus
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_TabsRememberFocus) {
+IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocus) {
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(browser()));
   const GURL url = embedded_test_server()->GetURL(kSimplePage);
   ui_test_utils::NavigateToURL(browser(), url);
@@ -341,7 +335,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, BackgroundBrowserDontStealFocus) {
 
   // Open a new browser window.
   Browser* background_browser =
-      new Browser(Browser::CreateParams(browser()->profile(), true));
+      Browser::Create(Browser::CreateParams(browser()->profile(), true));
   chrome::AddTabAt(background_browser, GURL(), -1, true);
   background_browser->window()->Show();
 
@@ -407,8 +401,10 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, MAYBE_FocusTraversal) {
   chrome::FocusLocationBar(browser());
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_NO_FATAL_FAILURE(TestFocusTraversal(tab->GetRenderViewHost(), false));
-  EXPECT_NO_FATAL_FAILURE(TestFocusTraversal(tab->GetRenderViewHost(), true));
+  EXPECT_NO_FATAL_FAILURE(
+      TestFocusTraversal(tab->GetMainFrame()->GetRenderViewHost(), false));
+  EXPECT_NO_FATAL_FAILURE(
+      TestFocusTraversal(tab->GetMainFrame()->GetRenderViewHost(), true));
 }
 
 // Test that find-in-page UI can request focus, even when it is already open.

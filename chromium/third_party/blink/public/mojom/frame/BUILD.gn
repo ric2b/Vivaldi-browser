@@ -24,15 +24,19 @@ mojom_component("frame") {
     "intrinsic_sizing_info.mojom",
     "lifecycle.mojom",
     "media_player_action.mojom",
+    "policy_container.mojom",
     "reporting_observer.mojom",
     "sudden_termination_disabler_type.mojom",
     "tree_scope_type.mojom",
     "user_activation_notification_type.mojom",
     "user_activation_update_types.mojom",
+    "viewport_intersection_state.mojom",
   ]
 
   public_deps = [
+    "//services/network/public/mojom",
     "//ui/gfx/geometry/mojom",
+    "//ui/gfx/mojom",
     "//url/mojom:url_mojom_gurl",
   ]
 

@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Não é possível partilhar <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540">Houve uma troca de <ph name="FIRST_ITEM_TITLE" /> por <ph name="SECOND_ITEM_TITLE" />.</translation>
 <translation id="1498028757988366001">Já efetuou esta pesquisa anteriormente. A eliminação de "<ph name="QUERY" />" do histórico remove permanentemente esta consulta da sua conta em todos os dispositivos.</translation>
+<translation id="1510238584712386396">Launcher</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minuto e  }other{# minutos e  }}</translation>
 <translation id="1643823602425662293">Notificação</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">Ficheiro <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668">Mais de <ph name="MAXIMUM_VALUE" /></translation>
 <translation id="3618849550573277856">Procurar "<ph name="LOOKUP_STRING" />"</translation>
+<translation id="3622035490309591977">Histórico da área de transferência</translation>
 <translation id="364720409959344976">Selecionar Pasta a Carregar</translation>
 <translation id="3660179305079774227">Seta para cima</translation>
 <translation id="3670030362669914947">Número</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Ativo hoje}=1{Ativo há 1 dia}other{Ativo há # dias}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 dia e  }other{# dias e  }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Imagem.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{em 1 a.}other{em # a.}}</translation>
 <translation id="588258955323874662">Ecrã inteiro</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Falta 1 segundo}other{Faltam # segundos}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">premir</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Falta 1 hora}other{Faltam # horas}}</translation>
 <translation id="688711909580084195">Página Web Sem Nome</translation>
+<translation id="6902419395050653510">Conteúdo HTML.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{Falta 1 ano}other{Faltam # anos}}</translation>
 <translation id="6945221475159498467">Selecionar</translation>

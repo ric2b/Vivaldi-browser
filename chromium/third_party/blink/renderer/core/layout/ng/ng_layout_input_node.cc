@@ -95,6 +95,10 @@ wtf_size_t NGLayoutInputNode::TableCellRowspan() const {
   return To<LayoutNGTableCell>(box_)->ComputedRowSpan();
 }
 
+bool NGLayoutInputNode::IsTextControlPlaceholder() const {
+  return IsBlock() && blink::IsTextControlPlaceholder(GetDOMNode());
+}
+
 MinMaxSizesResult NGLayoutInputNode::ComputeMinMaxSizes(
     WritingMode writing_mode,
     const MinMaxSizesInput& input,
@@ -115,7 +119,7 @@ void NGLayoutInputNode::IntrinsicSize(
 
   IntrinsicSizingInfo legacy_sizing_info;
 
-  ToLayoutReplaced(box_)->ComputeIntrinsicSizingInfo(legacy_sizing_info);
+  To<LayoutReplaced>(box_)->ComputeIntrinsicSizingInfo(legacy_sizing_info);
   if (!*computed_inline_size && legacy_sizing_info.has_width)
     *computed_inline_size = LayoutUnit(legacy_sizing_info.size.Width());
   if (!*computed_block_size && legacy_sizing_info.has_height)

@@ -17,7 +17,6 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/base/enum_set.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/base/user_demographics.h"
 #include "components/sync/driver/sync_service_observer.h"
 
 struct CoreAccountInfo;
@@ -29,9 +28,9 @@ namespace syncer {
 class JsController;
 class ProtocolEventObserver;
 class SyncCycleSnapshot;
+struct TypeEntitiesCount;
 struct SyncTokenStatus;
 class SyncUserSettings;
-class TypeDebugInfoObserver;
 struct SyncStatus;
 
 // UIs that need to prevent Sync startup should hold an instance of this class
@@ -301,10 +300,6 @@ class SyncService : public KeyedService {
   // DATA TYPE STATE
   //////////////////////////////////////////////////////////////////////////////
 
-  // Returns the set of data types that are supported in principle. These will
-  // typically only change via a command-line option.
-  virtual syncer::ModelTypeSet GetRegisteredDataTypes() const = 0;
-
   // Returns the set of types which are preferred for enabling. This is a
   // superset of the active types (see GetActiveDataTypes()). This also includes
   // any forced types.
@@ -324,10 +319,8 @@ class SyncService : public KeyedService {
   // ACTIONS / STATE CHANGE REQUESTS
   //////////////////////////////////////////////////////////////////////////////
 
-  // Stops sync and clears all local data. This usually gets called when the
-  // user fully signs out (i.e. removes the primary account).
-  // Note: This refers to Sync-the-feature. Sync-the-transport may remain active
-  // after calling this.
+  // Stops sync-the-feature and clears all local data. Sync-the-transport may
+  // remain active after calling this.
   virtual void StopAndClear() = 0;
 
   // Called when a datatype (SyncableService) has a need for sync to start
@@ -365,18 +358,12 @@ class SyncService : public KeyedService {
       const std::vector<std::vector<uint8_t>>& keys,
       int last_key_version) = 0;
 
-  //////////////////////////////////////////////////////////////////////////////
-  // USER DEMOGRAPHICS
-  //////////////////////////////////////////////////////////////////////////////
-
-  // Gets the synced user’s noised birth year and gender, see doc of
-  // metrics::DemographicMetricsProvider in
-  // components/metrics/demographic_metrics_provider.h for more details. Returns
-  // an error status with an empty value when the user's birth year or gender
-  // cannot be provided. You need to provide an accurate |now| time that
-  // represents the current time.
-  virtual UserDemographicsResult GetUserNoisedBirthYearAndGender(
-      base::Time now) = 0;
+  // Registers a new trusted recovery method that can be used to retrieve
+  // trusted vault encryption keys.
+  virtual void AddTrustedVaultRecoveryMethodFromWeb(
+      const std::string& gaia_id,
+      const std::vector<uint8_t>& public_key,
+      base::OnceClosure callback) = 0;
 
   //////////////////////////////////////////////////////////////////////////////
   // OBSERVERS
@@ -417,10 +404,16 @@ class SyncService : public KeyedService {
   // the type's status, and <status> is one of "error", "warning" or "ok"
   // depending on the type's current status.
   //
-  // This function is used by about_sync_util.cc to help populate the about:sync
-  // page.  It returns a ListValue rather than a DictionaryValue in part to make
-  // it easier to iterate over its elements when constructing that page.
+  // This function is used by sync_internals_util.cc to help populate the
+  // chrome://sync-internals page.  It returns a ListValue rather than a
+  // DictionaryValue in part to make it easier to iterate over its elements when
+  // constructing that page.
   virtual std::unique_ptr<base::Value> GetTypeStatusMapForDebugging() = 0;
+
+  // Retrieves the TypeEntitiesCount for all registered data types.
+  virtual void GetEntityCountsForDebugging(
+      base::OnceCallback<void(const std::vector<TypeEntitiesCount>&)> callback)
+      const = 0;
 
   virtual const GURL& GetSyncServiceUrlForDebugging() const = 0;
 
@@ -429,9 +422,6 @@ class SyncService : public KeyedService {
 
   virtual void AddProtocolEventObserver(ProtocolEventObserver* observer) = 0;
   virtual void RemoveProtocolEventObserver(ProtocolEventObserver* observer) = 0;
-
-  virtual void AddTypeDebugInfoObserver(TypeDebugInfoObserver* observer) = 0;
-  virtual void RemoveTypeDebugInfoObserver(TypeDebugInfoObserver* observer) = 0;
 
   virtual base::WeakPtr<JsController> GetJsController() = 0;
 

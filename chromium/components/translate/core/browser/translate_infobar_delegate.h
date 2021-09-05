@@ -49,6 +49,9 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
     // Handles UI changes on the translate step given.
     virtual void OnTranslateStepChanged(translate::TranslateStep step,
                                         TranslateErrors::Type error_type) = 0;
+    // Handles UI changes when the target language is updated.
+    virtual void OnTargetLanguageChanged(
+        const std::string& target_language_code) = 0;
     // Return whether user declined translate service.
     virtual bool IsDeclinedByUser() = 0;
     // Called when the TranslateInfoBarDelegate instance is destroyed.
@@ -218,6 +221,11 @@ class TranslateInfoBarDelegate : public infobars::InfoBarDelegate {
 
   // Remove an observer.
   virtual void RemoveObserver(Observer* observer);
+
+  // Handles when the user closes the translate infobar. This includes when: the
+  // user presses the 'x' button, the user selects to never translate the site,
+  // and the user selects to never translate the language.
+  void OnInfoBarClosedByUser();
 
   // InfoBarDelegate:
   infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;

@@ -22,25 +22,17 @@ class CONTENT_EXPORT AccessibilityTreeFormatterBlink
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
       BrowserAccessibility* root) override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForWindow(
-      gfx::AcceleratedWidget widget) override;
+  base::Value BuildTreeForWindow(gfx::AcceleratedWidget widget) const override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForSelector(
-      const TreeSelector& selector) override;
+  base::Value BuildTreeForSelector(
+      const AXTreeSelector& selector) const override;
 
   void AddDefaultFilters(
-      std::vector<PropertyFilter>* property_filters) override;
+      std::vector<AXPropertyFilter>* property_filters) override;
 
-  static std::unique_ptr<AccessibilityTreeFormatter> CreateBlink();
+  static std::unique_ptr<ui::AXTreeFormatter> CreateBlink();
 
  private:
-  base::FilePath::StringType GetExpectedFileSuffix() override;
-  const std::string GetAllowEmptyString() override;
-  const std::string GetAllowString() override;
-  const std::string GetDenyString() override;
-  const std::string GetDenyNodeString() override;
-  const std::string GetRunUntilEventString() override;
-
   void RecursiveBuildAccessibilityTree(const BrowserAccessibility& node,
                                        base::DictionaryValue* dict) const;
 

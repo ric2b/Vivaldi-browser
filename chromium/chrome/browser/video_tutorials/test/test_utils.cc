@@ -13,13 +13,13 @@ void BuildTestEntry(Tutorial* entry) {
   *entry = Tutorial(
       FeatureType::kTest, kTestTitle, "https://www.example.com/video_url",
       "https://www.example.com/share_url", "https://www.example.com/poster_url",
+      "https://www.example.com/animated_gif_url",
+      "https://www.example.com/thumbnail_url",
       "https://www.example.com/caption_url", 60);
 }
 
 void BuildTestGroup(TutorialGroup* group) {
-  Language language;
-  language.locale = "en";
-  *group = TutorialGroup(language);
+  *group = TutorialGroup("en");
   group->tutorials.clear();
   Tutorial entry1;
   BuildTestEntry(&entry1);

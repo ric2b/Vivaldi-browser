@@ -7,10 +7,15 @@ import 'chrome://resources/cr_elements/cr_icons_css.m.js';
 import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/mwb_shared_vars.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import './icons.js';
 
+import {assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {ReadLaterApiProxy, ReadLaterApiProxyImpl} from './read_later_api_proxy.js';
+
+/** @type {!Set<string>} */
+const navigationKeys = new Set([' ', 'Enter', 'ArrowRight', 'ArrowLeft']);
 
 export class ReadLaterItemElement extends PolymerElement {
   static get is() {
@@ -38,11 +43,51 @@ export class ReadLaterItemElement extends PolymerElement {
   ready() {
     super.ready();
     this.addEventListener('click', this.onClick_);
+    this.addEventListener('keydown', this.onKeyDown_.bind(this));
   }
 
   /** @private */
   onClick_() {
     this.apiProxy_.openSavedEntry(this.data.url);
+  }
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onKeyDown_(e) {
+    if (e.shiftKey || !navigationKeys.has(e.key)) {
+      return;
+    }
+    switch (e.key) {
+      case ' ':
+      case 'Enter':
+        this.onClick_();
+        break;
+      case 'ArrowRight':
+        if (!this.shadowRoot.activeElement) {
+          this.shadowRoot.getElementById('updateStatusButton').focus();
+        } else if (this.shadowRoot.activeElement.nextElementSibling) {
+          this.shadowRoot.activeElement.nextElementSibling.focus();
+        } else {
+          this.focus();
+        }
+        break;
+      case 'ArrowLeft':
+        if (!this.shadowRoot.activeElement) {
+          this.shadowRoot.getElementById('deleteButton').focus();
+        } else if (this.shadowRoot.activeElement.previousElementSibling) {
+          this.shadowRoot.activeElement.previousElementSibling.focus();
+        } else {
+          this.focus();
+        }
+        break;
+      default:
+        assertNotReached();
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
   }
 
   /**
@@ -61,6 +106,16 @@ export class ReadLaterItemElement extends PolymerElement {
   onItemDeleteClick_(e) {
     e.stopPropagation();
     this.apiProxy_.removeEntry(this.data.url);
+  }
+
+  /**
+   * @param {string} markAsUnreadIcon
+   * @param {string} markAsReadIcon
+   * @return {string} The appropriate icon for the current state
+   * @private
+   */
+  getUpdateStatusButtonIcon_(markAsUnreadIcon, markAsReadIcon) {
+    return this.data.read ? markAsUnreadIcon : markAsReadIcon;
   }
 
   /**

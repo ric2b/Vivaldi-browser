@@ -16,7 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "components/browsing_data/content/cookie_helper.h"
 #include "components/browsing_data/content/local_shared_objects_container.h"
@@ -453,8 +453,6 @@ class PageSpecificContentSettings
         content::RenderFrameHost* rfh);
 
     // content::WebContentsObserver overrides.
-    void RenderFrameForInterstitialPageCreated(
-        content::RenderFrameHost* render_frame_host) override;
     void DidStartNavigation(
         content::NavigationHandle* navigation_handle) override;
     void ReadyToCommitNavigation(
@@ -509,8 +507,7 @@ class PageSpecificContentSettings
   // content_settings::Observer implementation.
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               const std::string& resource_identifier) override;
+                               ContentSettingsType content_type) override;
 
   // Clears settings changed by the user via PageInfo since the last navigation.
   void ClearContentSettingsChangedViaPageInfo();
@@ -563,8 +560,8 @@ class PageSpecificContentSettings
   bool geolocation_was_just_granted_on_site_level_ = false;
 
   // Observer to watch for content settings changed.
-  ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_{
-      this};
+  base::ScopedObservation<HostContentSettingsMap, content_settings::Observer>
+      observation_{this};
 
   // Stores content settings changed by the user via page info since the last
   // navigation. Used to determine whether to display the settings in page info.

@@ -6,13 +6,12 @@
 
 #include <memory>
 
-#include "chrome/browser/profiles/profile_key.h"
-#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/reading_list/android/empty_reading_list_manager.h"
 #include "chrome/browser/reading_list/android/reading_list_manager_impl.h"
 #include "chrome/browser/ui/read_later/reading_list_model_factory.h"
-#include "chrome/browser/ui/ui_features.h"
-#include "components/keyed_service/core/simple_dependency_manager.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/reading_list/features/reading_list_switches.h"
 
 // static
 ReadingListManagerFactory* ReadingListManagerFactory::GetInstance() {
@@ -20,29 +19,32 @@ ReadingListManagerFactory* ReadingListManagerFactory::GetInstance() {
 }
 
 // static
-ReadingListManager* ReadingListManagerFactory::GetForKey(
-    SimpleFactoryKey* key) {
+ReadingListManager* ReadingListManagerFactory::GetForBrowserContext(
+    content::BrowserContext* context) {
   return static_cast<ReadingListManager*>(
-      GetInstance()->GetServiceForKey(key, /*create=*/true));
+      GetInstance()->GetServiceForBrowserContext(context, /*create=*/true));
 }
 
 ReadingListManagerFactory::ReadingListManagerFactory()
-    : SimpleKeyedServiceFactory("ReadingListManager",
-                                SimpleDependencyManager::GetInstance()) {
+    : BrowserContextKeyedServiceFactory(
+          "ReadingListManager",
+          BrowserContextDependencyManager::GetInstance()) {
   DependsOn(ReadingListModelFactory::GetInstance());
 }
 
 ReadingListManagerFactory::~ReadingListManagerFactory() = default;
 
-std::unique_ptr<KeyedService>
-ReadingListManagerFactory::BuildServiceInstanceFor(
-    SimpleFactoryKey* key) const {
-  if (!base::FeatureList::IsEnabled(features::kReadLater))
-    return std::make_unique<EmptyReadingListManager>();
+KeyedService* ReadingListManagerFactory::BuildServiceInstanceFor(
+    content::BrowserContext* context) const {
+  if (!base::FeatureList::IsEnabled(reading_list::switches::kReadLater))
+    return new EmptyReadingListManager();
 
-  auto* profile = ProfileManager::GetProfileFromProfileKey(
-      ProfileKey::FromSimpleFactoryKey(key));
   auto* reading_list_model =
-      ReadingListModelFactory::GetForBrowserContext(profile);
-  return std::make_unique<ReadingListManagerImpl>(reading_list_model);
+      ReadingListModelFactory::GetForBrowserContext(context);
+  return new ReadingListManagerImpl(reading_list_model);
+}
+
+content::BrowserContext* ReadingListManagerFactory::GetBrowserContextToUse(
+    content::BrowserContext* context) const {
+  return chrome::GetBrowserContextRedirectedInIncognito(context);
 }

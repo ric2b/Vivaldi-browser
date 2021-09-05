@@ -181,6 +181,15 @@ class ThrottlingURLLoader::ForwardingThrottleDelegate
     loader_->RestartWithURLResetAndFlagsNow(additional_load_flags);
   }
 
+  void RestartWithModifiedHeadersNow(
+      const net::HttpRequestHeaders& modified_headers) override {
+    if (!loader_)
+      return;
+
+    ScopedDelegateCall scoped_delegate_call(this);
+    loader_->RestartWithModifiedHeadersNow(modified_headers);
+  }
+
   void Detach() { loader_ = nullptr; }
 
  private:
@@ -523,8 +532,9 @@ void ThrottlingURLLoader::StartNow() {
 
   DCHECK(start_info_->url_loader_factory);
   start_info_->url_loader_factory->CreateLoaderAndStart(
-      url_loader_.BindNewPipeAndPassReceiver(), start_info_->routing_id,
-      start_info_->request_id, start_info_->options, start_info_->url_request,
+      url_loader_.BindNewPipeAndPassReceiver(start_info_->task_runner),
+      start_info_->routing_id, start_info_->request_id, start_info_->options,
+      start_info_->url_request,
       client_receiver_.BindNewPipeAndPassRemote(start_info_->task_runner),
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
 
@@ -596,6 +606,14 @@ void ThrottlingURLLoader::RestartWithURLResetAndFlagsNow(
   RestartWithURLResetAndFlags(additional_load_flags);
   if (!did_receive_response_)
     RestartWithFlagsNow();
+}
+
+void ThrottlingURLLoader::RestartWithModifiedHeadersNow(
+    const net::HttpRequestHeaders& modified_headers) {
+  modified_headers_.MergeFrom(modified_headers);
+  // While not actually redirecting, the mechanism here is very similar to an
+  // internal redirect to the same url.
+  FollowRedirectForcingRestart();
 }
 
 void ThrottlingURLLoader::OnReceiveResponse(

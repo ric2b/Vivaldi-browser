@@ -64,6 +64,9 @@ WGPUTextureComponentType AsDawnEnum<WGPUTextureComponentType>(
   if (webgpu_enum == "sint") {
     return WGPUTextureComponentType_Sint;
   }
+  if (webgpu_enum == "depth-comparison") {
+    return WGPUTextureComponentType_DepthComparison;
+  }
   NOTREACHED();
   return WGPUTextureComponentType_Force32;
 }
@@ -222,11 +225,18 @@ WGPUTextureFormat AsDawnEnum<WGPUTextureFormat>(
   }
 
   // Packed 32 bit formats
+  if (webgpu_enum == "rgb9e5ufloat") {
+    return WGPUTextureFormat_RGB9E5Ufloat;
+  }
   if (webgpu_enum == "rgb10a2unorm") {
     return WGPUTextureFormat_RGB10A2Unorm;
   }
   if (webgpu_enum == "rg11b10float") {
-    return WGPUTextureFormat_RG11B10Float;
+    // Deprecated.
+    return WGPUTextureFormat_RG11B10Ufloat;
+  }
+  if (webgpu_enum == "rg11b10ufloat") {
+    return WGPUTextureFormat_RG11B10Ufloat;
   }
 
   // Normal 64 bit formats
@@ -305,8 +315,12 @@ WGPUTextureFormat AsDawnEnum<WGPUTextureFormat>(
   if (webgpu_enum == "bc6h-rgb-ufloat") {
     return WGPUTextureFormat_BC6HRGBUfloat;
   }
+  if (webgpu_enum == "bc6h-rgb-float") {
+    return WGPUTextureFormat_BC6HRGBFloat;
+  }
   if (webgpu_enum == "bc6h-rgb-sfloat") {
-    return WGPUTextureFormat_BC6HRGBSfloat;
+    // Deprecated.
+    return WGPUTextureFormat_BC6HRGBFloat;
   }
   if (webgpu_enum == "bc7-rgba-unorm") {
     return WGPUTextureFormat_BC7RGBAUnorm;
@@ -753,15 +767,27 @@ WGPUExtent3D AsDawnType(
     const UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict* webgpu_extent) {
   DCHECK(webgpu_extent);
 
-  WGPUExtent3D dawn_extent = {};
+  WGPUExtent3D dawn_extent = {1, 1, 1};
 
   if (webgpu_extent->IsUnsignedLongEnforceRangeSequence()) {
     const Vector<uint32_t>& webgpu_extent_sequence =
         webgpu_extent->GetAsUnsignedLongEnforceRangeSequence();
-    DCHECK_EQ(webgpu_extent_sequence.size(), 3UL);
-    dawn_extent.width = webgpu_extent_sequence[0];
-    dawn_extent.height = webgpu_extent_sequence[1];
-    dawn_extent.depth = webgpu_extent_sequence[2];
+
+    // The WebGPU spec states that if the sequence isn't big enough then the
+    // default values of 1 are used (which are set above).
+    switch (webgpu_extent_sequence.size()) {
+      default:
+        dawn_extent.depth = webgpu_extent_sequence[2];
+        FALLTHROUGH;
+      case 2:
+        dawn_extent.height = webgpu_extent_sequence[1];
+        FALLTHROUGH;
+      case 1:
+        dawn_extent.width = webgpu_extent_sequence[0];
+        FALLTHROUGH;
+      case 0:
+        break;
+    }
 
   } else if (webgpu_extent->IsGPUExtent3DDict()) {
     const GPUExtent3DDict* webgpu_extent_3d_dict =
@@ -781,15 +807,27 @@ WGPUOrigin3D AsDawnType(
     const UnsignedLongEnforceRangeSequenceOrGPUOrigin3DDict* webgpu_origin) {
   DCHECK(webgpu_origin);
 
-  WGPUOrigin3D dawn_origin = {};
+  WGPUOrigin3D dawn_origin = {0, 0, 0};
 
   if (webgpu_origin->IsUnsignedLongEnforceRangeSequence()) {
     const Vector<uint32_t>& webgpu_origin_sequence =
         webgpu_origin->GetAsUnsignedLongEnforceRangeSequence();
-    DCHECK_EQ(webgpu_origin_sequence.size(), 3UL);
-    dawn_origin.x = webgpu_origin_sequence[0];
-    dawn_origin.y = webgpu_origin_sequence[1];
-    dawn_origin.z = webgpu_origin_sequence[2];
+
+    // The WebGPU spec states that if the sequence isn't big enough then the
+    // default values of 0 are used (which are set above).
+    switch (webgpu_origin_sequence.size()) {
+      default:
+        dawn_origin.z = webgpu_origin_sequence[2];
+        FALLTHROUGH;
+      case 2:
+        dawn_origin.y = webgpu_origin_sequence[1];
+        FALLTHROUGH;
+      case 1:
+        dawn_origin.x = webgpu_origin_sequence[0];
+        FALLTHROUGH;
+      case 0:
+        break;
+    }
 
   } else if (webgpu_origin->IsGPUOrigin3DDict()) {
     const GPUOrigin3DDict* webgpu_origin_3d_dict =
@@ -814,19 +852,45 @@ WGPUTextureCopyView AsDawnType(const GPUTextureCopyView* webgpu_view,
   dawn_view.texture = webgpu_view->texture()->GetHandle();
   dawn_view.mipLevel = webgpu_view->mipLevel();
   dawn_view.origin = AsDawnType(&webgpu_view->origin());
+  dawn_view.aspect = AsDawnEnum<WGPUTextureAspect>(webgpu_view->aspect());
 
   return dawn_view;
 }
 
-WGPUTextureDataLayout AsDawnType(const GPUTextureDataLayout* webgpu_layout) {
+// Dawn represents `undefined` as the special uint32_t value
+// WGPU_STRIDE_UNDEFINED (0xFFFF'FFFF). Blink must make sure that an actual
+// value of 0xFFFF'FFFF coming in from JS is not treated as
+// WGPU_STRIDE_UNDEFINED, so it injects an error in that case.
+const char* ValidateTextureDataLayout(const GPUTextureDataLayout* webgpu_layout,
+                                      WGPUTextureDataLayout* dawn_layout) {
   DCHECK(webgpu_layout);
 
-  WGPUTextureDataLayout dawn_layout = {};
-  dawn_layout.offset = webgpu_layout->offset();
-  dawn_layout.bytesPerRow = webgpu_layout->bytesPerRow();
-  dawn_layout.rowsPerImage = webgpu_layout->rowsPerImage();
+  uint32_t bytesPerRow = 0;
+  if (webgpu_layout->hasBytesPerRow()) {
+    bytesPerRow = webgpu_layout->bytesPerRow();
+    if (bytesPerRow == WGPU_STRIDE_UNDEFINED) {
+      return "bytesPerRow must be a multiple of 256";
+    }
+  } else {
+    bytesPerRow = WGPU_STRIDE_UNDEFINED;
+  }
 
-  return dawn_layout;
+  uint32_t rowsPerImage = 0;
+  if (webgpu_layout->hasRowsPerImage()) {
+    rowsPerImage = webgpu_layout->rowsPerImage();
+    if (rowsPerImage == WGPU_STRIDE_UNDEFINED) {
+      return "rowsPerImage is too large";
+    }
+  } else {
+    rowsPerImage = WGPU_STRIDE_UNDEFINED;
+  }
+
+  *dawn_layout = {};
+  dawn_layout->offset = webgpu_layout->offset();
+  dawn_layout->bytesPerRow = bytesPerRow;
+  dawn_layout->rowsPerImage = rowsPerImage;
+
+  return nullptr;
 }
 
 OwnedProgrammableStageDescriptor AsDawnType(

@@ -146,7 +146,7 @@ class LayoutGrid final : public LayoutBlock {
  private:
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectLayoutGrid || LayoutBlock::IsOfType(type);
+    return type == kLayoutObjectGrid || LayoutBlock::IsOfType(type);
   }
   MinMaxSizes ComputeIntrinsicLogicalWidths() const override;
 
@@ -270,16 +270,8 @@ class LayoutGrid final : public LayoutBlock {
   StyleSelfAlignmentData DefaultAlignment(GridAxis, const ComputedStyle&) const;
   bool DefaultAlignmentIsStretchOrNormal(GridAxis, const ComputedStyle&) const;
   void ApplyStretchAlignmentToChildIfNeeded(LayoutBox&);
-  bool HasAutoSizeInColumnAxis(const LayoutBox& child) const {
-    NOT_DESTROYED();
-    return IsHorizontalWritingMode() ? child.StyleRef().Height().IsAuto()
-                                     : child.StyleRef().Width().IsAuto();
-  }
-  bool HasAutoSizeInRowAxis(const LayoutBox& child) const {
-    NOT_DESTROYED();
-    return IsHorizontalWritingMode() ? child.StyleRef().Width().IsAuto()
-                                     : child.StyleRef().Height().IsAuto();
-  }
+  bool HasAutoSizeInColumnAxis(const LayoutBox& child) const;
+  bool HasAutoSizeInRowAxis(const LayoutBox& child) const;
   bool AllowedToStretchChildAlongColumnAxis(const LayoutBox& child) const {
     NOT_DESTROYED();
     return AlignSelfForChild(child).GetPosition() == ItemPosition::kStretch &&

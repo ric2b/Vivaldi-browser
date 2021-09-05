@@ -6,10 +6,10 @@ import("//build/buildflag_header.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/linux/pkg_config.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//ui/gl/features.gni")
-import("//ui/ozone/ozone.gni")
 
 declare_args() {
   # Whether service side logging (actual calls into the GL driver) is enabled
@@ -126,8 +126,6 @@ component("gl") {
     "gpu_switching_manager.h",
     "gpu_timing.cc",
     "gpu_timing.h",
-    "hdr_metadata.cc",
-    "hdr_metadata.h",
     "progress_reporter.h",
     "scoped_binders.cc",
     "scoped_binders.h",
@@ -143,8 +141,6 @@ component("gl") {
 
   if (is_android) {
     sources += [
-      "android/android_surface_control_compat.cc",
-      "android/android_surface_control_compat.h",
       "android/scoped_java_surface.cc",
       "android/scoped_java_surface.h",
       "android/surface_texture.cc",
@@ -246,6 +242,10 @@ component("gl") {
     ]
   }
 
+  if (use_ozone) {
+    deps += [ "//ui/ozone:buildflags" ]
+  }
+
   if (use_x11 || ozone_platform_x11) {
     sources += [
       "gl_image_egl_pixmap.cc",
@@ -262,6 +262,7 @@ component("gl") {
       "//ui/base:features",
       "//ui/base/x",
       "//ui/events/platform/x11:x11",
+      "//ui/gfx/linux:gpu_memory_buffer_support_x11",
     ]
 
     assert(use_egl)
@@ -307,6 +308,8 @@ component("gl") {
       "direct_composition_surface_win.h",
       "gl_angle_util_win.cc",
       "gl_angle_util_win.h",
+      "gl_fence_win.cc",
+      "gl_fence_win.h",
       "gl_image_d3d.cc",
       "gl_image_d3d.h",
       "gl_image_dxgi.cc",
@@ -565,6 +568,7 @@ test("gl_unittests") {
   if (is_win) {
     sources += [
       "direct_composition_surface_win_unittest.cc",
+      "gl_fence_win_unittest.cc",
       "gl_image_d3d_unittest.cc",
       "gl_image_dxgi_unittest.cc",
       "hdr_metadata_helper_win_unittest.cc",
@@ -575,7 +579,7 @@ test("gl_unittests") {
     sources += [ "gl_image_ahardwarebuffer_unittest.cc" ]
   }
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     sources += [ "gl_image_native_pixmap_unittest.cc" ]
   }
 

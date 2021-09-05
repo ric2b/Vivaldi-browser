@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -31,11 +32,14 @@ bool PasswordManagerClient::RequiresReauthToFill() {
 
 void PasswordManagerClient::ShowTouchToFill(PasswordManagerDriver* driver) {}
 
+void PasswordManagerClient::OnPasswordSelected(const base::string16& text) {}
+
 BiometricAuthenticator* PasswordManagerClient::GetBiometricAuthenticator() {
   return nullptr;
 }
 
-void PasswordManagerClient::GeneratePassword() {}
+void PasswordManagerClient::GeneratePassword(
+    autofill::password_generation::PasswordGenerationType type) {}
 
 void PasswordManagerClient::UpdateCredentialCache(
     const url::Origin& origin,
@@ -149,9 +153,4 @@ network::mojom::NetworkContext* PasswordManagerClient::GetNetworkContext()
 bool PasswordManagerClient::IsUnderAdvancedProtection() const {
   return false;
 }
-
-AutofillAssistantMode PasswordManagerClient::GetAutofillAssistantMode() const {
-  return GetPasswordManager()->GetAutofillAssistantMode();
-}
-
 }  // namespace password_manager

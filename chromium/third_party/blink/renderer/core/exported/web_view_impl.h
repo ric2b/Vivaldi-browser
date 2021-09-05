@@ -37,15 +37,18 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-blink.h"
+#include "third_party/blink/public/mojom/renderer_preference_watcher.mojom-blink.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_rect.h"
-#include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
@@ -54,6 +57,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/exported/web_page_popup_impl.h"
 #include "third_party/blink/renderer/core/frame/resize_viewport_anchor.h"
+#include "third_party/blink/renderer/core/loader/navigation_policy.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/context_menu_provider.h"
 #include "third_party/blink/renderer/core/page/event_with_hit_test_results.h"
@@ -71,7 +75,6 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace cc {
-struct BeginMainFrameMetrics;
 class ScopedDeferMainFrameUpdate;
 }
 
@@ -85,10 +88,8 @@ class BrowserControls;
 class DevToolsEmulator;
 class Frame;
 class FullscreenController;
-class HTMLPlugInElement;
 class PageScaleConstraintsSet;
 class WebDevToolsAgentImpl;
-class WebInputMethodController;
 class WebLocalFrame;
 class WebLocalFrameImpl;
 class WebSettingsImpl;
@@ -103,13 +104,10 @@ class TextAutosizerPageInfo;
 }
 }  // namespace mojom
 
-class VivaldiDoubleClickMenu;
-
 using PaintHoldingCommitTrigger = cc::PaintHoldingCommitTrigger;
 
 class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
                                       public RefCounted<WebViewImpl>,
-                                      public PageWidgetEventHandler,
                                       public mojom::blink::PageBroadcast {
  public:
   static WebViewImpl* Create(
@@ -118,7 +116,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
       bool is_inside_portal,
       bool compositing_enabled,
       WebViewImpl* opener,
-      mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle);
+      mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle,
+      scheduler::WebAgentGroupScheduler& agent_group_scheduler);
 
   // All calls to Create() should be balanced with a call to Close(). This
   // synchronously destroys the WebViewImpl.
@@ -138,23 +137,19 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidAttachRemoteMainFrame() override;
   void DidDetachRemoteMainFrame() override;
   void SetPrerendererClient(WebPrerendererClient*) override;
-  void CloseWindowSoon() override;
   WebSettings* GetSettings() override;
   WebString PageEncoding() const override;
-  bool TabsToLinks() const override;
-  void SetTabsToLinks(bool value) override;
-  bool TabKeyCyclesThroughElements() const override;
   void SetTabKeyCyclesThroughElements(bool value) override;
   bool IsActive() const override;
   void SetIsActive(bool value) override;
   void SetWindowFeatures(const WebWindowFeatures&) override;
   void SetOpenedByDOM() override;
-  void ResizeWithBrowserControls(const WebSize& main_frame_widget_size,
+  void ResizeWithBrowserControls(const gfx::Size& main_frame_widget_size,
                                  float top_controls_height,
                                  float bottom_controls_height,
                                  bool browser_controls_shrink_layout) override;
-  void ResizeWithBrowserControls(const WebSize& main_frame_widget_size,
-                                 const WebSize& visible_viewport_size,
+  void ResizeWithBrowserControls(const gfx::Size& main_frame_widget_size,
+                                 const gfx::Size& visible_viewport_size,
                                  cc::BrowserControlsParams) override;
   WebFrame* MainFrame() override;
   WebLocalFrame* FocusedFrame() override;
@@ -163,10 +158,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
                     int target_y,
                     base::TimeDelta duration) override;
   void AdvanceFocus(bool reverse) override;
-  void ZoomAndScrollToFocusedEditableElementRect(
-      const WebRect& element_bounds_in_document,
-      const WebRect& caret_bounds_in_document,
-      bool zoom_into_legible_scale) override;
   double ZoomLevel() override;
   double SetZoomLevel(double) override;
   float PageScaleFactor() const override;
@@ -174,25 +165,20 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   float MaximumPageScaleFactor() const override;
   void SetDefaultPageScaleLimits(float min_scale, float max_scale) override;
   void SetInitialPageScaleOverride(float) override;
-  void SetMaximumLegibleScale(float) override;
   void SetPageScaleFactor(float) override;
   void SetVisualViewportOffset(const gfx::PointF&) override;
   gfx::PointF VisualViewportOffset() const override;
   gfx::SizeF VisualViewportSize() const override;
-  void ResizeVisualViewport(const WebSize&) override;
-  void Resize(const WebSize&) override;
-  WebSize GetSize() override;
+  void Resize(const gfx::Size&) override;
   void SetScreenOrientationOverrideForTesting(
       base::Optional<blink::mojom::ScreenOrientation> orientation) override;
   void UseSynchronousResizeModeForTesting(bool enable) override;
   void SetWindowRectSynchronouslyForTesting(
       const gfx::Rect& new_window_rect) override;
   void ResetScrollAndScaleState() override;
-  void SetIgnoreViewportTagScaleLimits(bool) override;
-  WebSize ContentsPreferredMinimumSize() override;
+  gfx::Size ContentsPreferredMinimumSize() override;
   void UpdatePreferredSize() override;
   void EnablePreferredSizeChangedMode() override;
-  void Focus() override;
   void SetDeviceScaleFactor(float) override;
   void SetZoomFactorForDeviceScaleFactor(float) override;
   float ZoomFactorForDeviceScaleFactor() override {
@@ -202,10 +188,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void EnableAutoResizeForTesting(const gfx::Size& min_window_size,
                                   const gfx::Size& max_window_size) override;
   void DisableAutoResizeForTesting(const gfx::Size& new_window_size) override;
-  WebHitTestResult HitTestResultAt(const gfx::PointF&);
   WebHitTestResult HitTestResultForTap(const gfx::Point&,
-                                       const WebSize&) override;
-  uint64_t CreateUniqueIdentifierForRequest() override;
+                                       const gfx::Size&) override;
   void EnableDeviceEmulation(const DeviceEmulationParams&) override;
   void DisableDeviceEmulation() override;
   void PerformCustomContextMenuAction(unsigned action) override;
@@ -219,6 +203,11 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetDeviceColorSpaceForTesting(
       const gfx::ColorSpace& color_space) override;
   void PaintContent(cc::PaintCanvas*, const gfx::Rect&) override;
+  void RegisterRendererPreferenceWatcher(
+      CrossVariantMojoRemote<mojom::RendererPreferenceWatcherInterfaceBase>
+          watcher) override;
+  void SetRendererPreferences(const RendererPreferences& preferences) override;
+  const RendererPreferences& GetRendererPreferences() override;
   void SetWebPreferences(const web_pref::WebPreferences& preferences) override;
   const web_pref::WebPreferences& GetWebPreferences() override;
 
@@ -244,6 +233,10 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void SetInsidePortal(bool is_inside_portal) override;
   void UpdateWebPreferences(
       const blink::web_pref::WebPreferences& preferences) override;
+  void UpdateRendererPreferences(
+      const RendererPreferences& preferences) override;
+  void SetHistoryOffsetAndLength(int32_t history_offset,
+                                 int32_t history_length) override;
 
   void DispatchPageshow(base::TimeTicks navigation_start);
   void DispatchPagehide(mojom::blink::PagehideDispatch pagehide_dispatch);
@@ -255,7 +248,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void ResetScaleStateImmediately();
   base::Optional<mojom::blink::ScreenOrientation> ScreenOrientationOverride();
 
-  HitTestResult CoreHitTestResultAt(const gfx::PointF&);
   void InvalidateRect(const IntRect&);
 
   void SetZoomFactorOverride(float);
@@ -298,9 +290,13 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // outside this class.
   WebLocalFrameImpl* MainFrameImpl() const;
 
-  // Event related methods:
-  void MouseContextMenu(const WebMouseEvent&);
-  void MouseDoubleClick(const WebMouseEvent&);
+  // Changes the zoom and scroll for zooming into an editable element
+  // with bounds |element_bounds_in_document| and caret bounds
+  // |caret_bounds_in_document|.
+  void ZoomAndScrollToFocusedEditableElementRect(
+      const IntRect& element_bounds_in_document,
+      const IntRect& caret_bounds_in_document,
+      bool zoom_into_legible_scale);
 
   bool StartPageScaleAnimation(const IntPoint& target_position,
                                bool use_anchor,
@@ -422,9 +418,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void AddAutoplayFlags(int32_t) override;
   void ClearAutoplayFlags() override;
   int32_t AutoplayFlagsForTest() override;
-  WebSize GetPreferredSizeForTest() override;
+  gfx::Size GetPreferredSizeForTest() override;
 
-  WebSize Size();
+  gfx::Size Size();
   IntSize MainFrameSize();
 
   PageScaleConstraintsSet& GetPageScaleConstraintsSet() const;
@@ -434,12 +430,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   class ChromeClient& GetChromeClient() const {
     return *chrome_client_.Get();
   }
-
-  // Returns the currently active WebInputMethodController which is the one
-  // corresponding to the focused frame. It will return nullptr if there is no
-  // focused frame, or if the there is one but it belongs to a different local
-  // root.
-  WebInputMethodController* GetActiveWebInputMethodController() const;
 
   bool ShouldZoomToLegibleScale(const Element&);
 
@@ -457,6 +447,26 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   void DidEnterFullscreen();
   void DidExitFullscreen();
 
+  // Called when some JS code has instructed the window associated to the main
+  // frame to close, which will result in a request to the browser to close the
+  // Widget associated to it.
+  void CloseWindowSoon();
+
+  // Controls whether pressing Tab key advances focus to links.
+  bool TabsToLinks() const;
+  void SetTabsToLinks(bool);
+
+  // Prevent the web page from setting min/max scale via the viewport meta
+  // tag. This is an accessibility feature that lets folks zoom in to web
+  // pages even if the web page tries to block scaling.
+  void SetIgnoreViewportTagScaleLimits(bool);
+
+  // Sets the maximum page scale considered to be legible. Automatic zooms (e.g,
+  // double-tap or find in page) will have the page scale limited to this value
+  // times the font scale factor. Manual pinch zoom will not be affected by this
+  // limit.
+  void SetMaximumLegibleScale(float);
+
   void SetMainFrameViewWidget(WebViewFrameWidget* widget);
   WebViewFrameWidget* MainFrameViewWidget();
 
@@ -465,6 +475,31 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   // Called when keyboard focus switches to an anchor with the given URL.
   void SetKeyboardFocusURL(const KURL&);
+
+  void RunPaintBenchmark(int repeat_count, cc::PaintBenchmarkResult& result);
+
+  // Asks the browser process to activate this web view.
+  void Focus();
+
+  // Asks the browser process to take focus away from the WebView by focusing an
+  // adjacent UI element in the containing window.
+  void TakeFocus(bool reverse);
+
+  // Shows a previously created WebView (via window.open()).
+  void Show(const base::UnguessableToken& opener_frame_token,
+            NavigationPolicy policy,
+            const gfx::Rect& rect,
+            bool opened_by_user_gesture);
+
+  void SetWindowRect(const gfx::Rect& bounds);
+
+  // This method is used for testing.
+  // Resizes the unscaled (page scale = 1.0) visual viewport. Normally the
+  // unscaled visual viewport is the same size as the main frame. The passed
+  // size becomes the size of the viewport when page scale = 1. This
+  // is used to shrink the visible viewport to allow things like the ChromeOS
+  // virtual keyboard to overlay over content but allow scrolling it into view.
+  void ResizeVisualViewport(const gfx::Size&);
 
   // Vivaldi start
   void SetImagesEnabled(const bool images_enabled) override;
@@ -498,29 +533,13 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   // These are temporary methods to allow WebViewFrameWidget to delegate to
   // WebViewImpl. We expect to eventually move these out.
-  void SetSuppressFrameRequestsWorkaroundFor704763Only(bool);
-  void BeginFrame(base::TimeTicks last_frame_time);
-  void BeginUpdateLayers();
-  void EndUpdateLayers();
-  void RecordStartOfFrameMetrics();
-  void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
-                               cc::ActiveFrameSequenceTrackers trackers);
-  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics();
   void UpdateLifecycle(WebLifecycleUpdate requested_update,
                        DocumentUpdateReason reason);
   void ThemeChanged();
-  WebInputEventResult HandleInputEvent(const WebCoalescedInputEvent&);
-  WebInputEventResult DispatchBufferedTouchEvents();
-  void SetCursorVisibilityState(bool is_visible);
   void ApplyViewportChanges(const ApplyViewportChangesArgs& args);
   void RecordManipulationTypeCounts(cc::ManipulationInfo info);
-  void SendOverscrollEventFromImplSide(const gfx::Vector2dF& overscroll_delta,
-                                       cc::ElementId scroll_latched_element_id);
-  void SendScrollEndEventFromImplSide(cc::ElementId scroll_latched_element_id);
   void MouseCaptureLost();
   void SetFocus(bool enable) override;
-  bool SelectionBounds(WebRect& anchor, WebRect& focus) const;
-  WebURL GetURLForDebugTrace();
 
   // Update the target url locally and tell the browser that the target URL has
   // changed. If |url| is empty, show |fallback_url|.
@@ -550,6 +569,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
                                const IntSize& visible_viewport_size);
 
   void UpdateBaseBackgroundColor();
+  void UpdateFontRenderingFromRendererPrefs();
 
   // Request the window to close from the renderer by sending the request to the
   // browser.
@@ -561,10 +581,9 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
       bool is_inside_portal,
       bool does_composite,
       WebViewImpl* opener,
-      mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle);
+      mojo::PendingAssociatedReceiver<mojom::blink::PageBroadcast> page_handle,
+      scheduler::WebAgentGroupScheduler& agent_group_scheduler);
   ~WebViewImpl() override;
-
-  HitTestResult HitTestResultForRootFramePos(const FloatPoint&);
 
   void ConfigureAutoResizeMode();
 
@@ -581,18 +600,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   WebRect WidenRectWithinPageBounds(const WebRect& source,
                                     int target_margin,
                                     int minimum_margin);
-
-  // PageWidgetEventHandler functions
-  void HandleMouseLeave(LocalFrame&, const WebMouseEvent&) override;
-  void HandleMouseDown(LocalFrame&, const WebMouseEvent&) override;
-  WebInputEventResult HandleMouseUp(LocalFrame&, const WebMouseEvent&) override;
-  WebInputEventResult HandleMouseWheel(LocalFrame&,
-                                       const WebMouseWheelEvent&) override;
-  WebInputEventResult HandleGestureEvent(const WebGestureEvent&) override;
-  WebInputEventResult HandleKeyEvent(const WebKeyboardEvent&) override;
-  WebInputEventResult HandleCharEvent(const WebKeyboardEvent&) override;
-
-  WebInputEventResult HandleCapturedMouseEvent(const WebCoalescedInputEvent&);
 
   void EnablePopupMouseWheelEventListener(WebLocalFrameImpl* local_root);
   void DisablePopupMouseWheelEventListener();
@@ -628,6 +635,14 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // Sends any outstanding TrackedFeaturesUpdate messages to the browser.
   void ReportActiveSchedulerTrackedFeatures();
 
+  // Callback when this widget window has been displayed by the browser.
+  // Corresponds to a Show method call.
+  void DidShowCreatedWindow();
+
+  // Callback when the window rect has been adjusted by the browser.
+  // Corresponds to a SetWindowRect method call.
+  void DidSetWindowRect();
+
   // Can be null (e.g. unittests, shared workers, etc).
   WebViewClient* web_view_client_;
   Persistent<ChromeClient> chrome_client_;
@@ -639,7 +654,7 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // the page. This allows the browser to shrink the size of the displayed
   // contents [e.g. to accomodate a keyboard] without forcing the web page to
   // relayout. For more details, see the header for the VisualViewport class.
-  WebSize size_;
+  gfx::Size size_;
   // If true, automatically resize the layout view around its content.
   bool should_auto_resize_ = false;
   // The lower bound on the size when auto-resizing.
@@ -709,12 +724,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   float compositor_device_scale_factor_override_ = 0.f;
   TransformationMatrix device_emulation_transform_;
 
-  // Webkit expects keyPress events to be suppressed if the associated keyDown
-  // event was handled. Safari implements this behavior by peeking out the
-  // associated WM_CHAR event if the keydown was handled. We emulate
-  // this behavior by setting this flag if the keyDown was handled.
-  bool suppress_next_keypress_event_ = false;
-
   // TODO(ekaramad): Can we remove this and make sure IME events are not called
   // when there is no page focus?
   // Represents whether or not this object should process incoming IME events.
@@ -727,18 +736,10 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   // closed.
   scoped_refptr<WebPagePopupImpl> page_popup_;
 
-  // This stores the last hidden page popup. If a GestureTap attempts to open
-  // the popup that is closed by its previous GestureTapDown, the popup remains
-  // closed.
-  scoped_refptr<WebPagePopupImpl> last_hidden_page_popup_;
-
   Persistent<DevToolsEmulator> dev_tools_emulator_;
 
   // Whether the user can press tab to focus links.
   bool tabs_to_links_ = false;
-
-  // If set, the (plugin) element which has mouse capture.
-  Persistent<HTMLPlugInElement> mouse_capture_element_;
 
   // WebViews, and WebWidgets, are used to host a Page. The WidgetClient()
   // provides compositing support for the WebView.
@@ -769,11 +770,6 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   bool should_dispatch_first_layout_after_finished_parsing_ = false;
   bool should_dispatch_first_layout_after_finished_loading_ = false;
 
-  // TODO(bokan): Temporary debugging added to diagnose
-  // https://crbug.com/992315. Somehow we're synchronously calling
-  // WebViewImpl::Close while handling an input event.
-  bool debug_inside_input_handling_ = false;
-
   FloatSize elastic_overscroll_;
 
   // If true, we send IPC messages when |preferred_size_| changes.
@@ -791,6 +787,8 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
 
   web_pref::WebPreferences web_preferences_;
 
+  blink::RendererPreferences renderer_preferences_;
+
   // The local root whose document has |popup_mouse_wheel_event_listener_|
   // registered.
   WeakPersistent<WebLocalFrameImpl> local_root_with_empty_mouse_wheel_listener_;
@@ -807,24 +805,28 @@ class CORE_EXPORT WebViewImpl /*final*/ : public WebView,
   Persistent<ResizeViewportAnchor> resize_viewport_anchor_;
 
   // Handle to the local main frame host. Only valid when the MainFrame is
-  // local.
+  // local. It is ok to use WTF::Unretained(this) for callbacks made on this
+  // interface because the callbacks will be associated with the lifecycle
+  // of this AssociatedRemote and the lifetiime of the main LocalFrame.
   mojo::AssociatedRemote<mojom::blink::LocalMainFrameHost>
       local_main_frame_host_remote_;
 
   // Handle to the remote main frame host. Only valid when the MainFrame is
-  // remote.
+  // remote.  It is ok to use WTF::Unretained(this) for callbacks made on this
+  // interface because the callbacks will be associated with the lifecycle
+  // of this AssociatedRemote and the lifetime of the main RemoteFrame.
   mojo::AssociatedRemote<mojom::blink::RemoteMainFrameHost>
       remote_main_frame_host_remote_;
-
-  // Set when a measurement begins, reset when the measurement is taken.
-  base::Optional<base::TimeTicks> update_layers_start_time_;
 
   base::Optional<mojom::blink::ScreenOrientation> screen_orientation_override_;
 
   mojom::blink::PageLifecycleStatePtr lifecycle_state_;
   mojo::AssociatedReceiver<mojom::blink::PageBroadcast> receiver_;
 
-  std::unique_ptr<VivaldiDoubleClickMenu> vivaldi_double_click_menu_;
+  // These are observing changes in |renderer_preferences_|. This is used for
+  // keeping WorkerFetchContext in sync.
+  mojo::RemoteSet<mojom::blink::RendererPreferenceWatcher>
+      renderer_preference_watchers_;
 
   base::WeakPtrFactory<WebViewImpl> weak_ptr_factory_{this};
 };

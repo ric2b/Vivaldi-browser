@@ -3,6 +3,7 @@
 #include "components/bookmarks/browser/bookmark_node.h"
 
 #include "app/vivaldi_resources.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "ui/base/l10n/l10n_util.h"

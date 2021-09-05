@@ -137,6 +137,14 @@ copy("copies") {
     ]
   }
 
+  if (is_vivaldi) {
+    sources += [
+      "//vivaldi/installer/mac/profiles/Vivaldi.provisionprofile",
+      "//vivaldi/installer/mac/profiles/Vivaldi_Internal.provisionprofile",
+      "//vivaldi/installer/mac/profiles/Vivaldi_Snapshot.provisionprofile",
+    ]
+  }
+
   outputs = [ "$_packaging_dir/{{source_file_part}}" ]
 }
 

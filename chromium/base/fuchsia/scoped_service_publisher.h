@@ -14,6 +14,7 @@
 
 #include "base/base_export.h"
 #include "base/macros.h"
+#include "base/strings/string_piece.h"
 
 namespace base {
 namespace fuchsia {
@@ -24,24 +25,26 @@ class BASE_EXPORT ScopedServicePublisher {
   // Publishes a public service in the specified |outgoing_directory|.
   // |outgoing_directory| and |handler| must outlive the binding.
   ScopedServicePublisher(sys::OutgoingDirectory* outgoing_directory,
-                         fidl::InterfaceRequestHandler<Interface> handler)
+                         fidl::InterfaceRequestHandler<Interface> handler,
+                         base::StringPiece name = Interface::Name_)
       : ScopedServicePublisher(outgoing_directory->GetOrCreateDirectory("svc"),
-                               std::move(handler)) {}
+                               std::move(handler), name) {}
 
   // Publishes a service in the specified |pseudo_dir|. |pseudo_dir| and
   // |handler| must outlive the binding.
   ScopedServicePublisher(vfs::PseudoDir* pseudo_dir,
-                         fidl::InterfaceRequestHandler<Interface> handler)
-      : pseudo_dir_(pseudo_dir) {
-    pseudo_dir_->AddEntry(Interface::Name_,
+                         fidl::InterfaceRequestHandler<Interface> handler,
+                         base::StringPiece name = Interface::Name_)
+      : pseudo_dir_(pseudo_dir), name_(name.as_string()) {
+    pseudo_dir_->AddEntry(name_,
                           std::make_unique<vfs::Service>(std::move(handler)));
   }
 
-  ~ScopedServicePublisher() { pseudo_dir_->RemoveEntry(Interface::Name_); }
+  ~ScopedServicePublisher() { pseudo_dir_->RemoveEntry(name_); }
 
  private:
   vfs::PseudoDir* const pseudo_dir_ = nullptr;
-
+  std::string name_;
   DISALLOW_COPY_AND_ASSIGN(ScopedServicePublisher);
 };
 

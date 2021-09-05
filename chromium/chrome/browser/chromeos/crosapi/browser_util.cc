@@ -7,6 +7,8 @@
 #include <utility>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
@@ -18,6 +20,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/pref_names.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "components/exo/shell_surface_util.h"
@@ -38,6 +41,10 @@ namespace crosapi {
 namespace browser_util {
 namespace {
 
+// When this feature is enabled, Lacros will be available on stable channel.
+const base::Feature kLacrosAllowOnStableChannel{
+    "LacrosAllowOnStableChannel", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Some account types require features that aren't yet supported by lacros.
 // See https://crbug.com/1080693
 bool IsUserTypeAllowed(const User* user) {
@@ -57,16 +64,25 @@ bool IsUserTypeAllowed(const User* user) {
   }
 }
 
+using InterfaceVersions = base::flat_map<base::Token, uint32_t>;
+template <typename T>
+void AddVersion(InterfaceVersions* map) {
+  (*map)[T::Uuid_] = T::Version_;
+}
+
 mojom::LacrosInitParamsPtr GetLacrosInitParams(
     EnvironmentProvider* environment_provider) {
   auto params = mojom::LacrosInitParams::New();
   params->ash_chrome_service_version =
       crosapi::mojom::AshChromeService::Version_;
-  params->ash_metrics_enabled_has_value = true;
+  params->deprecated_ash_metrics_enabled_has_value = true;
   params->ash_metrics_enabled = g_browser_process->local_state()->GetBoolean(
       metrics::prefs::kMetricsReportingEnabled);
 
   params->session_type = environment_provider->GetSessionType();
+  params->device_mode = environment_provider->GetDeviceMode();
+  params->interface_versions = GetInterfaceVersions();
+
   return params;
 }
 
@@ -79,16 +95,15 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
 }
 
 base::FilePath GetUserDataDir() {
-  base::FilePath base_path;
   if (base::SysInfo::IsRunningOnChromeOS()) {
     // NOTE: On device this function is privacy/security sensitive. The
     // directory must be inside the encrypted user partition.
-    base_path = base::FilePath("/home/chronos/user");
-  } else {
-    // For developers on Linux desktop, put the directory under the developer's
-    // specified --user-data-dir.
-    base::PathService::Get(chrome::DIR_USER_DATA, &base_path);
+    return base::FilePath(crosapi::kLacrosUserDataPath);
   }
+  // For developers on Linux desktop, put the directory under the developer's
+  // specified --user-data-dir.
+  base::FilePath base_path;
+  base::PathService::Get(chrome::DIR_USER_DATA, &base_path);
   return base_path.Append("lacros");
 }
 
@@ -104,19 +119,13 @@ bool IsLacrosAllowed(Channel channel) {
   if (!IsUserTypeAllowed(user))
     return false;
 
-  const Profile* const profile =
-      chromeos::ProfileHelper::Get()->GetProfileByUser(user);
-  DCHECK(profile);
+  // TODO(https://crbug.com/1135494): Remove the free ticket for
+  // Channel::UNKNOWN after the policy is set on server side for developers.
+  if (channel == Channel::UNKNOWN)
+    return true;
 
-  // TODO(https://crbug.com/1135494): Disable Lacros for managed users that
-  // aren't @google using more robust mechanism.
-  if (profile->GetProfilePolicyConnector()->IsManaged()) {
-    const std::string canonical_email = user->GetAccountId().GetUserEmail();
-    if (!base::EndsWith(canonical_email, "@google.com",
-                        base::CompareCase::INSENSITIVE_ASCII)) {
-      return false;
-    }
-  }
+  if (!g_browser_process->local_state()->GetBoolean(prefs::kLacrosAllowed))
+    return false;
 
   switch (channel) {
     case Channel::UNKNOWN:
@@ -127,7 +136,7 @@ bool IsLacrosAllowed(Channel channel) {
       // Developer builds can use lacros.
       return true;
     case Channel::STABLE:
-      return false;
+      return base::FeatureList::IsEnabled(kLacrosAllowOnStableChannel);
   }
 }
 
@@ -136,6 +145,24 @@ bool IsLacrosWindow(const aura::Window* window) {
   if (!app_id)
     return false;
   return base::StartsWith(*app_id, kLacrosAppIdPrefix);
+}
+
+base::flat_map<base::Token, uint32_t> GetInterfaceVersions() {
+  static_assert(
+      crosapi::mojom::AshChromeService::Version_ == 5,
+      "if you add a new crosapi, please add it to the version map here");
+  InterfaceVersions versions;
+  AddVersion<crosapi::mojom::AccountManager>(&versions);
+  AddVersion<crosapi::mojom::AshChromeService>(&versions);
+  AddVersion<crosapi::mojom::Feedback>(&versions);
+  AddVersion<crosapi::mojom::FileManager>(&versions);
+  AddVersion<crosapi::mojom::KeystoreService>(&versions);
+  AddVersion<crosapi::mojom::MessageCenter>(&versions);
+  AddVersion<crosapi::mojom::ScreenManager>(&versions);
+  AddVersion<crosapi::mojom::SnapshotCapturer>(&versions);
+  AddVersion<device::mojom::HidConnection>(&versions);
+  AddVersion<device::mojom::HidManager>(&versions);
+  return versions;
 }
 
 mojo::Remote<crosapi::mojom::LacrosChromeService>

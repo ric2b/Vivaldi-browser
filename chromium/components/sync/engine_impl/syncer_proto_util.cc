@@ -249,7 +249,6 @@ SyncProtocolError ConvertErrorPBToSyncProtocolError(
   sync_protocol_error.error_type =
       PBErrorTypeToSyncProtocolErrorType(error.error_type());
   sync_protocol_error.error_description = error.error_description();
-  sync_protocol_error.url = error.url();
   sync_protocol_error.action = PBActionToClientAction(error.action());
 
   if (error.error_data_type_ids_size() > 0) {
@@ -356,11 +355,11 @@ bool SyncerProtoUtil::PostAndProcessHeaders(ServerConnectionManager* scm,
 
   const base::Time start_time = base::Time::Now();
 
+  // Fills in buffer_out.
   std::string buffer_out;
-  HttpResponse http_response = HttpResponse::Uninitialized();
-
-  // Fills in buffer_out and http_response.
-  if (!scm->PostBufferWithCachedAuth(buffer_in, &buffer_out, &http_response)) {
+  HttpResponse http_response =
+      scm->PostBufferWithCachedAuth(buffer_in, &buffer_out);
+  if (http_response.server_status != HttpResponse::SERVER_CONNECTION_OK) {
     LOG(WARNING) << "Error posting from syncer:" << http_response;
     return false;
   }

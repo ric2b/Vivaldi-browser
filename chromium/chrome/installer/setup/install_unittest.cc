@@ -273,16 +273,16 @@ class InstallShortcutTest : public testing::Test {
     base::win::UnpinShortcutFromTaskbar(system_start_menu_subdir_shortcut_);
   }
 
-  installer::MasterPreferences* GetFakeMasterPrefs(
+  installer::InitialPreferences* GetFakeMasterPrefs(
       bool do_not_create_desktop_shortcut,
       bool do_not_create_quick_launch_shortcut) {
     const struct {
       const char* pref_name;
       bool is_desired;
     } desired_prefs[] = {
-        {installer::master_preferences::kDoNotCreateDesktopShortcut,
+        {installer::initial_preferences::kDoNotCreateDesktopShortcut,
          do_not_create_desktop_shortcut},
-        {installer::master_preferences::kDoNotCreateQuickLaunchShortcut,
+        {installer::initial_preferences::kDoNotCreateQuickLaunchShortcut,
          do_not_create_quick_launch_shortcut},
     };
 
@@ -295,7 +295,7 @@ class InstallShortcutTest : public testing::Test {
     }
     master_prefs += "}}";
 
-    return new installer::MasterPreferences(master_prefs);
+    return new installer::InitialPreferences(master_prefs);
   }
 
   base::win::ScopedCOMInitializer com_initializer_;
@@ -304,7 +304,7 @@ class InstallShortcutTest : public testing::Test {
   base::win::ShortcutProperties expected_start_menu_properties_;
 
   base::FilePath chrome_exe_;
-  std::unique_ptr<installer::MasterPreferences> prefs_;
+  std::unique_ptr<installer::InitialPreferences> prefs_;
 
   base::ScopedTempDir temp_dir_;
   base::ScopedTempDir fake_user_desktop_;
@@ -375,7 +375,7 @@ TEST_F(InstallShortcutTest, CreateAllShortcutsSystemLevel) {
 }
 
 TEST_F(InstallShortcutTest, CreateAllShortcutsButDesktopShortcut) {
-  std::unique_ptr<installer::MasterPreferences> prefs_no_desktop(
+  std::unique_ptr<installer::InitialPreferences> prefs_no_desktop(
       GetFakeMasterPrefs(true, false));
   installer::CreateOrUpdateShortcuts(chrome_exe_, *prefs_no_desktop,
                                      installer::CURRENT_USER,
@@ -388,7 +388,7 @@ TEST_F(InstallShortcutTest, CreateAllShortcutsButDesktopShortcut) {
 }
 
 TEST_F(InstallShortcutTest, CreateAllShortcutsButQuickLaunchShortcut) {
-  std::unique_ptr<installer::MasterPreferences> prefs_no_ql(
+  std::unique_ptr<installer::InitialPreferences> prefs_no_ql(
       GetFakeMasterPrefs(false, true));
   installer::CreateOrUpdateShortcuts(chrome_exe_, *prefs_no_ql,
                                      installer::CURRENT_USER,

@@ -23,6 +23,13 @@ namespace {
   DO(ArAnchorList_create)                                          \
   DO(ArAnchorList_destroy)                                         \
   DO(ArAnchorList_getSize)                                         \
+  DO(ArAugmentedImage_getCenterPose)                               \
+  DO(ArAugmentedImage_getExtentX)                                  \
+  DO(ArAugmentedImage_getIndex)                                    \
+  DO(ArAugmentedImage_getTrackingMethod)                           \
+  DO(ArAugmentedImageDatabase_addImageWithPhysicalSize)            \
+  DO(ArAugmentedImageDatabase_create)                              \
+  DO(ArAugmentedImageDatabase_getNumImages)                        \
   DO(ArCamera_getDisplayOrientedPose)                              \
   DO(ArCamera_getProjectionMatrix)                                 \
   DO(ArCamera_getTrackingState)                                    \
@@ -31,6 +38,7 @@ namespace {
   DO(ArCameraConfig_destroy)                                       \
   DO(ArCameraConfig_getDepthSensorUsage)                           \
   DO(ArCameraConfig_getFacingDirection)                            \
+  DO(ArCameraConfig_getFpsRange)                                   \
   DO(ArCameraConfig_getImageDimensions)                            \
   DO(ArCameraConfig_getTextureDimensions)                          \
   DO(ArCameraConfigFilter_create)                                  \
@@ -45,7 +53,9 @@ namespace {
   DO(ArConfig_destroy)                                             \
   DO(ArConfig_getDepthMode)                                        \
   DO(ArConfig_getLightEstimationMode)                              \
+  DO(ArConfig_setAugmentedImageDatabase)                           \
   DO(ArConfig_setDepthMode)                                        \
+  DO(ArConfig_setFocusMode)                                        \
   DO(ArConfig_setLightEstimationMode)                              \
   DO(ArFrame_acquireCamera)                                        \
   DO(ArFrame_acquireDepthImage)                                    \
@@ -222,6 +232,66 @@ void ArAnchorList_getSize(const ArSession* session,
                                                  out_size);
 }
 
+void ArAugmentedImage_getCenterPose(const ArSession* session,
+                                    const ArAugmentedImage* augmented_image,
+                                    ArPose* out_pose) {
+  g_arcore_api->impl_ArAugmentedImage_getCenterPose(session, augmented_image,
+                                                    out_pose);
+}
+
+void ArAugmentedImage_getExtentX(const ArSession* session,
+                                 const ArAugmentedImage* augmented_image,
+                                 float* out_extent_x) {
+  g_arcore_api->impl_ArAugmentedImage_getExtentX(session, augmented_image,
+                                                 out_extent_x);
+}
+
+void ArAugmentedImage_getIndex(const ArSession* session,
+                               const ArAugmentedImage* augmented_image,
+                               int32_t* out_index) {
+  g_arcore_api->impl_ArAugmentedImage_getIndex(session, augmented_image,
+                                               out_index);
+}
+
+void ArAugmentedImage_getTrackingMethod(
+    const ArSession* session,
+    const ArAugmentedImage* image,
+    ArAugmentedImageTrackingMethod* out_tracking_method) {
+  return g_arcore_api->impl_ArAugmentedImage_getTrackingMethod(
+      session, image, out_tracking_method);
+}
+
+ArStatus ArAugmentedImageDatabase_addImageWithPhysicalSize(
+    const ArSession* session,
+    ArAugmentedImageDatabase* augmented_image_database,
+    const char* image_name,
+    const uint8_t* image_grayscale_pixels,
+    int32_t image_width_in_pixels,
+    int32_t image_height_in_pixels,
+    int32_t image_stride_in_pixels,
+    float image_width_in_meters,
+    int32_t* out_index) {
+  return g_arcore_api->impl_ArAugmentedImageDatabase_addImageWithPhysicalSize(
+      session, augmented_image_database, image_name, image_grayscale_pixels,
+      image_width_in_pixels, image_height_in_pixels, image_stride_in_pixels,
+      image_width_in_meters, out_index);
+}
+
+void ArAugmentedImageDatabase_create(
+    const ArSession* session,
+    ArAugmentedImageDatabase** out_augmented_image_database) {
+  g_arcore_api->impl_ArAugmentedImageDatabase_create(
+      session, out_augmented_image_database);
+}
+
+void ArAugmentedImageDatabase_getNumImages(
+    const ArSession* session,
+    const ArAugmentedImageDatabase* augmented_image_database,
+    int32_t* out_number_of_images) {
+  g_arcore_api->impl_ArAugmentedImageDatabase_getNumImages(
+      session, augmented_image_database, out_number_of_images);
+}
+
 void ArCamera_getDisplayOrientedPose(const ArSession* session,
                                      const ArCamera* camera,
                                      ArPose* out_pose) {
@@ -273,6 +343,14 @@ void ArCameraConfig_getFacingDirection(
     ArCameraConfigFacingDirection* out_facing) {
   return g_arcore_api->impl_ArCameraConfig_getFacingDirection(
       session, camera_config, out_facing);
+}
+
+void ArCameraConfig_getFpsRange(const ArSession* session,
+                                const ArCameraConfig* camera_config,
+                                int32_t* out_min_fps,
+                                int32_t* out_max_fps) {
+  return g_arcore_api->impl_ArCameraConfig_getFpsRange(
+      session, camera_config, out_min_fps, out_max_fps);
 }
 
 void ArCameraConfig_getImageDimensions(const ArSession* session,
@@ -361,10 +439,24 @@ void ArConfig_getLightEstimationMode(
       session, config, light_estimation_mode);
 }
 
+void ArConfig_setAugmentedImageDatabase(
+    const ArSession* session,
+    ArConfig* config,
+    const ArAugmentedImageDatabase* augmented_image_database) {
+  g_arcore_api->impl_ArConfig_setAugmentedImageDatabase(
+      session, config, augmented_image_database);
+}
+
 void ArConfig_setDepthMode(const ArSession* session,
                            ArConfig* config,
                            ArDepthMode mode) {
   return g_arcore_api->impl_ArConfig_setDepthMode(session, config, mode);
+}
+
+void ArConfig_setFocusMode(const ArSession* session,
+                           ArConfig* config,
+                           ArFocusMode focus_mode) {
+  g_arcore_api->impl_ArConfig_setFocusMode(session, config, focus_mode);
 }
 
 void ArConfig_setLightEstimationMode(

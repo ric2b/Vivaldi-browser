@@ -4,30 +4,38 @@
 
 import {PostMessageAPIServer} from '../../chromeos/add_supervision/post_message_api.m.js';
 import {AuthCompletedCredentials, Authenticator, AuthParams} from '../../gaia_auth_host/authenticator.m.js';
+import {EduCoexistenceBrowserProxyImpl} from './edu_coexistence_browser_proxy.js';
 
 /**
  * The methods to expose to the hosted content via the PostMessageAPI.
  */
-const METHOD_LIST = ['consentValid', 'consentLogged', 'requestClose', 'error'];
+const METHOD_LIST = [
+  'consentValid', 'consentLogged', 'requestClose', 'saveGuestFlowState',
+  'fetchGuestFlowState', 'error'
+];
 
 
 /**
  * @typedef {{
- *   hl: (string|undefined),
- *   url: (string|undefined),
- *   clientId: (string|undefined),
- *   sourceUi: (string|undefined),
- *   clientVersion: (string|undefined),
- *   eduCoexistenceAccessToken: (string|undefined),
- *   eduCoexistenceId: (string|undefined),
- *   platformVersion: (string|undefined),
- *   releaseChannel: (string|undefined),
+ *   hl: (string),
+ *   url: (string),
+ *   clientId: (string),
+ *   sourceUi: (string),
+ *   clientVersion: (string),
+ *   eduCoexistenceAccessToken: (string),
+ *   eduCoexistenceId: (string),
+ *   platformVersion: (string),
+ *   releaseChannel: (string),
+ *   deviceId: (string),
+ *   email: (string|undefined),
+ *   readOnlyEmail: (string|undefined),
  * }}
  */
-let EduCoexistenceParams;
+export let EduCoexistenceParams;
 
 
-/* Constructs the EDU Coexistence URL.
+/**
+ * Constructs the EDU Coexistence URL.
  * @param {!EduCoexistenceParams} params Parameters for the flow.
  * @return {URL}
  */
@@ -35,10 +43,18 @@ function constructEduCoexistenceUrl(params) {
   const url = new URL(params.url);
   url.searchParams.set('hl', params.hl);
   url.searchParams.set('source_ui', params.sourceUi);
+  url.searchParams.set('client_id', params.clientId);
   url.searchParams.set('client_version', params.clientVersion);
   url.searchParams.set('edu_coexistence_id', params.eduCoexistenceId);
   url.searchParams.set('platform_version', params.platformVersion);
   url.searchParams.set('release_channel', params.releaseChannel);
+  url.searchParams.set('device_id', params.deviceId);
+  if (params.email) {
+    url.searchParams.set('email', params.email);
+    if (params.readOnlyEmail) {
+      url.searchParams.set('read_only_email', params.readOnlyEmail);
+    }
+  }
   return url;
 }
 
@@ -47,22 +63,46 @@ function constructEduCoexistenceUrl(params) {
  */
 export class EduCoexistenceController extends PostMessageAPIServer {
   /**
+   * @param {!Element} ui Polymer object edu-coexistence-ui
    * @param {!Element} webview  The <webview> element to listen to as a
    *     client.
    * @param {!EduCoexistenceParams} params  The params for the flow.
    */
-  constructor(webview, params) {
+  constructor(ui, webview, params) {
     const flowURL = constructEduCoexistenceUrl(params);
-    const originURLPrefix = 'https://' + flowURL.host;
-    super(webview, METHOD_LIST, flowURL, originURLPrefix);
+    const protocol = flowURL.hostname === 'localhost' ? 'http://' : 'https://';
+    const originURLPrefix = protocol + flowURL.host;
+    super(webview, METHOD_LIST, originURLPrefix, originURLPrefix);
 
+    this.ui = ui;
     this.flowURL_ = flowURL;
     this.originURLPrefix_ = originURLPrefix;
     this.webview_ = webview;
     this.userInfo_ = null;
     this.authCompletedReceived_ = false;
+    this.browserProxy_ = EduCoexistenceBrowserProxyImpl.getInstance();
+    this.eduCoexistenceAccessToken_ = params.eduCoexistenceAccessToken;
 
-    // TODO(danan):  Set auth tokens in appropriate headers.
+    this.webview_.request.onBeforeSendHeaders.addListener(
+        (details) => {
+          details.requestHeaders.push({
+            name: 'Authorization',
+            value: 'Bearer ' + this.eduCoexistenceAccessToken_,
+          });
+
+          return {requestHeaders: details.requestHeaders};
+        },
+
+        {urls: ['<all_urls>']}, ['blocking', 'requestHeaders']);
+
+    /**
+     * The state of the guest content, saved as requested by
+     * the guest content to ensure that its state outlives content
+     * reload events, which destroy the state of the guest content.
+     * The value itself is opaque encoded binary data.
+     * @private {?Uint8Array}
+     */
+    this.guestFlowState_ = null;
 
     /**
      * The auth extension host instance.
@@ -84,6 +124,15 @@ export class EduCoexistenceController extends PostMessageAPIServer {
     }
   }
 
+  /**
+   * Returns the hostname of the origin of the flow's URL (the one it was
+   * initialized with, not its current URL).
+   * @return {string}
+   */
+  getFlowOriginHostname() {
+    return this.flowURL_.hostname;
+  }
+
   /** @private */
   initializeAfterDomLoaded_() {
     this.isDomLoaded_ = true;
@@ -92,6 +141,10 @@ export class EduCoexistenceController extends PostMessageAPIServer {
     this.registerMethod('consentLogged', this.consentLogged_.bind(this));
     this.registerMethod('requestClose', this.requestClose_.bind(this));
     this.registerMethod('reportError', this.reportError_.bind(this));
+    this.registerMethod(
+        'saveGuestFlowState', this.saveGuestFlowState_.bind(this));
+    this.registerMethod(
+        'fetchGuestFlowState', this.fetchGuestFlowState_.bind(this));
 
     // Add listeners for Authenticator.
     this.addAuthExtHostListeners_();
@@ -99,9 +152,19 @@ export class EduCoexistenceController extends PostMessageAPIServer {
 
   /**
    * Loads the flow into the controller.
+   * @param {!AuthParams} data parameters for auth extension.
    */
-  load() {
-    this.webview_.src = this.flowURL_.toString();
+  loadAuthExtension(data) {
+    // We use the Authenticator to set the web flow URL instead
+    // of setting it ourselves, so that the content isn't loaded twice.
+    // This is why this class doesn't directly set webview.src_ (except in
+    // onAuthCompleted below to handle the corner case of loading
+    // accounts.google.com for running against webserver running on localhost).
+    // The EDU Coexistence web flow will be responsible for constructing
+    // and forwarding to the accounts.google.com URL that Authenticator
+    // interacts with.
+    data.frameUrl = this.flowURL_;
+    this.authExtHost_.load(data.authMode, data);
   }
 
   /**
@@ -116,6 +179,8 @@ export class EduCoexistenceController extends PostMessageAPIServer {
   addAuthExtHostListeners_() {
     this.authExtHost_.addEventListener('ready', () => this.onAuthReady_());
     this.authExtHost_.addEventListener(
+        'getAccounts', () => this.onGetAccounts_());
+    this.authExtHost_.addEventListener(
         'authCompleted',
         e => this.onAuthCompleted_(
             /** @type {!CustomEvent<!AuthCompletedCredentials>} */ (e)));
@@ -123,15 +188,30 @@ export class EduCoexistenceController extends PostMessageAPIServer {
 
   /** @private */
   onAuthReady_() {
-    console.error('Got onAuthReady_');
-    // TODO(danan): do whatever is required after authenticator initialization.
+    this.browserProxy_.authExtensionReady();
+  }
+
+  /** @private */
+  onGetAccounts_() {
+    this.browserProxy_.getAccounts().then(result => {
+      this.authExtHost_.getAccountsResponse(result);
+    });
   }
 
   /** @private */
   onAuthCompleted_(e) {
     this.authCompletedReceived_ = true;
-    console.error('Got onAuthCompleted_');
-    this.userInfo_ = e.details;
+    this.userInfo_ = e.detail;
+    this.browserProxy_.completeLogin(e.detail);
+
+    // GAIA pages don't allow localhost as a "continue" URL, so we have to
+    // manually update the src when doing development against a localhost-hosted
+    // test server.
+    if (this.flowURL_.hostname === 'localhost') {
+      let finishURL = this.flowURL_;
+      finishURL.pathname = '/supervision/coexistence/finish';
+      this.webview_.src = finishURL.toString();
+    }
   }
 
   /**
@@ -140,47 +220,56 @@ export class EduCoexistenceController extends PostMessageAPIServer {
    * @param {!Array} unused Placeholder unused empty parameter.
    */
   consentValid_(unused) {
-    // TODO(danan): Set up object to wait for GAIA EDU Login page load, by
-    // observing for a page reload using this.webview_.request , and then
-    // this.authExtHost_.load(); Return promise acknowledging receipt.
-    console.error('Got consentValid_');
-    return Promise.resolve();
+    this.browserProxy_.consentValid();
   }
 
   /*
    * @private
-   * @param {!Array} unused Placeholder unused empty parameter.
-   * @return {Promise <{accountCreated: boolean}>} Returns a promise
+   * @param {!Array<string>} An array that contains eduCoexistenceToSVersion.
    * with a boolean indicating that the local account was created.
    */
-  consentLogged_(unused) {
-    // TODO(danan): Send message to owner indicating that the flow successfully
-    // completed
-    console.error('Got consentLogged_');
-    return Promise.resolve();
+  consentLogged_(eduCoexistenceToSVersion) {
+    return this.browserProxy_.consentLogged(
+        this.userInfo_.email, eduCoexistenceToSVersion[0]);
   }
 
   /**
    * @private
    * Attempts to close the widget hosting the flow.
-   * @return {Promise <{closed: boolean}>} If the widget is not closed
-   * this promise will resolve with boolean result indicating whether the
-   * dialog was closed.
    */
   requestClose_() {
-    // TODO(danan): Attempt to close the widget hosting the flow.
-    console.error('Got requestClose_');
-    return Promise.resolve();
+    this.browserProxy_.dialogClose();
+  }
+
+  /*
+   * @private
+   * @param {!Array<Uint8Array>} An array that contains guest flow state in its
+   *    first element.
+   */
+  saveGuestFlowState_(guestFlowState) {
+    this.guestFlowState_ = guestFlowState[0];
+  }
+
+  /**
+   * @param {!Array} unused Placeholder unused empty parameter.
+   * @return {?Object}  The guest flow state previously saved
+   *     using saveGuestFlowState().
+   */
+  fetchGuestFlowState_(unused) {
+    return {'state': this.guestFlowState_};
   }
 
   /**
    * @private
    * Notifies the API that there was an unrecoverable error during the flow.
-   * @param {!Array} unused Placeholder unused empty parameter.
+   * @param {!Array<string>} error An array that contains the error message at
+   *     index 0.
    */
-  reportError_(unused) {
-    // TODO(danan): Pass the error back up the stack.
-    console.error('Got reportError_');
-    return Promise.resolve();
+  reportError_(error) {
+    // Notify the app to switch to error screen.
+    this.ui.fire('go-error');
+
+    // Send the error strings to C++ handler so they are logged.
+    this.browserProxy_.onError(error);
   }
 }

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/autotest_desks_api.h"
 #include "ash/public/cpp/desks_helper.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
@@ -72,9 +73,14 @@ class ASH_EXPORT DesksController : public DesksHelper,
 
   const Desk* active_desk() const { return active_desk_; }
 
+  DeskAnimationBase* animation() const { return animation_.get(); }
+
   // Returns the current |active_desk()| or the soon-to-be active desk if a desk
   // switch animation is in progress.
   const Desk* GetTargetActiveDesk() const;
+
+  // Restores the primary user's activate desk at active_desk_index.
+  void RestorePrimaryUserActiveDeskIndex(int active_desk_index);
 
   // Destroys any pending animations in preparation for shutdown.
   void Shutdown();
@@ -160,6 +166,8 @@ class ASH_EXPORT DesksController : public DesksHelper,
   void OnRootWindowAdded(aura::Window* root_window);
   void OnRootWindowClosing(aura::Window* root_window);
 
+  int GetDeskIndex(const Desk* desk) const;
+
   // DesksHelper:
   bool BelongsToActiveDesk(aura::Window* window) override;
 
@@ -176,6 +184,7 @@ class ASH_EXPORT DesksController : public DesksHelper,
   void OnFirstSessionStarted() override;
 
  private:
+  class DeskTraversalsMetricsHelper;
   friend class DeskAnimationBase;
   friend class DeskActivationAnimation;
   friend class DeskRemovalAnimation;
@@ -183,8 +192,6 @@ class ASH_EXPORT DesksController : public DesksHelper,
   void OnAnimationFinished(DeskAnimationBase* animation);
 
   bool HasDesk(const Desk* desk) const;
-
-  int GetDeskIndex(const Desk* desk) const;
 
   // Activates the given |desk| and deactivates the currently active one. |desk|
   // has to be an existing desk. If |update_window_activation| is true,
@@ -240,6 +247,10 @@ class ASH_EXPORT DesksController : public DesksHelper,
 
   // True when the enhanced desk animations feature is enabled.
   const bool is_enhanced_desk_animations_;
+
+  // Responsible for tracking and writing number of desk traversals one has
+  // done within a span of X seconds.
+  std::unique_ptr<DeskTraversalsMetricsHelper> metrics_helper_;
 
   base::ObserverList<Observer>::Unchecked observers_;
 

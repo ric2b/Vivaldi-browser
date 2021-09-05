@@ -27,8 +27,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
+import org.chromium.android_webview.AwFeatureList;
 import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.AwSettings.LayoutAlgorithm;
+import org.chromium.android_webview.common.AwFeatures;
 import org.chromium.android_webview.test.AwActivityTestRule.TestDependencyFactory;
 import org.chromium.android_webview.test.TestAwContentsClient.DoUpdateVisitedHistoryHelper;
 import org.chromium.android_webview.test.util.CommonResources;
@@ -38,7 +40,6 @@ import org.chromium.android_webview.test.util.VideoTestUtil;
 import org.chromium.android_webview.test.util.VideoTestWebServer;
 import org.chromium.base.Callback;
 import org.chromium.base.FileUtils;
-import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
@@ -73,7 +74,6 @@ import java.util.regex.Pattern;
  */
 @RunWith(AwJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
-@Batch(Batch.PER_CLASS)
 public class AwSettingsTest {
     @Rule
     public AwActivityTestRule mActivityTestRule =
@@ -2554,6 +2554,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Navigation"})
+    @DisabledTest(message = "https://crbug.com/1144938")
     public void testAssetUrl() throws Throwable {
         // Note: this text needs to be kept in sync with the contents of the html file referenced
         // below.
@@ -2645,6 +2646,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1147937")
     public void testTextZoomAutosizingWithTwoViews() throws Throwable {
         ViewPair views = createViews();
         runPerViewSettingsTest(
@@ -2941,6 +2943,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1133535")
     public void testUseWideViewportWithTwoViews() throws Throwable {
         ViewPair views = createViews(true);
         runPerViewSettingsTest(
@@ -2951,6 +2954,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1133535")
     public void testUseWideViewportWithTwoViewsNoQuirks() throws Throwable {
         ViewPair views = createViews();
         runPerViewSettingsTest(
@@ -3021,6 +3025,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1133535")
     public void testUseWideViewportLayoutWidth() throws Throwable {
         TestAwContentsClient contentClient = new TestAwContentsClient();
         AwTestContainerView testContainerView =
@@ -3031,6 +3036,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1133535")
     public void testUseWideViewportLayoutWidthNoQuirks() throws Throwable {
         TestAwContentsClient contentClient = new TestAwContentsClient();
         AwTestContainerView testContainerView =
@@ -3198,6 +3204,7 @@ public class AwSettingsTest {
     @DisableHardwareAccelerationForTest
     @LargeTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1144945")
     public void testMediaPlaybackWithoutUserGesture() throws Throwable {
         Assert.assertTrue(VideoTestUtil.runVideoTest(InstrumentationRegistry.getInstrumentation(),
                 mActivityTestRule, false, WAIT_TIMEOUT_MS));
@@ -3207,6 +3214,7 @@ public class AwSettingsTest {
     @DisableHardwareAccelerationForTest
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1144945")
     public void testMediaPlaybackWithUserGesture() throws Throwable {
         // Wait for 5 second to see if video played.
         Assert.assertFalse(VideoTestUtil.runVideoTest(
@@ -3285,6 +3293,7 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
+    @DisabledTest(message = "https://crbug.com/1144935")
     public void testAllowMixedMode() throws Throwable {
         final TestAwContentsClient contentClient = new TestAwContentsClient() {
             @Override
@@ -3305,6 +3314,7 @@ public class AwSettingsTest {
             httpsServer = TestWebServer.startSsl();
             httpServer = TestWebServer.start();
             httpServer.setServerHost("example.com");
+            httpsServer.setServerHost("secure.com");
 
             final String jsUrl = "/insecure.js";
             final String imageUrl = "/insecure.png";
@@ -3334,11 +3344,29 @@ public class AwSettingsTest {
             Assert.assertEquals(1, httpServer.getRequestCount(imageUrl));
 
             awSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-            mActivityTestRule.loadUrlSync(
-                    awContents, contentClient.getOnPageFinishedHelper(), fullSecureUrl);
-            Assert.assertEquals(3, httpsServer.getRequestCount(secureUrl));
-            Assert.assertEquals(1, httpServer.getRequestCount(jsUrl));
-            Assert.assertEquals(2, httpServer.getRequestCount(imageUrl));
+            if (AwFeatureList.isEnabled(AwFeatures.WEBVIEW_MIXED_CONTENT_AUTOUPGRADES)) {
+                // COMPATIBILITY_MODE enables autoupgrades for passive mixed content (including
+                // images), so we set the image url to the HTTP version of the HTTPS server, and
+                // check it was autoupgraded by expecting the HTTPS server to be hit.
+                String httpImageUrl = httpsServer.setResponseBase64(
+                        imageUrl, CommonResources.FAVICON_DATA_BASE64, null);
+                httpImageUrl = httpImageUrl.replaceFirst("https", "http");
+                final String autoupgradedImageHtml = "<img src=\"" + httpImageUrl + "\" />";
+                final String htmlForAutoupgrade =
+                        "<body>" + autoupgradedImageHtml + " " + jsHtml + "</body>";
+                fullSecureUrl = httpsServer.setResponse(secureUrl, htmlForAutoupgrade, null);
+                mActivityTestRule.loadUrlSync(
+                        awContents, contentClient.getOnPageFinishedHelper(), fullSecureUrl);
+                Assert.assertEquals(1, httpsServer.getRequestCount(secureUrl));
+                Assert.assertEquals(1, httpsServer.getRequestCount(imageUrl));
+                Assert.assertEquals(1, httpServer.getRequestCount(jsUrl));
+            } else {
+                mActivityTestRule.loadUrlSync(
+                        awContents, contentClient.getOnPageFinishedHelper(), fullSecureUrl);
+                Assert.assertEquals(3, httpsServer.getRequestCount(secureUrl));
+                Assert.assertEquals(1, httpServer.getRequestCount(jsUrl));
+                Assert.assertEquals(2, httpServer.getRequestCount(imageUrl));
+            }
         } finally {
             if (httpServer != null) {
                 httpServer.shutdown();
@@ -3461,35 +3489,6 @@ public class AwSettingsTest {
         // Loading the html via a data URI requires us to encode '#' symbols as '%23'.
         mActivityTestRule.loadDataSync(
                 awContents, onPageFinishedHelper, page.replace("#", "%23"), "text/html", false);
-        String actualTitle = mActivityTestRule.getTitleOnUiThread(awContents);
-        Assert.assertEquals(expectedTitle, actualTitle);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"AndroidWebView", "Preferences"})
-    public void testWebComponentsV0Reenabled() throws Throwable {
-        // TODO(1021631): This test should be removed once Android Webview
-        // disables Web Components v0 by default.
-        final TestAwContentsClient client = new TestAwContentsClient();
-        final AwTestContainerView view =
-                mActivityTestRule.createAwTestContainerViewOnMainSync(client);
-        final AwContents awContents = view.getAwContents();
-        CallbackHelper onPageFinishedHelper = client.getOnPageFinishedHelper();
-        AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
-        final String expectedTitle = "enabled"; // https://crbug.com/1021631
-        final String page = "<!doctype html>"
-                + "<script>"
-                + "const htmlImportsEnabled = 'import' in document.createElement('link');"
-                + "const customElementsV0Enabled = 'registerElement' in document;"
-                + "const shadowDomV0Enabled = 'createShadowRoot' in document.createElement('div');"
-                + "if (htmlImportsEnabled && customElementsV0Enabled && shadowDomV0Enabled) {"
-                + "  document.title = 'enabled';"
-                + "} else {"
-                + "  document.title = 'disabled';"
-                + "}"
-                + "</script>";
-        mActivityTestRule.loadDataSync(awContents, onPageFinishedHelper, page, "text/html", false);
         String actualTitle = mActivityTestRule.getTitleOnUiThread(awContents);
         Assert.assertEquals(expectedTitle, actualTitle);
     }

@@ -755,7 +755,7 @@ void SigninScreenHandler::Initialize() {
     }
   }
 
-  // |delegate_| is null when we are preloading the lock screen.
+  // `delegate_` is null when we are preloading the lock screen.
   if (delegate_ && show_on_init_) {
     show_on_init_ = false;
     ShowImpl();
@@ -865,8 +865,8 @@ void SigninScreenHandler::OnPreferencesChanged() {
     // We need to reload GAIA if UI_STATE_UNKNOWN or the allow new user setting
     // has changed so that reloaded GAIA shows/hides the option to create a new
     // account.
-    GaiaScreen* gaia_screen = GaiaScreen::Get(
-        WizardController::default_controller()->screen_manager());
+    GaiaScreen* gaia_screen =
+        WizardController::default_controller()->GetScreen<GaiaScreen>();
     gaia_screen->LoadOnline(EmptyAccountId());
   }
 }
@@ -907,7 +907,7 @@ void SigninScreenHandler::Observe(int type,
         ReenableNetworkStateUpdatesAfterProxyAuth();
       } else {
         // Gaia is not hidden behind an error yet. Discard last cached network
-        // state notification and wait for |kProxyAuthTimeout| before
+        // state notification and wait for `kProxyAuthTimeout` before
         // considering network update notifications again (hoping the network
         // will become ONLINE by then).
         update_state_closure_.Cancel();
@@ -1056,7 +1056,7 @@ void SigninScreenHandler::HandleOfflineLogin(const base::ListValue* args) {
   args->GetString(0, &email);
 
   GaiaScreen* gaia_screen =
-      GaiaScreen::Get(WizardController::default_controller()->screen_manager());
+      WizardController::default_controller()->GetScreen<GaiaScreen>();
   gaia_screen->LoadOffline(AccountId::FromUserEmail(email));
   HideOfflineMessage(NetworkStateInformer::OFFLINE,
                      NetworkError::ERROR_REASON_NONE);
@@ -1140,8 +1140,10 @@ void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
         chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
         content::NotificationService::AllSources(),
         content::NotificationService::NoDetails());
-    TRACE_EVENT_NESTABLE_ASYNC_END0("ui", "ShowLoginWebUI",
-                                    LoginDisplayHostWebUI::kShowLoginWebUIid);
+    TRACE_EVENT_NESTABLE_ASYNC_END0(
+        "ui", "ShowLoginWebUI",
+        TRACE_ID_WITH_SCOPE(LoginDisplayHostWebUI::kShowLoginWebUIid,
+                            TRACE_ID_GLOBAL(1)));
   }
   webui_visible_ = true;
   if (preferences_changed_delayed_)
@@ -1196,7 +1198,7 @@ void SigninScreenHandler::HandleFocusPod(const AccountId& account_id,
 
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(account_id);
-  // |user| may be nullptr in kiosk mode or unit tests.
+  // `user` may be nullptr in kiosk mode or unit tests.
   if (user && user->is_logged_in() && !user->is_active()) {
     SessionControllerClientImpl::DoSwitchActiveUser(account_id);
     return;
@@ -1216,17 +1218,27 @@ void SigninScreenHandler::HandleFocusPod(const AccountId& account_id,
   lock_screen_utils::SetKeyboardSettings(account_id);
 
   bool use_24hour_clock = false;
-  if (user_manager::known_user::GetBooleanPref(
+  if (!user_manager::known_user::GetBooleanPref(
           account_id, prefs::kUse24HourClock, &use_24hour_clock)) {
-    g_browser_process->platform_part()
-        ->GetSystemClock()
-        ->SetLastFocusedPodHourClockType(use_24hour_clock ? base::k24HourClock
-                                                          : base::k12HourClock);
+    focused_user_clock_type_.reset();
+    return;
+  }
+
+  base::HourClockType clock_type =
+      use_24hour_clock ? base::k24HourClock : base::k12HourClock;
+
+  if (focused_user_clock_type_.has_value()) {
+    focused_user_clock_type_->UpdateClockType(clock_type);
+  } else {
+    focused_user_clock_type_ = g_browser_process->platform_part()
+                                   ->GetSystemClock()
+                                   ->CreateScopedHourClockType(clock_type);
   }
 }
 
 void SigninScreenHandler::HandleNoPodFocused() {
   focused_pod_account_id_.reset();
+  focused_user_clock_type_.reset();
 }
 
 void SigninScreenHandler::HandleGetPublicSessionKeyboardLayouts(

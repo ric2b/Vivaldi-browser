@@ -35,6 +35,7 @@ class COMPONENT_EXPORT(DBUS_AUDIO) FakeCrasAudioClient
   void GetNodes(DBusMethodCallback<AudioNodeList> callback) override;
   void GetNumberOfActiveOutputStreams(
       DBusMethodCallback<int> callback) override;
+  void GetDeprioritizeBtWbsMic(DBusMethodCallback<bool> callback) override;
   void SetOutputNodeVolume(uint64_t node_id, int32_t volume) override;
   void SetOutputUserMute(bool mute_on) override;
   void SetInputNodeGain(uint64_t node_id, int32_t gain) override;
@@ -45,7 +46,6 @@ class COMPONENT_EXPORT(DBUS_AUDIO) FakeCrasAudioClient
                        const std::string& hotword_model,
                        VoidDBusMethodCallback callback) override;
   void SetFixA2dpPacketSize(bool enabled) override;
-  void SetNextHandsfreeProfile(bool enabled) override;
   void AddActiveInputNode(uint64_t node_id) override;
   void RemoveActiveInputNode(uint64_t node_id) override;
   void AddActiveOutputNode(uint64_t node_id) override;

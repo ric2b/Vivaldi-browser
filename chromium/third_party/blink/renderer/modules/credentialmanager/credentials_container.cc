@@ -8,17 +8,20 @@
 #include <utility>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
 #include "build/build_config.h"
-#include "third_party/blink/public/common/sms/sms_receiver_outcome.h"
+#include "third_party/blink/public/common/sms/webotp_service_outcome.h"
 #include "third_party/blink/public/mojom/credentialmanager/credential_manager.mojom-blink.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/payments/payment_credential.mojom-blink.h"
-#include "third_party/blink/public/mojom/sms/sms_receiver.mojom-blink.h"
+#include "third_party/blink/public/mojom/sms/webotp_service.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_client_inputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_client_outputs.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_large_blob_inputs.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_large_blob_outputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authenticator_selection_criteria.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_credential_creation_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_credential_properties_output.h"
@@ -37,6 +40,7 @@
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
@@ -52,6 +56,8 @@
 #include "third_party/blink/renderer/modules/credentialmanager/password_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanager/payment_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanager/public_key_credential.h"
+#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_descriptor.h"
+#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_user_entity.h"
 #include "third_party/blink/renderer/modules/credentialmanager/scoped_promise_resolver.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -135,7 +141,7 @@ bool CheckSecurityRequirementsBeforeRequest(
 
   // The API is not exposed to Workers or Worklets, so if the current realm
   // execution context is valid, it must have a responsible browsing context.
-  SECURITY_CHECK(resolver->GetFrame());
+  SECURITY_CHECK(resolver->DomWindow());
 
   // The API is not exposed in non-secure context.
   SECURITY_CHECK(resolver->GetExecutionContext()->IsSecureContext());
@@ -146,7 +152,7 @@ bool CheckSecurityRequirementsBeforeRequest(
       break;
 
     case RequiredOriginType::kSecureAndSameWithAncestors:
-      if (!IsSameOriginWithAncestors(resolver->GetFrame())) {
+      if (!IsSameOriginWithAncestors(resolver->DomWindow()->GetFrame())) {
         resolver->Reject(MakeGarbageCollected<DOMException>(
             DOMExceptionCode::kNotAllowedError,
             "The following credential operations can only occur in a document "
@@ -161,7 +167,7 @@ bool CheckSecurityRequirementsBeforeRequest(
       // The 'publickey-credentials-get' feature's "default allowlist" is
       // "self", which means the webauthn feature is allowed by default in
       // same-origin child browsing contexts.
-      if (!resolver->GetFrame()->GetSecurityContext()->IsFeatureEnabled(
+      if (!resolver->GetExecutionContext()->IsFeatureEnabled(
               mojom::blink::FeaturePolicyFeature::kPublicKeyCredentialsGet)) {
         resolver->Reject(MakeGarbageCollected<DOMException>(
             DOMExceptionCode::kNotAllowedError,
@@ -190,7 +196,7 @@ void AssertSecurityRequirementsBeforeResponse(
     return;
   }
 
-  SECURITY_CHECK(resolver->GetFrame());
+  SECURITY_CHECK(resolver->DomWindow());
   SECURITY_CHECK(resolver->GetExecutionContext()->IsSecureContext());
   switch (require_origin) {
     case RequiredOriginType::kSecure:
@@ -198,13 +204,13 @@ void AssertSecurityRequirementsBeforeResponse(
       break;
 
     case RequiredOriginType::kSecureAndSameWithAncestors:
-      SECURITY_CHECK(IsSameOriginWithAncestors(resolver->GetFrame()));
+      SECURITY_CHECK(
+          IsSameOriginWithAncestors(resolver->DomWindow()->GetFrame()));
       break;
 
     case RequiredOriginType::kSecureAndPermittedByFeaturePolicy:
-      SECURITY_CHECK(
-          resolver->GetFrame()->GetSecurityContext()->IsFeatureEnabled(
-              mojom::blink::FeaturePolicyFeature::kPublicKeyCredentialsGet));
+      SECURITY_CHECK(resolver->GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kPublicKeyCredentialsGet));
       break;
   }
 }
@@ -222,6 +228,25 @@ bool IsIconURLNullOrSecure(const KURL& url) {
   return url.IsAboutSrcdocURL() || url.IsAboutBlankURL() ||
          url.ProtocolIsData() ||
          SecurityOrigin::Create(url)->IsPotentiallyTrustworthy();
+}
+
+// Checks if the size of the supplied ArrayBuffer or ArrayBufferView is at most
+// the maximum size allowed.
+bool IsArrayBufferOrViewBelowSizeLimit(
+    ArrayBufferOrArrayBufferView buffer_or_view) {
+  if (buffer_or_view.IsNull())
+    return true;
+
+  if (buffer_or_view.IsArrayBuffer()) {
+    return base::CheckedNumeric<wtf_size_t>(
+               buffer_or_view.GetAsArrayBuffer()->ByteLength())
+        .IsValid();
+  }
+
+  DCHECK(buffer_or_view.IsArrayBufferView());
+  return base::CheckedNumeric<wtf_size_t>(
+             buffer_or_view.GetAsArrayBufferView()->byteLength())
+      .IsValid();
 }
 
 DOMException* CredentialManagerErrorToDOMException(
@@ -319,6 +344,16 @@ DOMException* CredentialManagerErrorToDOMException(
           DOMExceptionCode::kSecurityError,
           "The relying party ID is not a registrable domain suffix of, nor "
           "equal to the current domain.");
+    case CredentialManagerError::CANNOT_READ_AND_WRITE_LARGE_BLOB:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "Only one of the 'largeBlob' extension's 'read' and 'write' "
+          "parameters is allowed at a time");
+    case CredentialManagerError::INVALID_ALLOW_CREDENTIALS_FOR_LARGE_BLOB:
+      return MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "The 'largeBlob' extension's 'write' parameter can only be used "
+          "with a single credential present on 'allowCredentials'");
     case CredentialManagerError::UNKNOWN:
       return MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kNotReadableError,
@@ -346,9 +381,9 @@ void AbortOtpRequest(ScriptState* script_state) {
   if (!script_state->ContextIsValid())
     return;
 
-  auto* sms_receiver =
-      CredentialManagerProxy::From(script_state)->SmsReceiver();
-  sms_receiver->Abort();
+  auto* webotp_service =
+      CredentialManagerProxy::From(script_state)->WebOTPService();
+  webotp_service->Abort();
 }
 
 void OnStoreComplete(std::unique_ptr<ScopedPromiseResolver> scoped_resolver) {
@@ -452,6 +487,14 @@ void OnMakePublicKeyCredentialComplete(
       }
       extension_outputs->setCredProps(cred_props_output);
     }
+    if (credential->echo_large_blob) {
+      DCHECK(
+          RuntimeEnabledFeatures::WebAuthenticationLargeBlobExtensionEnabled());
+      AuthenticationExtensionsLargeBlobOutputs* large_blob_outputs =
+          AuthenticationExtensionsLargeBlobOutputs::Create();
+      large_blob_outputs->setSupported(credential->supports_large_blob);
+      extension_outputs->setLargeBlob(large_blob_outputs);
+    }
     resolver->Resolve(MakeGarbageCollected<PublicKeyCredential>(
         credential->info->id, raw_id, authenticator_response,
         extension_outputs));
@@ -507,6 +550,20 @@ void OnGetAssertionComplete(
                         WebFeature::kCredentialManagerGetSuccessWithUVM);
     }
 #endif
+    if (credential->echo_large_blob) {
+      DCHECK(
+          RuntimeEnabledFeatures::WebAuthenticationLargeBlobExtensionEnabled());
+      AuthenticationExtensionsLargeBlobOutputs* large_blob_outputs =
+          AuthenticationExtensionsLargeBlobOutputs::Create();
+      if (credential->large_blob) {
+        large_blob_outputs->setBlob(
+            VectorToDOMArrayBuffer(std::move(*credential->large_blob)));
+      }
+      if (credential->echo_large_blob_written) {
+        large_blob_outputs->setWritten(credential->large_blob_written);
+      }
+      extension_outputs->setLargeBlob(large_blob_outputs);
+    }
     resolver->Resolve(MakeGarbageCollected<PublicKeyCredential>(
         credential->info->id, raw_id, authenticator_response,
         extension_outputs));
@@ -528,27 +585,45 @@ void OnSmsReceive(ScriptPromiseResolver* resolver,
   ukm::UkmRecorder* recorder = window.UkmRecorder();
 
   if (status == mojom::blink::SmsStatus::kUnhandledRequest) {
-    RecordSmsOutcome(SMSReceiverOutcome::kUnhandledRequest, source_id,
+    RecordSmsOutcome(WebOTPServiceOutcome::kUnhandledRequest, source_id,
                      recorder);
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError,
         "OTP retrieval request not handled."));
     return;
   } else if (status == mojom::blink::SmsStatus::kAborted) {
-    RecordSmsOutcome(SMSReceiverOutcome::kAborted, source_id, recorder);
+    RecordSmsOutcome(WebOTPServiceOutcome::kAborted, source_id, recorder);
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kAbortError, "OTP retrieval was aborted."));
     return;
   } else if (status == mojom::blink::SmsStatus::kCancelled) {
-    RecordSmsOutcome(SMSReceiverOutcome::kCancelled, source_id, recorder);
+    RecordSmsOutcome(WebOTPServiceOutcome::kCancelled, source_id, recorder);
     RecordSmsCancelTime(base::TimeTicks::Now() - start_time);
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kAbortError, "OTP retrieval was cancelled."));
     return;
+  } else if (status == mojom::blink::SmsStatus::kTimeout) {
+    RecordSmsOutcome(WebOTPServiceOutcome::kTimeout, source_id, recorder);
+    // We do not reject the promise as in other branches because the failure
+    // may not belong to the origin that sends the request. e.g. there are two
+    // origins A and B in the queue and A aborts the request. The prompt that
+    // is timeout may belong to A but we are sending the failure information to
+    // the only origin in the queue which is B. Therefore rejecting the promise
+    // may leak information. This should be rare so recording metrics is fine.
+    // TODO(crbug.com/1138454): We should improve the infrastructure to be able
+    // to handle failed requests when there are multiple pending origins
+    // simultaneously.
+    return;
+  } else if (status == mojom::blink::SmsStatus::kUserCancelled) {
+    RecordSmsOutcome(WebOTPServiceOutcome::kUserCancelled, source_id, recorder);
+    RecordSmsUserCancelTime(base::TimeTicks::Now() - start_time, source_id,
+                            recorder);
+    // Similar to kTimeout, the promise is not rejected here.
+    return;
   }
   RecordSmsSuccessTime(base::TimeTicks::Now() - start_time, source_id,
                        recorder);
-  RecordSmsOutcome(SMSReceiverOutcome::kSuccess, source_id, recorder);
+  RecordSmsOutcome(WebOTPServiceOutcome::kSuccess, source_id, recorder);
   resolver->Resolve(MakeGarbageCollected<OTPCredential>(otp));
 }
 
@@ -648,6 +723,13 @@ void CreatePublicKeyCredentialForPaymentCredential(
     return;
   }
 
+  if (!IsArrayBufferOrViewBelowSizeLimit(options->challenge())) {
+    resolver->Reject(DOMException::Create(
+        "The `challenge` attribute exceeds the maximum allowed size.",
+        "RangeError"));
+    return;
+  }
+
   auto mojo_options = mojom::blink::PublicKeyCredentialCreationOptions::New();
   mojo_options->relying_party =
       mojom::blink::PublicKeyCredentialRpEntity::From(*options->rp());
@@ -723,10 +805,8 @@ void CreatePublicKeyCredentialForPaymentCredential(
     return;
   }
   if (!mojo_options->relying_party->id) {
-    mojo_options->relying_party->id = resolver->GetFrame()
-                                          ->GetSecurityContext()
-                                          ->GetSecurityOrigin()
-                                          ->Domain();
+    mojo_options->relying_party->id =
+        resolver->GetExecutionContext()->GetSecurityOrigin()->Domain();
   }
 
   if (mojo_options->relying_party->icon &&
@@ -756,7 +836,20 @@ void CreatePublicKeyCredentialForPaymentCredential(
 
 }  // namespace
 
-CredentialsContainer::CredentialsContainer() = default;
+const char CredentialsContainer::kSupplementName[] = "CredentialsContainer";
+
+CredentialsContainer* CredentialsContainer::credentials(Navigator& navigator) {
+  CredentialsContainer* credentials =
+      Supplement<Navigator>::From<CredentialsContainer>(navigator);
+  if (!credentials) {
+    credentials = MakeGarbageCollected<CredentialsContainer>(navigator);
+    ProvideTo(navigator, credentials);
+  }
+  return credentials;
+}
+
+CredentialsContainer::CredentialsContainer(Navigator& navigator)
+    : Supplement<Navigator>(navigator) {}
 
 ScriptPromise CredentialsContainer::get(
     ScriptState* script_state,
@@ -778,7 +871,7 @@ ScriptPromise CredentialsContainer::get(
   if (options->hasPublicKey()) {
     auto cryptotoken_origin = SecurityOrigin::Create(KURL(kCryptotokenOrigin));
     if (!cryptotoken_origin->IsSameOriginWith(
-            resolver->GetFrame()->GetSecurityContext()->GetSecurityOrigin())) {
+            resolver->GetExecutionContext()->GetSecurityOrigin())) {
       // Cryptotoken requests are recorded as kU2FCryptotokenSign from within
       // the extension.
       UseCounter::Count(resolver->GetExecutionContext(),
@@ -791,7 +884,12 @@ ScriptPromise CredentialsContainer::get(
                         WebFeature::kCredentialManagerGetWithUVM);
     }
 #endif
-
+    if (!IsArrayBufferOrViewBelowSizeLimit(options->publicKey()->challenge())) {
+      resolver->Reject(DOMException::Create(
+          "The `challenge` attribute exceeds the maximum allowed size.",
+          "RangeError"));
+      return promise;
+    }
     if (options->publicKey()->hasExtensions()) {
       if (options->publicKey()->extensions()->hasAppid()) {
         const auto& appid = options->publicKey()->extensions()->appid();
@@ -820,19 +918,32 @@ ScriptPromise CredentialsContainer::get(
             "a credential"));
         return promise;
       }
+      if (options->publicKey()->extensions()->hasLargeBlob()) {
+        DCHECK(RuntimeEnabledFeatures::
+                   WebAuthenticationLargeBlobExtensionEnabled());
+        if (options->publicKey()->extensions()->largeBlob()->hasSupport()) {
+          resolver->Reject(MakeGarbageCollected<DOMException>(
+              DOMExceptionCode::kNotSupportedError,
+              "The 'largeBlob' extension's 'support' parameter is only valid "
+              "when creating a credential"));
+          return promise;
+        }
+      }
     }
 
     if (!options->publicKey()->hasUserVerification()) {
-      resolver->GetFrame()->Console().AddMessage(MakeGarbageCollected<
-                                                 ConsoleMessage>(
-          mojom::blink::ConsoleMessageSource::kJavaScript,
-          mojom::blink::ConsoleMessageLevel::kWarning,
-          "publicKey.userVerification was not set to any value in Web "
-          "Authentication navigator.credentials.get() call. This defaults to "
-          "'preferred', which is probably not what you want. If in doubt, set "
-          "to 'discouraged'. See "
-          "https://chromium.googlesource.com/chromium/src/+/master/content/"
-          "browser/webauth/uv_preferred.md for details."));
+      resolver->DomWindow()->AddConsoleMessage(
+          MakeGarbageCollected<ConsoleMessage>(
+              mojom::blink::ConsoleMessageSource::kJavaScript,
+              mojom::blink::ConsoleMessageLevel::kWarning,
+              "publicKey.userVerification was not set to any value in Web "
+              "Authentication navigator.credentials.get() call. This defaults "
+              "to "
+              "'preferred', which is probably not what you want. If in doubt, "
+              "set "
+              "to 'discouraged'. See "
+              "https://chromium.googlesource.com/chromium/src/+/master/content/"
+              "browser/webauth/uv_preferred.md for details."));
     }
 
     if (options->hasSignal()) {
@@ -849,10 +960,8 @@ ScriptPromise CredentialsContainer::get(
         MojoPublicKeyCredentialRequestOptions::From(*options->publicKey());
     if (mojo_options) {
       if (!mojo_options->relying_party_id) {
-        mojo_options->relying_party_id = resolver->GetFrame()
-                                             ->GetSecurityContext()
-                                             ->GetSecurityOrigin()
-                                             ->Domain();
+        mojo_options->relying_party_id =
+            resolver->GetExecutionContext()->GetSecurityOrigin()->Domain();
       }
       auto* authenticator =
           CredentialManagerProxy::From(script_state)->Authenticator();
@@ -892,10 +1001,10 @@ ScriptPromise CredentialsContainer::get(
       return promise;
     }
 
-    auto* sms_receiver =
-        CredentialManagerProxy::From(script_state)->SmsReceiver();
-    sms_receiver->Receive(WTF::Bind(&OnSmsReceive, WrapPersistent(resolver),
-                                    base::TimeTicks::Now()));
+    auto* webotp_service =
+        CredentialManagerProxy::From(script_state)->WebOTPService();
+    webotp_service->Receive(WTF::Bind(&OnSmsReceive, WrapPersistent(resolver),
+                                      base::TimeTicks::Now()));
     UMA_HISTOGRAM_ENUMERATION("Blink.UseCounter.Features", WebFeature::kWebOTP);
     return promise;
   }
@@ -1026,7 +1135,7 @@ ScriptPromise CredentialsContainer::create(
     DCHECK(options->hasPublicKey());
     auto cryptotoken_origin = SecurityOrigin::Create(KURL(kCryptotokenOrigin));
     if (!cryptotoken_origin->IsSameOriginWith(
-            resolver->GetFrame()->GetSecurityContext()->GetSecurityOrigin())) {
+            resolver->GetExecutionContext()->GetSecurityOrigin())) {
       // Cryptotoken requests are recorded as kU2FCryptotokenRegister from
       // within the extension.
       UseCounter::Count(
@@ -1034,6 +1143,30 @@ ScriptPromise CredentialsContainer::create(
           WebFeature::kCredentialManagerCreatePublicKeyCredential);
     }
 
+    if (!IsArrayBufferOrViewBelowSizeLimit(options->publicKey()->challenge())) {
+      resolver->Reject(DOMException::Create(
+          "The `challenge` attribute exceeds the maximum allowed size.",
+          "RangeError"));
+      return promise;
+    }
+
+    if (!IsArrayBufferOrViewBelowSizeLimit(
+            options->publicKey()->user()->id())) {
+      resolver->Reject(DOMException::Create(
+          "The `user.id` attribute exceeds the maximum allowed size.",
+          "RangeError"));
+      return promise;
+    }
+
+    for (const auto& credential : options->publicKey()->excludeCredentials()) {
+      if (!IsArrayBufferOrViewBelowSizeLimit(credential->id())) {
+        resolver->Reject(DOMException::Create(
+            "The `excludedCredentials.id` attribute exceeds the maximum "
+            "allowed size.",
+            "RangeError"));
+        return promise;
+      }
+    }
     if (options->publicKey()->hasExtensions()) {
       if (options->publicKey()->extensions()->hasAppid()) {
         resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -1064,6 +1197,22 @@ ScriptPromise CredentialsContainer::create(
             "an assertion"));
         return promise;
       }
+      if (options->publicKey()->extensions()->hasLargeBlob()) {
+        if (options->publicKey()->extensions()->largeBlob()->hasRead()) {
+          resolver->Reject(MakeGarbageCollected<DOMException>(
+              DOMExceptionCode::kNotSupportedError,
+              "The 'largeBlob' extension's 'read' parameter is only valid when "
+              "requesting an assertion"));
+          return promise;
+        }
+        if (options->publicKey()->extensions()->largeBlob()->hasWrite()) {
+          resolver->Reject(MakeGarbageCollected<DOMException>(
+              DOMExceptionCode::kNotSupportedError,
+              "The 'largeBlob' extension's 'write' parameter is only valid "
+              "when requesting an assertion"));
+          return promise;
+        }
+      }
     }
 
     if (options->hasSignal()) {
@@ -1080,26 +1229,28 @@ ScriptPromise CredentialsContainer::create(
         !options->publicKey()
              ->authenticatorSelection()
              ->hasUserVerification()) {
-      resolver->GetFrame()->Console().AddMessage(MakeGarbageCollected<
-                                                 ConsoleMessage>(
-          mojom::blink::ConsoleMessageSource::kJavaScript,
-          mojom::blink::ConsoleMessageLevel::kWarning,
-          "publicKey.authenticatorSelection.userVerification was not set to "
-          "any value in Web Authentication navigator.credentials.create() "
-          "call. This defaults to 'preferred', which is probably not what you "
-          "want. If in doubt, set to 'discouraged'. See "
-          "https://chromium.googlesource.com/chromium/src/+/master/content/"
-          "browser/webauth/uv_preferred.md for details"));
+      resolver->DomWindow()->AddConsoleMessage(
+          MakeGarbageCollected<ConsoleMessage>(
+              mojom::blink::ConsoleMessageSource::kJavaScript,
+              mojom::blink::ConsoleMessageLevel::kWarning,
+              "publicKey.authenticatorSelection.userVerification was not set "
+              "to "
+              "any value in Web Authentication navigator.credentials.create() "
+              "call. This defaults to 'preferred', which is probably not what "
+              "you "
+              "want. If in doubt, set to 'discouraged'. See "
+              "https://chromium.googlesource.com/chromium/src/+/master/content/"
+              "browser/webauth/uv_preferred.md for details"));
     }
     if (options->publicKey()->hasAuthenticatorSelection() &&
         options->publicKey()->authenticatorSelection()->hasResidentKey() &&
         !mojo::ConvertTo<base::Optional<mojom::blink::ResidentKeyRequirement>>(
             options->publicKey()->authenticatorSelection()->residentKey())) {
-      resolver->GetFrame()->Console().AddMessage(
+      resolver->DomWindow()->AddConsoleMessage(
           MakeGarbageCollected<ConsoleMessage>(
               mojom::blink::ConsoleMessageSource::kJavaScript,
               mojom::blink::ConsoleMessageLevel::kWarning,
-              "Ignoring unknown publicKey.authenticatorSelection.resident_key "
+              "Ignoring unknown publicKey.authenticatorSelection.residentKey "
               "value"));
     }
     auto mojo_options =
@@ -1115,10 +1266,8 @@ ScriptPromise CredentialsContainer::create(
           isolate, "User handle exceeds 64 bytes."));
     } else {
       if (!mojo_options->relying_party->id) {
-        mojo_options->relying_party->id = resolver->GetFrame()
-                                              ->GetSecurityContext()
-                                              ->GetSecurityOrigin()
-                                              ->Domain();
+        mojo_options->relying_party->id =
+            resolver->GetExecutionContext()->GetSecurityOrigin()->Domain();
       }
 
       if (mojo_options->relying_party->icon) {
@@ -1168,6 +1317,11 @@ ScriptPromise CredentialsContainer::preventSilentAccess(
       WTF::Passed(std::make_unique<ScopedPromiseResolver>(resolver))));
 
   return promise;
+}
+
+void CredentialsContainer::Trace(Visitor* visitor) const {
+  ScriptWrappable::Trace(visitor);
+  Supplement<Navigator>::Trace(visitor);
 }
 
 }  // namespace blink

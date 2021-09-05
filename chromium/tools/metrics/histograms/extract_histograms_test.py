@@ -243,6 +243,43 @@ TEST_HISTOGRAM_VARIANTS_DUPLICATE = """
 """
 
 
+TEST_HISTOGRAM_WITH_MIXED_VARIANTS = """
+<histogram-configuration>
+<histograms>
+<variants name="HistogramNameSize">
+  <variant name=".medium" summary="medium"/>
+  <variant name=".large" summary="large"/>
+</variants>
+
+<histogram name="HistogramName.{Color}{Size}" expires_after="2017-10-16">
+  <owner>me@chromium.org</owner>
+  <summary>
+    This is a histogram for button of {Color} color and {Size} size.
+  </summary>
+  <token key="Color">
+    <variant name="red">
+      <obsolete>
+        Obsolete red
+      </obsolete>
+    </variant>
+    <variant name="green">
+      <owner>green@chromium.org</owner>
+    </variant>
+  </token>
+  <token key="Size" variants="HistogramNameSize">
+    <variant name="" summary="all"/>
+    <variant name=".small" summary="small">
+      <owner>small@chromium.org</owner>
+      <obsolete>
+        Obsolete small
+      </obsolete>
+    </variant>
+  </token>
+</histogram>
+</histograms>
+</histogram-configuration>
+"""
+
 class ExtractHistogramsTest(unittest.TestCase):
 
   def testSuffixObsoletion(self):
@@ -444,6 +481,33 @@ class ExtractHistogramsTest(unittest.TestCase):
         histograms['MultiParagraphTest.Test2']['summary'],
         'Multi-paragraph sample description UI>Browser. Words.\n\n'
         'Still multi-paragraph sample description.\n\nHere.')
+
+  def testComponentExtraction(self):
+    """Checks that components are successfully extracted from histograms."""
+    histogram = xml.dom.minidom.parseString("""
+<histogram-configuration>
+<histograms>
+  <histogram name="Coffee" expires_after="2022-01-01">
+    <owner>histogram_owner@google.com</owner>
+    <summary>An ode to coffee.</summary>
+    <component>Liquid&gt;Hot</component>
+    <component>Caffeine</component>
+  </histogram>
+</histograms>
+
+<histogram_suffixes_list>
+  <histogram_suffixes name="Brand" separator=".">
+    <suffix name="Dunkies" label="The coffee is from Dunkin."/>
+    <affected-histogram name="Coffee"/>
+  </histogram_suffixes>
+</histogram_suffixes_list>
+</histogram-configuration>
+""")
+    histograms, _ = extract_histograms.ExtractHistogramsFromDom(histogram)
+    self.assertEqual(histograms['Coffee']['components'],
+                     ['Liquid>Hot', 'Caffeine'])
+    self.assertEqual(histograms['Coffee.Dunkies']['components'],
+                     ['Liquid>Hot', 'Caffeine'])
 
   def testNewHistogramWithoutSummary(self):
     histogram_without_summary = xml.dom.minidom.parseString("""
@@ -674,6 +738,7 @@ class ExtractHistogramsTest(unittest.TestCase):
   @parameterized.expand([
       ('InlineTokens', TEST_HISTOGRAM_WITH_TOKENS),
       ('InlineTokenAndOutOfLineVariants', TEST_HISTOGRAM_WITH_VARIANTS),
+      ('MixedVariants', TEST_HISTOGRAM_WITH_MIXED_VARIANTS),
   ])
   def testUpdateNameWithTokens(self, _, input_xml):
     histogram_with_token = xml.dom.minidom.parseString(input_xml)
@@ -698,6 +763,7 @@ class ExtractHistogramsTest(unittest.TestCase):
   @parameterized.expand([
       ('InlineTokens', TEST_HISTOGRAM_WITH_TOKENS),
       ('InlineTokenAndOutOfLineVariants', TEST_HISTOGRAM_WITH_VARIANTS),
+      ('MixedVariants', TEST_HISTOGRAM_WITH_MIXED_VARIANTS),
   ])
   def testUpdateSummaryWithTokens(self, _, input_xml):
     histogram_with_token = xml.dom.minidom.parseString(input_xml)
@@ -735,6 +801,7 @@ class ExtractHistogramsTest(unittest.TestCase):
   @parameterized.expand([
       ('InlineTokens', TEST_HISTOGRAM_WITH_TOKENS),
       ('InlineTokenAndOutOfLineVariants', TEST_HISTOGRAM_WITH_VARIANTS),
+      ('MixedVariants', TEST_HISTOGRAM_WITH_MIXED_VARIANTS),
   ])
   def testUpdateWithTokenOwner(self, _, input_xml):
     histogram_with_token = xml.dom.minidom.parseString(input_xml)
@@ -763,6 +830,7 @@ class ExtractHistogramsTest(unittest.TestCase):
   @parameterized.expand([
       ('InlineTokens', TEST_HISTOGRAM_WITH_TOKENS),
       ('InlineTokenAndOutOfLineVariants', TEST_HISTOGRAM_WITH_VARIANTS),
+      ('MixedVariants', TEST_HISTOGRAM_WITH_MIXED_VARIANTS),
   ])
   def testUpdateWithTokenObsolete(self, _, input_xml):
     histogram_with_token = xml.dom.minidom.parseString(input_xml)

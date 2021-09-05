@@ -101,7 +101,7 @@ WebRequestProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
     int32_t network_service_request_id,
     int32_t routing_id,
     uint32_t options,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     const network::ResourceRequest& request,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
@@ -141,7 +141,7 @@ WebRequestProxyingURLLoaderFactory::InProgressRequest::InProgressRequest(
       request_(request),
       original_initiator_(request.request_initiator),
       request_id_(request_id),
-      ukm_source_id_(base::kInvalidUkmSourceId),
+      ukm_source_id_(ukm::kInvalidSourceIdObj),
       proxied_loader_receiver_(this),
       for_cors_preflight_(true),
       has_any_extra_headers_listeners_(
@@ -158,6 +158,7 @@ WebRequestProxyingURLLoaderFactory::InProgressRequest::~InProgressRequest() {
       ukm::builders::Extensions_WebRequest_KeepaliveRequestFinished(
           ukm_source_id_)
           .SetState(state_)
+          .SetNumRedirects(num_redirects_)
           .Record(ukm::UkmRecorder::Get());
     }
   }
@@ -242,6 +243,10 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::RestartInternal() {
     if (should_collapse_initiator) {
       status.extended_error_code = static_cast<int>(
           blink::ResourceRequestBlockedReason::kCollapsedByClient);
+    } else {
+      status.extended_error_code =
+          static_cast<int>(blink::ResourceRequestBlockedReason::
+                               kBlockedByExtensionCrbug1128174Investigation);
     }
     OnRequestError(status, state_on_error);
     return;
@@ -304,6 +309,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::FollowRedirect(
     }
   }
 
+  ++num_redirects_;
   RestartInternal();
 }
 
@@ -591,8 +597,11 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
     if (result == net::ERR_BLOCKED_BY_CLIENT) {
       // The request was cancelled synchronously. Dispatch an error notification
       // and terminate the request.
-      OnRequestError(network::URLLoaderCompletionStatus(result),
-                     state_on_error);
+      network::URLLoaderCompletionStatus completion_status(result);
+      completion_status.extended_error_code =
+          static_cast<int>(blink::ResourceRequestBlockedReason::
+                               kBlockedByExtensionCrbug1128174Investigation);
+      OnRequestError(completion_status, state_on_error);
       return;
     }
 
@@ -984,7 +993,11 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::
       } else {
         state = State::kRejectedByOnHeadersReceivedForFinalResponse;
       }
-      OnRequestError(network::URLLoaderCompletionStatus(result), state);
+      network::URLLoaderCompletionStatus completion_status(result);
+      completion_status.extended_error_code =
+          static_cast<int>(blink::ResourceRequestBlockedReason::
+                               kBlockedByExtensionCrbug1128174Investigation);
+      OnRequestError(completion_status, state);
       return;
     }
 
@@ -1088,7 +1101,7 @@ WebRequestProxyingURLLoaderFactory::WebRequestProxyingURLLoaderFactory(
     WebRequestAPI::RequestIDGenerator* request_id_generator,
     std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data,
     base::Optional<int64_t> navigation_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
@@ -1132,7 +1145,7 @@ void WebRequestProxyingURLLoaderFactory::StartProxying(
     WebRequestAPI::RequestIDGenerator* request_id_generator,
     std::unique_ptr<ExtensionNavigationUIData> navigation_ui_data,
     base::Optional<int64_t> navigation_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
     mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>

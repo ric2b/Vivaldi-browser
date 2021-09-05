@@ -49,7 +49,6 @@
 #include "third_party/blink/renderer/core/page/named_pages_mapper.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/root_scroller_controller.h"
-#include "third_party/blink/renderer/core/page/scrolling/scrolling_coordinator_context.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -138,15 +137,9 @@ bool LayoutView::HitTest(const HitTestLocation& location,
   // Note that if an iframe has its render pipeline throttled, it will not
   // update layout here, and it will also not propagate the hit test into the
   // iframe's inner document.
-  if (RuntimeEnabledFeatures::CompositingOptimizationsEnabled()) {
-    if (!GetFrameView()->UpdateLifecycleToPrePaintClean(
-            DocumentUpdateReason::kHitTest))
-      return false;
-  } else {
-    if (!GetFrameView()->UpdateAllLifecyclePhasesExceptPaint(
-            DocumentUpdateReason::kHitTest))
-      return false;
-  }
+  if (!GetFrameView()->UpdateLifecycleToPrePaintClean(
+          DocumentUpdateReason::kHitTest))
+    return false;
   HitTestLatencyRecorder hit_test_latency_recorder(
       result.GetHitTestRequest().AllowsChildFrameContent());
   return HitTestNoLifecycleUpdate(location, result);
@@ -304,7 +297,8 @@ void LayoutView::UpdateBlockLayout(bool relayout_children) {
       if (child->IsSVGRoot())
         continue;
 
-      if ((child->IsBox() && ToLayoutBox(child)->HasRelativeLogicalHeight()) ||
+      if ((child->IsBox() &&
+           To<LayoutBox>(child)->HasRelativeLogicalHeight()) ||
           child->StyleRef().LogicalHeight().IsPercentOrCalc() ||
           child->StyleRef().LogicalMinHeight().IsPercentOrCalc() ||
           child->StyleRef().LogicalMaxHeight().IsPercentOrCalc())
@@ -490,32 +484,19 @@ void LayoutView::PaintBoxDecorationBackground(const PaintInfo& paint_info,
   ViewPainter(*this).PaintBoxDecorationBackground(paint_info);
 }
 
-static void SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(
-    LayoutObject* object) {
-  object->SetShouldDoFullPaintInvalidation();
-  for (LayoutObject* child = object->SlowFirstChild(); child;
-       child = child->NextSibling()) {
-    SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(child);
-  }
+static void InvalidatePaintForViewAndDescendantsRecursively(PaintLayer& layer) {
+  layer.GetLayoutObject().SetSubtreeShouldDoFullPaintInvalidation();
+  for (PaintLayer* child = layer.FirstChild(); child;
+       child = child->NextSibling())
+    InvalidatePaintForViewAndDescendantsRecursively(*child);
 }
 
-void LayoutView::SetShouldDoFullPaintInvalidationForViewAndAllDescendants() {
+void LayoutView::InvalidatePaintForViewAndDescendants() {
   NOT_DESTROYED();
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
     SetSubtreeShouldDoFullPaintInvalidation();
   else
-    SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(this);
-}
-
-void LayoutView::InvalidatePaintForViewAndCompositedLayers() {
-  NOT_DESTROYED();
-  SetSubtreeShouldDoFullPaintInvalidation();
-
-  if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    DisableCompositingQueryAsserts disabler;
-    if (Compositor()->InCompositingMode())
-      Compositor()->FullyInvalidatePaint();
-  }
+    InvalidatePaintForViewAndDescendantsRecursively(*Layer());
 }
 
 bool LayoutView::MapToVisualRectInAncestorSpace(
@@ -742,12 +723,12 @@ void LayoutView::CalculateScrollbarModes(
 
   if (viewport->IsSVGRoot()) {
     // Don't allow overflow to affect <img> and css backgrounds
-    if (ToLayoutSVGRoot(viewport)->IsEmbeddedThroughSVGImage())
+    if (To<LayoutSVGRoot>(viewport)->IsEmbeddedThroughSVGImage())
       RETURN_SCROLLBAR_MODE(mojom::blink::ScrollbarMode::kAuto);
 
     // FIXME: evaluate if we can allow overflow for these cases too.
     // Overflow is always hidden when stand-alone SVG documents are embedded.
-    if (ToLayoutSVGRoot(viewport)
+    if (To<LayoutSVGRoot>(viewport)
             ->IsEmbeddedThroughFrameContainingSVGDocument())
       RETURN_SCROLLBAR_MODE(mojom::blink::ScrollbarMode::kAlwaysOff);
   }
@@ -836,8 +817,7 @@ const LayoutBox& LayoutView::RootBox() const {
   Element* document_element = GetDocument().documentElement();
   DCHECK(document_element);
   DCHECK(document_element->GetLayoutObject());
-  DCHECK(document_element->GetLayoutObject()->IsBox());
-  return ToLayoutBox(*document_element->GetLayoutObject());
+  return To<LayoutBox>(*document_element->GetLayoutObject());
 }
 
 void LayoutView::UpdateAfterLayout() {
@@ -936,13 +916,6 @@ RecalcLayoutOverflowResult LayoutView::RecalcLayoutOverflow() {
 
   auto result = LayoutBlockFlow::RecalcLayoutOverflow();
   if (result.layout_overflow_changed) {
-    // Changing overflow should notify scrolling coordinator to ensures that it
-    // updates non-fast scroll rects even if there is no layout.
-    if (ScrollingCoordinator* scrolling_coordinator =
-            GetDocument().GetPage()->GetScrollingCoordinator()) {
-      GetFrameView()->GetScrollingContext()->SetScrollGestureRegionIsDirty(
-          true);
-    }
     if (NeedsLayout())
       return result;
     if (GetFrameView()->VisualViewportSuppliesScrollbars())
@@ -991,10 +964,8 @@ void LayoutView::UpdateCounters() {
 
   for (LayoutObject* layout_object = this; layout_object;
        layout_object = layout_object->NextInPreOrder()) {
-    if (!layout_object->IsCounter())
-      continue;
-
-    ToLayoutCounter(layout_object)->UpdateCounter();
+    if (auto* counter = DynamicTo<LayoutCounter>(layout_object))
+      counter->UpdateCounter();
   }
 }
 

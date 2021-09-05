@@ -5,7 +5,7 @@
 #include "ui/views/test/widget_test.h"
 
 #include "base/rand_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/native_widget_types.h"
@@ -48,10 +48,6 @@ View* AnyViewWithClassName(Widget* widget, const std::string& classname) {
   return AnyViewMatchingPredicate(widget, [&](const View* view) {
     return view->GetClassName() == classname;
   });
-}
-
-void WidgetTest::WidgetCloser::operator()(Widget* widget) const {
-  widget->CloseNow();
 }
 
 WidgetTest::WidgetTest() = default;

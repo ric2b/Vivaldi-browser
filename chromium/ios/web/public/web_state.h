@@ -186,6 +186,13 @@ class WebState : public base::SupportsUserData {
   // caller to size the view.
   virtual UIView* GetView() = 0;
 
+  // Notifies the WebState that the WebContent is covered. Triggers
+  // visibilitychange event.
+  virtual void DidCoverWebContent() = 0;
+  // Notifies the WebState that the WebContent is no longer covered. Triggers
+  // visibilitychange event.
+  virtual void DidRevealWebContent() = 0;
+
   // Must be called when the WebState becomes shown/hidden.
   virtual void WasShown() = 0;
   virtual void WasHidden() = 0;
@@ -323,7 +330,7 @@ class WebState : public base::SupportsUserData {
   using ScriptCommandCallback =
       base::RepeatingCallback<ScriptCommandCallbackSignature>;
   using ScriptCommandSubscription =
-      base::CallbackList<ScriptCommandCallbackSignature>::Subscription;
+      base::RepeatingCallbackList<ScriptCommandCallbackSignature>::Subscription;
   // Registers |callback| for JS message whose 'command' matches
   // |command_prefix|. The returned ScriptCommandSubscription should be stored
   // by the caller. When the description object is destroyed, it will unregister

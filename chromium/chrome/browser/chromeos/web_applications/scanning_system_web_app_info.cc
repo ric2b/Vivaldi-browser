@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "chrome/browser/chromeos/web_applications/system_web_app_install_utils.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chromeos/components/scanning/url_constants.h"
 #include "chromeos/grit/chromeos_scanning_app_resources.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
@@ -22,7 +22,16 @@ std::unique_ptr<WebApplicationInfo> CreateWebAppInfoForScanningSystemWebApp() {
   info->scope = GURL(chromeos::kChromeUIScanningAppUrl);
   info->title = l10n_util::GetStringUTF16(IDS_SCANNING_APP_TITLE);
   web_app::CreateIconInfoForSystemWebApp(
-      info->start_url, {{"app_icon_192.png", 192, IDR_SCANNING_APP_ICON}},
+      info->start_url,
+      {
+          {"scanning_app_icon_16.png", 16, IDR_SCANNING_APP_ICON_16},
+          {"scanning_app_icon_32.png", 32, IDR_SCANNING_APP_ICON_32},
+          {"scanning_app_icon_48.png", 48, IDR_SCANNING_APP_ICON_48},
+          {"scanning_app_icon_64.png", 64, IDR_SCANNING_APP_ICON_64},
+          {"scanning_app_icon_128.png", 128, IDR_SCANNING_APP_ICON_128},
+          {"scanning_app_icon_192.png", 192, IDR_SCANNING_APP_ICON_192},
+          {"scanning_app_icon_256.png", 256, IDR_SCANNING_APP_ICON_256},
+      },
       *info);
   info->theme_color = 0xFFFFFFFF;
   info->background_color = 0xFFFFFFFF;

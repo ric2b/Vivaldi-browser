@@ -159,6 +159,15 @@ class AccessibilityPrivateUpdateSwitchAccessBubbleFunction
                              ACCESSIBILITY_PRIVATE_UPDATESWITCHACCESSBUBBLE)
 };
 
+// API function that is called to start or end point scanning of the
+// Switch Access extension.
+class AccessibilityPrivateActivatePointScanFunction : public ExtensionFunction {
+  ~AccessibilityPrivateActivatePointScanFunction() override {}
+  ResponseAction Run() override;
+  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.activatePointScan",
+                             ACCESSIBILITY_PRIVATE_ACTIVATEPOINTSCAN)
+};
+
 // API function that is called to get the device's battery status as a string.
 class AccessibilityPrivateGetBatteryDescriptionFunction
     : public ExtensionFunction {
@@ -188,6 +197,23 @@ class AccessibilityPrivatePerformAcceleratorActionFunction
   ResponseAction Run() override;
   DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.performAcceleratorAction",
                              ACCESSIBILITY_PRIVATE_PERFORMACCELERATORACTION)
+};
+
+// API function that determines if an accessibility feature is enabled.
+class AccessibilityPrivateIsFeatureEnabledFunction : public ExtensionFunction {
+  ~AccessibilityPrivateIsFeatureEnabledFunction() override {}
+  ResponseAction Run() override;
+  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.isFeatureEnabled",
+                             ACCESSIBILITY_PRIVATE_ISFEATUREENABLED)
+};
+
+// API function that updates properties of the Select-to-speak panel.
+class AccessibilityPrivateUpdateSelectToSpeakPanelFunction
+    : public ExtensionFunction {
+  ~AccessibilityPrivateUpdateSelectToSpeakPanelFunction() override = default;
+  ResponseAction Run() override;
+  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.updateSelectToSpeakPanel",
+                             ACCESSIBILITY_PRIVATE_UPDATESELECTTOSPEAKPANEL)
 };
 #endif  // defined (OS_CHROMEOS)
 

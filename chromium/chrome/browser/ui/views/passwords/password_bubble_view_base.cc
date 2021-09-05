@@ -6,7 +6,9 @@
 
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -20,7 +22,9 @@
 #include "chrome/browser/ui/views/passwords/password_save_update_with_account_store_view.h"
 #include "chrome/browser/ui/views/passwords/post_save_compromised_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "ui/views/controls/button/button.h"
 
@@ -42,6 +46,10 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
          !g_manage_passwords_bubble_->GetWidget()->IsVisible());
 
   if (browser->is_vivaldi()) {
+    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+    FeaturePromoControllerViews* promo_controller =
+      browser_view ? browser_view->feature_promo_controller() : nullptr;
+
     VivaldiBrowserWindow* window =
         static_cast<VivaldiBrowserWindow*>(browser->window());
     views::View* contents_view = window->GetContentsView();
@@ -69,7 +77,7 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
     rect.set_x(pos.x() - (rect.width() / 2));
 
     PasswordBubbleViewBase* bubble =
-      CreateBubble(web_contents, nullptr, reason);
+        CreateBubble(web_contents, nullptr, reason, promo_controller);
     DCHECK(bubble);
     DCHECK(bubble == g_manage_passwords_bubble_);
 
@@ -100,7 +108,8 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
       button_provider->GetAnchorView(PageActionIconType::kManagePasswords);
 
   PasswordBubbleViewBase* bubble =
-      CreateBubble(web_contents, anchor_view, reason);
+      CreateBubble(web_contents, anchor_view, reason,
+                   browser_view->feature_promo_controller());
   DCHECK(bubble);
   DCHECK_EQ(bubble, g_manage_passwords_bubble_);
 
@@ -117,7 +126,8 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
 PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
     content::WebContents* web_contents,
     views::View* anchor_view,
-    DisplayReason reason) {
+    DisplayReason reason,
+    FeaturePromoControllerViews* promo_controller) {
   PasswordBubbleViewBase* view = nullptr;
   password_manager::ui::State model_state =
       PasswordsModelDelegateFromWebContents(web_contents)->GetState();
@@ -133,8 +143,8 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
              model_state == password_manager::ui::PENDING_PASSWORD_STATE) {
     if (base::FeatureList::IsEnabled(
             password_manager::features::kEnablePasswordsAccountStorage)) {
-      view = new PasswordSaveUpdateWithAccountStoreView(web_contents,
-                                                        anchor_view, reason);
+      view = new PasswordSaveUpdateWithAccountStoreView(
+          web_contents, anchor_view, reason, promo_controller);
     } else {
       view = new PasswordSaveUpdateView(web_contents, anchor_view, reason);
     }
@@ -154,8 +164,6 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
                  password_manager::ui::PASSWORD_UPDATED_MORE_TO_FIX ||
              model_state ==
                  password_manager::ui::PASSWORD_UPDATED_UNSAFE_STATE) {
-    DCHECK(base::FeatureList::IsEnabled(
-        password_manager::features::kCompromisedPasswordsReengagement));
     view = new PostSaveCompromisedBubbleView(web_contents, anchor_view);
   } else {
     NOTREACHED();
@@ -189,6 +197,9 @@ PasswordBubbleViewBase::PasswordBubbleViewBase(
     views::View* anchor_view,
     bool easily_dismissable)
     : LocationBarBubbleDelegateView(anchor_view, web_contents) {
+  SetShowCloseButton(true);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   // The |mouse_handler| closes the bubble if a keyboard or mouse
   // interactions happens outside of the bubble. By this the bubble becomes
   // 'easily-dismissable' and this behavior can be enforced by the
@@ -204,20 +215,42 @@ PasswordBubbleViewBase::~PasswordBubbleViewBase() {
     g_manage_passwords_bubble_ = nullptr;
 }
 
+// static
+std::unique_ptr<views::Label> PasswordBubbleViewBase::CreateUsernameLabel(
+    const password_manager::PasswordForm& form) {
+  auto label = std::make_unique<views::Label>(
+      GetDisplayUsername(form), views::style::CONTEXT_DIALOG_BODY_TEXT,
+      views::style::STYLE_SECONDARY);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  return label;
+}
+
+// static
+std::unique_ptr<views::Label> PasswordBubbleViewBase::CreatePasswordLabel(
+    const password_manager::PasswordForm& form) {
+  std::unique_ptr<views::Label> label;
+  if (form.federation_origin.opaque()) {
+    label = std::make_unique<views::Label>(
+        form.password_value, views::style::CONTEXT_DIALOG_BODY_TEXT,
+        STYLE_SECONDARY_MONOSPACED);
+    label->SetObscured(true);
+  } else {
+    label = std::make_unique<views::Label>(
+        l10n_util::GetStringFUTF16(IDS_PASSWORDS_VIA_FEDERATION,
+                                   GetDisplayFederation(form)),
+        views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY);
+    label->SetElideBehavior(gfx::ELIDE_HEAD);
+  }
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  return label;
+}
+
 void PasswordBubbleViewBase::Init() {
   LocationBarBubbleDelegateView::Init();
   const PasswordBubbleControllerBase* controller = GetController();
   DCHECK(controller);
   SetTitle(controller->GetTitle());
   SetShowTitle(!controller->GetTitle().empty());
-}
-
-ax::mojom::Role PasswordBubbleViewBase::GetAccessibleWindowRole() {
-  // This bubble is displayed as non-modal when users finish typing their
-  // password. In absence of a focus change event, ATs will not notice the
-  // bubble unless an alert event is emitted, so we need it to have an
-  // alert role.
-  return ax::mojom::Role::kAlertDialog;
 }
 
 void PasswordBubbleViewBase::OnWidgetClosing(views::Widget* widget) {

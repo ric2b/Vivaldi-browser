@@ -227,7 +227,7 @@ WebViewImpl* TouchActionTest::SetupTest(
 
   // Set size to enable hit testing, and avoid line wrapping for consistency
   // with browser.
-  web_view->MainFrameWidget()->Resize(WebSize(900, 1600));
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(900, 1600));
 
   // Scroll to verify the code properly transforms windows to client co-ords.
   const int kScrollOffset = 100;
@@ -376,16 +376,20 @@ void TouchActionTest::RunTestOnTree(
           EXPECT_EQ(TouchAction::kNone, client.LastTouchAction())
               << failure_context_pos;
         } else if (expected_action == "pan-x") {
-          EXPECT_EQ(TouchAction::kPanX, client.LastTouchAction())
+          EXPECT_EQ(TouchAction::kPanX, client.LastTouchAction() &
+                                            ~TouchAction::kInternalPanXScrolls)
               << failure_context_pos;
         } else if (expected_action == "pan-y") {
           EXPECT_EQ(TouchAction::kPanY, client.LastTouchAction())
               << failure_context_pos;
         } else if (expected_action == "pan-x-y") {
-          EXPECT_EQ((TouchAction::kPan), client.LastTouchAction())
+          EXPECT_EQ(TouchAction::kPan, client.LastTouchAction() &
+                                           ~TouchAction::kInternalPanXScrolls)
               << failure_context_pos;
         } else if (expected_action == "manipulation") {
-          EXPECT_EQ((TouchAction::kManipulation), client.LastTouchAction())
+          EXPECT_EQ(
+              TouchAction::kManipulation,
+              client.LastTouchAction() & ~TouchAction::kInternalPanXScrolls)
               << failure_context_pos;
         } else {
           FAIL() << "Unrecognized expected-action " << expected_action << " "

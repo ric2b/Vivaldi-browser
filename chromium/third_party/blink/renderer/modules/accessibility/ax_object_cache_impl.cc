@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
+#include "third_party/blink/renderer/core/events/event_util.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -474,7 +475,7 @@ AXObject* AXObjectCacheImpl::CreateFromRenderer(LayoutObject* layout_object) {
     return MakeGarbageCollected<AXSVGRoot>(layout_object, *this);
 
   if (layout_object->IsBoxModelObject()) {
-    LayoutBoxModelObject* css_box = ToLayoutBoxModelObject(layout_object);
+    auto* css_box = To<LayoutBoxModelObject>(layout_object);
     if (auto* select_element = DynamicTo<HTMLSelectElement>(node)) {
       if (select_element->UsesMenuList()) {
         if (use_ax_menu_list_)
@@ -487,7 +488,7 @@ AXObject* AXObjectCacheImpl::CreateFromRenderer(LayoutObject* layout_object) {
     // progress bar
     if (css_box->IsProgress()) {
       return MakeGarbageCollected<AXProgressIndicator>(
-          ToLayoutProgress(css_box), *this);
+          To<LayoutProgress>(css_box), *this);
     }
   }
 
@@ -1136,7 +1137,7 @@ void AXObjectCacheImpl::TextChangedWithCleanLayout(
       }
     }
 
-    PostNotification(obj, ax::mojom::Event::kTextChanged);
+    MarkAXObjectDirty(obj, /*subtree=*/false);
   }
 
   if (optional_node_for_relation_update)
@@ -1189,6 +1190,9 @@ void AXObjectCacheImpl::UpdateCacheAfterNodeIsAttachedWithCleanLayout(
   if (!node || !node->isConnected())
     return;
 
+  // Ignore attached nodes that are not elements, including text nodes and
+  // #shadow-root nodes. This matches previous implementations that worked,
+  // but it is not clear if that could potentially lead to missing content.
   Element* element = DynamicTo<Element>(node);
   if (!element)
     return;
@@ -1206,13 +1210,16 @@ void AXObjectCacheImpl::UpdateCacheAfterNodeIsAttachedWithCleanLayout(
 
   // Force computation of aria-owns, so that original parents that already
   // computed their children get the aria-owned children removed.
-  if (element->FastHasAttribute(html_names::kAriaOwnsAttr) ||
-      element->HasExplicitlySetAttrAssociatedElements(
-          html_names::kAriaOwnsAttr)) {
+  if (AXObject::HasARIAOwns(element))
     HandleAttributeChangedWithCleanLayout(html_names::kAriaOwnsAttr, element);
-  }
 
   MaybeNewRelationTarget(node, Get(node));
+
+  // Even if the node or parent are ignored, an ancestor may need to include
+  // descendants of the attached node, thus ChildrenChangedWithCleanLayout()
+  // must be called. It handles ignored logic, ensuring that the first ancestor
+  // that should have this as a child will be updated.
+  ChildrenChangedWithCleanLayout(LayoutTreeBuilderTraversal::Parent(*node));
 }
 
 void AXObjectCacheImpl::DidInsertChildrenOfNode(Node* node) {
@@ -1346,6 +1353,11 @@ void AXObjectCacheImpl::ProcessDeferredAccessibilityEvents(Document& document) {
   }
 
   ProcessUpdates(document);
+
+  // Changes to ids or aria-owns may have resulted in queued up relation
+  // cache work; do that now.
+  relation_cache_->ProcessUpdatesWithCleanLayout();
+
   PostNotifications(document);
 }
 
@@ -1384,7 +1396,7 @@ void AXObjectCacheImpl::ProcessUpdates(Document& document) {
     // These may have been destroyed since the original update occurred.
     if (!node) {
       if (!axid || !ObjectFromAXID(axid))
-        return;
+        continue;
     }
     base::OnceClosure& callback = tree_update->callback;
     // Insure the update is for the correct document.
@@ -1562,23 +1574,12 @@ AXObject* AXObjectCacheImpl::GetAriaOwnedParent(const AXObject* object) const {
   return relation_cache_->GetAriaOwnedParent(object);
 }
 
-void AXObjectCacheImpl::UpdateAriaOwns(
+void AXObjectCacheImpl::GetAriaOwnedChildren(
     const AXObject* owner,
-    const Vector<String>& id_vector,
     HeapVector<Member<AXObject>>& owned_children) {
   DCHECK(GetDocument().Lifecycle().GetState() >=
          DocumentLifecycle::kLayoutClean);
-  relation_cache_->UpdateAriaOwns(owner, id_vector, owned_children);
-}
-
-void AXObjectCacheImpl::UpdateAriaOwnsFromAttrAssociatedElements(
-    const AXObject* owner,
-    const HeapVector<Member<Element>>& attr_associated_elements,
-    HeapVector<Member<AXObject>>& owned_children) {
-  DCHECK(GetDocument().Lifecycle().GetState() >=
-         DocumentLifecycle::kLayoutClean);
-  relation_cache_->UpdateAriaOwnsFromAttrAssociatedElements(
-      owner, attr_associated_elements, owned_children);
+  relation_cache_->GetAriaOwnedChildren(owner, owned_children);
 }
 
 bool AXObjectCacheImpl::MayHaveHTMLLabel(const HTMLElement& elem) {
@@ -1897,16 +1898,12 @@ void AXObjectCacheImpl::HandleAttributeChangedWithCleanLayout(
   } else if (attr_name == html_names::kAriaHiddenAttr) {
     ChildrenChangedWithCleanLayout(element->parentNode());
   } else if (attr_name == html_names::kAriaInvalidAttr) {
-    PostNotification(element, ax::mojom::Event::kInvalidStatusChanged);
+    MarkElementDirty(element, false);
   } else if (attr_name == html_names::kAriaErrormessageAttr) {
     MarkElementDirty(element, false);
   } else if (attr_name == html_names::kAriaOwnsAttr) {
-    ChildrenChangedWithCleanLayout(element);
-    // Ensure aria-owns update fires on original parent as well
-    if (AXObject* obj = GetOrCreate(element)) {
-      obj->ClearChildren();
-      obj->AddChildren();
-    }
+    if (AXObject* obj = GetOrCreate(element))
+      relation_cache_->UpdateAriaOwnsWithCleanLayout(obj);
   } else {
     PostNotification(element, ax::mojom::Event::kAriaAttributeChanged);
   }
@@ -2009,6 +2006,44 @@ void AXObjectCacheImpl::HandleValidationMessageVisibilityChangedWithCleanLayout(
   // If the form control is invalid, it will now have an error message relation
   // to the message container.
   MarkElementDirty(form_control, false);
+}
+
+void AXObjectCacheImpl::HandleEventListenerAdded(
+    const Node& node,
+    const AtomicString& event_type) {
+  // If this is the first |event_type| listener for |node|, handle the
+  // subscription change.
+  if (node.NumberOfEventListeners(event_type) == 1)
+    HandleEventSubscriptionChanged(node, event_type);
+}
+
+void AXObjectCacheImpl::HandleEventListenerRemoved(
+    const Node& node,
+    const AtomicString& event_type) {
+  // If there are no more |event_type| listeners for |node|, handle the
+  // subscription change.
+  if (node.NumberOfEventListeners(event_type) == 0)
+    HandleEventSubscriptionChanged(node, event_type);
+}
+
+bool AXObjectCacheImpl::DoesEventListenerImpactIgnoredState(
+    const AtomicString& event_type) const {
+  return event_util::IsMouseButtonEventType(event_type);
+}
+
+void AXObjectCacheImpl::HandleEventSubscriptionChanged(
+    const Node& node,
+    const AtomicString& event_type) {
+  // Adding or Removing an event listener for certain events may affect whether
+  // a node or its descendants should be accessibility ignored.
+  if (!DoesEventListenerImpactIgnoredState(event_type))
+    return;
+
+  // If the |event_type| may affect the ignored state of |node|, invalidate all
+  // cached values then mark |node| dirty so it may reconsider its accessibility
+  // ignored state.
+  modification_count_++;
+  MarkElementDirty(&node, /*subtree=*/false);
 }
 
 void AXObjectCacheImpl::LabelChangedWithCleanLayout(Element* element) {
@@ -2409,8 +2444,9 @@ void AXObjectCacheImpl::HandleScrollPositionChanged(
   SCOPED_DISALLOW_LIFECYCLE_TRANSITION(*frame_view->GetFrame().GetDocument());
 
   InvalidateBoundingBoxForFixedOrStickyPosition();
+  MarkElementDirty(document_, false);
   DeferTreeUpdate(&AXObjectCacheImpl::EnsurePostNotification, document_,
-                  ax::mojom::blink::Event::kScrollPositionChanged);
+                  ax::mojom::blink::Event::kLayoutComplete);
 }
 
 void AXObjectCacheImpl::HandleScrollPositionChanged(
@@ -2419,8 +2455,9 @@ void AXObjectCacheImpl::HandleScrollPositionChanged(
   InvalidateBoundingBoxForFixedOrStickyPosition();
   Node* node = GetClosestNodeForLayoutObject(layout_object);
   if (node) {
+    MarkElementDirty(node, false);
     DeferTreeUpdate(&AXObjectCacheImpl::EnsurePostNotification, node,
-                    ax::mojom::blink::Event::kScrollPositionChanged);
+                    ax::mojom::blink::Event::kLayoutComplete);
   }
 }
 

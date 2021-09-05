@@ -11,8 +11,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/containers/stack.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -22,7 +22,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -1650,7 +1650,7 @@ class AppCacheStorageImplTest : public testing::Test {
       request.url = GetMockUrl("manifest");
       handler_ = host2->CreateRequestHandler(
           std::make_unique<AppCacheRequest>(request),
-          blink::mojom::ResourceType::kMainFrame, false);
+          network::mojom::RequestDestination::kDocument, false);
       handler_->MaybeCreateLoader(request, nullptr, base::DoNothing(),
                                   base::DoNothing());
     }

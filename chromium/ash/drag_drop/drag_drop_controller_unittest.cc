@@ -8,14 +8,20 @@
 
 #include "ash/drag_drop/drag_drop_tracker.h"
 #include "ash/drag_drop/drag_image_view.h"
+#include "ash/drag_drop/toplevel_window_drag_delegate.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test_shell_delegate.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/drag_drop_client_observer.h"
 #include "ui/aura/client/drag_drop_delegate.h"
@@ -35,9 +41,16 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/events_test_utils.h"
 #include "ui/gfx/animation/linear_animation.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+
+using ::testing::_;
+using ::testing::NiceMock;
+using ::testing::Return;
 
 namespace ash {
 
@@ -291,7 +304,80 @@ void DispatchGesture(ui::EventType gesture_type, gfx::Point location) {
   CHECK(!details.dispatcher_destroyed);
 }
 
+class TestToplevelWindowDragDelegate : public ToplevelWindowDragDelegate {
+ public:
+  enum class State {
+    kNotInvoked,
+    kDragStartedInvoked,
+    kDragDroppedInvoked,
+    kDragCancelledInvoked,
+    kDragEventInvoked
+  };
+
+  TestToplevelWindowDragDelegate() = default;
+
+  TestToplevelWindowDragDelegate(const TestToplevelWindowDragDelegate&) =
+      delete;
+  TestToplevelWindowDragDelegate& operator=(
+      const TestToplevelWindowDragDelegate&) = delete;
+
+  ~TestToplevelWindowDragDelegate() override = default;
+
+  State state() const { return state_; }
+  int events_forwarded() const { return events_forwarded_; }
+  ui::mojom::DragEventSource source() const { return source_; }
+  base::Optional<gfx::PointF> current_location() const {
+    return current_location_;
+  }
+
+  // ToplevelWindowDragDelegate:
+  void OnToplevelWindowDragStarted(const gfx::PointF& start_location,
+                                   ui::mojom::DragEventSource source) override {
+    EXPECT_EQ(State::kNotInvoked, state_);
+    state_ = State::kDragStartedInvoked;
+    current_location_.emplace(start_location);
+    source_ = source;
+  }
+
+  int OnToplevelWindowDragDropped() override {
+    EXPECT_EQ(State::kDragStartedInvoked, state_);
+    state_ = State::kDragDroppedInvoked;
+    return ui::DragDropTypes::DRAG_MOVE;
+  }
+
+  void OnToplevelWindowDragCancelled() override {
+    EXPECT_EQ(State::kDragStartedInvoked, state_);
+    state_ = State::kDragCancelledInvoked;
+  }
+
+  void OnToplevelWindowDragEvent(ui::LocatedEvent* event) override {
+    ASSERT_TRUE(event);
+    EXPECT_TRUE(current_location_.has_value());
+    current_location_.emplace(event->root_location_f());
+    events_forwarded_++;
+  }
+
+ private:
+  State state_ = State::kNotInvoked;
+  int events_forwarded_ = 0;
+  base::Optional<gfx::PointF> current_location_;
+  ui::mojom::DragEventSource source_;
+};
+
 }  // namespace
+
+class MockShellDelegate : public TestShellDelegate {
+ public:
+  MockShellDelegate() = default;
+  ~MockShellDelegate() override = default;
+
+  MOCK_METHOD(bool, IsTabDrag, (const ui::OSExchangeData&), (override));
+  MOCK_METHOD(aura::Window*,
+              CreateBrowserForTabDrop,
+              (aura::Window * source_window,
+               const ui::OSExchangeData& drop_data),
+              (override));
+};
 
 class DragDropControllerTest : public AshTestBase {
  public:
@@ -299,7 +385,10 @@ class DragDropControllerTest : public AshTestBase {
   ~DragDropControllerTest() override = default;
 
   void SetUp() override {
-    AshTestBase::SetUp();
+    auto mock_shell_delegate = std::make_unique<NiceMock<MockShellDelegate>>();
+    mock_shell_delegate_ = mock_shell_delegate.get();
+    AshTestBase::SetUp(std::move(mock_shell_delegate));
+
     drag_drop_controller_ = std::make_unique<TestDragDropController>();
     drag_drop_controller_->set_should_block_during_drag_drop(false);
     drag_drop_controller_->set_enabled(true);
@@ -346,6 +435,8 @@ class DragDropControllerTest : public AshTestBase {
     return drag_drop_controller_->drag_drop_tracker_.get();
   }
 
+  MockShellDelegate* mock_shell_delegate() { return mock_shell_delegate_; }
+
   void CompleteCancelAnimation() {
     CompletableLinearAnimation* animation =
         static_cast<CompletableLinearAnimation*>(
@@ -366,6 +457,7 @@ class DragDropControllerTest : public AshTestBase {
   }
 
   std::unique_ptr<TestDragDropController> drag_drop_controller_;
+  NiceMock<MockShellDelegate>* mock_shell_delegate_ = nullptr;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DragDropControllerTest);
@@ -1265,6 +1357,117 @@ TEST_F(DragDropControllerTest, EventTarget) {
   EXPECT_EQ(EventTargetTestDelegate::State::kPerformDropInvoked,
             delegate.state());
   base::RunLoop().RunUntilIdle();
+}
+
+// Verifies that a tab drag changes the drag operation to a move.
+TEST_F(DragDropControllerTest, DragTabChangesDragOperationToMove) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kWebUITabStripTabDragIntegration);
+
+  EXPECT_CALL(*mock_shell_delegate(), IsTabDrag(_))
+      .Times(1)
+      .WillOnce(Return(true));
+  std::unique_ptr<aura::Window> new_window = CreateToplevelTestWindow();
+  EXPECT_CALL(*mock_shell_delegate(), CreateBrowserForTabDrop(_, _))
+      .Times(1)
+      .WillOnce(Return(new_window.get()));
+
+  std::unique_ptr<views::Widget> widget = CreateFramelessWidget();
+  aura::Window* window = widget->GetNativeWindow();
+
+  // Posted task will be run when the inner loop runs in StartDragAndDrop.
+  ui::test::EventGenerator generator(window->GetRootWindow(), window);
+  generator.PressLeftButton();
+  // For drag enter.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&ui::test::EventGenerator::MoveMouseBy,
+                                base::Unretained(&generator), 0, 1));
+  // For perform drop.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&ui::test::EventGenerator::ReleaseLeftButton,
+                                base::Unretained(&generator)));
+
+  drag_drop_controller_->set_should_block_during_drag_drop(true);
+  int operation = drag_drop_controller_->StartDragAndDrop(
+      std::make_unique<ui::OSExchangeData>(), window->GetRootWindow(), window,
+      gfx::Point(5, 5), ui::DragDropTypes::DRAG_NONE,
+      ui::mojom::DragEventSource::kMouse);
+
+  EXPECT_EQ(operation, ui::DragDropTypes::DRAG_MOVE);
+}
+
+TEST_F(DragDropControllerTest, ToplevelWindowDragDelegate) {
+  std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithDelegate(
+      aura::test::TestWindowDelegate::CreateSelfDestroyingDelegate(), -1,
+      gfx::Rect(0, 0, 100, 100)));
+
+  // Emulate a full drag and drop flow and verify that toplevel window drag
+  // delegate gets notified about the events as expected.
+  {
+    TestToplevelWindowDragDelegate delegate;
+    drag_drop_controller_->set_toplevel_window_drag_delegate(&delegate);
+
+    ui::test::EventGenerator generator(window->GetRootWindow(), window.get());
+    generator.PressLeftButton();
+
+    auto data(std::make_unique<ui::OSExchangeData>());
+    drag_drop_controller_->StartDragAndDrop(
+        std::move(data), window->GetRootWindow(), window.get(),
+        gfx::Point(5, 5), ui::DragDropTypes::DRAG_MOVE,
+        ui::mojom::DragEventSource::kMouse);
+
+    EXPECT_EQ(TestToplevelWindowDragDelegate::State::kDragStartedInvoked,
+              delegate.state());
+    EXPECT_EQ(ui::mojom::DragEventSource::kMouse, delegate.source());
+    EXPECT_TRUE(delegate.current_location().has_value());
+    EXPECT_EQ(gfx::PointF(5, 5), *delegate.current_location());
+    EXPECT_EQ(0, delegate.events_forwarded());
+
+    generator.MoveMouseBy(1, 1);
+    generator.MoveMouseBy(1, 1);
+    generator.MoveMouseBy(1, 1);
+    generator.MoveMouseBy(1, 1);
+    generator.ReleaseLeftButton();
+
+    EXPECT_EQ(TestToplevelWindowDragDelegate::State::kDragDroppedInvoked,
+              delegate.state());
+    EXPECT_TRUE(delegate.current_location().has_value());
+    EXPECT_EQ(gfx::PointF(54, 54), *delegate.current_location());
+    EXPECT_EQ(5, delegate.events_forwarded());
+  }
+
+  // Emulate a drag session cancellation and verify the toplevel window drag
+  // delegate gets notified about the events as expected.
+  {
+    TestToplevelWindowDragDelegate delegate;
+    drag_drop_controller_->set_toplevel_window_drag_delegate(&delegate);
+
+    ui::test::EventGenerator generator(window->GetRootWindow(), window.get());
+    generator.PressLeftButton();
+
+    auto data(std::make_unique<ui::OSExchangeData>());
+    drag_drop_controller_->StartDragAndDrop(
+        std::move(data), window->GetRootWindow(), window.get(),
+        gfx::Point(5, 5), ui::DragDropTypes::DRAG_MOVE,
+        ui::mojom::DragEventSource::kMouse);
+
+    EXPECT_EQ(TestToplevelWindowDragDelegate::State::kDragStartedInvoked,
+              delegate.state());
+    EXPECT_EQ(ui::mojom::DragEventSource::kMouse, delegate.source());
+    EXPECT_TRUE(delegate.current_location().has_value());
+    EXPECT_EQ(gfx::PointF(5, 5), *delegate.current_location());
+    EXPECT_EQ(0, delegate.events_forwarded());
+
+    generator.MoveMouseBy(1, 1);
+    generator.MoveMouseBy(1, 1);
+    generator.PressKey(ui::VKEY_ESCAPE, 0);
+
+    EXPECT_EQ(TestToplevelWindowDragDelegate::State::kDragCancelledInvoked,
+              delegate.state());
+    EXPECT_TRUE(delegate.current_location().has_value());
+    EXPECT_EQ(gfx::PointF(52, 52), *delegate.current_location());
+    EXPECT_EQ(2, delegate.events_forwarded());
+  }
 }
 
 }  // namespace ash

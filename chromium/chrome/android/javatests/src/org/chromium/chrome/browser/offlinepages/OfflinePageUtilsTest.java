@@ -24,8 +24,8 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.blink.mojom.MhtmlLoadResult;
@@ -40,7 +40,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.offlinepages.SavePageResult;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.ConnectionType;
 import org.chromium.net.NetworkChangeNotifier;
@@ -211,7 +210,6 @@ public class OfflinePageUtilsTest {
 
     @Test
     @SmallTest
-    @DisabledTest(message = "crbug.com/786237")
     public void testShowOfflineSnackbarIfNecessary() throws Exception {
         // Arrange - build a mock controller for sensing.
         OfflinePageUtils.setSnackbarDurationForTesting(1000);

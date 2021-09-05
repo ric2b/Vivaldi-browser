@@ -18,12 +18,6 @@ if (use_cups && is_chromeos) {
   import("//printing/backend/tools/code_generator.gni")
 }
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 if ((enable_basic_printing && is_win) || enable_print_preview) {
   # Windows basic printing or print preview requires pdf enabled.
   assert(enable_pdf,
@@ -34,7 +28,7 @@ if ((enable_basic_printing && is_win) || enable_print_preview) {
 # Enable the CUPS IPP printing backend.
 # TODO(crbug.com/226176): Remove this after CUPS PPD API calls are removed.
 declare_args() {
-  use_cups_ipp = use_cups && !is_desktop_linux
+  use_cups_ipp = use_cups && !is_linux
 }
 
 # Several targets want to include this header file. We separate it out
@@ -106,6 +100,7 @@ component("printing") {
     "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//build:chromeos_buildflags",
     "//cc/paint",
     "//printing/common",
     "//printing/mojom",
@@ -141,7 +136,7 @@ component("printing") {
     ]
   }
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     sources += [
       "printed_document_linux.cc",
       "printing_context_linux.cc",
@@ -302,6 +297,7 @@ static_library("test_support") {
   ]
   deps = [
     "//base",
+    "//build:chromeos_buildflags",
     "//skia",
     "//ui/gfx",
   ]
@@ -342,6 +338,7 @@ test("printing_unittests") {
   deps = [
     ":printing",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//mojo/core/test:run_all_unittests",
     "//mojo/public/cpp/test_support:test_utils",
     "//printing/backend/mojom",

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -44,11 +44,11 @@ net::CookieList GetCookies(
 void SetCookie(
     const mojo::Remote<network::mojom::CookieManager>& cookie_manager) {
   base::Time t = base::Time::Now();
-  net::CanonicalCookie cookie(kCookieName, kCookieValue, "www.test.com", "/", t,
-                              t + base::TimeDelta::FromDays(1), base::Time(),
-                              true /* secure */, false /* http-only*/,
-                              net::CookieSameSite::NO_RESTRICTION,
-                              net::COOKIE_PRIORITY_DEFAULT);
+  net::CanonicalCookie cookie(
+      kCookieName, kCookieValue, "www.test.com", "/", t,
+      t + base::TimeDelta::FromDays(1), base::Time(), true /* secure */,
+      false /* http-only*/, net::CookieSameSite::NO_RESTRICTION,
+      net::COOKIE_PRIORITY_DEFAULT, false /* same_party */);
   base::RunLoop run_loop;
   cookie_manager->SetCanonicalCookie(
       cookie, net::cookie_util::SimulatedCookieSource(cookie, "https"),

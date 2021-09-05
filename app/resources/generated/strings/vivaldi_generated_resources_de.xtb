@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Nur Auswahl</translation>
 <translation id="1244303850296295656">Erweiterungsfehler</translation>
 <translation id="125220115284141797">Standardeinstellung</translation>
-<translation id="1274977772557788323">Speichereinstellungen für Adobe Flash Player</translation>
 <translation id="1297175357211070620">Ziel</translation>
 <translation id="1303101771013849280">Lesezeichen-HTML-Datei</translation>
 <translation id="1380436189840894976">Privaten Modus trotzdem beenden?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Als unformatierten Text einfügen</translation>
 <translation id="2249605167705922988">z. B. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identifikatoren für geschützten Inhalt zulassen (eventuell Neustart des Computers erforderlich)</translation>
-<translation id="2263497240924215535">(Deaktiviert)</translation>
 <translation id="2277255602909579701">Alle Cookies und Websitedaten</translation>
 <translation id="2280486287150724112">Rechter Rand</translation>
 <translation id="2282146716419988068">GPU-Verarbeitung</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Wieder aktivieren</translation>
 <translation id="2721037002783622288">Mit <ph name="SEARCH_ENGINE" /> nach Bild &amp;suchen</translation>
+<translation id="2783321960289401138">Verknüpfung erstellen...</translation>
 <translation id="2785873697295365461">Dateideskriptoren</translation>
 <translation id="2809586584051668049">und <ph name="NUMBER_ADDITIONAL_DISABLED" /> weitere</translation>
 <translation id="2812989263793994277">Keine Bilder anzeigen</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">MIDI-Geräte</translation>
 <translation id="3021678814754966447">Frame-Quelltext &amp;anzeigen</translation>
 <translation id="3036546437875325427">Flash aktivieren</translation>
-<translation id="3038675903128704560">Verwendung von Plug-ins für den Zugriff auf Ihren Computer für keine Website zulassen</translation>
 <translation id="3046910703532196514">Webseite, vollständig</translation>
 <translation id="3067198360141518313">Dieses Plug-in ausführen</translation>
 <translation id="3080207940057008665">Ein anderes Programm auf Ihrem Computer hat ein Design hinzugefügt, das sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
@@ -139,7 +137,7 @@
 <translation id="3222066309010235055">Vorrendern: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Wählen Sie das Stammverzeichnis der Erweiterung, die gepackt werden soll. Zur Aktualisierung einer Erweiterung wählen Sie eine private Schlüsseldatei zur Wiederverwendung.</translation>
-<translation id="3266179261140759675">Verhindern, dass geschlossene Websites Daten senden und empfangen</translation>
+<translation id="3266179261140759675">Verhindern, dass geschlossene Websites Daten senden und empfangen können</translation>
 <translation id="3280237271814976245">Speichern &amp;unter...</translation>
 <translation id="3285322247471302225">Neuer &amp;Tab</translation>
 <translation id="3288047731229977326">Erweiterungen im Entwicklermodus können auf Ihrem Computer Schaden anrichten. Wenn Sie kein Entwickler sind, sollten Sie diese Erweiterungen im Entwicklermodus deaktivieren, um sicher zu sein.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Diese Erweiterung ist möglicherweise beschädigt.</translation>
 <translation id="3387614642886316601">Vorschläge von Google</translation>
 <translation id="3432227430032737297">Alle angezeigten Cookies entfernen</translation>
-<translation id="3440761377721825626">Nachfragen, wenn eine Website ein Plug-in für den Zugriff auf Ihren Computer verwenden möchte</translation>
 <translation id="345693547134384690">Bil&amp;d in neuem Tab öffnen</translation>
 <translation id="3494769164076977169">Nachfragen, wenn eine Website versucht, Dateien nach der ersten Datei automatisch herunterzuladen (empfohlen)</translation>
 <translation id="3505030558724226696">Gerätezugriff aufheben</translation>
 <translation id="3511307672085573050">Adr&amp;esse des Links kopieren</translation>
-<translation id="3523642406908660543">Nachfragen, wenn eine Website ein Plug-in für den Zugriff auf Ihren Computer verwenden möchte (empfohlen)</translation>
 <translation id="354068948465830244">Kann Websitedaten lesen und ändern</translation>
 <translation id="3560034655160545939">&amp;Rechtschreibprüfung</translation>
 <translation id="3574917942258583917">Privaten Modus trotzdem beenden?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; möchte den Drucker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; für eine Gruppe freigeben, deren Inhaber Sie sind: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Falls Sie zustimmen, können alle Gruppenmitglieder diesen Drucker nutzen.</translation>
 <translation id="3587482841069643663">Alle</translation>
 <translation id="3627588569887975815">Link in &amp;privatem Fenster öffnen</translation>
+<translation id="3627879631695760395"><ph name="APP" /> installieren...</translation>
 <translation id="3668823961463113931">Handler</translation>
 <translation id="3678156199662914018">Erweiterung: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Anfrage zur Bildschirmfreigabe durch <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Einstellungen wiederherstellen</translation>
 <translation id="4434045419905280838">Pop-ups und Weiterleitungen</translation>
 <translation id="4478664379124702289">Lin&amp;k speichern unter...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535"><ph name="HOST_NAME" /> kann nicht gestreamt werden.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> öffnen</translation>
 <translation id="4595560905247879544">Apps und Erweiterungen können nur vom Administrator, <ph name="CUSTODIAN_NAME" />, geändert werden.</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Unbekannt</translation>
 <translation id="5860491529813859533">Aktivieren</translation>
 <translation id="5867841422488265304">Suche oder URL eingeben</translation>
-<translation id="5908769186679515905">Ausführen von Flash auf Websites blockieren</translation>
 <translation id="5910363049092958439">Bi&amp;ld speichern unter...</translation>
 <translation id="5956585768868398362">Ist dies Ihre erwartete Seite für die Suche?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (Spitzenwert <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Steuerelemente anzeigen</translation>
-<translation id="7311079019872751559">Plug-in-Zugriff ohne Sandbox</translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7412226954991670867">GPU-Speicher</translation>
 <translation id="7421925624202799674">Seitenquelltext &amp;anzeigen</translation>
@@ -476,6 +470,7 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="9027459031423301635">Link in neuem Tab öffnen</translation>
 <translation id="9056810968620647706">Keine Übereinstimmungen gefunden.</translation>
 <translation id="9137916601698928395">Link als <ph name="USER" /> öffnen</translation>
+<translation id="91568222606626347">Verknüpfung erstellen...</translation>
 <translation id="916607977885256133">Bild-in-Bild</translation>
 <translation id="9170848237812810038">&amp;Rückgängig</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" hinzugefügt</translation>

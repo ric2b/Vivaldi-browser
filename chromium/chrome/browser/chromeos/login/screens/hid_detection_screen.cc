@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -99,12 +99,6 @@ HIDDetectionScreen::~HIDDetectionScreen() {
 }
 
 // static
-HIDDetectionScreen* HIDDetectionScreen::Get(ScreenManager* manager) {
-  return static_cast<HIDDetectionScreen*>(
-      manager->GetScreen(HIDDetectionView::kScreenId));
-}
-
-// static
 void HIDDetectionScreen::OverrideInputDeviceManagerBinderForTesting(
     InputDeviceManagerBinder binder) {
   GetInputDeviceManagerBinderOverride() = std::move(binder);
@@ -173,6 +167,9 @@ void HIDDetectionScreen::ShowImpl() {
   if (!is_hidden())
     return;
 
+  if (adapter_)
+    adapter_->AddObserver(this);
+
   if (view_)
     view_->SetPinDialogVisible(false);
   SendPointingDeviceNotification();
@@ -196,6 +193,9 @@ void HIDDetectionScreen::HideImpl() {
 
   if (discovery_session_.get())
     discovery_session_->Stop();
+
+  if (adapter_)
+    adapter_->RemoveObserver(this);
 
   if (view_)
     view_->Hide();
@@ -484,8 +484,6 @@ void HIDDetectionScreen::InitializeAdapter(
     scoped_refptr<device::BluetoothAdapter> adapter) {
   adapter_ = adapter;
   CHECK(adapter_.get());
-
-  adapter_->AddObserver(this);
 }
 
 void HIDDetectionScreen::StartBTDiscoverySession() {
@@ -532,6 +530,8 @@ void HIDDetectionScreen::TryInitiateBTDevicesUpdate() {
                      weak_ptr_factory_.GetWeakPtr()),
           base::Bind(&HIDDetectionScreen::SetPoweredError,
                      weak_ptr_factory_.GetWeakPtr()));
+    } else if (!discovery_session_ || !discovery_session_->IsActive()) {
+      StartBTDiscoverySession();
     } else {
       UpdateBTDevices();
     }

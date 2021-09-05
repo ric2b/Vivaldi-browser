@@ -36,9 +36,12 @@
 
 namespace blink {
 
-enum AddRuleFlags {
+using AddRuleFlags = unsigned;
+
+enum AddRuleFlag {
   kRuleHasNoSpecialState = 0,
-  kRuleHasDocumentSecurityOrigin = 1,
+  kRuleHasDocumentSecurityOrigin = 1 << 0,
+  kRuleIsVisitedDependent = 1 << 1,
 };
 
 // Some CSS properties do not apply to certain pseudo-elements, and need to be
@@ -55,6 +58,10 @@ enum class ValidPropertyFilter : unsigned {
   // Defined in a ::marker pseudo-element scope. Only properties listed in
   // https://drafts.csswg.org/css-pseudo-4/#marker-pseudo are valid.
   kMarker,
+  // Defined in a highlight pseudo-element scope like ::selection and
+  // ::target-text. Only properties listed in
+  // https://drafts.csswg.org/css-pseudo-4/#highlight-styling are valid.
+  kHighlight,
 };
 
 class CSSSelector;
@@ -146,10 +153,10 @@ class CORE_EXPORT RuleData : public GarbageCollected<RuleData> {
   unsigned contains_uncommon_attribute_selector_ : 1;
   // 32 bits above
   unsigned specificity_ : 24;
-  unsigned link_match_type_ : 2;  //  CSSSelector::LinkMatchMask
+  unsigned link_match_type_ : 2;
   unsigned has_document_security_origin_ : 1;
-  unsigned valid_property_filter_ : 2;
-  // 29 bits above
+  unsigned valid_property_filter_ : 3;
+  // 30 bits above
   // Use plain array instead of a Vector to minimize memory overhead.
   unsigned descendant_selector_identifier_hashes_[kMaximumIdentifierCount];
 };
@@ -240,6 +247,10 @@ class CORE_EXPORT RuleSet final : public GarbageCollected<RuleSet> {
     DCHECK(!pending_rules_);
     return &part_pseudo_rules_;
   }
+  const HeapVector<Member<const RuleData>>* VisitedDependentRules() const {
+    DCHECK(!pending_rules_);
+    return &visited_dependent_rules_;
+  }
   const HeapVector<Member<StyleRulePage>>& PageRules() const {
     DCHECK(!pending_rules_);
     return page_rules_;
@@ -250,6 +261,7 @@ class CORE_EXPORT RuleSet final : public GarbageCollected<RuleSet> {
   const HeapVector<Member<StyleRuleKeyframes>>& KeyframesRules() const {
     return keyframes_rules_;
   }
+  StyleRuleKeyframes* KeyframeStylesForAnimation(const AtomicString& name);
   const HeapVector<Member<StyleRuleProperty>>& PropertyRules() const {
     return property_rules_;
   }
@@ -319,6 +331,8 @@ class CORE_EXPORT RuleSet final : public GarbageCollected<RuleSet> {
                      AddRuleFlags);
   bool FindBestRuleSetAndAdd(const CSSSelector&, RuleData*);
 
+  void SortKeyframesRulesIfNeeded();
+
   void CompactRules();
   static void CompactPendingRules(PendingRuleMap&, CompactRuleMap&);
 
@@ -351,6 +365,7 @@ class CORE_EXPORT RuleSet final : public GarbageCollected<RuleSet> {
   HeapVector<Member<const RuleData>> universal_rules_;
   HeapVector<Member<const RuleData>> shadow_host_rules_;
   HeapVector<Member<const RuleData>> part_pseudo_rules_;
+  HeapVector<Member<const RuleData>> visited_dependent_rules_;
   RuleFeatureSet features_;
   HeapVector<Member<StyleRulePage>> page_rules_;
   HeapVector<Member<StyleRuleFontFace>> font_face_rules_;
@@ -361,6 +376,8 @@ class CORE_EXPORT RuleSet final : public GarbageCollected<RuleSet> {
   HeapVector<MinimalRuleData> content_pseudo_element_rules_;
   HeapVector<MinimalRuleData> slotted_pseudo_element_rules_;
   Vector<MediaQuerySetResult> media_query_set_results_;
+
+  bool keyframes_rules_sorted_ = true;
 
   unsigned rule_count_;
   Member<PendingRuleMaps> pending_rules_;

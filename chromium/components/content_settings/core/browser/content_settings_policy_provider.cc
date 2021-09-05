@@ -61,12 +61,6 @@ const PrefsForManagedContentSettingsMapEntry
          ContentSettingsType::NOTIFICATIONS, CONTENT_SETTING_ALLOW},
         {prefs::kManagedNotificationsBlockedForUrls,
          ContentSettingsType::NOTIFICATIONS, CONTENT_SETTING_BLOCK},
-        {prefs::kManagedPluginsAllowedForUrls, ContentSettingsType::PLUGINS,
-         CONTENT_SETTING_ALLOW,
-         content_settings::WildcardsInPrimaryPattern::NOT_ALLOWED},
-        {prefs::kManagedPluginsBlockedForUrls, ContentSettingsType::PLUGINS,
-         CONTENT_SETTING_BLOCK,
-         content_settings::WildcardsInPrimaryPattern::NOT_ALLOWED},
         {prefs::kManagedPopupsAllowedForUrls, ContentSettingsType::POPUPS,
          CONTENT_SETTING_ALLOW},
         {prefs::kManagedPopupsBlockedForUrls, ContentSettingsType::POPUPS,
@@ -147,7 +141,6 @@ const PolicyProvider::PrefsForManagedDefaultMapEntry
          prefs::kManagedDefaultInsecureContentSetting},
         {ContentSettingsType::NOTIFICATIONS,
          prefs::kManagedDefaultNotificationsSetting},
-        {ContentSettingsType::PLUGINS, prefs::kManagedDefaultPluginsSetting},
         {ContentSettingsType::POPUPS, prefs::kManagedDefaultPopupsSetting},
         {ContentSettingsType::BLUETOOTH_GUARD,
          prefs::kManagedDefaultWebBluetoothGuardSetting},
@@ -181,8 +174,6 @@ void PolicyProvider::RegisterProfilePrefs(
   registry->RegisterListPref(prefs::kManagedJavaScriptBlockedForUrls);
   registry->RegisterListPref(prefs::kManagedNotificationsAllowedForUrls);
   registry->RegisterListPref(prefs::kManagedNotificationsBlockedForUrls);
-  registry->RegisterListPref(prefs::kManagedPluginsAllowedForUrls);
-  registry->RegisterListPref(prefs::kManagedPluginsBlockedForUrls);
   registry->RegisterListPref(prefs::kManagedPopupsAllowedForUrls);
   registry->RegisterListPref(prefs::kManagedPopupsBlockedForUrls);
   registry->RegisterListPref(prefs::kManagedWebUsbAllowDevicesForUrls);
@@ -218,8 +209,6 @@ void PolicyProvider::RegisterProfilePrefs(
   registry->RegisterIntegerPref(prefs::kManagedDefaultNotificationsSetting,
                                 CONTENT_SETTING_DEFAULT);
   registry->RegisterIntegerPref(prefs::kManagedDefaultMediaStreamSetting,
-                                CONTENT_SETTING_DEFAULT);
-  registry->RegisterIntegerPref(prefs::kManagedDefaultPluginsSetting,
                                 CONTENT_SETTING_DEFAULT);
   registry->RegisterIntegerPref(prefs::kManagedDefaultPopupsSetting,
                                 CONTENT_SETTING_DEFAULT);
@@ -269,8 +258,6 @@ PolicyProvider::PolicyProvider(PrefService* prefs) : prefs_(prefs) {
       prefs::kManagedNotificationsAllowedForUrls, callback);
   pref_change_registrar_.Add(
       prefs::kManagedNotificationsBlockedForUrls, callback);
-  pref_change_registrar_.Add(prefs::kManagedPluginsAllowedForUrls, callback);
-  pref_change_registrar_.Add(prefs::kManagedPluginsBlockedForUrls, callback);
   pref_change_registrar_.Add(prefs::kManagedPopupsAllowedForUrls, callback);
   pref_change_registrar_.Add(prefs::kManagedPopupsBlockedForUrls, callback);
   pref_change_registrar_.Add(prefs::kManagedWebUsbAskForUrls, callback);
@@ -310,7 +297,6 @@ PolicyProvider::PolicyProvider(PrefService* prefs) : prefs_(prefs) {
       prefs::kManagedDefaultNotificationsSetting, callback);
   pref_change_registrar_.Add(
       prefs::kManagedDefaultMediaStreamSetting, callback);
-  pref_change_registrar_.Add(prefs::kManagedDefaultPluginsSetting, callback);
   pref_change_registrar_.Add(prefs::kManagedDefaultPopupsSetting, callback);
   pref_change_registrar_.Add(prefs::kManagedDefaultWebBluetoothGuardSetting,
                              callback);
@@ -335,14 +321,12 @@ PolicyProvider::~PolicyProvider() {
 
 std::unique_ptr<RuleIterator> PolicyProvider::GetRuleIterator(
     ContentSettingsType content_type,
-    const ResourceIdentifier& resource_identifier,
     bool incognito) const {
-  return value_map_.GetRuleIterator(content_type, resource_identifier, &lock_);
+  return value_map_.GetRuleIterator(content_type, &lock_);
 }
 
 std::unique_ptr<RuleIterator> PolicyProvider::GetDiscardedRuleIterator(
     ContentSettingsType content_type,
-    const ResourceIdentifier& resource_identifier,
     bool incognito) const {
   auto it = discarded_rules_value_map_.find(content_type);
   if (it == discarded_rules_value_map_.end()) {
@@ -425,8 +409,7 @@ void PolicyProvider::GetContentSettingsFromPreferences(
 
       // Don't set a timestamp for policy settings.
       value_map->SetValue(
-          pattern_pair.first, secondary_pattern, content_type,
-          ResourceIdentifier(), base::Time(),
+          pattern_pair.first, secondary_pattern, content_type, base::Time(),
           base::Value(kPrefsForManagedContentSettingsMap[i].setting), {});
     }
   }
@@ -519,7 +502,7 @@ void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences(
 
     value_map->SetValue(pattern, ContentSettingsPattern::Wildcard(),
                         ContentSettingsType::AUTO_SELECT_CERTIFICATE,
-                        std::string(), base::Time(), setting.Clone(), {});
+                        base::Time(), setting.Clone(), {});
   }
 }
 
@@ -547,22 +530,15 @@ void PolicyProvider::UpdateManagedDefaultSetting(
          prefs_->IsManagedPreference(entry.pref_name));
   base::AutoLock auto_lock(lock_);
   int setting = prefs_->GetInteger(entry.pref_name);
-  // TODO(wfh): Remove once HDB is enabled by default.
-  if (entry.pref_name == prefs::kManagedDefaultPluginsSetting) {
-    static constexpr base::Feature kIgnoreDefaultPluginsSetting = {
-        "IgnoreDefaultPluginsSetting", base::FEATURE_DISABLED_BY_DEFAULT};
-    if (base::FeatureList::IsEnabled(kIgnoreDefaultPluginsSetting))
-      setting = CONTENT_SETTING_DEFAULT;
-  }
   if (setting == CONTENT_SETTING_DEFAULT) {
     value_map_.DeleteValue(ContentSettingsPattern::Wildcard(),
                            ContentSettingsPattern::Wildcard(),
-                           entry.content_type, std::string());
+                           entry.content_type);
   } else if (info->IsSettingValid(IntToContentSetting(setting))) {
     // Don't set a timestamp for policy settings.
     value_map_.SetValue(ContentSettingsPattern::Wildcard(),
                         ContentSettingsPattern::Wildcard(), entry.content_type,
-                        std::string(), base::Time(), base::Value(setting), {});
+                        base::Time(), base::Value(setting), {});
   }
 }
 
@@ -581,7 +557,6 @@ bool PolicyProvider::SetWebsiteSetting(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
-    const ResourceIdentifier& resource_identifier,
     std::unique_ptr<base::Value>&& value,
     const ContentSettingConstraints& constraints) {
   return false;
@@ -624,8 +599,6 @@ void PolicyProvider::OnPreferenceChanged(const std::string& name) {
       name == prefs::kManagedJavaScriptBlockedForUrls ||
       name == prefs::kManagedNotificationsAllowedForUrls ||
       name == prefs::kManagedNotificationsBlockedForUrls ||
-      name == prefs::kManagedPluginsAllowedForUrls ||
-      name == prefs::kManagedPluginsBlockedForUrls ||
       name == prefs::kManagedPopupsAllowedForUrls ||
       name == prefs::kManagedPopupsBlockedForUrls ||
       name == prefs::kManagedWebUsbAskForUrls ||
@@ -641,7 +614,7 @@ void PolicyProvider::OnPreferenceChanged(const std::string& name) {
   }
 
   NotifyObservers(ContentSettingsPattern(), ContentSettingsPattern(),
-                  ContentSettingsType::DEFAULT, std::string());
+                  ContentSettingsType::DEFAULT);
 }
 
 }  // namespace content_settings

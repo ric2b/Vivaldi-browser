@@ -11,9 +11,11 @@
 
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/cbor/diagnostic_writer.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/cable/fido_cable_discovery.h"
@@ -22,6 +24,7 @@
 #include "device/fido/fido_discovery_factory.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/get_assertion_task.h"
+#include "device/fido/large_blob.h"
 #include "device/fido/pin.h"
 
 #if defined(OS_MAC)
@@ -33,7 +36,7 @@
 #include "device/fido/win/type_conversions.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 #include "device/fido/cros/authenticator.h"
 #endif
 
@@ -42,6 +45,17 @@ namespace device {
 namespace {
 
 using PINDisposition = FidoAuthenticator::GetAssertionPINDisposition;
+
+const std::vector<pin::Permissions> GetPinTokenPermissionsFor(
+    const FidoAuthenticator& authenticator,
+    const CtapGetAssertionRequest& request) {
+  std::vector<pin::Permissions> permissions = {pin::Permissions::kGetAssertion};
+  if (request.large_blob_write && authenticator.Options() &&
+      authenticator.Options()->supports_large_blobs) {
+    permissions.emplace_back(pin::Permissions::kLargeBlobWrite);
+  }
+  return permissions;
+}
 
 base::Optional<GetAssertionStatus> ConvertDeviceResponseCode(
     CtapDeviceResponseCode device_response_code) {
@@ -99,6 +113,10 @@ bool ValidateResponseExtensions(const CtapGetAssertionRequest& request,
     }
     const std::string& ext_name = it.first.GetString();
 
+    if (ext_name == kExtensionLargeBlobKey && !request.large_blob_key) {
+      return false;
+    }
+
     if (ext_name == kExtensionHmacSecret) {
       // This extension is checked by |GetAssertionTask| because it needs to be
       // decrypted there.
@@ -117,9 +135,7 @@ bool ValidateResponseExtensions(const CtapGetAssertionRequest& request,
 bool ResponseValid(const FidoAuthenticator& authenticator,
                    const CtapGetAssertionRequest& request,
                    const CtapGetAssertionOptions& options,
-                   const AuthenticatorGetAssertionResponse& response,
-                   const base::Optional<AndroidClientDataExtensionInput>&
-                       android_client_data_ext_in) {
+                   const AuthenticatorGetAssertionResponse& response) {
   // The underlying code must take care of filling in the credential from the
   // allow list as needed.
   CHECK(response.credential());
@@ -173,10 +189,10 @@ bool ResponseValid(const FidoAuthenticator& authenticator,
   }
 
   if (response.android_client_data_ext() &&
-      (!android_client_data_ext_in || !authenticator.Options() ||
+      (!request.android_client_data_ext || !authenticator.Options() ||
        !authenticator.Options()->supports_android_client_data_ext ||
        !IsValidAndroidClientDataJSON(
-           *android_client_data_ext_in,
+           *request.android_client_data_ext,
            base::StringPiece(reinterpret_cast<const char*>(
                                  response.android_client_data_ext()->data()),
                              response.android_client_data_ext()->size())))) {
@@ -235,6 +251,31 @@ void ReportGetAssertionResponseTransport(FidoAuthenticator* authenticator) {
   }
 }
 
+CtapGetAssertionRequest SpecializeRequestForAuthenticator(
+    const CtapGetAssertionRequest& request,
+    const FidoAuthenticator& authenticator) {
+  CtapGetAssertionRequest specialized_request(request);
+  if (!authenticator.Options() ||
+      !authenticator.Options()->supports_android_client_data_ext) {
+    // Only send the googleAndroidClientData extension to authenticators that
+    // support it.
+    specialized_request.android_client_data_ext.reset();
+  }
+
+  if (!authenticator.Options() ||
+      !authenticator.Options()->supports_large_blobs) {
+    // Do not attempt large blob operations on devices not supporting it.
+    specialized_request.large_blob_key = false;
+    specialized_request.large_blob_read = false;
+    specialized_request.large_blob_write.reset();
+  }
+  if (authenticator.Options() && authenticator.Options()->always_uv) {
+    specialized_request.user_verification =
+        UserVerificationRequirement::kRequired;
+  }
+  return specialized_request;
+}
+
 }  // namespace
 
 GetAssertionRequestHandler::GetAssertionRequestHandler(
@@ -261,13 +302,6 @@ GetAssertionRequestHandler::GetAssertionRequestHandler(
   if (request_.allow_list.empty()) {
     // Resident credential requests always involve user verification.
     request_.user_verification = UserVerificationRequirement::kRequired;
-  }
-
-  // Only send the googleAndroidClientData extension to authenticators that
-  // support it.
-  if (request_.android_client_data_ext) {
-    android_client_data_ext_ = *request_.android_client_data_ext;
-    request_.android_client_data_ext.reset();
   }
 
   FIDO_LOG(EVENT) << "Starting GetAssertion flow";
@@ -305,7 +339,9 @@ void GetAssertionRequestHandler::DispatchRequest(
     return;
   }
 
-  switch (authenticator->WillNeedPINToGetAssertion(request_, observer())) {
+  CtapGetAssertionRequest request =
+      SpecializeRequestForAuthenticator(request_, *authenticator);
+  switch (authenticator->WillNeedPINToGetAssertion(request, observer())) {
     case PINDisposition::kUsePIN:
       // Skip asking for touch if this is the only available authenticator.
       if (active_authenticators().size() == 1 && allow_skipping_pin_touch_) {
@@ -334,7 +370,6 @@ void GetAssertionRequestHandler::DispatchRequest(
       break;
   }
 
-  CtapGetAssertionRequest request(request_);
   if (request.user_verification != UserVerificationRequirement::kDiscouraged &&
       authenticator->CanGetUvToken()) {
     authenticator->GetUvRetries(
@@ -343,20 +378,16 @@ void GetAssertionRequestHandler::DispatchRequest(
     return;
   }
 
-  if (android_client_data_ext_ && authenticator->Options() &&
-      authenticator->Options()->supports_android_client_data_ext) {
-    request.android_client_data_ext = *android_client_data_ext_;
-  }
-
   ReportGetAssertionRequestTransport(authenticator);
 
   FIDO_LOG(DEBUG) << "Asking for assertion from "
                   << authenticator->GetDisplayName();
+  CtapGetAssertionRequest request_copy(request);
   authenticator->GetAssertion(
-      std::move(request), options_,
+      std::move(request_copy), options_,
       base::BindOnce(&GetAssertionRequestHandler::HandleResponse,
                      weak_factory_.GetWeakPtr(), authenticator,
-                     base::ElapsedTimer()));
+                     std::move(request), base::ElapsedTimer()));
 }
 
 void GetAssertionRequestHandler::AuthenticatorAdded(
@@ -375,7 +406,7 @@ void GetAssertionRequestHandler::AuthenticatorAdded(
   }
 #endif  // defined(OS_MAC)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   // TODO(martinkr): Put this boolean in a ChromeOS equivalent of
   // "has_recognized_mac_touch_id_credential".
   if (authenticator->IsChromeOSAuthenticator()) {
@@ -383,7 +414,7 @@ void GetAssertionRequestHandler::AuthenticatorAdded(
         static_cast<ChromeOSAuthenticator*>(authenticator)
             ->HasCredentialForGetAssertionRequest(request_);
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
   FidoRequestHandlerBase::AuthenticatorAdded(discovery, authenticator);
 }
@@ -409,6 +440,7 @@ void GetAssertionRequestHandler::AuthenticatorRemoved(
 
 void GetAssertionRequestHandler::HandleResponse(
     FidoAuthenticator* authenticator,
+    CtapGetAssertionRequest request,
     base::ElapsedTimer request_timer,
     CtapDeviceResponseCode status,
     base::Optional<AuthenticatorGetAssertionResponse> response) {
@@ -432,8 +464,7 @@ void GetAssertionRequestHandler::HandleResponse(
                base::nullopt, authenticator);
       return;
     }
-    if (!ResponseValid(*authenticator, request_, options_, *response,
-                       android_client_data_ext_)) {
+    if (!ResponseValid(*authenticator, request, options_, *response)) {
       FIDO_LOG(ERROR) << "Failing assertion request due to bad response from "
                       << authenticator->GetDisplayName();
       std::move(completion_callback_)
@@ -453,12 +484,12 @@ void GetAssertionRequestHandler::HandleResponse(
 
   // Requests that require a PIN should follow the |GetTouch| path initially.
   DCHECK(state_ == State::kWaitingForSecondTouch ||
-         authenticator->WillNeedPINToGetAssertion(request_, observer()) !=
+         authenticator->WillNeedPINToGetAssertion(request, observer()) !=
              PINDisposition::kUsePIN);
 
   if ((status == CtapDeviceResponseCode::kCtap2ErrPinRequired ||
        status == CtapDeviceResponseCode::kCtap2ErrOperationDenied) &&
-      authenticator->WillNeedPINToGetAssertion(request_, observer()) ==
+      authenticator->WillNeedPINToGetAssertion(request, observer()) ==
           PINDisposition::kUsePINForFallback) {
     // Authenticators without uvToken support will return this error immediately
     // without user interaction when internal UV is locked.
@@ -501,8 +532,8 @@ void GetAssertionRequestHandler::HandleResponse(
     return;
   }
 
-  if (!response || !ResponseValid(*authenticator, request_, options_, *response,
-                                  android_client_data_ext_)) {
+  if (!response ||
+      !ResponseValid(*authenticator, request, options_, *response)) {
     FIDO_LOG(ERROR) << "Failing assertion request due to bad response from "
                     << authenticator->GetDisplayName();
     std::move(completion_callback_)
@@ -513,7 +544,7 @@ void GetAssertionRequestHandler::HandleResponse(
 
   const size_t num_responses = response->num_credentials().value_or(1);
   if (num_responses == 0 ||
-      (num_responses > 1 && !request_.allow_list.empty())) {
+      (num_responses > 1 && !request.allow_list.empty())) {
     std::move(completion_callback_)
         .Run(GetAssertionStatus::kAuthenticatorResponseInvalid, base::nullopt,
              authenticator);
@@ -526,20 +557,19 @@ void GetAssertionRequestHandler::HandleResponse(
     // Multiple responses. Need to read them all.
     state_ = State::kReadingMultipleResponses;
     remaining_responses_ = num_responses - 1;
-    authenticator->GetNextAssertion(
-        base::BindOnce(&GetAssertionRequestHandler::HandleNextResponse,
-                       weak_factory_.GetWeakPtr(), authenticator));
+    authenticator->GetNextAssertion(base::BindOnce(
+        &GetAssertionRequestHandler::HandleNextResponse,
+        weak_factory_.GetWeakPtr(), authenticator, std::move(request)));
     return;
   }
 
   ReportGetAssertionResponseTransport(authenticator);
-
-  std::move(completion_callback_)
-      .Run(GetAssertionStatus::kSuccess, std::move(responses_), authenticator);
+  OnGetAssertionSuccess(authenticator, std::move(request));
 }
 
 void GetAssertionRequestHandler::HandleNextResponse(
     FidoAuthenticator* authenticator,
+    CtapGetAssertionRequest request,
     CtapDeviceResponseCode status,
     base::Optional<AuthenticatorGetAssertionResponse> response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(my_sequence_checker_);
@@ -557,8 +587,7 @@ void GetAssertionRequestHandler::HandleNextResponse(
     return;
   }
 
-  if (!ResponseValid(*authenticator, request_, options_, *response,
-                     android_client_data_ext_)) {
+  if (!ResponseValid(*authenticator, request, options_, *response)) {
     FIDO_LOG(ERROR) << "Failing assertion request due to bad response from "
                     << authenticator->GetDisplayName();
     std::move(completion_callback_)
@@ -572,16 +601,15 @@ void GetAssertionRequestHandler::HandleNextResponse(
   remaining_responses_--;
   if (remaining_responses_ > 0) {
     state_ = State::kReadingMultipleResponses;
-    authenticator->GetNextAssertion(
-        base::BindOnce(&GetAssertionRequestHandler::HandleNextResponse,
-                       weak_factory_.GetWeakPtr(), authenticator));
+    authenticator->GetNextAssertion(base::BindOnce(
+        &GetAssertionRequestHandler::HandleNextResponse,
+        weak_factory_.GetWeakPtr(), authenticator, std::move(request)));
     return;
   }
 
   ReportGetAssertionResponseTransport(authenticator);
 
-  std::move(completion_callback_)
-      .Run(GetAssertionStatus::kSuccess, std::move(responses_), authenticator);
+  OnGetAssertionSuccess(authenticator, std::move(request));
 }
 
 void GetAssertionRequestHandler::CollectPINThenSendRequest(
@@ -589,9 +617,10 @@ void GetAssertionRequestHandler::CollectPINThenSendRequest(
   if (state_ != State::kWaitingForTouch) {
     return;
   }
-  DCHECK(authenticator->WillNeedPINToGetAssertion(request_, observer()) !=
-         PINDisposition::kNoPIN);
-
+  DCHECK_NE(authenticator->WillNeedPINToGetAssertion(
+                SpecializeRequestForAuthenticator(request_, *authenticator),
+                observer()),
+            PINDisposition::kNoPIN);
   DCHECK(observer());
   state_ = State::kGettingRetries;
   CancelActiveAuthenticators(authenticator->GetId());
@@ -603,8 +632,10 @@ void GetAssertionRequestHandler::CollectPINThenSendRequest(
 
 void GetAssertionRequestHandler::StartPINFallbackForInternalUv(
     FidoAuthenticator* authenticator) {
-  DCHECK(authenticator->WillNeedPINToGetAssertion(request_, observer()) ==
-         PINDisposition::kUsePINForFallback);
+  DCHECK_EQ(authenticator->WillNeedPINToGetAssertion(
+                SpecializeRequestForAuthenticator(request_, *authenticator),
+                observer()),
+            PINDisposition::kUsePINForFallback);
   observer()->OnInternalUserVerificationLocked();
   CollectPINThenSendRequest(authenticator);
 }
@@ -660,7 +691,8 @@ void GetAssertionRequestHandler::OnHavePIN(std::string pin) {
 
   state_ = State::kRequestWithPIN;
   authenticator_->GetPINToken(
-      std::move(pin), {pin::Permissions::kGetAssertion}, request_.rp_id,
+      std::move(pin), GetPinTokenPermissionsFor(*authenticator_, request_),
+      request_.rp_id,
       base::BindOnce(&GetAssertionRequestHandler::OnHavePINToken,
                      weak_factory_.GetWeakPtr()));
 }
@@ -715,7 +747,9 @@ void GetAssertionRequestHandler::OnStartUvTokenOrFallback(
   }
 
   if (retries == 0) {
-    if (authenticator->WillNeedPINToGetAssertion(request_, observer()) ==
+    CtapGetAssertionRequest request =
+        SpecializeRequestForAuthenticator(request_, *authenticator);
+    if (authenticator->WillNeedPINToGetAssertion(request, observer()) ==
         PINDisposition::kUsePINForFallback) {
       authenticator->GetTouch(base::BindOnce(
           &GetAssertionRequestHandler::StartPINFallbackForInternalUv,
@@ -727,9 +761,8 @@ void GetAssertionRequestHandler::OnStartUvTokenOrFallback(
         weak_factory_.GetWeakPtr(), authenticator));
   }
 
-  base::Optional<std::string> rp_id(request_.rp_id);
   authenticator->GetUvToken(
-      std::move(rp_id),
+      GetPinTokenPermissionsFor(*authenticator, request_), request_.rp_id,
       base::BindOnce(&GetAssertionRequestHandler::OnHaveUvToken,
                      weak_factory_.GetWeakPtr(), authenticator));
 }
@@ -748,7 +781,9 @@ void GetAssertionRequestHandler::OnUvRetriesResponse(
   }
   state_ = State::kWaitingForTouch;
   if (response->retries == 0) {
-    if (authenticator_->WillNeedPINToGetAssertion(request_, observer()) ==
+    CtapGetAssertionRequest request =
+        SpecializeRequestForAuthenticator(request_, *authenticator_);
+    if (authenticator_->WillNeedPINToGetAssertion(request, observer()) ==
         PINDisposition::kUsePINForFallback) {
       // Fall back to PIN.
       StartPINFallbackForInternalUv(authenticator_);
@@ -760,7 +795,7 @@ void GetAssertionRequestHandler::OnUvRetriesResponse(
   }
   observer()->OnRetryUserVerification(response->retries);
   authenticator_->GetUvToken(
-      request_.rp_id,
+      GetPinTokenPermissionsFor(*authenticator_, request_), request_.rp_id,
       base::BindOnce(&GetAssertionRequestHandler::OnHaveUvToken,
                      weak_factory_.GetWeakPtr(), authenticator_));
 }
@@ -781,7 +816,9 @@ void GetAssertionRequestHandler::OnHaveUvToken(
       status == CtapDeviceResponseCode::kCtap2ErrOperationDenied ||
       status == CtapDeviceResponseCode::kCtap2ErrUvBlocked) {
     if (status == CtapDeviceResponseCode::kCtap2ErrUvBlocked) {
-      if (authenticator->WillNeedPINToGetAssertion(request_, observer()) ==
+      CtapGetAssertionRequest request =
+          SpecializeRequestForAuthenticator(request_, *authenticator_);
+      if (authenticator->WillNeedPINToGetAssertion(request, observer()) ==
           PINDisposition::kUsePINForFallback) {
         StartPINFallbackForInternalUv(authenticator);
         return;
@@ -814,23 +851,90 @@ void GetAssertionRequestHandler::OnHaveUvToken(
 void GetAssertionRequestHandler::DispatchRequestWithToken(
     pin::TokenResponse token) {
   observer()->FinishCollectToken();
+  pin_token_ = std::move(token);
   state_ = State::kWaitingForSecondTouch;
-  CtapGetAssertionRequest request(request_);
-  request.pin_auth = token.PinAuth(request.client_data_hash);
-  request.pin_protocol = pin::kProtocolVersion;
-
-  if (android_client_data_ext_ && authenticator_->Options() &&
-      authenticator_->Options()->supports_android_client_data_ext) {
-    request.android_client_data_ext = *android_client_data_ext_;
-  }
+  CtapGetAssertionRequest request =
+      SpecializeRequestForAuthenticator(request_, *authenticator_);
+  std::tie(request.pin_protocol, request.pin_auth) =
+      pin_token_->PinAuth(request.client_data_hash);
 
   ReportGetAssertionRequestTransport(authenticator_);
 
+  auto request_copy(request);
   authenticator_->GetAssertion(
-      std::move(request), options_,
+      std::move(request_copy), options_,
       base::BindOnce(&GetAssertionRequestHandler::HandleResponse,
                      weak_factory_.GetWeakPtr(), authenticator_,
-                     base::ElapsedTimer()));
+                     std::move(request), base::ElapsedTimer()));
+}
+
+void GetAssertionRequestHandler::OnGetAssertionSuccess(
+    FidoAuthenticator* authenticator,
+    CtapGetAssertionRequest request) {
+  if (request.large_blob_read || request.large_blob_write) {
+    DCHECK(authenticator->Options()->supports_large_blobs);
+    std::vector<LargeBlobKey> keys;
+    for (const auto& response : responses_) {
+      if (response.large_blob_key()) {
+        keys.emplace_back(*response.large_blob_key());
+      }
+    }
+    if (!keys.empty()) {
+      if (request.large_blob_read) {
+        authenticator->ReadLargeBlob(
+            keys, pin_token_,
+            base::BindOnce(&GetAssertionRequestHandler::OnReadLargeBlobs,
+                           weak_factory_.GetWeakPtr(), authenticator));
+        return;
+      }
+      DCHECK(request.large_blob_write);
+      DCHECK_EQ(1u, keys.size());
+      authenticator->WriteLargeBlob(
+          *request.large_blob_write, keys.at(0), pin_token_,
+          base::BindOnce(&GetAssertionRequestHandler::OnWriteLargeBlob,
+                         weak_factory_.GetWeakPtr(), authenticator));
+      return;
+    }
+  }
+
+  std::move(completion_callback_)
+      .Run(GetAssertionStatus::kSuccess, std::move(responses_), authenticator);
+}
+
+void GetAssertionRequestHandler::OnReadLargeBlobs(
+    FidoAuthenticator* authenticator,
+    CtapDeviceResponseCode status,
+    base::Optional<std::vector<std::pair<LargeBlobKey, std::vector<uint8_t>>>>
+        blobs) {
+  if (status == CtapDeviceResponseCode::kSuccess) {
+    for (auto& response : responses_) {
+      const auto blob =
+          base::ranges::find_if(*blobs, [&response](const auto& pair) {
+            return pair.first == response.large_blob_key();
+          });
+      if (blob != blobs->end()) {
+        response.set_large_blob(std::move(blob->second));
+      }
+    }
+  } else {
+    FIDO_LOG(ERROR) << "Reading large blob failed with code "
+                    << static_cast<int>(status);
+  }
+  std::move(completion_callback_)
+      .Run(GetAssertionStatus::kSuccess, std::move(responses_), authenticator);
+}
+
+void GetAssertionRequestHandler::OnWriteLargeBlob(
+    FidoAuthenticator* authenticator,
+    CtapDeviceResponseCode status) {
+  if (status != CtapDeviceResponseCode::kSuccess) {
+    FIDO_LOG(ERROR) << "Writing large blob failed with code "
+                    << static_cast<int>(status);
+  }
+  responses_.at(0).set_large_blob_written(status ==
+                                          CtapDeviceResponseCode::kSuccess);
+  std::move(completion_callback_)
+      .Run(GetAssertionStatus::kSuccess, std::move(responses_), authenticator);
 }
 
 }  // namespace device

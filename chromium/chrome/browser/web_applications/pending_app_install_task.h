@@ -8,16 +8,16 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 
 class Profile;
 
@@ -41,12 +41,13 @@ class PendingAppInstallTask {
   struct Result {
     Result(InstallResultCode code, base::Optional<AppId> app_id);
     Result(Result&&);
+    Result(const Result&) = delete;
+    Result& operator=(const Result&) = delete;
     ~Result();
 
     const InstallResultCode code;
     const base::Optional<AppId> app_id;
 
-    DISALLOW_COPY_AND_ASSIGN(Result);
   };
 
   using ResultCallback = base::OnceCallback<void(Result)>;
@@ -65,6 +66,9 @@ class PendingAppInstallTask {
                                  InstallFinalizer* install_finalizer,
                                  InstallManager* install_manager,
                                  ExternalInstallOptions install_options);
+
+  PendingAppInstallTask(const PendingAppInstallTask&) = delete;
+  PendingAppInstallTask& operator=(const PendingAppInstallTask&) = delete;
 
   virtual ~PendingAppInstallTask();
 
@@ -98,6 +102,9 @@ class PendingAppInstallTask {
                          InstallResultCode code);
   void TryAppInfoFactoryOnFailure(ResultCallback result_callback,
                                   Result result);
+  void OnOsHooksCreated(const AppId& app_id,
+                        base::ScopedClosureRunner scoped_closure,
+                        const OsHooksResults os_hooks_results);
 
   Profile* const profile_;
   AppRegistrar* const registrar_;
@@ -112,7 +119,6 @@ class PendingAppInstallTask {
 
   base::WeakPtrFactory<PendingAppInstallTask> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(PendingAppInstallTask);
 };
 
 }  // namespace web_app

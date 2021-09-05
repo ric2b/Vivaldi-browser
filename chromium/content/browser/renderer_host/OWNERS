@@ -1,6 +1,3 @@
-# COMPONENT: Internals>Core
-# COMPONENT: Internals>Sandbox>SiteIsolation
-# TEAM: site-isolation-dev@chromium.org
 
 # Compositing and input related code.
 kenrb@chromium.org
@@ -42,7 +39,12 @@ per-file dwrite_*=drott@chromium.org
 # BackForwardCache.
 per-file back_forward_cache*=altimin@chromium.org
 
+# Clipboard
+per-file *clipboard_host_impl*=huangdarwin@chromium.org
+per-file *clipboard_host_impl*=dcheng@chromium.org
+
 # AgentSchedulingGroup (MBI)
 per-file agent_scheduling_group*=talp@chromium.org
+per-file agent_scheduling_group*=dom@chromium.org
 per-file agent_scheduling_group*=kouhei@chromium.org
 per-file agent_scheduling_group*=haraken@chromium.org

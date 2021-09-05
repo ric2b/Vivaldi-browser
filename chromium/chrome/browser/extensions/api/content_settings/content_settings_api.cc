@@ -11,7 +11,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
@@ -33,8 +32,6 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/content_settings/core/common/features.h"
-#include "components/permissions/features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/webplugininfo.h"
@@ -84,6 +81,12 @@ ContentSettingsContentSettingClearFunction::Run() {
   std::unique_ptr<Clear::Params> params(Clear::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (content_type == ContentSettingsType::PLUGINS) {
+    return RespondNow(
+        Error(content_settings_api_constants::
+                  kSettingPluginContentSettingsClearIsDisallowed));
+  }
+
   ExtensionPrefsScope scope = kExtensionPrefsScopeRegular;
   bool incognito = false;
   if (params->details.scope ==
@@ -118,6 +121,11 @@ ContentSettingsContentSettingGetFunction::Run() {
   std::unique_ptr<Get::Params> params(Get::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  if (content_type == ContentSettingsType::PLUGINS) {
+    return RespondNow(Error(content_settings_api_constants::
+                                kSettingPluginContentSettingsGetIsDisallowed));
+  }
+
   GURL primary_url(params->details.primary_url);
   if (!primary_url.is_valid()) {
     return RespondNow(Error(content_settings_api_constants::kInvalidUrlError,
@@ -132,10 +140,6 @@ ContentSettingsContentSettingGetFunction::Run() {
                               *params->details.secondary_url));
     }
   }
-
-  std::string resource_identifier;
-  if (params->details.resource_identifier.get())
-    resource_identifier = params->details.resource_identifier->id;
 
   bool incognito = false;
   if (params->details.incognito.get())
@@ -168,8 +172,7 @@ ContentSettingsContentSettingGetFunction::Run() {
     cookie_settings->GetCookieSetting(primary_url, secondary_url, nullptr,
                                       &setting);
   } else {
-    setting = map->GetContentSetting(primary_url, secondary_url, content_type,
-                                     resource_identifier);
+    setting = map->GetContentSetting(primary_url, secondary_url, content_type);
   }
 
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
@@ -179,7 +182,8 @@ ContentSettingsContentSettingGetFunction::Run() {
   result->SetString(content_settings_api_constants::kContentSettingKey,
                     setting_string);
 
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 ExtensionFunction::ResponseAction
@@ -205,10 +209,6 @@ ContentSettingsContentSettingSetFunction::Run() {
     if (!secondary_pattern.IsValid())
       return RespondNow(Error(secondary_error));
   }
-
-  std::string resource_identifier;
-  if (params->details.resource_identifier.get())
-    resource_identifier = params->details.resource_identifier->id;
 
   std::string setting_str;
   EXTENSION_FUNCTION_VALIDATE(
@@ -305,25 +305,15 @@ ContentSettingsContentSettingSetFunction::Run() {
   }
 
   if (content_type == ContentSettingsType::PLUGINS) {
-    if (base::FeatureList::IsEnabled(
-            content_settings::kDisallowExtensionsToSetPluginContentSettings)) {
       return RespondNow(Error(content_settings_api_constants::
                                   kSettingPluginContentSettingsIsDisallowed));
-    }
-    if (base::FeatureList::IsEnabled(
-            content_settings::kDisallowWildcardsInPluginContentSettings) &&
-        primary_pattern.HasHostWildcards()) {
-      WriteToConsole(blink::mojom::ConsoleMessageLevel::kError,
-                     content_settings_api_constants::
-                         kWildcardPatternsForPluginsDisallowed);
-    }
   }
 
   scoped_refptr<ContentSettingsStore> store =
       ContentSettingsService::Get(browser_context())->content_settings_store();
   store->SetExtensionContentSetting(extension_id(), primary_pattern,
-                                    secondary_pattern, content_type,
-                                    resource_identifier, setting, scope);
+                                    secondary_pattern, content_type, setting,
+                                    scope);
 
   return RespondNow(NoArguments());
 }
@@ -338,38 +328,12 @@ ContentSettingsContentSettingGetResourceIdentifiersFunction::Run() {
   }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-  content::PluginService::GetInstance()->GetPlugins(base::BindOnce(
-      &ContentSettingsContentSettingGetResourceIdentifiersFunction::
-          OnGotPlugins,
-      this));
+  return RespondNow(
+      Error(content_settings_api_constants::
+                kSettingPluginContentSettingsResourceIdentifierIsDisallowed));
 #endif
 
   return RespondLater();
 }
-
-#if BUILDFLAG(ENABLE_PLUGINS)
-void ContentSettingsContentSettingGetResourceIdentifiersFunction::OnGotPlugins(
-    const std::vector<content::WebPluginInfo>& plugins) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  PluginFinder* finder = PluginFinder::GetInstance();
-  std::set<std::string> group_identifiers;
-  std::unique_ptr<base::ListValue> list(new base::ListValue());
-  for (auto it = plugins.cbegin(); it != plugins.cend(); ++it) {
-    std::unique_ptr<PluginMetadata> plugin_metadata(
-        finder->GetPluginMetadata(*it));
-    const std::string& group_identifier = plugin_metadata->identifier();
-    if (group_identifiers.find(group_identifier) != group_identifiers.end())
-      continue;
-
-    group_identifiers.insert(group_identifier);
-    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-    dict->SetString(content_settings_api_constants::kIdKey, group_identifier);
-    dict->SetString(content_settings_api_constants::kDescriptionKey,
-                    plugin_metadata->name());
-    list->Append(std::move(dict));
-  }
-  Respond(OneArgument(std::move(list)));
-}
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 }  // namespace extensions

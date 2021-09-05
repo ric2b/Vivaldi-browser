@@ -10,7 +10,6 @@ import androidx.annotation.IntDef;
 import androidx.annotation.StringRes;
 
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
-import org.chromium.chrome.browser.omnibox.suggestions.SuggestionViewDelegate;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
@@ -74,15 +73,23 @@ public class BaseSuggestionViewProperties {
     public static final WritableObjectPropertyKey<List<Action>> ACTIONS =
             new WritableObjectPropertyKey();
 
-    /** Delegate receiving user events. */
-    public static final WritableObjectPropertyKey<SuggestionViewDelegate> SUGGESTION_DELEGATE =
+    /** Callback invoked when the Suggestion view is highlighted. */
+    public static final WritableObjectPropertyKey<Runnable> ON_FOCUS_VIA_SELECTION =
             new WritableObjectPropertyKey<>();
 
     /** Specifies how densely suggestions should be packed. */
     public static final WritableIntPropertyKey DENSITY = new WritableIntPropertyKey();
 
-    public static final PropertyKey[] ALL_UNIQUE_KEYS =
-            new PropertyKey[] {ACTIONS, ICON, DENSITY, SUGGESTION_DELEGATE};
+    /** Callback invoked when user clicks the suggestion. */
+    public static final WritableObjectPropertyKey<Runnable> ON_CLICK =
+            new WritableObjectPropertyKey<>();
+
+    /** Callback invoked when user long-clicks the suggestion. */
+    public static final WritableObjectPropertyKey<Runnable> ON_LONG_CLICK =
+            new WritableObjectPropertyKey<>();
+
+    public static final PropertyKey[] ALL_UNIQUE_KEYS = new PropertyKey[] {
+            ACTIONS, ICON, DENSITY, ON_CLICK, ON_LONG_CLICK, ON_FOCUS_VIA_SELECTION};
 
     public static final PropertyKey[] ALL_KEYS =
             PropertyModel.concatKeys(ALL_UNIQUE_KEYS, SuggestionCommonProperties.ALL_KEYS);

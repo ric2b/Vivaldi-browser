@@ -27,6 +27,7 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/client_view.h"
 #include "ui/views/window/dialog_delegate.h"
@@ -174,7 +175,7 @@ void MessageBoxView::SetLink(const base::string16& text,
   DCHECK(!callback.is_null());
   DCHECK(link_);
 
-  link_->set_callback(std::move(callback));
+  link_->SetCallback(std::move(callback));
   if (link_->GetVisible() && link_->GetText() == text)
     return;
   link_->SetText(text);

@@ -168,19 +168,37 @@ unsigned NGInlineItem::SetBidiLevel(Vector<NGInlineItem>& items,
                                     UBiDiLevel level) {
   for (; items[index].end_offset_ < end_offset; index++)
     items[index].SetBidiLevel(level);
-  items[index].SetBidiLevel(level);
+  NGInlineItem* item = &items[index];
+  item->SetBidiLevel(level);
 
-  if (items[index].end_offset_ == end_offset) {
+  if (item->end_offset_ == end_offset) {
     // Let close items have the same bidi-level as the previous item.
     while (index + 1 < items.size() &&
            items[index + 1].Type() == NGInlineItem::kCloseTag) {
       items[++index].SetBidiLevel(level);
     }
   } else {
+    // If a reused item needs to split, |SetNeedsLayout| to ensure the line is
+    // not reused.
+    LayoutObject* layout_object = item->GetLayoutObject();
+    if (layout_object->EverHadLayout() && !layout_object->NeedsLayout())
+      layout_object->SetNeedsLayout(layout_invalidation_reason::kStyleChange);
+
     Split(items, index, end_offset);
   }
 
   return index + 1;
+}
+
+void NGInlineItemsData::GetOpenTagItems(wtf_size_t size,
+                                        OpenTagItems* open_items) const {
+  DCHECK_LE(size, items.size());
+  for (const NGInlineItem& item : base::make_span(items.data(), size)) {
+    if (item.Type() == NGInlineItem::kOpenTag)
+      open_items->push_back(&item);
+    else if (item.Type() == NGInlineItem::kCloseTag)
+      open_items->pop_back();
+  }
 }
 
 String NGInlineItem::ToString() const {

@@ -10,6 +10,8 @@
 #include "base/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "components/password_manager/core/browser/credential_manager_logger.h"
+#include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
+#include "components/password_manager/core/browser/credential_manager_utils.h"
 #include "components/password_manager/core/browser/form_fetcher_impl.h"
 #include "components/password_manager/core/browser/form_saver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -130,7 +132,7 @@ void CredentialManagerImpl::Get(CredentialMediationRequirement mediation,
     return;
   }
   // Return an empty credential while autofill-assistant is running.
-  if (client_->GetAutofillAssistantMode() == AutofillAssistantMode::kUIShown) {
+  if (client_->IsAutofillAssistantUIVisible()) {
     // Callback with empty credential info.
     std::move(callback).Run(CredentialManagerError::SUCCESS, CredentialInfo());
     LogCredentialManagerGetResult(
@@ -197,11 +199,7 @@ void CredentialManagerImpl::SendPasswordForm(
     const PasswordForm* form) {
   CredentialInfo info;
   if (form) {
-    password_manager::CredentialType type_to_return =
-        form->federation_origin.opaque()
-            ? CredentialType::CREDENTIAL_TYPE_PASSWORD
-            : CredentialType::CREDENTIAL_TYPE_FEDERATED;
-    info = CredentialInfo(*form, type_to_return);
+    info = PasswordFormToCredentialInfo(*form);
     PasswordStore* store = form->IsUsingAccountStore()
                                ? GetAccountPasswordStore()
                                : GetProfilePasswordStore();

@@ -12,6 +12,7 @@
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/loader/content_security_notifier.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/storage_partition_impl.h"
@@ -30,6 +31,8 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "net/base/isolation_info.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom.h"
@@ -49,7 +52,6 @@ DedicatedWorkerHost::DedicatedWorkerHost(
     : service_(service),
       token_(token),
       worker_process_host_(worker_process_host),
-      scoped_process_host_observer_(this),
       creator_render_frame_host_id_(creator_render_frame_host_id),
       ancestor_render_frame_host_id_(ancestor_render_frame_host_id),
       creator_origin_(creator_origin),
@@ -63,10 +65,10 @@ DedicatedWorkerHost::DedicatedWorkerHost(
   DCHECK(worker_process_host_->IsInitializedAndNotDead());
   DCHECK(coep_reporter_);
 
-  scoped_process_host_observer_.Add(worker_process_host_);
+  scoped_process_host_observation_.Observe(worker_process_host_);
 
   service_->NotifyWorkerCreated(token_, worker_process_host_->GetID(),
-                                ancestor_render_frame_host_id_);
+                                ancestor_render_frame_host_id_, this);
 }
 
 DedicatedWorkerHost::~DedicatedWorkerHost() {
@@ -183,6 +185,24 @@ void DedicatedWorkerHost::StartScriptLoad(
   service_worker_handle_ = std::make_unique<ServiceWorkerMainResourceHandle>(
       storage_partition_impl->GetServiceWorkerContext(), base::DoNothing());
 
+  // For blob URL workers, inherit the controller from the worker's parent.
+  // See https://w3c.github.io/ServiceWorker/#control-and-use-worker-client
+  if (script_url.SchemeIsBlob()) {
+    if (creator_render_frame_host_id_) {
+      base::WeakPtr<ServiceWorkerContainerHost> creator_container_host =
+          RenderFrameHostImpl::FromID(creator_render_frame_host_id_.value())
+              ->GetLastCommittedServiceWorkerHost();
+
+      service_worker_handle_->core()->set_parent_container_host(
+          creator_container_host);
+    } else {
+      // TODO(https://crbug.com/1017034): When this worker is nested, the worker
+      // should inherit the active service worker from the parent worker host.
+      // Implement this behavior.
+      NOTIMPLEMENTED();
+    }
+  }
+
   // Get a storage domain.
   auto partition_domain =
       nearest_ancestor_render_frame_host->GetSiteInstance()->GetPartitionDomain(
@@ -195,12 +215,16 @@ void DedicatedWorkerHost::StartScriptLoad(
       creator_origin_,
       nearest_ancestor_render_frame_host->GetIsolationInfoForSubresources(),
       credentials_mode, std::move(outside_fetch_client_settings_object),
-      blink::mojom::ResourceType::kWorker,
+      network::mojom::RequestDestination::kWorker,
       storage_partition_impl->GetServiceWorkerContext(),
       service_worker_handle_.get(),
       appcache_host ? appcache_host->GetWeakPtr() : nullptr,
       std::move(blob_url_loader_factory), nullptr, storage_partition_impl,
       partition_domain,
+      // TODO(crbug.com/1138622): Propagate dedicated worker ukm::SourceId here.
+      ukm::kInvalidSourceId,
+      // TODO(crbug.com/1143102): pass DevToolsAgentHostImpl for the worker.
+      nullptr, base::UnguessableToken(),
       base::BindOnce(&DedicatedWorkerHost::DidStartScriptLoad,
                      weak_factory_.GetWeakPtr()));
 }
@@ -311,14 +335,13 @@ DedicatedWorkerHost::CreateNetworkFactoryForSubresources(
           ancestor_render_frame_host->IsFeatureEnabled(
               blink::mojom::FeaturePolicyFeature::kTrustTokenRedemption)
               ? network::mojom::TrustTokenRedemptionPolicy::kPotentiallyPermit
-              : network::mojom::TrustTokenRedemptionPolicy::kForbid,
-          "DedicatedWorkerHost::CreateNetworkFactoryForSubresources");
+              : network::mojom::TrustTokenRedemptionPolicy::kForbid);
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       worker_process_host_->GetBrowserContext(),
       /*frame=*/nullptr, worker_process_host_->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kWorkerSubResource,
       worker_origin_, /*navigation_id=*/base::nullopt,
-      base::UkmSourceId::FromInt64(
+      ukm::SourceIdObj::FromInt64(
           ancestor_render_frame_host->GetPageUkmSourceId()),
       &default_factory_receiver, &factory_params->header_client,
       bypass_redirect_checks,
@@ -436,8 +459,8 @@ void DedicatedWorkerHost::CreateIdleManager(
   ancestor_render_frame_host->BindIdleManager(std::move(receiver));
 }
 
-void DedicatedWorkerHost::BindSmsReceiverReceiver(
-    mojo::PendingReceiver<blink::mojom::SmsReceiver> receiver) {
+void DedicatedWorkerHost::BindWebOTPServiceReceiver(
+    mojo::PendingReceiver<blink::mojom::WebOTPService> receiver) {
   RenderFrameHostImpl* ancestor_render_frame_host =
       RenderFrameHostImpl::FromID(ancestor_render_frame_host_id_);
   if (!ancestor_render_frame_host) {
@@ -446,7 +469,7 @@ void DedicatedWorkerHost::BindSmsReceiverReceiver(
     return;
   }
 
-  ancestor_render_frame_host->BindSmsReceiverReceiver(std::move(receiver));
+  ancestor_render_frame_host->BindWebOTPServiceReceiver(std::move(receiver));
 }
 
 #if !defined(OS_ANDROID)
@@ -469,7 +492,6 @@ void DedicatedWorkerHost::ObserveNetworkServiceCrash(
     StoragePartitionImpl* storage_partition_impl) {
   auto params = network::mojom::URLLoaderFactoryParams::New();
   params->process_id = worker_process_host_->GetID();
-  params->debug_tag = "DedicatedWorkerHost::ObserveNetworkServiceCrash";
   network_service_connection_error_handler_holder_.reset();
   storage_partition_impl->GetNetworkContext()->CreateURLLoaderFactory(
       network_service_connection_error_handler_holder_

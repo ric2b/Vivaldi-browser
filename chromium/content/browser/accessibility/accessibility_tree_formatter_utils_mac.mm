@@ -6,8 +6,10 @@
 
 #include "base/strings/sys_string_conversions.h"
 #include "content/browser/accessibility/accessibility_tools_utils_mac.h"
+#include "content/browser/accessibility/browser_accessibility_mac.h"
+#include "ui/accessibility/platform/inspect/property_node.h"
 
-using base::SysNSStringToUTF8;
+using ui::AXPropertyNode;
 
 namespace content {
 namespace a11y {
@@ -91,6 +93,20 @@ void LineIndexer::Build(const gfx::NativeViewAccessible node, int* counter) {
   }
 }
 
+// OptionalNSObject
+
+std::string OptionalNSObject::ToString() const {
+  if (IsNotApplicable()) {
+    return "<n/a>";
+  } else if (IsError()) {
+    return "<error>";
+  } else if (value == nil) {
+    return "<nil>";
+  } else {
+    return base::SysNSStringToUTF8([NSString stringWithFormat:@"%@", value]);
+  }
+}
+
 // AttributeInvoker
 
 AttributeInvoker::AttributeInvoker(const id node,
@@ -101,10 +117,10 @@ AttributeInvoker::AttributeInvoker(const id node,
 }
 
 OptionalNSObject AttributeInvoker::Invoke(
-    const PropertyNode& property_node) const {
+    const AXPropertyNode& property_node) const {
   // Attributes
   for (NSString* attribute : attributes) {
-    if (property_node.IsMatching(SysNSStringToUTF8(attribute))) {
+    if (property_node.IsMatching(base::SysNSStringToUTF8(attribute))) {
       return OptionalNSObject::NotNullOrNotApplicable(
           AttributeValueOf(node, attribute));
     }
@@ -112,7 +128,7 @@ OptionalNSObject AttributeInvoker::Invoke(
 
   // Parameterized attributes
   for (NSString* attribute : parameterized_attributes) {
-    if (property_node.IsMatching(SysNSStringToUTF8(attribute))) {
+    if (property_node.IsMatching(base::SysNSStringToUTF8(attribute))) {
       OptionalNSObject param = ParamByPropertyNode(property_node);
       if (param.IsNotNil()) {
         return OptionalNSObject(
@@ -125,8 +141,42 @@ OptionalNSObject AttributeInvoker::Invoke(
   return OptionalNSObject::NotApplicable();
 }
 
+OptionalNSObject AttributeInvoker::GetValue(
+    const std::string& property_name,
+    const OptionalNSObject& param) const {
+  NSString* attribute = base::SysUTF8ToNSString(property_name);
+  if ([parameterized_attributes containsObject:attribute]) {
+    if (param.IsNotNil()) {
+      return OptionalNSObject(
+          ParameterizedAttributeValueOf(node, attribute, *param));
+    } else {
+      return param;
+    }
+  }
+  return OptionalNSObject::NotApplicable();
+}
+
+OptionalNSObject AttributeInvoker::GetValue(
+    const std::string& property_name) const {
+  NSString* attribute = base::SysUTF8ToNSString(property_name);
+  if ([attributes containsObject:attribute]) {
+    return OptionalNSObject::NotNullOrNotApplicable(
+        AttributeValueOf(node, attribute));
+  }
+  return OptionalNSObject::NotApplicable();
+}
+
+void AttributeInvoker::SetValue(const std::string& property_name,
+                                const OptionalNSObject& value) const {
+  NSString* attribute = base::SysUTF8ToNSString(property_name);
+  if ([attributes containsObject:attribute] &&
+      IsAttributeSettable(node, attribute)) {
+    SetAttributeValueOf(node, attribute, *value);
+  }
+}
+
 OptionalNSObject AttributeInvoker::ParamByPropertyNode(
-    const PropertyNode& property_node) const {
+    const AXPropertyNode& property_node) const {
   // NSAccessibility attributes always take a single parameter.
   if (property_node.parameters.size() != 1) {
     LOG(ERROR) << "Failed to parse " << property_node.original_property
@@ -135,7 +185,7 @@ OptionalNSObject AttributeInvoker::ParamByPropertyNode(
   }
 
   // Nested attribute case: attempt to invoke an attribute for an argument node.
-  const PropertyNode& arg_node = property_node.parameters[0];
+  const AXPropertyNode& arg_node = property_node.parameters[0];
   OptionalNSObject subvalue = Invoke(arg_node);
   if (!subvalue.IsNotApplicable()) {
     return subvalue;
@@ -169,7 +219,7 @@ OptionalNSObject AttributeInvoker::ParamByPropertyNode(
 
 // NSNumber. Format: integer.
 NSNumber* AttributeInvoker::PropertyNodeToInt(
-    const PropertyNode& intnode) const {
+    const AXPropertyNode& intnode) const {
   base::Optional<int> param = intnode.AsInt();
   if (!param) {
     INT_FAIL(intnode, "not a number")
@@ -179,7 +229,7 @@ NSNumber* AttributeInvoker::PropertyNodeToInt(
 
 // NSArray of two NSNumber. Format: [integer, integer].
 NSArray* AttributeInvoker::PropertyNodeToIntArray(
-    const PropertyNode& arraynode) const {
+    const AXPropertyNode& arraynode) const {
   if (arraynode.name_or_value != "[]") {
     INTARRAY_FAIL(arraynode, "not array")
   }
@@ -198,7 +248,7 @@ NSArray* AttributeInvoker::PropertyNodeToIntArray(
 
 // NSRange. Format: {loc: integer, len: integer}.
 NSValue* AttributeInvoker::PropertyNodeToRange(
-    const PropertyNode& dictnode) const {
+    const AXPropertyNode& dictnode) const {
   if (!dictnode.IsDict()) {
     NSRANGE_FAIL(dictnode, "dictionary is expected")
   }
@@ -218,7 +268,7 @@ NSValue* AttributeInvoker::PropertyNodeToRange(
 
 // UIElement. Format: :line_num.
 gfx::NativeViewAccessible AttributeInvoker::PropertyNodeToUIElement(
-    const PropertyNode& uielement_node) const {
+    const AXPropertyNode& uielement_node) const {
   gfx::NativeViewAccessible uielement =
       line_indexer->NodeBy(uielement_node.name_or_value);
   if (!uielement) {
@@ -228,7 +278,8 @@ gfx::NativeViewAccessible AttributeInvoker::PropertyNodeToUIElement(
   return uielement;
 }
 
-id AttributeInvoker::DictNodeToTextMarker(const PropertyNode& dictnode) const {
+id AttributeInvoker::DictNodeToTextMarker(
+    const AXPropertyNode& dictnode) const {
   if (!dictnode.IsDict()) {
     TEXTMARKER_FAIL(dictnode, "dictionary is expected")
   }
@@ -263,17 +314,17 @@ id AttributeInvoker::DictNodeToTextMarker(const PropertyNode& dictnode) const {
 }
 
 id AttributeInvoker::PropertyNodeToTextMarker(
-    const PropertyNode& dictnode) const {
+    const AXPropertyNode& dictnode) const {
   return DictNodeToTextMarker(dictnode);
 }
 
 id AttributeInvoker::PropertyNodeToTextMarkerRange(
-    const PropertyNode& rangenode) const {
+    const AXPropertyNode& rangenode) const {
   if (!rangenode.IsDict()) {
     TEXTMARKER_FAIL(rangenode, "dictionary is expected")
   }
 
-  const PropertyNode* anchornode = rangenode.FindKey("anchor");
+  const AXPropertyNode* anchornode = rangenode.FindKey("anchor");
   if (!anchornode) {
     TEXTMARKER_FAIL(rangenode, "no anchor")
   }
@@ -283,7 +334,7 @@ id AttributeInvoker::PropertyNodeToTextMarkerRange(
     TEXTMARKER_FAIL(rangenode, "failed to parse anchor")
   }
 
-  const PropertyNode* focusnode = rangenode.FindKey("focus");
+  const AXPropertyNode* focusnode = rangenode.FindKey("focus");
   if (!focusnode) {
     TEXTMARKER_FAIL(rangenode, "no focus")
   }
@@ -294,6 +345,50 @@ id AttributeInvoker::PropertyNodeToTextMarkerRange(
   }
 
   return content::AXTextMarkerRangeFrom(anchor_textmarker, focus_textmarker);
+}
+
+OptionalNSObject TextMarkerRangeGetStartMarker(const OptionalNSObject& obj) {
+  if (!IsAXTextMarkerRange(*obj))
+    return OptionalNSObject::NotApplicable();
+
+  BrowserAccessibilityPosition::AXRangeType range =
+      AXTextMarkerRangeToRange(*obj);
+  if (range.IsNull())
+    return OptionalNSObject::Error();
+
+  BrowserAccessibilityPosition::AXPositionInstance::pointer position =
+      range.anchor();
+  const BrowserAccessibility* node = position->GetAnchor();
+  const BrowserAccessibilityCocoa* cocoa_node =
+      ToBrowserAccessibilityCocoa(node);
+  return OptionalNSObject::NotNilOrError(content::AXTextMarkerFrom(
+      cocoa_node, position->text_offset(), position->affinity()));
+}
+
+OptionalNSObject TextMarkerRangeGetEndMarker(const OptionalNSObject& obj) {
+  if (!IsAXTextMarkerRange(*obj))
+    return OptionalNSObject::NotApplicable();
+
+  BrowserAccessibilityPosition::AXRangeType range =
+      AXTextMarkerRangeToRange(*obj);
+  if (range.IsNull())
+    return OptionalNSObject::Error();
+
+  BrowserAccessibilityPosition::AXPositionInstance::pointer position =
+      range.focus();
+  const BrowserAccessibility* node = position->GetAnchor();
+  const BrowserAccessibilityCocoa* cocoa_node =
+      ToBrowserAccessibilityCocoa(node);
+  return OptionalNSObject::NotNilOrError(content::AXTextMarkerFrom(
+      cocoa_node, position->text_offset(), position->affinity()));
+}
+
+OptionalNSObject MakePairArray(const OptionalNSObject& obj1,
+                               const OptionalNSObject& obj2) {
+  if (!obj1.IsNotNil() || !obj2.IsNotNil())
+    return OptionalNSObject::Error();
+  return OptionalNSObject::NotNilOrError(
+      [NSArray arrayWithObjects:*obj1, *obj2, nil]);
 }
 
 }  // namespace a11y

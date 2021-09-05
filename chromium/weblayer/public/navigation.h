@@ -82,7 +82,8 @@ class Navigation {
     kHttpServerError = 2,    // Server responded with 5xx status code.
     kSSLError = 3,           // Certificate error.
     kConnectivityError = 4,  // Problem connecting to server.
-    kOtherError = 5,         // An error not listed above occurred.
+    kOtherError = 5,         // An error not listed above or below occurred.
+    kSafeBrowsingError = 6,  // Safe browsing error.
   };
 
   // Return information about the error, if any, that was encountered while
@@ -109,6 +110,11 @@ class Navigation {
   // must not contain any illegal characters as documented in
   // SetRequestHeader().
   virtual void SetUserAgentString(const std::string& value) = 0;
+
+  // Disables auto-reload for this navigation if the network is down and comes
+  // back later. Auto-reload is enabled by default. This function may only be
+  // called from NavigationObserver::NavigationStarted().
+  virtual void DisableNetworkErrorAutoReload() = 0;
 
   // Whether the navigation was initiated by the page. Examples of
   // page-initiated navigations include:

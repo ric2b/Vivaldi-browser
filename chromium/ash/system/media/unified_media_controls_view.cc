@@ -31,29 +31,30 @@ using media_session::mojom::MediaSessionAction;
 namespace {
 
 constexpr int kMediaControlsCornerRadius = 8;
-constexpr int kMediaControlsViewPadding = 16;
+constexpr int kMediaControlsViewPadding = 8;
 constexpr int kMediaButtonsPadding = 8;
 constexpr int kMediaButtonIconSize = 20;
 constexpr int kArtworkCornerRadius = 4;
 constexpr int kTitleRowHeight = 20;
 constexpr int kTrackTitleFontSizeIncrease = 1;
 
-constexpr gfx::Insets kTrackColumnInsets = gfx::Insets(1, 0, 1, 0);
+constexpr gfx::Insets kTrackColumnInsets = gfx::Insets(1, 8, 1, 8);
 constexpr gfx::Insets kMediaControlsViewInsets = gfx::Insets(8, 8, 8, 12);
 
+constexpr gfx::Size kEmptyArtworkIconSize = gfx::Size(20, 20);
 constexpr gfx::Size kArtworkSize = gfx::Size(40, 40);
 constexpr gfx::Size kMediaButtonSize = gfx::Size(32, 32);
 
 gfx::Size ScaleSizeToFitView(const gfx::Size& size,
                              const gfx::Size& view_size) {
-  // If |size| is too big in either dimension or two small in both
+  // If |size| is too small in either dimension or too big in both
   // dimensions, scale it appropriately.
-  if ((size.width() > view_size.width() ||
+  if ((size.width() > view_size.width() &&
        size.height() > view_size.height()) ||
-      (size.width() < view_size.width() &&
+      (size.width() < view_size.width() ||
        size.height() < view_size.height())) {
     const float scale =
-        std::min(view_size.width() / static_cast<float>(size.width()),
+        std::max(view_size.width() / static_cast<float>(size.width()),
                  view_size.height() / static_cast<float>(size.height()));
     return gfx::ScaleToFlooredSize(size, scale);
   }
@@ -90,13 +91,27 @@ const gfx::VectorIcon& GetVectorIconForMediaAction(MediaSessionAction action) {
   return gfx::kNoneIcon;
 }
 
+SkColor GetBackgroundColor() {
+  return AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
+}
+
 }  // namespace
 
 UnifiedMediaControlsView::MediaActionButton::MediaActionButton(
-    views::ButtonListener* listener,
+    UnifiedMediaControlsController* controller,
     MediaSessionAction action,
     const base::string16& accessible_name)
-    : views::ImageButton(listener) {
+    : views::ImageButton(base::BindRepeating(
+          // Handle dynamically-updated button tags without rebinding.
+          [](UnifiedMediaControlsController* controller,
+             MediaActionButton* button) {
+            controller->PerformAction(
+                media_message_center::GetActionFromButtonTag(*button));
+          },
+          controller,
+          this)),
+      action_(action) {
   SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
   SetPreferredSize(kMediaButtonSize);
@@ -109,13 +124,10 @@ UnifiedMediaControlsView::MediaActionButton::MediaActionButton(
 void UnifiedMediaControlsView::MediaActionButton::SetAction(
     MediaSessionAction action,
     const base::string16& accessible_name) {
+  action_ = action;
   set_tag(static_cast<int>(action));
   SetTooltipText(accessible_name);
-  SetImage(views::Button::STATE_NORMAL,
-           CreateVectorIcon(
-               GetVectorIconForMediaAction(action), kMediaButtonIconSize,
-               AshColorProvider::Get()->GetContentLayerColor(
-                   AshColorProvider::ContentLayerType::kIconColorPrimary)));
+  UpdateVectorIcon();
 }
 
 std::unique_ptr<views::InkDrop>
@@ -137,13 +149,31 @@ UnifiedMediaControlsView::MediaActionButton::CreateInkDropRipple() const {
       GetInkDropCenterBasedOnLastEvent());
 }
 
+void UnifiedMediaControlsView::MediaActionButton::OnThemeChanged() {
+  views::ImageButton::OnThemeChanged();
+  UpdateVectorIcon();
+  focus_ring()->SetColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
+}
+
+void UnifiedMediaControlsView::MediaActionButton::UpdateVectorIcon() {
+  AshColorProvider::Get()->DecorateIconButton(
+      this, GetVectorIconForMediaAction(action_), /*toggled=*/false,
+      kMediaButtonIconSize);
+}
+
 UnifiedMediaControlsView::UnifiedMediaControlsView(
     UnifiedMediaControlsController* controller)
-    : views::Button(this), controller_(controller) {
-  SetBackground(views::CreateRoundedRectBackground(
-      AshColorProvider::Get()->GetControlsLayerColor(
-          AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive),
-      kMediaControlsCornerRadius));
+    : views::Button(base::BindRepeating(
+          [](UnifiedMediaControlsView* view) {
+            if (!view->is_in_empty_state_)
+              view->controller_->OnMediaControlsViewClicked();
+          },
+          this)),
+      controller_(controller) {
+  SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  SetBackground(views::CreateRoundedRectBackground(GetBackgroundColor(),
+                                                   kMediaControlsCornerRadius));
   auto* box_layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, kMediaControlsViewInsets,
       kMediaControlsViewPadding));
@@ -156,8 +186,11 @@ UnifiedMediaControlsView::UnifiedMediaControlsView(
   artwork_view_->SetVisible(false);
 
   auto track_column = std::make_unique<views::View>();
-  track_column->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, kTrackColumnInsets));
+  auto* track_column_layout =
+      track_column->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical, kTrackColumnInsets));
+  track_column_layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kStart);
 
   auto title_row = std::make_unique<views::View>();
   auto* title_row_layout =
@@ -171,31 +204,22 @@ UnifiedMediaControlsView::UnifiedMediaControlsView(
     label->SetSubpixelRenderingEnabled(false);
   };
 
-  auto title_label = std::make_unique<views::Label>();
-  config_label(title_label.get());
-  title_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary));
-  title_label->SetFontList(
+  title_label_ = title_row->AddChildView(std::make_unique<views::Label>());
+  config_label(title_label_);
+  title_label_->SetFontList(
       views::Label::GetDefaultFontList().DeriveWithSizeDelta(
           kTrackTitleFontSizeIncrease));
-  title_label_ = title_row->AddChildView(std::move(title_label));
 
-  auto drop_down_icon = std::make_unique<views::ImageView>();
-  drop_down_icon->SetPreferredSize(gfx::Size(kTitleRowHeight, kTitleRowHeight));
-  drop_down_icon->SetImage(CreateVectorIcon(
-      kUnifiedMenuMoreIcon,
-      AshColorProvider::Get()->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kIconColorPrimary)));
-  title_row->AddChildView(std::move(drop_down_icon));
+  drop_down_icon_ =
+      title_row->AddChildView(std::make_unique<views::ImageView>());
+  drop_down_icon_->SetPreferredSize(
+      gfx::Size(kTitleRowHeight, kTitleRowHeight));
 
   title_row_layout->SetFlexForView(title_label_, 1);
   track_column->AddChildView(std::move(title_row));
 
-  auto artist_label = std::make_unique<views::Label>();
-  config_label(artist_label.get());
-  artist_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorSecondary));
-  artist_label_ = track_column->AddChildView(std::move(artist_label));
+  artist_label_ = track_column->AddChildView(std::make_unique<views::Label>());
+  config_label(artist_label_);
 
   box_layout->SetFlexForView(AddChildView(std::move(track_column)), 1);
 
@@ -205,31 +229,20 @@ UnifiedMediaControlsView::UnifiedMediaControlsView(
       kMediaButtonsPadding));
 
   button_row->AddChildView(std::make_unique<MediaActionButton>(
-      this, MediaSessionAction::kPreviousTrack,
+      controller_, MediaSessionAction::kPreviousTrack,
       l10n_util::GetStringUTF16(
           IDS_ASH_MEDIA_NOTIFICATION_ACTION_PREVIOUS_TRACK)));
 
   play_pause_button_ =
       button_row->AddChildView(std::make_unique<MediaActionButton>(
-          this, MediaSessionAction::kPause,
+          controller_, MediaSessionAction::kPause,
           l10n_util::GetStringUTF16(IDS_ASH_MEDIA_NOTIFICATION_ACTION_PAUSE)));
 
   button_row->AddChildView(std::make_unique<MediaActionButton>(
-      this, MediaSessionAction::kNextTrack,
+      controller_, MediaSessionAction::kNextTrack,
       l10n_util::GetStringUTF16(IDS_ASH_MEDIA_NOTIFICATION_ACTION_NEXT_TRACK)));
 
   button_row_ = AddChildView(std::move(button_row));
-}
-
-void UnifiedMediaControlsView::ButtonPressed(views::Button* sender,
-                                             const ui::Event& event) {
-  if (sender == this) {
-    controller_->OnMediaControlsViewClicked();
-    return;
-  }
-
-  controller_->PerformAction(
-      media_message_center::GetActionFromButtonTag(*sender));
 }
 
 void UnifiedMediaControlsView::SetIsPlaying(bool playing) {
@@ -263,11 +276,23 @@ void UnifiedMediaControlsView::SetArtwork(
 }
 
 void UnifiedMediaControlsView::SetTitle(const base::string16& title) {
+  if (title_label_->GetText() == title)
+    return;
+
   title_label_->SetText(title);
+  SetAccessibleName(l10n_util::GetStringFUTF16(
+      IDS_ASH_QUICK_SETTINGS_BUBBLE_MEDIA_CONTROLS_ACCESSIBLE_DESCRIPTION,
+      title));
 }
 
 void UnifiedMediaControlsView::SetArtist(const base::string16& artist) {
   artist_label_->SetText(artist);
+
+  if (artist_label_->GetVisible() != artist.empty())
+    return;
+
+  artist_label_->SetVisible(!artist.empty());
+  InvalidateLayout();
 }
 
 void UnifiedMediaControlsView::UpdateActionButtonAvailability(
@@ -286,15 +311,77 @@ void UnifiedMediaControlsView::UpdateActionButtonAvailability(
     button_row_->InvalidateLayout();
 }
 
+void UnifiedMediaControlsView::OnThemeChanged() {
+  views::Button::OnThemeChanged();
+  auto* color_provider = AshColorProvider::Get();
+  focus_ring()->SetColor(color_provider->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
+  background()->SetNativeControlColor(GetBackgroundColor());
+  title_label_->SetEnabledColor(color_provider->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
+  drop_down_icon_->SetImage(CreateVectorIcon(
+      kUnifiedMenuMoreIcon,
+      color_provider->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconColorPrimary)));
+  artist_label_->SetEnabledColor(color_provider->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorSecondary));
+}
+
+void UnifiedMediaControlsView::ShowEmptyState() {
+  if (is_in_empty_state_)
+    return;
+
+  is_in_empty_state_ = true;
+
+  title_label_->SetText(
+      l10n_util::GetStringUTF16(IDS_ASH_GLOBAL_MEDIA_CONTROLS_NO_MEDIA_TEXT));
+  title_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorSecondary));
+  artist_label_->SetVisible(false);
+  drop_down_icon_->SetVisible(false);
+
+  for (views::View* button : button_row_->children())
+    button->SetEnabled(false);
+  InvalidateLayout();
+
+  if (!artwork_view_->GetVisible())
+    return;
+
+  artwork_view_->SetBackground(views::CreateSolidBackground(
+      AshColorProvider::Get()->GetControlsLayerColor(
+          AshColorProvider::ControlsLayerType::
+              kControlBackgroundColorInactive)));
+  artwork_view_->SetImageSize(kEmptyArtworkIconSize);
+  artwork_view_->SetImage(CreateVectorIcon(
+      kMusicNoteIcon, kEmptyArtworkIconSize.width(),
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconColorSecondary)));
+
+  artwork_view_->SetClipPath(GetArtworkClipPath());
+}
+
+void UnifiedMediaControlsView::OnNewMediaSession() {
+  if (!is_in_empty_state_)
+    return;
+
+  is_in_empty_state_ = false;
+  title_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
+  drop_down_icon_->SetVisible(true);
+
+  for (views::View* button : button_row_->children())
+    button->SetEnabled(true);
+  InvalidateLayout();
+
+  if (!artwork_view_->GetVisible())
+    return;
+  artwork_view_->SetBackground(nullptr);
+}
+
 SkPath UnifiedMediaControlsView::GetArtworkClipPath() {
-  // Calculate image bounds since we might need to draw this when image is
-  // not visible (i.e. when quick setting bubble is collapsed).
-  gfx::Size image_size = artwork_view_->GetImageBounds().size();
-  int x = (kArtworkSize.width() - image_size.width()) / 2;
-  int y = (kArtworkSize.height() - image_size.height()) / 2;
   SkPath path;
-  path.addRoundRect(gfx::RectToSkRect(gfx::Rect(x, y, image_size.width(),
-                                                image_size.height())),
+  path.addRoundRect(gfx::RectToSkRect(gfx::Rect(0, 0, kArtworkSize.width(),
+                                                kArtworkSize.height())),
                     kArtworkCornerRadius, kArtworkCornerRadius);
   return path;
 }

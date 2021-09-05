@@ -90,13 +90,13 @@ class PasswordsPrivateDelegate : public KeyedService {
       PlaintextPasswordCallback callback,
       content::WebContents* web_contents) = 0;
 
-  // Moves a password currently stored on the device to being stored in the
-  // signed-in, non-syncing Google Account. The result is a no-op if any of
-  // these is true: |id| is invalid; |id| corresponds to a password already
-  // stored in the account; or the user is not using the account-scoped password
-  // storage.
-  virtual void MovePasswordToAccount(int id,
-                                     content::WebContents* web_contents) = 0;
+  // Moves a list of passwords currently stored on the device to being stored in
+  // the signed-in, non-syncing Google Account. The result of any password is a
+  // no-op if any of these is true: |id| is invalid; |id| corresponds to a
+  // password already stored in the account; or the user is not using the
+  // account-scoped password storage.
+  virtual void MovePasswordsToAccount(const std::vector<int>& ids,
+                                      content::WebContents* web_contents) = 0;
 
   // Trigger the password import procedure, allowing the user to select a file
   // containing passwords to import.

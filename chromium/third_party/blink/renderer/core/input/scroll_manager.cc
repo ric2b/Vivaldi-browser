@@ -279,7 +279,7 @@ bool ScrollManager::LogicalScroll(mojom::blink::ScrollDirection direction,
     Node* scroll_chain_node = DOMNodeIds::NodeForId(scroll_chain.TakeLast());
     DCHECK(scroll_chain_node);
 
-    LayoutBox* box = ToLayoutBox(scroll_chain_node->GetLayoutObject());
+    auto* box = To<LayoutBox>(scroll_chain_node->GetLayoutObject());
     DCHECK(box);
 
     ScrollDirectionPhysical physical_direction =
@@ -907,12 +907,11 @@ WebInputEventResult ScrollManager::PassScrollGestureEvent(
     LayoutObject* layout_object) {
   DCHECK(gesture_event.IsScrollEvent());
 
-  if (!last_gesture_scroll_over_embedded_content_view_ || !layout_object ||
-      !layout_object->IsLayoutEmbeddedContent())
+  auto* embedded = DynamicTo<LayoutEmbeddedContent>(layout_object);
+  if (!last_gesture_scroll_over_embedded_content_view_ || !embedded)
     return WebInputEventResult::kNotHandled;
 
-  FrameView* frame_view =
-      ToLayoutEmbeddedContent(layout_object)->ChildFrameView();
+  FrameView* frame_view = embedded->ChildFrameView();
 
   if (!frame_view)
     return WebInputEventResult::kNotHandled;
@@ -1090,6 +1089,11 @@ Node* ScrollManager::NodeTargetForScrollableAreaElementId(
     LocalFrame* current_frame = layout_box->GetDocument().GetFrame();
     while (current_frame) {
       HTMLFrameOwnerElement* owner = current_frame->GetDocument()->LocalOwner();
+      // If the hosting element has no layout box, don't return it for targeting
+      // since there's nothing to scroll.
+      if (!owner->GetLayoutBox())
+        break;
+
       LocalFrame* owner_frame =
           owner ? owner->GetDocument().GetFrame() : nullptr;
       if (owner_frame == frame_) {

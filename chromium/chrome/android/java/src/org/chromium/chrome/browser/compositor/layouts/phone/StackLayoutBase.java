@@ -26,26 +26,27 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
-import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
-import org.chromium.chrome.browser.compositor.animation.FloatProperty;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.GestureEventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.GestureHandler;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.NonOverlappingStack;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.OverlappingStack;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.Stack;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackTab;
-import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.TabListSceneLayer;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
+import org.chromium.chrome.browser.layouts.EventFilter;
+import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
+import org.chromium.chrome.browser.layouts.animation.FloatProperty;
+import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -239,6 +240,8 @@ public abstract class StackLayoutBase extends Layout {
     private TabListSceneLayer mSceneLayer;
     private boolean mShowPending;
 
+    private boolean mUiDoneEnteringStack;
+
     private class StackLayoutGestureHandler implements GestureHandler {
         @Override
         public void onDown(float x, float y, boolean fromMouse, int buttons) {
@@ -369,7 +372,7 @@ public abstract class StackLayoutBase extends Layout {
         }
 
         private long time() {
-            return LayoutManager.time();
+            return LayoutManagerImpl.time();
         }
     }
 
@@ -419,7 +422,7 @@ public abstract class StackLayoutBase extends Layout {
         ensureSceneLayerCreated();
         if (mShowPending) {
             mShowPending = false;
-            show(LayoutManager.time(), false);
+            show(LayoutManagerImpl.time(), false);
         }
     }
 
@@ -545,7 +548,7 @@ public abstract class StackLayoutBase extends Layout {
             @Override
             public void tabClosureUndone(Tab tab) {
                 if (!isActive()) return;
-                onTabClosureCancelled(LayoutManager.time(), tab.getId(), tab.isIncognito());
+                onTabClosureCancelled(LayoutManagerImpl.time(), tab.getId(), tab.isIncognito());
             }
         };
     }
@@ -861,6 +864,7 @@ public abstract class StackLayoutBase extends Layout {
      * Called when a {@link Stack} instance is done animating the stack enter effect.
      */
     public void uiDoneEnteringStack() {
+        mUiDoneEnteringStack = true;
         // Tabs don't overlap in the horizontal tab switcher experiment, so the order comparator
         // already does what we want (the visibility comparator's logic actually doesn't compute
         // visibility properly in this case).
@@ -904,6 +908,7 @@ public abstract class StackLayoutBase extends Layout {
     @Override
     public void show(long time, boolean animate) {
         super.show(time, animate);
+        mUiDoneEnteringStack = false;
 
         if (!mIsActiveLayout) {
             // The mIsActiveLayout check is necessary because there are certain edge cases where
@@ -959,6 +964,8 @@ public abstract class StackLayoutBase extends Layout {
 
     @Override
     public void doneShowing() {
+        if (!mUiDoneEnteringStack) return;
+
         super.doneShowing();
 
         if (mBrowserControlsSupplier.get() != null) {
@@ -1676,6 +1683,11 @@ public abstract class StackLayoutBase extends Layout {
         mSceneLayer.pushLayers(getContext(), viewport, contentViewport, this, layerTitleCache,
                 tabContentManager, resourceManager, browserControls, SceneLayer.INVALID_RESOURCE_ID,
                 0, 0);
+    }
+
+    @Override
+    public int getLayoutType() {
+        return LayoutType.TAB_SWITCHER;
     }
 
     /**

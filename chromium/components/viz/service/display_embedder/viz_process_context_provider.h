@@ -44,6 +44,7 @@ class GrContextForGLES2Interface;
 
 namespace viz {
 class ContextLostObserver;
+class DisplayCompositorMemoryAndTaskController;
 class GpuTaskSchedulerHelper;
 class RendererSettings;
 
@@ -60,6 +61,7 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       gpu::ImageFactory* image_factory,
       gpu::GpuChannelManagerDelegate* gpu_channel_manager_delegate,
+      DisplayCompositorMemoryAndTaskController* display_controller,
       const RendererSettings& renderer_settings);
 
   // ContextProvider implementation.
@@ -76,8 +78,6 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
   void AddObserver(ContextLostObserver* obs) override;
   void RemoveObserver(ContextLostObserver* obs) override;
-  gpu::SharedImageManager* GetSharedImageManager() override;
-  gpu::MemoryTracker* GetMemoryTracker() override;
 
   virtual void SetUpdateVSyncParametersCallback(
       UpdateVSyncParametersCallback callback);
@@ -90,8 +90,6 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
   virtual uint32_t GetCopyTextureInternalFormat();
 
   virtual base::ScopedClosureRunner GetCacheBackBufferCb();
-
-  scoped_refptr<gpu::GpuTaskSchedulerHelper> GetGpuTaskSchedulerHelper();
 
   void SetNeedsMeasureNextDrawLatency();
 
@@ -107,6 +105,7 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       gpu::ImageFactory* image_factory,
       gpu::GpuChannelManagerDelegate* gpu_channel_manager_delegate,
+      DisplayCompositorMemoryAndTaskController* display_controller,
       const gpu::SharedMemoryLimits& mem_limits);
   void OnContextLost();
 
@@ -118,7 +117,7 @@ class VIZ_SERVICE_EXPORT VizProcessContextProvider
 
   // The |gpu_task_scheduler_helper_| has 1:1 relationship with the Display
   // compositor.
-  scoped_refptr<gpu::GpuTaskSchedulerHelper> gpu_task_scheduler_helper_;
+  gpu::GpuTaskSchedulerHelper* gpu_task_scheduler_helper_;
   std::unique_ptr<gpu::InProcessCommandBuffer> command_buffer_;
   std::unique_ptr<gpu::gles2::GLES2CmdHelper> gles2_helper_;
   std::unique_ptr<gpu::TransferBuffer> transfer_buffer_;

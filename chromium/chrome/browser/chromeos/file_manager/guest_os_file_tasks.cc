@@ -51,7 +51,6 @@ namespace {
 // upon whether it "thinks" it is binary or text content.
 constexpr char kUnknownBinaryMimeType[] = "application/octet-stream";
 constexpr char kUnknownTextMimeType[] = "text/plain";
-constexpr char kPluginVmAppNameSuffix[] = " (Windows)";
 
 bool HasSupportedMimeType(
     const std::set<std::string>& supported_mime_types,
@@ -161,7 +160,7 @@ void FindGuestOsApps(
   for (const GURL& file_url : file_urls) {
     if (!file_manager::util::ConvertFileSystemURLToPathInsideVM(
             profile, file_system_context->CrackURL(file_url), dummy_vm_mount,
-            &not_used)) {
+            /*map_crostini_home=*/false, &not_used)) {
       return;
     }
   }
@@ -182,7 +181,6 @@ void FindGuestOsApps(
                                              registration)) {
           continue;
         }
-        app_names->push_back(registration.Name());
         break;
 
       case guest_os::GuestOsRegistryService::VmType::
@@ -190,7 +188,6 @@ void FindGuestOsApps(
         if (!AppSupportsExtensionOfAllEntries(entries, registration)) {
           continue;
         }
-        app_names->push_back(registration.Name() + kPluginVmAppNameSuffix);
         break;
 
       default:
@@ -199,6 +196,7 @@ void FindGuestOsApps(
     }
 
     app_ids->push_back(app_id);
+    app_names->push_back(registration.Name());
     vm_types->push_back(registration.VmType());
   }
 }

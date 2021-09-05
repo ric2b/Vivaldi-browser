@@ -5,7 +5,7 @@
 #include "chrome/browser/nearby_sharing/instantmessaging/receive_messages_express.h"
 
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/nearby_sharing/instantmessaging/constants.h"
 #include "chrome/browser/nearby_sharing/instantmessaging/fake_token_fetcher.h"
@@ -30,9 +30,21 @@ CreateReceiveMessagesResponse(const std::string& msg) {
   return response;
 }
 
+chrome_browser_nearby_sharing_instantmessaging::ReceiveMessagesResponse
+CreateFastPathReadyResponse() {
+  chrome_browser_nearby_sharing_instantmessaging::ReceiveMessagesResponse
+      response;
+  response.mutable_fast_path_ready();
+  return response;
+}
+
 chrome_browser_nearby_sharing_instantmessaging::StreamBody BuildResponseProto(
-    const std::vector<std::string>& messages) {
+    const std::vector<std::string>& messages,
+    bool include_fast_path_ready = true) {
   chrome_browser_nearby_sharing_instantmessaging::StreamBody stream_body;
+  if (include_fast_path_ready) {
+    stream_body.add_messages(CreateFastPathReadyResponse().SerializeAsString());
+  }
   for (const auto& msg : messages) {
     stream_body.add_messages(
         CreateReceiveMessagesResponse(msg).SerializeAsString());

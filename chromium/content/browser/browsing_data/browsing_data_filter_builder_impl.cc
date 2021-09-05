@@ -38,14 +38,20 @@ bool MatchesOrigin(const std::set<url::Origin>& origins,
                    const std::set<std::string>& registerable_domains,
                    BrowsingDataFilterBuilder::Mode mode,
                    const url::Origin& origin) {
-  std::string registerable_domain =
-      GetDomainAndRegistry(origin, INCLUDE_PRIVATE_REGISTRIES);
-  bool found_domain = base::Contains(
-      registerable_domains,
-      registerable_domain == "" ? origin.host() : registerable_domain);
+  bool is_delete_list = mode == BrowsingDataFilterBuilder::Mode::kDelete;
   bool found_origin = base::Contains(origins, origin);
-  return ((found_domain || found_origin) ==
-          (mode == BrowsingDataFilterBuilder::Mode::kDelete));
+  if (found_origin)
+    return is_delete_list;
+
+  bool found_domain = false;
+  if (!registerable_domains.empty()) {
+    std::string registerable_domain =
+        GetDomainAndRegistry(origin, INCLUDE_PRIVATE_REGISTRIES);
+    found_domain = base::Contains(
+        registerable_domains,
+        registerable_domain == "" ? origin.host() : registerable_domain);
+  }
+  return found_domain == is_delete_list;
 }
 
 bool MatchesURL(const std::set<url::Origin>& origins,
@@ -93,10 +99,6 @@ BrowsingDataFilterBuilderImpl::BrowsingDataFilterBuilderImpl(Mode mode)
 BrowsingDataFilterBuilderImpl::~BrowsingDataFilterBuilderImpl() {}
 
 void BrowsingDataFilterBuilderImpl::AddOrigin(const url::Origin& origin) {
-  // TODO(msramek): Optimize OriginFilterBuilder for larger filters if needed.
-  DCHECK_LE(origins_.size(), 10U) << "OriginFilterBuilder is only suitable "
-                                     "for creating small filters.";
-
   // By limiting the filter to non-unique origins, we can guarantee that
   // origin1 < origin2 && origin1 > origin2 <=> origin1.isSameOrigin(origin2).
   // This means that std::set::find() will use the same semantics for
@@ -139,6 +141,12 @@ BrowsingDataFilterBuilderImpl::BuildOriginFilter() {
 
 network::mojom::ClearDataFilterPtr
 BrowsingDataFilterBuilderImpl::BuildNetworkServiceFilter() {
+  // TODO(msramek): Optimize BrowsingDataFilterBuilder for larger filters
+  // if needed.
+  DCHECK_LE(origins_.size(), 10U)
+      << "BrowsingDataFilterBuilder is only suitable for creating "
+         "small network service filters.";
+
   if (MatchesAllOriginsAndDomains())
     return nullptr;
   network::mojom::ClearDataFilterPtr filter =

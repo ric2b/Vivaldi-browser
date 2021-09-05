@@ -90,7 +90,7 @@ WGPUTexture SharedImageRepresentationDawnD3D::BeginAccess(
 
   dawn_native::d3d12::ExternalImageDescriptorDXGISharedHandle descriptor;
   descriptor.cTextureDescriptor = &texture_descriptor;
-  descriptor.isCleared = IsCleared();
+  descriptor.isInitialized = IsCleared();
   descriptor.sharedHandle = shared_handle;
   descriptor.acquireMutexKey = shared_mutex_acquire_key;
   descriptor.isSwapChainTexture =
@@ -98,11 +98,7 @@ WGPUTexture SharedImageRepresentationDawnD3D::BeginAccess(
        SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE);
 
   texture_ = dawn_native::d3d12::WrapSharedHandle(device_, &descriptor);
-  if (texture_) {
-    // Keep a reference to the texture so that it stays valid (its content
-    // might be destroyed).
-    dawn_procs_.textureReference(texture_);
-  } else {
+  if (!texture_) {
     d3d_image_backing->EndAccessD3D12();
   }
 
@@ -138,7 +134,9 @@ SharedImageRepresentationOverlayD3D::SharedImageRepresentationOverlayD3D(
     MemoryTypeTracker* tracker)
     : SharedImageRepresentationOverlay(manager, backing, tracker) {}
 
-bool SharedImageRepresentationOverlayD3D::BeginReadAccess() {
+bool SharedImageRepresentationOverlayD3D::BeginReadAccess(
+    std::vector<gfx::GpuFence>* acquire_fences,
+    std::vector<gfx::GpuFence>* release_fences) {
   // Note: only the DX11 video decoder uses this overlay and does not need to
   // synchronize read access from different devices.
   return true;
@@ -148,11 +146,6 @@ void SharedImageRepresentationOverlayD3D::EndReadAccess() {}
 
 gl::GLImage* SharedImageRepresentationOverlayD3D::GetGLImage() {
   return static_cast<SharedImageBackingD3D*>(backing())->GetGLImage();
-}
-
-std::unique_ptr<gfx::GpuFence>
-SharedImageRepresentationOverlayD3D::GetReadFence() {
-  return nullptr;
 }
 
 }  // namespace gpu

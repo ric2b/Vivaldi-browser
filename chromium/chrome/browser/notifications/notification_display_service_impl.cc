@@ -36,7 +36,13 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
 #include "chrome/browser/nearby_sharing/nearby_notification_handler.h"
+#endif
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/notifications/muted_notification_handler.h"
+#include "chrome/browser/notifications/screen_capture_notification_blocker.h"
 #endif
 
 namespace {
@@ -91,6 +97,17 @@ NotificationDisplayServiceImpl::NotificationDisplayServiceImpl(Profile* profile)
                            std::make_unique<SharingNotificationHandler>());
     AddNotificationHandler(NotificationHandler::Type::ANNOUNCEMENT,
                            std::make_unique<AnnouncementNotificationHandler>());
+
+    if (base::FeatureList::IsEnabled(
+            features::kMuteNotificationsDuringScreenShare)) {
+      auto screen_capture_blocker =
+          std::make_unique<ScreenCaptureNotificationBlocker>(this);
+      AddNotificationHandler(NotificationHandler::Type::NOTIFICATIONS_MUTED,
+                             std::make_unique<MutedNotificationHandler>(
+                                 screen_capture_blocker.get()));
+      notification_queue_.AddNotificationBlocker(
+          std::move(screen_capture_blocker));
+    }
 
 #endif
 
@@ -196,7 +213,8 @@ void NotificationDisplayServiceImpl::Display(
   for (auto& observer : observers_)
     observer.OnNotificationDisplayed(notification, metadata.get());
 
-  if (notification_queue_.ShouldEnqueueNotifications()) {
+  if (notification_queue_.ShouldEnqueueNotification(notification_type,
+                                                    notification)) {
     notification_queue_.EnqueueNotification(notification_type, notification,
                                             std::move(metadata));
   } else {
@@ -283,6 +301,14 @@ void NotificationDisplayServiceImpl::
         std::unique_ptr<NotificationPlatformBridgeDelegator> bridge_delegator) {
   bridge_delegator_ = std::move(bridge_delegator);
   OnNotificationPlatformBridgeReady();
+}
+
+void NotificationDisplayServiceImpl::OverrideNotificationHandlerForTesting(
+    NotificationHandler::Type notification_type,
+    std::unique_ptr<NotificationHandler> handler) {
+  DCHECK(handler);
+  DCHECK_EQ(1u, notification_handlers_.count(notification_type));
+  notification_handlers_[notification_type] = std::move(handler);
 }
 
 void NotificationDisplayServiceImpl::OnNotificationPlatformBridgeReady() {

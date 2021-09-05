@@ -8,7 +8,6 @@
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_image_glx.h"
 #include "ui/gl/scoped_binders.h"
@@ -35,7 +34,7 @@ VaapiTFPPicture::VaapiTFPPicture(
                    client_texture_id,
                    texture_target),
       connection_(x11::Connection::Get()),
-      x_pixmap_(0) {
+      x_pixmap_(x11::Pixmap::None) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!features::IsUsingOzonePlatform());
   DCHECK(texture_id);
@@ -49,13 +48,13 @@ VaapiTFPPicture::~VaapiTFPPicture() {
     DCHECK_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
   }
 
-  if (x_pixmap_)
-    connection_->FreePixmap({static_cast<x11::Pixmap>(x_pixmap_)});
+  if (x_pixmap_ != x11::Pixmap::None)
+    connection_->FreePixmap({x_pixmap_});
 }
 
 Status VaapiTFPPicture::Initialize() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(x_pixmap_);
+  DCHECK_NE(x_pixmap_, x11::Pixmap::None);
 
   if (make_context_current_cb_ && !make_context_current_cb_.Run())
     return StatusCode::kVaapiBadContext;
@@ -111,7 +110,7 @@ Status VaapiTFPPicture::Allocate(gfx::BufferFormat format) {
     DLOG(ERROR) << "Failed creating an X Pixmap for TFP";
     return StatusCode::kVaapiNoPixmap;
   } else {
-    x_pixmap_ = base::strict_cast<::Pixmap>(pixmap);
+    x_pixmap_ = pixmap;
   }
 
   return Initialize();

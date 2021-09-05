@@ -2,15 +2,33 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-load("//lib/builders.star", "goma", "os")
+load("//lib/builders.star", "cpu", "goma", "os")
 load("//lib/try.star", "try_")
-load("//project.star", "settings")
 
-try_.set_defaults(
-    settings,
+try_.defaults.set(
+    bucket = "try",
+    build_numbers = True,
+    caches = [
+        swarming.cache(
+            name = "win_toolchain",
+            path = "win_toolchain",
+        ),
+    ],
+    configure_kitchen = True,
+    cores = 8,
+    cpu = cpu.X86_64,
+    cq_group = "cq",
+    executable = "recipe:chromium_trybot",
     execution_timeout = 6 * time.hour,
-    subproject_list_view = "luci.chromium.try",
+    # Max. pending time for builds. CQ considers builds pending >2h as timed
+    # out: http://shortn/_8PaHsdYmlq. Keep this in sync.
+    expiration_timeout = 2 * time.hour,
+    os = os.LINUX_DEFAULT,
+    pool = "luci.chromium.try",
     service_account = "chromium-try-gpu-builder@chops-service-accounts.iam.gserviceaccount.com",
+    subproject_list_view = "luci.chromium.try",
+    swarming_tags = ["vpython:native-python-wrapper"],
+    task_template_canary_percentage = 5,
 )
 
 # Builders appear after the function used to define them, with all builders
@@ -139,6 +157,11 @@ def gpu_linux_builder(*, name, **kwargs):
         ssd = None,
         **kwargs
     )
+
+gpu_linux_builder(
+    name = "gpu-fyi-try-linux-amd-rel",
+    pool = "luci.chromium.gpu.linux.amd.try",
+)
 
 gpu_linux_builder(
     name = "gpu-fyi-try-linux-intel-dqp",
@@ -275,6 +298,11 @@ gpu_mac_builder(
 )
 
 gpu_mac_builder(
+    name = "gpu-fyi-try-mac-intel-uhd-630-rel",
+    pool = "luci.chromium.gpu.mac.mini.intel.uhd630.try",
+)
+
+gpu_mac_builder(
     name = "gpu-fyi-try-mac-nvidia-retina-dbg",
     pool = "luci.chromium.gpu.mac.retina.nvidia.try",
 )
@@ -313,6 +341,11 @@ def gpu_win_builder(*, name, **kwargs):
         ssd = None,
         **kwargs
     )
+
+gpu_win_builder(
+    name = "gpu-fyi-try-win10-amd-rel-64",
+    pool = "luci.chromium.gpu.win10.amd.try",
+)
 
 gpu_win_builder(
     name = "gpu-fyi-try-win10-intel-dqp-64",
@@ -356,11 +389,6 @@ gpu_win_builder(
 
 gpu_win_builder(
     name = "gpu-fyi-try-win10-nvidia-sk-dawn-rel-64",
-    pool = "luci.chromium.gpu.win10.nvidia.try",
-)
-
-gpu_win_builder(
-    name = "gpu-fyi-try-win10-nvidia-skgl-64",
     pool = "luci.chromium.gpu.win10.nvidia.try",
 )
 

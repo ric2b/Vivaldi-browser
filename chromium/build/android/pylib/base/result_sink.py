@@ -10,7 +10,6 @@ from pylib.base import base_test_result
 import requests  # pylint: disable=import-error
 
 # Comes from luci/resultdb/pbutil/test_result.go
-# Slightly smaller to allow prepending <pre></pres>
 MAX_REPORT_LEN = 4 * 1024
 
 # Maps base_test_results to the luci test-result.proto.
@@ -57,7 +56,7 @@ class ResultSinkClient(object):
         'Authorization': 'ResultSink %s' % context['auth_token'],
     }
 
-  def Post(self, test_id, status, test_log):
+  def Post(self, test_id, status, test_log, artifacts=None):
     """Uploads the test result to the ResultSink server.
 
     This assumes that the rdb stream has been called already and that
@@ -67,6 +66,7 @@ class ResultSinkClient(object):
       test_id: A string representing the test's name.
       status: A string representing if the test passed, failed, etc...
       test_log: A string representing the test's output.
+      artifacts: An optional dict of artifacts to attach to the test.
 
     Returns:
       N/A
@@ -91,9 +91,13 @@ class ResultSinkClient(object):
         'summaryHtml': test_log_formatted,
         'testId': test_id,
     }
+    artifacts = artifacts or {}
     if len(test_log) > report_check_size:
-      tr['artifacts'] = {'Test Log': {'contents': base64.b64encode(test_log)}}
+      artifacts.update({'Test Log': {'contents': base64.b64encode(test_log)}})
+    if artifacts:
+      tr['artifacts'] = artifacts
 
-    requests.post(url=self.url,
-                  headers=self.headers,
-                  data=json.dumps({'testResults': [tr]}))
+    res = requests.post(url=self.url,
+                        headers=self.headers,
+                        data=json.dumps({'testResults': [tr]}))
+    res.raise_for_status()

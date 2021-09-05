@@ -65,6 +65,7 @@ const char kEduCoexistenceId[] = "account_manager.edu_coexistence_id";
 // A string pref storing a parental consent text version that requires
 // invalidation of the secondary accounts added with the previous consent
 // versions.
+// This is used for the V1 version of EduCoexistence and will be removed.
 const char kEduCoexistenceSecondaryAccountsInvalidationVersion[] =
     "account_manager.edu_coexistence_secondary_accounts_invalidation_version";
 
@@ -72,6 +73,12 @@ const char kEduCoexistenceSecondaryAccountsInvalidationVersion[] =
 // Controlled by EduCoexistenceToSVersion policy.
 const char kEduCoexistenceToSVersion[] =
     "family_link_user.edu_coexistence_tos_version";
+
+// A dictionary pref that associates the secondary edu accounts gaia id string
+// with the corresponding accepted Edu Coexistence Terms of Service version
+// number.
+const char kEduCoexistenceToSAcceptedVersion[] =
+    "family_link_user.edu_coexistence_tos_accepted_version";
 
 // A dictionary of info for Quirks Client/Server interaction, mostly last server
 // request times, keyed to display product_id's.
@@ -112,6 +119,14 @@ const char kLoginDisplayPasswordButtonEnabled[] =
 
 // Boolean pref indicating whether the user has enabled Suggested Content.
 const char kSuggestedContentEnabled[] = "settings.suggested_content_enabled";
+
+// Boolean pref recording whether a search result has ever been launched from
+// the Chrome OS launcher.
+const char kLauncherResultEverLaunched[] = "launcher.result_ever_launched";
+
+// Whether the status of the platform app version of camera app is migrated to
+// SWA.
+const char kHasCameraAppMigratedToSWA[] = "camera.has_migrated_to_swa";
 
 }  // namespace prefs
 }  // namespace chromeos

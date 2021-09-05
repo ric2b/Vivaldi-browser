@@ -300,7 +300,7 @@ TEST(RasterSourceTest, RasterFullContents) {
 
       SkBitmap bitmap;
       bitmap.allocN32Pixels(canvas_rect.width(), canvas_rect.height());
-      SkCanvas canvas(bitmap);
+      SkCanvas canvas(bitmap, SkSurfaceProps{});
       canvas.clear(SK_ColorTRANSPARENT);
 
       raster->PlaybackToCanvas(
@@ -361,7 +361,7 @@ TEST(RasterSourceTest, RasterFullContentsWithRasterTranslation) {
 
       SkBitmap bitmap;
       bitmap.allocN32Pixels(canvas_rect.width(), canvas_rect.height());
-      SkCanvas canvas(bitmap);
+      SkCanvas canvas(bitmap, SkSurfaceProps{});
       canvas.clear(SK_ColorTRANSPARENT);
 
       raster->PlaybackToCanvas(
@@ -408,7 +408,7 @@ TEST(RasterSourceTest, RasterPartialContents) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(content_bounds.width(), content_bounds.height());
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.clear(SK_ColorTRANSPARENT);
 
   // Playback the full rect which should make everything white.
@@ -482,7 +482,7 @@ TEST(RasterSourceTest, RasterPartialContentsWithRasterTranslation) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(content_bounds.width(), content_bounds.height());
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.clear(SK_ColorTRANSPARENT);
 
   // Playback the full rect which should make everything white.
@@ -576,7 +576,7 @@ TEST(RasterSourceTest, RasterPartialClear) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(content_bounds.width(), content_bounds.height());
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.clear(SK_ColorTRANSPARENT);
 
   // Playback the full rect which should make everything light gray (alpha=10).
@@ -645,7 +645,7 @@ TEST(RasterSourceTest, RasterContentsTransparent) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(canvas_rect.width(), canvas_rect.height());
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
 
   raster->PlaybackToCanvas(
       &canvas, content_bounds, canvas_rect, canvas_rect,
@@ -656,20 +656,6 @@ TEST(RasterSourceTest, RasterContentsTransparent) {
     for (int j = 0; j < bitmap.height(); j++)
       EXPECT_EQ(0u, SkColorGetA(bitmap.getColor(i, j))) << i << "," << j;
   }
-}
-
-TEST(RasterSourceTest, GetPictureMemoryUsageIncludesClientReportedMemory) {
-  const size_t kReportedMemoryUsageInBytes = 100 * 1024 * 1024;
-  gfx::Size layer_bounds(5, 3);
-  std::unique_ptr<FakeRecordingSource> recording_source =
-      FakeRecordingSource::CreateFilledRecordingSource(layer_bounds);
-  recording_source->set_reported_memory_usage(kReportedMemoryUsageInBytes);
-  recording_source->Rerecord();
-
-  scoped_refptr<RasterSource> raster = recording_source->CreateRasterSource();
-  size_t total_memory_usage = raster->GetMemoryUsage();
-  EXPECT_GE(total_memory_usage, kReportedMemoryUsageInBytes);
-  EXPECT_LT(total_memory_usage, 2 * kReportedMemoryUsageInBytes);
 }
 
 TEST(RasterSourceTest, RasterTransformWithoutRecordingScale) {

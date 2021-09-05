@@ -57,7 +57,8 @@ class AndroidLiveTabContext : public sessions::LiveTabContext {
       bool pin,
       bool from_last_session,
       const sessions::PlatformSpecificTabData* storage_namespace,
-      const sessions::SerializedUserAgentOverride& user_agent_override)
+      const sessions::SerializedUserAgentOverride& user_agent_override,
+      const std::map<std::string, bool> page_action_overrides)
       override;
   sessions::LiveTab* ReplaceRestoredTab(
       const std::vector<sessions::SerializedNavigationEntry>& navigations,
@@ -66,7 +67,8 @@ class AndroidLiveTabContext : public sessions::LiveTabContext {
       bool from_last_session,
       const std::string& extension_app_id,
       const sessions::PlatformSpecificTabData* tab_platform_data,
-      const sessions::SerializedUserAgentOverride& user_agent_override)
+      const sessions::SerializedUserAgentOverride& user_agent_override,
+      const std::map<std::string, bool> page_action_overrides)
       override;
   void CloseTab() override;
 

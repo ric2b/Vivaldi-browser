@@ -29,6 +29,8 @@
 #endif  // BUILDFLAG(USE_TCMALLOC)
 #endif  // defined(OS_CHROMEOS)
 
+#include "components/content_injection/renderer/content_injection_manager.h"
+
 namespace {
 
 void BindWebRTCLoggingAgent(
@@ -75,4 +77,8 @@ void ExposeChromeRendererInterfacesToBrowser(
   binders->Add(base::BindRepeating(&BindSpellChecker, client),
                base::SequencedTaskRunnerHandle::Get());
 #endif
+
+  // Vivaldi
+  binders->Add(base::BindRepeating(&content_injection::Manager::BindReceiver),
+               base::SequencedTaskRunnerHandle::Get());
 }

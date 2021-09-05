@@ -26,7 +26,7 @@ namespace vivaldi {
 
 namespace {
 
-// For thumbanils in theory we can use RenderWidgetHostView::CopyFromSurface,
+// For thumbnails in theory we can use RenderWidgetHostView::CopyFromSurface,
 // instead of our IPC capture, but it works for some reason only on Mac.
 constexpr bool use_CopyFromSurface = false;
 
@@ -203,10 +203,6 @@ bool ThumbnailCaptureContents::CanDragEnter(
   return false;
 }
 
-bool ThumbnailCaptureContents::EmbedsFullscreenWidget() {
-  return false;
-}
-
 void ThumbnailCaptureContents::RequestMediaAccessPermission(
     WebContents* contents,
     const content::MediaStreamRequest& request,
@@ -329,7 +325,6 @@ void ThumbnailCaptureContents::CaptureViaIpc() {
   params.full_page = false;
   params.once_per_contents = true;
   params.target_size = target_size_;
-
   CapturePage::Capture(offscreen_tab_web_contents_.get(), params,
                        base::Bind(&ThumbnailCaptureContents::OnIpcCaptureDone,
                                   weak_ptr_factory_.GetWeakPtr()));

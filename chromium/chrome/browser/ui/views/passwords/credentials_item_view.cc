@@ -56,14 +56,14 @@ void CircularImageView::OnPaint(gfx::Canvas* canvas) {
 }  // namespace
 
 CredentialsItemView::CredentialsItemView(
-    views::ButtonListener* button_listener,
+    PressedCallback callback,
     const base::string16& upper_text,
     const base::string16& lower_text,
-    const autofill::PasswordForm* form,
+    const password_manager::PasswordForm* form,
     network::mojom::URLLoaderFactory* loader_factory,
     int upper_text_style,
     int lower_text_style)
-    : Button(button_listener), form_(form) {
+    : Button(std::move(callback)) {
   SetNotifyEnterExitOnChild(true);
   views::BoxLayout* layout =
       SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -83,10 +83,10 @@ CredentialsItemView::CredentialsItemView(
   DCHECK(image.Width() >= kAvatarImageSize &&
          image.Height() >= kAvatarImageSize);
   UpdateAvatar(image.AsImageSkia());
-  if (form_->icon_url.is_valid()) {
+  if (form->icon_url.is_valid()) {
     // Fetch the actual avatar.
     AccountAvatarFetcher* fetcher = new AccountAvatarFetcher(
-        form_->icon_url, weak_ptr_factory_.GetWeakPtr());
+        form->icon_url, weak_ptr_factory_.GetWeakPtr());
     fetcher->Start(loader_factory);
   }
   AddChildView(std::move(image_view));
@@ -121,9 +121,9 @@ CredentialsItemView::CredentialsItemView(
     lower_label_ = text_container->AddChildView(std::move(lower_label));
   }
 
-  if (form_->is_public_suffix_match) {
+  if (form->is_public_suffix_match) {
     info_icon_ = AddChildView(std::make_unique<views::TooltipIcon>(
-        base::UTF8ToUTF16(form_->url.GetOrigin().spec())));
+        base::UTF8ToUTF16(form->url.GetOrigin().spec())));
   }
 
   if (!upper_text.empty() && !lower_text.empty())
@@ -137,8 +137,8 @@ CredentialsItemView::CredentialsItemView(
 CredentialsItemView::~CredentialsItemView() = default;
 
 void CredentialsItemView::SetStoreIndicatorIcon(
-    autofill::PasswordForm::Store store) {
-  if (store == autofill::PasswordForm::Store::kAccountStore &&
+    password_manager::PasswordForm::Store store) {
+  if (store == password_manager::PasswordForm::Store::kAccountStore &&
       !store_indicator_icon_view_) {
     store_indicator_icon_view_ =
         AddChildView(std::make_unique<views::ImageView>());
@@ -150,7 +150,7 @@ void CredentialsItemView::SetStoreIndicatorIcon(
         vector_icons::kSyncIcon,
 #endif  // !BUILDFLAG(GOOGLE_CHROME_BRANDING)
         gfx::kPlaceholderColor));
-  } else if (store == autofill::PasswordForm::Store::kProfileStore &&
+  } else if (store == password_manager::PasswordForm::Store::kProfileStore &&
              store_indicator_icon_view_) {
     RemoveChildView(store_indicator_icon_view_);
     store_indicator_icon_view_ = nullptr;

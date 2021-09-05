@@ -2029,18 +2029,16 @@ TEST_F(WebStateObserverTest, FailedSslConnection) {
           web_state(), url, ui::PageTransition::PAGE_TRANSITION_TYPED, &context,
           &nav_id));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
-  if (base::FeatureList::IsEnabled(web::features::kSSLCommittedInterstitials)) {
-    // First, a placeholder navigation starts and finishes.
-    EXPECT_CALL(observer_, DidStartLoading(web_state()));
-    EXPECT_CALL(observer_, DidStopLoading(web_state()));
-    EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
-    EXPECT_CALL(observer_,
-                PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
+  // First, a placeholder navigation starts and finishes.
+  EXPECT_CALL(observer_, DidStartLoading(web_state()));
+  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
 
-    // Finally, the error page itself is loaded.
-    EXPECT_CALL(observer_, DidStartLoading(web_state()));
-    EXPECT_CALL(observer_, DidStopLoading(web_state()));
-  }
+  // Finally, the error page itself is loaded.
+  EXPECT_CALL(observer_, DidStartLoading(web_state()));
+  EXPECT_CALL(observer_, DidStopLoading(web_state()));
 
   test::LoadUrl(web_state(), url);
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
@@ -2323,8 +2321,9 @@ TEST_F(WebStateObserverTest, StopFinishedNavigation) {
 
 // Tests that iframe navigation triggers DidChangeBackForwardState.
 TEST_F(WebStateObserverTest, IframeNavigation) {
-  // TODO(crbug.com/1076233): Test is failing when running on iOS 13.4.
-  if (base::ios::IsRunningOnOrLater(13, 4, 0)) {
+  // This test fails in iOS 13.4 but is fixed in iOS 14. See crbug.com//1076233.
+  if (base::ios::IsRunningOnOrLater(13, 4, 0) &&
+      !base::ios::IsRunningOnIOS14OrLater()) {
     return;
   }
 

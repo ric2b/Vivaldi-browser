@@ -306,6 +306,7 @@ target(link_target_type, "gles2_sources") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//build:chromecast_buildflags",
+    "//build:chromeos_buildflags",
     "//components/crash/core/common",
     "//components/viz/common:resource_format_utils",
     "//gpu/command_buffer/client",
@@ -352,6 +353,8 @@ target(link_target_type, "gles2_sources") {
         "external_vk_image_factory.h",
         "external_vk_image_gl_representation.cc",
         "external_vk_image_gl_representation.h",
+        "external_vk_image_overlay_representation.cc",
+        "external_vk_image_overlay_representation.h",
         "external_vk_image_skia_representation.cc",
         "external_vk_image_skia_representation.h",
       ]
@@ -387,7 +390,10 @@ target(link_target_type, "gles2_sources") {
   }
 
   if (use_dawn) {
-    deps += [ "//third_party/dawn/src/dawn_native" ]
+    deps += [
+      "//third_party/dawn/src/dawn_native",
+      "//third_party/dawn/src/dawn_platform",
+    ]
   }
 
   if (is_mac) {

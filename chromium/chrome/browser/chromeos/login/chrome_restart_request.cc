@@ -69,10 +69,10 @@ namespace {
 // Increase logging level for Guest mode to avoid INFO messages in logs.
 const char kGuestModeLoggingLevel[] = "1";
 
-// Derives the new command line from |base_command_line| by doing the following:
+// Derives the new command line from `base_command_line` by doing the following:
 // - Forward a given switches list to new command;
 // - Set start url if given;
-// - Append/override switches using |new_switches|;
+// - Append/override switches using `new_switches`;
 void DeriveCommandLine(const GURL& start_url,
                        const base::CommandLine& base_command_line,
                        const base::DictionaryValue& new_switches,
@@ -125,9 +125,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kGpuSandboxStartEarly,
     ::switches::kNumRasterThreads,
     ::switches::kPlatformDisallowsChromeOSDirectVideoDecoder,
-    ::switches::kPpapiFlashArgs,
-    ::switches::kPpapiFlashPath,
-    ::switches::kPpapiFlashVersion,
     ::switches::kPpapiInProcess,
     ::switches::kRemoteDebuggingPort,
     ::switches::kRendererStartupDialog,
@@ -172,6 +169,7 @@ void DeriveCommandLine(const GURL& start_url,
     blink::switches::kEnableLowResTiling,
     blink::switches::kEnablePreferCompositingToLCDText,
     blink::switches::kEnableRGBA4444Textures,
+    blink::switches::kEnableRasterSideDarkModeForImages,
     blink::switches::kEnableZeroCopy,
     blink::switches::kGpuRasterizationMSAASampleCount,
     chromeos::switches::kDefaultWallpaperLarge,
@@ -229,7 +227,7 @@ void DeriveCommandLine(const GURL& start_url,
   }
 }
 
-// Adds allowlisted features to |out_command_line| if they are enabled in the
+// Adds allowlisted features to `out_command_line` if they are enabled in the
 // current session.
 void DeriveEnabledFeatures(base::CommandLine* out_command_line) {
   static const base::Feature* kForwardEnabledFeatures[] = {

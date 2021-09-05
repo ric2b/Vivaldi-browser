@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_local_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_property_parser.h"
+#include "third_party/blink/renderer/core/css/parser/css_selector_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/css/properties/longhand.h"
@@ -103,11 +104,12 @@ void RegisterProperty(Document& document,
 }
 
 scoped_refptr<CSSVariableData> CreateVariableData(String s) {
-  auto tokens = CSSTokenizer(s).TokenizeToEOF();
+  CSSTokenizer tokenizer(s);
+  auto tokens = tokenizer.TokenizeToEOF();
   CSSParserTokenRange range(tokens);
   bool is_animation_tainted = false;
   bool needs_variable_resolution = false;
-  return CSSVariableData::Create(range, is_animation_tainted,
+  return CSSVariableData::Create({range, StringView(s)}, is_animation_tainted,
                                  needs_variable_resolution, KURL(),
                                  WTF::TextEncoding());
 }
@@ -157,6 +159,16 @@ const CSSValue* ParseValue(Document& document, String syntax, String value) {
   CSSParserTokenRange range(tokens);
   return syntax_definition->Parse(range, *context,
                                   /* is_animation_tainted */ false);
+}
+
+CSSSelectorList ParseSelectorList(const String& string) {
+  auto* context = MakeGarbageCollected<CSSParserContext>(
+      kHTMLStandardMode, SecureContextMode::kInsecureContext);
+  auto* sheet = MakeGarbageCollected<StyleSheetContents>(context);
+  CSSTokenizer tokenizer(string);
+  const auto tokens = tokenizer.TokenizeToEOF();
+  CSSParserTokenRange range(tokens);
+  return CSSSelectorParser::ParseSelector(range, context, sheet);
 }
 
 }  // namespace css_test_helpers

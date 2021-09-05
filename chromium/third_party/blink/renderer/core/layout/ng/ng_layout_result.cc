@@ -40,10 +40,13 @@ ASSERT_SIZE(NGLayoutResult, SameSizeAsNGLayoutResult);
 
 // static
 scoped_refptr<const NGLayoutResult>
-NGLayoutResult::CloneWithPostLayoutFragments(const NGLayoutResult& other) {
+NGLayoutResult::CloneWithPostLayoutFragments(
+    const NGLayoutResult& other,
+    const base::Optional<PhysicalRect> updated_layout_overflow) {
   return base::AdoptRef(new NGLayoutResult(
       other, NGPhysicalBoxFragment::CloneWithPostLayoutFragments(
-                 To<NGPhysicalBoxFragment>(other.PhysicalFragment()))));
+                 To<NGPhysicalBoxFragment>(other.PhysicalFragment()),
+                 updated_layout_overflow)));
 }
 
 NGLayoutResult::NGLayoutResult(
@@ -103,6 +106,8 @@ NGLayoutResult::NGLayoutResult(
   }
   if (builder->table_column_count_)
     EnsureRareData()->table_column_count_ = *builder->table_column_count_;
+  if (builder->math_data_.has_value())
+    EnsureRareData()->math_layout_data_ = builder->math_data_;
 }
 
 NGLayoutResult::NGLayoutResult(
@@ -208,7 +213,7 @@ NGLayoutResult::NGLayoutResult(
     DCHECK(!physical_fragment_->IsFormattingContextRoot());
 
     // Self-collapsing children must have a block-size of zero.
-    NGFragment fragment(physical_fragment_->Style().GetWritingMode(),
+    NGFragment fragment(physical_fragment_->Style().GetWritingDirection(),
                         *physical_fragment_);
     DCHECK_EQ(LayoutUnit(), fragment.BlockSize());
   }

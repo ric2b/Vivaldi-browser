@@ -445,10 +445,6 @@ AST_MATCHER(clang::FunctionDecl, isImplicitFunctionTemplateSpecialization) {
   }
 }
 
-AST_MATCHER(clang::Type, anyCharType) {
-  return Node.isAnyCharacterType();
-}
-
 AST_POLYMORPHIC_MATCHER(isInMacroLocation,
                         AST_POLYMORPHIC_SUPPORTED_TYPES(clang::Decl,
                                                         clang::Stmt,
@@ -489,6 +485,30 @@ const clang::FieldDecl* GetExplicitDecl(const clang::FieldDecl* field_decl) {
   return field_decl;
 }
 
+// Given:
+//   template <typename T>
+//   class MyTemplate {
+//     T field;  // This is an explicit field declaration.
+//   };
+//   void foo() {
+//     // This creates implicit template specialization for MyTemplate,
+//     // including an implicit |field| declaration.
+//     MyTemplate<int> v;
+//     v.field = 123;
+//   }
+// and
+//   innerMatcher that will match the explicit |T field| declaration (but not
+//   necessarily the implicit template declarations),
+// hasExplicitFieldDecl(innerMatcher) will match both explicit and implicit
+// field declarations.
+//
+// For example, |member_expr_matcher| below will match |v.field| in the example
+// above, even though the type of |v.field| is |int|, rather than |T| (matched
+// by substTemplateTypeParmType()):
+//   auto explicit_field_decl_matcher =
+//       fieldDecl(hasType(substTemplateTypeParmType()));
+//   auto member_expr_matcher = memberExpr(member(fieldDecl(
+//       hasExplicitFieldDecl(explicit_field_decl_matcher))))
 AST_MATCHER_P(clang::FieldDecl,
               hasExplicitFieldDecl,
               clang::ast_matchers::internal::Matcher<clang::FieldDecl>,
@@ -673,18 +693,97 @@ AST_MATCHER(clang::FieldDecl, overlapsOtherDeclsWithinRecordDecl) {
   return has_sibling_with_overlapping_location;
 }
 
-// Matches RecordDecl if
-// 1) it has a FieldDecl that matches the InnerMatcher
+// Matches clang::Type if
+// 1) it represents a RecordDecl with a FieldDecl that matches the InnerMatcher
+//    (*all* such FieldDecls will be matched)
 // or
-// 2) it has a FieldDecl that hasType of a RecordDecl that matches the
-//    InnerMatcher (this recurses to any depth).
-AST_MATCHER_P(clang::RecordDecl,
-              hasNestedFieldDecl,
+// 2) it represents an array or a RecordDecl that nests the case #1
+//    (this recurses to any depth).
+AST_MATCHER_P(clang::QualType,
+              typeWithEmbeddedFieldDecl,
               clang::ast_matchers::internal::Matcher<clang::FieldDecl>,
               InnerMatcher) {
-  auto matcher = recordDecl(has(fieldDecl(anyOf(
-      InnerMatcher, hasType(recordDecl(hasNestedFieldDecl(InnerMatcher)))))));
-  return matcher.matches(Node, Finder, Builder);
+  const clang::Type* type =
+      Node.getDesugaredType(Finder->getASTContext()).getTypePtrOrNull();
+  if (!type)
+    return false;
+
+  if (const clang::CXXRecordDecl* record_decl = type->getAsCXXRecordDecl()) {
+    auto matcher = recordDecl(forEach(fieldDecl(hasExplicitFieldDecl(anyOf(
+        InnerMatcher, hasType(typeWithEmbeddedFieldDecl(InnerMatcher)))))));
+    return matcher.matches(*record_decl, Finder, Builder);
+  }
+
+  if (type->isArrayType()) {
+    const clang::ArrayType* array_type =
+        Finder->getASTContext().getAsArrayType(Node);
+    auto matcher = typeWithEmbeddedFieldDecl(InnerMatcher);
+    return matcher.matches(array_type->getElementType(), Finder, Builder);
+  }
+
+  return false;
+}
+
+// forEachInitExprWithFieldDecl matches InitListExpr if it
+// 1) evaluates to a RecordType
+// 2) has a InitListExpr + FieldDecl pair that matches the submatcher args.
+//
+// forEachInitExprWithFieldDecl is based on and very similar to the builtin
+// forEachArgumentWithParam matcher.
+AST_MATCHER_P2(clang::InitListExpr,
+               forEachInitExprWithFieldDecl,
+               clang::ast_matchers::internal::Matcher<clang::Expr>,
+               init_expr_matcher,
+               clang::ast_matchers::internal::Matcher<clang::FieldDecl>,
+               field_decl_matcher) {
+  const clang::InitListExpr& init_list_expr = Node;
+  const clang::Type* type = init_list_expr.getType()
+                                .getDesugaredType(Finder->getASTContext())
+                                .getTypePtrOrNull();
+  if (!type)
+    return false;
+  const clang::CXXRecordDecl* record_decl = type->getAsCXXRecordDecl();
+  if (!record_decl)
+    return false;
+
+  bool is_matching = false;
+  clang::ast_matchers::internal::BoundNodesTreeBuilder result;
+  const std::vector<const clang::FieldDecl*> field_decls(
+      record_decl->field_begin(), record_decl->field_end());
+  for (unsigned i = 0; i < init_list_expr.getNumInits(); i++) {
+    const clang::Expr* expr = init_list_expr.getInit(i);
+
+    const clang::FieldDecl* field_decl = nullptr;
+    if (const clang::ImplicitValueInitExpr* implicit_value_init_expr =
+            clang::dyn_cast<clang::ImplicitValueInitExpr>(expr)) {
+      continue;  // Do not match implicit value initializers.
+    } else if (const clang::DesignatedInitExpr* designated_init_expr =
+                   clang::dyn_cast<clang::DesignatedInitExpr>(expr)) {
+      // Nested designators are unsupported by C++.
+      if (designated_init_expr->size() != 1)
+        break;
+      expr = designated_init_expr->getInit();
+      field_decl = designated_init_expr->getDesignator(0)->getField();
+    } else {
+      if (i >= field_decls.size())
+        break;
+      field_decl = field_decls[i];
+    }
+
+    clang::ast_matchers::internal::BoundNodesTreeBuilder field_matches(
+        *Builder);
+    if (field_decl_matcher.matches(*field_decl, Finder, &field_matches)) {
+      clang::ast_matchers::internal::BoundNodesTreeBuilder expr_matches(
+          field_matches);
+      if (init_expr_matcher.matches(*expr, Finder, &expr_matches)) {
+        result.addMatch(expr_matches);
+        is_matching = true;
+      }
+    }
+  }
+
+  *Builder = std::move(result);
+  return is_matching;
 }
 
 // Rewrites |SomeClass* field| (matched as "affectedFieldDecl") into
@@ -853,16 +952,11 @@ int main(int argc, const char* argv[]) {
   //     int (*func_ptr)();
   //     int (MyStruct::* member_func_ptr)(char);
   //     int (*ptr_to_array_of_ints)[123]
-  //     StructOrClassWithDeletedOperatorNew* stack_or_gc_ptr;
   //   };
   // matches |int*|, but not the other types.
-  auto record_with_deleted_allocation_operator_type_matcher =
-      recordType(hasDeclaration(cxxRecordDecl(
-          hasMethod(allOf(hasOverloadedOperatorName("new"), isDeleted())))));
   auto supported_pointer_types_matcher =
       pointerType(unless(pointee(hasUnqualifiedDesugaredType(
-          anyOf(record_with_deleted_allocation_operator_type_matcher,
-                functionType(), memberPointerType(), arrayType())))));
+          anyOf(functionType(), memberPointerType(), arrayType())))));
 
   // Implicit field declarations =========
   // Matches field declarations that do not explicitly appear in the source
@@ -976,6 +1070,23 @@ int main(int argc, const char* argv[]) {
                cxxConstructExpr(templated_function_arg_matcher)),
       &affected_expr_rewriter);
 
+  // Calls to constructors via an implicit cast =========
+  // Given
+  //   struct I { I(int*) {} };
+  //   void bar(I i) {}
+  //   struct S { int* y; };
+  //   void foo(const S& s) {
+  //     bar(s.y);  // implicit cast from |s.y| to I.
+  //   }
+  // binds the |s.y| expr if it matches the |affected_expr_matcher| above.
+  //
+  // See also testcases in tests/affected-expr-original.cc
+  auto implicit_ctor_expr_matcher = implicitCastExpr(has(cxxConstructExpr(allOf(
+      hasDeclaration(
+          cxxConstructorDecl(allOf(parameterCountIs(1), unless(isExplicit())))),
+      forEachArgumentWithParam(affected_expr_matcher, parmVarDecl())))));
+  match_finder.addMatcher(implicit_ctor_expr_matcher, &affected_expr_rewriter);
+
   // |auto| type declarations =========
   // Given
   //   struct S { int* y; };
@@ -1038,6 +1149,32 @@ int main(int argc, const char* argv[]) {
   match_finder.addMatcher(overlapping_field_decl_matcher,
                           &overlapping_field_decl_writer);
 
+  // Matches fields initialized with a non-nullptr value in a constexpr
+  // constructor.  See also the testcase in tests/gen-constexpr-test.cc.
+  auto non_nullptr_expr_matcher =
+      expr(unless(ignoringImplicit(cxxNullPtrLiteralExpr())));
+  auto constexpr_ctor_field_initializer_matcher = cxxConstructorDecl(
+      allOf(isConstexpr(), forEachConstructorInitializer(allOf(
+                               forField(field_decl_matcher),
+                               withInitializer(non_nullptr_expr_matcher)))));
+  FilteredExprWriter constexpr_ctor_field_initializer_writer(
+      &output_helper, "constexpr-ctor-field-initializer");
+  match_finder.addMatcher(constexpr_ctor_field_initializer_matcher,
+                          &constexpr_ctor_field_initializer_writer);
+
+  // Matches constexpr initializer list expressions that initialize a rewritable
+  // field with a non-nullptr value.  For more details and rationale see the
+  // testcases in tests/gen-constexpr-test.cc.
+  auto constexpr_var_initializer_matcher = varDecl(
+      allOf(isConstexpr(),
+            hasInitializer(findAll(initListExpr(forEachInitExprWithFieldDecl(
+                non_nullptr_expr_matcher,
+                hasExplicitFieldDecl(field_decl_matcher)))))));
+  FilteredExprWriter constexpr_var_initializer_writer(
+      &output_helper, "constexpr-var-initializer");
+  match_finder.addMatcher(constexpr_var_initializer_matcher,
+                          &constexpr_var_initializer_writer);
+
   // See the doc comment for the isInMacroLocation matcher
   // and the testcases in tests/gen-macro-test.cc.
   auto macro_field_decl_matcher =
@@ -1045,27 +1182,51 @@ int main(int argc, const char* argv[]) {
   FilteredExprWriter macro_field_decl_writer(&output_helper, "macro");
   match_finder.addMatcher(macro_field_decl_matcher, &macro_field_decl_writer);
 
-  // See the doc comment for the anyCharType matcher
-  // and the testcases in tests/gen-char-test.cc.
-  auto char_ptr_field_decl_matcher = fieldDecl(allOf(
-      field_decl_matcher,
-      hasType(pointerType(pointee(qualType(allOf(
-          isConstQualified(), hasUnqualifiedDesugaredType(anyCharType()))))))));
-  FilteredExprWriter char_ptr_field_decl_writer(&output_helper, "const-char");
-  match_finder.addMatcher(char_ptr_field_decl_matcher,
-                          &char_ptr_field_decl_writer);
-
   // See the testcases in tests/gen-global-destructor-test.cc.
-  auto global_destructor_matcher = varDecl(
-      allOf(hasGlobalStorage(),
-            hasType(recordDecl(hasNestedFieldDecl(field_decl_matcher)))));
-  FilteredExprWriter global_destructor_writer(&output_helper,
-                                              "global-destructor");
+  auto global_destructor_matcher =
+      varDecl(allOf(hasGlobalStorage(),
+                    hasType(typeWithEmbeddedFieldDecl(field_decl_matcher))));
+  FilteredExprWriter global_destructor_writer(&output_helper, "global-scope");
   match_finder.addMatcher(global_destructor_matcher, &global_destructor_writer);
 
-  // Matches fields in unions - see the testcases in tests/gen-unions-test.cc.
-  auto union_field_decl_matcher = fieldDecl(
-      allOf(field_decl_matcher, hasParent(decl(recordDecl(isUnion())))));
+  // Matches CXXRecordDecls with a deleted operator new - e.g.
+  // StructWithNoOperatorNew below:
+  //     struct StructWithNoOperatorNew {
+  //       void* operator new(size_t) = delete;
+  //     };
+  auto record_with_deleted_allocation_operator_type_matcher = cxxRecordDecl(
+      hasMethod(allOf(hasOverloadedOperatorName("new"), isDeleted())));
+  // Matches rewritable fields inside structs with no operator new.  See the
+  // testcase in tests/gen-deleted-operator-new-test.cc
+  auto field_in_record_with_deleted_operator_new_matcher = fieldDecl(
+      allOf(field_decl_matcher,
+            hasParent(record_with_deleted_allocation_operator_type_matcher)));
+  FilteredExprWriter field_in_record_with_deleted_operator_new_writer(
+      &output_helper, "embedder-has-no-operator-new");
+  match_finder.addMatcher(field_in_record_with_deleted_operator_new_matcher,
+                          &field_in_record_with_deleted_operator_new_writer);
+  // Matches rewritable fields that contain a pointer, pointing to a pointee
+  // with no operator new.  See the testcase in
+  // tests/gen-deleted-operator-new-test.cc
+  auto field_pointing_to_record_with_deleted_operator_new_matcher =
+      fieldDecl(allOf(
+          field_decl_matcher,
+          hasType(pointerType(
+              pointee(hasUnqualifiedDesugaredType(recordType(hasDeclaration(
+                  record_with_deleted_allocation_operator_type_matcher))))))));
+  FilteredExprWriter field_pointing_to_record_with_deleted_operator_new_writer(
+      &output_helper, "pointee-has-no-operator-new");
+  match_finder.addMatcher(
+      field_pointing_to_record_with_deleted_operator_new_matcher,
+      &field_pointing_to_record_with_deleted_operator_new_writer);
+
+  // Matches fields in unions (both directly rewritable fields as well as union
+  // fields that embed a struct that contains a rewritable field).  See also the
+  // testcases in tests/gen-unions-test.cc.
+  auto union_field_decl_matcher = recordDecl(allOf(
+      isUnion(), forEach(fieldDecl(anyOf(field_decl_matcher,
+                                         hasType(typeWithEmbeddedFieldDecl(
+                                             field_decl_matcher)))))));
   FilteredExprWriter union_field_decl_writer(&output_helper, "union");
   match_finder.addMatcher(union_field_decl_matcher, &union_field_decl_writer);
 

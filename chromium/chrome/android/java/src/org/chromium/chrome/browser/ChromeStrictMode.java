@@ -18,6 +18,7 @@ import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.strictmode.KnownViolations;
 import org.chromium.components.strictmode.StrictModePolicyViolation;
 import org.chromium.components.strictmode.ThreadStrictModeInterceptor;
@@ -210,6 +211,14 @@ public class ChromeStrictMode {
             threadInterceptor.ignoreExternalMethod(Violation.DETECT_DISK_READ,
                     "android.net.ConnectivityManager#registerDefaultNetworkCallback");
         }
+
+        // crbug.com/1133401
+        threadInterceptor.ignoreExternalMethod(
+                Violation.DETECT_DISK_IO, "android.content.ContentResolver#removePeriodicSync");
+        threadInterceptor.ignoreExternalMethod(
+                Violation.DETECT_DISK_IO, "android.content.ContentResolver#setIsSyncable");
+        threadInterceptor.ignoreExternalMethod(
+                Violation.DETECT_DISK_IO, "android.content.ContentResolver#setSyncAutomatically");
     }
 
     public static void addExemptions(ThreadStrictModeInterceptor.Builder threadInterceptor) {

@@ -182,19 +182,10 @@ class ImageTransferCacheEntryTest
     DCHECK_EQ(height, allocated_texture.height());
     DCHECK(!allocated_texture.hasMipMaps());
     DCHECK(allocated_texture_info.fTarget == GL_TEXTURE_2D);
-    if (texture_format == GL_RG8_EXT) {
-      // TODO(crbug.com/985458): using GL_RGBA8_EXT is a workaround so that we
-      // can make a SkImage out of a GL_RG8_EXT texture. Revisit this once Skia
-      // supports a corresponding SkColorType.
-      allocated_texture = GrBackendTexture(
-          width, height, GrMipMapped::kNo,
-          GrGLTextureInfo{GL_TEXTURE_2D, allocated_texture_info.fID,
-                          GL_RGBA8_EXT});
-    }
     *released = false;
     return SkImage::MakeFromTexture(
         gr_context, allocated_texture, kTopLeft_GrSurfaceOrigin,
-        texture_format == GL_RG8_EXT ? kRGBA_8888_SkColorType
+        texture_format == GL_RG8_EXT ? kR8G8_unorm_SkColorType
                                      : kAlpha_8_SkColorType,
         kOpaque_SkAlphaType, nullptr /* colorSpace */, MarkTextureAsReleased,
         released);
@@ -209,14 +200,6 @@ class ImageTransferCacheEntryTest
 };
 
 TEST_P(ImageTransferCacheEntryTest, Deserialize) {
-#if defined(OS_ANDROID)
-  // TODO(crbug.com/985458): this test is failing on Android for NV12 and we
-  // don't understand why yet. Revisit this once Skia supports an RG8
-  // SkColorType.
-  if (GetParam() == YUVDecodeFormat::kYUV2)
-    return;
-#endif
-
   // Create a client-side entry from YUV planes. Use a different stride than the
   // width to test that alignment works correctly.
   const int image_width = 12;
@@ -303,13 +286,6 @@ TEST_P(ImageTransferCacheEntryTest, HardwareDecodedNoMipsAtCreation) {
 }
 
 TEST_P(ImageTransferCacheEntryTest, HardwareDecodedMipsAtCreation) {
-#if defined(OS_ANDROID)
-  // TODO(crbug.com/985458): this test is failing on Android for NV12 and we
-  // don't understand why yet. Revisit this once Skia supports an RG8
-  // SkColorType.
-  if (GetParam() == YUVDecodeFormat::kYUV2)
-    return;
-#endif
   std::unique_ptr<bool[]> release_flags;
   std::vector<sk_sp<SkImage>> plane_images = CreateTestYUVImage(&release_flags);
   const size_t plane_images_size = plane_images.size();
@@ -341,13 +317,6 @@ TEST_P(ImageTransferCacheEntryTest, HardwareDecodedMipsAtCreation) {
 }
 
 TEST_P(ImageTransferCacheEntryTest, HardwareDecodedMipsAfterCreation) {
-#if defined(OS_ANDROID)
-  // TODO(crbug.com/985458): this test is failing on Android for NV12 and we
-  // don't understand why yet. Revisit this once Skia supports an RG8
-  // SkColorType.
-  if (GetParam() == YUVDecodeFormat::kYUV2)
-    return;
-#endif
   std::unique_ptr<bool[]> release_flags;
   std::vector<sk_sp<SkImage>> plane_images = CreateTestYUVImage(&release_flags);
   const size_t plane_images_size = plane_images.size();

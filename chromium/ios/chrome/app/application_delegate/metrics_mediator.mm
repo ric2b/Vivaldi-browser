@@ -17,6 +17,7 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_service.h"
+#import "components/previous_session_info/previous_session_info.h"
 #include "components/ukm/ios/features.h"
 #import "ios/chrome/app/application_delegate/metric_kit_subscriber.h"
 #import "ios/chrome/app/application_delegate/startup_information.h"
@@ -25,7 +26,6 @@
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
 #include "ios/chrome/browser/main/browser.h"
 #include "ios/chrome/browser/metrics/first_user_action_recorder.h"
-#import "ios/chrome/browser/metrics/previous_session_info.h"
 #import "ios/chrome/browser/net/connection_type_observer_bridge.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/system_flags.h"
@@ -34,6 +34,7 @@
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/widget_kit/widget_metrics_util.h"
 #include "ios/chrome/common/app_group/app_group_metrics_mainapp.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/distribution/app_distribution_provider.h"
@@ -185,6 +186,10 @@ using metrics_mediator::kAppEnteredBackgroundDateKey;
   if (UIAccessibilityIsVoiceOverRunning()) {
     base::RecordAction(
         base::UserMetricsAction("MobileVoiceOverActiveOnLaunch"));
+  }
+
+  if (@available(iOS 14, *)) {
+    [WidgetMetricsUtil logInstalledWidgets];
   }
 
   // Create the first user action recorder and schedule a task to expire it

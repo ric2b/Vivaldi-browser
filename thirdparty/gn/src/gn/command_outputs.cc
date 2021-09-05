@@ -17,7 +17,7 @@ namespace commands {
 const char kOutputs[] = "outputs";
 const char kOutputs_HelpShort[] = "outputs: Which files a source/target make.";
 const char kOutputs_Help[] =
-    R"(gn outputs <out_dir> <list of target or file names...> *
+    R"(gn outputs <out_dir> <list of target or file names...>
 
   Lists the output files corresponding to the given target(s) or file name(s).
   There can be multiple outputs because there can be more than one output

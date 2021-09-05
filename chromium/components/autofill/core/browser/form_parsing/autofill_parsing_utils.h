@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_PARSING_AUTOFILL_PARSING_UTILS_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_PARSING_AUTOFILL_PARSING_UTILS_H_
 
+#include <base/optional.h>
 #include <string>
 
 namespace autofill {
@@ -51,16 +52,11 @@ struct MatchingPattern {
   std::string pattern_identifier;
   std::string positive_pattern;
   float positive_score = 1.1f;
-  std::string negative_pattern;
+  base::Optional<std::string> negative_pattern;
   int match_field_attributes;
   int match_field_input_types;
   std::string language;
 };
-
-// Use these functions instead of storing "non standats type" constants that
-// bots might complaining over.
-MatchingPattern GetCompanyPatternEn();
-MatchingPattern GetCompanyPatternDe();
 
 }  // namespace autofill
 

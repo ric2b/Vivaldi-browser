@@ -14,7 +14,6 @@ import android.widget.ScrollView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.MemoryPressureListener;
 import org.chromium.base.memory.MemoryPressureCallback;
@@ -56,6 +55,8 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.mojom.WindowOpenDisposition;
+
+import java.util.Locale;
 
 /**
  * A mediator for the {@link FeedSurfaceCoordinator} responsible for interacting with the
@@ -209,13 +210,25 @@ public class FeedSurfaceMediator
             public void onContentChanged() {
                 mStreamContentChanged = true;
                 if (mSnapScrollHelper != null) mSnapScrollHelper.resetSearchBoxOnScroll(true);
+
+                // Feed v2's background is set to be transparent in {@link
+                // FeedSurfaceCoordinator#createStream} to show the Feed placeholder. When first
+                // batch of articles are about to show, set recyclerView back to non-transparent.
+                // Feed v2 doesn't call onAddFinished(), so we hide placeholder here.
+                if (FeedFeatures.isV2Enabled() && mCoordinator.isPlaceholderShown()) {
+                    stream.hidePlaceholder();
+                }
             }
 
             @Override
             public void onAddFinished() {
-                // After first batch of articles are loaded, set recyclerView back to
+                // Feed v1's background is set to be transparent in {@link
+                // FeedSurfaceCoordinator#createStream} to show the Feed placeholder. After first
+                // batch of articles finish fade-in animation, set recyclerView back to
                 // non-transparent.
-                stream.getView().getBackground().setAlpha(255);
+                if (!FeedFeatures.isV2Enabled() && mCoordinator.isPlaceholderShown()) {
+                    stream.hidePlaceholder();
+                }
                 if (mContentFirstAvailableTimeMs == 0) {
                     mContentFirstAvailableTimeMs = SystemClock.elapsedRealtime();
                     if (mHasPendingUmaRecording) {
@@ -228,19 +241,11 @@ public class FeedSurfaceMediator
 
             @Override
             public void onAddStarting() {
-                if (!mCoordinator.isPlaceholderShown()) {
-                    return;
-                }
-                // If the placeholder is shown, set sign-in box visible back.
-                RecyclerView recyclerView = (RecyclerView) stream.getView();
-                if (recyclerView != null) {
-                    View signInView = recyclerView.findViewById(R.id.signin_promo_view_container);
-                    if (signInView != null) {
-                        signInView.setAlpha(0f);
-                        signInView.setVisibility(View.VISIBLE);
-                        signInView.animate().alpha(1f).setDuration(
-                                recyclerView.getItemAnimator().getAddDuration());
-                    }
+                // Feed v1's sign-in view is set to be invisible in {@link
+                // FeedSurfaceCoordinator#getSigninPromoView} if the Feed placeholder is shown. Set
+                // sign-in box visible back when Feed articles are about to show.
+                if (!FeedFeatures.isV2Enabled() && mCoordinator.isPlaceholderShown()) {
+                    mCoordinator.fadeInSigninView();
                 }
             }
         };
@@ -615,8 +620,8 @@ public class FeedSurfaceMediator
             FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_TOGGLED_FEED);
             SuggestionsMetrics.recordArticlesListVisible();
         } else {
-            assert false
-                : String.format("Cannot handle action for item in the menu with id %d", itemId);
+            assert false : String.format(Locale.ENGLISH,
+                                   "Cannot handle action for item in the menu with id %d", itemId);
         }
     }
 

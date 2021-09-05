@@ -348,8 +348,12 @@ void WMFMediaPipeline::Initialize(ipc_data_source::Info source_info,
   LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " mime_type="
             << source_info.mime_type;
 
-  media_pipeline_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+  // NOTE(pettern): All tasks must run on the same thread or there will be
+  // hangs. See VB-74757 for the consequences.
+  media_pipeline_task_runner_ = base::ThreadPool::CreateSingleThreadTaskRunner(
+      {base::WithBaseSyncPrimitives(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::SingleThreadTaskRunnerThreadMode::DEDICATED);
   threaded_impl_ = std::make_unique<ThreadedImpl>();
 
   // See comments in the destructor about base::Unretained().

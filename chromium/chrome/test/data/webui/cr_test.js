@@ -127,6 +127,7 @@ function testDefinePropertyAttrWithSetter() {
   var obj = document.createElement('div');
 
   var hit = false;
+
   function onTestSet(value, oldValue) {
     assertEquals(obj, this);
     assertEquals(null, oldValue);
@@ -206,6 +207,7 @@ function testDefinePropertyBoolAttrEvent() {
 function testDefinePropertyBoolAttrEventWithHook() {
   var obj = document.createElement('div');
   var hit = false;
+
   function onTestSet(value, oldValue) {
     assertEquals(obj, this);
     assertTrue(this.test);

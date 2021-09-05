@@ -28,7 +28,6 @@
 
 #include "base/atomic_ref_count.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -50,7 +49,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/thread_restrictions.h"
@@ -84,6 +83,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/search/instant_test_utils.h"
+#include "chrome/browser/ui/search/local_ntp_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/browser/ui/webui/welcome/helpers.h"
@@ -152,6 +152,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -693,6 +694,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_Disable3DAPIs) {
   // Crash and reload the tab to get a new renderer.
   content::CrashTab(contents);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_RELOAD));
+  if (content::ShouldSkipEarlyCommitPendingForCrashedFrame())
+    EXPECT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_FALSE(IsWebGLEnabled(contents));
   // Enable with a policy.
   policies.Set(key::kDisable3DAPIs, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
@@ -700,6 +703,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_Disable3DAPIs) {
   UpdateProviderPolicy(policies);
   content::CrashTab(contents);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_RELOAD));
+  if (content::ShouldSkipEarlyCommitPendingForCrashedFrame())
+    EXPECT_TRUE(content::WaitForLoadStop(contents));
   EXPECT_TRUE(IsWebGLEnabled(contents));
 }
 
@@ -799,7 +804,8 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HomepageLocation) {
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_HOME));
   EXPECT_TRUE(content::WaitForLoadStop(contents));
-  EXPECT_TRUE(search::IsInstantNTP(contents));
+  EXPECT_EQ(local_ntp_test_utils::GetFinalNtpUrl(browser()->profile()),
+            contents->GetURL());
 }
 
 #if defined(OS_MAC) && defined(ADDRESS_SANITIZER)

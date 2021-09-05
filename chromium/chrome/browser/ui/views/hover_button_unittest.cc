@@ -76,22 +76,6 @@ class HoverButtonTest : public ChromeViewsTestBase {
   DISALLOW_COPY_AND_ASSIGN(HoverButtonTest);
 };
 
-class TestButtonListener : public views::ButtonListener {
- public:
-  TestButtonListener() = default;
-  ~TestButtonListener() override = default;
-
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
-    last_sender_ = sender;
-  }
-
-  views::View* last_sender() { return last_sender_; }
-
- private:
-  views::View* last_sender_ = nullptr;
-  DISALLOW_COPY_AND_ASSIGN(TestButtonListener);
-};
-
 // Double check the length of the strings used for testing are either over or
 // under the width used for the following tests.
 TEST_F(HoverButtonTest, ValidateTestData) {
@@ -118,8 +102,8 @@ TEST_F(HoverButtonTest, TooltipAndAccessibleName) {
     SCOPED_TRACE(testing::Message() << "Index: " << i << ", expected_tooltip="
                                     << (pair.tooltip ? "true" : "false"));
     auto button = std::make_unique<HoverButton>(
-        nullptr, CreateIcon(), base::ASCIIToUTF16(pair.title),
-        base::ASCIIToUTF16(pair.subtitle));
+        views::Button::PressedCallback(), CreateIcon(),
+        base::ASCIIToUTF16(pair.title), base::ASCIIToUTF16(pair.subtitle));
     button->SetSize(gfx::Size(kButtonWidth, 40));
 
     ui::AXNodeData data;
@@ -148,29 +132,29 @@ TEST_F(HoverButtonTest, CreateButtonWithSubtitleAndIcons) {
   std::unique_ptr<views::View> secondary_icon = CreateIcon();
   views::View* secondary_icon_raw = secondary_icon.get();
 
-  HoverButton button(nullptr, std::move(primary_icon),
+  HoverButton button(views::Button::PressedCallback(), std::move(primary_icon),
                      base::ASCIIToUTF16("Title"),
                      base::ASCIIToUTF16("Subtitle"), std::move(secondary_icon));
   EXPECT_TRUE(button.Contains(primary_icon_raw));
   EXPECT_TRUE(button.Contains(secondary_icon_raw));
 }
 
-// Tests that the listener is notified on mouse release rather than mouse press.
+// Tests that the button is activated on mouse release rather than mouse press.
 TEST_F(HoverButtonTest, ActivatesOnMouseReleased) {
-  TestButtonListener button_listener;
+  bool clicked = false;
   HoverButton* button = widget()->SetContentsView(std::make_unique<HoverButton>(
-      &button_listener, CreateIcon(), base::ASCIIToUTF16("Title"),
-      base::string16()));
+      base::BindRepeating([](bool* clicked) { *clicked = true; }, &clicked),
+      CreateIcon(), base::ASCIIToUTF16("Title"), base::string16()));
   button->SetBoundsRect(gfx::Rect(100, 100, 200, 200));
   widget()->Show();
 
-  // ButtonListener should not be activated on press.
+  // Button callback should not be called on press.
   generator()->PressLeftButton();
-  EXPECT_EQ(nullptr, button_listener.last_sender());
+  EXPECT_FALSE(clicked);
 
-  // ButtonListener should be activated on release.
+  // Button callback should be called on release.
   generator()->ReleaseLeftButton();
-  EXPECT_EQ(button, button_listener.last_sender());
+  EXPECT_TRUE(clicked);
 
   widget()->Close();
 }

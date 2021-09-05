@@ -74,7 +74,7 @@
 #include "components/metrics/content/rendering_perf_metrics_provider.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/metrics/cpu_metrics_provider.h"
-#include "components/metrics/demographic_metrics_provider.h"
+#include "components/metrics/demographics/demographic_metrics_provider.h"
 #include "components/metrics/drive_metrics_provider.h"
 #include "components/metrics/entropy_state_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -144,12 +144,15 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "base/feature_list.h"
+#include "chrome/browser/chromeos/child_accounts/family_features.h"
 #include "chrome/browser/chromeos/printing/printer_metrics_provider.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/metrics/ambient_mode_metrics_provider.h"
 #include "chrome/browser/metrics/assistant_service_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chrome/browser/metrics/cros_healthd_metrics_provider.h"
+#include "chrome/browser/metrics/family_link_user_metrics_provider.h"
 #include "chrome/browser/metrics/family_user_metrics_provider.h"
 #include "chrome/browser/signin/signin_status_metrics_provider_chromeos.h"
 #include "components/metrics/structured/structured_metrics_provider.h"
@@ -389,6 +392,14 @@ class ProfileClientImpl
 
   int GetNumberOfProfilesOnDisk() override {
     return g_browser_process->profile_manager()->GetNumberOfProfiles();
+  }
+
+  PrefService* GetPrefService() override {
+    Profile* profile = cached_metrics_profile_.GetMetricsProfile();
+    if (!profile)
+      return nullptr;
+
+    return profile->GetPrefs();
   }
 
   syncer::SyncService* GetSyncService() override {
@@ -735,8 +746,15 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<AmbientModeMetricsProvider>());
 
-  metrics_service_->RegisterMetricsProvider(
-      std::make_unique<FamilyUserMetricsProvider>());
+  if (base::FeatureList::IsEnabled(chromeos::kFamilyUserMetricsProvider)) {
+    metrics_service_->RegisterMetricsProvider(
+        std::make_unique<FamilyUserMetricsProvider>());
+  }
+
+  if (base::FeatureList::IsEnabled(chromeos::kFamilyLinkUserMetricsProvider)) {
+    metrics_service_->RegisterMetricsProvider(
+        std::make_unique<FamilyLinkUserMetricsProvider>());
+  }
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_CHROMEOS)
@@ -909,8 +927,9 @@ bool ChromeMetricsServiceClient::RegisterForNotifications() {
 
   omnibox_url_opened_subscription_ =
       OmniboxEventGlobalTracker::GetInstance()->RegisterCallback(
-          base::Bind(&ChromeMetricsServiceClient::OnURLOpenedFromOmnibox,
-                     base::Unretained(this)));
+          base::BindRepeating(
+              &ChromeMetricsServiceClient::OnURLOpenedFromOmnibox,
+              base::Unretained(this)));
 
 #if !defined(OS_ANDROID)
   browser_activity_watcher_ = std::make_unique<BrowserActivityWatcher>(

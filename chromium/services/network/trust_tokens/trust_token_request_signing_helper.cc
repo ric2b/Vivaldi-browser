@@ -11,6 +11,7 @@
 #include "base/base64.h"
 #include "base/containers/flat_set.h"
 #include "base/optional.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
@@ -22,10 +23,10 @@
 #include "net/http/structured_headers.h"
 #include "net/url_request/url_request.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "services/network/public/cpp/trust_token_http_headers.h"
 #include "services/network/public/cpp/trust_token_parameterization.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/trust_tokens/proto/public.pb.h"
-#include "services/network/trust_tokens/trust_token_http_headers.h"
 #include "services/network/trust_tokens/trust_token_request_canonicalizer.h"
 #include "services/network/trust_tokens/trust_token_store.h"
 #include "url/url_constants.h"
@@ -76,7 +77,7 @@ base::Optional<std::vector<std::string>> ParseTrustTokenSignedHeadersHeader(
 }  // namespace internal
 
 const char* const TrustTokenRequestSigningHelper::kSignableRequestHeaders[]{
-    kTrustTokensRequestHeaderSecSignedRedemptionRecord,
+    kTrustTokensRequestHeaderSecRedemptionRecord,
     kTrustTokensRequestHeaderSecTime,
     kTrustTokensRequestHeaderSecTrustTokensAdditionalSigningData,
 };
@@ -97,6 +98,7 @@ const char kSignatureHeaderSignRequestDataIncludeValue[] = "include";
 const char kSignatureHeaderSignRequestDataHeadersOnlyValue[] = "headers-only";
 const char kSignatureHeaderSignaturesKey[] = "signatures";
 const char kSignatureHeaderSignRequestDataKey[] = "sign-request-data";
+const char kSignatureHeaderAlgorithmKey[] = "alg";
 const char kSignatureHeaderPublicKeyKey[] = "public-key";
 const char kSignatureHeaderSignatureKey[] = "sig";
 const char kRedemptionRecordHeaderRedemptionRecordKey[] = "redemption-record";
@@ -168,8 +170,8 @@ GetHeadersToSignAndUpdateSignedHeadersHeader(
   if (deduped_lowercase_headers_to_sign.empty())
     return std::vector<std::string>();
 
-  if (!base::STLIncludes(LowercaseSignableHeaders(),
-                         deduped_lowercase_headers_to_sign)) {
+  if (!base::ranges::includes(LowercaseSignableHeaders(),
+                              deduped_lowercase_headers_to_sign)) {
     return base::nullopt;
   }
 
@@ -183,20 +185,18 @@ GetHeadersToSignAndUpdateSignedHeadersHeader(
   return out;
 }
 
-void AttachSignedRedemptionRecordHeader(net::URLRequest* request,
-                                        std::string value) {
+void AttachRedemptionRecordHeader(net::URLRequest* request, std::string value) {
   request->SetExtraRequestHeaderByName(
-      kTrustTokensRequestHeaderSecSignedRedemptionRecord, value,
+      kTrustTokensRequestHeaderSecRedemptionRecord, value,
       /*overwrite=*/true);
 }
 
-// Builds a Trust Tokens signed redemption record header, which is logically an
-// issuer-to-SRR map but implemented as a Structured Headers Draft 15
+// Builds a Trust Tokens redemption record header, which is logically an
+// issuer-to-RR map but implemented as a Structured Headers Draft 15
 // parameterized list (essentially a list where each member has an associated
 // dictionary).
-base::Optional<std::string> ConstructSignedRedemptionRecordHeader(
-    const base::flat_map<SuitableTrustTokenOrigin,
-                         SignedTrustTokenRedemptionRecord>&
+base::Optional<std::string> ConstructRedemptionRecordHeader(
+    const base::flat_map<SuitableTrustTokenOrigin, TrustTokenRedemptionRecord>&
         records_per_issuer) {
   net::structured_headers::List header_items;
 
@@ -272,10 +272,10 @@ void TrustTokenRequestSigningHelper::Begin(
          mojom::TrustTokenOperationStatus result) {
         const auto& headers = request->extra_request_headers();
 
-        std::string srr_header;
-        DCHECK(headers.GetHeader(
-            kTrustTokensRequestHeaderSecSignedRedemptionRecord, &srr_header));
-        if (srr_header.empty()) {
+        std::string rr_header;
+        DCHECK(headers.GetHeader(kTrustTokensRequestHeaderSecRedemptionRecord,
+                                 &rr_header));
+        if (rr_header.empty()) {
           DCHECK(!headers.HasHeader(kTrustTokensRequestHeaderSecTime));
           DCHECK(!headers.HasHeader(kTrustTokensRequestHeaderSecSignature));
           DCHECK(!headers.HasHeader(kTrustTokensRequestHeaderSignedHeaders));
@@ -288,7 +288,7 @@ void TrustTokenRequestSigningHelper::Begin(
   // This class is responsible for adding these headers; callers should not add
   // them.
   DCHECK(!request->extra_request_headers().HasHeader(
-      kTrustTokensRequestHeaderSecSignedRedemptionRecord));
+      kTrustTokensRequestHeaderSecRedemptionRecord));
   DCHECK(!request->extra_request_headers().HasHeader(
       kTrustTokensRequestHeaderSecTime));
   DCHECK(!request->extra_request_headers().HasHeader(
@@ -302,13 +302,13 @@ void TrustTokenRequestSigningHelper::Begin(
 
   // (Because of the chracteristics of the protocol, this map is expected to
   // have at most ~5 elements.)
-  base::flat_map<SuitableTrustTokenOrigin, SignedTrustTokenRedemptionRecord>
+  base::flat_map<SuitableTrustTokenOrigin, TrustTokenRedemptionRecord>
       records_per_issuer;
 
-  // 1. For each issuer specified, search storage for a non-expired SRR
+  // 1. For each issuer specified, search storage for a non-expired RR
   // corresponding to that issuer and the request’s initiating top-level origin.
   for (const SuitableTrustTokenOrigin& issuer : params_.issuers) {
-    base::Optional<SignedTrustTokenRedemptionRecord> maybe_redemption_record =
+    base::Optional<TrustTokenRedemptionRecord> maybe_redemption_record =
         token_store_->RetrieveNonstaleRedemptionRecord(issuer,
                                                        params_.toplevel);
     if (!maybe_redemption_record)
@@ -318,10 +318,10 @@ void TrustTokenRequestSigningHelper::Begin(
   }
 
   if (records_per_issuer.empty()) {
-    AttachSignedRedemptionRecordHeader(request, std::string());
+    AttachRedemptionRecordHeader(request, std::string());
 
     LogOutcome(net_log_,
-               "No SRR for any of the given issuers, in the operation's "
+               "No RR for any of the given issuers, in the operation's "
                "top-level context");
     std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
     return;
@@ -336,7 +336,7 @@ void TrustTokenRequestSigningHelper::Begin(
         kTrustTokenAdditionalSigningDataMaxSizeBytes) {
       LogOutcome(net_log_, "Overly long additionalSigningData");
 
-      AttachSignedRedemptionRecordHeader(request, std::string());
+      AttachRedemptionRecordHeader(request, std::string());
       std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
       return;
     }
@@ -348,7 +348,7 @@ void TrustTokenRequestSigningHelper::Begin(
       LogOutcome(net_log_,
                  "additionalSigningData was not a valid HTTP header value");
 
-      AttachSignedRedemptionRecordHeader(request, std::string());
+      AttachRedemptionRecordHeader(request, std::string());
       std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
       return;
     }
@@ -383,7 +383,7 @@ void TrustTokenRequestSigningHelper::Begin(
           request, params_.additional_headers_to_sign);
 
   if (!maybe_headers_to_sign) {
-    AttachSignedRedemptionRecordHeader(request, std::string());
+    AttachRedemptionRecordHeader(request, std::string());
 
     LogOutcome(net_log_,
                "Unsignable header specified in Signed-Headers "
@@ -392,18 +392,17 @@ void TrustTokenRequestSigningHelper::Begin(
     return;
   }
 
-  // 2.c. Attach the SRRs in a Sec-Signed-Redemption-Record header.
-  if (base::Optional<std::string> maybe_signed_redemption_record_header =
-          ConstructSignedRedemptionRecordHeader(records_per_issuer)) {
-    AttachSignedRedemptionRecordHeader(
-        request, std::move(*maybe_signed_redemption_record_header));
+  // 2.c. Attach the RRs in a Sec-Redemption-Record header.
+  if (base::Optional<std::string> maybe_redemption_record_header =
+          ConstructRedemptionRecordHeader(records_per_issuer)) {
+    AttachRedemptionRecordHeader(request,
+                                 std::move(*maybe_redemption_record_header));
   } else {
-    AttachSignedRedemptionRecordHeader(request, std::string());
+    AttachRedemptionRecordHeader(request, std::string());
 
-    LogOutcome(
-        net_log_,
-        "Unexpected internal error serializing Sec-Signed-Redemption-Record"
-        " header.");
+    LogOutcome(net_log_,
+               "Unexpected internal error serializing Sec-Redemption-Record"
+               " header.");
     std::move(done).Run(mojom::TrustTokenOperationStatus::kOk);
     return;
   }
@@ -463,7 +462,7 @@ void TrustTokenRequestSigningHelper::Begin(
                                          std::move(*maybe_signature_header),
                                          /*overwrite=*/true);
   } else {
-    AttachSignedRedemptionRecordHeader(request, std::string());
+    AttachRedemptionRecordHeader(request, std::string());
     request->RemoveRequestHeaderByName(kTrustTokensRequestHeaderSecTime);
     request->RemoveRequestHeaderByName(kTrustTokensRequestHeaderSignedHeaders);
 
@@ -493,7 +492,7 @@ namespace {
 // nested map, corresponding to a single entry in the Sec-Signature header's
 // top-level list.
 net::structured_headers::Parameters ConstructKeyAndSignaturePair(
-    const SignedTrustTokenRedemptionRecord& redemption_record,
+    const TrustTokenRedemptionRecord& redemption_record,
     base::span<const uint8_t> signature_bytes) {
   net::structured_headers::Item public_key(
       redemption_record.public_key(),
@@ -512,14 +511,17 @@ net::structured_headers::Parameters ConstructKeyAndSignaturePair(
 base::Optional<std::string> TrustTokenRequestSigningHelper::
     BuildSignatureHeaderIfAtLeastOneSignatureIsPresent(
         const base::flat_map<SuitableTrustTokenOrigin,
-                             SignedTrustTokenRedemptionRecord>&
-            records_per_issuer,
+                             TrustTokenRedemptionRecord>& records_per_issuer,
         const base::flat_map<SuitableTrustTokenOrigin, std::vector<uint8_t>>&
             signatures_per_issuer) {
   if (signatures_per_issuer.empty())
     return base::nullopt;
 
   net::structured_headers::Dictionary header_items;
+
+  header_items[kSignatureHeaderAlgorithmKey] =
+      net::structured_headers::ParameterizedMember(
+          net::structured_headers::Item(signer_->GetAlgorithmIdentifier()), {});
 
   std::vector<net::structured_headers::ParameterizedItem> keys_and_signatures;
   for (const auto& kv : signatures_per_issuer) {
@@ -571,14 +573,14 @@ base::Optional<std::string> TrustTokenRequestSigningHelper::
 base::Optional<std::vector<uint8_t>>
 TrustTokenRequestSigningHelper::GetSignature(
     net::URLRequest* request,
-    const SignedTrustTokenRedemptionRecord& redemption_record,
+    const TrustTokenRedemptionRecord& redemption_record,
     const std::vector<std::string>& headers_to_sign) {
   // (This follows the normative pseudocode, labeled "signature
   // generation," in the Trust Tokens design doc.)
   //
   // 1. Generate a CBOR-encoded dictionary, the canonical request data.
-  // 2. Sign the concatenation of “Trust Token v0” and the CBOR-encoded
-  // dictionary. (The domain separator string “Trust Token v0” allows versioning
+  // 2. Sign the concatenation of the major protocol version and the
+  // CBOR-encoded dictionary. (The domain separator string allows versioning
   // otherwise-forward-compatible protocol structures, which is useful in case
   // the semantics change across versions.)
 

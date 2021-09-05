@@ -7,36 +7,12 @@
 #include <memory>
 #include <string>
 
-#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "chrome/browser/video_tutorials/internal/jni_headers/TutorialConversionBridge_jni.h"
 
 namespace video_tutorials {
 
 using base::android::ConvertUTF8ToJavaString;
-using base::android::ToJavaArrayOfStrings;
-
-ScopedJavaLocalRef<jobject> CreateJavaLanguageAndMaybeAddToList(
-    JNIEnv* env,
-    ScopedJavaLocalRef<jobject> jlist,
-    const Language& language) {
-  return Java_TutorialConversionBridge_createLanguageAndMaybeAddToList(
-      env, jlist, ConvertUTF8ToJavaString(env, language.locale),
-      ConvertUTF8ToJavaString(env, language.name),
-      ConvertUTF8ToJavaString(env, language.native_name));
-}
-
-ScopedJavaLocalRef<jobject> TutorialConversionBridge::CreateJavaLanguages(
-    JNIEnv* env,
-    const std::vector<Language>& languages) {
-  ScopedJavaLocalRef<jobject> jlist =
-      Java_TutorialConversionBridge_createLanguageList(env);
-
-  for (const auto& language : languages)
-    CreateJavaLanguageAndMaybeAddToList(env, jlist, language);
-
-  return jlist;
-}
 
 ScopedJavaLocalRef<jobject> CreateJavaTutorialAndMaybeAddToList(
     JNIEnv* env,
@@ -47,6 +23,8 @@ ScopedJavaLocalRef<jobject> CreateJavaTutorialAndMaybeAddToList(
       ConvertUTF8ToJavaString(env, tutorial.title),
       ConvertUTF8ToJavaString(env, tutorial.video_url.spec()),
       ConvertUTF8ToJavaString(env, tutorial.poster_url.spec()),
+      ConvertUTF8ToJavaString(env, tutorial.animated_gif_url.spec()),
+      ConvertUTF8ToJavaString(env, tutorial.thumbnail_url.spec()),
       ConvertUTF8ToJavaString(env, tutorial.caption_url.spec()),
       ConvertUTF8ToJavaString(env, tutorial.share_url.spec()),
       tutorial.video_length);

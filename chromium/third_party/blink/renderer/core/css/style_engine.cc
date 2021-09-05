@@ -29,6 +29,7 @@
 
 #include "third_party/blink/renderer/core/css/style_engine.h"
 
+#include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/core/css/css_default_style_sheets.h"
@@ -111,7 +112,8 @@ StyleEngine::StyleEngine(Document& document)
     : document_(&document),
       is_html_import_(document.IsHTMLImport()),
       document_style_sheet_collection_(
-          MakeGarbageCollected<DocumentStyleSheetCollection>(document)) {
+          MakeGarbageCollected<DocumentStyleSheetCollection>(document)),
+      owner_color_scheme_(mojom::blink::ColorScheme::kLight) {
   if (document.GetFrame()) {
     // We don't need to create CSSFontSelector for imported document or
     // HTMLTemplateElement's document, because those documents have no frame.
@@ -470,6 +472,14 @@ void StyleEngine::RemoveTextTrack(TextTrack* text_track) {
   text_tracks_.erase(text_track);
 }
 
+Element* StyleEngine::EnsureVTTOriginatingElement() {
+  if (!vtt_originating_element_) {
+    vtt_originating_element_ = MakeGarbageCollected<Element>(
+        QualifiedName(g_null_atom, g_empty_atom, g_empty_atom), document_);
+  }
+  return vtt_originating_element_;
+}
+
 void StyleEngine::MediaQueryAffectingValueChanged(
     HeapHashSet<Member<TextTrack>>& text_tracks,
     MediaValueChange change) {
@@ -511,8 +521,7 @@ void StyleEngine::MediaQueryAffectingValueChanged(MediaValueChange change) {
 void StyleEngine::UpdateActiveStyleSheetsInImport(
     StyleEngine& root_engine,
     DocumentStyleSheetCollector& parent_collector) {
-  DCHECK(RuntimeEnabledFeatures::HTMLImportsEnabled(
-      GetDocument().GetExecutionContext()));
+  DCHECK(RuntimeEnabledFeatures::HTMLImportsEnabled());
   DCHECK(IsHTMLImport());
   HeapVector<Member<StyleSheet>> sheets_for_list;
   ImportedDocumentStyleSheetCollector subcollector(parent_collector,
@@ -1590,9 +1599,15 @@ void StyleEngine::ApplyUserRuleSetChanges(
     ScopedStyleResolver::KeyframesRulesAdded(GetDocument());
   }
 
-  if (changed_rule_flags & kPropertyRules) {
-    ClearPropertyRules();
-    AddPropertyRulesFromSheets(new_style_sheets);
+  if (changed_rule_flags & (kPropertyRules | kScrollTimelineRules)) {
+    if (changed_rule_flags & kPropertyRules) {
+      ClearPropertyRules();
+      AddPropertyRulesFromSheets(new_style_sheets);
+    }
+    if (changed_rule_flags & kScrollTimelineRules) {
+      ClearScrollTimelineRules();
+      AddScrollTimelineRulesFromSheets(new_style_sheets);
+    }
 
     // We just cleared all the rules, which includes any author rules. They
     // must be forcibly re-added.
@@ -1629,10 +1644,12 @@ void StyleEngine::ApplyRuleSetChanges(
                                  (changed_rule_flags & kFontFaceRules) &&
                                  tree_scope.RootNode().IsDocumentNode();
   bool rebuild_at_property_registry = false;
+  bool rebuild_at_scroll_timeline_map = false;
   ScopedStyleResolver* scoped_resolver = tree_scope.GetScopedStyleResolver();
   if (scoped_resolver && scoped_resolver->NeedsAppendAllSheets()) {
     rebuild_font_face_cache = true;
     rebuild_at_property_registry = true;
+    rebuild_at_scroll_timeline_map = true;
     change = kActiveSheetsChanged;
   }
 
@@ -1655,17 +1672,14 @@ void StyleEngine::ApplyRuleSetChanges(
     }
   }
 
-  // TODO(crbug.com/1097055): Support user origin rules.
-  if (changed_rule_flags & kScrollTimelineRules) {
+  if ((changed_rule_flags & kScrollTimelineRules) ||
+      rebuild_at_scroll_timeline_map) {
     // @scroll-timeline rules are currently not allowed in shadow trees.
     // https://drafts.csswg.org/scroll-animations-1/#scroll-timeline-at-rule
     if (tree_scope.RootNode().IsDocumentNode()) {
-      scroll_timeline_map_.clear();
-
-      for (const ActiveStyleSheet& active_sheet : new_style_sheets) {
-        if (RuleSet* rule_set = active_sheet.second)
-          AddScrollTimelineRules(*rule_set);
-      }
+      ClearScrollTimelineRules();
+      AddScrollTimelineRulesFromSheets(active_user_style_sheets_);
+      AddScrollTimelineRulesFromSheets(new_style_sheets);
     }
   }
 
@@ -1879,11 +1893,23 @@ void StyleEngine::ClearPropertyRules() {
   PropertyRegistration::RemoveDeclaredProperties(GetDocument());
 }
 
+void StyleEngine::ClearScrollTimelineRules() {
+  scroll_timeline_map_.clear();
+}
+
 void StyleEngine::AddPropertyRulesFromSheets(
     const ActiveStyleSheetVector& sheets) {
   for (const ActiveStyleSheet& active_sheet : sheets) {
     if (RuleSet* rule_set = active_sheet.second)
       AddPropertyRules(*rule_set);
+  }
+}
+
+void StyleEngine::AddScrollTimelineRulesFromSheets(
+    const ActiveStyleSheetVector& sheets) {
+  for (const ActiveStyleSheet& active_sheet : sheets) {
+    if (RuleSet* rule_set = active_sheet.second)
+      AddScrollTimelineRules(*rule_set);
   }
 }
 
@@ -1903,6 +1929,9 @@ bool StyleEngine::AddUserFontFaceRules(const RuleSet& rule_set) {
 }
 
 void StyleEngine::AddUserKeyframeRules(const RuleSet& rule_set) {
+  if (RuntimeEnabledFeatures::CSSKeyframesMemoryReductionEnabled())
+    return;
+
   const HeapVector<Member<StyleRuleKeyframes>> keyframes_rules =
       rule_set.KeyframesRules();
   for (unsigned i = 0; i < keyframes_rules.size(); ++i)
@@ -1910,6 +1939,8 @@ void StyleEngine::AddUserKeyframeRules(const RuleSet& rule_set) {
 }
 
 void StyleEngine::AddUserKeyframeStyle(StyleRuleKeyframes* rule) {
+  DCHECK(!RuntimeEnabledFeatures::CSSKeyframesMemoryReductionEnabled());
+
   AtomicString animation_name(rule->GetName());
 
   if (rule->IsVendorPrefixed()) {
@@ -1936,12 +1967,21 @@ void StyleEngine::AddPropertyRules(const RuleSet& rule_set) {
 void StyleEngine::AddScrollTimelineRules(const RuleSet& rule_set) {
   const HeapVector<Member<StyleRuleScrollTimeline>> scroll_timeline_rules =
       rule_set.ScrollTimelineRules();
+  if (scroll_timeline_rules.IsEmpty())
+    return;
   for (const auto& rule : scroll_timeline_rules)
     scroll_timeline_map_.Set(AtomicString(rule->GetName()), rule);
+  MarkAllElementsForStyleRecalc(StyleChangeReasonForTracing::Create(
+      style_change_reason::kScrollTimeline));
 }
 
 StyleRuleKeyframes* StyleEngine::KeyframeStylesForAnimation(
     const AtomicString& animation_name) {
+  if (RuntimeEnabledFeatures::CSSKeyframesMemoryReductionEnabled()) {
+    return ScopedStyleResolver::KeyframeStylesForAnimationFromActiveSheets(
+        animation_name, active_user_style_sheets_);
+  }
+
   if (keyframes_rule_map_.IsEmpty())
     return nullptr;
 
@@ -2145,7 +2185,8 @@ bool StyleEngine::SupportsDarkColorScheme() {
     }
   }
   return has_dark &&
-         (!has_light || preferred_color_scheme_ == PreferredColorScheme::kDark);
+         (!has_light ||
+          preferred_color_scheme_ == mojom::blink::PreferredColorScheme::kDark);
 }
 
 void StyleEngine::UpdateColorScheme() {
@@ -2158,7 +2199,8 @@ void StyleEngine::UpdateColorScheme() {
   ForcedColors old_forced_colors = forced_colors_;
   forced_colors_ = web_theme_engine->GetForcedColors();
 
-  PreferredColorScheme old_preferred_color_scheme = preferred_color_scheme_;
+  mojom::blink::PreferredColorScheme old_preferred_color_scheme =
+      preferred_color_scheme_;
   preferred_color_scheme_ = settings->GetPreferredColorScheme();
   if (const auto* overrides =
           GetDocument().GetPage()->GetMediaFeatureOverrides()) {
@@ -2169,10 +2211,10 @@ void StyleEngine::UpdateColorScheme() {
   if (!SupportsDarkColorScheme() && settings->GetForceDarkModeEnabled()) {
     // Make sure we don't match (prefers-color-scheme: dark) when forced
     // darkening is enabled.
-    preferred_color_scheme_ = PreferredColorScheme::kLight;
+    preferred_color_scheme_ = mojom::blink::PreferredColorScheme::kLight;
   }
   if (GetDocument().Printing())
-    preferred_color_scheme_ = PreferredColorScheme::kLight;
+    preferred_color_scheme_ = mojom::blink::PreferredColorScheme::kLight;
 
   bool color_scheme_changed = false;
   if (forced_colors_ != old_forced_colors ||
@@ -2191,15 +2233,33 @@ void StyleEngine::UpdateColorSchemeMetrics() {
     UseCounter::Count(GetDocument(), WebFeature::kForcedDarkMode);
 
   // True if the preferred color scheme will match dark.
-  if (preferred_color_scheme_ == PreferredColorScheme::kDark)
+  if (preferred_color_scheme_ == mojom::blink::PreferredColorScheme::kDark)
     UseCounter::Count(GetDocument(), WebFeature::kPreferredColorSchemeDark);
 
   // This is equal to kPreferredColorSchemeDark in most cases, but can differ
   // with forced dark mode. With the system in dark mode and forced dark mode
   // enabled, the preferred color scheme can be light while the setting is dark.
-  if (settings->GetPreferredColorScheme() == PreferredColorScheme::kDark) {
+  if (settings->GetPreferredColorScheme() ==
+      mojom::blink::PreferredColorScheme::kDark) {
     UseCounter::Count(GetDocument(),
                       WebFeature::kPreferredColorSchemeDarkSetting);
+  }
+
+  // Record kColorSchemeDarkSupportedOnRoot if the meta color-scheme contains
+  // dark (though dark may not be used). This metric is also recorded in
+  // longhands_custom.cc (see: ColorScheme::ApplyValue) if the root style
+  // color-scheme contains dark.
+  if (meta_color_scheme_) {
+    const auto* scheme_list = DynamicTo<CSSValueList>(*meta_color_scheme_);
+    if (scheme_list) {
+      for (auto& item : *scheme_list) {
+        const auto* ident = DynamicTo<CSSIdentifierValue>(*item);
+        if (ident && ident->GetValueID() == CSSValueID::kDark) {
+          UseCounter::Count(GetDocument(),
+                            WebFeature::kColorSchemeDarkSupportedOnRoot);
+        }
+      }
+    }
   }
 }
 
@@ -2234,18 +2294,20 @@ void StyleEngine::UpdateColorSchemeBackground(bool color_scheme_changed) {
     // view's base background color in order to match the root element color-
     // scheme. See spec:
     // https://drafts.csswg.org/css-color-adjust/#color-scheme-effect
-    ColorScheme root_color_scheme = ColorScheme::kLight;
+    mojom::blink::ColorScheme root_color_scheme =
+        mojom::blink::ColorScheme::kLight;
     if (auto* root_element = GetDocument().documentElement()) {
       if (const ComputedStyle* style = root_element->GetComputedStyle())
         root_color_scheme = style->UsedColorSchemeForInitialColors();
       else if (SupportsDarkColorScheme())
-        root_color_scheme = ColorScheme::kDark;
+        root_color_scheme = mojom::blink::ColorScheme::kDark;
     }
-    color_scheme_background_ = root_color_scheme == ColorScheme::kLight
-                                   ? Color::kWhite
-                                   : Color(0x12, 0x12, 0x12);
+    color_scheme_background_ =
+        root_color_scheme == mojom::blink::ColorScheme::kLight
+            ? Color::kWhite
+            : Color(0x12, 0x12, 0x12);
     if (GetDocument().IsInMainFrame()) {
-      if (root_color_scheme == ColorScheme::kDark) {
+      if (root_color_scheme == mojom::blink::ColorScheme::kDark) {
         use_color_adjust_background =
             LocalFrameView::UseColorAdjustBackground::kIfBaseNotTransparent;
       }
@@ -2262,7 +2324,7 @@ void StyleEngine::UpdateColorSchemeBackground(bool color_scheme_changed) {
                                     color_scheme_changed);
 }
 
-void StyleEngine::SetOwnerColorScheme(ColorScheme color_scheme) {
+void StyleEngine::SetOwnerColorScheme(mojom::blink::ColorScheme color_scheme) {
   DCHECK(!GetDocument().IsInMainFrame());
   if (owner_color_scheme_ == color_scheme)
     return;
@@ -2272,7 +2334,7 @@ void StyleEngine::SetOwnerColorScheme(ColorScheme color_scheme) {
 
 void StyleEngine::UpdateForcedBackgroundColor() {
   forced_background_color_ = LayoutTheme::GetTheme().SystemColor(
-      CSSValueID::kCanvas, ColorScheme::kLight);
+      CSSValueID::kCanvas, mojom::blink::ColorScheme::kLight);
 }
 
 Color StyleEngine::ColorAdjustBackgroundColor() const {
@@ -2342,6 +2404,7 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(tracker_);
   visitor->Trace(meta_color_scheme_);
   visitor->Trace(text_tracks_);
+  visitor->Trace(vtt_originating_element_);
   FontSelectorClient::Trace(visitor);
 }
 

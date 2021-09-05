@@ -45,10 +45,9 @@ class WebView;
 
 class WebPagePopupClient : public WebWidgetClient {
  public:
-  // Called when the window for this popup widget should be closed. The
-  // WebWidget will be closed asynchronously as a result of this
-  // request.
-  virtual void ClosePopupWidgetSoon() = 0;
+  // Request to destroy the WebPagePopupClient immediately given that the
+  // browser has closed the associated mojom connection.
+  virtual void BrowserClosedIpcChannelForPopupWidget() = 0;
 };
 
 class WebPagePopup : public WebWidget {
@@ -57,9 +56,12 @@ class WebPagePopup : public WebWidget {
   // be released when the popup is closed via Close().
   BLINK_EXPORT static WebPagePopup* Create(
       WebPagePopupClient*,
+      CrossVariantMojoAssociatedRemote<mojom::PopupWidgetHostInterfaceBase>
+          popup_widget_host,
       CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
           widget_host,
-      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget);
+      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // The popup's accessibility tree is connected to the main document's
   // accessibility tree. Access to the popup document is needed to ensure the

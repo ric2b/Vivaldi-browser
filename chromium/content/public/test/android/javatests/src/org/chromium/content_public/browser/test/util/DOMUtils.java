@@ -14,6 +14,9 @@ import org.junit.Assert;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content.browser.RenderCoordinatesImpl;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
 import org.chromium.content_public.browser.WebContents;

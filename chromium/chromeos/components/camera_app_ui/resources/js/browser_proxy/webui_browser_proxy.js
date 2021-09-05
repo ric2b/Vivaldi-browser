@@ -11,17 +11,24 @@
  */
 import '/strings.m.js';
 
-// eslint-disable-next-line no-unused-vars
-import {BackgroundOps} from '../background_ops.js';
 import {assert} from '../chrome_util.js';
-import {NotImplementedError} from '../error.js';
-import {Intent} from '../intent.js';
+import {getMaybeLazyDirectory} from '../models/lazy_directory_entry.js';
 import {NativeDirectoryEntry} from '../models/native_file_system_entry.js';
 import {ChromeHelper} from '../mojo/chrome_helper.js';
-import {PerfLogger} from '../perf.js';
+import {UntrustedOrigin} from '../type.js';
 
 // eslint-disable-next-line no-unused-vars
 import {BrowserProxy} from './browser_proxy_interface.js';
+
+/**
+ * The 'beforeunload' listener which will show confirm dialog when trying to
+ * close window.
+ * @param {!Event} event The 'beforeunload' event.
+ */
+function beforeUnloadListener(event) {
+  event.preventDefault();
+  event.returnValue = '';
+}
 
 /**
  * The WebUI implementation of the CCA's interaction with the browser.
@@ -36,7 +43,7 @@ class WebUIBrowserProxy {
   }
 
   /** @override */
-  async getExternalDir() {
+  async getCameraDirectory() {
     return new Promise((resolve) => {
       const launchQueue = window.launchQueue;
       assert(launchQueue !== undefined);
@@ -45,7 +52,9 @@ class WebUIBrowserProxy {
         const dir =
             /** @type {!FileSystemDirectoryHandle} */ (launchParams.files[0]);
         assert(dir.kind === 'directory');
-        resolve(new NativeDirectoryEntry(dir));
+
+        const myFilesDir = new NativeDirectoryEntry(dir);
+        resolve(getMaybeLazyDirectory(myFilesDir, 'Camera'));
       });
     });
   }
@@ -99,6 +108,11 @@ class WebUIBrowserProxy {
   }
 
   /** @override */
+  async localStorageClear() {
+    window.localStorage.clear();
+  }
+
+  /** @override */
   async getBoard() {
     return window.loadTimeData.getString('board_name');
   }
@@ -125,7 +139,8 @@ class WebUIBrowserProxy {
 
   /** @override */
   openInspector(type) {
-    throw new NotImplementedError();
+    // SWA can open the inspector by the hot-keys and there is no need to
+    // implement it.
   }
 
   /** @override */
@@ -134,45 +149,12 @@ class WebUIBrowserProxy {
   }
 
   /** @override */
-  addOnMessageExternalListener(listener) {
-    throw new NotImplementedError();
+  getTextDirection() {
+    return window.loadTimeData.getString('textdirection');
   }
 
   /** @override */
-  addOnConnectExternalListener(listener) {
-    throw new NotImplementedError();
-  }
-
-  /** @override */
-  addDummyHistoryIfNotAvailable() {
-    // no-ops
-  }
-
-  /** @override */
-  isMp4RecordingEnabled() {
-    return false;
-  }
-
-  /** @override */
-  getBackgroundOps() {
-    // TODO(crbug.com/980846): Refactor after migrating to SWA since there is no
-    // background page for SWA.
-    const perfLogger = new PerfLogger();
-    const url = window.location.href;
-    const intent = url.includes('intent') ? Intent.create(new URL(url)) : null;
-    return /** @type {!BackgroundOps} */ ({
-      bindForegroundOps: (ops) => {},
-      getIntent: () => intent,
-      getPerfLogger: () => perfLogger,
-      getTestingErrorCallback: () => null,
-      notifyActivation: () => {},
-      notifySuspension: () => {},
-    });
-  }
-
-  /** @override */
-  isFullscreenOrMaximized() {
-    // TODO(crbug.com/980846): Implement the fullscreen monitor.
+  shouldAddFakeHistory() {
     return false;
   }
 
@@ -182,30 +164,39 @@ class WebUIBrowserProxy {
   }
 
   /** @override */
-  showWindow() {
-    // TODO(crbug.com/980846): Remove the method once we migrate to SWA.
-  }
-
-  /** @override */
-  hideWindow() {
-    // TODO(crbug.com/980846): Remove the method once we migrate to SWA.
-  }
-
-  /** @override */
-  isMinimized() {
-    // TODO(crbug.com/980846): Implement the minimization monitor.
-    return false;
-  }
-
-  /** @override */
-  addOnMinimizedListener(listener) {
-    // TODO(crbug.com/980846): Implement the minimization monitor.
-  }
-
-  /** @override */
   openFeedback() {
     ChromeHelper.getInstance().openFeedbackDialog(
         this.getI18nMessage('feedback_description_placeholder'));
+  }
+
+  /** @override */
+  async initCameraUsageMonitor(exploitUsage, releaseUsage) {
+    return ChromeHelper.getInstance().initCameraUsageMonitor(
+        exploitUsage, releaseUsage);
+  }
+
+  /** @override */
+  setupUnloadListener(listener) {
+    window.addEventListener('unload', listener);
+  }
+
+  /** @override */
+  async setLaunchingFromWindowCreationStartTime(callback) {
+    await callback();
+  }
+
+  /** @override */
+  getUntrustedOrigin() {
+    return UntrustedOrigin.CHROME_UNTRUSTED;
+  }
+
+  /** @override */
+  setBeforeUnloadListenerEnabled(enabled) {
+    if (enabled) {
+      window.addEventListener('beforeunload', beforeUnloadListener);
+    } else {
+      window.removeEventListener('beforeunload', beforeUnloadListener);
+    }
   }
 }
 

@@ -28,8 +28,8 @@ namespace payments {
 
 namespace {
 
-// This event is used to pass to ButtonPressed when its event parameter doesn't
-// matter, only the sender.
+// This event is used to run the Button callback when its event parameter
+// doesn't matter, only the sender.
 class DummyEvent : public ui::Event {
  public:
   DummyEvent() : ui::Event(ui::ET_UNKNOWN, base::TimeTicks(), 0) {}
@@ -236,9 +236,11 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
 
   layout->StartRow(views::GridLayout::kFixedSize, 0);
   header_view_ = layout->AddView(std::make_unique<views::View>());
-  PopulateSheetHeaderView(ShouldShowHeaderBackArrow(),
-                          CreateHeaderContentView(header_view_), this,
-                          header_view_, GetHeaderBackground(header_view_));
+  PopulateSheetHeaderView(
+      ShouldShowHeaderBackArrow(), CreateHeaderContentView(header_view_),
+      base::BindRepeating(&PaymentRequestSheetController::BackButtonPressed,
+                          base::Unretained(this)),
+      header_view_, GetHeaderBackground(header_view_));
 
   layout->StartRow(views::GridLayout::kFixedSize, 0);
   header_content_separator_container_ =
@@ -253,7 +255,8 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   scroll_ = layout->AddView(DisplayDynamicBorderForHiddenContents()
                                 ? std::make_unique<BorderedScrollView>()
                                 : std::make_unique<views::ScrollView>());
-  scroll_->SetHideHorizontalScrollBar(true);
+  scroll_->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
   pane_ = scroll_->SetContents(std::make_unique<views::View>());
   views::GridLayout* pane_layout =
       pane_->SetLayoutManager(std::make_unique<views::GridLayout>());
@@ -291,9 +294,11 @@ void PaymentRequestSheetController::UpdateContentView() {
 
 void PaymentRequestSheetController::UpdateHeaderView() {
   header_view_->RemoveAllChildViews(true);
-  PopulateSheetHeaderView(ShouldShowHeaderBackArrow(),
-                          CreateHeaderContentView(header_view_), this,
-                          header_view_, GetHeaderBackground(header_view_));
+  PopulateSheetHeaderView(
+      ShouldShowHeaderBackArrow(), CreateHeaderContentView(header_view_),
+      base::BindRepeating(&PaymentRequestSheetController::BackButtonPressed,
+                          base::Unretained(this)),
+      header_view_, GetHeaderBackground(header_view_));
   header_view_->Layout();
   header_view_->SchedulePaint();
 }
@@ -320,25 +325,52 @@ void PaymentRequestSheetController::RelayoutPane() {
   scroll_->Layout();
 }
 
-std::unique_ptr<views::Button>
-PaymentRequestSheetController::CreatePrimaryButton() {
-  return nullptr;
+bool PaymentRequestSheetController::ShouldShowPrimaryButton() {
+  return true;
+}
+
+base::string16 PaymentRequestSheetController::GetPrimaryButtonLabel() {
+  const bool continue_button =
+      state()->selected_app() &&
+      state()->selected_app()->type() != PaymentApp::Type::AUTOFILL;
+  return l10n_util::GetStringUTF16(
+      continue_button ? IDS_PAYMENTS_CONTINUE_BUTTON : IDS_PAYMENTS_PAY_BUTTON);
+}
+
+views::Button::PressedCallback
+PaymentRequestSheetController::GetPrimaryButtonCallback() {
+  return base::BindRepeating(
+      [](const base::WeakPtr<PaymentRequestDialogView>& dialog) {
+        if (dialog->IsInteractive())
+          dialog->Pay();
+      },
+      dialog());
+}
+
+int PaymentRequestSheetController::GetPrimaryButtonId() {
+  return static_cast<int>(DialogViewID::PAY_BUTTON);
+}
+
+bool PaymentRequestSheetController::GetPrimaryButtonEnabled() {
+  return state()->is_ready_to_pay();
+}
+
+bool PaymentRequestSheetController::ShouldShowSecondaryButton() {
+  return true;
 }
 
 base::string16 PaymentRequestSheetController::GetSecondaryButtonLabel() {
   return l10n_util::GetStringUTF16(IDS_PAYMENTS_CANCEL_PAYMENT);
 }
 
-int PaymentRequestSheetController::GetSecondaryButtonTag() {
-  return static_cast<int>(PaymentRequestCommonTags::CLOSE_BUTTON_TAG);
+views::Button::PressedCallback
+PaymentRequestSheetController::GetSecondaryButtonCallback() {
+  return base::BindRepeating(&PaymentRequestSheetController::CloseButtonPressed,
+                             base::Unretained(this));
 }
 
 int PaymentRequestSheetController::GetSecondaryButtonId() {
   return static_cast<int>(DialogViewID::CANCEL_BUTTON);
-}
-
-bool PaymentRequestSheetController::ShouldShowSecondaryButton() {
-  return true;
 }
 
 bool PaymentRequestSheetController::ShouldShowHeaderBackArrow() {
@@ -365,27 +397,6 @@ std::unique_ptr<views::Background>
 PaymentRequestSheetController::GetHeaderBackground(views::View* header_view) {
   return views::CreateThemedSolidBackground(
       header_view, ui::NativeTheme::kColorId_DialogBackground);
-}
-
-void PaymentRequestSheetController::ButtonPressed(views::Button* sender,
-                                                  const ui::Event& event) {
-  if (!dialog()->IsInteractive())
-    return;
-
-  switch (static_cast<PaymentRequestCommonTags>(sender->tag())) {
-    case PaymentRequestCommonTags::CLOSE_BUTTON_TAG:
-      dialog()->CloseDialog();
-      break;
-    case PaymentRequestCommonTags::BACK_BUTTON_TAG:
-      dialog()->GoBack();
-      break;
-    case PaymentRequestCommonTags::PAY_BUTTON_TAG:
-      dialog()->Pay();
-      break;
-    case PaymentRequestCommonTags::PAYMENT_REQUEST_COMMON_TAG_MAX:
-      NOTREACHED();
-      break;
-  }
 }
 
 std::unique_ptr<views::View> PaymentRequestSheetController::CreateFooterView() {
@@ -458,32 +469,49 @@ bool PaymentRequestSheetController::DisplayDynamicBorderForHiddenContents() {
   return true;
 }
 
+void PaymentRequestSheetController::CloseButtonPressed() {
+  if (dialog()->IsInteractive())
+    dialog()->CloseDialog();
+}
+
+void PaymentRequestSheetController::AddPrimaryButton(views::View* container) {
+  if (ShouldShowPrimaryButton()) {
+    primary_button_ =
+        container->AddChildView(std::make_unique<views::MdTextButton>(
+            GetPrimaryButtonCallback(), GetPrimaryButtonLabel()));
+    primary_button_->SetID(GetPrimaryButtonId());
+    primary_button_->SetEnabled(GetPrimaryButtonEnabled());
+    primary_button_->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+    primary_button_->SetProminent(true);
+  }
+}
+
+void PaymentRequestSheetController::AddSecondaryButton(views::View* container) {
+  if (ShouldShowSecondaryButton()) {
+    secondary_button_ =
+        container->AddChildView(std::make_unique<views::MdTextButton>(
+            GetSecondaryButtonCallback(), GetSecondaryButtonLabel()));
+    secondary_button_->SetID(GetSecondaryButtonId());
+    secondary_button_->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  }
+}
+
 void PaymentRequestSheetController::PerformPrimaryButtonAction(
     bool* is_enabled) {
   // Set |is_enabled| to "true" to prevent other views from handling the event.
   *is_enabled = true;
 
   if (dialog()->IsInteractive() && primary_button_ &&
-      primary_button_->GetEnabled())
-    ButtonPressed(primary_button_, DummyEvent());
-}
-
-void PaymentRequestSheetController::AddPrimaryButton(views::View* container) {
-  std::unique_ptr<views::Button> primary_button = CreatePrimaryButton();
-  if (primary_button) {
-    primary_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
-    primary_button_ = container->AddChildView(std::move(primary_button));
+      primary_button_->GetEnabled()) {
+    views::Button::PressedCallback callback = GetPrimaryButtonCallback();
+    if (callback)
+      callback.Run(DummyEvent());
   }
 }
 
-void PaymentRequestSheetController::AddSecondaryButton(views::View* container) {
-  if (ShouldShowSecondaryButton()) {
-    secondary_button_ = container->AddChildView(
-        std::make_unique<views::MdTextButton>(this, GetSecondaryButtonLabel()));
-    secondary_button_->set_tag(GetSecondaryButtonTag());
-    secondary_button_->SetID(GetSecondaryButtonId());
-    secondary_button_->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
-  }
+void PaymentRequestSheetController::BackButtonPressed() {
+  if (dialog()->IsInteractive())
+    dialog()->GoBack();
 }
 
 }  // namespace payments

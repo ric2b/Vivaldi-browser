@@ -34,6 +34,8 @@
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/stl_util.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -107,18 +109,8 @@ bool VerifySpecificPathControlledByUser(const FilePath& path,
   return true;
 }
 
-std::string TempFileName() {
-#if defined(OS_APPLE)
-  return StringPrintf(".%s.XXXXXX", base::mac::BaseBundleID());
-#endif
-
-#if defined(VIVALDI_BUILD)
-  return std::string(".com.vivaldi.Vivaldi.XXXXXX");
-#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  return std::string(".com.google.Chrome.XXXXXX");
-#else
-  return std::string(".org.chromium.Chromium.XXXXXX");
-#endif
+base::FilePath GetTempTemplate() {
+  return FormatTemporaryFileName("XXXXXX");
 }
 
 bool AdvanceEnumeratorWithStat(FileEnumerator* traversal,
@@ -513,7 +505,7 @@ ScopedFD CreateAndOpenFdForTemporaryFileInDir(const FilePath& directory,
   ScopedBlockingCall scoped_blocking_call(
       FROM_HERE,
       BlockingType::MAY_BLOCK);  // For call to mkstemp().
-  *path = directory.Append(TempFileName());
+  *path = directory.Append(GetTempTemplate());
   const std::string& tmpdir_string = path->value();
   // this should be OK since mkstemp just replaces characters in place
   char* buffer = const_cast<char*>(tmpdir_string.c_str());
@@ -669,6 +661,19 @@ bool CreateTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
   return fd.is_valid();
 }
 
+FilePath FormatTemporaryFileName(FilePath::StringPieceType identifier) {
+#if defined(OS_APPLE)
+  StringPiece prefix = base::mac::BaseBundleID();
+#elif defined(VIVALDI_BUILD)
+  StringPiece prefix = ".com.vivaldi.Vivaldi.XXXXXX";
+#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  StringPiece prefix = "com.google.Chrome";
+#else
+  StringPiece prefix = "org.chromium.Chromium";
+#endif
+  return FilePath(StrCat({".", prefix, ".", identifier}));
+}
+
 ScopedFILE CreateAndOpenTemporaryStreamInDir(const FilePath& dir,
                                              FilePath* path) {
   ScopedFD scoped_fd = CreateAndOpenFdForTemporaryFileInDir(dir, path);
@@ -683,12 +688,12 @@ ScopedFILE CreateAndOpenTemporaryStreamInDir(const FilePath& dir,
 }
 
 static bool CreateTemporaryDirInDirImpl(const FilePath& base_dir,
-                                        const FilePath::StringType& name_tmpl,
+                                        const FilePath& name_tmpl,
                                         FilePath* new_dir) {
   ScopedBlockingCall scoped_blocking_call(
       FROM_HERE, BlockingType::MAY_BLOCK);  // For call to mkdtemp().
-  DCHECK(name_tmpl.find("XXXXXX") != FilePath::StringType::npos)
-      << "Directory name template must contain \"XXXXXX\".";
+  DCHECK(EndsWith(name_tmpl.value(), "XXXXXX"))
+      << "Directory name template must end with \"XXXXXX\".";
 
   FilePath sub_dir = base_dir.Append(name_tmpl);
   std::string sub_dir_string = sub_dir.value();
@@ -708,8 +713,9 @@ bool CreateTemporaryDirInDir(const FilePath& base_dir,
                              const FilePath::StringType& prefix,
                              FilePath* new_dir) {
   FilePath::StringType mkdtemp_template = prefix;
-  mkdtemp_template.append(FILE_PATH_LITERAL("XXXXXX"));
-  return CreateTemporaryDirInDirImpl(base_dir, mkdtemp_template, new_dir);
+  mkdtemp_template.append("XXXXXX");
+  return CreateTemporaryDirInDirImpl(base_dir, FilePath(mkdtemp_template),
+                                     new_dir);
 }
 
 bool CreateNewTempDirectory(const FilePath::StringType& prefix,
@@ -718,7 +724,7 @@ bool CreateNewTempDirectory(const FilePath::StringType& prefix,
   if (!GetTempDir(&tmpdir))
     return false;
 
-  return CreateTemporaryDirInDirImpl(tmpdir, TempFileName(), new_temp_path);
+  return CreateTemporaryDirInDirImpl(tmpdir, GetTempTemplate(), new_temp_path);
 }
 
 bool CreateDirectoryAndGetError(const FilePath& full_path,
@@ -1259,7 +1265,7 @@ BASE_EXPORT bool IsPathExecutable(const FilePath& path) {
     CHECK_GE(sizeof(pagesize), sizeof(sysconf_result));
     void* mapping = mmap(nullptr, pagesize, PROT_READ, MAP_SHARED, fd.get(), 0);
     if (mapping != MAP_FAILED) {
-      if (mprotect(mapping, pagesize, PROT_READ | PROT_EXEC) == 0)
+      if (HANDLE_EINTR(mprotect(mapping, pagesize, PROT_READ | PROT_EXEC)) == 0)
         result = true;
       munmap(mapping, pagesize);
     }

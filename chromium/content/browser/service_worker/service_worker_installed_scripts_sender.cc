@@ -186,7 +186,8 @@ void ServiceWorkerInstalledScriptsSender::Abort(
     case ServiceWorkerInstalledScriptReader::FinishedReason::kSuccess:
       NOTREACHED();
       return;
-    case ServiceWorkerInstalledScriptReader::FinishedReason::kNoHttpInfoError:
+    case ServiceWorkerInstalledScriptReader::FinishedReason::
+        kNoResponseHeadError:
     case ServiceWorkerInstalledScriptReader::FinishedReason::
         kResponseReaderError:
       owner_->SetStartWorkerStatusCode(
@@ -204,8 +205,13 @@ void ServiceWorkerInstalledScriptsSender::Abort(
       if (owner_->context()) {
         ServiceWorkerRegistration* registration =
             owner_->context()->GetLiveRegistration(owner_->registration_id());
-        // This can destruct |this|.
-        registration->ForceDelete();
+        DCHECK(registration);
+        // Check if the registation is still alive. The registration may have
+        // already been deleted while this service worker was running.
+        if (!registration->is_uninstalled()) {
+          // This can destruct |this|.
+          registration->ForceDelete();
+        }
       }
       return;
     case ServiceWorkerInstalledScriptReader::FinishedReason::

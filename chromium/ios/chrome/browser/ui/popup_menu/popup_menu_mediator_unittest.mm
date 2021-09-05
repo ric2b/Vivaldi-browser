@@ -45,6 +45,7 @@
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
+#import "ios/public/provider/chrome/browser/text_zoom_provider.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_provider.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
@@ -293,18 +294,19 @@ TEST_F(PopupMenuMediatorTest, TestToolsMenuItemsCount) {
     number_of_action_items++;
   }
 
-  // Text zoom is currently disabled on iPad. See crbug.com/1061119.
-  if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
+  if (ios::GetChromeBrowserProvider()
+          ->GetTextZoomProvider()
+          ->IsTextZoomEnabled()) {
     number_of_action_items++;
   }
 
   // Checks that Tools Menu has the right number of items in each section.
   CheckMediatorSetItems(@[
-    // Stop/Reload, New Tab, New Incognito Tab
+    // Stop/Reload, New Tab, New Incognito Tab.
     @(3),
-    // 4 collections + Settings
-    @(5),
-    // Other actions, depending on configuration
+    // 4 collections, Downloads, Settings.
+    @(6),
+    // Other actions, depending on configuration.
     @(number_of_action_items)
   ]);
 }
@@ -407,6 +409,7 @@ TEST_F(PopupMenuMediatorTest, TestItemsStatusOnNTP) {
 TEST_F(PopupMenuMediatorTest, TestReadLaterDisabled) {
   const GURL kUrl("https://chromium.test");
   web_state_->SetCurrentURL(kUrl);
+  CreatePrefs();
   CreateMediator(PopupMenuTypeToolsMenu, /*is_incognito=*/NO,
                  /*trigger_incognito_hint=*/NO);
   mediator_.webStateList = web_state_list_.get();
@@ -414,6 +417,7 @@ TEST_F(PopupMenuMediatorTest, TestReadLaterDisabled) {
       browser_.get(), OverlayModality::kWebContentArea);
   FakePopupMenuConsumer* consumer = [[FakePopupMenuConsumer alloc] init];
   mediator_.popupMenu = consumer;
+  mediator_.prefService = prefs_.get();
   SetUpActiveWebState();
   ASSERT_TRUE(HasItem(consumer, kToolsMenuReadLater, /*enabled=*/YES));
 
@@ -434,13 +438,6 @@ TEST_F(PopupMenuMediatorTest, TestReadLaterDisabled) {
 
 // Tests that the "Text Zoom..." button is disabled on non-HTML pages.
 TEST_F(PopupMenuMediatorTest, TestTextZoomDisabled) {
-  // This feature is currently disabled on iPad. See crbug.com/1061119.
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    return;
-  }
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(web::kWebPageTextAccessibility);
-
   CreateMediator(PopupMenuTypeToolsMenu, /*is_incognito=*/NO,
                  /*trigger_incognito_hint=*/NO);
   mediator_.webStateList = web_state_list_.get();
@@ -508,27 +505,6 @@ TEST_F(PopupMenuMediatorTest, TestEnterpriseInfoShown) {
   ASSERT_TRUE(HasEnterpriseInfoItem(consumer));
 }
 
-// Tests that this feature is disabled on iPad, no matter the state of the
-// Feature flag. See crbug.com/1061119.
-TEST_F(PopupMenuMediatorTest, TestTextZoomDisabledIPad) {
-  if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET) {
-    return;
-  }
-
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(web::kWebPageTextAccessibility);
-
-  CreateMediator(PopupMenuTypeToolsMenu, /*is_incognito=*/NO,
-                 /*trigger_incognito_hint=*/NO);
-  mediator_.webStateList = web_state_list_.get();
-
-  FakePopupMenuConsumer* consumer = [[FakePopupMenuConsumer alloc] init];
-  mediator_.popupMenu = consumer;
-  FontSizeTabHelper::CreateForWebState(web_state_list_->GetWebStateAt(0));
-  SetUpActiveWebState();
-  EXPECT_FALSE(HasItem(consumer, kToolsMenuTextZoom, /*enabled=*/YES));
-}
-
 // Tests that 1) the tools menu has an enabled 'Add to Bookmarks' button when
 // the current URL is not in bookmarks 2) the bookmark button changes to an
 // enabled 'Edit bookmark' button when navigating to a bookmarked URL, 3) the
@@ -538,12 +514,14 @@ TEST_F(PopupMenuMediatorTest, TestBookmarksToolsMenuButtons) {
   web_state_->SetCurrentURL(url);
   CreateMediator(PopupMenuTypeToolsMenu, /*is_incognito=*/NO,
                  /*trigger_incognito_hint=*/NO);
+  CreatePrefs();
   SetUpBookmarks();
   bookmarks::AddIfNotBookmarked(bookmark_model_, url,
                                 base::SysNSStringToUTF16(@"Test bookmark"));
   mediator_.webStateList = web_state_list_.get();
   FakePopupMenuConsumer* consumer = [[FakePopupMenuConsumer alloc] init];
   mediator_.popupMenu = consumer;
+  mediator_.prefService = prefs_.get();
 
   EXPECT_TRUE(HasItem(consumer, kToolsMenuAddToBookmarks, /*enabled=*/YES));
 

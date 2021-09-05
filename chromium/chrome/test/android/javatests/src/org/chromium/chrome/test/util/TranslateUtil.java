@@ -7,16 +7,24 @@ package org.chromium.chrome.test.util;
 import android.app.Instrumentation;
 import android.view.View;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.TranslateCompactInfoBar;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.infobars.InfoBarCompactLayout;
 import org.chromium.components.translate.TranslateMenu;
 import org.chromium.components.translate.TranslateTabLayout;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+
+import java.util.ArrayList;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Utility functions for dealing with Translate InfoBars.
@@ -99,5 +107,41 @@ public class TranslateUtil {
     public static void clickTargetMenuItem(
             final TranslateCompactInfoBar infoBar, final String code) {
         TestThreadUtils.runOnUiThreadBlocking(() -> { infoBar.onTargetMenuItemClicked(code); });
+    }
+
+    /**
+     * Wait until the translate infobar is present in the given InfoBarContainer and is in the given
+     * state. Throws a TimeoutException if the given state is never reached.
+     */
+    public static void waitForTranslateInfoBarState(
+            InfoBarContainer container, boolean expectTranslated) throws TimeoutException {
+        CriteriaHelper.pollUiThread(() -> {
+            ArrayList<InfoBar> infoBars = container.getInfoBarsForTesting();
+            if (infoBars.isEmpty()) {
+                return false;
+            }
+            assertCompactTranslateInfoBar(infoBars.get(0));
+            TranslateCompactInfoBar infoBar = (TranslateCompactInfoBar) infoBars.get(0);
+            if (expectTranslated) {
+                return !infoBar.isSourceTabSelectedForTesting()
+                        && infoBar.isTargetTabSelectedForTesting();
+            } else {
+                return infoBar.isSourceTabSelectedForTesting()
+                        && !infoBar.isTargetTabSelectedForTesting();
+            }
+        });
+    }
+
+    /**
+     * Wait until the given tab is translatable. This is useful in cases where we can't wait on the
+     * infobar, such as when a page is in a accept-lang but is still translatable.
+     */
+    public static void waitUntilTranslatable(Tab tab) {
+        Assert.assertNotNull(tab);
+        CriteriaHelper.pollUiThread(() -> {
+            boolean canManuallyTranslate =
+                    TranslateBridge.canManuallyTranslate(tab, /*menuLogging=*/false);
+            Criteria.checkThat(canManuallyTranslate, Matchers.is(true));
+        });
     }
 }

@@ -3,14 +3,16 @@
 // found in the LICENSE file.
 
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_test_util.h"
 #include "chrome/browser/chromeos/file_manager/web_file_tasks.h"
 #include "chrome/browser/chromeos/web_applications/system_web_app_integration_test.h"
+#include "chrome/browser/error_reporting/mock_chrome_js_error_report_processor.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -42,6 +44,10 @@ constexpr char kFilePng800x600[] = "image.png";
 
 // A 640x480 image/jpeg (all green pixels).
 constexpr char kFileJpeg640x480[] = "image3.jpg";
+
+// A RAW file from an Olympus camera with the original preview/thumbnail data
+// swapped out with "exif.jpg".
+constexpr char kRaw378x272[] = "raw.orf";
 
 // A 1-second long 648x486 VP9-encoded video with stereo Opus-encoded audio.
 constexpr char kFileVideoVP9[] = "world.webm";
@@ -154,22 +160,108 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaApp) {
 // params.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchWithFile) {
   WaitForTestSystemAppInstall();
-  auto params = LaunchParamsForApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* app;
+  {
+    auto params = LaunchParamsForApp(web_app::SystemAppType::MEDIA);
 
-  // Add the 800x600 PNG image to launch params.
-  params.launch_files.push_back(TestFile(kFilePng800x600));
+    // Add the 800x600 PNG image to launch params.
+    params.launch_files.push_back(TestFile(kFilePng800x600));
 
-  content::WebContents* app = LaunchApp(params);
+    app = LaunchApp(std::move(params));
+  }
   PrepareAppForTest(app);
 
   EXPECT_EQ("800x600", WaitForImageAlt(app, kFilePng800x600));
 
   // Relaunch with a different file. This currently re-uses the existing window,
   // so we don't wait for page load here.
-  params.launch_files = {TestFile(kFileJpeg640x480)};
-  LaunchAppWithoutWaiting(params);
+  {
+    auto params = LaunchParamsForApp(web_app::SystemAppType::MEDIA);
+    params.launch_files = {TestFile(kFileJpeg640x480)};
+    LaunchAppWithoutWaiting(std::move(params));
+  }
 
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
+}
+
+// Regression test for b/172881869.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsPdf) {
+  WaitForTestSystemAppInstall();
+  LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* app = PrepareActiveBrowserForTest();
+  // TODO(crbug/1148090): To fully load PDFs, "frame-src" needs to be set, this
+  // test doesn't provide coverage for that.
+  // Note: If "object-src" is not set in the CSP, the `<embed>` element fails to
+  // load and times out.
+  constexpr char loadPdf[] = R"(
+      (() => {
+        const embedBlob =  document.createElement('embed');
+        embedBlob.type ='application/pdf';
+        embedBlob.height = '100%';
+        embedBlob.width = '100%';
+        const loadPromise = new Promise((resolve, reject) => {
+          embedBlob.addEventListener('load', () => resolve(true));
+          embedBlob.addEventListener('error', () => reject(false));
+        });
+        document.body.appendChild(embedBlob);
+        embedBlob.src = 'blob:chrome-untrusted://media-app/fake-pdf-blob-hash';
+        return loadPromise;
+      })();
+  )";
+
+  EXPECT_EQ(true, MediaAppUiBrowserTest::EvalJsInAppFrame(app, loadPdf));
+}
+
+// Test that the MediaApp can load RAW files passed on launch params.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, HandleRawFiles) {
+  WaitForTestSystemAppInstall();
+
+  content::WebContents* web_ui;
+  {
+    auto params = LaunchParamsForApp(web_app::SystemAppType::MEDIA);
+
+    // Add the handcrafted RAW file to launch params and launch.
+    params.launch_files.push_back(TestFile(kRaw378x272));
+    web_ui = LaunchApp(std::move(params));
+    PrepareAppForTest(web_ui);
+  }
+
+  EXPECT_EQ("378x272", WaitForImageAlt(web_ui, kRaw378x272));
+
+  // Loading a raw file will put the RAW loading module into the JS context.
+  // Inject a script to manipulate the RAW loader into returning a result that
+  // includes an Exif rotation.
+  constexpr char kAdd270DegreeRotation[] = R"(
+    (function() {
+      const realPiexLoad = PiexLoader.load;
+      PiexLoader.load = async (buffer, onFailure) => {
+        const response = await realPiexLoad(buffer, onPiexModuleFailed);
+        response.orientation = 8;
+        return response;
+      };
+    })();
+  )";
+  content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
+  EXPECT_EQ(true, ExecuteScript(app, kAdd270DegreeRotation));
+
+  // Launch with a file that has a different name to ensure the rotated version
+  // of the file is detected robustly.
+  {
+    auto clearFileParams = LaunchParamsForApp(web_app::SystemAppType::MEDIA);
+    clearFileParams.launch_files = {TestFile(kFileJpeg640x480)};
+    LaunchAppWithoutWaiting(std::move(clearFileParams));
+  }
+  EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
+
+  {
+    auto params = LaunchParamsForApp(web_app::SystemAppType::MEDIA);
+
+    // Add the handcrafted RAW file to launch params and launch.
+    params.launch_files.push_back(TestFile(kRaw378x272));
+    LaunchAppWithoutWaiting(std::move(params));
+  }
+  // Width and height should be swapped now.
+  EXPECT_EQ("272x378", WaitForImageAlt(web_ui, kRaw378x272));
 }
 
 // Ensures that chrome://media-app is available as a file task for the ChromeOS
@@ -220,6 +312,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        TrustedContextReportsConsoleErrors) {
   MockCrashEndpoint endpoint(embedded_test_server());
+  ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
   content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
@@ -241,6 +334,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        TrustedContextReportsDomExceptions) {
   MockCrashEndpoint endpoint(embedded_test_server());
+  ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
   content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
@@ -257,6 +351,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        UntrustedContextReportsDomExceptions) {
   MockCrashEndpoint endpoint(embedded_test_server());
+  ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
   content::WebContents* app = LaunchApp(web_app::SystemAppType::MEDIA);
@@ -273,6 +368,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        TrustedContextReportsUnhandledExceptions) {
   MockCrashEndpoint endpoint(embedded_test_server());
+  ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
   content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
@@ -289,6 +385,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        UntrustedContextReportsUnhandledExceptions) {
   MockCrashEndpoint endpoint(embedded_test_server());
+  ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
   content::WebContents* app = LaunchApp(web_app::SystemAppType::MEDIA);
@@ -304,6 +401,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        TrustedContextReportsTypeErrors) {
   MockCrashEndpoint endpoint(embedded_test_server());
+  ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
   content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
@@ -321,6 +419,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        UntrustedContextReportsTypeErrors) {
   MockCrashEndpoint endpoint(embedded_test_server());
+  ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
   content::WebContents* app = LaunchApp(web_app::SystemAppType::MEDIA);

@@ -15,6 +15,7 @@
 #include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/sync_manager.h"
@@ -34,7 +35,6 @@ namespace syncer {
 class Cryptographer;
 class ModelTypeRegistry;
 class SyncCycleContext;
-class TypeDebugInfoObserver;
 
 // Unless stated otherwise, all methods of SyncManager should be called on the
 // same thread.
@@ -57,6 +57,7 @@ class SyncManagerImpl
   // SyncManager implementation.
   void Init(InitArgs* args) override;
   ModelTypeSet InitialSyncEndedTypes() override;
+  ModelTypeSet GetEnabledTypes() override;
   void UpdateCredentials(const SyncCredentials& credentials) override;
   void InvalidateCredentials() override;
   void StartSyncingNormally(base::Time last_poll_time) override;
@@ -81,19 +82,12 @@ class SyncManagerImpl
   SyncEncryptionHandler* GetEncryptionHandler() override;
   std::vector<std::unique_ptr<ProtocolEvent>> GetBufferedProtocolEvents()
       override;
-  void RegisterDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) override;
-  void UnregisterDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) override;
-  bool HasDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) override;
-  void RequestEmitDebugInfo() override;
   void OnCookieJarChanged(bool account_mismatch, bool empty_jar) override;
   void UpdateInvalidationClientId(const std::string& client_id) override;
+  void UpdateSingleClientStatus(bool single_client) override;
 
   // SyncEncryptionHandler::Observer implementation.
   void OnPassphraseRequired(
-      PassphraseRequiredReason reason,
       const KeyDerivationParams& key_derivation_params,
       const sync_pb::EncryptedData& pending_keys) override;
   void OnPassphraseAccepted() override;
@@ -103,7 +97,6 @@ class SyncManagerImpl
                                BootstrapTokenType type) override;
   void OnEncryptedTypesChanged(ModelTypeSet encrypted_types,
                                bool encrypt_everything) override;
-  void OnEncryptionComplete() override;
   void OnCryptographerStateChanged(Cryptographer* cryptographer,
                                    bool has_pending_keys) override;
   void OnPassphraseTypeChanged(PassphraseType type,
@@ -194,7 +187,7 @@ class SyncManagerImpl
   bool observing_network_connectivity_changes_;
 
   // Map used to store the notification info to be displayed in
-  // about:sync page.
+  // chrome://sync-internals page.
   NotificationInfoMap notification_info_map_;
 
   // These are for interacting with chrome://sync-internals.

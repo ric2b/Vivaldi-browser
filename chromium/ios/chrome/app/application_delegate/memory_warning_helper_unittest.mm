@@ -9,7 +9,7 @@
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread.h"
-#import "ios/chrome/browser/metrics/previous_session_info.h"
+#import "components/previous_session_info/previous_session_info.h"
 #include "testing/platform_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -26,8 +26,9 @@ class MemoryWarningHelperTest : public PlatformTest {
     // will store the memory pressure level sent to the callback in
     // |memory_pressure_level_| so that tests can verify the level is correct.
     memory_pressure_listener_.reset(new base::MemoryPressureListener(
-        FROM_HERE, base::Bind(&MemoryWarningHelperTest::OnMemoryPressure,
-                              base::Unretained(this))));
+        FROM_HERE,
+        base::BindRepeating(&MemoryWarningHelperTest::OnMemoryPressure,
+                            base::Unretained(this))));
     memory_pressure_level_ =
         base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE;
   }

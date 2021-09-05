@@ -60,6 +60,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   AXObjectInclusion ShouldIncludeBasedOnSemantics(
       IgnoredReasons* = nullptr) const;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
+  bool CanIgnoreTextAsEmpty() const override;
   const AXObject* InheritsPresentationalRoleFrom() const override;
   ax::mojom::blink::Role DetermineTableSectionRole() const;
   ax::mojom::blink::Role DetermineTableCellRole() const;
@@ -73,7 +74,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void AccessibilityChildrenFromAOMProperty(AOMRelationListProperty,
                                             AXObject::AXObjectVector&) const;
 
-  bool HasContentEditableAttributeSet() const;
   bool IsTextControl() const override;
   Element* MenuItemElementForMenu() const;
   Element* MouseButtonListener() const;
@@ -98,6 +98,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsMultiline() const override;
   bool IsEditable() const override { return IsNativeTextControl(); }
   bool ComputeIsEditableRoot() const override;
+  bool HasContentEditableAttributeSet() const override;
   bool IsFieldset() const final;
   bool IsHovered() const final;
   bool IsImageButton() const;
@@ -174,7 +175,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool HasAriaAttribute() const override;
   void AriaDescribedbyElements(AXObjectVector&) const override;
   void AriaOwnsElements(AXObjectVector&) const override;
-  bool SupportsARIAOwns() const override;
   bool SupportsARIADragging() const override;
   void Dropeffects(
       Vector<ax::mojom::blink::Dropeffect>& dropeffects) const override;
@@ -221,8 +221,12 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void AddChildren() override;
 
   bool CanHaveChildren() const override;
-  void AddChild(AXObject*);
-  void InsertChild(AXObject*, unsigned index);
+  // Set is_from_aria_owns to true if the child is being added because it was
+  // pointed to from aria-owns.
+  void AddChild(AXObject*, bool is_from_aria_owns = false);
+  // Set is_from_aria_owns to true if the child is being insert because it was
+  // pointed to from aria-owns.
+  void InsertChild(AXObject*, unsigned index, bool is_from_aria_owns = false);
   void ClearChildren() override;
   bool NeedsToUpdateChildren() const override { return children_dirty_; }
   void SetNeedsToUpdateChildren() override { children_dirty_ = true; }
@@ -240,6 +244,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
 
   // DOM and layout tree access.
   AtomicString Language() const override;
+  bool HasAttribute(const QualifiedName&) const override;
+  const AtomicString& GetAttribute(const QualifiedName&) const override;
 
   // Modify or take an action on an object.
   bool OnNativeFocusAction() final;
@@ -289,6 +295,10 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, UpdateChildrenIfNecessary);
 
  private:
+  bool HasInternalsAttribute(Element&, const QualifiedName&) const;
+  const AtomicString& GetInternalsAttribute(Element&,
+                                            const QualifiedName&) const;
+
   Member<Node> node_;
 
   bool IsNativeCheckboxInMixedState() const;

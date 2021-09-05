@@ -47,14 +47,7 @@ struct CORE_EXPORT NGBoxStrut {
 
   bool IsEmpty() const { return *this == NGBoxStrut(); }
 
-  void ClampNegativeToZero() {
-    inline_start = inline_start.ClampNegativeToZero();
-    inline_end = inline_end.ClampNegativeToZero();
-    block_start = block_start.ClampNegativeToZero();
-    block_end = block_end.ClampNegativeToZero();
-  }
-
-  inline NGPhysicalBoxStrut ConvertToPhysical(WritingMode, TextDirection) const;
+  inline NGPhysicalBoxStrut ConvertToPhysical(WritingDirectionMode) const;
 
   // The following two operators exist primarily to have an easy way to access
   // the sum of border and padding.
@@ -167,10 +160,9 @@ struct CORE_EXPORT NGPhysicalBoxStrut {
 
   // Converts physical dimensions to logical ones per
   // https://drafts.csswg.org/css-writing-modes-3/#logical-to-physical
-  NGBoxStrut ConvertToLogical(WritingMode writing_mode,
-                              TextDirection direction) const {
+  NGBoxStrut ConvertToLogical(WritingDirectionMode writing_direction) const {
     NGBoxStrut strut;
-    switch (writing_mode) {
+    switch (writing_direction.GetWritingMode()) {
       case WritingMode::kHorizontalTb:
         strut = {left, right, top, bottom};
         break;
@@ -185,17 +177,17 @@ struct CORE_EXPORT NGPhysicalBoxStrut {
         strut = {bottom, top, left, right};
         break;
     }
-    if (direction == TextDirection::kRtl)
+    if (writing_direction.IsRtl())
       std::swap(strut.inline_start, strut.inline_end);
     return strut;
   }
 
   // Converts physical dimensions to line-relative logical ones per
   // https://drafts.csswg.org/css-writing-modes-3/#line-directions
-  NGLineBoxStrut ConvertToLineLogical(WritingMode writing_mode,
-                                      TextDirection direction) const {
-    return NGLineBoxStrut(ConvertToLogical(writing_mode, direction),
-                          IsFlippedLinesWritingMode(writing_mode));
+  NGLineBoxStrut ConvertToLineLogical(
+      WritingDirectionMode writing_direction) const {
+    return NGLineBoxStrut(ConvertToLogical(writing_direction),
+                          writing_direction.IsFlippedLines());
   }
 
   NGPixelSnappedPhysicalBoxStrut SnapToDevicePixels() const {
@@ -238,13 +230,12 @@ struct CORE_EXPORT NGPhysicalBoxStrut {
 };
 
 inline NGPhysicalBoxStrut NGBoxStrut::ConvertToPhysical(
-    WritingMode writing_mode,
-    TextDirection direction) const {
+    WritingDirectionMode writing_direction) const {
   LayoutUnit direction_start = inline_start;
   LayoutUnit direction_end = inline_end;
-  if (direction == TextDirection::kRtl)
+  if (writing_direction.IsRtl())
     std::swap(direction_start, direction_end);
-  switch (writing_mode) {
+  switch (writing_direction.GetWritingMode()) {
     case WritingMode::kHorizontalTb:
       return NGPhysicalBoxStrut(block_start, direction_end, block_end,
                                 direction_start);

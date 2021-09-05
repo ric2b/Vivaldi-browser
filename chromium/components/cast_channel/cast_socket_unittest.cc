@@ -21,7 +21,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/mock_timer.h"
 #include "build/build_config.h"
@@ -534,11 +534,12 @@ class SslCastSocketTest : public CastSocketTestBase {
   std::unique_ptr<crypto::RSAPrivateKey> ReadTestKeyFromPEM(
       const base::StringPiece& name) {
     base::FilePath key_path = GetTestCertsDirectory().AppendASCII(name);
-    std::vector<std::string> headers({"PRIVATE KEY"});
     std::string pem_data;
     if (!base::ReadFileToString(key_path, &pem_data)) {
       return nullptr;
     }
+
+    const std::vector<std::string> headers({"PRIVATE KEY"});
     net::PEMTokenizer pem_tokenizer(pem_data, headers);
     if (!pem_tokenizer.GetNext()) {
       return nullptr;

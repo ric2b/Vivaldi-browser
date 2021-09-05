@@ -14,7 +14,6 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
@@ -60,12 +59,13 @@
 #include "content/browser/network_context_client_base_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/quota/quota_context.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/service_sandbox_type.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/ssl/ssl_client_auth_handler.h"
 #include "content/browser/ssl/ssl_error_handler.h"
 #include "content/browser/ssl_private_key_impl.h"
-#include "content/browser/web_contents/frame_tree_node_id_registry.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/navigation_params.mojom.h"
 #include "content/common/service_worker/service_worker_utils.h"
@@ -140,6 +140,9 @@ const storage::QuotaSettings* g_test_quota_settings;
 // recorded.
 const base::TimeDelta kSlowTaskTimeout = base::TimeDelta::FromSeconds(180);
 
+// If true, Storage Service instances will always be started in-process.
+bool g_force_in_process_storage_service = false;
+
 mojo::Remote<storage::mojom::StorageService>& GetStorageServiceRemoteStorage() {
   // NOTE: This use of sequence-local storage is only to ensure that the Remote
   // only lives as long as the UI-thread sequence, since the UI-thread sequence
@@ -176,20 +179,21 @@ mojo::Remote<storage::mojom::StorageService>& GetStorageServiceRemote() {
       GetStorageServiceRemoteStorage();
   if (!remote) {
 #if !defined(OS_ANDROID)
-    const bool oop_storage_enabled =
-        base::FeatureList::IsEnabled(features::kStorageServiceOutOfProcess);
+    const base::FilePath sandboxed_data_dir =
+        GetContentClient()
+            ->browser()
+            ->GetSandboxedStorageServiceDataDirectory();
     const bool single_process_mode =
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kSingleProcess);
-    if (oop_storage_enabled && !single_process_mode) {
-      const base::FilePath sandboxed_data_dir =
-          GetContentClient()
-              ->browser()
-              ->GetSandboxedStorageServiceDataDirectory();
-      DCHECK(!sandboxed_data_dir.empty())
-          << "Cannot run Storage Service out-of-process without a non-default "
-          << "implementation of "
-          << "ContentBrowserClient::GetSandboxedStorageServiceDataDirectory().";
+    const bool oop_storage_enabled =
+        base::FeatureList::IsEnabled(features::kStorageServiceOutOfProcess) &&
+        !sandboxed_data_dir.empty() && !single_process_mode &&
+        !g_force_in_process_storage_service;
+    if (oop_storage_enabled) {
+      DCHECK(sandboxed_data_dir.IsAbsolute())
+          << "Storage Service data directory must be an absolute path, but \""
+          << sandboxed_data_dir << "\" is not an absolute path.";
       remote = ServiceProcessHost::Launch<storage::mojom::StorageService>(
           ServiceProcessHost::Options()
               .WithDisplayName("Storage Service")
@@ -545,11 +549,7 @@ void OnAuthRequiredContinuation(
     mojo::PendingRemote<network::mojom::AuthChallengeResponder>
         auth_challenge_responder,
     base::RepeatingCallback<WebContents*(void)> web_contents_getter) {
-  if (!web_contents_getter) {
-    web_contents_getter =
-        base::BindRepeating(GetWebContents, process_id, routing_id);
-  }
-  if (!web_contents_getter.Run()) {
+  if (!web_contents_getter || !web_contents_getter.Run()) {
     mojo::Remote<network::mojom::AuthChallengeResponder>
         auth_challenge_responder_remote(std::move(auth_challenge_responder));
     auth_challenge_responder_remote->OnAuthCredentials(base::nullopt);
@@ -560,63 +560,6 @@ void OnAuthRequiredContinuation(
                            is_request_for_main_frame, process_id, routing_id,
                            request_id, url, head ? head->headers : nullptr,
                            first_auth_attempt);  // deletes self
-}
-
-FrameTreeNodeIdRegistry::IsMainFrameGetter GetIsMainFrameFromRegistry(
-    const base::UnguessableToken& window_id) {
-  return FrameTreeNodeIdRegistry::GetInstance()->GetIsMainFrameGetter(
-      window_id);
-}
-
-base::RepeatingCallback<WebContents*(void)> GetWebContentsFromRegistry(
-    const base::UnguessableToken& window_id) {
-  return FrameTreeNodeIdRegistry::GetInstance()->GetWebContentsGetter(
-      window_id);
-}
-
-void OnAuthRequiredContinuationForWindowId(
-    const base::UnguessableToken& window_id,
-    uint32_t process_id,
-    uint32_t routing_id,
-    uint32_t request_id,
-    const GURL& url,
-    bool first_auth_attempt,
-    const net::AuthChallengeInfo& auth_info,
-    network::mojom::URLResponseHeadPtr head,
-    mojo::PendingRemote<network::mojom::AuthChallengeResponder>
-        auth_challenge_responder,
-    FrameTreeNodeIdRegistry::IsMainFrameGetter is_main_frame_getter) {
-  if (!is_main_frame_getter) {
-    // FrameTreeNode id may already be removed from FrameTreeNodeIdRegistry
-    // due to thread hopping.
-    mojo::Remote<network::mojom::AuthChallengeResponder>
-        auth_challenge_responder_remote(std::move(auth_challenge_responder));
-    auth_challenge_responder_remote->OnAuthCredentials(base::nullopt);
-    return;
-  }
-  base::Optional<bool> is_main_frame_opt = is_main_frame_getter.Run();
-  // The frame may already be gone due to thread hopping.
-  if (!is_main_frame_opt) {
-    mojo::Remote<network::mojom::AuthChallengeResponder>
-        auth_challenge_responder_remote(std::move(auth_challenge_responder));
-    auth_challenge_responder_remote->OnAuthCredentials(base::nullopt);
-    return;
-  }
-
-  if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-    OnAuthRequiredContinuation(process_id, routing_id, request_id, url,
-                               *is_main_frame_opt, first_auth_attempt,
-                               auth_info, std::move(head),
-                               std::move(auth_challenge_responder),
-                               GetWebContentsFromRegistry(window_id));
-  } else {
-    GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
-        FROM_HERE, base::BindOnce(&GetWebContentsFromRegistry, window_id),
-        base::BindOnce(&OnAuthRequiredContinuation, process_id, routing_id,
-                       request_id, url, *is_main_frame_opt, first_auth_attempt,
-                       auth_info, std::move(head),
-                       std::move(auth_challenge_responder)));
-  }
 }
 
 bool IsMainFrameRequest(int process_id, int routing_id) {
@@ -701,11 +644,10 @@ void OnCertificateRequestedContinuation(
     mojo::PendingRemote<network::mojom::ClientCertificateResponder>
         client_cert_responder_remote,
     base::RepeatingCallback<WebContents*(void)> web_contents_getter) {
-  if (!web_contents_getter) {
-    web_contents_getter =
-        base::BindRepeating(GetWebContents, process_id, routing_id);
-  }
-  WebContents* web_contents = web_contents_getter.Run();
+  WebContents* web_contents = nullptr;
+  if (web_contents_getter)
+    web_contents = web_contents_getter.Run();
+
   if (!web_contents) {
     DCHECK(client_cert_responder_remote);
     mojo::Remote<network::mojom::ClientCertificateResponder>
@@ -886,6 +828,11 @@ void StoragePartitionImpl::
       << "It is not expected that this is called with non-null callback when "
       << "another overriding callback is already set.";
   GetCreateURLLoaderFactoryCallback() = std::move(url_loader_factory_callback);
+}
+
+// static
+void StoragePartitionImpl::ForceInProcessStorageServiceForTesting() {
+  g_force_in_process_storage_service = true;
 }
 
 // Helper for deleting quota managed data from a partition.
@@ -1276,7 +1223,7 @@ void StoragePartitionImpl::Initialize(
 
   if (StoragePartition::IsAppCacheEnabled()) {
     appcache_service_ = base::MakeRefCounted<ChromeAppCacheService>(
-        quota_manager_proxy.get(), weak_factory_.GetWeakPtr());
+        quota_manager_proxy, weak_factory_.GetWeakPtr());
   }
 
   dedicated_worker_service_ = std::make_unique<DedicatedWorkerServiceImpl>();
@@ -1347,10 +1294,7 @@ void StoragePartitionImpl::Initialize(
   // The Conversion Measurement API is not available in Incognito mode.
   if (!is_in_memory_ &&
       base::FeatureList::IsEnabled(features::kConversionMeasurement)) {
-    conversion_manager_ = std::make_unique<ConversionManagerImpl>(
-        this, path,
-        base::ThreadPool::CreateSequencedTaskRunner(
-            {base::MayBlock(), base::TaskPriority::BEST_EFFORT}));
+    conversion_manager_ = std::make_unique<ConversionManagerImpl>(this, path);
   }
 
   is_vivaldi_ = vivaldi::IsVivaldiApp(partition_domain_);
@@ -1381,6 +1325,9 @@ void StoragePartitionImpl::Initialize(
   }
 
   font_access_manager_ = std::make_unique<FontAccessManagerImpl>();
+
+  if (base::FeatureList::IsEnabled(blink::features::kPrerender2))
+    prerender_host_registry_ = std::make_unique<PrerenderHostRegistry>();
 }
 
 void StoragePartitionImpl::OnStorageServiceDisconnected() {
@@ -1656,6 +1603,12 @@ FontAccessManagerImpl* StoragePartitionImpl::GetFontAccessManager() {
   return font_access_manager_.get();
 }
 
+PrerenderHostRegistry* StoragePartitionImpl::GetPrerenderHostRegistry() {
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kPrerender2));
+  DCHECK(initialized_);
+  return prerender_host_registry_.get();
+}
+
 ContentIndexContextImpl* StoragePartitionImpl::GetContentIndexContext() {
   DCHECK(initialized_);
   return content_index_context_.get();
@@ -1734,26 +1687,33 @@ void StoragePartitionImpl::OnAuthRequired(
     mojo::PendingRemote<network::mojom::AuthChallengeResponder>
         auth_challenge_responder) {
   if (window_id) {
-    if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-      OnAuthRequiredContinuationForWindowId(
-          *window_id, process_id, routing_id, request_id, url,
-          first_auth_attempt, auth_info, std::move(head),
-          std::move(auth_challenge_responder),
-          GetIsMainFrameFromRegistry(*window_id));
-    } else {
-      GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
-          FROM_HERE, base::BindOnce(&GetIsMainFrameFromRegistry, *window_id),
-          base::BindOnce(&OnAuthRequiredContinuationForWindowId, *window_id,
-                         process_id, routing_id, request_id, url,
-                         first_auth_attempt, auth_info, std::move(head),
-                         std::move(auth_challenge_responder)));
+    bool is_main_frame = false;
+    base::RepeatingCallback<WebContents*(void)> web_contents_getter;
+    if (service_worker_context_->context()) {
+      auto* container_host =
+          service_worker_context_->context()->GetContainerHostByWindowId(
+              *window_id);
+      if (container_host) {
+        int frame_tree_node_id = container_host->frame_tree_node_id();
+        if (FrameTreeNode* frame_tree_node =
+                FrameTreeNode::GloballyFindByID(frame_tree_node_id)) {
+          is_main_frame = frame_tree_node->IsMainFrame();
+          web_contents_getter = base::BindRepeating(
+              &WebContents::FromFrameTreeNodeId, frame_tree_node_id);
+        }
+      }
     }
+    OnAuthRequiredContinuation(
+        process_id, routing_id, request_id, url, is_main_frame,
+        first_auth_attempt, auth_info, std::move(head),
+        std::move(auth_challenge_responder), web_contents_getter);
     return;
   }
-  OnAuthRequiredContinuation(process_id, routing_id, request_id, url,
-                             IsMainFrameRequest(process_id, routing_id),
-                             first_auth_attempt, auth_info, std::move(head),
-                             std::move(auth_challenge_responder), {});
+  OnAuthRequiredContinuation(
+      process_id, routing_id, request_id, url,
+      IsMainFrameRequest(process_id, routing_id), first_auth_attempt, auth_info,
+      std::move(head), std::move(auth_challenge_responder),
+      base::BindRepeating(GetWebContents, process_id, routing_id));
 }
 
 void StoragePartitionImpl::OnCertificateRequested(
@@ -1766,22 +1726,26 @@ void StoragePartitionImpl::OnCertificateRequested(
         cert_responder) {
   // Use |window_id| if it's provided.
   if (window_id) {
-    if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled()) {
-      OnCertificateRequestedContinuation(
-          process_id, routing_id, request_id, cert_info,
-          std::move(cert_responder), GetWebContentsFromRegistry(*window_id));
-    } else {
-      GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
-          FROM_HERE, base::BindOnce(&GetWebContentsFromRegistry, *window_id),
-          base::BindOnce(&OnCertificateRequestedContinuation, process_id,
-                         routing_id, request_id, cert_info,
-                         std::move(cert_responder)));
+    base::RepeatingCallback<WebContents*(void)> web_contents_getter;
+    if (service_worker_context_->context()) {
+      auto* container_host =
+          service_worker_context_->context()->GetContainerHostByWindowId(
+              *window_id);
+      if (container_host) {
+        int frame_tree_node_id = container_host->frame_tree_node_id();
+        web_contents_getter = base::BindRepeating(
+            &WebContents::FromFrameTreeNodeId, frame_tree_node_id);
+      }
     }
+    OnCertificateRequestedContinuation(process_id, routing_id, request_id,
+                                       cert_info, std::move(cert_responder),
+                                       web_contents_getter);
     return;
   }
 
-  OnCertificateRequestedContinuation(process_id, routing_id, request_id,
-                                     cert_info, std::move(cert_responder), {});
+  OnCertificateRequestedContinuation(
+      process_id, routing_id, request_id, cert_info, std::move(cert_responder),
+      base::BindRepeating(GetWebContents, process_id, routing_id));
 }
 
 void StoragePartitionImpl::OnSSLCertificateError(
@@ -1892,6 +1856,17 @@ void StoragePartitionImpl::OnTrustAnchorUsed() {
   GetContentClient()->browser()->OnTrustAnchorUsed(browser_context_);
 }
 #endif
+
+void StoragePartitionImpl::OnTrustTokenIssuanceDivertedToSystem(
+    network::mojom::FulfillTrustTokenIssuanceRequestPtr request,
+    OnTrustTokenIssuanceDivertedToSystemCallback callback) {
+  // TODO(crbug.com/1130272): Implement logic that allows executing Trust
+  // Tokens operations when available, rather than failing unconditionally.
+  auto response = network::mojom::FulfillTrustTokenIssuanceAnswer::New();
+  response->status =
+      network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound;
+  std::move(callback).Run(std::move(response));
+}
 
 void StoragePartitionImpl::ClearDataImpl(
     uint32_t remove_mask,

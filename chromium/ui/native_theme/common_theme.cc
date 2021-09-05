@@ -72,12 +72,15 @@ base::Optional<SkColor> GetDarkSchemeColor(NativeTheme::ColorId color_id) {
     case NativeTheme::kColorId_BubbleBackground:
     case NativeTheme::kColorId_NotificationDefaultBackground:
       return color_utils::AlphaBlend(SK_ColorWHITE, gfx::kGoogleGrey900, 0.04f);
+    case NativeTheme::kColorId_AvatarIconGuest:
     case NativeTheme::kColorId_DialogForeground:
       return gfx::kGoogleGrey500;
-    case NativeTheme::kColorId_BubbleForeground:
-      return gfx::kGoogleGrey200;
     case NativeTheme::kColorId_BubbleFooterBackground:
       return SkColorSetRGB(0x32, 0x36, 0x39);
+    case NativeTheme::kColorId_AvatarHeaderArt:
+      return gfx::kGoogleGrey800;
+    case NativeTheme::kColorId_AvatarIconIncognito:
+      return gfx::kGoogleGrey200;
 
     // FocusableBorder
     case NativeTheme::kColorId_FocusedBorderColor:
@@ -249,10 +252,13 @@ SkColor GetDefaultColor(NativeTheme::ColorId color_id,
     case NativeTheme::kColorId_BubbleBackground:
     case NativeTheme::kColorId_NotificationDefaultBackground:
       return SK_ColorWHITE;
+    case NativeTheme::kColorId_AvatarHeaderArt:
+      return gfx::kGoogleGrey300;
+    case NativeTheme::kColorId_AvatarIconIncognito:
+      return kPrimaryTextColor;
+    case NativeTheme::kColorId_AvatarIconGuest:
     case NativeTheme::kColorId_DialogForeground:
       return gfx::kGoogleGrey700;
-    case NativeTheme::kColorId_BubbleForeground:
-      return kPrimaryTextColor;
     case NativeTheme::kColorId_BubbleFooterBackground:
       return gfx::kGoogleGrey050;
 

@@ -2,24 +2,79 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-var anchor = document.getElementById('anchor');
-var popup = document.getElementById('popup');
-var anchorParent = anchor.offsetParent;
-var oldGetBoundingClientRect = anchorParent.getBoundingClientRect;
-var availRect;
+// clang-format off
+// #import {assertEquals} from '../../../chai_assert.js';
+// #import {positionPopupAroundElement, positionPopupAtPoint, AnchorType} from 'chrome://resources/js/cr/ui/position_util.m.js';
+// clang-format on
 
+/** @type {!HTMLElement} */
+let anchor;
+/** @type {!HTMLElement} */
+let popup;
+let anchorParent;
+let oldGetBoundingClientRect;
+let availRect;
+
+/**
+ * @param {number} w width
+ * @param {number} h height
+ * @constructor
+ */
 function MockRect(w, h) {
+  /** @type {number} */
+  this.left = 0;
+
+  /** @type {number} */
+  this.top = 0;
+
+  /** @type {number} */
   this.width = w;
+
+  /** @type {number} */
   this.height = h;
+
+  /** @type {number} */
   this.right = this.left + w;
+
+  /** @type {number} */
   this.bottom = this.top + h;
 }
-MockRect.prototype = {
-  left: 0,
-  top: 0
-};
 
 function setUp() {
+  document.body.innerHTML = `
+    <style>
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      #anchor {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: green;
+      }
+
+      #popup {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100px;
+        height: 100px;
+        background: red;
+      }
+    </style>
+
+    <div id="anchor"></div>
+    <div id="popup"></div>
+    `;
+
+  anchor = /** @type {!HTMLElement} */ (document.getElementById('anchor'));
+  popup = /** @type {!HTMLElement} */ (document.getElementById('popup'));
+  anchorParent = anchor.offsetParent;
+  oldGetBoundingClientRect = anchorParent.getBoundingClientRect;
+
   anchor.style.top = '100px';
   anchor.style.left = '100px';
   availRect = new MockRect(200, 200);
@@ -260,3 +315,23 @@ function testPositionAtPoint() {
   assertEquals('50px', popup.style.right);
   assertEquals('50px', popup.style.bottom);
 }
+
+Object.assign(window, {
+  setUp,
+  tearDown,
+  testAbovePrimary,
+  testBelowPrimary,
+  testBeforePrimary,
+  testBeforePrimaryRtl,
+  testAfterPrimary,
+  testAfterPrimaryRtl,
+  testAboveSecondary,
+  testAboveSecondaryRtl,
+  testAboveSecondarySwappedAlign,
+  testBelowSecondary,
+  testBelowSecondaryRtl,
+  testBelowSecondarySwappedAlign,
+  testBeforeSecondary,
+  testAfterSecondary,
+  testPositionAtPoint,
+});

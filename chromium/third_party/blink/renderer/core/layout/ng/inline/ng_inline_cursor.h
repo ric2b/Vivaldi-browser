@@ -173,12 +173,6 @@ class CORE_EXPORT NGInlineCursorPosition {
   // other than line.
   bool HasSoftWrapToNextLine() const;
 
-  // Returns a point at the visual start/end of the line. (0, 0) is left-top of
-  // the line.
-  // Encapsulates the handling of text direction and writing mode.
-  PhysicalOffset LineStartPoint() const;
-  PhysicalOffset LineEndPoint() const;
-
   // LogicalRect/PhysicalRect conversions
   // |logical_rect| and |physical_rect| are converted with |Size()| as
   // "outer size".
@@ -222,9 +216,9 @@ class CORE_EXPORT NGInlineCursor {
   using ItemsSpan = NGFragmentItems::Span;
 
   explicit NGInlineCursor(const LayoutBlockFlow& block_flow);
-  explicit NGInlineCursor(const NGFragmentItems& items);
-  explicit NGInlineCursor(const NGFragmentItems& fragment_items,
-                          ItemsSpan items);
+  explicit NGInlineCursor(const NGPhysicalBoxFragment& box_fragment);
+  NGInlineCursor(const NGPhysicalBoxFragment& box_fragment,
+                 const NGFragmentItems& items);
   explicit NGInlineCursor(const NGPaintFragment& root_paint_fragment);
   explicit NGInlineCursor(const NGInlineBackwardCursor& backward_cursor);
   NGInlineCursor(const NGInlineCursor& other) = default;
@@ -251,8 +245,19 @@ class CORE_EXPORT NGInlineCursor {
     return *fragment_items_;
   }
 
+  // Returns the |NGPhysicalBoxFragment| that owns |Items|.
+  const NGPhysicalBoxFragment& BoxFragment() const {
+    DCHECK(root_box_fragment_);
+    return *root_box_fragment_;
+  }
+
   // Returns the |LayoutBlockFlow| containing this cursor.
+  // When |this| is a column box, returns the multicol container.
   const LayoutBlockFlow* GetLayoutBlockFlow() const;
+
+  // Return the index of the current physical box fragment of the containing
+  // block. An inline formatting context may be block fragmented.
+  wtf_size_t CurrentContainerFragmentIndex() const { return fragment_index_; }
 
   //
   // Functions to query the current position.
@@ -302,6 +307,38 @@ class CORE_EXPORT NGInlineCursor {
   PhysicalRect CurrentLocalRect(unsigned start_offset,
                                 unsigned end_offset) const;
 
+  // Return a rectangle (or just an offset) relatively to containing
+  // LayoutBlockFlow, as if all the container fragments were stitched together
+  // in the block direction (aka. "flow thread coordinate space").
+  //
+  // Example:
+  // <div style="columns:2; orphans:1; widows:1; width:20px; line-height:20px;">
+  //   <div id="container">line1 line2 line3 line4 line5 line6</div>
+  // </div>
+  //
+  // The text will end up on six lines. The first three lines will end up in the
+  // first column, and the last three lines will end up in the second column. So
+  // we get two box fragments generated for #container - one for each column.
+  //
+  // The offsets returned from these methods will be (OffsetInContainerBlock()
+  // values in parentheses):
+  //
+  // line1: 0,0   (0,0)
+  // line2: 0,20  (0,20)
+  // line3: 0,40  (0,40)
+  // line4: 0,60  (0,0)
+  // line5: 0,80  (0,20)
+  // line6: 0,100 (0,40)
+  //
+  // We need this functionality, because we're still using the legacy layout
+  // engine to calculate offsets relatively to some ancestor.
+  PhysicalRect CurrentRectInBlockFlow() const;
+  PhysicalOffset CurrentOffsetInBlockFlow() const {
+    DCHECK_EQ(Current().OffsetInContainerBlock(),
+              Current().RectInContainerBlock().offset);
+    return CurrentRectInBlockFlow().offset;
+  }
+
   // Relative to fragment of the current position. It is error to call other
   // than text.
   LayoutUnit InlinePositionForOffset(unsigned offset) const;
@@ -327,6 +364,9 @@ class CORE_EXPORT NGInlineCursor {
   // previous caret after line up/down.
   PositionWithAffinity PositionForPointInChild(
       const PhysicalOffset& point_in_container) const;
+
+  // Returns |PositionWithAffinity| in current text at |text_offset|
+  PositionWithAffinity PositionForPointInText(unsigned text_offset) const;
 
   // Returns first/last position of |this| line. |this| should be line box.
   PositionWithAffinity PositionForStartOfLine() const;
@@ -361,8 +401,13 @@ class CORE_EXPORT NGInlineCursor {
   void MoveToFirstLine();
 
   // Move to first logical leaf of current line box. If current line box has
-  // no children, curosr becomes null.
+  // no children, cursor becomes null.
   void MoveToFirstLogicalLeaf();
+
+  // Move to first leaf from current position.
+  // Unlike |MoveToFirstLogicalLeaf()|, this function ignores pseudo node and
+  // stops at non-truncated text.
+  void MoveToFirstNonPseudoLeaf();
 
   // Move to last child of current container box. If the current position is
   // at fragment without children, this cursor points nothing.
@@ -374,8 +419,13 @@ class CORE_EXPORT NGInlineCursor {
   void MoveToLastLine();
 
   // Move to last logical leaf of current line box. If current line box has
-  // no children, curosr becomes null.
+  // no children, cursor becomes null.
   void MoveToLastLogicalLeaf();
+
+  // Move to last leaf from current position.
+  // Unlike |MoveToLastLogicalLeaf()|, this
+  // function ignores pseudo node and stops at non-truncated text.
+  void MoveToLastNonPseudoLeaf();
 
   // Move the current position to the next fragment in pre-order DFS. When
   // the current position is at last fragment, this cursor points nothing.
@@ -469,6 +519,10 @@ class CORE_EXPORT NGInlineCursor {
 #endif
 
  private:
+  NGInlineCursor(const NGPhysicalBoxFragment& box_fragment,
+                 const NGFragmentItems& fragment_items,
+                 ItemsSpan items);
+
   // Returns true if |this| is only for a part of an inline formatting context;
   // in other words, if |this| is created by |CursorForDescendants|.
   bool IsDescendantsCursor() const {
@@ -497,8 +551,11 @@ class CORE_EXPORT NGInlineCursor {
   // Move the cursor position to the first fragment in tree.
   void MoveToFirst();
 
-  void SetRoot(const NGFragmentItems& items);
-  void SetRoot(const NGFragmentItems& fragment_items, ItemsSpan items);
+  void SetRoot(const NGPhysicalBoxFragment& box_fragment,
+               const NGFragmentItems& items);
+  void SetRoot(const NGPhysicalBoxFragment& box_fragment,
+               const NGFragmentItems& fragment_items,
+               ItemsSpan items);
   void SetRoot(const NGPaintFragment& root_paint_fragment);
   void SetRoot(const LayoutBlockFlow& block_flow);
   bool SetRoot(const LayoutBlockFlow& block_flow, wtf_size_t fragment_index);
@@ -532,13 +589,8 @@ class CORE_EXPORT NGInlineCursor {
    public:
     CulledInlineTraversal() = default;
 
-    const LayoutInline* GetLayoutInline() const { return layout_inline_; }
-
-    explicit operator bool() const { return layout_inline_; }
-    void Reset() { layout_inline_ = nullptr; }
-
-    bool UseFragmentTree() const { return use_fragment_tree_; }
-    void SetUseFragmentTree(const LayoutInline& layout_inline);
+    explicit operator bool() const { return current_object_; }
+    void Reset() { current_object_ = nullptr; }
 
     // Returns first/next |LayoutObject| that contribute to |layout_inline|.
     const LayoutObject* MoveToFirstFor(const LayoutInline& layout_inline);
@@ -549,24 +601,31 @@ class CORE_EXPORT NGInlineCursor {
 
     const LayoutObject* current_object_ = nullptr;
     const LayoutInline* layout_inline_ = nullptr;
-    bool use_fragment_tree_ = false;
   };
 
   void MoveToFirstForCulledInline(const LayoutInline& layout_inline);
   void MoveToNextForCulledInline();
   void MoveToNextCulledInlineDescendantIfNeeded();
 
+  void ResetFragmentIndex();
+  void AdvanceFragmentIndex();
+
   NGInlineCursorPosition current_;
 
   ItemsSpan items_;
   const NGFragmentItems* fragment_items_ = nullptr;
-
+  const NGPhysicalBoxFragment* root_box_fragment_ = nullptr;
   const NGPaintFragment* root_paint_fragment_ = nullptr;
 
   CulledInlineTraversal culled_inline_;
 
   // Used to traverse multiple |NGFragmentItems| when block fragmented.
   const LayoutBlockFlow* root_block_flow_ = nullptr;
+
+  // Block-size consumed in previous container fragments, when an
+  // inline formatting context is block-fragmented.
+  LayoutUnit previously_consumed_block_size_;
+
   wtf_size_t fragment_index_ = 0;
   wtf_size_t max_fragment_index_ = 0;
 

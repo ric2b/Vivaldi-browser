@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Pouze výběr</translation>
 <translation id="1244303850296295656">Chyba rozšíření</translation>
 <translation id="125220115284141797">Výchozí</translation>
-<translation id="1274977772557788323">Nastavení úložiště přehrávače Adobe Flash Player</translation>
 <translation id="1297175357211070620">Cíl</translation>
 <translation id="1303101771013849280">Soubor HTML záložek</translation>
 <translation id="1380436189840894976">Přesto ukončit soukromé prohlížení?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Vložit jako prostý text</translation>
 <translation id="2249605167705922988">např. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Povolit identifikátory chráněného obsahu (může být potřeba restart počítače)</translation>
-<translation id="2263497240924215535">Deaktivováno</translation>
 <translation id="2277255602909579701">Všechny položky cookies a údaje stránek</translation>
 <translation id="2280486287150724112">Pravý okraj</translation>
 <translation id="2282146716419988068">Úloha GPU</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Internetový obchod Chrome</translation>
 <translation id="2678063897982469759">Znovu aktivovat</translation>
 <translation id="2721037002783622288">&amp;Vyhledat obrázek pomocí vyhledávače <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Vytvořit zástupce…</translation>
 <translation id="2785873697295365461">Popisovače souborů</translation>
 <translation id="2809586584051668049">a další (<ph name="NUMBER_ADDITIONAL_DISABLED" />)</translation>
 <translation id="2812989263793994277">Nezobrazovat žádné obrázky</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">Zařízení MIDI</translation>
 <translation id="3021678814754966447">Zobrazit zdrojo&amp;vý kód rámce</translation>
 <translation id="3036546437875325427">Povolit Flash</translation>
-<translation id="3038675903128704560">Nepovolovat žádným webům přístup do počítače pomocí pluginu</translation>
 <translation id="3046910703532196514">Webová stránka, úplná</translation>
 <translation id="3067198360141518313">Spustit tento zásuvný modul</translation>
 <translation id="3080207940057008665">Jiný program ve vašem počítači nainstaloval motiv, který může měnit funkce prohlížeče Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Toto rozšíření mohlo být poškozeno.</translation>
 <translation id="3387614642886316601">Použít vylepšenou kontrolu pravopisu</translation>
 <translation id="3432227430032737297">Odstranit všechny zobrazené</translation>
-<translation id="3440761377721825626">Dotázat se, pokud chce web použít plugin k přístupu do počítače</translation>
 <translation id="345693547134384690">Otevřít obrázek v novém l&amp;istu</translation>
 <translation id="3494769164076977169">Zeptat se po stažení prvního souboru, když se web pokouší stahovat soubory automaticky (doporučeno)</translation>
 <translation id="3505030558724226696">Zrušit přístup k zařízení</translation>
 <translation id="3511307672085573050">Kopírovat adr&amp;esu odkazu</translation>
-<translation id="3523642406908660543">Dotázat se, pokud chce web použít plugin k přístupu do počítače (doporučeno)</translation>
 <translation id="354068948465830244">Rozšíření může číst a měnit data webů</translation>
 <translation id="3560034655160545939">&amp;Kontrola pravopisu</translation>
 <translation id="3574917942258583917">Přesto ukončit soukromé prohlížení?</translation>
 <translation id="357886715122934472">Uživatel &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce sdílet tiskárnu &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; se skupinou, kterou vlastníte: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Pokud tuto akci přijmete, pomocí této tiskárny budou moci tisknout všichni členové skupiny.</translation>
 <translation id="3587482841069643663">Vše</translation>
 <translation id="3627588569887975815">Otevřít odkaz v &amp;soukromém okně</translation>
+<translation id="3627879631695760395">Nainstalovat aplikaci <ph name="APP" />…</translation>
 <translation id="3668823961463113931">Obslužné nástroje</translation>
 <translation id="3678156199662914018">Rozšíření: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Požadavek na sdílení obrazovky s aplikací <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Obnovit nastavení</translation>
 <translation id="4434045419905280838">Vyskakovací okna a přesměrování</translation>
 <translation id="4478664379124702289">Uložit cíl od&amp;kazu jako…</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Nelze odeslat do <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Přejít na adresu <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplikace a rozšíření může upravit pouze správce (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Neznámé</translation>
 <translation id="5860491529813859533">Zapnout</translation>
 <translation id="5867841422488265304">Zadejte dotaz nebo webovou adresu</translation>
-<translation id="5908769186679515905">Zamezit spouštění obsahu Flash na stránkách</translation>
 <translation id="5910363049092958439">Uložit o&amp;brázek jako…</translation>
 <translation id="5956585768868398362">Je toto stránka vyhledávání, kterou jste očekávali?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (maximum: <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Přístup byl odepřen.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Zobrazit &amp;ovládací prvky</translation>
-<translation id="7311079019872751559">Přístup doplňku mimo vyhrazený prostor</translation>
 <translation id="7385854874724088939">Při pokusu o tisk došlo k chybě. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
 <translation id="7412226954991670867">Paměť GPU</translation>
 <translation id="7421925624202799674">Zobrazit zdrojo&amp;vý kód stránky</translation>
@@ -476,6 +470,7 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="9027459031423301635">Otevří&amp;t odkaz v novém listu</translation>
 <translation id="9056810968620647706">Nebyly nalezeny žádné shody.</translation>
 <translation id="9137916601698928395">Otevřít odkaz jako <ph name="USER" /></translation>
+<translation id="91568222606626347">Vytvořit zástupce…</translation>
 <translation id="916607977885256133">Obraz v obraze</translation>
 <translation id="9170848237812810038">Z&amp;pět</translation>
 <translation id="9215293857209265904">Bylo přidáno rozšíření <ph name="EXTENSION_NAME" /></translation>

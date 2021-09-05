@@ -26,6 +26,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/language/core/browser/language_model_manager.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -36,6 +37,7 @@
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
 #include "components/translate/core/browser/translate_manager.h"
+#include "components/translate/core/browser/translate_metrics_logger.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/language_detection_details.h"
 #include "components/translate/core/common/translate_util.h"
@@ -114,6 +116,11 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
     per_frame_translate_driver_->set_translate_manager(
         translate_manager_.get());
   }
+
+  auto* assistant_runtime_manager =
+      autofill_assistant::RuntimeManager::GetOrCreateForWebContents(
+          web_contents);
+  assistant_runtime_manager->AddObserver(this);
 }
 
 ChromeTranslateClient::~ChromeTranslateClient() {
@@ -245,6 +252,8 @@ bool ChromeTranslateClient::ShowTranslateUI(
       InfoBarService::FromWebContents(web_contents()),
       web_contents()->GetBrowserContext()->IsOffTheRecord(), step,
       source_language, target_language, error_type, triggered_from_menu);
+
+  translate_manager_->GetActiveTranslateMetricsLogger()->LogUIChange(true);
 #else
   DCHECK(TranslateService::IsTranslateBubbleEnabled());
   // Bubble UI.
@@ -313,6 +322,19 @@ bool ChromeTranslateClient::IsTranslatableURL(const GURL& url) {
   return TranslateService::IsTranslatableURL(url);
 }
 
+bool ChromeTranslateClient::IsAutofillAssistantRunning() const {
+  auto* assistant_runtime_manager =
+      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
+  return assistant_runtime_manager && assistant_runtime_manager->GetState() ==
+                                          autofill_assistant::UIState::kShown;
+}
+
+void ChromeTranslateClient::OnStateChanged(autofill_assistant::UIState state) {
+  if (state == autofill_assistant::UIState::kNotShown) {
+    GetTranslateManager()->OnAutofillAssistantFinished();
+  }
+}
+
 void ChromeTranslateClient::ShowReportLanguageDetectionErrorUI(
     const GURL& report_url) {
 #if defined(OS_ANDROID)
@@ -336,6 +358,12 @@ void ChromeTranslateClient::WebContentsDestroyed() {
   // Destroying the TranslateManager now guarantees that it never has to deal
   // with NULL WebContents.
   translate_manager_.reset();
+
+  auto* assistant_runtime_manager =
+      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
+  if (assistant_runtime_manager) {
+    assistant_runtime_manager->RemoveObserver(this);
+  }
 }
 
 // ContentTranslateDriver::Observer implementation.

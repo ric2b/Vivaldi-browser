@@ -5,6 +5,7 @@
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
+import("//tools/grit/grit_rule.gni")
 
 android_library("java") {
   resources_package = "org.chromium.components.media_router"
@@ -57,7 +58,6 @@ android_library("java") {
     "java/src/org/chromium/components/media_router/caf/CafMessageHandler.java",
     "java/src/org/chromium/components/media_router/caf/CafNotificationController.java",
     "java/src/org/chromium/components/media_router/caf/CastMediaSource.java",
-    "java/src/org/chromium/components/media_router/caf/CastOptionsProvider.java",
     "java/src/org/chromium/components/media_router/caf/CastSessionController.java",
     "java/src/org/chromium/components/media_router/caf/CastUtils.java",
     "java/src/org/chromium/components/media_router/caf/CreateRouteRequestInfo.java",
@@ -70,6 +70,14 @@ android_library("java") {
     "java/src/org/chromium/components/media_router/caf/remoting/StreamPositionExtrapolator.java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+}
+
+android_library("cast_options_provider_java") {
+  sources = [ "java/src/org/chromium/components/media_router/caf/CastOptionsProvider.java" ]
+  deps = [
+    "$google_play_services_package:google_play_services_cast_framework_java",
+    "$google_play_services_package:google_play_services_cast_java",
+  ]
 }
 
 generate_jni("jni_headers") {
@@ -86,16 +94,20 @@ android_library("test_support_java") {
   sources = [
     "java/src/org/chromium/components/media_router/TestMediaRouterClient.java",
     "javatests/src/org/chromium/components/media_router/MockMediaRouteProvider.java",
+    "javatests/src/org/chromium/components/media_router/RouterTestUtils.java",
   ]
 
   deps = [
     ":java",
     ":test_jni_headers",
     "//base:base_java",
+    "//base:base_java_test_support",
     "//components/browser_ui/media/android:java",
     "//content/public/android:content_java",
+    "//content/public/test/android:content_java_test_support",
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_fragment_fragment_java",
+    "//third_party/hamcrest:hamcrest_java",
   ]
 }
 
@@ -168,7 +180,6 @@ android_resources("java_resources") {
     "java/res/drawable/ic_cast_dark_chrome.xml",
     "java/res/layout/caf_controller_media_route_button.xml",
     "java/res/layout/expanded_cast_controller.xml",
-    "java/res/values/ids.xml",
     "java/res/values/styles.xml",
   ]
   deps = [

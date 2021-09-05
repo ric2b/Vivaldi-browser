@@ -1676,7 +1676,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed in July, 2020
   </obsolete>
   <owner>twellington@chromium.org</owner>
-  <owner>chrome-android-app@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Records the number of other devices listed in recent tabs page when recent
     tabs page is loaded.
@@ -1689,7 +1689,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed in July, 2020
   </obsolete>
   <owner>twellington@chromium.org</owner>
-  <owner>chrome-android-app@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Records the number of recently-closed tabs shown in recent tabs page when
     recent tabs page is loaded.
@@ -1702,7 +1702,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed in July, 2020
   </obsolete>
   <owner>twellington@chromium.org</owner>
-  <owner>chrome-android-app@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Records the total number of tabs listed in recent tabs page (sum of all tab
     from other devices plus recently-closed tabs) when recent tabs page is
@@ -6520,6 +6520,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Blink.Fonts.HarfBuzzFaceZeroCopyAccess" enum="BooleanSuccess"
+    expires_after="M88">
+  <obsolete>
+    Removed as of 10/15/2020.
+  </obsolete>
+  <owner>drott@chromium.org</owner>
+  <owner>layout-dev@chromium.org</owner>
+  <summary>
+    Counts success or failure of attempting to access font tables using the zero
+    copy instantiation method in the HarfBuzz integration layer. This value is
+    only recorded on non-Mac platforms. Reported each time a HarfBuzz face
+    object is created.
+  </summary>
+</histogram>
+
 <histogram name="Blink.Gesture.Merged" enum="GestureMergeState"
     expires_after="M77">
   <obsolete>
@@ -7480,7 +7495,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Bluetooth.Web.Characteristic.ReadValue and
     Bluetooth.Web.Characteristic.WriteValue.
   </obsolete>
-  <owner>odejesush@chromium.org</owner>
   <owner>ortuno@chromium.org</owner>
   <owner>reillyg@chromium.org</owner>
   <summary>
@@ -7495,7 +7509,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <obsolete>
     Removed 08/2015 and replaced by Bluetooth.Web.RequestDevice.Outcome.
   </obsolete>
-  <owner>odejesush@chromium.org</owner>
   <owner>ortuno@chromium.org</owner>
   <owner>reillyg@chromium.org</owner>
   <summary>
@@ -7512,7 +7525,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed as of 11/2016, replaced by
     Bluetooth.Web.Blocklist.ParsedNonEmptyString.
   </obsolete>
-  <owner>odejesush@chromium.org</owner>
   <owner>ortuno@chromium.org</owner>
   <owner>reillyg@chromium.org</owner>
   <summary>
@@ -7530,7 +7542,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed as of 3/2017. Replaced by using blink IDL annotation MeasureAs which
     appear in Blink.UseCounter.Features.
   </obsolete>
-  <owner>odejesush@chromium.org</owner>
   <owner>ortuno@chromium.org</owner>
   <owner>reillyg@chromium.org</owner>
   <summary>
@@ -25388,7 +25399,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed 2020/02. Replaced by Cancelled.
   </obsolete>
   <owner>jinsukkim@chromium.org</owner>
-  <owner>chrome-android-app@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Overscroll gestures that were abandoned before they were completed.
     Implemented for Android.
@@ -25401,7 +25412,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed 2020/02.
   </obsolete>
   <owner>jinsukkim@chromium.org</owner>
-  <owner>chrome-android-app@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Overscroll gesture was made beyond a threshold that, upon release, would
     trigger navigation. Users can swipe back below the threshold but this event
@@ -25415,7 +25426,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Removed 2020/02. Replaced by Activated.
   </obsolete>
   <owner>jinsukkim@chromium.org</owner>
-  <owner>chrome-android-app@chromium.org</owner>
+  <owner>clank-app-team@google.com</owner>
   <summary>
     Overscroll gestures initiated by the user. Note that not all overscroll
     gestures triggered are completed (e.g. the overscroll gesture is aborted if
@@ -27091,33 +27102,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Number of items in the in-memory url index char_word_map_. Recorded on
     profile open when restoring from a cache file and again shortly after
     profile open when rebuilding the in-memory url index from history.
-  </summary>
-</histogram>
-
-<histogram name="History.InMemoryURLIndexRestoreCacheTime" units="ms"
-    expires_after="2019-08-30">
-  <obsolete>
-    Removed July 2020.
-  </obsolete>
-  <owner>mpearson@chromium.org</owner>
-  <owner>ssid@chromium.org</owner>
-  <summary>
-    Time to restore the in-memory url index from disk cache. Recorded on profile
-    open.
-  </summary>
-</histogram>
-
-<histogram name="History.InMemoryURLIndexSaveCacheTime" units="ms"
-    expires_after="2019-08-30">
-  <obsolete>
-    Removed July 2020.
-  </obsolete>
-  <owner>mpearson@chromium.org</owner>
-  <owner>ssid@chromium.org</owner>
-  <summary>
-    Time to write in-memory url index to disk cache. Recorded once shortly after
-    profile open (after rebuilding the in-memory url index from history) and
-    again upon (clean) shutdown.
   </summary>
 </histogram>
 
@@ -42064,6 +42048,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Net.QuicSession.FailToSerializePacketLocation"
+    enum="QuicFailToSerializePacketLocation" expires_after="2021-05-21">
+  <obsolete>
+    Deprecated 10/2020 because it's no longer needed for analysis.
+  </obsolete>
+  <owner>renjietang@chromium.org</owner>
+  <owner>src/net/quic/OWNERS</owner>
+  <summary>
+    Record where exactly packet serialization fails for investigation.
+  </summary>
+</histogram>
+
 <histogram name="Net.QuicSession.HandshakeRoundTrips" units="RTTs"
     expires_after="2014-01-22">
   <obsolete>
@@ -47725,33 +47721,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Notifications.Triggers.HasShowTrigger" enum="Boolean"
-    expires_after="M86">
-  <obsolete>
-    Removed July 2020 as the Origin Trial is ramping down.
-  </obsolete>
-  <owner>knollr@chromium.org</owner>
-  <owner>peter@chromium.org</owner>
-  <summary>
-    Indicates if the notificaiton has a show trigger. This is recorded before a
-    notification is written to the database if the notification triggers feature
-    is enabled.
-  </summary>
-</histogram>
-
-<histogram name="Notifications.Triggers.ShowTriggerDelay" units="days"
-    expires_after="M86">
-  <obsolete>
-    Removed July 2020 as the Origin Trial is ramping down.
-  </obsolete>
-  <owner>knollr@chromium.org</owner>
-  <owner>peter@chromium.org</owner>
-  <summary>
-    The specified delay until the notification is displayed. This is recorded
-    before writing a notification with a valid show trigger to the database.
-  </summary>
-</histogram>
-
 <histogram name="Notifications.Windows.ImageRetainerDestructionTime" units="ms"
     expires_after="2018-10-23">
   <obsolete>
@@ -53308,6 +53277,23 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram base="true"
+    name="PageLoad.FrameCounts.AdFrames.PerFrame.SqrtNumberOfPixels"
+    units="pixels" expires_after="2021-01-30">
+  <obsolete>
+    Removed 10/20.
+  </obsolete>
+  <owner>johnidel@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    The square root of the area of a root adframe in pixels. Only recorded for
+    ad frames with non-zero total bytes. Recorded when the page is destroyed or
+    navigated. Display none iframes will not always update their size because
+    they lack a content view. This uses the last size of frame before it was set
+    to display: none.
+  </summary>
+</histogram>
+
 <histogram name="PageLoad.FrameCounts.AnyParentFrame.AdFrames"
     units="Ad frames" expires_after="M80">
   <obsolete>
@@ -57013,6 +56999,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     produced by this code: while (*string) hash = (hash &lt;&lt; 5) + hash +
     *string++; Separately each warning is also collected (with its hash) via the
     crash reporter, but only its first occurrence in each boot session.
+  </summary>
+</histogram>
+
+<histogram name="Platform.MemoryBandwidth.ReadWrite" units="MB/s"
+    expires_after="M85">
+  <obsolete>
+    Removed 09/2020 due to lack of usage.
+  </obsolete>
+  <owner>hajimehoshi@chromium.org</owner>
+  <owner>kouhei@chromium.org</owner>
+  <owner>cast-analytics@google.com</owner>
+  <summary>
+    Peak memory bandwith (read and write) usage during the last sample interval.
+    The sample interval may vary from seconds to several minutes.
   </summary>
 </histogram>
 
@@ -72827,6 +72827,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="ServiceWorker.FetchRespondWithDataPipeCreation.Time"
+    units="ms" expires_after="M85">
+  <obsolete>
+    Expired after M85.
+  </obsolete>
+  <owner>wanderview@chromium.org</owner>
+  <summary>
+    Measures how long the service worker thread is blocked creating a
+    mojo::DataPipe during FetchEvent.respondWith() processing.
+  </summary>
+</histogram>
+
 <histogram name="ServiceWorker.ForeignFetch.OriginCount" units="units"
     expires_after="2018-04-09">
   <obsolete>
@@ -73429,6 +73441,22 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     Records the final result of diskcache migration in ServiceWorkerStorage.
     ServiceWorker.DiskCacheMigrator.MigrationResult records more detailed status
     of migration operations.
+  </summary>
+</histogram>
+
+<histogram name="ServiceWorker.SubresourceNotifyStartLoadingResponseBodyDelay"
+    units="ms" expires_after="M85">
+  <obsolete>
+    Expired after M85.
+  </obsolete>
+  <owner>wanderview@chromium.org</owner>
+  <summary>
+    The time between when the ServiceWorkerSubresourceLoader receives a Response
+    and when it notifies the loader's client that the body has started loading.
+    This is different from SubresourceStartBlobReadingDelay in that notifying
+    the client about the Response may take place some time later than when the
+    blob body reading begins. This will be triggered for every successful
+    subresource load handled by a ServiceWorker with servification enabled.
   </summary>
 </histogram>
 
@@ -80447,6 +80475,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram base="true" name="Sync.CommitLatency" units="ms"
+    expires_after="2020-10-02">
+  <obsolete>
+    Removed in 2020-10.
+  </obsolete>
+  <owner>mastiz@chromium.org</owner>
+  <owner>treib@chromium.org</owner>
+  <summary>
+    Records the time between the local model being changed until the commit
+    response is completed and propagated to the model thread. Note: This is only
+    recorded with a data type suffix. The base version is never recorded.
+  </summary>
+</histogram>
+
 <histogram base="true" name="Sync.ConfigureFailure" enum="SyncConfigureResult"
     expires_after="2020-04-01">
   <obsolete>
@@ -85717,6 +85759,35 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="Uptime.LoginPromptSetupTimeAfterLogout" units="ms"
+    expires_after="M85">
+  <obsolete>
+    Removed 09/2020. No direct replacement.
+  </obsolete>
+  <owner>hajimehoshi@chromium.org</owner>
+  <owner>kouhei@chromium.org</owner>
+  <summary>
+    Measures the time elapsed on Chrome OS for setting up for a login after a
+    logout. More specifically, it is the time between when the Cryptohome is
+    unmounted (the last step in the logout process) and when the login prompt is
+    again visible after a logout.
+  </summary>
+</histogram>
+
+<histogram name="Uptime.Logout" units="ms" expires_after="M85">
+  <obsolete>
+    Removed 09/2020. No direct replacement.
+  </obsolete>
+  <owner>hajimehoshi@chromium.org</owner>
+  <owner>kouhei@chromium.org</owner>
+  <summary>
+    Measures the time elapsed on Chrome OS when performing a logout. More
+    specifically, it is the time between when a logout is initiated and when the
+    Cryptohome is unmounted, signaling the last step in the logout process. This
+    statistic is not collected when the logout is part of a restart or shutdown.
+  </summary>
+</histogram>
+
 <histogram name="Uptime.ProcessesTerminatedToXTerminatedAfterLogout" units="ms"
     expires_after="2018-06-06">
   <obsolete>
@@ -89897,7 +89968,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     main thread.
   </obsolete>
   <owner>reillyg@chromium.org</owner>
-  <owner>juncai@chromium.org</owner>
   <summary>
     Records the time spent initializing the WebUSB detector module.
   </summary>

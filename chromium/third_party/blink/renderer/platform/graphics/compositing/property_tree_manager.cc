@@ -639,7 +639,7 @@ void PropertyTreeManager::EmitClipMaskLayer() {
   DCHECK(mask_isolation);
   bool needs_layer =
       !pending_synthetic_mask_layers_.Contains(mask_isolation->id) &&
-      mask_isolation->rounded_corner_bounds.IsEmpty();
+      mask_isolation->mask_filter_info.IsEmpty();
 
   CompositorElementId mask_isolation_id, mask_effect_id;
   SynthesizedClip& clip = client_.CreateOrReuseSynthesizedClipLayer(
@@ -666,16 +666,16 @@ void PropertyTreeManager::EmitClipMaskLayer() {
 
   cc::PictureLayer* mask_layer = clip.Layer();
 
-  const auto& clip_space = current_.clip->LocalTransformSpace().Unalias();
   layer_list_builder_.Add(mask_layer);
   mask_layer->set_property_tree_sequence_number(
       root_layer_.property_tree_sequence_number());
-  mask_layer->SetTransformTreeIndex(EnsureCompositorTransformNode(clip_space));
+  mask_layer->SetTransformTreeIndex(
+      EnsureCompositorTransformNode(*current_.transform));
   // TODO(pdr): This could be a performance issue because it crawls up the
   // transform tree for each pending layer. If this is on profiles, we should
   // cache a lookup of transform node to scroll translation transform node.
-  int scroll_id =
-      EnsureCompositorScrollNode(clip_space.NearestScrollTranslationNode());
+  int scroll_id = EnsureCompositorScrollNode(
+      current_.transform->NearestScrollTranslationNode());
   mask_layer->SetScrollTreeIndex(scroll_id);
   mask_layer->SetClipTreeIndex(mask_effect.clip_id);
   mask_layer->SetEffectTreeIndex(mask_effect.id);
@@ -984,8 +984,8 @@ int PropertyTreeManager::SynthesizeCcEffectsForClipsIfNeeded(
       // is used. See PropertyTreeManager::EmitClipMaskLayer().
       if (SupportsShaderBasedRoundedCorner(*pending_clip.clip,
                                            pending_clip.type, next_effect)) {
-        synthetic_effect.rounded_corner_bounds =
-            gfx::RRectF(pending_clip.clip->PixelSnappedClipRect());
+        synthetic_effect.mask_filter_info = gfx::MaskFilterInfo(
+            gfx::RRectF(pending_clip.clip->PixelSnappedClipRect()));
         synthetic_effect.is_fast_rounded_corner = true;
 
         // Nested rounded corner clips need to force render surfaces for

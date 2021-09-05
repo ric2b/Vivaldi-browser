@@ -13,6 +13,7 @@
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
@@ -21,8 +22,8 @@
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -127,22 +128,22 @@ UpdateShortcutsMenuItemInfosFromManifest(
 }
 
 apps::ShareTarget::Method ToAppsShareTargetMethod(
-    blink::Manifest::ShareTarget::Method method) {
+    blink::mojom::ManifestShareTarget_Method method) {
   switch (method) {
-    case blink::Manifest::ShareTarget::Method::kGet:
+    case blink::mojom::ManifestShareTarget_Method::kGet:
       return apps::ShareTarget::Method::kGet;
-    case blink::Manifest::ShareTarget::Method::kPost:
+    case blink::mojom::ManifestShareTarget_Method::kPost:
       return apps::ShareTarget::Method::kPost;
   }
   NOTREACHED();
 }
 
 apps::ShareTarget::Enctype ToAppsShareTargetEnctype(
-    blink::Manifest::ShareTarget::Enctype enctype) {
+    blink::mojom::ManifestShareTarget_Enctype enctype) {
   switch (enctype) {
-    case blink::Manifest::ShareTarget::Enctype::kFormUrlEncoded:
+    case blink::mojom::ManifestShareTarget_Enctype::kFormUrlEncoded:
       return apps::ShareTarget::Enctype::kFormUrlEncoded;
-    case blink::Manifest::ShareTarget::Enctype::kMultipartFormData:
+    case blink::mojom::ManifestShareTarget_Enctype::kMultipartFormData:
       return apps::ShareTarget::Enctype::kMultipartFormData;
   }
   NOTREACHED();
@@ -274,6 +275,8 @@ void UpdateWebAppInfoFromManifest(const blink::Manifest& manifest,
   web_app_info->share_target = ToWebAppShareTarget(manifest.share_target);
 
   web_app_info->protocol_handlers = manifest.protocol_handlers;
+
+  web_app_info->url_handlers = manifest.url_handlers;
 
   // If any shortcuts are specified in the manifest, they take precedence over
   // any we picked up from the web_app stuff.

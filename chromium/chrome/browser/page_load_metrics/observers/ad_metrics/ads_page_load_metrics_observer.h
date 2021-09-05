@@ -15,21 +15,27 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/scoped_observer.h"
 #include "base/time/tick_clock.h"
+#include "build/build_config.h"
 #include "chrome/browser/page_load_metrics/observers/ad_metrics/frame_data.h"
 #include "chrome/browser/page_load_metrics/observers/ad_metrics/page_ad_density_tracker.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom-forward.h"
-#include "components/performance_manager/public/v8_memory/v8_per_frame_memory_decorator.h"
+#include "components/performance_manager/public/v8_memory/v8_detailed_memory.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/core/common/load_policy.h"
 #include "net/http/http_response_info.h"
 #include "services/metrics/public/cpp/ukm_source.h"
 
+using MeasurementMode =
+    performance_manager::v8_memory::V8DetailedMemoryRequest::MeasurementMode;
+
 namespace features {
 extern const base::Feature kRestrictedNavigationAdTagging;
 extern const base::Feature kV8PerAdFrameMemoryMonitoring;
 extern const base::FeatureParam<int> kMemoryPollInterval;
+extern const base::FeatureParam<MeasurementMode>::Option memory_poll_modes[];
+extern const base::FeatureParam<MeasurementMode> kMemoryPollMode;
 }
 
 class HeavyAdBlocklist;
@@ -38,34 +44,12 @@ class HeavyAdBlocklist;
 // relevant per-frame and whole-page byte statistics.
 class AdsPageLoadMetricsObserver
     : public page_load_metrics::PageLoadMetricsObserver,
-      public performance_manager::v8_memory::V8PerFrameMemoryObserverAnySeq,
+      public performance_manager::v8_memory::V8DetailedMemoryObserverAnySeq,
       public subresource_filter::SubresourceFilterObserver {
  public:
-  // Returns a new AdsPageLoadMetricsObserver. If the feature is disabled it
-  // returns nullptr.
-  static std::unique_ptr<AdsPageLoadMetricsObserver> CreateIfNeeded(
-      content::WebContents* web_contents);
-
-  // For a given subframe, returns whether or not the subframe's url would be
-  // considering same origin to the main frame's url. |use_parent_origin|
-  // indicates that the subframe's parent frames's origin should be used when
-  // performing the comparison.
-  static bool IsSubframeSameOriginToMainFrame(
-      content::RenderFrameHost* sub_host,
-      bool use_parent_origin);
-
-  using ResourceMimeType = FrameData::ResourceMimeType;
-
-  // Aggregates high level summary statistics across FrameData objects.
-  struct AggregateFrameInfo {
-    AggregateFrameInfo();
-    size_t bytes;
-    size_t network_bytes;
-    size_t num_frames;
-    base::TimeDelta cpu_time;
-
-    DISALLOW_COPY_AND_ASSIGN(AggregateFrameInfo);
-  };
+  using AggregateFrameData = ad_metrics::AggregateFrameData;
+  using FrameTreeData = ad_metrics::FrameTreeData;
+  using ResourceMimeType = ad_metrics::ResourceMimeType;
 
   // Helper class that generates a random amount of noise to apply to thresholds
   // for heavy ads. A different noise should be generated for each frame.
@@ -90,6 +74,19 @@ class AdsPageLoadMetricsObserver
     // Whether to use noise.
     const bool use_noise_;
   };
+
+  // Returns a new AdsPageLoadMetricsObserver. If the feature is disabled it
+  // returns nullptr.
+  static std::unique_ptr<AdsPageLoadMetricsObserver> CreateIfNeeded(
+      content::WebContents* web_contents);
+
+  // For a given subframe, returns whether or not the subframe's url would be
+  // considering same origin to the main frame's url. |use_parent_origin|
+  // indicates that the subframe's parent frames's origin should be used when
+  // performing the comparison.
+  static bool IsSubframeSameOriginToMainFrame(
+      content::RenderFrameHost* sub_host,
+      bool use_parent_origin);
 
   explicit AdsPageLoadMetricsObserver(base::TickClock* clock = nullptr,
                                       HeavyAdBlocklist* blocklist = nullptr);
@@ -138,24 +135,31 @@ class AdsPageLoadMetricsObserver
     heavy_ad_threshold_noise_provider_ = std::move(noise_provider);
   }
 
-  // performance_manager::v8_memory::V8PerFrameMemoryObserverAnySeq
+  // performance_manager::v8_memory::V8DetailedMemoryObserverAnySeq
   void OnV8MemoryMeasurementAvailable(
       performance_manager::RenderProcessHostId render_process_host_id,
-      const performance_manager::v8_memory::V8PerFrameMemoryProcessData&
+      const performance_manager::v8_memory::V8DetailedMemoryProcessData&
           process_data,
-      const V8PerFrameMemoryObserverAnySeq::FrameDataMap& frame_data) override {
-  }
+      const V8DetailedMemoryObserverAnySeq::FrameDataMap& frame_data) override;
+
+  void UpdateAggregateMemoryUsage(int64_t bytes,
+                                  ad_metrics::FrameVisibility visibility);
+
+  void CleanupDeletedFrame(FrameTreeNodeId id,
+                           FrameTreeData* frame_data,
+                           bool update_density_tracker,
+                           bool record_metrics);
 
  private:
-  // Object which maps to a FrameData object. This can either own the FrameData
-  // object, or hold a reference to a FrameData owned by a different
-  // FrameInstance.
+  // Object which maps to a FrameTreeData object. This can either own the
+  // FrameTreeData object, or hold a reference to a FrameTreeData owned by a
+  // different FrameInstance.
   class FrameInstance {
    public:
     // Default constructor to indicate no frame is referenced.
     FrameInstance();
-    explicit FrameInstance(std::unique_ptr<FrameData> frame_data);
-    explicit FrameInstance(base::WeakPtr<FrameData> frame_data);
+    explicit FrameInstance(std::unique_ptr<FrameTreeData> frame_data);
+    explicit FrameInstance(base::WeakPtr<FrameTreeData> frame_data);
     FrameInstance& operator=(FrameInstance&& other) = default;
 
     FrameInstance(const FrameInstance& other) = delete;
@@ -165,17 +169,22 @@ class AdsPageLoadMetricsObserver
 
     // Returns underlying pointer from |owned_frame_data_|,
     // |unowned_frame_data_| or nullptr.
-    FrameData* Get();
+    FrameTreeData* Get();
 
     // Returns underlying pointer from |owned_frame_data_| if it exists.
-    FrameData* GetOwnedFrame();
+    FrameTreeData* GetOwnedFrame();
 
    private:
     // Only |owned_frame_data_| or |unowned_frame_data_| can be set at one time.
     // Both can be nullptr.
-    std::unique_ptr<FrameData> owned_frame_data_;
-    base::WeakPtr<FrameData> unowned_frame_data_;
+    std::unique_ptr<FrameTreeData> owned_frame_data_;
+    base::WeakPtr<FrameTreeData> unowned_frame_data_;
   };
+
+  // Checks the current page ad density by height for an better ads standard
+  // violation. The better ads standard defines ad density violations as any
+  // site with more than 30 percent ad density by height.
+  void CheckForAdDensityViolation();
 
   // subresource_filter::SubresourceFilterObserver:
   void OnAdSubframeDetected(
@@ -198,6 +207,14 @@ class AdsPageLoadMetricsObserver
       int process_id,
       const page_load_metrics::mojom::ResourceDataUpdatePtr& resource) const;
 
+  // Looks up the |frame_node_id| in the current memory usage map, updates it
+  // with the current bytes (or removes it), and returns the
+  // difference between the new value (0 if removed) and the old one, or the
+  // delta in the amount of memory the frame is using.
+  int64_t UpdateMemoryUsageForFrame(FrameTreeNodeId frame_node_id,
+                                    uint64_t current_bytes);
+  int64_t RemoveMemoryUsageForFrame(FrameTreeNodeId frame_node_id);
+
   // Updates page level counters for resource loads.
   void ProcessResourceForPage(
       int process_id,
@@ -210,15 +227,15 @@ class AdsPageLoadMetricsObserver
   void RecordHistograms(ukm::SourceId source_id);
   void RecordAggregateHistogramsForCpuUsage();
   void RecordAggregateHistogramsForAdTagging(
-      FrameData::FrameVisibility visibility);
+      ad_metrics::FrameVisibility visibility);
   void RecordAggregateHistogramsForHeavyAds();
 
   // Should be called on all frames prior to recording any aggregate histograms.
-  void RecordPerFrameMetrics(const FrameData& ad_frame_data,
+  void RecordPerFrameMetrics(const FrameTreeData& ad_frame_data,
                              ukm::SourceId source_id);
-  void RecordPerFrameHistogramsForAdTagging(const FrameData& ad_frame_data);
-  void RecordPerFrameHistogramsForCpuUsage(const FrameData& ad_frame_data);
-  void RecordPerFrameHistogramsForHeavyAds(const FrameData& ad_frame_data);
+  void RecordPerFrameHistogramsForAdTagging(const FrameTreeData& ad_frame_data);
+  void RecordPerFrameHistogramsForCpuUsage(const FrameTreeData& ad_frame_data);
+  void RecordPerFrameHistogramsForHeavyAds(const FrameTreeData& ad_frame_data);
 
   // Checks to see if a resource is waiting for a navigation in the given
   // RenderFrameHost to commit before it can be processed. If so, call
@@ -227,14 +244,14 @@ class AdsPageLoadMetricsObserver
 
   // Records whether an ad frame was ignored by the Restricted Navigation
   // AdTagging feature. For frames that are ignored, this is recorded when a
-  // FrameData object would have been created for them, or when their FrameData
-  // is deleted. For non-ignored frames, this is recorded when it is logged to
-  // metrics.
+  // FrameTreeData object would have been created for them, or when their
+  // FrameTreeData is deleted. For non-ignored frames, this is recorded when it
+  // is logged to metrics.
   void RecordAdFrameIgnoredByRestrictedAdTagging(bool ignored);
 
-  // Find the FrameData object associated with a given FrameTreeNodeId in
-  // |ad_frames_data_|.
-  FrameData* FindFrameData(FrameTreeNodeId id);
+  // Find the FrameTreeData object associated with a given FrameTreeNodeId in
+  // |ad_frames_data_storage_|.
+  FrameTreeData* FindFrameData(FrameTreeNodeId id);
 
   // Triggers the heavy ad intervention page in the target frame if it is safe
   // to do so on this origin, and the frame meets the criteria to be considered
@@ -242,14 +259,14 @@ class AdsPageLoadMetricsObserver
   // frame then loads an error page in the root ad frame.
   void MaybeTriggerHeavyAdIntervention(
       content::RenderFrameHost* render_frame_host,
-      FrameData* frame_data);
+      FrameTreeData* frame_data);
 
   bool IsBlocklisted();
   HeavyAdBlocklist* GetHeavyAdBlocklist();
 
   // Maps a frame (by id) to the corresponding FrameInstance. Multiple frame ids
-  // can point to the same underlying FrameData. The responsible frame is the
-  // top-most frame labeled as an ad in the frame's ancestry, which may be
+  // can point to the same underlying FrameTreeData. The responsible frame is
+  // the top-most frame labeled as an ad in the frame's ancestry, which may be
   // itself. If the frame is not an ad, the id will point to a FrameInstance
   // where FrameInstance::Get() returns nullptr..
   std::map<FrameTreeNodeId, FrameInstance> ad_frames_data_;
@@ -263,21 +280,12 @@ class AdsPageLoadMetricsObserver
   std::map<FrameTreeNodeId, page_load_metrics::mojom::ResourceDataUpdatePtr>
       ongoing_navigation_resources_;
 
-  // Tracks byte counts only for resources loaded in the main frame.
-  std::unique_ptr<FrameData> main_frame_data_;
+  // Per-frame memory usage by V8 in bytes. Memory data is stored for each frame
+  // on the page during the navigation.
+  std::unordered_map<FrameTreeNodeId, uint64_t> v8_current_memory_usage_map_;
 
-  // Tracks aggregate counts across all frames on the page.
-  std::unique_ptr<FrameData> aggregate_frame_data_;
-
-  // Track aggregate counts across all non-ad frames on the page.
-  // TODO(crbug.com/1109754): Currently this only measures CPU metrics for the
-  // page.  That should be expanded to include other metrics.
-  std::unique_ptr<FrameData> aggregate_non_ad_frame_data_;
-
-  // Tracks aggregate counts across all ad frames on the page by visibility
-  // type.
-  AggregateFrameInfo aggregate_ad_info_by_visibility_
-      [static_cast<size_t>(FrameData::FrameVisibility::kMaxValue) + 1];
+  // Tracks page-level information for the navigation.
+  std::unique_ptr<AggregateFrameData> aggregate_frame_data_;
 
   // Flag denoting that this observer should no longer monitor changes in
   // display state for frames. This prevents us from receiving the updates when
@@ -328,8 +336,15 @@ class AdsPageLoadMetricsObserver
 
   // Tracks per ad-frame V8 memory measurements for the page during its
   // lifecycle. Lazily initialized when the first ad is detected.
-  std::unique_ptr<performance_manager::v8_memory::V8PerFrameMemoryRequestAnySeq>
+  std::unique_ptr<performance_manager::v8_memory::V8DetailedMemoryRequestAnySeq>
       memory_request_;
+
+  // Tracks number of memory updates received.
+  int num_memory_updates_ = 0;
+
+  // Tracks number of per-frame memory measurements missed due to receipt
+  // after the corresponding RenderFrameHost has been destroyed.
+  int num_missed_memory_measurements_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(AdsPageLoadMetricsObserver);
 };

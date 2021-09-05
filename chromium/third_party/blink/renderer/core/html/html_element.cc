@@ -26,13 +26,16 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 
 #include "base/stl_util.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_script.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_treat_null_as_empty_string_or_trusted_script.h"
 #include "third_party/blink/renderer/core/css/css_color_value.h"
+#include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_markup.h"
+#include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
+#include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
@@ -51,6 +54,7 @@
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/custom/custom_element.h"
@@ -69,10 +73,12 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/adjust_for_absolute_zoom.h"
+#include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/mathml_names.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
+#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_script.h"
 #include "third_party/blink/renderer/core/xml_names.h"
@@ -734,7 +740,8 @@ void HTMLElement::ParseAttribute(const AttributeModificationParams& params) {
   if (triggers->event != g_null_atom) {
     SetAttributeEventListener(
         triggers->event,
-        CreateAttributeEventListener(this, params.name, params.new_value));
+        JSEventHandlerForContentAttribute::Create(
+            GetExecutionContext(), params.name, params.new_value));
   }
 
   if (triggers->web_feature != kNoWebFeature) {
@@ -877,6 +884,31 @@ void HTMLElement::setOuterText(const String& text,
   auto* prev_text_node = DynamicTo<Text>(prev);
   if (!exception_state.HadException() && prev && prev->IsTextNode())
     MergeWithNextTextNode(prev_text_node, exception_state);
+}
+
+void HTMLElement::ApplyAspectRatioToStyle(const AtomicString& width,
+                                          const AtomicString& height,
+                                          MutableCSSPropertyValueSet* style) {
+  HTMLDimension width_dim, height_dim;
+  if (!ParseDimensionValue(width, width_dim))
+    return;
+  if (!ParseDimensionValue(height, height_dim))
+    return;
+  if (!width_dim.IsAbsolute() || !height_dim.IsAbsolute())
+    return;
+  CSSValue* width_val = CSSNumericLiteralValue::Create(
+      width_dim.Value(), CSSPrimitiveValue::UnitType::kNumber);
+  CSSValue* height_val = CSSNumericLiteralValue::Create(
+      height_dim.Value(), CSSPrimitiveValue::UnitType::kNumber);
+  CSSValueList* ratio_list = CSSValueList::CreateSlashSeparated();
+  ratio_list->Append(*width_val);
+  ratio_list->Append(*height_val);
+
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  list->Append(*CSSIdentifierValue::Create(CSSValueID::kAuto));
+  list->Append(*ratio_list);
+
+  style->SetProperty(CSSPropertyID::kAspectRatio, *list);
 }
 
 void HTMLElement::ApplyAlignmentAttributeToStyle(
@@ -1239,7 +1271,8 @@ void HTMLElement::DidMoveToNewDocument(Document& old_document) {
 void HTMLElement::AddHTMLLengthToStyle(MutableCSSPropertyValueSet* style,
                                        CSSPropertyID property_id,
                                        const String& value,
-                                       AllowPercentage allow_percentage) {
+                                       AllowPercentage allow_percentage,
+                                       AllowZero allow_zero) {
   HTMLDimension dimension;
   if (!ParseDimensionValue(value, dimension))
     return;
@@ -1249,7 +1282,10 @@ void HTMLElement::AddHTMLLengthToStyle(MutableCSSPropertyValueSet* style,
   }
   if (dimension.IsRelative())
     return;
-  if (dimension.IsPercentage() && allow_percentage != kAllowPercentageValues)
+  if (dimension.IsPercentage() &&
+      allow_percentage == kDontAllowPercentageValues)
+    return;
+  if (dimension.Value() == 0 && allow_zero == kDontAllowZeroValues)
     return;
   CSSPrimitiveValue::UnitType unit =
       dimension.IsPercentage() ? CSSPrimitiveValue::UnitType::kPercentage
@@ -1491,13 +1527,17 @@ int HTMLElement::offsetWidthForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(
       this, DocumentUpdateReason::kJavaScript);
   Element* offset_parent = unclosedOffsetParent();
-  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-               LayoutUnit(
-                   layout_object->PixelSnappedOffsetWidth(offset_parent)),
-               layout_object->StyleRef())
-        .Round();
-  return 0;
+  int result = 0;
+  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject()) {
+    result =
+        AdjustForAbsoluteZoom::AdjustLayoutUnit(
+            LayoutUnit(layout_object->PixelSnappedOffsetWidth(offset_parent)),
+            layout_object->StyleRef())
+            .Round();
+    RecordScrollbarSizeForStudy(result, /* isWidth= */ true,
+                                /* is_offset= */ true);
+  }
+  return result;
 }
 
 DISABLE_CFI_PERF
@@ -1505,13 +1545,17 @@ int HTMLElement::offsetHeightForBinding() {
   GetDocument().EnsurePaintLocationDataValidForNode(
       this, DocumentUpdateReason::kJavaScript);
   Element* offset_parent = unclosedOffsetParent();
-  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject())
-    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-               LayoutUnit(
-                   layout_object->PixelSnappedOffsetHeight(offset_parent)),
-               layout_object->StyleRef())
-        .Round();
-  return 0;
+  int result = 0;
+  if (LayoutBoxModelObject* layout_object = GetLayoutBoxModelObject()) {
+    result =
+        AdjustForAbsoluteZoom::AdjustLayoutUnit(
+            LayoutUnit(layout_object->PixelSnappedOffsetHeight(offset_parent)),
+            layout_object->StyleRef())
+            .Round();
+    RecordScrollbarSizeForStudy(result, /* is_width= */ false,
+                                /* is_offset= */ true);
+  }
+  return result;
 }
 
 Element* HTMLElement::unclosedOffsetParent() {
@@ -1577,6 +1621,8 @@ void HTMLElement::OnXMLLangAttrChanged(
 
 ElementInternals* HTMLElement::attachInternals(
     ExceptionState& exception_state) {
+  // 1. If this's is value is not null, then throw a "NotSupportedError"
+  // DOMException.
   if (IsValue()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
@@ -1584,9 +1630,14 @@ ElementInternals* HTMLElement::attachInternals(
     return nullptr;
   }
 
+  // 2. Let definition be the result of looking up a custom element definition
+  // given this's node document, its namespace, its local name, and null as the
+  // is value.
   CustomElementRegistry* registry = CustomElement::Registry(*this);
   auto* definition =
       registry ? registry->DefinitionForName(localName()) : nullptr;
+
+  // 3. If definition is null, then throw an "NotSupportedError" DOMException.
   if (!definition) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
@@ -1594,12 +1645,17 @@ ElementInternals* HTMLElement::attachInternals(
     return nullptr;
   }
 
+  // 4. If definition's disable internals is true, then throw a
+  // "NotSupportedError" DOMException.
   if (definition->DisableInternals()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
         "ElementInternals is disabled by disabledFeature static field.");
     return nullptr;
   }
+
+  // 5. If this's attached internals is true, then throw an "NotSupportedError"
+  // DOMException.
   if (DidAttachInternals()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
@@ -1607,24 +1663,21 @@ ElementInternals* HTMLElement::attachInternals(
     return nullptr;
   }
 
-  // If element's custom element state is not "precustomized" or "custom",
-  // throw "NotSupportedError" DOMException.
+  // 6. If this's custom element state is not "precustomized" or "custom", then
+  // throw a "NotSupportedError" DOMException.
   if (GetCustomElementState() != CustomElementState::kCustom &&
       GetCustomElementState() != CustomElementState::kPreCustomized) {
-    if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
-            GetExecutionContext())) {
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kNotSupportedError,
-          "The attachInternals() function cannot be called prior to the "
-          "execution of the custom element constructor.");
-      return nullptr;
-    }
-    UseCounter::Count(GetDocument(),
-                      WebFeature::kElementAttachInternalsBeforeConstructor);
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "The attachInternals() function cannot be called prior to the "
+        "execution of the custom element constructor.");
+    return nullptr;
   }
 
-  UseCounter::Count(GetDocument(), WebFeature::kElementAttachInternals);
+  // 7. Set this's attached internals to true.
   SetDidAttachInternals();
+  // 8. Return a new ElementInternals instance whose target element is this.
+  UseCounter::Count(GetDocument(), WebFeature::kElementAttachInternals);
   return &EnsureElementInternals();
 }
 

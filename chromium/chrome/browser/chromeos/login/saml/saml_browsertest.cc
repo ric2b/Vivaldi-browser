@@ -10,8 +10,8 @@
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -25,10 +25,12 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/attestation/mock_machine_certificate_uploader.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
@@ -61,6 +63,7 @@
 #include "chrome/browser/ui/login/login_handler_test_utils.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/saml_challenge_key_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/signin_fatal_error_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -72,6 +75,9 @@
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/cryptohome/mock_async_method_caller.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
+#include "chromeos/dbus/attestation/fake_attestation_client.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
+#include "chromeos/dbus/constants/attestation_constants.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "chromeos/dbus/cryptohome/key.pb.h"
@@ -122,6 +128,7 @@
 
 namespace em = enterprise_management;
 
+using base::test::RunOnceCallback;
 using net::test_server::BasicHttpResponse;
 using net::test_server::HttpRequest;
 using net::test_server::HttpResponse;
@@ -190,15 +197,16 @@ constexpr char kSamlVerifiedAccessResponseHeader[] =
     "x-verified-access-challenge-response";
 
 constexpr char kTpmChallenge[] = {0, 1, 2, 'c', 'h', 'a', 'l', 253, 254, 255};
-constexpr char kTpmChallengeResponse[] = {0,   1,   2,   'r', 'e',
-                                          's', 'p', 253, 254, 255};
 
 std::string GetTpmChallenge() {
   return std::string(kTpmChallenge, base::size(kTpmChallenge));
 }
 
 std::string GetTpmResponse() {
-  return std::string(kTpmChallengeResponse, base::size(kTpmChallengeResponse));
+  return AttestationClient::Get()
+      ->GetTestInterface()
+      ->GetEnterpriseChallengeFakeSignature(GetTpmChallenge(),
+                                            /*include_spkac=*/false);
 }
 
 std::string GetTpmChallengeBase64() {
@@ -207,8 +215,8 @@ std::string GetTpmChallengeBase64() {
 }
 
 std::string GetTpmResponseBase64() {
-  return base::Base64Encode(
-      base::as_bytes(base::span<const char>(kTpmChallengeResponse)));
+  const std::string response = GetTpmResponse();
+  return base::Base64Encode(base::as_bytes(base::make_span(response)));
 }
 
 // Returns relay state from http get/post requests.
@@ -266,7 +274,7 @@ class FakeSamlIdp {
     kLoginCheckDeviceAnswer
   };
 
-  // Returns the RequestType that corresponds to |url|, or RequestType::Unknown
+  // Returns the RequestType that corresponds to `url`, or RequestType::Unknown
   // if this is not a request for the FakeSamlIdp.
   RequestType ParseRequestTypeFromRequestPath(const GURL& request_url) const;
 
@@ -370,7 +378,7 @@ void FakeSamlIdp::SetRequireHttpBasicAuth(bool require_http_basic_auth) {
 std::unique_ptr<net::test_server::HttpResponse> FakeSamlIdp::HandleRequest(
     const net::test_server::HttpRequest& request) {
   // The scheme and host of the URL is actually not important but required to
-  // get a valid GURL in order to parse |request.relative_url|.
+  // get a valid GURL in order to parse `request.relative_url`.
   GURL request_url = GURL("http://localhost").Resolve(request.relative_url);
   const RequestType request_type = ParseRequestTypeFromRequestPath(request_url);
 
@@ -631,6 +639,19 @@ class SamlTest : public OobeBaseTest {
   }
 
   void SetUpOnMainThread() override {
+    // Allowlist the default EMK to sign enterprise challenge.
+    ::attestation::SignEnterpriseChallengeRequest
+        sign_enterprise_challenge_request;
+    sign_enterprise_challenge_request.set_username("");
+    sign_enterprise_challenge_request.set_key_label(
+        attestation::kEnterpriseMachineKey);
+    sign_enterprise_challenge_request.set_domain("google.com");
+    sign_enterprise_challenge_request.set_device_id("device_id");
+    AttestationClient::Get()
+        ->GetTestInterface()
+        ->AllowlistSignEnterpriseChallengeKey(
+            sign_enterprise_challenge_request);
+
     fake_gaia_.fake_gaia()->SetFakeMergeSessionParams(
         saml_test_users::kFirstUserCorpExampleComEmail, kTestAuthSIDCookie1,
         kTestAuthLSIDCookie1);
@@ -682,23 +703,15 @@ class SamlTest : public OobeBaseTest {
     test::OobeJS().TapOnPath(kPasswordSubmit);
   }
 
-  std::string WaitForAndGetFatalErrorMessage() {
-    OobeScreenWaiter(OobeScreen::SCREEN_FATAL_ERROR).Wait();
+  void ExpectFatalErrorMessage(const std::string& error_message) {
+    OobeScreenWaiter(SignInFatalErrorView::kScreenId).Wait();
 
     EXPECT_TRUE(ash::LoginScreenTestApi::IsShutdownButtonShown());
     EXPECT_FALSE(ash::LoginScreenTestApi::IsGuestButtonShown());
     EXPECT_FALSE(ash::LoginScreenTestApi::IsAddUserButtonShown());
 
-    std::string message_element = "$('fatal-error-card')";
-    std::string error_message;
-    if (!content::ExecuteScriptAndExtractString(
-            GetLoginUI()->GetWebContents(),
-            "window.domAutomationController.send(" + message_element +
-                ".textContent);",
-            &error_message)) {
-      ADD_FAILURE();
-    }
-    return error_message;
+    test::OobeJS().ExpectElementText(error_message,
+                                     {"signin-fatal-error", "subtitle"});
   }
 
   FakeSamlIdp* fake_saml_idp() { return &fake_saml_idp_; }
@@ -794,7 +807,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, IdpRequiresHttpAuth) {
   auth_needed_waiter.Wait();
   ASSERT_FALSE(login_prompt_observer.handlers().empty());
   LoginHandler* handler = *login_prompt_observer.handlers().begin();
-  // Note that the actual credentials don't matter because |fake_saml_idp()|
+  // Note that the actual credentials don't matter because `fake_saml_idp()`
   // doesn't check those (only that something has been provided).
   handler->SetAuth(base::UTF8ToUTF16("user"), base::UTF8ToUTF16("pwd"));
 
@@ -1032,9 +1045,9 @@ IN_PROC_BROWSER_TEST_F(SamlTest, UseAutenticatedUserEmailAddress) {
   StartSamlAndWaitForIdpPageLoad(
       saml_test_users::kSecondUserCorpExampleComEmail);
 
-  // Authenticate as the first user via SAML (the |Email| provided here is
+  // Authenticate as the first user via SAML (the `Email` provided here is
   // irrelevant - the authenticated user's e-mail address that FakeGAIA reports
-  // was set via |SetFakeMergeSessionParams|).
+  // was set via `SetFakeMergeSessionParams`).
   SigninFrameJS().TypeIntoPath("fake_user", {"Email"});
   SigninFrameJS().TypeIntoPath("fake_password", {"Password"});
 
@@ -1061,8 +1074,8 @@ IN_PROC_BROWSER_TEST_F(SamlTest, FailToRetrieveAutenticatedUserEmailAddress) {
   SigninFrameJS().TypeIntoPath("fake_password", {"Password"});
   SigninFrameJS().TapOn("Submit");
 
-  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(
+      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS));
 }
 
 // Tests the password confirm flow when more than one password is scraped: show
@@ -1094,21 +1107,20 @@ IN_PROC_BROWSER_TEST_F(SamlTest, PasswordConfirmFlow) {
 
   // Enter an unknown password 2nd time should go back fatal error message.
   SendConfirmPassword("wrong_password");
-  EXPECT_EQ(
-      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_PASSWORD_VERIFICATION),
-      WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(
+      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_PASSWORD_VERIFICATION));
 }
 
 // Verifies that when the login flow redirects from one host to another, the
 // notice shown to the user is updated. This guards against regressions of
 // http://crbug.com/447818.
 IN_PROC_BROWSER_TEST_F(SamlTest, NoticeUpdatedOnRedirect) {
-  // Start another https server at |kAdditionalIdPHost|.
+  // Start another https server at `kAdditionalIdPHost`.
   HTTPSForwarder saml_https_forwarder_2;
   ASSERT_TRUE(saml_https_forwarder_2.Initialize(
       kAdditionalIdPHost, embedded_test_server()->base_url()));
 
-  // Make the login flow redirect to |kAdditionalIdPHost|.
+  // Make the login flow redirect to `kAdditionalIdPHost`.
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login_instant_meta_refresh.html");
   fake_saml_idp()->SetRefreshURL(
       saml_https_forwarder_2.GetURLForSSLHost("simple.html"));
@@ -1116,7 +1128,7 @@ IN_PROC_BROWSER_TEST_F(SamlTest, NoticeUpdatedOnRedirect) {
       saml_test_users::kFirstUserCorpExampleComEmail);
 
   // Wait until the notice shown to the user is updated to contain
-  // |kAdditionalIdPHost|.
+  // `kAdditionalIdPHost`.
   std::string js =
       "var sendIfHostFound = function() {"
       "  var found = $SamlNoticeMessagePath.textContent.indexOf('$Host') > -1;"
@@ -1163,9 +1175,8 @@ IN_PROC_BROWSER_TEST_F(SamlTest, HTTPRedirectDisallowed) {
                                 "", "[]");
 
   const GURL url = embedded_test_server()->base_url().Resolve("/SAML");
-  EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL,
-                                      base::UTF8ToUTF16(url.spec())),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(l10n_util::GetStringFUTF8(
+      IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL, base::UTF8ToUTF16(url.spec())));
 }
 
 // Verifies that when GAIA attempts to redirect to a page served over http, not
@@ -1183,9 +1194,8 @@ IN_PROC_BROWSER_TEST_F(SamlTest, MetaRefreshToHTTPDisallowed) {
       ->ShowSigninScreenForTest(saml_test_users::kFirstUserCorpExampleComEmail,
                                 "", "[]");
 
-  EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL,
-                                      base::UTF8ToUTF16(url.spec())),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(l10n_util::GetStringFUTF8(
+      IDS_LOGIN_FATAL_ERROR_TEXT_INSECURE_URL, base::UTF8ToUTF16(url.spec())));
 }
 
 class SAMLEnrollmentTest : public SamlTest {
@@ -1761,7 +1771,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
   HostContentSettingsMapFactory::GetForProfile(profile)
       ->SetContentSettingDefaultScope(url3, url3,
                                       ContentSettingsType::MEDIASTREAM_CAMERA,
-                                      std::string(), CONTENT_SETTING_ALLOW);
+                                      CONTENT_SETTING_ALLOW);
 
   EXPECT_FALSE(web_contents_delegate->CheckMediaAccessPermission(
       web_contents->GetMainFrame(), url3,
@@ -1844,8 +1854,8 @@ IN_PROC_BROWSER_TEST_P(SAMLPasswordAttributesTest, LoginFailed) {
   SigninFrameJS().TapOn("Submit");
 
   // SAML login fails:
-  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS),
-            WaitForAndGetFatalErrorMessage());
+  ExpectFatalErrorMessage(
+      l10n_util::GetStringUTF8(IDS_LOGIN_FATAL_ERROR_NO_ACCOUNT_DETAILS));
 
   // Make sure no SAML password attributes are saved.
   // None are saved for the logged in user, since there is no logged in user:
@@ -1864,17 +1874,14 @@ INSTANTIATE_TEST_SUITE_P(All, SAMLPasswordAttributesTest, testing::Bool());
 
 void FakeGetCertificateCallbackTrue(
     attestation::AttestationFlow::CertificateCallback callback) {
+  // In reality, attestation service holds the certificate after a successful
+  // attestation flow.
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->GetMutableKeyInfoReply(/*username=*/"",
+                               attestation::kEnterpriseMachineKey)
+      ->set_certificate("certificate");
   std::move(callback).Run(attestation::ATTESTATION_SUCCESS, "certificate");
-}
-
-void FakeEnterpriseChallenge(
-    const std::string& challenge,
-    cryptohome::AsyncMethodCaller::DataCallback callback) {
-  if (challenge == GetTpmChallenge()) {
-    std::move(callback).Run(/*success=*/true, GetTpmResponse());
-  } else {
-    NOTREACHED();
-  }
 }
 
 constexpr base::TimeDelta kTimeoutTaskDelay =
@@ -1885,15 +1892,6 @@ static_assert(
     kTimeoutTaskDelay < kBuildResponseTaskDelay,
     "kTimeoutTaskDelay should be less than kBuildResponseTaskDelay to trigger "
     "timeout error in SAMLDeviceAttestationTest.TimeoutError test.");
-
-void FakeEnterpriseChallengeWithDelay(
-    const std::string& challenge,
-    cryptohome::AsyncMethodCaller::DataCallback callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(FakeEnterpriseChallenge, challenge, std::move(callback)),
-      kBuildResponseTaskDelay);
-}
 
 class SAMLDeviceAttestationTest : public SamlTest {
  public:
@@ -1912,6 +1910,7 @@ class SAMLDeviceAttestationTest : public SamlTest {
   StubCrosSettingsProvider* settings_provider_ = nullptr;
 
   cryptohome::MockAsyncMethodCaller* mock_async_method_caller_ = nullptr;
+  attestation::MockMachineCertificateUploader mock_cert_uploader_;
   NiceMock<chromeos::attestation::MockAttestationFlow> mock_attestation_flow_;
   chromeos::ScopedStubInstallAttributes stub_install_attributes_;
 };
@@ -1924,8 +1923,6 @@ void SAMLDeviceAttestationTest::SetUpInProcessBrowserTestFixture() {
   mock_async_method_caller_ = new NiceMock<cryptohome::MockAsyncMethodCaller>();
   mock_async_method_caller_->SetUp(/*success=*/true,
                                    cryptohome::MountError::MOUNT_ERROR_NONE);
-  ON_CALL(*mock_async_method_caller_, TpmAttestationSignEnterpriseChallenge)
-      .WillByDefault(WithArgs<6, 8>(Invoke(FakeEnterpriseChallenge)));
 
   // Ownership of mock_async_method_caller_ is transferred to
   // AsyncMethodCaller::InitializeForTesting.
@@ -1935,9 +1932,13 @@ void SAMLDeviceAttestationTest::SetUpInProcessBrowserTestFixture() {
   ON_CALL(mock_attestation_flow_, GetCertificate)
       .WillByDefault(WithArgs<5>(Invoke(FakeGetCertificateCallbackTrue)));
 
+  // By default make it reply that the certificate is already uploaded.
+  ON_CALL(mock_cert_uploader_, WaitForUploadComplete)
+      .WillByDefault(RunOnceCallback<0>(/*certificate_uploaded=*/true));
+
   attestation::TpmChallengeKeyFactory::SetForTesting(
       std::make_unique<attestation::TpmChallengeKeyImpl>(
-          &mock_attestation_flow_));
+          &mock_attestation_flow_, &mock_cert_uploader_));
 
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
 }
@@ -2122,8 +2123,9 @@ IN_PROC_BROWSER_TEST_F(SAMLDeviceAttestationTest, TimeoutError) {
   stub_install_attributes_.Get()->SetCloudManaged("google.com", "device_id");
   settings_provider_->SetBoolean(chromeos::kDeviceAttestationEnabled, true);
 
-  ON_CALL(*mock_async_method_caller_, TpmAttestationSignEnterpriseChallenge)
-      .WillByDefault(WithArgs<6, 8>(Invoke(FakeEnterpriseChallengeWithDelay)));
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->set_sign_enterprise_challenge_delay(kBuildResponseTaskDelay);
 
   auto handler = std::make_unique<SamlChallengeKeyHandler>();
   handler->SetTpmResponseTimeoutForTesting(kTimeoutTaskDelay);

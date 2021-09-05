@@ -16,8 +16,6 @@ static_library("vr_android") {
   sources = [
     "android_ui_gesture_target.cc",
     "android_ui_gesture_target.h",
-    "android_vr_utils.cc",
-    "android_vr_utils.h",
     "android_vsync_helper.cc",
     "android_vsync_helper.h",
     "autocomplete_controller.cc",
@@ -67,10 +65,7 @@ static_library("vr_android") {
     sources += [
       "arcore_device/arcore_device_provider.cc",
       "arcore_device/arcore_device_provider.h",
-      "arcore_device/arcore_install_helper.cc",
-      "arcore_device/arcore_install_helper.h",
-      "arcore_device/arcore_java_utils.cc",
-      "arcore_device/arcore_java_utils.h",
+      "arcore_device/arcore_device_utils.cc",
     ]
   }
 
@@ -92,6 +87,8 @@ static_library("vr_android") {
     "//components/rappor",
     "//components/search_engines:search_engines",
     "//components/webxr:webxr",
+    "//components/webxr/android",
+    "//components/webxr/android:android_utils",
     "//content/public/browser",
     "//content/public/common",
     "//device/vr",
@@ -116,7 +113,7 @@ static_library("vr_android") {
     ]
   }
 
-  public_deps = [ "//device/vr/public/mojom" ]
+  public_deps = [ "//device/vr/public/mojom:isolated_xr_service" ]
 
   libs = [ "android" ]
 
@@ -173,21 +170,11 @@ group("module_factory") {
   }
 }
 
-android_library("ar_java") {
-  deps = [
-    "//base:base_java",
-    "//chrome/android:chrome_java",
-    "//third_party/arcore-android-sdk-client:com_google_ar_core_java",
-  ]
-
-  sources = [ "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreShimImpl.java" ]
-}
-
 if (enable_arcore) {
   generate_jni("ar_jni_headers") {
     sources = [
-      "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreInstallUtils.java",
-      "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreJavaUtils.java",
+      "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCompositorDelegateProviderImpl.java",
+      "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreDeviceUtils.java",
     ]
   }
 }
@@ -228,7 +215,7 @@ test("vr_android_unittests") {
     "//components/webxr:webxr",
     "//device/vr:vr_fakes",
     "//device/vr/android/arcore",
-    "//device/vr/public/mojom",
+    "//device/vr/public/mojom:isolated_xr_service",
     "//mojo/core/embedder",
     "//mojo/public/cpp/bindings",
     "//services/network:test_support",

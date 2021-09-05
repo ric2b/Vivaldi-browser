@@ -198,9 +198,8 @@ void Tokenizer::AdvanceToNextToken() {
     Advance();
 }
 
-Token::Type Tokenizer::ClassifyCurrent() const {
-  DCHECK(!at_end());
-  char next_char = cur_char();
+// static
+Token::Type Tokenizer::ClassifyToken(char next_char, char following_char) {
   if (base::IsAsciiDigit(next_char))
     return Token::INTEGER;
   if (next_char == '"')
@@ -237,16 +236,22 @@ Token::Type Tokenizer::ClassifyCurrent() const {
   // For the case of '-' differentiate between a negative number and anything
   // else.
   if (next_char == '-') {
-    if (!CanIncrement())
+    if (following_char == '\0')
       return Token::UNCLASSIFIED_OPERATOR;  // Just the minus before end of
                                             // file.
-    char following_char = input_[cur_ + 1];
     if (base::IsAsciiDigit(following_char))
       return Token::INTEGER;
     return Token::UNCLASSIFIED_OPERATOR;
   }
 
   return Token::INVALID;
+}
+
+Token::Type Tokenizer::ClassifyCurrent() const {
+  DCHECK(!at_end());
+  char next_char = cur_char();
+  char following_char = CanIncrement() ? input_[cur_ + 1] : '\0';
+  return ClassifyToken(next_char, following_char);
 }
 
 void Tokenizer::AdvanceToEndOfToken(const Location& location,

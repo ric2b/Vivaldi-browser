@@ -21,19 +21,18 @@
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/drop_data.h"
-#include "content/public/common/page_state.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "media/base/video_frame.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/aura/env.h"
@@ -62,7 +61,7 @@ void InitNavigateParams(FrameHostMsg_DidCommitProvisionalLoad_Params* params,
   params->did_create_new_entry = did_create_new_entry;
   params->gesture = NavigationGestureUser;
   params->method = "GET";
-  params->page_state = PageState::CreateFromURL(url);
+  params->page_state = blink::PageState::CreateFromURL(url);
 }
 
 TestRenderWidgetHostView::TestRenderWidgetHostView(RenderWidgetHost* rwh)
@@ -156,6 +155,10 @@ uint32_t TestRenderWidgetHostView::GetCaptureSequenceNumber() const {
   return latest_capture_sequence_number_;
 }
 
+void TestRenderWidgetHostView::UpdateCursor(const WebCursor& cursor) {
+  last_cursor_ = cursor;
+}
+
 void TestRenderWidgetHostView::RenderProcessGone() {
   delete this;
 }
@@ -229,6 +232,18 @@ TestRenderWidgetHostView::CreateSyntheticGestureTarget() {
 }
 
 void TestRenderWidgetHostView::UpdateBackgroundColor() {}
+
+void TestRenderWidgetHostView::SetDisplayFeatureForTesting(
+    const DisplayFeature* display_feature) {
+  if (display_feature)
+    display_feature_ = *display_feature;
+  else
+    display_feature_ = base::nullopt;
+}
+
+base::Optional<DisplayFeature> TestRenderWidgetHostView::GetDisplayFeature() {
+  return display_feature_;
+}
 
 TestRenderViewHost::TestRenderViewHost(
     SiteInstance* instance,
@@ -338,8 +353,8 @@ void TestRenderViewHost::TestStartDragging(const DropData& drop_data,
 
 void TestRenderViewHost::TestOnUpdateStateWithFile(
     const base::FilePath& file_path) {
-  PageState state = PageState::CreateForTesting(GURL("http://www.google.com"),
-                                                false, "data", &file_path);
+  auto state = blink::PageState::CreateForTesting(GURL("http://www.google.com"),
+                                                  false, "data", &file_path);
   static_cast<RenderFrameHostImpl*>(GetMainFrame())->UpdateState(state);
 }
 

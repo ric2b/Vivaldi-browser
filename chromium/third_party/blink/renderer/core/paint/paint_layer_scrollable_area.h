@@ -350,7 +350,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool ShouldPlaceVerticalScrollbarOnLeft() const override;
   int PageStep(ScrollbarOrientation) const override;
   mojom::blink::ScrollBehavior ScrollBehaviorStyle() const override;
-  ColorScheme UsedColorScheme() const override;
+  mojom::blink::ColorScheme UsedColorScheme() const override;
   cc::AnimationHost* GetCompositorAnimationHost() const override;
   CompositorAnimationTimeline* GetCompositorAnimationTimeline() const override;
   bool HasTickmarks() const override;
@@ -404,6 +404,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   bool HasOverlayOverflowControls() const;
   bool NeedsScrollCorner() const;
+
+  bool ShouldOverflowControlsPaintAsOverlay() const;
 
   bool HasOverflow() const {
     return HasHorizontalOverflow() || HasVerticalOverflow();

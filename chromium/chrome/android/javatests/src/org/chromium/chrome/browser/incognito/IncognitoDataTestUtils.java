@@ -16,6 +16,8 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -24,9 +26,8 @@ import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.BrowserStartupController;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -53,12 +54,12 @@ public class IncognitoDataTestUtils {
             this.cct = cct;
         }
 
-        public Tab launchUrl(ChromeActivityTestRule chromeActivityRule,
+        public Tab launchUrl(ChromeTabbedActivityTestRule chromeTabbedActivityRule,
                 CustomTabActivityTestRule customTabActivityTestRule, String url) {
             if (cct) {
                 return launchUrlInCCT(customTabActivityTestRule, url, incognito);
             } else {
-                return launchUrlInTab(chromeActivityRule, url, incognito);
+                return launchUrlInTab(chromeTabbedActivityRule, url, incognito);
             }
         }
     }
@@ -137,7 +138,7 @@ public class IncognitoDataTestUtils {
     }
 
     private static Tab launchUrlInTab(
-            ChromeActivityTestRule testRule, String url, boolean incognito) {
+            ChromeTabbedActivityTestRule testRule, String url, boolean incognito) {
         // This helps to bring back the "existing" chrome tabbed activity to foreground
         // in case the custom tab activity was launched before.
         if (!isChromeTabbedActivityRunningOnTop()) {

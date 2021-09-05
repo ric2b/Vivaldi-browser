@@ -2,9 +2,9 @@
 <!-- Copyright 2016 The Chromium Authors. All rights reserved.
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
+<!-- Copyright 2021 Vivaldi Technologies AS. All rights reserved. -->
 
-<merge
-    xmlns:android="http://schemas.android.com/apk/res/android">
+<merge xmlns:android="http://schemas.android.com/apk/res/android">
 
     <LinearLayout android:id="@+id/url_action_container"
         android:layout_width="wrap_content"
@@ -19,6 +19,13 @@
             android:src="@drawable/btn_delete_24dp"
             android:visibility="invisible"
             android:contentDescription="@string/accessibility_toolbar_btn_delete_url" />
+
+        <org.chromium.ui.widget.ChromeImageButton
+            android:id="@+id/qrcode_button"
+            style="@style/LocationBarActionButton"
+            android:src="@drawable/qr_48dp"
+            android:visibility="invisible"
+            android:contentDescription="@string/accessibility_toolbar_btn_qrcode" />
 
         <org.chromium.ui.widget.ChromeImageButton
             android:id="@+id/mic_button"

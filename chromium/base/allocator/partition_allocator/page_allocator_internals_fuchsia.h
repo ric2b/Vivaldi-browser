@@ -71,8 +71,7 @@ std::atomic<int32_t> s_allocPageErrorCode{0};
 void* SystemAllocPagesInternal(void* hint,
                                size_t length,
                                PageAccessibilityConfiguration accessibility,
-                               PageTag page_tag,
-                               bool commit) {
+                               PageTag page_tag) {
   zx::vmo vmo;
   zx_status_t status = zx::vmo::create(length, 0, &vmo);
   if (status != ZX_OK) {
@@ -107,8 +106,8 @@ void* SystemAllocPagesInternal(void* hint,
 
   uint64_t address;
   status =
-      zx::vmar::root_self()->map(vmar_offset, vmo,
-                                 /*vmo_offset=*/0, length, options, &address);
+      zx::vmar::root_self()->map(options, vmar_offset, vmo,
+                                 /*vmo_offset=*/0, length, &address);
   if (status != ZX_OK) {
     // map() is expected to fail if |hint| is set to an already-in-use location.
     if (!hint) {
@@ -124,7 +123,6 @@ void* TrimMappingInternal(void* base,
                           size_t base_length,
                           size_t trim_length,
                           PageAccessibilityConfiguration accessibility,
-                          bool commit,
                           size_t pre_slack,
                           size_t post_slack) {
   PA_DCHECK(base_length == trim_length + pre_slack + post_slack);
@@ -151,9 +149,9 @@ bool TrySetSystemPagesAccessInternal(
     void* address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
-  zx_status_t status = zx::vmar::root_self()->protect(
-      reinterpret_cast<uint64_t>(address), length,
-      PageAccessibilityToZxVmOptions(accessibility));
+  zx_status_t status = zx::vmar::root_self()->protect2(
+      PageAccessibilityToZxVmOptions(accessibility),
+      reinterpret_cast<uint64_t>(address), length);
   return status == ZX_OK;
 }
 
@@ -161,9 +159,9 @@ void SetSystemPagesAccessInternal(
     void* address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
-  zx_status_t status = zx::vmar::root_self()->protect(
-      reinterpret_cast<uint64_t>(address), length,
-      PageAccessibilityToZxVmOptions(accessibility));
+  zx_status_t status = zx::vmar::root_self()->protect2(
+      PageAccessibilityToZxVmOptions(accessibility),
+      reinterpret_cast<uint64_t>(address), length);
   ZX_CHECK(status == ZX_OK, status);
 }
 

@@ -16,7 +16,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_split.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/metrics/perf/cpu_identity.h"
 #include "chrome/browser/metrics/perf/windowed_incognito_observer.h"
@@ -36,6 +36,8 @@ const char kPerfCyclesCmd[] = "perf record -a -e cycles -c 1000003";
 const char kPerfFPCallgraphCmd[] = "perf record -a -e cycles -g -c 4000037";
 const char kPerfLBRCallgraphCmd[] =
     "perf record -a -e cycles -c 4000037 --call-graph lbr";
+const char kPerfFPCallgraphPPPCmd[] =
+    "perf record -a -e cycles:ppp -g -c 4000037";
 const char kPerfLBRCmd[] = "perf record -a -e r20c4 -b -c 200011";
 const char kPerfLBRCmdAtom[] = "perf record -a -e rc4 -b -c 300001";
 const char kPerfITLBMissCyclesCmdIvyBridge[] =
@@ -516,7 +518,7 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Tigerlake) {
   ASSERT_GE(cmds.size(), 3UL);
   EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
   // We have both FP and LBR based callstacks.
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
   EXPECT_EQ(cmds[2].value, kPerfLBRCallgraphCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
@@ -551,7 +553,7 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_Goldmont) {
   ASSERT_GE(cmds.size(), 2UL);
   EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   // No LBR callstacks because the microarchitecture doesn't support it.
   auto found =
@@ -590,7 +592,7 @@ TEST_F(PerfCollectorTest, DefaultCommandsBasedOnUarch_GoldmontPlus) {
   ASSERT_GE(cmds.size(), 2UL);
   EXPECT_EQ(cmds[0].value, kPerfCyclesCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[0].value));
-  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphCmd);
+  EXPECT_EQ(cmds[1].value, kPerfFPCallgraphPPPCmd);
   EXPECT_TRUE(DoesCommandSampleCycles(cmds[1].value));
   // No LBR callstacks because the microarchitecture doesn't support it.
   auto found =

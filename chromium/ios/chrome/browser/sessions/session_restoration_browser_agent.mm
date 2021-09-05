@@ -7,10 +7,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/favicon/ios/web_favicon_driver.h"
+#import "components/previous_session_info/previous_session_info.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/metrics/previous_session_info.h"
 #import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_ios_factory.h"
 #import "ios/chrome/browser/sessions/session_restoration_observer.h"
@@ -229,6 +229,53 @@ void SessionRestorationBrowserAgent::WebStateActivatedAt(
     int active_index,
     ActiveWebStateChangeReason reason) {
   if (new_web_state && new_web_state->IsLoading())
+    return;
+
+  // Persist the session state if the new web state is not loading (or if
+  // the last tab was closed).
+  SaveSession(/*immediately=*/false);
+}
+
+void SessionRestorationBrowserAgent::WillDetachWebStateAt(
+    WebStateList* web_state_list,
+    web::WebState* web_state,
+    int index) {
+  if (web_state_list->active_index() == index)
+    return;
+
+  // Persist the session state if a background tab is detached.
+  SaveSession(/*immediately=*/false);
+}
+
+void SessionRestorationBrowserAgent::WebStateInsertedAt(
+    WebStateList* web_state_list,
+    web::WebState* web_state,
+    int index,
+    bool activating) {
+  if (activating || web_state->IsLoading())
+    return;
+
+  // Persist the session state if the new web state is not loading.
+  SaveSession(/*immediately=*/false);
+}
+
+void SessionRestorationBrowserAgent::WebStateReplacedAt(
+    WebStateList* web_state_list,
+    web::WebState* old_web_state,
+    web::WebState* new_web_state,
+    int index) {
+  if (new_web_state->IsLoading())
+    return;
+
+  // Persist the session state if the new web state is not loading.
+  SaveSession(/*immediately=*/false);
+}
+
+void SessionRestorationBrowserAgent::WebStateMoved(WebStateList* web_state_list,
+                                                   web::WebState* web_state,
+                                                   int from_index,
+                                                   int to_index) {
+  if (web_state->IsLoading())
     return;
 
   // Persist the session state if the new web state is not loading.

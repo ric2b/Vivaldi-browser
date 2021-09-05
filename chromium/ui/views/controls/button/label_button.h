@@ -8,6 +8,7 @@
 #include <array>
 #include <memory>
 
+#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -29,7 +30,7 @@ namespace views {
 class InkDropContainerView;
 class LabelButtonBorder;
 
-// LabelButton is a button with text and an icon, it's not focusable by default.
+// LabelButton is a button with text and an icon.
 class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
  public:
   METADATA_HEADER(LabelButton);
@@ -40,9 +41,8 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   explicit LabelButton(PressedCallback callback = PressedCallback(),
                        const base::string16& text = base::string16(),
                        int button_context = style::CONTEXT_BUTTON);
-  explicit LabelButton(ButtonListener* listener,
-                       const base::string16& text = base::string16(),
-                       int button_context = style::CONTEXT_BUTTON);
+  LabelButton(const LabelButton&) = delete;
+  LabelButton& operator=(const LabelButton&) = delete;
   ~LabelButton() override;
 
   // Gets or sets the image shown for the specified button state.
@@ -118,7 +118,6 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   gfx::Size GetMinimumSize() const override;
   int GetHeightForWidth(int w) const override;
   void Layout() override;
-  void EnableCanvasFlippingForRTLUI(bool flip) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void AddLayerBeneathView(ui::Layer* new_layer) override;
   void RemoveLayerBeneathView(ui::Layer* old_layer) override;
@@ -209,6 +208,8 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   // STATE_NORMAL when |for_state|'s image is empty.
   ButtonState ImageStateForState(ButtonState for_state) const;
 
+  void FlipCanvasOnPaintForRTLUIChanged();
+
   // The image and label shown in the button.
   ImageView* image_;
   internal::LabelButtonLabel* label_;
@@ -265,7 +266,10 @@ class VIEWS_EXPORT LabelButton : public Button, public NativeThemeDelegate {
   std::unique_ptr<Widget::PaintAsActiveCallbackList::Subscription>
       paint_as_active_subscription_;
 
-  DISALLOW_COPY_AND_ASSIGN(LabelButton);
+  PropertyChangedSubscription flip_canvas_on_paint_subscription_ =
+      AddFlipCanvasOnPaintForRTLUIChangedCallback(
+          base::BindRepeating(&LabelButton::FlipCanvasOnPaintForRTLUIChanged,
+                              base::Unretained(this)));
 };
 
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, LabelButton, Button)
@@ -276,8 +280,10 @@ VIEW_BUILDER_PROPERTY(gfx::Size, MaxSize)
 VIEW_BUILDER_PROPERTY(bool, IsDefault)
 VIEW_BUILDER_PROPERTY(int, ImageLabelSpacing)
 VIEW_BUILDER_PROPERTY(bool, ImageCentered)
-END_VIEW_BUILDER(VIEWS_EXPORT, LabelButton)
+END_VIEW_BUILDER
 
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, LabelButton)
 
 #endif  // UI_VIEWS_CONTROLS_BUTTON_LABEL_BUTTON_H_

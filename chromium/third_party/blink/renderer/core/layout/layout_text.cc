@@ -688,7 +688,7 @@ void LayoutText::AbsoluteQuadsForRange(Vector<FloatQuad>& quads,
       const unsigned clamped_start = std::max(start, offset.start);
       const unsigned clamped_end = std::min(end, offset.end);
       PhysicalRect rect = cursor.CurrentLocalRect(clamped_start, clamped_end);
-      rect.Move(cursor.Current().OffsetInContainerBlock());
+      rect.Move(cursor.CurrentOffsetInBlockFlow());
       const FloatQuad quad = LocalRectToAbsoluteQuad(rect);
       if (clamped_start < clamped_end) {
         quads.push_back(quad);
@@ -863,6 +863,10 @@ PositionWithAffinity LayoutText::PositionForPoint(
     const PhysicalOffset& point) const {
   NOT_DESTROYED();
   if (IsInLayoutNGInlineFormattingContext()) {
+    // Because of Texts in "position:relative" can be outside of line box, we
+    // attempt to find a fragment containing |point|.
+    // See All/LayoutViewHitTestTest.HitTestHorizontal/* and
+    // All/LayoutViewHitTestTest.HitTestVerticalRL/*
     NGInlineCursor cursor;
     for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject()) {
       if (!EnclosingIntRect(cursor.Current().RectInContainerBlock())
@@ -878,7 +882,8 @@ PositionWithAffinity LayoutText::PositionForPoint(
                                          position_with_affinity.Affinity());
       }
     }
-    return CreatePositionWithAffinity(0);
+    // Try for leading and trailing spaces between lines.
+    return ContainingNGBlockFlow()->PositionForPoint(*this, point);
   }
 
   DCHECK(CanUseInlineBox(*this));
@@ -945,7 +950,7 @@ LayoutRect LayoutText::LocalCaretRect(
   if (!inline_box->IsInlineTextBox())
     return LayoutRect();
 
-  const InlineTextBox* box = ToInlineTextBox(inline_box);
+  const auto* box = To<InlineTextBox>(inline_box);
   // Find an InlineBox before caret position, which is used to get caret height.
   const InlineBox* caret_box = box;
   if (box->GetLineLayoutItem().Style(box->IsFirstLineStyle())->Direction() ==
@@ -1049,7 +1054,7 @@ ALWAYS_INLINE float LayoutText::WidthFromFont(
     float expansion) const {
   NOT_DESTROYED();
   if (StyleRef().HasTextCombine() && IsCombineText()) {
-    const LayoutTextCombine* combine_text = ToLayoutTextCombine(this);
+    const auto* combine_text = To<LayoutTextCombine>(this);
     if (combine_text->IsCombined())
       return combine_text->CombinedTextWidth(f);
   }
@@ -1325,7 +1330,7 @@ void LayoutText::ComputePreferredLogicalWidths(
       text_, style_to_use.LocaleForLineBreakIterator());
   bool needs_word_spacing = false;
   bool ignoring_spaces = false;
-  bool is_space = false;
+  bool is_whitespace = false;
   bool first_word = true;
   bool first_line = true;
   int next_breakable = -1;
@@ -1389,48 +1394,48 @@ void LayoutText::ComputePreferredLogicalWidths(
       text_direction = run->Direction();
     }
 
-    bool previous_character_is_space = is_space;
+    bool previous_character_is_whitespace = is_whitespace;
     bool is_newline = false;
     if (c == kNewlineCharacter) {
       if (style_to_use.PreserveNewline()) {
         has_break_ = true;
         is_newline = true;
-        is_space = false;
+        is_whitespace = false;
       } else {
-        is_space = true;
+        is_whitespace = true;
       }
     } else if (c == kTabulationCharacter) {
       if (!style_to_use.CollapseWhiteSpace()) {
         has_tab_ = true;
-        is_space = false;
+        is_whitespace = false;
       } else {
-        is_space = true;
+        is_whitespace = true;
       }
     } else if (c == kSpaceCharacter) {
-      is_space = true;
+      is_whitespace = true;
     } else if (c == kNoBreakSpaceCharacter) {
-      is_space = false;
+      is_whitespace = false;
     } else {
-      is_space = false;
+      is_whitespace = false;
       contains_only_whitespace_or_nbsp_ =
           static_cast<unsigned>(OnlyWhitespaceOrNbsp::kNo);
     }
 
     bool is_breakable_location =
-        is_newline || (is_space && style_to_use.AutoWrap()) ||
+        is_newline || (is_whitespace && style_to_use.AutoWrap()) ||
         break_all_or_break_word == EWordBreak::kBreakWord;
     if (!i)
       has_breakable_start_ = is_breakable_location;
     if (i == len - 1) {
       has_breakable_end_ = is_breakable_location;
-      has_end_white_space_ = is_newline || is_space;
+      has_end_white_space_ = is_newline || is_whitespace;
     }
 
     if (!ignoring_spaces && style_to_use.CollapseWhiteSpace() &&
-        previous_character_is_space && is_space)
+        previous_character_is_whitespace && is_whitespace)
       ignoring_spaces = true;
 
-    if (ignoring_spaces && !is_space)
+    if (ignoring_spaces && !is_whitespace)
       ignoring_spaces = false;
 
     // Ignore spaces and soft hyphens
@@ -1603,17 +1608,17 @@ void LayoutText::ComputePreferredLogicalWidths(
           max_width_ = curr_max_width;
         curr_max_width = 0;
       } else {
-        TextRun run =
+        TextRun text_run =
             ConstructTextRun(f, this, i, 1, style_to_use, text_direction);
-        run.SetCharactersLength(len - i);
-        DCHECK_GE(run.CharactersLength(), run.length());
-        run.SetTabSize(!StyleRef().CollapseWhiteSpace(),
-                       StyleRef().GetTabSize());
-        run.SetXPos(lead_width + curr_max_width);
+        text_run.SetCharactersLength(len - i);
+        DCHECK_GE(text_run.CharactersLength(), text_run.length());
+        text_run.SetTabSize(!StyleRef().CollapseWhiteSpace(),
+                            StyleRef().GetTabSize());
+        text_run.SetXPos(lead_width + curr_max_width);
 
-        curr_max_width += f.Width(run);
+        curr_max_width += f.Width(text_run);
         needs_word_spacing =
-            is_space && !previous_character_is_space && i == len - 1;
+            is_whitespace && !previous_character_is_whitespace && i == len - 1;
       }
       DCHECK_EQ(last_word_boundary, i);
       last_word_boundary++;
@@ -1846,10 +1851,11 @@ void LayoutText::SetTextWithOffset(scoped_refptr<StringImpl> text,
     FloatRect glyph_bounds;
     float text_width =
         style_to_use->GetFont().Width(text_run, nullptr, &glyph_bounds);
-    // If the text is not wrapping we don't care if it fits or not in the
-    // container as it's not going to be split in multiple lines.
-    if (!style_to_use->AutoWrap() ||
-        (text_width <= ContainingBlock()->ContentLogicalWidth())) {
+    // TODO(rego): Ideally we could avoid measuring text width in some specific
+    // situations (e.g. if "white-space" property is "pre" and "overflow-wrap"
+    // is "normal"). However we tried that on the past and it caused a
+    // regression (crbug.com/985723).
+    if (text_width <= ContainingBlock()->ContentLogicalWidth()) {
       FirstTextBox()->ManuallySetStartLenAndLogicalWidth(
           offset, text->length(), LayoutUnit(text_width));
       SetFirstTextBoxLogicalLeft(text_width);
@@ -1967,7 +1973,7 @@ static inline bool IsInlineFlowOrEmptyText(const LayoutObject* o) {
     return true;
   if (!o->IsText())
     return false;
-  return ToLayoutText(o)->GetText().IsEmpty();
+  return To<LayoutText>(o)->GetText().IsEmpty();
 }
 
 OnlyWhitespaceOrNbsp LayoutText::ContainsOnlyWhitespaceOrNbsp() const {
@@ -1988,7 +1994,7 @@ UChar LayoutText::PreviousCharacter() const {
   UChar prev = kSpaceCharacter;
   if (previous_text && previous_text->IsText()) {
     if (StringImpl* previous_string =
-            ToLayoutText(previous_text)->GetText().Impl())
+            To<LayoutText>(previous_text)->GetText().Impl())
       prev = (*previous_string)[previous_string->length() - 1];
   }
   return prev;
@@ -2146,7 +2152,7 @@ InlineTextBox* LayoutText::CreateInlineTextBox(int start, uint16_t length) {
 
 void LayoutText::PositionLineBox(InlineBox* box) {
   NOT_DESTROYED();
-  InlineTextBox* s = ToInlineTextBox(box);
+  auto* s = To<InlineTextBox>(box);
 
   // FIXME: should not be needed!!!
   if (!s->Len()) {
@@ -2315,7 +2321,7 @@ PhysicalRect LayoutText::LocalSelectionVisualRect() const {
   const FrameSelection& frame_selection = GetFrame()->Selection();
   if (IsInLayoutNGInlineFormattingContext()) {
     PhysicalRect rect;
-    NGInlineCursor cursor(*RootInlineFormattingContext());
+    NGInlineCursor cursor(*ContainingNGBlockFlow());
     for (cursor.MoveTo(*this); cursor; cursor.MoveToNextForSameLayoutObject()) {
       if (cursor.Current().IsHiddenForPaint())
         continue;
@@ -2531,7 +2537,7 @@ static bool CanNotContinueOnNextLine(const LayoutText& text_layout_object,
     return true;
   return LineLayoutAPIShim::LayoutObjectFrom(box->GetLineLayoutItem()) ==
              text_layout_object &&
-         ToInlineTextBox(box)->Start() >= text_offset;
+         To<InlineTextBox>(box)->Start() >= text_offset;
 }
 
 // The text continues on the next line only if the last text box is not on this

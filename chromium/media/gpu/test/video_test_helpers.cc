@@ -6,7 +6,7 @@
 
 #include <limits>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/ptr_util.h"
@@ -15,7 +15,7 @@
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "media/base/format_utils.h"
-#include "media/base/video_decoder_config.h"
+#include "media/base/video_codecs.h"
 #include "media/base/video_frame_layout.h"
 #include "media/filters/vp9_parser.h"
 #include "media/gpu/test/video.h"
@@ -135,6 +135,7 @@ scoped_refptr<DecoderBuffer> EncodedDataHelper::GetNextBuffer() {
       return GetNextFragment();
     case kCodecVP8:
     case kCodecVP9:
+    case kCodecAV1:
       return GetNextFrame();
     default:
       NOTREACHED();
@@ -343,6 +344,9 @@ bool EncodedDataHelper::HasConfigInfo(const uint8_t* data,
     }
     // Stream configuration is present in a keyframe in vp9.
     return frame_header.IsKeyframe();
+  } else if (profile >= AV1PROFILE_MIN && profile <= AV1PROFILE_MAX) {
+    // TODO(hiroh): Implement this.
+    return false;
   }
   // Shouldn't happen at this point.
   LOG(FATAL) << "Invalid profile: " << GetProfileName(profile);

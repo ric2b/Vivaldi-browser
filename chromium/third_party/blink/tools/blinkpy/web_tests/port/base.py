@@ -136,6 +136,7 @@ class Port(object):
         ('mac10.14', 'x86'),
         ('mac10.15', 'x86'),
         ('mac11.0', 'x86'),
+        ('mac-arm11.0', 'arm64'),
         ('win7', 'x86'),
         ('win10', 'x86'),
         ('trusty', 'x86_64'),
@@ -143,7 +144,8 @@ class Port(object):
     )
 
     CONFIGURATION_SPECIFIER_MACROS = {
-        'mac': ['mac10.12', 'mac10.13', 'mac10.14', 'mac10.15', 'mac11.0'],
+        'mac': ['mac10.12', 'mac10.13', 'mac10.14', 'mac10.15', 'mac11.0',
+                'mac-arm11.0'],
         'win': ['win7', 'win10'],
         'linux': ['trusty'],
         'fuchsia': ['fuchsia'],
@@ -959,7 +961,7 @@ class Port(object):
                 'manifest_update', True):
             _log.debug('Generating MANIFEST.json for %s...', path)
             WPTManifest.ensure_manifest(self, path)
-        return WPTManifest(self._filesystem.read_text_file(manifest_path))
+        return WPTManifest(self.host, manifest_path)
 
     def is_wpt_crash_test(self, test_file):
         """Returns whether a WPT test is a crashtest.

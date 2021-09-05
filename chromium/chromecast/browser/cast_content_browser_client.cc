@@ -15,7 +15,6 @@
 #include "base/files/scoped_file.h"
 #include "base/i18n/rtl.h"
 #include "base/message_loop/message_pump_type.h"
-#include "base/metrics/ukm_source_id.h"
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -86,6 +85,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
@@ -127,7 +127,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTERNAL_MOJO_SERVICES)
-#include "chromecast/external_mojo/broker_service/broker_service.h"
+#include "chromecast/external_mojo/broker_service/broker_service.h"  // nogncheck
 #endif
 
 #if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(USE_OZONE)
@@ -198,8 +198,7 @@ std::unique_ptr<CastService> CastContentBrowserClient::CreateCastService(
     PrefService* pref_service,
     media::VideoPlaneController* video_plane_controller,
     CastWindowManager* window_manager) {
-  return std::make_unique<CastServiceSimple>(browser_context, pref_service,
-                                             window_manager);
+  return std::make_unique<CastServiceSimple>(browser_context, window_manager);
 }
 
 media::VideoModeSwitcher* CastContentBrowserClient::GetVideoModeSwitcher() {
@@ -549,7 +548,7 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
   // 1280px wide layout viewport by default.
   DCHECK(prefs->viewport_enabled);
   DCHECK(prefs->viewport_meta_enabled);
-  prefs->viewport_style = blink::web_pref::ViewportStyle::kTelevision;
+  prefs->viewport_style = blink::mojom::ViewportStyle::kTelevision;
 #endif  // defined(OS_ANDROID)
 
   // Disable WebSQL databases by default.
@@ -564,9 +563,10 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
     }
   }
 
-  prefs->preferred_color_scheme = static_cast<blink::PreferredColorScheme>(
-      CastBrowserProcess::GetInstance()->pref_service()->GetInteger(
-          prefs::kWebColorScheme));
+  prefs->preferred_color_scheme =
+      static_cast<blink::mojom::PreferredColorScheme>(
+          CastBrowserProcess::GetInstance()->pref_service()->GetInteger(
+              prefs::kWebColorScheme));
 
   // After all other default settings are set, check and see if there are any
   // specific overrides for the WebContents.
@@ -866,8 +866,7 @@ CastContentBrowserClient::CreateThrottlesForNavigation(
 
 void CastContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
     int frame_tree_node_id,
-    base::UkmSourceId ukm_source_id,
-    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
+    ukm::SourceIdObj ukm_source_id,
     NonNetworkURLLoaderFactoryMap* factories) {
 #if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
   content::WebContents* web_contents =
@@ -886,7 +885,6 @@ void CastContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
 void CastContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
     int render_process_id,
     int render_frame_id,
-    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
     NonNetworkURLLoaderFactoryMap* factories) {
   if (render_frame_id == MSG_ROUTING_NONE) {
     LOG(ERROR) << "Service worker not supported.";

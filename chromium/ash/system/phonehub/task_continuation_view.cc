@@ -8,8 +8,11 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/phonehub/continue_browsing_chip.h"
 #include "ash/system/phonehub/phone_hub_view_ids.h"
+#include "ash/system/phonehub/ui_constants.h"
+#include "ash/system/tray/tray_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -19,24 +22,41 @@ using BrowserTabsModel = chromeos::phonehub::BrowserTabsModel;
 
 namespace {
 
-constexpr int kTaskContinuationHeaderSpacing = 8;
-constexpr gfx::Insets kTaskContinuationViewPadding(12, 4);
-constexpr gfx::Insets kPhoneHubSubHeaderPadding(4, 32);
-constexpr gfx::Size kTaskContinuationChipSize(170, 80);
+// Appearance constants in dip.
+constexpr int kTaskContinuationChipHeight = 96;
 constexpr int kTaskContinuationChipsInRow = 2;
 constexpr int kTaskContinuationChipSpacing = 8;
-constexpr int kTaskContinuationChipVerticalPadding = 5;
+constexpr int kTaskContinuationChipHorizontalSidePadding = 4;
+constexpr int kTaskContinuationChipVerticalPadding = 4;
+constexpr int kHeaderLabelLineHeight = 48;
 
-class HeaderView : public views::View {
+// Typography.
+constexpr int kHeaderTextFontSizeDip = 15;
+
+gfx::Size GetTaskContinuationChipSize() {
+  int width =
+      (kTrayMenuWidth - kBubbleHorizontalSidePaddingDip * 2 -
+       kTaskContinuationChipHorizontalSidePadding * 2 -
+       kTaskContinuationChipSpacing * (kTaskContinuationChipsInRow - 1)) /
+      kTaskContinuationChipsInRow;
+  return gfx::Size(width, kTaskContinuationChipHeight);
+}
+
+class HeaderView : public views::Label {
  public:
   HeaderView() {
-    SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kVertical, kPhoneHubSubHeaderPadding));
-    auto* header_label = AddChildView(std::make_unique<views::Label>(
-        l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_TASK_CONTINUATION_TITLE)));
-    header_label->SetAutoColorReadabilityEnabled(false);
-    header_label->SetSubpixelRenderingEnabled(false);
-    header_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+    SetText(
+        l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_TASK_CONTINUATION_TITLE));
+    SetLineHeight(kHeaderLabelLineHeight);
+    SetFontList(font_list()
+                    .DeriveWithSizeDelta(kHeaderTextFontSizeDip -
+                                         font_list().GetFontSize())
+                    .DeriveWithWeight(gfx::Font::Weight::MEDIUM));
+    SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+    SetVerticalAlignment(gfx::VerticalAlignment::ALIGN_MIDDLE);
+    SetAutoColorReadabilityEnabled(false);
+    SetSubpixelRenderingEnabled(false);
+    SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
         AshColorProvider::ContentLayerType::kTextColorPrimary));
   }
 
@@ -51,15 +71,15 @@ class HeaderView : public views::View {
 }  // namespace
 
 TaskContinuationView::TaskContinuationView(
-    chromeos::phonehub::PhoneModel* phone_model)
-    : phone_model_(phone_model) {
+    chromeos::phonehub::PhoneModel* phone_model,
+    chromeos::phonehub::UserActionRecorder* user_action_recorder)
+    : phone_model_(phone_model), user_action_recorder_(user_action_recorder) {
   SetID(PhoneHubViewID::kTaskContinuationView);
 
   phone_model_->AddObserver(this);
 
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, kTaskContinuationViewPadding,
-      kTaskContinuationHeaderSpacing));
+      views::BoxLayout::Orientation::kVertical));
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStart);
 
@@ -93,14 +113,16 @@ void TaskContinuationView::TaskChipsView::AddTaskChip(views::View* task_chip) {
 
 // views::View:
 gfx::Size TaskContinuationView::TaskChipsView::CalculatePreferredSize() const {
-  int width = kTaskContinuationChipSize.width() * kTaskContinuationChipsInRow +
-              kTaskContinuationChipSpacing;
+  auto chip_size = GetTaskContinuationChipSize();
+  int width = chip_size.width() * kTaskContinuationChipsInRow +
+              kTaskContinuationChipSpacing +
+              2 * kTaskContinuationChipHorizontalSidePadding;
   int rows_num =
       std::ceil((double)task_chips_.view_size() / kTaskContinuationChipsInRow);
-  int height = (kTaskContinuationChipSize.height() +
-                kTaskContinuationChipVerticalPadding) *
+  int height = (chip_size.height() + kTaskContinuationChipVerticalPadding) *
                    std::max(0, rows_num - 1) +
-               kTaskContinuationChipSize.height();
+               chip_size.height() +
+               2 * kTaskContinuationChipHorizontalSidePadding;
   return gfx::Size(width, height);
 }
 
@@ -123,20 +145,20 @@ void TaskContinuationView::TaskChipsView::Reset() {
 }
 
 gfx::Point TaskContinuationView::TaskChipsView::GetButtonPosition(int index) {
+  auto chip_size = GetTaskContinuationChipSize();
   int row = index / kTaskContinuationChipsInRow;
   int column = index % kTaskContinuationChipsInRow;
-  int x = (kTaskContinuationChipSize.width() + kTaskContinuationChipSpacing) *
-          column;
-  int y = (kTaskContinuationChipSize.height() +
-           kTaskContinuationChipVerticalPadding) *
-          row;
+  int x = (chip_size.width() + kTaskContinuationChipSpacing) * column +
+          kTaskContinuationChipHorizontalSidePadding;
+  int y = (chip_size.height() + kTaskContinuationChipVerticalPadding) * row +
+          kTaskContinuationChipVerticalPadding;
   return gfx::Point(x, y);
 }
 
 void TaskContinuationView::TaskChipsView::CalculateIdealBounds() {
   for (int i = 0; i < task_chips_.view_size(); ++i) {
     gfx::Rect tile_bounds =
-        gfx::Rect(GetButtonPosition(i), kTaskContinuationChipSize);
+        gfx::Rect(GetButtonPosition(i), GetTaskContinuationChipSize());
     task_chips_.set_ideal_bounds(i, tile_bounds);
   }
 }
@@ -158,9 +180,12 @@ void TaskContinuationView::Update() {
     return;
   }
 
+  int index = 0;
   for (const BrowserTabsModel::BrowserTabMetadata& metadata :
        browser_tabs.most_recent_tabs()) {
-    chips_view_->AddTaskChip(new ContinueBrowsingChip(metadata));
+    chips_view_->AddTaskChip(new ContinueBrowsingChip(
+        metadata, index, user_action_recorder_));
+    index++;
   }
 
   PreferredSizeChanged();

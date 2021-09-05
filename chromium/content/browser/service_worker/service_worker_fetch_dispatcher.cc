@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
 #include "base/time/time.h"
@@ -43,8 +43,10 @@
 #include "net/http/http_util.h"
 #include "net/log/net_log.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 
 namespace content {
 
@@ -216,15 +218,16 @@ class DelegatingURLLoaderClient final : public network::mojom::URLLoaderClient {
 };
 
 using EventType = ServiceWorkerMetrics::EventType;
-EventType ResourceTypeToEventType(blink::mojom::ResourceType resource_type) {
-  switch (resource_type) {
-    case blink::mojom::ResourceType::kMainFrame:
+EventType RequestDestinationToEventType(
+    network::mojom::RequestDestination destination) {
+  switch (destination) {
+    case network::mojom::RequestDestination::kDocument:
       return EventType::FETCH_MAIN_FRAME;
-    case blink::mojom::ResourceType::kSubFrame:
+    case network::mojom::RequestDestination::kIframe:
       return EventType::FETCH_SUB_FRAME;
-    case blink::mojom::ResourceType::kSharedWorker:
+    case network::mojom::RequestDestination::kSharedWorker:
       return EventType::FETCH_SHARED_WORKER;
-    case blink::mojom::ResourceType::kServiceWorker:
+    case network::mojom::RequestDestination::kServiceWorker:
       return EventType::FETCH_SUB_RESOURCE;
     default:
       return EventType::FETCH_SUB_RESOURCE;
@@ -325,7 +328,7 @@ void CreateNetworkFactoryForNavigationPreloadOnUI(
       frame_tree_node->current_frame_host()->GetProcess()->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kNavigation, url::Origin(),
       frame_tree_node->navigation_request()->GetNavigationId(),
-      base::UkmSourceId::FromInt64(
+      ukm::SourceIdObj::FromInt64(
           frame_tree_node->navigation_request()->GetNextPageUkmSourceId()),
       &receiver, &header_client, &bypass_redirect_checks_unused,
       /*disable_secure_dns=*/nullptr, /*factory_override=*/nullptr);
@@ -458,7 +461,7 @@ class ServiceWorkerFetchDispatcher::URLLoaderAssets
 
 ServiceWorkerFetchDispatcher::ServiceWorkerFetchDispatcher(
     blink::mojom::FetchAPIRequestPtr request,
-    blink::mojom::ResourceType resource_type,
+    network::mojom::RequestDestination destination,
     const std::string& client_id,
     scoped_refptr<ServiceWorkerVersion> version,
     base::OnceClosure prepare_callback,
@@ -467,7 +470,7 @@ ServiceWorkerFetchDispatcher::ServiceWorkerFetchDispatcher(
     : request_(std::move(request)),
       client_id_(client_id),
       version_(std::move(version)),
-      resource_type_(resource_type),
+      destination_(destination),
       prepare_callback_(std::move(prepare_callback)),
       fetch_callback_(std::move(fetch_callback)),
       is_offline_capability_check_(is_offline_capability_check) {
@@ -620,6 +623,7 @@ void ServiceWorkerFetchDispatcher::DispatchFetchEvent() {
   version_->endpoint()->DispatchFetchEventForMainResource(
       std::move(params), std::move(pending_response_callback),
       base::BindOnce(&ServiceWorkerFetchDispatcher::OnFetchEventFinished,
+                     weak_factory_.GetWeakPtr(),
                      base::Unretained(version_.get()), event_finish_id,
                      url_loader_assets_));
 }
@@ -678,8 +682,8 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
     URLLoaderFactoryGetter* url_loader_factory_getter,
     scoped_refptr<ServiceWorkerContextWrapper> context_wrapper,
     int frame_tree_node_id) {
-  if (resource_type_ != blink::mojom::ResourceType::kMainFrame &&
-      resource_type_ != blink::mojom::ResourceType::kSubFrame) {
+  if (destination_ != network::mojom::RequestDestination::kDocument &&
+      destination_ != network::mojom::RequestDestination::kIframe) {
     return false;
   }
   if (!version_->navigation_preload_state().enabled)
@@ -706,11 +710,11 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   }
 
   network::ResourceRequest resource_request(original_request);
-  if (resource_type_ == blink::mojom::ResourceType::kMainFrame) {
+  if (destination_ == network::mojom::RequestDestination::kDocument) {
     resource_request.resource_type = static_cast<int>(
         blink::mojom::ResourceType::kNavigationPreloadMainFrame);
   } else {
-    DCHECK_EQ(blink::mojom::ResourceType::kSubFrame, resource_type_);
+    DCHECK_EQ(network::mojom::RequestDestination::kIframe, destination_);
     resource_request.resource_type = static_cast<int>(
         blink::mojom::ResourceType::kNavigationPreloadSubFrame);
   }
@@ -771,19 +775,21 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
 
 ServiceWorkerMetrics::EventType ServiceWorkerFetchDispatcher::GetEventType()
     const {
-  return ResourceTypeToEventType(resource_type_);
+  return RequestDestinationToEventType(destination_);
 }
 
 bool ServiceWorkerFetchDispatcher::IsEventDispatched() const {
   return request_.is_null();
 }
 
-// static
 void ServiceWorkerFetchDispatcher::OnFetchEventFinished(
     ServiceWorkerVersion* version,
     int event_finish_id,
     scoped_refptr<URLLoaderAssets> url_loader_assets,
     blink::mojom::ServiceWorkerEventStatus status) {
+  if (status == blink::mojom::ServiceWorkerEventStatus::TIMEOUT) {
+    DidFail(blink::ServiceWorkerStatusCode::kErrorTimeout);
+  }
   version->FinishRequest(
       event_finish_id,
       status != blink::mojom::ServiceWorkerEventStatus::ABORTED);

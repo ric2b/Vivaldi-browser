@@ -135,8 +135,9 @@ class LocalDeviceTestRun(test_run.TestRun):
 
     try:
       with signal_handler.AddSignalHandler(signal.SIGTERM, stop_tests):
-        tries = 0
-        while tries < self._env.max_tries and tests:
+        self._env.ResetCurrentTry()
+        while self._env.current_try < self._env.max_tries and tests:
+          tries = self._env.current_try
           grouped_tests = self._GroupTests(tests)
           logging.info('STARTING TRY #%d/%d', tries + 1, self._env.max_tries)
           if tries > 0 and self._env.recover_devices:
@@ -189,10 +190,10 @@ class LocalDeviceTestRun(test_run.TestRun):
                       log=_SIGTERM_TEST_LOG))
             raise
 
-          tries += 1
+          self._env.IncrementCurrentTry()
           tests = self._GetTestsToRetry(tests, try_results)
 
-          logging.info('FINISHED TRY #%d/%d', tries, self._env.max_tries)
+          logging.info('FINISHED TRY #%d/%d', tries + 1, self._env.max_tries)
           if tests:
             logging.info('%d failed tests remain.', len(tests))
           else:

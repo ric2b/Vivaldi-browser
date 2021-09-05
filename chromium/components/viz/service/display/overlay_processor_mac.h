@@ -27,7 +27,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorMac
  public:
   using CandidateList = CALayerOverlayList;
 
-  OverlayProcessorMac(bool could_overlay, bool enable_ca_overlay);
+  explicit OverlayProcessorMac(bool enable_ca_overlay);
   // For testing.
   explicit OverlayProcessorMac(
       std::unique_ptr<CALayerOverlayProcessor> ca_layer_overlay_processor);
@@ -42,7 +42,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorMac
   // Returns true if the platform supports hw overlays and surface occluding
   // damage rect needs to be computed since it will be used by overlay
   // processor.
-  bool NeedsSurfaceOccludingDamageRect() const override;
+  bool NeedsSurfaceDamageRectList() const override;
 
   // Attempt to replace quads from the specified root render pass with overlays
   // or CALayers. This must be called every frame.
@@ -52,6 +52,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorMac
       const SkMatrix44& output_color_matrix,
       const FilterOperationsMap& render_pass_filters,
       const FilterOperationsMap& render_pass_backdrop_filters,
+      SurfaceDamageRectList* surface_damage_rect_list,
       OutputSurfaceOverlayPlane* output_surface_plane,
       CandidateList* overlay_candidates,
       gfx::Rect* damage_rect,
@@ -66,7 +67,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorMac
       base::Optional<OutputSurfaceOverlayPlane>* output_surface_plane) override;
 
  private:
-  const bool could_overlay_;
   const bool enable_ca_overlay_;
   gfx::Rect ca_overlay_damage_rect_;
   gfx::Rect previous_frame_full_bounding_rect_;

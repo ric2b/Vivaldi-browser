@@ -205,9 +205,17 @@ export class DestinationStore extends EventTarget {
       [
         PrinterType.EXTENSION_PRINTER, DestinationStorePrinterSearchStatus.START
       ],
-      [PrinterType.PRIVET_PRINTER, DestinationStorePrinterSearchStatus.START],
       [PrinterType.LOCAL_PRINTER, DestinationStorePrinterSearchStatus.START],
     ]);
+
+    // TODO (rbpotter): Remove the code below once this flag and policy are no
+    // longer supported. Remove the privet flag in M90.
+    if (loadTimeData.getBoolean('forceEnablePrivetPrinting') ||
+        loadTimeData.getBoolean('cloudPrintDeprecationWarningsSuppressed')) {
+      this.destinationSearchStatus_.set(
+          PrinterType.PRIVET_PRINTER,
+          DestinationStorePrinterSearchStatus.START);
+    }
 
     /** @private {!Set<string>} */
     this.inFlightCloudPrintRequests_ = new Set();
@@ -883,13 +891,7 @@ export class DestinationStore extends EventTarget {
     this.destinationSearchStatus_.set(
         type, DestinationStorePrinterSearchStatus.SEARCHING);
     this.nativeLayer_.getPrinters(type).then(
-        this.onDestinationSearchDone_.bind(this, type), () => {
-          // Will be rejected by C++ for privet printers if privet printing
-          // is disabled.
-          assert(type === PrinterType.PRIVET_PRINTER);
-          this.destinationSearchStatus_.set(
-              type, DestinationStorePrinterSearchStatus.DONE);
-        });
+        this.onDestinationSearchDone_.bind(this, type));
   }
 
   /**
@@ -910,10 +912,16 @@ export class DestinationStore extends EventTarget {
   startLoadAllDestinations() {
     // Printer types that need to be retrieved from the handler.
     const types = [
-      PrinterType.PRIVET_PRINTER,
       PrinterType.EXTENSION_PRINTER,
       PrinterType.LOCAL_PRINTER,
     ];
+
+    // TODO (rbpotter): Remove the code below once this flag and policy are no
+    // longer supported. Remove the privet flag in M90.
+    if (loadTimeData.getBoolean('forceEnablePrivetPrinting') ||
+        loadTimeData.getBoolean('cloudPrintDeprecationWarningsSuppressed')) {
+      types.push(PrinterType.PRIVET_PRINTER);
+    }
 
     // Cloud destinations are pulled from the cloud print server instead of the
     // NativeLayer/PrintPreviewHandler.

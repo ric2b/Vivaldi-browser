@@ -1,6 +1,7 @@
 // Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
 
 #include "app/vivaldi_apptools.h"
+#include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
@@ -8,6 +9,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -76,9 +78,9 @@ void WebViewImpl::SetAllowAccessKeys(const bool allow_access_keys) {
 }
 
 void WebViewImpl::LoadImageAt(const gfx::Point& point) {
-  HitTestResult result =
-      HitTestResultForRootFramePos(FloatPoint(IntPoint(point.x(), point.y())));
-  Node* node = result.InnerNode();
+  WebHitTestResult result = HitTestResultForTap(point, gfx::Size(0, 0));
+
+  Node* node = result.GetNode().Unwrap<Node>();
   DCHECK(node);
   if (!node || !IsA<HTMLImageElement>(*node))
     return;

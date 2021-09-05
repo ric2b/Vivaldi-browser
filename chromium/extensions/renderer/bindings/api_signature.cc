@@ -29,7 +29,8 @@ bool HasCallback(const std::vector<std::unique_ptr<ArgumentSpec>>& signature) {
 
 std::vector<std::unique_ptr<ArgumentSpec>> ValueListToArgumentSpecs(
     const base::Value& specification_list,
-    bool supports_promises) {
+    const base::Value* returns_async) {
+  bool supports_promises = returns_async != nullptr;
   std::vector<std::unique_ptr<ArgumentSpec>> signature;
   auto size = specification_list.GetList().size() + (supports_promises ? 1 : 0);
   signature.reserve(size);
@@ -39,10 +40,16 @@ std::vector<std::unique_ptr<ArgumentSpec>> ValueListToArgumentSpecs(
   }
 
   if (supports_promises) {
+    CHECK(returns_async->is_dict());
     // To allow promise supporting APIs that use the returns_async format to
     // instead take a callback, we add an allowed function to the end of the
     // signature.
     auto callback = std::make_unique<ArgumentSpec>(ArgumentType::FUNCTION);
+    const base::Value* callback_optional =
+        returns_async->FindKeyOfType("optional", base::Value::Type::BOOLEAN);
+    if (callback_optional) {
+      callback->set_optional(callback_optional->GetBool());
+    }
     callback->set_name("callback");
     signature.push_back(std::move(callback));
   }
@@ -421,12 +428,11 @@ APISignature::JSONParseResult& APISignature::JSONParseResult::operator=(
     JSONParseResult&& other) = default;
 
 APISignature::APISignature(const base::Value& specification_list,
-                           bool api_supports_promises,
+                           const base::Value* returns_async,
                            BindingAccessChecker* access_checker)
-    : APISignature(
-          ValueListToArgumentSpecs(specification_list, api_supports_promises),
-          api_supports_promises,
-          access_checker) {}
+    : APISignature(ValueListToArgumentSpecs(specification_list, returns_async),
+                   returns_async != nullptr /*api_supports_promises*/,
+                   access_checker) {}
 
 APISignature::APISignature(std::vector<std::unique_ptr<ArgumentSpec>> signature)
     : APISignature(std::move(signature),
@@ -500,8 +506,8 @@ APISignature::JSONParseResult APISignature::ConvertArgumentsIgnoringSchema(
       callback = value.As<v8::Function>();
   }
 
-  auto json = std::make_unique<base::ListValue>();
-  json->Reserve(size);
+  base::Value::ListStorage json;
+  json.reserve(size);
 
   std::unique_ptr<content::V8ValueConverter> converter =
       content::V8ValueConverter::Create();
@@ -520,11 +526,11 @@ APISignature::JSONParseResult APISignature::ConvertArgumentsIgnoringSchema(
       // null). Duplicate that behavior here.
       converted = std::make_unique<base::Value>();
     }
-    json->Append(std::move(converted));
+    json.push_back(base::Value::FromUniquePtrValue(std::move(converted)));
   }
 
   JSONParseResult result;
-  result.arguments = std::move(json);
+  result.arguments = std::make_unique<base::ListValue>(std::move(json));
   result.callback = callback;
   result.async_type = callback.IsEmpty()
                           ? binding::AsyncResponseType::kNone

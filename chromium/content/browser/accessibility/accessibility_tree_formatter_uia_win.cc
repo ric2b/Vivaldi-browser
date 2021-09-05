@@ -28,7 +28,6 @@
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_safearray.h"
 #include "base/win/scoped_variant.h"
-#include "base/win/windows_version.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_win.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "ui/accessibility/accessibility_switches.h"
@@ -259,7 +258,7 @@ const long AccessibilityTreeFormatterUia::pattern_properties_[] = {
     UIA_ToggleToggleStatePropertyId,                  // 30086
 };
 // static
-std::unique_ptr<AccessibilityTreeFormatter>
+std::unique_ptr<ui::AXTreeFormatter>
 AccessibilityTreeFormatterUia::CreateUia() {
   base::win::AssertComInitialized();
   return std::make_unique<AccessibilityTreeFormatterUia>();
@@ -276,7 +275,7 @@ AccessibilityTreeFormatterUia::AccessibilityTreeFormatterUia() {
 AccessibilityTreeFormatterUia::~AccessibilityTreeFormatterUia() {}
 
 void AccessibilityTreeFormatterUia::AddDefaultFilters(
-    std::vector<PropertyFilter>* property_filters) {
+    std::vector<AXPropertyFilter>* property_filters) {
   // Too noisy: IsKeyboardFocusable, IsDataValidForForm, UIA_ScrollPatternId,
   //  Value.IsReadOnly
 
@@ -321,7 +320,7 @@ void AccessibilityTreeFormatterUia::AddDefaultFilters(
   // UIA_ValuePatternId
   AddPropertyFilter(property_filters, "Value.Value=*");
   AddPropertyFilter(property_filters, "Value.Value='http*'",
-                    PropertyFilter::DENY);
+                    AXPropertyFilter::DENY);
   // UIA_WindowPatternId
   AddPropertyFilter(property_filters, "Window.IsModal=*");
 }
@@ -423,9 +422,8 @@ AccessibilityTreeFormatterUia::BuildAccessibilityTree(
   return tree;
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterUia::BuildAccessibilityTreeForWindow(
-    gfx::AcceleratedWidget hwnd) {
+base::Value AccessibilityTreeFormatterUia::BuildTreeForWindow(
+    gfx::AcceleratedWidget hwnd) const {
   CHECK(hwnd);
 
   Microsoft::WRL::ComPtr<IUIAutomationElement> root;
@@ -435,26 +433,24 @@ AccessibilityTreeFormatterUia::BuildAccessibilityTreeForWindow(
   RECT root_bounds = {0};
   root->get_CurrentBoundingRectangle(&root_bounds);
 
-  std::unique_ptr<base::DictionaryValue> tree =
-      std::make_unique<base::DictionaryValue>();
+  base::DictionaryValue tree;
   RecursiveBuildAccessibilityTree(root.Get(), root_bounds.left, root_bounds.top,
-                                  tree.get());
-  return tree;
+                                  &tree);
+  return std::move(tree);
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterUia::BuildAccessibilityTreeForSelector(
-    const TreeSelector& selector) {
+base::Value AccessibilityTreeFormatterUia::BuildTreeForSelector(
+    const AXTreeSelector& selector) const {
   LOG(ERROR) << "Windows does not yet support building accessibility trees for "
                 "tree selectors";
-  return nullptr;
+  return base::Value(base::Value::Type::DICTIONARY);
 }
 
 void AccessibilityTreeFormatterUia::RecursiveBuildAccessibilityTree(
     IUIAutomationElement* uncached_node,
     int root_x,
     int root_y,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   // Process this node.
   AddProperties(uncached_node, root_x, root_y, dict);
 
@@ -488,7 +484,7 @@ void AccessibilityTreeFormatterUia::AddProperties(
     IUIAutomationElement* uncached_node,
     int root_x,
     int root_y,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   // Update the cache for this node's information.
   Microsoft::WRL::ComPtr<IUIAutomationElement> node;
   uncached_node->BuildUpdatedCache(element_cache_request_.Get(), &node);
@@ -517,7 +513,7 @@ void AccessibilityTreeFormatterUia::AddProperties(
 
 void AccessibilityTreeFormatterUia::AddExpandCollapseProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationExpandCollapsePattern>
       expand_collapse_pattern;
   if (SUCCEEDED(
@@ -549,7 +545,7 @@ void AccessibilityTreeFormatterUia::AddExpandCollapseProperties(
 
 void AccessibilityTreeFormatterUia::AddGridProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationGridPattern> grid_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_GridPatternId,
                                          IID_PPV_ARGS(&grid_pattern))) &&
@@ -566,7 +562,7 @@ void AccessibilityTreeFormatterUia::AddGridProperties(
 
 void AccessibilityTreeFormatterUia::AddGridItemProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationGridItemPattern> grid_item_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_GridItemPatternId,
                                          IID_PPV_ARGS(&grid_item_pattern))) &&
@@ -598,7 +594,7 @@ void AccessibilityTreeFormatterUia::AddGridItemProperties(
 
 void AccessibilityTreeFormatterUia::AddRangeValueProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationRangeValuePattern> range_value_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_RangeValuePatternId,
                                          IID_PPV_ARGS(&range_value_pattern))) &&
@@ -631,7 +627,7 @@ void AccessibilityTreeFormatterUia::AddRangeValueProperties(
 
 void AccessibilityTreeFormatterUia::AddScrollProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationScrollPattern> scroll_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_ScrollPatternId,
                                          IID_PPV_ARGS(&scroll_pattern))) &&
@@ -674,7 +670,7 @@ void AccessibilityTreeFormatterUia::AddScrollProperties(
 
 void AccessibilityTreeFormatterUia::AddSelectionProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationSelectionPattern> selection_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_SelectionPatternId,
                                          IID_PPV_ARGS(&selection_pattern))) &&
@@ -693,7 +689,7 @@ void AccessibilityTreeFormatterUia::AddSelectionProperties(
 
 void AccessibilityTreeFormatterUia::AddSelectionItemProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationSelectionItemPattern>
       selection_item_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(
@@ -714,7 +710,7 @@ void AccessibilityTreeFormatterUia::AddSelectionItemProperties(
 
 void AccessibilityTreeFormatterUia::AddTableProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationTablePattern> table_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_TablePatternId,
                                          IID_PPV_ARGS(&table_pattern))) &&
@@ -741,7 +737,7 @@ void AccessibilityTreeFormatterUia::AddTableProperties(
 
 void AccessibilityTreeFormatterUia::AddToggleProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationTogglePattern> toggle_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_TogglePatternId,
                                          IID_PPV_ARGS(&toggle_pattern))) &&
@@ -767,7 +763,7 @@ void AccessibilityTreeFormatterUia::AddToggleProperties(
 
 void AccessibilityTreeFormatterUia::AddValueProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationValuePattern> value_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_ValuePatternId,
                                          IID_PPV_ARGS(&value_pattern))) &&
@@ -784,7 +780,7 @@ void AccessibilityTreeFormatterUia::AddValueProperties(
 
 void AccessibilityTreeFormatterUia::AddWindowProperties(
     IUIAutomationElement* node,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   Microsoft::WRL::ComPtr<IUIAutomationWindowPattern> window_pattern;
   if (SUCCEEDED(node->GetCachedPatternAs(UIA_WindowPatternId,
                                          IID_PPV_ARGS(&window_pattern))) &&
@@ -800,7 +796,7 @@ void AccessibilityTreeFormatterUia::WriteProperty(
     const base::win::ScopedVariant& var,
     int root_x,
     int root_y,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   switch (var.type()) {
     case VT_EMPTY:
     case VT_NULL:
@@ -863,7 +859,7 @@ void AccessibilityTreeFormatterUia::WriteProperty(
 void AccessibilityTreeFormatterUia::WriteI4Property(
     long propertyId,
     long lval,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   switch (propertyId) {
     case UIA_ControlTypePropertyId:
       dict->SetString(UiaIdentifierToCondensedString(propertyId),
@@ -886,7 +882,7 @@ void AccessibilityTreeFormatterUia::WriteI4Property(
 void AccessibilityTreeFormatterUia::WriteUnknownProperty(
     long propertyId,
     IUnknown* unk,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   switch (propertyId) {
     case UIA_ControllerForPropertyId:
     case UIA_DescribedByPropertyId:
@@ -915,7 +911,7 @@ void AccessibilityTreeFormatterUia::WriteRectangleProperty(
     const VARIANT& value,
     int root_x,
     int root_y,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   CHECK(value.vt == (VT_ARRAY | VT_R8));
 
   double* data = nullptr;
@@ -934,7 +930,7 @@ void AccessibilityTreeFormatterUia::WriteRectangleProperty(
 void AccessibilityTreeFormatterUia::WriteElementArray(
     long propertyId,
     IUIAutomationElementArray* array,
-    base::DictionaryValue* dict) {
+    base::DictionaryValue* dict) const {
   int count;
   array->get_Length(&count);
   base::string16 element_list;
@@ -958,7 +954,7 @@ void AccessibilityTreeFormatterUia::WriteElementArray(
 }
 
 base::string16 AccessibilityTreeFormatterUia::GetNodeName(
-    IUIAutomationElement* uncached_node) {
+    IUIAutomationElement* uncached_node) const {
   // Update the cache for this node.
   if (uncached_node) {
     Microsoft::WRL::ComPtr<IUIAutomationElement> node;
@@ -1150,39 +1146,6 @@ void AccessibilityTreeFormatterUia::ProcessValueForOutput(
       NOTREACHED();
       break;
   }
-}
-
-base::FilePath::StringType
-AccessibilityTreeFormatterUia::GetExpectedFileSuffix() {
-  return FILE_PATH_LITERAL("-expected-uia-win.txt");
-}
-
-base::FilePath::StringType
-AccessibilityTreeFormatterUia::GetVersionSpecificExpectedFileSuffix() {
-  if (base::win::GetVersion() == base::win::Version::WIN7) {
-    return FILE_PATH_LITERAL("-expected-uia-win7.txt");
-  }
-  return FILE_PATH_LITERAL("");
-}
-
-const std::string AccessibilityTreeFormatterUia::GetAllowEmptyString() {
-  return "@UIA-WIN-ALLOW-EMPTY:";
-}
-
-const std::string AccessibilityTreeFormatterUia::GetAllowString() {
-  return "@UIA-WIN-ALLOW:";
-}
-
-const std::string AccessibilityTreeFormatterUia::GetDenyString() {
-  return "@UIA-WIN-DENY:";
-}
-
-const std::string AccessibilityTreeFormatterUia::GetDenyNodeString() {
-  return "@UIA-WIN-DENY-NODE:";
-}
-
-const std::string AccessibilityTreeFormatterUia::GetRunUntilEventString() {
-  return "@UIA-WIN-RUN-UNTIL-EVENT:";
 }
 
 }  // namespace content

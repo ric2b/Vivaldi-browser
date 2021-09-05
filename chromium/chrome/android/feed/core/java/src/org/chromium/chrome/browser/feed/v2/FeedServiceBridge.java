@@ -10,13 +10,25 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.feed.library.common.locale.LocaleUtils;
-
+import org.chromium.chrome.browser.xsurface.ImagePrefetcher;
+import org.chromium.chrome.browser.xsurface.ProcessScope;
 /**
  * Bridge for FeedService-related calls.
  */
 @JNINamespace("feed")
 public final class FeedServiceBridge {
+    private static ProcessScope sXSurfaceProcessScope;
+
+    public static ProcessScope xSurfaceProcessScope() {
+        if (sXSurfaceProcessScope == null) {
+            sXSurfaceProcessScope = AppHooks.get().getExternalSurfaceProcessScope(
+                    new FeedProcessScopeDependencyProvider());
+        }
+        return sXSurfaceProcessScope;
+    }
+
     public static boolean isEnabled() {
         return FeedServiceBridgeJni.get().isEnabled();
     }
@@ -37,6 +49,17 @@ public final class FeedServiceBridge {
     @CalledByNative
     public static void clearAll() {
         FeedStreamSurface.clearAll();
+    }
+
+    @CalledByNative
+    public static void prefetchImage(String url) {
+        ProcessScope processScope = xSurfaceProcessScope();
+        if (processScope != null) {
+            ImagePrefetcher imagePrefetcher = processScope.provideImagePrefetcher();
+            if (imagePrefetcher != null) {
+                imagePrefetcher.prefetchImage(url);
+            }
+        }
     }
 
     /** Called at startup to trigger creation of |FeedService|. */

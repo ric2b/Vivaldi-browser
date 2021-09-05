@@ -23,35 +23,37 @@ const base::flat_map<UINT, std::string>& PredefinedFormatToNameMap() {
   static const base::NoDestructor<base::flat_map<UINT, std::string>>
       format_to_name({
           {CF_TEXT, "CF_TEXT"},
-          {CF_BITMAP, "CF_BITMAP"},
-          {CF_METAFILEPICT, "CF_METAFILEPICT"},
-          {CF_SYLK, "CF_SYLK"},
           {CF_DIF, "CF_DIF"},
           {CF_TIFF, "CF_TIFF"},
           {CF_OEMTEXT, "CF_OEMTEXT"},
           {CF_DIB, "CF_DIB"},
-          {CF_PALETTE, "CF_PALETTE"},
           {CF_PENDATA, "CF_PENDATA"},
           {CF_RIFF, "CF_RIFF"},
           {CF_WAVE, "CF_WAVE"},
           {CF_UNICODETEXT, "CF_UNICODETEXT"},
-          {CF_ENHMETAFILE, "CF_ENHMETAFILE"},
-          {CF_HDROP, "CF_HDROP"},
-          {CF_LOCALE, "CF_LOCALE"},
           {CF_DIBV5, "CF_DIBV5"},
           {CF_OWNERDISPLAY, "CF_OWNERDISPLAY"},
-          {CF_DSPTEXT, "CF_DSPTEXT"},
-          {CF_DSPBITMAP, "CF_DSPBITMAP"},
-          {CF_DSPMETAFILEPICT, "CF_DSPMETAFILEPICT"},
-          {CF_DSPENHMETAFILE, "CF_DSPENHMETAFILE"},
 
-          // These formats are predefined but explicitly blocked from use.
-          // TODO(huangdarwin): Which other formats should always be disallowed?
-          //  {CF_MAX, "CF_MAX"},
-          //  {CF_PRIVATEFIRST, "CF_PRIVATEFIRST"},
-          //  {CF_PRIVATELAST, "CF_PRIVATELAST"},
-          //  {CF_GDIOBJFIRST, "CF_GDIOBJFIRST"},
-          //  {CF_GDIOBJLAST, "CF_GDIOBJLAST"},
+          // These formats are predefined but explicitly blocked from use,
+          // either due to passing along handles, or concerns regarding exposing
+          // private information.
+          // {CF_MAX, "CF_MAX"},
+          // {CF_PRIVATEFIRST, "CF_PRIVATEFIRST"},
+          // {CF_PRIVATELAST, "CF_PRIVATELAST"},
+          // {CF_GDIOBJFIRST, "CF_GDIOBJFIRST"},
+          // {CF_GDIOBJLAST, "CF_GDIOBJLAST"},
+          // {CF_BITMAP, "CF_BITMAP"},
+          // {CF_SYLK, "CF_SYLK"},
+          // {CF_METAFILEPICT, "CF_METAFILEPICT"},
+          // {CF_DSPTEXT, "CF_DSPTEXT"},
+          // {CF_DSPBITMAP, "CF_DSPBITMAP"},
+          // {CF_DSPMETAFILEPICT, "CF_DSPMETAFILEPICT"},
+          // {CF_DSPENHMETAFILE, "CF_DSPENHMETAFILE"},
+          // {CF_ENHMETAFILE, "CF_ENHMETAFILE"},
+          // {CF_HDROP, "CF_HDROP"},
+          // {CF_LOCALE, "CF_LOCALE"},
+          // {CF_PALETTE, "CF_PALETTE"},
+
       });
   return *format_to_name;
 }
@@ -135,7 +137,7 @@ std::string ClipboardFormatType::GetName() const {
     return std::string();
   }
 
-  return base::UTF16ToUTF8(base::string16(name_buffer->data(), name_size));
+  return base::WideToUTF8(std::wstring(name_buffer->data(), name_size));
 }
 
 bool ClipboardFormatType::operator<(const ClipboardFormatType& other) const {
@@ -157,7 +159,7 @@ ClipboardFormatType ClipboardFormatType::GetType(
     return ClipboardFormatType(it->second);
 
   return ClipboardFormatType(
-      ::RegisterClipboardFormat(base::ASCIIToUTF16(format_string).c_str()));
+      ::RegisterClipboardFormat(base::ASCIIToWide(format_string).c_str()));
 }
 
 // The following formats can be referenced by ClipboardUtilWin::GetPlainText.
@@ -263,7 +265,7 @@ const ClipboardFormatType& ClipboardFormatType::GetFileDescriptorType() {
 
 // static
 const ClipboardFormatType& ClipboardFormatType::GetFileContentZeroType() {
-  // Note this uses a storage media type of TYMED_HGLOBAL, which is not commonly
+  // This uses a storage media type of TYMED_HGLOBAL, which is not commonly
   // used with CFSTR_FILECONTENTS (but used in Chromium--see
   // OSExchangeDataProviderWin::SetFileContents). Use GetFileContentAtIndexType
   // if TYMED_ISTREAM and TYMED_ISTORAGE are needed.
@@ -330,13 +332,6 @@ const ClipboardFormatType& ClipboardFormatType::GetWebCustomDataType() {
   // TODO(http://crbug.com/106449): Standardize this name.
   static base::NoDestructor<ClipboardFormatType> format(
       ::RegisterClipboardFormat(L"Chromium Web Custom MIME Data Format"));
-  return *format;
-}
-
-// static
-const ClipboardFormatType& ClipboardFormatType::GetPepperCustomDataType() {
-  static base::NoDestructor<ClipboardFormatType> format(
-      ::RegisterClipboardFormat(L"Chromium Pepper MIME Data Format"));
   return *format;
 }
 

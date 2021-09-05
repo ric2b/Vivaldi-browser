@@ -35,6 +35,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ChromeWindow;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -47,7 +48,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 
 import java.util.concurrent.TimeoutException;
@@ -75,8 +75,9 @@ public class AddressAccessoryIntegrationTest {
         mHelper.loadTestPage("/chrome/test/data/autofill/autofill_test_form.html", false, false,
                 keyboardDelegate);
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "Marcus McSpartangregor", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "",
-                "94102", "", "US", "(415) 999-0000", "marc@acme-mail.inc", "en"));
+                "" /* honorific prefix */, "Marcus McSpartangregor", "Acme Inc", "1 Main\nApt A",
+                "CA", "San Francisco", "", "94102", "", "US", "(415) 999-0000",
+                "marc@acme-mail.inc", "en"));
         DOMUtils.waitForNonZeroNodeBounds(mHelper.getWebContents(), "NAME_FIRST");
     }
 

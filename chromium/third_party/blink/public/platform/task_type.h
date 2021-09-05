@@ -48,6 +48,9 @@ enum class TaskType : unsigned char {
   // This is a part of Networking task source used to annotate tasks which are
   // posted from the loading stack (i.e. WebURLLoader).
   kNetworkingWithURLLoaderAnnotation = 50,
+  // This is a part of Networking task that should not be frozen when a page is
+  // frozen.
+  kNetworkingUnfreezable = 75,
   // This task source is used for control messages between kNetworking tasks.
   kNetworkingControl = 4,
   // This task source is used to queue calls to history.back() and similar APIs.
@@ -268,13 +271,14 @@ enum class TaskType : unsigned char {
   // kMainThreadTaskQueueCleanup = 52,
   kMainThreadTaskQueueMemoryPurge = 62,
   kMainThreadTaskQueueNonWaking = 69,
+  kMainThreadTaskQueueIPCTracking = 74,
   kCompositorThreadTaskQueueDefault = 45,
   kCompositorThreadTaskQueueInput = 49,
   kWorkerThreadTaskQueueDefault = 46,
   kWorkerThreadTaskQueueV8 = 47,
   kWorkerThreadTaskQueueCompositor = 48,
 
-  kCount = 74,
+  kCount = 76,
 };
 
 }  // namespace blink

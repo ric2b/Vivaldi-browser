@@ -49,15 +49,10 @@ update_target("//content/renderer:renderer") {
   ]
 }
 
-update_template_instance("//third_party/blink/renderer/core/page:page") {
+update_template_instance("//third_party/blink/renderer/core:core") {
   sources += [
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.cc",
-    "//vivaldi/components/blink/vivaldi_add_search_context_menu.h"
-  ]
-}
-
-update_template_instance("//third_party/blink/renderer/core/exported:exported") {
-  sources += [
+    "//vivaldi/components/blink/vivaldi_add_search_context_menu.h",
     "//vivaldi/components/blink/vivaldi_web_settings_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_view_impl.cc",
   ]

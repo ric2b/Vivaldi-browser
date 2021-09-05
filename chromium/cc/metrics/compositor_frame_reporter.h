@@ -115,10 +115,9 @@ class CC_EXPORT CompositorFrameReporter {
     kCompositingInputs = 5,
     kCompositingAssignments = 6,
     kPaint = 7,
-    kScrollingCoordinator = 8,
-    kCompositeCommit = 9,
-    kUpdateLayers = 10,
-    kBeginMainSentToStarted = 11,
+    kCompositeCommit = 8,
+    kUpdateLayers = 9,
+    kBeginMainSentToStarted = 10,
     kBreakdownCount
   };
 
@@ -149,7 +148,8 @@ class CC_EXPORT CompositorFrameReporter {
                           LatencyUkmReporter* latency_ukm_reporter,
                           bool should_report_metrics,
                           SmoothThread smooth_thread,
-                          int layer_tree_host_id);
+                          int layer_tree_host_id,
+                          DroppedFrameCounter* dropped_frame_counter);
   ~CompositorFrameReporter();
 
   CompositorFrameReporter(const CompositorFrameReporter& reporter) = delete;
@@ -166,7 +166,7 @@ class CC_EXPORT CompositorFrameReporter {
   void SetBlinkBreakdown(std::unique_ptr<BeginMainFrameMetrics> blink_breakdown,
                          base::TimeTicks begin_main_start);
   void SetVizBreakdown(const viz::FrameTimingDetails& viz_breakdown);
-  void SetEventsMetrics(std::vector<EventMetrics> events_metrics);
+  void SetEventsMetrics(EventMetrics::List events_metrics);
 
   int StageHistorySizeForTesting() { return stage_history_.size(); }
 
@@ -198,10 +198,6 @@ class CC_EXPORT CompositorFrameReporter {
   void set_tick_clock(const base::TickClock* tick_clock) {
     DCHECK(tick_clock);
     tick_clock_ = tick_clock;
-  }
-
-  void SetDroppedFrameCounter(DroppedFrameCounter* counter) {
-    dropped_frame_counter_ = counter;
   }
 
   bool has_partial_update() const { return has_partial_update_; }
@@ -294,7 +290,7 @@ class CC_EXPORT CompositorFrameReporter {
   std::vector<StageData> stage_history_;
 
   // List of metrics for events affecting this frame.
-  std::vector<EventMetrics> events_metrics_;
+  EventMetrics::List events_metrics_;
 
   std::bitset<static_cast<size_t>(FrameReportType::kMaxValue) + 1>
       report_types_;

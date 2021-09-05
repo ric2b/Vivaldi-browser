@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 
 #include "ash/public/cpp/file_icon_util.h"
+#include "ash/public/cpp/holding_space/holding_space_color_provider.h"
 #include "ash/public/cpp/holding_space/holding_space_constants.h"
 #include "ash/public/cpp/holding_space/holding_space_image.h"
 #include "base/barrier_closure.h"
@@ -31,27 +32,31 @@ gfx::ImageSkia GetPlaceholderImage(HoldingSpaceItem::Type type,
   gfx::Size size;
   switch (type) {
     case HoldingSpaceItem::Type::kDownload:
+    case HoldingSpaceItem::Type::kNearbyShare:
     case HoldingSpaceItem::Type::kPinnedFile:
       size = gfx::Size(kHoldingSpaceChipIconSize, kHoldingSpaceChipIconSize);
       break;
+    case HoldingSpaceItem::Type::kScreenRecording:
     case HoldingSpaceItem::Type::kScreenshot:
-      size = kHoldingSpaceScreenshotSize;
+      size = kHoldingSpaceScreenCaptureSize;
       break;
   }
+
+  const SkColor color = HoldingSpaceColorProvider::Get()->GetFileIconColor();
 
   // NOTE: We superimpose the file type icon for `file_path` over a transparent
   // bitmap in order to center it within the placeholder image at a fixed size.
   SkBitmap bitmap;
   bitmap.allocN32Pixels(size.width(), size.height());
   return gfx::ImageSkiaOperations::CreateSuperimposedImage(
-      gfx::ImageSkia::CreateFrom1xBitmap(bitmap), GetIconForPath(file_path));
+      gfx::ImageSkia::CreateFrom1xBitmap(bitmap),
+      GetIconForPath(file_path, color));
 }
 
 }  // namespace
 
 ValidityRequirement::ValidityRequirement() = default;
-ValidityRequirement::ValidityRequirement(const ValidityRequirement& other) =
-    default;
+ValidityRequirement::ValidityRequirement(const ValidityRequirement&) = default;
 ValidityRequirement::ValidityRequirement(ValidityRequirement&& other) = default;
 
 // Utilities -------------------------------------------------------------------
@@ -80,11 +85,22 @@ void FilePathValid(Profile* profile,
           std::move(callback), file_path_with_requirement.second));
 }
 
+void PartitionFilePathsByExistence(
+    Profile* profile,
+    FilePathList file_paths,
+    PartitionFilePathsByExistenceCallback callback) {
+  FilePathsWithValidityRequirements file_paths_with_requirements;
+  for (const auto& file_path : file_paths)
+    file_paths_with_requirements.push_back({file_path, /*requirements=*/{}});
+  PartitionFilePathsByValidity(profile, file_paths_with_requirements,
+                               std::move(callback));
+}
+
 void PartitionFilePathsByValidity(
     Profile* profile,
-    FilePathsWithValidityRequirements file_paths_with_requirement,
+    FilePathsWithValidityRequirements file_paths_with_requirements,
     PartitionFilePathsByValidityCallback callback) {
-  if (file_paths_with_requirement.empty()) {
+  if (file_paths_with_requirements.empty()) {
     std::move(callback).Run(/*valid_file_paths=*/{},
                             /*invalid_file_paths=*/{});
     return;
@@ -97,7 +113,7 @@ void PartitionFilePathsByValidity(
   auto* invalid_file_paths_ptr = invalid_file_paths.get();
 
   FilePathList file_paths;
-  for (const auto& file_path_with_requirement : file_paths_with_requirement)
+  for (const auto& file_path_with_requirement : file_paths_with_requirements)
     file_paths.push_back(file_path_with_requirement.first);
 
   // This `barrier_closure` will be run after verifying the existence of all
@@ -105,7 +121,7 @@ void PartitionFilePathsByValidity(
   // `invalid_file_paths` will have been populated by the time of
   // invocation.
   base::RepeatingClosure barrier_closure = base::BarrierClosure(
-      file_paths_with_requirement.size(),
+      file_paths_with_requirements.size(),
       base::BindOnce(
           [](FilePathList sorted_file_paths,
              std::unique_ptr<FilePathList> valid_file_paths,
@@ -136,7 +152,7 @@ void PartitionFilePathsByValidity(
   // Verify existence of each `file_path`. Upon successful check of existence,
   // each `file_path` should be pushed into either `valid_file_paths` or
   // `invalid_file_paths` as appropriate.
-  for (const auto& file_path_with_requirement : file_paths_with_requirement) {
+  for (const auto& file_path_with_requirement : file_paths_with_requirements) {
     FilePathValid(
         profile, file_path_with_requirement,
         base::BindOnce(

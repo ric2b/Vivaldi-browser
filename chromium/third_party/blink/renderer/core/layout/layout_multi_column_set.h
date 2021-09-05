@@ -77,6 +77,10 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
     NOT_DESTROYED();
     return fragmentainer_groups_.Last();
   }
+  MultiColumnFragmentainerGroup& LastFragmentainerGroup() {
+    NOT_DESTROYED();
+    return fragmentainer_groups_.Last();
+  }
   unsigned FragmentainerGroupIndexAtFlowThreadOffset(LayoutUnit,
                                                      PageBoundaryRule) const;
   MultiColumnFragmentainerGroup& FragmentainerGroupAtFlowThreadOffset(
@@ -102,7 +106,7 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
 
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectLayoutMultiColumnSet ||
+    return type == kLayoutObjectMultiColumnSet ||
            LayoutBlockFlow::IsOfType(type);
   }
   bool CanHaveChildren() const final {
@@ -149,7 +153,7 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
   }
   LayoutMultiColumnFlowThread* MultiColumnFlowThread() const {
     NOT_DESTROYED();
-    return ToLayoutMultiColumnFlowThread(FlowThread());
+    return To<LayoutMultiColumnFlowThread>(FlowThread());
   }
 
   LayoutMultiColumnSet* NextSiblingMultiColumnSet() const;
@@ -264,7 +268,7 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
   bool ComputeColumnRuleBounds(const LayoutPoint& paint_offset,
                                Vector<LayoutRect>& column_rule_bounds) const;
 
-  void UpdateFromNG();
+  void FinishLayoutFromNG();
 
  protected:
   LayoutMultiColumnSet(LayoutFlowThread*);
@@ -313,7 +317,12 @@ class CORE_EXPORT LayoutMultiColumnSet final : public LayoutBlockFlow {
   unsigned last_actual_column_count_;
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutMultiColumnSet, IsLayoutMultiColumnSet());
+template <>
+struct DowncastTraits<LayoutMultiColumnSet> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsLayoutMultiColumnSet();
+  }
+};
 
 }  // namespace blink
 

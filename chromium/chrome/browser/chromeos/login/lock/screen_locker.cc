@@ -40,10 +40,8 @@
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
-#include "chrome/browser/chromeos/login/supervised/supervised_user_authentication.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
-#include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
@@ -82,7 +80,7 @@ namespace chromeos {
 
 namespace {
 
-// Returns true if fingerprint authentication is available for |user|.
+// Returns true if fingerprint authentication is available for `user`.
 bool IsFingerprintAvailableForUser(const user_manager::User* user) {
   quick_unlock::QuickUnlockStorage* quick_unlock_storage =
       quick_unlock::QuickUnlockFactory::GetForUser(user);
@@ -199,6 +197,11 @@ void ScreenLocker::Init() {
       input_method::InputMethodManager::Get();
   saved_ime_state_ = imm->GetActiveIMEState();
   imm->SetState(saved_ime_state_->Clone());
+  input_method::InputMethodManager::Get()->GetActiveIMEState()->SetUIStyle(
+      input_method::InputMethodManager::UIStyle::kLock);
+  input_method::InputMethodManager::Get()
+      ->GetActiveIMEState()
+      ->EnableLockScreenLayouts();
 
   authenticator_ = UserSessionManager::GetInstance()->CreateAuthenticator(this);
   extended_authenticator_ = ExtendedAuthenticator::Create(this);
@@ -467,25 +470,6 @@ void ScreenLocker::OnPinAttemptDone(const UserContext& user_context,
 
 void ScreenLocker::ContinueAuthenticate(
     const chromeos::UserContext& user_context) {
-  const user_manager::User* user = FindUnlockUser(user_context.GetAccountId());
-  if (user) {
-    // Special case: supervised users. Use special authenticator.
-    if (user->GetType() == user_manager::USER_TYPE_SUPERVISED) {
-      UserContext updated_context = ChromeUserManager::Get()
-                                        ->GetSupervisedUserManager()
-                                        ->GetAuthentication()
-                                        ->TransformKey(user_context);
-      content::GetUIThreadTaskRunner({})->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              &ExtendedAuthenticator::AuthenticateToCheck,
-              extended_authenticator_.get(), updated_context,
-              base::Bind(&ScreenLocker::OnPasswordAuthSuccess,
-                         weak_factory_.GetWeakPtr(), updated_context)));
-      return;
-    }
-  }
-
   if (user_context.GetAccountId().GetAccountType() ==
           AccountType::ACTIVE_DIRECTORY &&
       user_context.GetKey()->GetKeyType() == Key::KEY_TYPE_PASSWORD_PLAIN) {
@@ -582,7 +566,7 @@ void ScreenLocker::ShutDownClass() {
   delete g_screen_lock_observer;
   g_screen_lock_observer = nullptr;
 
-  // Delete |screen_locker_| if it is being shown.
+  // Delete `screen_locker_` if it is being shown.
   ScheduleDeletion();
 }
 
@@ -755,10 +739,6 @@ void ScreenLocker::ScreenLockReady() {
 
   session_manager::SessionManager::Get()->SetSessionState(
       session_manager::SessionState::LOCKED);
-
-  input_method::InputMethodManager::Get()
-      ->GetActiveIMEState()
-      ->EnableLockScreenLayouts();
 
   // Start a fingerprint authentication session if fingerprint is available for
   // the primary user. Only the primary user can use fingerprint.

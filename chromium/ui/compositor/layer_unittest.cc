@@ -22,7 +22,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -841,6 +841,25 @@ TEST_F(LayerWithDelegateTest, Cloning) {
   EXPECT_EQ(SK_ColorGREEN, clone->background_color());
 }
 
+TEST_F(LayerWithDelegateTest, CloneDamagedRegion) {
+  std::unique_ptr<Layer> layer = CreateLayer(LAYER_TEXTURED);
+  // Set a delegate so that the damage region is accumulated.
+  DrawTreeLayerDelegate delegate(gfx::Rect(0, 0, 10, 10));
+  layer->set_delegate(&delegate);
+
+  cc::Region damaged_region;
+  damaged_region.Union(gfx::Rect(10, 10, 5, 5));
+  damaged_region.Union(gfx::Rect(20, 20, 7, 7));
+
+  for (auto rect : damaged_region)
+    layer->SchedulePaint(rect);
+
+  ASSERT_EQ(damaged_region, layer->damaged_region());
+
+  auto clone = layer->Clone();
+  EXPECT_EQ(damaged_region, clone->damaged_region());
+}
+
 TEST_F(LayerWithDelegateTest, Mirroring) {
   std::unique_ptr<Layer> root = CreateNoTextureLayer(gfx::Rect(0, 0, 100, 100));
   std::unique_ptr<Layer> child = CreateLayer(LAYER_TEXTURED);
@@ -1431,8 +1450,7 @@ TEST_F(LayerWithNullDelegateTest, UpdateDamageInDeferredPaint) {
   EXPECT_EQ(bound1, root->damaged_region_for_testing());
   root->SendDamagedRects();
   EXPECT_EQ(gfx::Rect(), root->cc_layer_for_testing()->update_rect());
-  root->PaintContentsToDisplayList(
-      cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  root->PaintContentsToDisplayList();
   EXPECT_EQ(gfx::Rect(), LastInvalidation());
 
   // During deferring paint request, a new invalid_rect will be accumulated.
@@ -1443,8 +1461,7 @@ TEST_F(LayerWithNullDelegateTest, UpdateDamageInDeferredPaint) {
   EXPECT_EQ(bound_union, root->damaged_region_for_testing().bounds());
   root->SendDamagedRects();
   EXPECT_EQ(gfx::Rect(), root->cc_layer_for_testing()->update_rect());
-  root->PaintContentsToDisplayList(
-      cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  root->PaintContentsToDisplayList();
   EXPECT_EQ(gfx::Rect(), LastInvalidation());
 
   // Remove deferring paint request.
@@ -1454,8 +1471,7 @@ TEST_F(LayerWithNullDelegateTest, UpdateDamageInDeferredPaint) {
   // paint, i.e. union of bound1 and bound2.
   root->SendDamagedRects();
   EXPECT_EQ(bound_union, root->cc_layer_for_testing()->update_rect());
-  root->PaintContentsToDisplayList(
-      cc::ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
+  root->PaintContentsToDisplayList();
   EXPECT_EQ(bound_union, LastInvalidation());
 }
 

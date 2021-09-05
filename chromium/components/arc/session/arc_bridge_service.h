@@ -40,6 +40,7 @@ class ClipboardHost;
 class ClipboardInstance;
 class CrashCollectorHost;
 class CrashCollectorInstance;
+class DigitalGoodsInstance;
 class DiskQuotaHost;
 class DiskQuotaInstance;
 class EnterpriseReportingHost;
@@ -84,6 +85,8 @@ class ScreenCaptureHost;
 class ScreenCaptureInstance;
 class SensorHost;
 class SensorInstance;
+class SharesheetHost;
+class SharesheetInstance;
 class SmartCardManagerHost;
 class SmartCardManagerInstance;
 class StorageManagerInstance;
@@ -181,6 +184,9 @@ class ArcBridgeService {
   crash_collector() {
     return &crash_collector_;
   }
+  ConnectionHolder<mojom::DigitalGoodsInstance>* digital_goods() {
+    return &digital_goods_;
+  }
   ConnectionHolder<mojom::DiskQuotaInstance, mojom::DiskQuotaHost>*
   disk_quota() {
     return &disk_quota_;
@@ -258,6 +264,10 @@ class ArcBridgeService {
   ConnectionHolder<mojom::SensorInstance, mojom::SensorHost>* sensor() {
     return &sensor_;
   }
+  ConnectionHolder<mojom::SharesheetInstance, mojom::SharesheetHost>*
+  sharesheet() {
+    return &sharesheet_;
+  }
   ConnectionHolder<mojom::SmartCardManagerInstance,
                    mojom::SmartCardManagerHost>*
   smart_card_manager() {
@@ -311,6 +321,7 @@ class ArcBridgeService {
   ConnectionHolder<mojom::ClipboardInstance, mojom::ClipboardHost> clipboard_;
   ConnectionHolder<mojom::CrashCollectorInstance, mojom::CrashCollectorHost>
       crash_collector_;
+  ConnectionHolder<mojom::DigitalGoodsInstance> digital_goods_;
   ConnectionHolder<mojom::DiskQuotaInstance, mojom::DiskQuotaHost> disk_quota_;
   ConnectionHolder<mojom::EnterpriseReportingInstance,
                    mojom::EnterpriseReportingHost>
@@ -345,6 +356,8 @@ class ArcBridgeService {
   ConnectionHolder<mojom::ScreenCaptureInstance, mojom::ScreenCaptureHost>
       screen_capture_;
   ConnectionHolder<mojom::SensorInstance, mojom::SensorHost> sensor_;
+  ConnectionHolder<mojom::SharesheetInstance, mojom::SharesheetHost>
+      sharesheet_;
   ConnectionHolder<mojom::SmartCardManagerInstance, mojom::SmartCardManagerHost>
       smart_card_manager_;
   ConnectionHolder<mojom::StorageManagerInstance> storage_manager_;

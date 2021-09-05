@@ -48,7 +48,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="LocalSearchService.Backend" enum="LocalSearchServiceBackend"
-    expires_after="2020-11-30">
+    expires_after="2021-06-30">
 <!-- Name completed by histogram_suffixes name="IndexId" -->
 
   <owner>jiameng@chromium.org</owner>
@@ -62,7 +62,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="LocalSearchService.DailySearch" units="count"
-    expires_after="2020-11-30">
+    expires_after="2021-06-30">
 <!-- Name completed by histogram_suffixes name="IndexId" -->
 
   <owner>jiameng@chromium.org</owner>
@@ -80,7 +80,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="LocalSearchService.MetricsDailyEventInterval"
-    enum="DailyEventIntervalType" expires_after="2021-01-31">
+    enum="DailyEventIntervalType" expires_after="2021-06-30">
   <owner>jiameng@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <owner>thanhdng@chromium.org</owner>
@@ -91,7 +91,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="LocalSearchService.NumberDocuments" units="count"
-    expires_after="2020-11-30">
+    expires_after="2021-06-30">
 <!-- Name completed by histogram_suffixes name="IndexId" -->
 
   <owner>jiameng@chromium.org</owner>
@@ -106,7 +106,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="LocalSearchService.NumberResults" units="count"
-    expires_after="2020-11-30">
+    expires_after="2021-06-30">
 <!-- Name completed by histogram_suffixes name="IndexId" -->
 
   <owner>jiameng@chromium.org</owner>
@@ -119,7 +119,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="LocalSearchService.ResponseStatus"
-    enum="LocalSearchServiceResponseStatus" expires_after="2020-11-30">
+    enum="LocalSearchServiceResponseStatus" expires_after="2021-06-30">
 <!-- Name completed by histogram_suffixes name="IndexId" -->
 
   <owner>jiameng@chromium.org</owner>
@@ -132,7 +132,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="LocalSearchService.SearchLatency" units="ms"
-    expires_after="2020-11-30">
+    expires_after="2021-06-30">
 <!-- Name completed by histogram_suffixes name="IndexId" -->
 
   <owner>jiameng@chromium.org</owner>
@@ -315,14 +315,27 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram base="true" name="LocalStorageContext.OpenResultAfter"
+<histogram
+    name="LocalStorageContext.OpenResultAfter{LocalStorageContextOpenReasons}"
     enum="LocalStorageOpenError" expires_after="M87">
-<!-- Name completed by histogram_suffixes name="LocalStorageContextOpenReasons" -->
-
   <owner>mek@chromium.org</owner>
   <summary>
     The result of opening the LevelDB database that backs LocalStorage.
+    {LocalStorageContextOpenReasons}
   </summary>
+  <token key="LocalStorageContextOpenReasons">
+    <variant name="">
+      <obsolete>
+        Base histogram. Use suffixes of this histogram instead.
+      </obsolete>
+    </variant>
+    <variant name="CommitErrors" summary="After too many commit errors."/>
+    <variant name="InvalidVersion"
+        summary="After an invalid version was read."/>
+    <variant name="OpenFailed" summary="After opening the DB failed."/>
+    <variant name="ReadVersionError"
+        summary="After reading the schema version failed."/>
+  </token>
 </histogram>
 
 <histogram name="LocalStorageContext.ReadVersionError" enum="LevelDBStatus"

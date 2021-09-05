@@ -9,9 +9,9 @@ import android.content.Context;
 import org.chromium.android_webview.nonembedded.WebViewApkApplication;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.chrome.browser.base.SplitMonochromeApplication;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.content_public.browser.ChildProcessCreationParams;
 
 /**
@@ -32,9 +32,7 @@ public class MonochromeApplication extends ChromeApplication {
     }
 
     /** Monochrome application logic. */
-    @UsedByReflection("SplitMonochromeApplication.java")
-    public static class MonochromeApplicationImpl extends ChromeApplication.ChromeApplicationImpl {
-        @UsedByReflection("SplitMonochromeApplication.java")
+    public static class MonochromeApplicationImpl extends ChromeApplicationImpl {
         public MonochromeApplicationImpl() {}
 
         @Override

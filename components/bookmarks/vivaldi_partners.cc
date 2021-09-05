@@ -130,10 +130,14 @@ bool ParsePartnerDatabaseDetailsList(
       } else if (property == kThumbnailKey) {
         if (!v.is_string())
           return error(property + " is not a string");
-        if (!HasPartnerThumbnailPrefix(v.GetString()))
-          return error(property + " value does not start with " +
-                       kPartnerThumbnailUrlPrefix);
-        details.thumbnail = std::move(v.GetString());
+        // For convenience of partners.json maintainence allow but ignore an
+        // empty thumbnail.
+        if (!v.GetString().empty()) {
+          if (!HasPartnerThumbnailPrefix(v.GetString()))
+            return error(property + " value does not start with " +
+                         kPartnerThumbnailUrlPrefix);
+          details.thumbnail = std::move(v.GetString());
+        }
         bookmark_only = true;
       } else {
         return error("unsupported or unknown property '" + property + "'");

@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
@@ -123,15 +123,14 @@ void LoadStreamTask::UploadActionsComplete(UploadActionsTask::Result result) {
   latencies_->StepComplete(LoadLatencyTimes::kUploadActions);
   stream_->GetNetwork()->SendQueryRequest(
       CreateFeedQueryRefreshRequest(
-          GetRequestReason(load_type_), stream_->GetRequestMetadata(),
+          GetRequestReason(load_type_),
+          stream_->GetRequestMetadata(/*is_for_next_page=*/false),
           stream_->GetMetadata()->GetConsistencyToken()),
       force_signed_out_request,
-      base::BindOnce(&LoadStreamTask::QueryRequestComplete, GetWeakPtr(),
-                     force_signed_out_request));
+      base::BindOnce(&LoadStreamTask::QueryRequestComplete, GetWeakPtr()));
 }
 
 void LoadStreamTask::QueryRequestComplete(
-    bool was_forced_signed_out_request,
     FeedNetwork::QueryRequestResult result) {
   latencies_->StepComplete(LoadLatencyTimes::kQueryRequest);
 
@@ -149,14 +148,11 @@ void LoadStreamTask::QueryRequestComplete(
       return Done(LoadStreamStatus::kNoResponseBody);
   }
 
-  bool was_signed_in_request =
-      !was_forced_signed_out_request && stream_->IsSignedIn();
-
   RefreshResponseData response_data =
       stream_->GetWireResponseTranslator()->TranslateWireResponse(
           *result.response_body,
           StreamModelUpdateRequest::Source::kNetworkUpdate,
-          was_signed_in_request, stream_->GetClock()->Now());
+          result.response_info.was_signed_in, stream_->GetClock()->Now());
   if (!response_data.model_update_request)
     return Done(LoadStreamStatus::kProtoTranslationFailed);
 
@@ -171,6 +167,9 @@ void LoadStreamTask::QueryRequestComplete(
                                    .privacy_notice_fulfilled();
   stream_->SetLastStreamLoadHadNoticeCard(isNoticeCardFulfilled);
   MetricsReporter::NoticeCardFulfilled(isNoticeCardFulfilled);
+
+  stream_->GetMetadata()->MaybeUpdateSessionId(response_data.session_id,
+                                               stream_->GetClock());
 
   if (load_type_ != LoadType::kBackgroundRefresh) {
     auto model = std::make_unique<StreamModel>();

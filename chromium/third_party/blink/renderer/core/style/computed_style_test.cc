@@ -145,6 +145,9 @@ TEST(ComputedStyleTest, LayoutContainmentStackingContext) {
 }
 
 TEST(ComputedStyleTest, FirstPublicPseudoStyle) {
+  static_assert(kFirstPublicPseudoId == kPseudoIdFirstLine,
+                "Make sure we are testing the first public pseudo id");
+
   scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
   style->SetHasPseudoElementStyle(kPseudoIdFirstLine);
   EXPECT_TRUE(style->HasPseudoElementStyle(kPseudoIdFirstLine));
@@ -152,9 +155,12 @@ TEST(ComputedStyleTest, FirstPublicPseudoStyle) {
 }
 
 TEST(ComputedStyleTest, LastPublicPseudoElementStyle) {
+  static_assert(kFirstInternalPseudoId - 1 == kPseudoIdTargetText,
+                "Make sure we are testing the last public pseudo id");
+
   scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
-  style->SetHasPseudoElementStyle(kPseudoIdScrollbar);
-  EXPECT_TRUE(style->HasPseudoElementStyle(kPseudoIdScrollbar));
+  style->SetHasPseudoElementStyle(kPseudoIdTargetText);
+  EXPECT_TRUE(style->HasPseudoElementStyle(kPseudoIdTargetText));
   EXPECT_TRUE(style->HasAnyPseudoElementStyles());
 }
 
@@ -659,7 +665,6 @@ TEST(ComputedStyleTest, CustomPropertiesInheritance_StyleRecalc) {
 }
 
 TEST(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
-  ScopedCSSColorSchemeForTest scoped_property_enabled(true);
   ScopedCSSColorSchemeUARenderingForTest scoped_ua_enabled(true);
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
@@ -667,7 +672,8 @@ TEST(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
   const ComputedStyle* initial = &ComputedStyle::InitialStyle();
 
   ColorSchemeHelper color_scheme_helper(dummy_page_holder_->GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   StyleResolverState state(dummy_page_holder_->GetDocument(),
                            *dummy_page_holder_->GetDocument().documentElement(),
                            initial, initial);
@@ -684,16 +690,15 @@ TEST(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
   light_value->Append(*CSSIdentifierValue::Create(CSSValueID::kLight));
 
   To<Longhand>(ref.GetProperty()).ApplyValue(state, *dark_value);
-  EXPECT_EQ(ColorScheme::kDark, style->UsedColorScheme());
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark, style->UsedColorScheme());
 
   To<Longhand>(ref.GetProperty()).ApplyValue(state, *light_value);
-  EXPECT_EQ(ColorScheme::kLight, style->UsedColorScheme());
+  EXPECT_EQ(mojom::blink::ColorScheme::kLight, style->UsedColorScheme());
 }
 
 TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
   using css_test_helpers::ParseDeclarationBlock;
 
-  ScopedCSSColorSchemeForTest scoped_property_enabled(true);
   ScopedCSSColorSchemeUARenderingForTest scoped_ua_enabled(true);
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
@@ -701,7 +706,8 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
   const ComputedStyle* initial = &ComputedStyle::InitialStyle();
 
   ColorSchemeHelper color_scheme_helper(dummy_page_holder_->GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   StyleResolverState state(dummy_page_holder_->GetDocument(),
                            *dummy_page_holder_->GetDocument().documentElement(),
                            initial, initial);
@@ -736,7 +742,6 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
 TEST(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
   using css_test_helpers::ParseDeclarationBlock;
 
-  ScopedCSSColorSchemeForTest scoped_property_enabled(true);
   ScopedCSSColorSchemeUARenderingForTest scoped_ua_enabled(true);
 
   std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
@@ -744,7 +749,8 @@ TEST(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
   const ComputedStyle* initial = &ComputedStyle::InitialStyle();
 
   ColorSchemeHelper color_scheme_helper(dummy_page_holder_->GetDocument());
-  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  color_scheme_helper.SetPreferredColorScheme(
+      mojom::blink::PreferredColorScheme::kDark);
   StyleResolverState state(dummy_page_holder_->GetDocument(),
                            *dummy_page_holder_->GetDocument().documentElement(),
                            initial, initial);
@@ -1094,6 +1100,26 @@ TEST(ComputedStyleTest, ClonedStyleTransitionsAreIndependent) {
 
   EXPECT_EQ(2u, cloned_style->Transitions()->PropertyList().size());
   EXPECT_EQ(1u, style->Transitions()->PropertyList().size());
+}
+
+TEST(ComputedStyleTest, ApplyInitialAnimationNameAndTransitionProperty) {
+  std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
+      std::make_unique<DummyPageHolder>(IntSize(0, 0), nullptr);
+
+  const ComputedStyle* initial = &ComputedStyle::InitialStyle();
+  StyleResolverState state(dummy_page_holder_->GetDocument(),
+                           *dummy_page_holder_->GetDocument().documentElement(),
+                           initial, initial);
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+  state.SetStyle(style);
+  EXPECT_FALSE(style->Animations());
+  EXPECT_FALSE(style->Transitions());
+
+  To<Longhand>(GetCSSPropertyAnimationName()).ApplyInitial(state);
+  To<Longhand>(GetCSSPropertyTransitionProperty()).ApplyInitial(state);
+  EXPECT_FALSE(style->Animations());
+  EXPECT_FALSE(style->Transitions());
 }
 
 }  // namespace blink

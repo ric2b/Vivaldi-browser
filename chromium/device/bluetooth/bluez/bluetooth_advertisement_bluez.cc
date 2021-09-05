@@ -8,7 +8,7 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -89,7 +89,7 @@ BluetoothAdvertisementBlueZ::BluetoothAdvertisementBlueZ(
           bluez::BluetoothLEAdvertisementServiceProvider::AdvertisementType>(
           data->type()),
       data->service_uuids(), data->manufacturer_data(), data->solicit_uuids(),
-      data->service_data());
+      data->service_data(), data->scan_response_data());
 }
 
 void BluetoothAdvertisementBlueZ::Register(

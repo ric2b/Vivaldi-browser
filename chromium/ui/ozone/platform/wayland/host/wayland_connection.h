@@ -31,11 +31,14 @@ class WaylandOutputManager;
 class WaylandPointer;
 class WaylandShm;
 class WaylandTouch;
+class WaylandZAuraShell;
+class WaylandZcrCursorShapes;
 class WaylandZwpLinuxDmabuf;
 class WaylandDataDeviceManager;
 class WaylandCursorPosition;
 class WaylandWindowDragController;
 class GtkPrimarySelectionDeviceManager;
+class ZwpPrimarySelectionDeviceManager;
 class XdgForeignWrapper;
 
 class WaylandConnection {
@@ -67,7 +70,6 @@ class WaylandConnection {
   wp_viewporter* viewporter() const { return viewporter_.get(); }
   xdg_wm_base* shell() const { return shell_.get(); }
   zxdg_shell_v6* shell_v6() const { return shell_v6_.get(); }
-  zaura_shell* aura_shell() const { return aura_shell_.get(); }
   wl_seat* seat() const { return seat_.get(); }
   wp_presentation* presentation() const { return presentation_.get(); }
   zwp_text_input_manager_v1* text_input_manager_v1() const {
@@ -80,6 +82,9 @@ class WaylandConnection {
   zxdg_decoration_manager_v1* xdg_decoration_manager_v1() const {
     return xdg_decoration_manager_.get();
   }
+  zcr_extended_drag_v1* extended_drag_v1() const {
+    return extended_drag_v1_.get();
+  }
 
   void set_serial(uint32_t serial, EventType event_type) {
     serial_ = {serial, event_type};
@@ -88,7 +93,8 @@ class WaylandConnection {
   EventSerial event_serial() const { return serial_; }
 
   void SetCursorBitmap(const std::vector<SkBitmap>& bitmaps,
-                       const gfx::Point& location);
+                       const gfx::Point& hotspot_in_dips,
+                       int buffer_scale);
 
   WaylandEventSource* event_source() const { return event_source_.get(); }
 
@@ -116,6 +122,12 @@ class WaylandConnection {
     return buffer_manager_host_.get();
   }
 
+  WaylandZAuraShell* zaura_shell() const { return zaura_shell_.get(); }
+
+  WaylandZcrCursorShapes* zcr_cursor_shapes() const {
+    return zcr_cursor_shapes_.get();
+  }
+
   WaylandZwpLinuxDmabuf* zwp_dmabuf() const { return zwp_dmabuf_.get(); }
 
   WaylandDrm* drm() const { return drm_.get(); }
@@ -130,8 +142,13 @@ class WaylandConnection {
     return data_device_manager_.get();
   }
 
-  GtkPrimarySelectionDeviceManager* primary_selection_device_manager() const {
-    return primary_selection_device_manager_.get();
+  GtkPrimarySelectionDeviceManager* gtk_primary_selection_device_manager()
+      const {
+    return gtk_primary_selection_device_manager_.get();
+  }
+
+  ZwpPrimarySelectionDeviceManager* zwp_primary_selection_device_manager() const {
+    return zwp_primary_selection_device_manager_.get();
   }
 
   WaylandDataDragController* data_drag_controller() const {
@@ -151,6 +168,8 @@ class WaylandConnection {
   wl::Object<wl_surface> CreateSurface();
 
  private:
+  friend class WaylandConnectionTestApi;
+
   void Flush();
   void UpdateInputDevices(wl_seat* seat, uint32_t capabilities);
 
@@ -192,10 +211,10 @@ class WaylandConnection {
   wl::Object<wp_viewporter> viewporter_;
   wl::Object<zcr_keyboard_extension_v1> keyboard_extension_v1_;
   wl::Object<zwp_text_input_manager_v1> text_input_manager_v1_;
-  wl::Object<zaura_shell> aura_shell_;
   wl::Object<zwp_linux_explicit_synchronization_v1>
       linux_explicit_synchronization_;
   wl::Object<zxdg_decoration_manager_v1> xdg_decoration_manager_;
+  wl::Object<zcr_extended_drag_v1> extended_drag_v1_;
 
   // Event source instance. Must be declared before input objects so it
   // outlives them so thus being able to properly handle their destruction.
@@ -211,6 +230,8 @@ class WaylandConnection {
   std::unique_ptr<WaylandClipboard> clipboard_;
   std::unique_ptr<WaylandOutputManager> wayland_output_manager_;
   std::unique_ptr<WaylandCursorPosition> wayland_cursor_position_;
+  std::unique_ptr<WaylandZAuraShell> zaura_shell_;
+  std::unique_ptr<WaylandZcrCursorShapes> zcr_cursor_shapes_;
   std::unique_ptr<WaylandZwpLinuxDmabuf> zwp_dmabuf_;
   std::unique_ptr<WaylandDrm> drm_;
   std::unique_ptr<WaylandShm> shm_;
@@ -218,7 +239,10 @@ class WaylandConnection {
   std::unique_ptr<XdgForeignWrapper> xdg_foreign_;
 
   std::unique_ptr<GtkPrimarySelectionDeviceManager>
-      primary_selection_device_manager_;
+      gtk_primary_selection_device_manager_;
+
+  std::unique_ptr<ZwpPrimarySelectionDeviceManager>
+      zwp_primary_selection_device_manager_;
 
   std::unique_ptr<WaylandDataDragController> data_drag_controller_;
   std::unique_ptr<WaylandWindowDragController> window_drag_controller_;

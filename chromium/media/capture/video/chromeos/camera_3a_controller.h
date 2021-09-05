@@ -18,7 +18,7 @@ namespace media {
 // operations and modes of the camera.  For the detailed state transitions for
 // auto-exposure, auto-focus, and auto-white-balancing, see
 // https://source.android.com/devices/camera/camera3_3Amodes
-class CAPTURE_EXPORT Camera3AController
+class CAPTURE_EXPORT Camera3AController final
     : public CaptureMetadataDispatcher::ResultMetadataObserver {
  public:
   Camera3AController(const cros::mojom::CameraMetadataPtr& static_metadata,
@@ -44,6 +44,11 @@ class CAPTURE_EXPORT Camera3AController
 
   // Set auto white balance mode.
   void SetAutoWhiteBalanceMode(cros::mojom::AndroidControlAwbMode mode);
+
+  // Set exposure time.
+  // |enable_auto| enables auto exposure mode. |exposure_time_nanoseconds| is
+  // only effective if |enable_auto| is set to false
+  void SetExposureTime(bool enable_auto, int64_t exposure_time_nanoseconds);
 
   bool IsPointOfInterestSupported();
 

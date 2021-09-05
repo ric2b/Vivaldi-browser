@@ -737,24 +737,6 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest,
   EXPECT_EQ(old_selected_line, popup_model->selected_line());
 }
 
-IN_PROC_BROWSER_TEST_F(OmniboxViewTest,
-                       RendererInitiatedFocusPreservesUserText) {
-  OmniboxView* omnibox_view = nullptr;
-  ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
-
-  // Type a single character.
-  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_A, 0));
-  EXPECT_EQ(base::ASCIIToUTF16("a"), omnibox_view->GetText());
-
-  // Simulate a renderer-initated focus event.
-  browser()->SetFocusToLocationBar();
-
-  // Type an additional character and verify that we didn't clobber the
-  // character we already typed.
-  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_B, 0));
-  EXPECT_EQ(base::ASCIIToUTF16("ab"), omnibox_view->GetText());
-}
-
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
   chrome::FocusLocationBar(browser());
@@ -913,7 +895,11 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, SearchDisabledDontCrashOnQuestionMark) {
 #define MAYBE_AcceptKeywordBySpace AcceptKeywordBySpace
 #endif
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_AcceptKeywordBySpace) {
-  OmniboxView* omnibox_view = NULL;
+  // AcceptKeywordBySpace is disabled when keyword search button is enabled.
+  if (OmniboxFieldTrial::IsKeywordSearchButtonEnabled())
+    return;
+
+  OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
 
   base::string16 search_keyword(ASCIIToUTF16(kSearchKeyword));
@@ -1019,7 +1005,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_AcceptKeywordBySpace) {
   // end of text.
   omnibox_view->OnBeforePossibleChange();
   omnibox_view->OnInlineAutocompleteTextMaybeChanged(
-      search_keyword + ASCIIToUTF16("  "), 0, search_keyword.length());
+      search_keyword + ASCIIToUTF16("  "),
+      {{search_keyword.length() + 2, search_keyword.length()}},
+      search_keyword.length());
   omnibox_view->OnAfterPossibleChange(true);
   ASSERT_TRUE(omnibox_view->model()->is_keyword_hint());
   ASSERT_EQ(search_keyword, omnibox_view->model()->keyword());

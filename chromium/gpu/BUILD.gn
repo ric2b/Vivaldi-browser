@@ -2,18 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/ui.gni")
+import("//gpu/vulkan/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//ui/gl/features.gni")
-
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 config("gpu_implementation") {
   defines = [ "GPU_IMPLEMENTATION" ]
@@ -230,7 +225,7 @@ static_library("test_support") {
   ]
 }
 
-if (!is_android && !is_fuchsia && !is_chromeos) {
+if (!is_android && !is_fuchsia && !is_ash) {
   proto_library("gl_lpm_fuzzer_proto") {
     sources = [ "command_buffer/tests/lpm/gl_lpm_fuzzer.proto" ]
 
@@ -350,7 +345,6 @@ test("gl_tests") {
     "command_buffer/tests/gl_texture_storage_unittest.cc",
     "command_buffer/tests/gl_unallocated_texture_unittest.cc",
     "command_buffer/tests/gl_unittest.cc",
-    "command_buffer/tests/gl_unittests_android.cc",
     "command_buffer/tests/gl_virtual_contexts_ext_window_rectangles_unittest.cc",
     "command_buffer/tests/gl_virtual_contexts_unittest.cc",
     "command_buffer/tests/gl_webgl_multi_draw_test.cc",
@@ -362,7 +356,12 @@ test("gl_tests") {
     "ipc/client/raster_in_process_context_tests.cc",
   ]
 
-  if (use_dawn) {
+  if (is_android) {
+    sources += [ "command_buffer/tests/gl_unittests_android.cc" ]
+  }
+
+  # Simply loading the Vulkan driver leaks crbug.com/1134681
+  if (use_dawn && !is_lsan) {
     sources += [
       "command_buffer/service/webgpu_decoder_unittest.cc",
       "command_buffer/tests/shared_image_gl_backing_produce_dawn_unittest.cc",
@@ -428,6 +427,14 @@ test("gl_tests") {
     sources += [
       "command_buffer/service/shared_image_backing_factory_d3d_unittest.cc",
     ]
+  } else if (is_linux || is_chromeos) {
+    # Simply loading the Vulkan driver leaks crbug.com/1134681
+    # CFI error in third_party/vulkan_memory_allocator crbug.com/1139916
+    if (enable_vulkan && !is_lsan && !is_cfi) {
+      deps += [ "//gpu/vulkan/init:init" ]
+      sources +=
+          [ "command_buffer/service/external_vk_image_factory_unittest.cc" ]
+    }
   }
 
   if (use_dawn) {
@@ -582,7 +589,7 @@ test("gpu_unittests") {
     "ipc/service/gpu_watchdog_thread_unittest.cc",
   ]
 
-  if (is_chromeos) {
+  if (is_ash) {
     # Image decode acceleration with hardware is only supported in Chrome OS.
     # The intention is to run this test in the linux-chromeos build.
     sources += [ "ipc/service/image_decode_accelerator_stub_unittest.cc" ]
@@ -641,6 +648,7 @@ test("gpu_unittests") {
     "//base",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
+    "//build:chromeos_buildflags",
     "//cc/paint",
     "//components/viz/common:resource_format",
     "//gpu/command_buffer/client:gles2_c_lib",

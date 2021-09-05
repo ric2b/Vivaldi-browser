@@ -28,7 +28,7 @@
         "id": "ItemType",
         "type": "string",
         "description": "What kind of item.",
-        "enum": [ "command", "checkbox", "radiobutton", "folder"]
+        "enum": [ "command", "checkbox", "radio", "folder"]
       },
       {
         "id": "Icons",

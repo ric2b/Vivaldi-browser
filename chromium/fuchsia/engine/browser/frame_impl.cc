@@ -9,13 +9,14 @@
 #include <lib/ui/scenic/cpp/view_ref_pair.h>
 #include <limits>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_context.h"
@@ -43,6 +44,7 @@
 #include "fuchsia/engine/browser/frame_layout_manager.h"
 #include "fuchsia/engine/browser/frame_window_tree_host.h"
 #include "fuchsia/engine/browser/media_player_impl.h"
+#include "fuchsia/engine/browser/navigation_policy_handler.h"
 #include "fuchsia/engine/browser/web_engine_devtools_controller.h"
 #include "fuchsia/engine/common/cast_streaming.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -225,30 +227,36 @@ base::Optional<url::Origin> ParseAndValidateWebOrigin(
 }  // namespace
 
 // static
-FrameImpl* FrameImpl::FromRenderFrameHost(
-    content::RenderFrameHost* render_frame_host) {
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(render_frame_host);
+FrameImpl* FrameImpl::FromWebContents(content::WebContents* web_contents) {
   if (!web_contents)
     return nullptr;
 
   auto& map = WebContentsToFrameImplMap();
   auto it = map.find(web_contents);
-  if (it == map.end())
-    return nullptr;
+  DCHECK(it != map.end()) << "WebContents not owned by a FrameImpl.";
   return it->second;
+}
+
+// static
+FrameImpl* FrameImpl::FromRenderFrameHost(
+    content::RenderFrameHost* render_frame_host) {
+  return FromWebContents(
+      content::WebContents::FromRenderFrameHost(render_frame_host));
 }
 
 FrameImpl::FrameImpl(std::unique_ptr<content::WebContents> web_contents,
                      ContextImpl* context,
+                     fuchsia::web::CreateFrameParams params_for_popups,
                      fidl::InterfaceRequest<fuchsia::web::Frame> frame_request)
     : web_contents_(std::move(web_contents)),
       context_(context),
+      params_for_popups_(std::move(params_for_popups)),
       navigation_controller_(web_contents_.get()),
       log_level_(kLogSeverityUnreachable),
       url_request_rewrite_rules_manager_(web_contents_.get()),
       binding_(this, std::move(frame_request)),
-      media_blocker_(web_contents_.get()) {
+      media_blocker_(web_contents_.get()),
+      theme_manager_(web_contents_.get()) {
   DCHECK(!WebContentsToFrameImplMap()[web_contents_.get()]);
   WebContentsToFrameImplMap()[web_contents_.get()] = this;
 
@@ -443,12 +451,19 @@ void FrameImpl::MaybeSendPopup() {
   // The PopupFrameCreationInfo won't be needed anymore, so clear it out.
   popup->SetUserData(kPopupCreationInfo, nullptr);
 
-  popup_listener_->OnPopupFrameCreated(
-      context_->CreateFrameForPopupWebContents(std::move(popup)),
-      std::move(creation_info), [this] {
-        popup_ack_outstanding_ = false;
-        MaybeSendPopup();
-      });
+  // ContextImpl::CreateFrameInternal() verified that |params_for_popups_| can
+  // be cloned, so it cannot fail here.
+  fuchsia::web::CreateFrameParams params;
+  CHECK_EQ(ZX_OK, params_for_popups_.Clone(&params));
+
+  fidl::InterfaceHandle<fuchsia::web::Frame> frame_handle;
+  context_->CreateFrameForWebContents(std::move(popup), std::move(params),
+                                      frame_handle.NewRequest());
+  popup_listener_->OnPopupFrameCreated(std::move(frame_handle),
+                                       std::move(creation_info), [this] {
+                                         popup_ack_outstanding_ = false;
+                                         MaybeSendPopup();
+                                       });
   popup_ack_outstanding_ = true;
 }
 
@@ -486,6 +501,14 @@ void FrameImpl::OnPopupListenerDisconnected(zx_status_t status) {
 
 void FrameImpl::OnMediaPlayerDisconnect() {
   media_player_ = nullptr;
+}
+
+void FrameImpl::OnAccessibilityError(zx_status_t error) {
+  // The task is posted so |accessibility_bridge_| does not tear |this| down
+  // while events are still being processed.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&FrameImpl::CloseAndDestroyFrame,
+                                weak_factory_.GetWeakPtr(), error));
 }
 
 bool FrameImpl::MaybeHandleCastStreamingMessage(
@@ -567,7 +590,7 @@ void FrameImpl::CreateViewWithViewRef(
       semantics_manager_for_test_ ? semantics_manager_for_test_
                                   : semantics_manager.get(),
       window_tree_host_->CreateViewRef(), web_contents_.get(),
-      base::BindOnce(&FrameImpl::CloseAndDestroyFrame, base::Unretained(this)));
+      base::BindOnce(&FrameImpl::OnAccessibilityError, base::Unretained(this)));
 }
 
 void FrameImpl::GetMediaPlayer(
@@ -770,7 +793,7 @@ void FrameImpl::EnableHeadlessRendering() {
     accessibility_bridge_ = std::make_unique<AccessibilityBridge>(
         semantics_manager_for_test_, window_tree_host_->CreateViewRef(),
         web_contents_.get(),
-        base::BindOnce(&FrameImpl::CloseAndDestroyFrame,
+        base::BindOnce(&FrameImpl::OnAccessibilityError,
                        base::Unretained(this)));
 
     // Set bounds for testing hit testing.
@@ -861,6 +884,27 @@ void FrameImpl::GetPrivateMemorySize(GetPrivateMemorySizeCallback callback) {
   }
 
   callback(task_stats.mem_private_bytes);
+}
+
+void FrameImpl::SetNavigationPolicyProvider(
+    fuchsia::web::NavigationPolicyProviderParams params,
+    fidl::InterfaceHandle<fuchsia::web::NavigationPolicyProvider> provider) {
+  navigation_policy_handler_ = std::make_unique<NavigationPolicyHandler>(
+      std::move(params), std::move(provider));
+}
+
+void FrameImpl::SetPreferredTheme(fuchsia::settings::ThemeType theme) {
+  theme_manager_.SetTheme(theme, base::BindOnce(
+                                     [](FrameImpl* frame_impl, bool result) {
+                                       // TODO(crbug.com/1148454): Destroy the
+                                       // frame once a fake Display service is
+                                       // implemented.
+
+                                       // if (!result)
+                                       //   frame_impl->CloseAndDestroyFrame
+                                       //       ZX_ERR_INVALID_ARGS);
+                                     },
+                                     base::Unretained(this)));
 }
 
 void FrameImpl::ForceContentDimensions(
@@ -970,9 +1014,6 @@ bool FrameImpl::DidAddMessageToConsole(
       // Let the default logging mechanism handle the message.
       return false;
   }
-
-  if (console_log_message_hook_)
-    console_log_message_hook_.Run(formatted_message);
 
   return true;
 }
@@ -1094,4 +1135,9 @@ void FrameImpl::ResourceLoadComplete(
     base::RecordComputedAction(
         base::StringPrintf("WebEngine.ResourceRequestError:%d", net_error));
   }
+}
+
+// TODO(crbug.com/1136681#c6): Move below GetBindingChannelForTest when fixed.
+void FrameImpl::EnableExplicitSitesFilter(std::string error_page) {
+  explicit_sites_filter_error_page_ = std::move(error_page);
 }

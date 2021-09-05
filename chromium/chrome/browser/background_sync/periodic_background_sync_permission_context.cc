@@ -109,8 +109,8 @@ PeriodicBackgroundSyncPermissionContext::GetPermissionStatusInternal(
   DCHECK(host_content_settings_map);
 
   auto content_setting = host_content_settings_map->GetContentSetting(
-      requesting_origin, embedding_origin, ContentSettingsType::BACKGROUND_SYNC,
-      /* resource_identifier= */ std::string());
+      requesting_origin, embedding_origin,
+      ContentSettingsType::BACKGROUND_SYNC);
   DCHECK(content_setting == CONTENT_SETTING_BLOCK ||
          content_setting == CONTENT_SETTING_ALLOW);
   return content_setting;
@@ -134,9 +134,10 @@ void PeriodicBackgroundSyncPermissionContext::NotifyPermissionSet(
     const GURL& embedding_origin,
     permissions::BrowserPermissionCallback callback,
     bool persist,
-    ContentSetting content_setting) {
+    ContentSetting content_setting,
+    bool is_one_time) {
   DCHECK(!persist);
   permissions::PermissionContextBase::NotifyPermissionSet(
       id, requesting_origin, embedding_origin, std::move(callback), persist,
-      content_setting);
+      content_setting, is_one_time);
 }

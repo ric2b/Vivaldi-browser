@@ -14,15 +14,13 @@
 #include "android_webview/browser/aw_browser_process.h"
 #include "android_webview/browser/aw_metrics_service_client_delegate.h"
 #include "android_webview/browser/metrics/aw_metrics_service_client.h"
-#include "android_webview/browser/variations_seed_loader.h"
+#include "android_webview/browser/variations/variations_seed_loader.h"
 #include "android_webview/proto/aw_variations_seed.pb.h"
 #include "base/base_switches.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/time/time.h"
@@ -144,13 +142,7 @@ std::unique_ptr<PrefService> AwFeatureListCreator::CreatePrefService() {
   pref_service_factory.set_read_error_callback(
       base::BindRepeating(&HandleReadError));
 
-  base::TimeTicks pref_load_start = base::TimeTicks::Now();
-  auto service = pref_service_factory.Create(pref_registry);
-  base::TimeDelta pref_load_time = base::TimeTicks::Now() - pref_load_start;
-  UmaHistogramCustomTimes("Android.WebView.PrefLoadTime", pref_load_time,
-                          base::TimeDelta::FromMilliseconds(1),
-                          base::TimeDelta::FromMinutes(1), 50);
-  return service;
+  return pref_service_factory.Create(pref_registry);
 }
 
 void AwFeatureListCreator::SetUpFieldTrials() {
@@ -216,14 +208,16 @@ void AwFeatureListCreator::SetUpFieldTrials() {
 
   // Populate FieldTrialList. Since low_entropy_provider is null, it will fall
   // back to the provider we previously gave to FieldTrialList, which is a low
-  // entropy provider.
+  // entropy provider. The X-Client-Data header is not reported on WebView, so
+  // we pass an empty object as the |low_entropy_source_value|.
   variations_field_trial_creator_->SetupFieldTrials(
       cc::switches::kEnableGpuBenchmarking, switches::kEnableFeatures,
       switches::kDisableFeatures, std::vector<std::string>(),
       content::GetSwitchDependentFeatureOverrides(
           *base::CommandLine::ForCurrentProcess()),
       /*low_entropy_provider=*/nullptr, std::make_unique<base::FeatureList>(),
-      aw_field_trials_.get(), &ignored_safe_seed_manager);
+      aw_field_trials_.get(), &ignored_safe_seed_manager,
+      /*low_entropy_source_value=*/base::nullopt);
 }
 
 void AwFeatureListCreator::CreateLocalState() {

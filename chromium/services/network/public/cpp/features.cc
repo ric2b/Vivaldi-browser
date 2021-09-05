@@ -5,6 +5,7 @@
 #include "services/network/public/cpp/features.h"
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 
 namespace network {
 namespace features {
@@ -46,12 +47,6 @@ const base::Feature kThrottleDelayable{"ThrottleDelayable",
 const base::Feature kDelayRequestsOnMultiplexedConnections{
     "DelayRequestsOnMultiplexedConnections", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// When kRequestInitiatorSiteLock is enabled, then CORB, CORP and Sec-Fetch-Site
-// will validate network::ResourceRequest::request_initiator against
-// network::mojom::URLLoaderFactoryParams::request_initiator_origin_lock.
-const base::Feature kRequestInitiatorSiteLock{"RequestInitiatorSiteLock",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
-
 // When kPauseBrowserInitiatedHeavyTrafficForP2P is enabled, then a subset of
 // the browser initiated traffic may be paused if there is at least one active
 // P2P connection and the network is estimated to be congested. This feature is
@@ -76,6 +71,7 @@ const base::Feature kProactivelyThrottleLowPriorityRequests{
 
 // Enables Cross-Origin Opener Policy (COOP).
 // https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e
+// https://html.spec.whatwg.org/#cross-origin-opener-policy
 // Currently this feature is enabled for all platforms except WebView.
 const base::Feature kCrossOriginOpenerPolicy{"CrossOriginOpenerPolicy",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
@@ -96,9 +92,16 @@ const base::Feature kCrossOriginOpenerPolicyReporting{
 const base::Feature kCrossOriginOpenerPolicyAccessReporting{
     "CrossOriginOpenerPolicyAccessReporting", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Shift's COOP's default from `unsafe-none` to `same-origin-allow-popups`.
+// https://github.com/mikewest/coop-by-default/
+const base::Feature kCrossOriginOpenerPolicyByDefault{
+    "CrossOriginOpenerPolicyByDefault", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables Cross-Origin Embedder Policy (COEP).
-// https://github.com/mikewest/corpp
-// Currently this feature is enabled for all platforms except WebView.
+// https://html.spec.whatwg.org/#coep
+// Currently this feature is enabled for all platforms (including webview).
+// TODO(https://crbug.com/1140432): Remove this flag after M88 Stable + 1 week =
+// 2021-02-01.
 const base::Feature kCrossOriginEmbedderPolicy{
     "CrossOriginEmbedderPolicy", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -115,7 +118,7 @@ const base::Feature kSplitAuthCacheByNetworkIsolationKey{
 // Enable usage of hardcoded DoH upgrade mapping for use in automatic mode.
 const base::Feature kDnsOverHttpsUpgrade {
   "DnsOverHttpsUpgrade",
-#if defined(OS_CHROMEOS) || defined(OS_MAC) || defined(OS_ANDROID) || \
+#if BUILDFLAG(IS_ASH) || defined(OS_MAC) || defined(OS_ANDROID) || \
     defined(OS_WIN)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -148,25 +151,6 @@ const base::Feature
     kDeriveOriginFromUrlForNeitherGetNorHeadRequestWhenHavingSpecialAccess{
         "DeriveOriginFromUrlForNeitherGetNorHeadRequestWhenHavingSpecialAccess",
         base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Emergency switch for legacy cookie access semantics on given patterns, as
-// specified by the param, comma separated.
-const base::Feature kEmergencyLegacyCookieAccess{
-    "EmergencyLegacyCookieAccess", base::FEATURE_DISABLED_BY_DEFAULT};
-const char kEmergencyLegacyCookieAccessParamName[] = "Patterns";
-const base::FeatureParam<std::string> kEmergencyLegacyCookieAccessParam{
-    &kEmergencyLegacyCookieAccess, kEmergencyLegacyCookieAccessParamName, ""};
-
-// Controls whether the CORB allowlist [1] is also applied to OOR-CORS (e.g.
-// whether non-allowlisted content scripts are subject to CORS in OOR-CORS
-// mode).  See also: https://crbug.com/920638
-//
-// [1]
-// https://www.chromium.org/Home/chromium-security/extension-content-script-fetches
-const base::Feature kCorbAllowlistAlsoAppliesToOorCors = {
-    "CorbAllowlistAlsoAppliesToOorCors", base::FEATURE_ENABLED_BY_DEFAULT};
-const char kCorbAllowlistAlsoAppliesToOorCorsParamName[] =
-    "AllowlistForCorbAndCors";
 
 // Controls whether a |request_initiator| that mismatches
 // |request_initiator_origin_lock| leads to 1) failing the HTTP request and 2)
@@ -224,6 +208,12 @@ const base::FeatureParam<TrustTokenOriginTrialSpec>
         &kTrustTokens, "TrustTokenOperationsRequiringOriginTrial",
         TrustTokenOriginTrialSpec::kOriginTrialNotRequired,
         &kTrustTokenOriginTrialParamOptions};
+
+// Determines whether Trust Tokens issuance requests should be diverted, at the
+// corresponding issuers' request, to the operating system instead of sent
+// to the issuers' servers.
+const base::FeatureParam<bool> kPlatformProvidedTrustTokenIssuance{
+    &kTrustTokens, "PlatformProvidedTrustTokenIssuance", false};
 
 // Enables the Content Security Policy Embedded Enforcement check out of blink
 const base::Feature kOutOfBlinkCSPEE{"OutOfBlinkCSPEE",

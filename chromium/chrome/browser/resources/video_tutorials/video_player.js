@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {$} from 'chrome://resources/js/util.m.js';
+import {$} from '//resources/js/util.m.js';
 
 function onDocumentLoaded() {
   // Find out the video, image, and caption urls from the url params.
@@ -15,7 +15,7 @@ function onDocumentLoaded() {
 
 function onVideoEnded() {
   // Resize the poster.
-  video.style.classList.add('video-ended');
+  video.classList.add('video-ended');
   video.controls = false;
 }
 

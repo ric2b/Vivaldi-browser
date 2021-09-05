@@ -7,18 +7,25 @@
 #include "ash/public/cpp/network_icon_image_source.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/root_window_controller.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/system/phonehub/phone_hub_tray.h"
 #include "ash/system/phonehub/phone_hub_view_ids.h"
+#include "ash/system/power/battery_image_source.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_popup_item_style.h"
+#include "ash/system/tray/tray_popup_utils.h"
 #include "base/i18n/number_formatting.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/text_elider.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
@@ -30,10 +37,16 @@ using PhoneStatusModel = chromeos::phonehub::PhoneStatusModel;
 
 namespace {
 
+// Appearance in Dip.
 constexpr int kTitleContainerSpacing = 16;
-constexpr int kStatusSpacing = 6;
-constexpr gfx::Size kStatusIconSize(16, 16);
+constexpr int kStatusSpacing = 4;
+constexpr gfx::Size kStatusIconSize(kUnifiedTrayIconSize, kUnifiedTrayIconSize);
 constexpr int kSeparatorHeight = 18;
+constexpr int kPhoneNameLabelWidthMax = 160;
+constexpr gfx::Insets kBorderInsets(0, 16);
+
+// Typograph in dip.
+constexpr int kBatteryLabelFontSize = 11;
 
 int GetSignalStrengthAsInt(PhoneStatusModel::SignalStrength signal_strength) {
   switch (signal_strength) {
@@ -50,18 +63,64 @@ int GetSignalStrengthAsInt(PhoneStatusModel::SignalStrength signal_strength) {
   }
 }
 
+// ImageSource for the battery icon.
+class PhoneHubBatteryImageSource : public BatteryImageSource {
+ public:
+  PhoneHubBatteryImageSource(const PowerStatus::BatteryImageInfo& info,
+                             int height,
+                             SkColor bg_color,
+                             SkColor fg_color,
+                             bool in_battery_saver_mode)
+      : BatteryImageSource(info, height, bg_color, fg_color),
+        bg_color_(bg_color),
+        in_battery_saver_mode_(in_battery_saver_mode) {}
+
+  ~PhoneHubBatteryImageSource() override = default;
+
+  // BatteryImageSource:
+  void Draw(gfx::Canvas* canvas) override {
+    BatteryImageSource::Draw(canvas);
+
+    if (!in_battery_saver_mode_)
+      return;
+
+    SkColor saver_color = AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kIconColorWarning);
+
+    gfx::ImageSkia icon = CreateVectorIcon(kBatteryIcon, saver_color);
+    // Draw the solid outline of the battery icon.
+    canvas->DrawImageInt(icon, 0, 0);
+
+    PaintVectorIcon(canvas, kPhoneHubBatterySaverOutlineIcon, bg_color_);
+    PaintVectorIcon(canvas, kPhoneHubBatterySaverIcon, saver_color);
+  }
+
+ private:
+  const SkColor bg_color_;
+  bool in_battery_saver_mode_ = false;
+};
+
 }  // namespace
 
-PhoneStatusView::PhoneStatusView(chromeos::phonehub::PhoneModel* phone_model)
+PhoneStatusView::PhoneStatusView(chromeos::phonehub::PhoneModel* phone_model,
+                                 Delegate* delegate)
     : TriView(kTitleContainerSpacing),
       phone_model_(phone_model),
       phone_name_label_(new views::Label),
       signal_icon_(new views::ImageView),
-      mobile_provider_label_(new views::Label),
       battery_icon_(new views::ImageView),
       battery_label_(new views::Label) {
+  DCHECK(delegate);
+
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
   SetID(PhoneHubViewID::kPhoneStatusView);
 
+  SetBorder(views::CreateEmptyBorder(kBorderInsets));
+
+  // Phone name is placed at START container, Settings icon is
+  // placed at END container, other phone states, i.e. battery level,
+  // and Separator are placed at CENTER container.
   ConfigureTriViewContainer(TriView::Container::START);
   ConfigureTriViewContainer(TriView::Container::CENTER);
   ConfigureTriViewContainer(TriView::Container::END);
@@ -69,37 +128,40 @@ PhoneStatusView::PhoneStatusView(chromeos::phonehub::PhoneModel* phone_model)
   phone_model_->AddObserver(this);
 
   phone_name_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SUB_HEADER,
-                           true /* use_unified_theme */);
-  style.SetupLabel(phone_name_label_);
-  AddView(TriView::Container::CENTER, phone_name_label_);
-
-  AddView(TriView::Container::END, signal_icon_);
-
-  mobile_provider_label_->SetAutoColorReadabilityEnabled(false);
-  mobile_provider_label_->SetSubpixelRenderingEnabled(false);
-  mobile_provider_label_->SetEnabledColor(
+  phone_name_label_->SetEnabledColor(
       AshColorProvider::Get()->GetContentLayerColor(
           AshColorProvider::ContentLayerType::kTextColorPrimary));
-  AddView(TriView::Container::END, mobile_provider_label_);
+  TrayPopupUtils::SetLabelFontList(phone_name_label_,
+                                   TrayPopupUtils::FontStyle::kSubHeader);
+  phone_name_label_->SetElideBehavior(gfx::ElideBehavior::ELIDE_TAIL);
+  AddView(TriView::Container::START, phone_name_label_);
 
-  AddView(TriView::Container::END, battery_icon_);
+  AddView(TriView::Container::CENTER, signal_icon_);
+  AddView(TriView::Container::CENTER, battery_icon_);
 
   battery_label_->SetAutoColorReadabilityEnabled(false);
   battery_label_->SetSubpixelRenderingEnabled(false);
   battery_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kTextColorPrimary));
-  AddView(TriView::Container::END, battery_label_);
+  auto default_font = battery_label_->font_list();
+  battery_label_->SetFontList(default_font.DeriveWithSizeDelta(
+      kBatteryLabelFontSize - default_font.GetFontSize()));
+  AddView(TriView::Container::CENTER, battery_label_);
 
-  auto* separator = new views::Separator();
-  separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
+  separator_ = new views::Separator();
+  separator_->SetColor(AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kSeparatorColor));
-  separator->SetPreferredHeight(kSeparatorHeight);
-  AddView(TriView::Container::END, separator);
+  separator_->SetPreferredHeight(kSeparatorHeight);
+  AddView(TriView::Container::CENTER, separator_);
 
-  settings_button_ = new TopShortcutButton(this, kSystemMenuSettingsIcon,
-                                           IDS_ASH_STATUS_TRAY_SETTINGS);
+  settings_button_ = new TopShortcutButton(
+      base::BindRepeating(&Delegate::OpenConnectedDevicesSettings,
+                          base::Unretained(delegate)),
+      kSystemMenuSettingsIcon, IDS_ASH_STATUS_TRAY_SETTINGS);
   AddView(TriView::Container::END, settings_button_);
+
+  separator_->SetVisible(delegate->CanOpenConnectedDeviceSettings());
+  settings_button_->SetVisible(delegate->CanOpenConnectedDeviceSettings());
 
   Update();
 }
@@ -108,23 +170,23 @@ PhoneStatusView::~PhoneStatusView() {
   phone_model_->RemoveObserver(this);
 }
 
-void PhoneStatusView::ButtonPressed(views::Button* sender,
-                                    const ui::Event& event) {
-  // TODO(leandre): implement open settings/other buttons.
-}
-
 void PhoneStatusView::OnModelChanged() {
   Update();
 }
 
 void PhoneStatusView::Update() {
+  // Set phone name text and elide it if needed.
   phone_name_label_->SetText(
-      phone_model_->phone_name().value_or(base::string16()));
+      gfx::ElideText(phone_model_->phone_name().value_or(base::string16()),
+                     phone_name_label_->font_list(), kPhoneNameLabelWidthMax,
+                     gfx::ELIDE_TAIL));
 
   // Clear the phone status if the status model returns null when the phone is
   // disconnected.
   if (!phone_model_->phone_status_model()) {
     ClearExistingStatus();
+    // Hide separator if there is no preceding content.
+    separator_->SetVisible(false);
     return;
   }
 
@@ -140,13 +202,18 @@ void PhoneStatusView::UpdateMobileStatus() {
       AshColorProvider::ContentLayerType::kIconColorPrimary);
 
   gfx::ImageSkia signal_image;
+  base::string16 tooltip_text;
   switch (phone_status.mobile_status()) {
     case PhoneStatusModel::MobileStatus::kNoSim:
       signal_image = CreateVectorIcon(kPhoneHubMobileNoSimIcon, primary_color);
+      tooltip_text =
+          l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_MOBILE_STATUS_NO_SIM);
       break;
     case PhoneStatusModel::MobileStatus::kSimButNoReception:
       signal_image =
           CreateVectorIcon(kPhoneHubMobileNoConnectionIcon, primary_color);
+      tooltip_text =
+          l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_MOBILE_STATUS_NO_NETWORK);
       break;
     case PhoneStatusModel::MobileStatus::kSimWithReception:
       const PhoneStatusModel::MobileConnectionMetadata& metadata =
@@ -156,14 +223,15 @@ void PhoneStatusView::UpdateMobileStatus() {
           network_icon::SignalStrengthImageSource>(
           network_icon::ImageType::BARS, primary_color, kStatusIconSize,
           signal_strength);
-      mobile_provider_label_->SetText(metadata.mobile_provider);
+      tooltip_text = l10n_util::GetStringFUTF16(
+          IDS_ASH_PHONE_HUB_MOBILE_STATUS_NETWORK_STRENGTH,
+          base::NumberToString16(signal_strength));
       break;
   }
 
   signal_icon_->SetImage(signal_image);
-  mobile_provider_label_->SetVisible(
-      phone_status.mobile_status() ==
-      PhoneStatusModel::MobileStatus::kSimWithReception);
+  signal_icon_->SetImageSize(kStatusIconSize);
+  signal_icon_->SetTooltipText(tooltip_text);
 }
 
 void PhoneStatusView::UpdateBatteryStatus() {
@@ -178,8 +246,15 @@ void PhoneStatusView::UpdateBatteryStatus() {
   const SkColor icon_fg_color = AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kIconColorPrimary);
 
-  battery_icon_->SetImage(PowerStatus::GetBatteryImage(
-      info, kUnifiedTrayIconSize, icon_bg_color, icon_fg_color));
+  bool in_battery_saver_mode = phone_status.battery_saver_state() ==
+                               PhoneStatusModel::BatterySaverState::kOn;
+
+  auto* source = new PhoneHubBatteryImageSource(info, kStatusIconSize.height(),
+                                                icon_bg_color, icon_fg_color,
+                                                in_battery_saver_mode);
+  battery_icon_->SetImage(
+      gfx::ImageSkia(base::WrapUnique(source), source->size()));
+  SetBatteryTooltipText();
   battery_label_->SetText(
       base::FormatPercent(phone_status.battery_percentage()));
 }
@@ -213,10 +288,40 @@ PowerStatus::BatteryImageInfo PhoneStatusView::CalculateBatteryInfo() {
   return info;
 }
 
+void PhoneStatusView::SetBatteryTooltipText() {
+  const PhoneStatusModel& phone_status =
+      phone_model_->phone_status_model().value();
+
+  int charging_tooltip_id;
+  switch (phone_status.charging_state()) {
+    case PhoneStatusModel::ChargingState::kNotCharging:
+      charging_tooltip_id = IDS_ASH_PHONE_HUB_BATTERY_STATUS_NOT_CHARGING;
+      break;
+    case PhoneStatusModel::ChargingState::kChargingAc:
+      charging_tooltip_id = IDS_ASH_PHONE_HUB_BATTERY_STATUS_CHARGING_AC;
+      break;
+    case PhoneStatusModel::ChargingState::kChargingUsb:
+      charging_tooltip_id = IDS_ASH_PHONE_HUB_BATTERY_STATUS_CHARGING_USB;
+      break;
+  }
+  base::string16 charging_tooltip =
+      l10n_util::GetStringUTF16(charging_tooltip_id);
+
+  bool battery_saver_on = phone_status.battery_saver_state() ==
+                          PhoneStatusModel::BatterySaverState::kOn;
+  base::string16 batter_saver_tooltip =
+      battery_saver_on
+          ? l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_BATTERY_SAVER_ON)
+          : l10n_util::GetStringUTF16(IDS_ASH_PHONE_HUB_BATTERY_SAVER_OFF);
+
+  battery_icon_->SetTooltipText(
+      l10n_util::GetStringFUTF16(IDS_ASH_PHONE_HUB_BATTERY_TOOLTIP,
+                                 charging_tooltip, batter_saver_tooltip));
+}
+
 void PhoneStatusView::ClearExistingStatus() {
   // Clear mobile status.
   signal_icon_->SetImage(gfx::ImageSkia());
-  mobile_provider_label_->SetText(base::string16());
 
   // Clear battery status.
   battery_icon_->SetImage(gfx::ImageSkia());
@@ -228,18 +333,7 @@ void PhoneStatusView::ConfigureTriViewContainer(TriView::Container container) {
 
   switch (container) {
     case TriView::Container::START:
-      FALLTHROUGH;
-    case TriView::Container::END:
-      layout = std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
-          kStatusSpacing);
-      layout->set_main_axis_alignment(
-          views::BoxLayout::MainAxisAlignment::kCenter);
-      layout->set_cross_axis_alignment(
-          views::BoxLayout::CrossAxisAlignment::kCenter);
-      break;
-    case TriView::Container::CENTER:
-      SetFlexForContainer(TriView::Container::CENTER, 1.f);
+      SetFlexForContainer(TriView::Container::START, 1.f);
 
       layout = std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kVertical);
@@ -247,6 +341,23 @@ void PhoneStatusView::ConfigureTriViewContainer(TriView::Container container) {
           views::BoxLayout::MainAxisAlignment::kCenter);
       layout->set_cross_axis_alignment(
           views::BoxLayout::CrossAxisAlignment::kStretch);
+      break;
+    case TriView::Container::CENTER:
+      layout = std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+          kStatusSpacing);
+      layout->set_main_axis_alignment(
+          views::BoxLayout::MainAxisAlignment::kEnd);
+      layout->set_cross_axis_alignment(
+          views::BoxLayout::CrossAxisAlignment::kCenter);
+      break;
+    case TriView::Container::END:
+      layout = std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal);
+      layout->set_main_axis_alignment(
+          views::BoxLayout::MainAxisAlignment::kCenter);
+      layout->set_cross_axis_alignment(
+          views::BoxLayout::CrossAxisAlignment::kCenter);
       break;
   }
 

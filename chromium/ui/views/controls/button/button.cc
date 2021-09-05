@@ -27,6 +27,7 @@
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/focus_ring.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
 
@@ -101,18 +102,6 @@ Button::PressedCallback::PressedCallback(base::RepeatingClosure closure)
                                  const ui::Event& event) { closure.Run(); },
                               std::move(closure))) {}
 
-Button::PressedCallback::PressedCallback(ButtonListener* listener,
-                                         Button* button)
-    : callback_(listener ? base::BindRepeating(
-                               [](ButtonListener* listener,
-                                  Button* button,
-                                  const ui::Event& event) {
-                                 listener->ButtonPressed(button, event);
-                               },
-                               listener,
-                               button)
-                         : Callback()) {}
-
 Button::PressedCallback::PressedCallback(const PressedCallback&) = default;
 
 Button::PressedCallback::PressedCallback(PressedCallback&&) = default;
@@ -158,15 +147,6 @@ Button::ButtonState Button::GetButtonStateFrom(ui::NativeTheme::State state) {
 }
 
 Button::~Button() = default;
-
-void Button::SetFocusForPlatform() {
-#if defined(OS_APPLE)
-  // On Mac, buttons are focusable only in full keyboard access mode.
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
-#else
-  SetFocusBehavior(FocusBehavior::ALWAYS);
-#endif
-}
 
 void Button::SetTooltipText(const base::string16& tooltip_text) {
   if (tooltip_text == tooltip_text_)
@@ -611,16 +591,13 @@ Button::Button(PressedCallback callback)
     : AnimationDelegateViews(this),
       callback_(std::move(callback)),
       ink_drop_base_color_(gfx::kPlaceholderColor) {
-  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  SetFocusBehavior(PlatformStyle::DefaultFocusBehavior());
   SetProperty(kIsButtonProperty, true);
   hover_animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(150));
-  SetInstallFocusRingOnFocus(PlatformStyle::kPreferFocusRings);
+  SetInstallFocusRingOnFocus(true);
   button_controller_ = std::make_unique<ButtonController>(
       this, std::make_unique<DefaultButtonControllerDelegate>(this));
 }
-
-Button::Button(ButtonListener* listener)
-    : Button(PressedCallback(listener, this)) {}
 
 void Button::RequestFocusFromEvent() {
   if (request_focus_on_press_)
@@ -714,6 +691,7 @@ DEFINE_ENUM_CONVERTERS(
 
 BEGIN_METADATA(Button, InkDropHostView)
 ADD_PROPERTY_METADATA(base::string16, AccessibleName)
+ADD_PROPERTY_METADATA(PressedCallback, Callback)
 ADD_PROPERTY_METADATA(bool, AnimateOnStateChange)
 ADD_PROPERTY_METADATA(bool, HasInkDropActionOnClick)
 ADD_PROPERTY_METADATA(bool, HideInkDropWhenShowingContextMenu)

@@ -4,24 +4,23 @@
 
 #include "chromeos/services/ime/decoder/decoder_engine.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "chromeos/services/ime/constants.h"
 #include "chromeos/services/ime/public/cpp/buildflags.h"
-#include "chromeos/services/ime/public/proto/messages.pb.h"
 
 namespace chromeos {
 namespace ime {
 
 namespace {
 
-// Whether to create a fake main entry.
-bool g_fake_main_entry_for_testing = false;
-
-// A client delegate that makes calls on client side.
+// A client delegate passed to the shared library in order for the
+// shared library to send replies back to the engine.
 class ClientDelegate : public ImeClientDelegate {
  public:
+  // All replies from the shared library will be sent to both |remote| and
+  // |callback|.
   ClientDelegate(const std::string& ime_spec,
                  mojo::PendingRemote<mojom::InputChannel> remote)
       : ime_spec_(ime_spec), client_remote_(std::move(remote)) {
@@ -55,55 +54,25 @@ class ClientDelegate : public ImeClientDelegate {
   mojo::Remote<mojom::InputChannel> client_remote_;
 };
 
-std::vector<uint8_t> SerializeMessage(ime::PublicMessage message) {
-  ime::Wrapper wrapper;
-  *wrapper.mutable_public_message() = std::move(message);
-  std::vector<uint8_t> output;
-  wrapper.SerializeToArray(output.data(), wrapper.ByteSizeLong());
-  return output;
-}
-
 }  // namespace
 
-void FakeEngineMainEntryForTesting() {
-  g_fake_main_entry_for_testing = true;
-}
-
 DecoderEngine::DecoderEngine(ImeCrosPlatform* platform) : platform_(platform) {
-  if (g_fake_main_entry_for_testing) {
-    // TODO(b/156897880): Add a fake main entry.
-  } else {
-    if (!TryLoadDecoder()) {
-      LOG(ERROR) << "DecoderEngine INIT FAILED!";
-    }
+  if (!TryLoadDecoder()) {
+    LOG(WARNING) << "DecoderEngine INIT INCOMPLETED.";
   }
 }
 
 DecoderEngine::~DecoderEngine() {}
 
 bool DecoderEngine::TryLoadDecoder() {
-  if (engine_main_entry_)
+  auto* decoder = ImeDecoder::GetInstance();
+  if (decoder->GetStatus() == ImeDecoder::Status::kSuccess &&
+      decoder->GetEntryPoints().isReady) {
+    decoder_entry_points_ = decoder->GetEntryPoints();
+    decoder_entry_points_->initOnce(platform_);
     return true;
-
-  // Load the decoder whose DSO has been preloaded before sandbox is engaged.
-  base::FilePath lib_path(kCrosImeDecoderLib);
-  library_ = base::ScopedNativeLibrary(lib_path);
-
-  if (!library_.is_valid()) {
-    LOG(ERROR) << "Failed to load decoder shared library from: " << lib_path
-               << ", error: " << library_.GetError()->ToString();
-    return false;
   }
-
-  // Prepare the decoder data directory before initialization.
-  base::FilePath data_dir(platform_->GetImeUserHomeDir());
-  base::CreateDirectory(data_dir.Append(kLanguageDataDirName));
-
-  ImeMainEntryCreateFn createMainEntryFn =
-      reinterpret_cast<ImeMainEntryCreateFn>(
-          library_.GetFunctionPointer(IME_MAIN_ENTRY_CREATE_FN_NAME));
-  engine_main_entry_ = createMainEntryFn(platform_);
-  return true;
+  return false;
 }
 
 bool DecoderEngine::BindRequest(
@@ -115,7 +84,7 @@ bool DecoderEngine::BindRequest(
     // Activates an IME engine via the shared library. Passing a
     // |ClientDelegate| for engine instance created by the shared library to
     // make safe calls on the client.
-    if (engine_main_entry_->ActivateIme(
+    if (decoder_entry_points_->activateIme(
             ime_spec.c_str(),
             new ClientDelegate(ime_spec, std::move(remote)))) {
       decoder_channel_receivers_.Add(this, std::move(receiver));
@@ -131,16 +100,10 @@ bool DecoderEngine::BindRequest(
 }
 
 bool DecoderEngine::IsImeSupportedByDecoder(const std::string& ime_spec) {
-  return engine_main_entry_ &&
-         engine_main_entry_->IsImeSupported(ime_spec.c_str());
-}
-
-void DecoderEngine::OnFocus() {
-  ime::PublicMessage message;
-  message.set_seq_id(current_seq_id_++);
-  *message.mutable_on_focus() = ime::OnFocus();
-
-  ProcessMessage(SerializeMessage(std::move(message)), base::DoNothing());
+  if (decoder_entry_points_) {
+    return decoder_entry_points_->support(ime_spec.c_str());
+  }
+  return false;
 }
 
 void DecoderEngine::ProcessMessage(const std::vector<uint8_t>& message,
@@ -149,8 +112,9 @@ void DecoderEngine::ProcessMessage(const std::vector<uint8_t>& message,
   std::vector<uint8_t> result;
 
   // Handle message via corresponding functions of loaded decoder.
-  if (engine_main_entry_)
-    engine_main_entry_->Process(message.data(), message.size());
+  if (decoder_entry_points_) {
+    decoder_entry_points_->process(message.data(), message.size());
+  }
 
   std::move(callback).Run(result);
 }

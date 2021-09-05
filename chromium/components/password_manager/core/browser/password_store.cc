@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -40,12 +40,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/model_impl/client_tag_based_model_type_processor.h"
 #include "components/sync/model_impl/proxy_model_type_controller_delegate.h"
-
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 #include "base/strings/string16.h"
 #include "components/password_manager/core/browser/password_store_signin_notifier.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#endif
 
 namespace password_manager {
 
@@ -92,7 +89,6 @@ void PasswordStore::DatabaseCompromisedCredentialsObserver::
   OnCompromisedCredentialsChanged();
 }
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 PasswordStore::CheckReuseRequest::CheckReuseRequest(
     PasswordReuseDetectorConsumer* consumer)
     : origin_task_runner_(base::SequencedTaskRunnerHandle::Get()),
@@ -116,7 +112,6 @@ void PasswordStore::CheckReuseRequest::OnReuseCheckDone(
                      matching_reused_credentials, saved_passwords));
   TRACE_EVENT_NESTABLE_ASYNC_END0("passwords", "CheckReuseRequest", this);
 }
-#endif
 
 PasswordStore::FormDigest::FormDigest(PasswordForm::Scheme new_scheme,
                                       const std::string& new_signon_realm,
@@ -552,7 +547,6 @@ void PasswordStore::SetSyncTaskTimeoutForTest(base::TimeDelta timeout) {
   sync_task_timeout_ = timeout;
 }
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 void PasswordStore::CheckReuse(const base::string16& input,
                                const std::string& domain,
                                PasswordReuseDetectorConsumer* consumer) {
@@ -560,9 +554,7 @@ void PasswordStore::CheckReuse(const base::string16& input,
                               std::make_unique<CheckReuseRequest>(consumer),
                               input, domain));
 }
-#endif
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 void PasswordStore::PreparePasswordHashData(const std::string& sync_username,
                                             const bool is_signed_in) {
   SchedulePasswordHashUpdate(/*should_log_metrics=*/true,
@@ -677,10 +669,11 @@ void PasswordStore::ScheduleEnterprisePasswordURLUpdate() {
                               std::move(enterprise_change_password_url)));
 }
 
-#endif
-
 PasswordStore::~PasswordStore() {
   DCHECK(shutdown_called_);
+  // PasswordSyncBridge should delete on the same sequence where it was created.
+  if (sync_bridge_)
+    background_task_runner_->DeleteSoon(FROM_HERE, std::move(sync_bridge_));
 }
 
 scoped_refptr<base::SequencedTaskRunner>
@@ -816,7 +809,6 @@ void PasswordStore::NotifyUnsyncedCredentialsWillBeDeleted(
   }
 }
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 void PasswordStore::CheckReuseImpl(std::unique_ptr<CheckReuseRequest> request,
                                    const base::string16& input,
                                    const std::string& domain) {
@@ -889,8 +881,6 @@ void PasswordStore::ClearAllNonGmailPasswordHashImpl() {
   if (reuse_detector_)
     reuse_detector_->ClearAllNonGmailPasswordHash();
 }
-
-#endif
 
 void PasswordStore::OnInitCompleted(bool success) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
@@ -1387,13 +1377,6 @@ void PasswordStore::DestroyOnBackgroundSequence() {
   delete reuse_detector_;
   reuse_detector_ = nullptr;
 #endif
-}
-
-std::ostream& operator<<(std::ostream& os,
-                         const PasswordStore::FormDigest& digest) {
-  return os << "FormDigest(scheme: " << digest.scheme
-            << ", signon_realm: " << digest.signon_realm
-            << ", url: " << digest.url << ")";
 }
 
 }  // namespace password_manager

@@ -108,10 +108,6 @@ const char kForwardVariablesFrom_Help[] =
   important because most targets have an implicit configs list, which means it
   wouldn't work at all if it didn't clobber).
 
-  The sources assignment filter (see "gn help set_sources_assignment_filter")
-  is never applied by this function. It's assumed than any desired filtering
-  was already done when sources was set on the from_scope.
-
   If variables_to_not_forward_list is non-empty, then it must contains a list
   of variable names that will not be forwarded. This is mostly useful when
   variable_list_or_star has a value of "*".

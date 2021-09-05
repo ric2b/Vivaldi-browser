@@ -19,7 +19,12 @@
 #include "services/resource_coordinator/memory_instrumentation/aggregate_metrics_processor.h"
 #include "services/resource_coordinator/memory_instrumentation/memory_dump_map_converter.h"
 #include "services/resource_coordinator/memory_instrumentation/switches.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/tracing_observer_proto.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/tracing_observer_traced_value.h"
 #include "third_party/perfetto/include/perfetto/ext/trace_processor/importers/memory_tracker/graph_processor.h"
+#include "third_party/perfetto/protos/perfetto/trace/memory_graph.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/trace_packet.pbzero.h"
 
 #if defined(OS_MAC)
 #include "base/mac/mac_util.h"
@@ -45,7 +50,8 @@ namespace {
 uint32_t CalculatePrivateFootprintKb(const mojom::RawOSMemDump& os_dump,
                                      uint32_t shared_resident_kb) {
   DCHECK(os_dump.platform_private_footprint);
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID) || \
+    defined(OS_FUCHSIA)
   uint64_t rss_anon_bytes = os_dump.platform_private_footprint->rss_anon_bytes;
   uint64_t vm_swap_bytes = os_dump.platform_private_footprint->vm_swap_bytes;
   return (rss_anon_bytes + vm_swap_bytes) / 1024;
@@ -382,7 +388,8 @@ QueuedRequestDispatcher::FinalizeVmRegionRequest(
 }
 
 void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
-                                       TracingObserver* tracing_observer) {
+                                       TracingObserver* tracing_observer,
+                                       bool use_proto_writer) {
   DCHECK(request->dump_in_progress);
   DCHECK(request->pending_responses.empty());
 
@@ -438,7 +445,7 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
       pid_to_os_dump[original_pid] = kv.second.get();
     }
 #endif
-  }  // for (response : request->responses)
+  }
 
   MemoryDumpMapConverter converter;
   perfetto::trace_processor::GraphProcessor::RawMemoryNodeMap perfettoNodeMap =
@@ -446,6 +453,8 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
 
   // Generate the global memory graph from the map of pids to dumps, removing
   // weak nodes.
+  // TODO (crbug.com/1112671): We should avoid graph processing once we moved
+  // the shared footprint computation to perfetto.
   std::unique_ptr<GlobalNodeGraph> global_graph =
       GraphProcessor::CreateMemoryGraph(perfettoNodeMap);
   GraphProcessor::RemoveWeakNodesFromGraph(global_graph.get());
@@ -461,6 +470,9 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
   // Perform the rest of the computation on the graph.
   GraphProcessor::AddOverheadsAndPropagateEntries(global_graph.get());
   GraphProcessor::CalculateSizesForGraph(global_graph.get());
+
+  // The same timestamp needs to be set for all dumps in the memory snapshot.
+  base::TimeTicks timestamp = TRACE_TIME_TICKS_NOW();
 
   // Build up the global dump by iterating on the |valid| process dumps.
   mojom::GlobalMemoryDumpPtr global_dump(mojom::GlobalMemoryDump::New());
@@ -511,8 +523,8 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
     if (request->args.add_to_trace) {
       if (raw_os_dump) {
         bool trace_os_success = tracing_observer->AddOsDumpToTraceIfEnabled(
-            request->GetRequestArgs(), pid, os_dump.get(),
-            &raw_os_dump->memory_maps);
+            request->GetRequestArgs(), pid, *os_dump, raw_os_dump->memory_maps,
+            timestamp);
         if (!trace_os_success)
           request->failed_memory_dump_count++;
       }
@@ -520,7 +532,7 @@ void QueuedRequestDispatcher::Finalize(QueuedRequest* request,
       if (raw_chrome_dump) {
         bool trace_chrome_success = AddChromeMemoryDumpToTrace(
             request->GetRequestArgs(), pid, *raw_chrome_dump, *global_graph,
-            pid_to_process_type, tracing_observer);
+            pid_to_process_type, tracing_observer, use_proto_writer, timestamp);
         if (!trace_chrome_success)
           request->failed_memory_dump_count++;
       }
@@ -602,16 +614,23 @@ bool QueuedRequestDispatcher::AddChromeMemoryDumpToTrace(
     const base::trace_event::ProcessMemoryDump& raw_chrome_dump,
     const GlobalNodeGraph& global_graph,
     const std::map<base::ProcessId, mojom::ProcessType>& pid_to_process_type,
-    TracingObserver* tracing_observer) {
+    TracingObserver* tracing_observer,
+    bool use_proto_writer,
+    const base::TimeTicks& timestamp) {
   bool is_chrome_tracing_enabled =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableChromeTracingComputation);
   if (!is_chrome_tracing_enabled) {
-    return tracing_observer->AddChromeDumpToTraceIfEnabled(args, pid,
-                                                           &raw_chrome_dump);
+    return tracing_observer->AddChromeDumpToTraceIfEnabled(
+        args, pid, &raw_chrome_dump, timestamp);
   }
   if (!tracing_observer->ShouldAddToTrace(args))
     return false;
+
+  if (use_proto_writer) {
+    return tracing_observer->AddChromeDumpToTraceIfEnabled(
+        args, pid, &raw_chrome_dump, timestamp);
+  }
 
   const GlobalNodeGraph::Process& process =
       *global_graph.process_node_graphs().find(pid)->second;
@@ -623,7 +642,7 @@ bool QueuedRequestDispatcher::AddChromeMemoryDumpToTrace(
   } else {
     traced_value = GetChromeDumpTracedValue(process);
   }
-  tracing_observer->AddToTrace(args, pid, std::move(traced_value));
+  TracingObserverTracedValue::AddToTrace(args, pid, std::move(traced_value));
 
   return true;
 }

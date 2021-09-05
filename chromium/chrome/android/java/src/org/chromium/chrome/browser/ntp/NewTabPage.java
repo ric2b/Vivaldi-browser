@@ -6,16 +6,17 @@ package org.chromium.chrome.browser.ntp;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.view.ViewCompat;
 import androidx.recyclerview.widget.RecyclerView;
@@ -45,7 +46,7 @@ import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderView;
-import org.chromium.chrome.browser.omnibox.LocationBar.OmniboxFocusReason;
+import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.query_tiles.QueryTileSection.QueryInfo;
@@ -68,21 +69,18 @@ import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
-import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.mojom.WindowOpenDisposition;
-import org.chromium.url.GURL;
 
 import java.util.List;
-
-import org.vivaldi.browser.common.VivaldiUrlConstants;
 
 /**
  * Provides functionality when the user interacts with the NTP.
@@ -101,6 +99,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
 
     private final String mTitle;
+    private Resources mResources;
     private final int mBackgroundColor;
     protected final NewTabPageManagerImpl mNewTabPageManager;
     protected final TileGroup.Delegate mTileGroupDelegate;
@@ -159,33 +158,6 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         void onNtpScrollChanged(float scrollPercentage);
     }
 
-    /**
-     * @param gurl The GURL to check whether it is for the NTP.
-     * @return Whether the passed in URL is used to render the NTP.
-     */
-    public static boolean isNTPUrl(GURL gurl) {
-        // Vivaldi
-        boolean is_vivaldi_scheme = gurl.getScheme() != null
-                && VivaldiUrlConstants.VIVALDI_SCHEME.compareTo(gurl.getScheme()) == 0;
-        if (!is_vivaldi_scheme)
-        if (!gurl.isValid() || !UrlUtilities.isInternalScheme(gurl)) return false;
-        return UrlConstants.NTP_HOST.equals(gurl.getHost());
-    }
-
-    /**
-     * @param url The URL to check whether it is for the NTP.
-     * @return Whether the passed in URL is used to render the NTP.
-     */
-    public static boolean isNTPUrl(String url) {
-        // Also handle the legacy chrome://newtab and about:newtab URLs since they will redirect to
-        // chrome-native://newtab natively.
-        if (TextUtils.isEmpty(url)) return false;
-        // We need to fixup the URL to handle about: schemes and transform them into the equivalent
-        // chrome:// scheme so that GURL parses the host correctly.
-        GURL gurl = UrlFormatter.fixupUrl(url);
-        return isNTPUrl(gurl);
-    }
-
     protected class NewTabPageManagerImpl
             extends SuggestionsUiDelegateImpl implements NewTabPageManager {
         public NewTabPageManagerImpl(SuggestionsNavigationDelegate navigationDelegate,
@@ -232,7 +204,13 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         public boolean isCurrentPage() {
             if (mIsDestroyed) return false;
             if (mFakeboxDelegate == null) return false;
-            return mFakeboxDelegate.isCurrentPage(NewTabPage.this);
+            return getNewTabPageForCurrentTab() == NewTabPage.this;
+        }
+
+        private NewTabPage getNewTabPageForCurrentTab() {
+            Tab currentTab = mActivityTabProvider.get();
+            NativePage nativePage = currentTab != null ? currentTab.getNativePage() : null;
+            return (nativePage instanceof NewTabPage) ? (NewTabPage) nativePage : null;
         }
 
         @Override
@@ -319,6 +297,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         mTileGroupDelegate = new NewTabPageTileGroupDelegate(
                 activity, profile, navigationDelegate, snackbarManager);
 
+        mResources = activity.getResources();
         mTitle = activity.getResources().getString(R.string.button_new_tab);
         mBackgroundColor =
                 ApiCompatibilityUtils.getColor(activity.getResources(), R.color.default_bg_color);
@@ -341,7 +320,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
 
             @Override
             public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
-                mNewTabPageLayout.onLoadUrl(isNTPUrl(tab.getUrl()));
+                mNewTabPageLayout.onLoadUrl(UrlUtilities.isNTPUrl(tab.getUrl()));
             }
         };
         mTab.addObserver(mTabObserver);
@@ -438,7 +417,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
                         new SnapScrollHelper(mNewTabPageManager, mNewTabPageLayout),
                         mNewTabPageLayout, sectionHeaderView, new FeedV1ActionOptions(),
                         isInNightMode, this, mNewTabPageManager.getNavigationDelegate(), profile,
-                        /* isPlaceholderRequested= */ false, bottomSheetController);
+                        /* isPlaceholderShownInitially= */ false, bottomSheetController);
 
         // Record the timestamp at which the new tab page's construction started.
         uma.trackTimeToFirstDraw(mFeedSurfaceProvider.getView(), mConstructedTimeNs);
@@ -467,7 +446,7 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
         // NTP itself, at which point the last committed entry is not for the NTP yet. This method
         // will then be called a second time when the user navigates away, at which point the last
         // committed entry is for the NTP. The extra data must only be set in the latter case.
-        if (!isNTPUrl(entry.getUrl())) return;
+        if (!UrlUtilities.isNTPUrl(entry.getUrl())) return;
 
         controller.setEntryExtraData(index, key, value);
     }
@@ -775,6 +754,27 @@ public class NewTabPage implements NativePage, InvalidationAwareThumbnailProvide
     @Override
     public int getBackgroundColor() {
         return mBackgroundColor;
+    }
+
+    @Override
+    public @ColorInt int getToolbarTextBoxBackgroundColor(@ColorInt int defaultColor) {
+        if (isLocationBarShownInNTP()) {
+            return isLocationBarScrolledToTopInNtp()
+                    ? ApiCompatibilityUtils.getColor(
+                            mResources, R.color.toolbar_text_box_background)
+                    : ChromeColors.getPrimaryBackgroundColor(mResources, false);
+        }
+        return defaultColor;
+    }
+
+    @Override
+    public @ColorInt int getToolbarSceneLayerBackground(@ColorInt int defaultColor) {
+        return isLocationBarShownInNTP() ? getBackgroundColor() : defaultColor;
+    }
+
+    @Override
+    public float getToolbarTextBoxAlpha(float defaultAlpha) {
+        return isLocationBarShownInNTP() ? 0.f : defaultAlpha;
     }
 
     @Override

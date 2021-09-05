@@ -21,6 +21,7 @@
 
 #include "third_party/blink/renderer/core/css/style_rule.h"
 
+#include "third_party/blink/renderer/core/css/css_counter_style_rule.h"
 #include "third_party/blink/renderer/core/css/css_font_face_rule.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_import_rule.h"
@@ -96,6 +97,9 @@ void StyleRuleBase::Trace(Visitor* visitor) const {
     case kViewport:
       To<StyleRuleViewport>(this)->TraceAfterDispatch(visitor);
       return;
+    case kCounterStyle:
+      To<StyleRuleCounterStyle>(this)->TraceAfterDispatch(visitor);
+      return;
   }
   NOTREACHED();
 }
@@ -141,6 +145,9 @@ void StyleRuleBase::FinalizeGarbageCollectedObject() {
     case kViewport:
       To<StyleRuleViewport>(this)->~StyleRuleViewport();
       return;
+    case kCounterStyle:
+      To<StyleRuleCounterStyle>(this)->~StyleRuleCounterStyle();
+      return;
   }
   NOTREACHED();
 }
@@ -175,6 +182,8 @@ StyleRuleBase* StyleRuleBase::Copy() const {
     case kKeyframe:
       NOTREACHED();
       return nullptr;
+    case kCounterStyle:
+      return To<StyleRuleCounterStyle>(this)->Copy();
   }
   NOTREACHED();
   return nullptr;
@@ -224,6 +233,10 @@ CSSRule* StyleRuleBase::CreateCSSOMWrapper(CSSStyleSheet* parent_sheet,
     case kNamespace:
       rule = MakeGarbageCollected<CSSNamespaceRule>(
           To<StyleRuleNamespace>(self), parent_sheet);
+      break;
+    case kCounterStyle:
+      rule = MakeGarbageCollected<CSSCounterStyleRule>(
+          To<StyleRuleCounterStyle>(self), parent_sheet);
       break;
     case kKeyframe:
     case kCharset:
@@ -332,6 +345,7 @@ StyleRuleProperty::StyleRuleProperty(const String& name,
 
 StyleRuleProperty::StyleRuleProperty(const StyleRuleProperty& property_rule)
     : StyleRuleBase(property_rule),
+      name_(property_rule.name_),
       properties_(property_rule.properties_->MutableCopy()) {}
 
 StyleRuleProperty::~StyleRuleProperty() = default;
@@ -481,6 +495,43 @@ MutableCSSPropertyValueSet& StyleRuleViewport::MutableProperties() {
 
 void StyleRuleViewport::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(properties_);
+  StyleRuleBase::TraceAfterDispatch(visitor);
+}
+
+StyleRuleCounterStyle::StyleRuleCounterStyle(const AtomicString& name,
+                                             CSSPropertyValueSet* properties)
+    : StyleRuleBase(kCounterStyle),
+      name_(name),
+      system_(properties->GetPropertyCSSValue(CSSPropertyID::kSystem)),
+      negative_(properties->GetPropertyCSSValue(CSSPropertyID::kNegative)),
+      prefix_(properties->GetPropertyCSSValue(CSSPropertyID::kPrefix)),
+      suffix_(properties->GetPropertyCSSValue(CSSPropertyID::kSuffix)),
+      range_(properties->GetPropertyCSSValue(CSSPropertyID::kRange)),
+      pad_(properties->GetPropertyCSSValue(CSSPropertyID::kPad)),
+      fallback_(properties->GetPropertyCSSValue(CSSPropertyID::kFallback)),
+      symbols_(properties->GetPropertyCSSValue(CSSPropertyID::kSymbols)),
+      additive_symbols_(
+          properties->GetPropertyCSSValue(CSSPropertyID::kAdditiveSymbols)),
+      speak_as_(properties->GetPropertyCSSValue(CSSPropertyID::kSpeakAs)) {
+  DCHECK(properties);
+}
+
+StyleRuleCounterStyle::StyleRuleCounterStyle(const StyleRuleCounterStyle&) =
+    default;
+
+StyleRuleCounterStyle::~StyleRuleCounterStyle() = default;
+
+void StyleRuleCounterStyle::TraceAfterDispatch(blink::Visitor* visitor) const {
+  visitor->Trace(system_);
+  visitor->Trace(negative_);
+  visitor->Trace(prefix_);
+  visitor->Trace(suffix_);
+  visitor->Trace(range_);
+  visitor->Trace(pad_);
+  visitor->Trace(fallback_);
+  visitor->Trace(symbols_);
+  visitor->Trace(additive_symbols_);
+  visitor->Trace(speak_as_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
 

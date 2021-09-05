@@ -8,12 +8,14 @@
 #include <set>
 #include <string>
 #include <utility>
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/events/gesture_event_details.h"
 
 #if defined(OS_WIN)
 #include <vector>
 #endif
 
+#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -53,6 +55,7 @@
 #include "ui/views/controls/views_text_services_context_menu.h"
 #include "ui/views/drag_utils.h"
 #include "ui/views/layout/layout_provider.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/native_cursor.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
@@ -380,6 +383,10 @@ void Textfield::SetAssociatedLabel(View* labelling_view) {
   // associated label changes.
   SetAccessibleName(
       node_data.GetString16Attribute(ax::mojom::StringAttribute::kName));
+}
+
+void Textfield::SetController(TextfieldController* controller) {
+  controller_ = controller;
 }
 
 bool Textfield::GetReadOnly() const {
@@ -819,6 +826,8 @@ bool Textfield::OnKeyPressed(const ui::KeyEvent& event) {
     return handled;
   }
 #endif
+
+  base::AutoReset<bool> show_rejection_ui(&show_rejection_ui_if_any_, true);
 
   if (edit_command == ui::TextEditCommand::INVALID_COMMAND)
     edit_command = GetCommandForKeyEvent(event);
@@ -1765,9 +1774,12 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
       return editable && readable && HasSelection();
     case ui::TextEditCommand::COPY:
       return readable && HasSelection();
-    case ui::TextEditCommand::PASTE:
+    case ui::TextEditCommand::PASTE: {
+      ui::DataTransferEndpoint data_dst(ui::EndpointType::kDefault,
+                                        show_rejection_ui_if_any_);
       ui::Clipboard::GetForCurrentThread()->ReadText(
-          ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr, &result);
+          ui::ClipboardBuffer::kCopyPaste, &data_dst, &result);
+    }
       return editable && !result.empty();
     case ui::TextEditCommand::SELECT_ALL:
       return !GetText().empty() &&
@@ -1829,6 +1841,7 @@ bool Textfield::SetCompositionFromExistingText(
     const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
   // TODO(https://crbug.com/952355): Support custom text spans.
   DCHECK(!model_->HasCompositionText());
+  OnBeforeUserAction();
   model_->SetCompositionFromExistingText(range);
   SchedulePaint();
   OnAfterUserAction();
@@ -1913,6 +1926,8 @@ void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
   DestroyTouchSelection();
 
   bool add_to_kill_buffer = false;
+
+  base::AutoReset<bool> show_rejection_ui(&show_rejection_ui_if_any_, true);
 
   // Some codepaths may bypass GetCommandForKeyEvent, so any selection-dependent
   // modifications of the command should happen here.

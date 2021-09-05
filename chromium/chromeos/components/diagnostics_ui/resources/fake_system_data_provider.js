@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {BatteryChargeStatus, BatteryHealth, BatteryInfo, CpuUsage, CpuUsageObserver, ExternalPowerSource, MemoryUsage, MemoryUsageObserver, SystemInfo} from './diagnostics_types.js';
+import {BatteryChargeStatus, BatteryHealth, BatteryInfo, CpuUsage, CpuUsageObserver, ExternalPowerSource, MemoryUsage, MemoryUsageObserver, SystemDataProviderInterface, SystemInfo} from './diagnostics_types.js';
 import {FakeMethodResolver} from './fake_method_resolver.js';
 import {FakeObservables} from './fake_observables.js';
 
@@ -11,6 +11,7 @@ import {FakeObservables} from './fake_observables.js';
  * Implements a fake version of the SystemDataProvider mojo interface.
  */
 
+/** @implements {SystemDataProviderInterface} */
 export class FakeSystemDataProvider {
   constructor() {
     /** @private {!FakeMethodResolver} */
@@ -24,7 +25,7 @@ export class FakeSystemDataProvider {
   }
 
   /**
-   * @return {!Promise<!SystemInfo>}
+   * @return {!Promise<!{systemInfo: !SystemInfo}>}
    */
   getSystemInfo() {
     return this.methods_.resolveMethod('getSystemInfo');
@@ -35,12 +36,12 @@ export class FakeSystemDataProvider {
    * @param {!SystemInfo} systemInfo
    */
   setFakeSystemInfo(systemInfo) {
-    this.methods_.setResult('getSystemInfo', systemInfo);
+    this.methods_.setResult('getSystemInfo', {systemInfo: systemInfo});
   }
 
   /**
    * Implements SystemDataProviderInterface.GetBatteryInfo.
-   * @return {!Promise<!BatteryInfo>}
+   * @return {!Promise<!{batteryInfo: !BatteryInfo}>}
    */
   getBatteryInfo() {
     return this.methods_.resolveMethod('getBatteryInfo');
@@ -51,7 +52,7 @@ export class FakeSystemDataProvider {
    * @param {!BatteryInfo} batteryInfo
    */
   setFakeBatteryInfo(batteryInfo) {
-    this.methods_.setResult('getBatteryInfo', batteryInfo);
+    this.methods_.setResult('getBatteryInfo', {batteryInfo: batteryInfo});
   }
 
   /*
@@ -78,6 +79,14 @@ export class FakeSystemDataProvider {
         batteryChargeStatusList);
   }
 
+  /**
+   * Causes the battery charge status observer to fire.
+   */
+  triggerBatteryChargeStatusObserver() {
+    this.observables_.trigger(
+        'BatteryChargeStatusObserver_onBatteryChargeStatusUpdated');
+  }
+
   /*
    * Implements SystemDataProviderInterface.ObserveBatteryHealth.
    * @param {!BatteryHealthObserver} remote
@@ -98,6 +107,13 @@ export class FakeSystemDataProvider {
   setFakeBatteryHealth(batteryHealthList) {
     this.observables_.setObservableData(
         'BatteryHealthObserver_onBatteryHealthUpdated', batteryHealthList);
+  }
+
+  /**
+   * Causes the battery health observer to fire.
+   */
+  triggerBatteryHealthObserver() {
+    this.observables_.trigger('BatteryHealthObserver_onBatteryHealthUpdated');
   }
 
   /*
@@ -121,6 +137,13 @@ export class FakeSystemDataProvider {
         'CpuUsageObserver_onCpuUsageUpdated', cpuUsageList);
   }
 
+  /**
+   * Causes the CPU usage observer to fire.
+   */
+  triggerCpuUsageObserver() {
+    this.observables_.trigger('CpuUsageObserver_onCpuUsageUpdated');
+  }
+
   /*
    * Implements SystemDataProviderInterface.ObserveMemoryUsage.
    * @param {!MemoryUsageObserver} remote
@@ -141,6 +164,13 @@ export class FakeSystemDataProvider {
   setFakeMemoryUsage(memoryUsageList) {
     this.observables_.setObservableData(
         'MemoryUsageObserver_onMemoryUsageUpdated', memoryUsageList);
+  }
+
+  /**
+   * Causes the memory usage observer to fire.
+   */
+  triggerMemoryUsageObserver() {
+    this.observables_.trigger('MemoryUsageObserver_onMemoryUsageUpdated');
   }
 
   /**
@@ -177,7 +207,7 @@ export class FakeSystemDataProvider {
    */
   registerObservables() {
     this.observables_.register(
-    'BatteryChargeStatusObserver_onBatteryChargeStatusUpdated');
+        'BatteryChargeStatusObserver_onBatteryChargeStatusUpdated');
     this.observables_.register('BatteryHealthObserver_onBatteryHealthUpdated');
     this.observables_.register('CpuUsageObserver_onCpuUsageUpdated');
     this.observables_.register('MemoryUsageObserver_onMemoryUsageUpdated');

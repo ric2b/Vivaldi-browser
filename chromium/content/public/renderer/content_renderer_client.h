@@ -56,6 +56,7 @@ class WebURL;
 class WebURLRequest;
 struct WebPluginParams;
 struct WebURLError;
+enum class ProtocolHandlerSecurityLevel;
 }  // namespace blink
 
 namespace media {
@@ -127,14 +128,6 @@ class CONTENT_EXPORT ContentRendererClient {
       RenderFrame* render_frame,
       const base::FilePath& plugin_path);
 
-  // Returns true if the embedder has an error page to show for the given http
-  // status code.
-  virtual bool HasErrorPage(int http_status_code);
-
-  // Returns false for new tab page activities, which should be filtered out in
-  // UseCounter; returns true otherwise.
-  virtual bool ShouldTrackUseCounter(const GURL& url);
-
   // Returns the information to display when a navigation error occurs.
   // |error_html| should be set to null if this is a custom error page that will
   // set its own html content, otherwise if |error_html| is not null then it may
@@ -149,10 +142,10 @@ class CONTENT_EXPORT ContentRendererClient {
 
   virtual void PrepareErrorPageForHttpStatusError(
       content::RenderFrame* render_frame,
-      const GURL& unreachable_url,
+      const blink::WebURLError& error,
       const std::string& http_method,
       int http_status,
-      std::string* error_html) {}
+      std::string* error_html);
 
   // Allows the embedder to control when media resources are loaded. Embedders
   // can run |closure| immediately if they don't wish to defer media resource
@@ -196,6 +189,9 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Returns true if a popup window should be allowed.
   virtual bool AllowPopup();
+
+  // Returns the security level to use for Navigator.RegisterProtocolHandler().
+  virtual blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel();
 
 #if defined(OS_ANDROID)
   // TODO(sgurun) This callback is deprecated and will be removed as soon
@@ -413,11 +409,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // most once.
   virtual void DidSetUserAgent(const std::string& user_agent);
 
-  // Returns true if |url| still requires native Web Components v0 features.
+  // Returns true if |url| still requires the native HTML Imports feature.
   // Used for Web UI pages.
   // TODO(937747): Remove this function when all WebUIs can function without
-  // Web Components v0.
-  virtual bool RequiresWebComponentsV0(const GURL& url);
+  // HTML Imports.
+  virtual bool RequiresHtmlImports(const GURL& url);
 
   // Optionally returns audio renderer algorithm parameters.
   virtual base::Optional<::media::AudioRendererAlgorithmParameters>

@@ -3,6 +3,7 @@
 <translationbundle lang="pt-BR">
 <translation id="1276998909102132017">Imagens da galeria</translation>
 <translation id="1430915738399379752">Imprimir</translation>
+<translation id="1473110567575736769">Timer de 3 segundos</translation>
 <translation id="1620510694547887537">Câmera</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Nada gravado</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Resolução da câmera</translation>
 <translation id="3517926952904427380">Não foi possível capturar o retrato</translation>
 <translation id="3569311554794739032">Tem certeza de que quer remover <ph name="FILE" />?</translation>
+<translation id="3750315947605636967">Sua câmera está sendo usada por outro app</translation>
 <translation id="3810838688059735925">Vídeo</translation>
+<translation id="4000398125663085899">Novos vídeos e fotos serão salvos em uma pasta no app Arquivos: Meus arquivos &gt; Câmera</translation>
 <translation id="4118525110028899586">Pausar gravação</translation>
 <translation id="4279490309300973883">Espelhamento</translation>
 <translation id="4329152592498422850">Alternar para tirar foto quadrada</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">Sua câmera está indisponível no momento.
         Verifique se ela está conectada corretamente.</translation>
 <translation id="5152121255775685072">Ir para a galeria</translation>
+<translation id="5422455049771430511">Suas fotos e seus vídeos estão de casa nova</translation>
 <translation id="5671277269877808209">Quadrado</translation>
 <translation id="5775960006311140197">Modo Especialista</translation>
 <translation id="5869546221129391014">Grade</translation>
+<translation id="6040143037577758943">Fechar</translation>
 <translation id="6073451960410192870">Parar de gravar</translation>
 <translation id="6197807149213783179">Salvar metadados</translation>
 <translation id="6233780560267770709">3 por 3</translation>
@@ -60,6 +65,7 @@ Caso seu feedback seja sobre a qualidade da imagem ou do vídeo, adicione uma fo
 <translation id="6965382102122355670">OK</translation>
 <translation id="698156982839284926">3 segundos</translation>
 <translation id="712848772518857951">Tem certeza de que quer remover <ph name="COUNT" /> itens?</translation>
+<translation id="7134221860976209830">Timer de 10 segundos</translation>
 <translation id="7243947652761655814">Resolução do vídeo</translation>
 <translation id="7337660886763914220">Erros no sistema de arquivos.</translation>
 <translation id="7557677699350329807">Alternar para a próxima câmera</translation>
@@ -67,7 +73,6 @@ Caso seu feedback seja sobre a qualidade da imagem ou do vídeo, adicione uma fo
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7670511624014457267">60 QPS</translation>
-<translation id="8049189770492311300">Timer</translation>
 <translation id="8067883171444229417">Assistir vídeo</translation>
 <translation id="8131740175452115882">Confirmar</translation>
 <translation id="8145038249676204903">Alternar para tirar foto</translation>

@@ -5,6 +5,7 @@
 #include "content/shell/browser/shell_platform_delegate.h"
 
 #include "content/public/browser/javascript_dialog_manager.h"
+#include "content/public/browser/web_contents.h"
 
 namespace content {
 
@@ -17,11 +18,12 @@ ShellPlatformDelegate::CreateJavaScriptDialogManager(Shell* shell) {
   return nullptr;
 }
 
-std::unique_ptr<BluetoothChooser> ShellPlatformDelegate::RunBluetoothChooser(
+bool ShellPlatformDelegate::HandleRequestToLockMouse(
     Shell* shell,
-    RenderFrameHost* frame,
-    const BluetoothChooser::EventHandler& event_handler) {
-  return nullptr;
+    WebContents* web_contents,
+    bool user_gesture,
+    bool last_unlocked_by_target) {
+  return false;
 }
 
 bool ShellPlatformDelegate::ShouldAllowRunningInsecureContent(Shell* shell) {

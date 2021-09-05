@@ -27,6 +27,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/buildflags.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/upgrade_detector/build_state.h"
@@ -125,10 +126,8 @@ void UpgradeDetectorImpl::StartUpgradeNotificationTimer() {
   if (upgrade_detected_time().is_null())
     set_upgrade_detected_time(clock()->Now());
 
-  // Start the repeating timer for notifying the user after a certain period.
-  upgrade_notification_timer_.Start(
-      FROM_HERE, is_testing_ ? kNotifyCycleTimeForTesting : kNotifyCycleTime,
-      this, &UpgradeDetectorImpl::NotifyOnUpgrade);
+  // Broadcast the appropriate notification.
+  NotifyOnUpgrade();
 }
 
 void UpgradeDetectorImpl::InitializeThresholds() {
@@ -389,8 +388,8 @@ void UpgradeDetectorImpl::OnRelaunchNotificationPeriodPrefChanged() {
 }
 
 void UpgradeDetectorImpl::NotifyOnUpgrade() {
-  const base::TimeDelta time_passed = clock()->Now() - upgrade_detected_time();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  const base::TimeDelta time_passed = clock()->Now() - upgrade_detected_time();
   NotifyOnUpgradeWithTimePassed(time_passed);
 }
 
@@ -457,7 +456,8 @@ void UpgradeDetectorImpl::Init() {
 
   // On Windows, only enable upgrade notifications for Google Chrome builds.
   // Chromium does not use an auto-updater.
-#if !defined(OS_WIN) || BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if !defined(OS_WIN) || BUILDFLAG(GOOGLE_CHROME_BRANDING) || \
+    BUILDFLAG(ENABLE_CHROMIUM_UPDATER)
 
   // On macOS, only enable upgrade notifications if the updater (Keystone) is
   // present.

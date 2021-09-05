@@ -120,7 +120,8 @@ sessions::LiveTab* AndroidLiveTabContext::AddRestoredTab(
     bool pin,
     bool from_last_session,
     const sessions::PlatformSpecificTabData* tab_platform_data,
-    const sessions::SerializedUserAgentOverride& user_agent_override) {
+    const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, bool> page_action_overrides) {
   Profile* profile = tab_model_->GetProfile();
 
   // Prepare navigation history.
@@ -150,7 +151,8 @@ sessions::LiveTab* AndroidLiveTabContext::ReplaceRestoredTab(
     bool from_last_session,
     const std::string& extension_app_id,
     const sessions::PlatformSpecificTabData* tab_platform_data,
-    const sessions::SerializedUserAgentOverride& user_agent_override) {
+    const sessions::SerializedUserAgentOverride& user_agent_override,
+    const std::map<std::string, bool> page_action_overrides) {
   NOTIMPLEMENTED();
   return nullptr;
 }

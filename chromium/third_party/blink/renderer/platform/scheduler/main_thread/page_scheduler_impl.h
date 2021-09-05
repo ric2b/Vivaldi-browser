@@ -63,7 +63,6 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   void SetPageVisible(bool page_visible) override;
   void SetPageFrozen(bool) override;
   void SetPageBackForwardCached(bool) override;
-  bool IsStoredInBackForwardCache() { return is_stored_in_back_forward_cache_; }
   void SetKeepActive(bool) override;
   bool IsMainFrameLocal() const override;
   void SetIsMainFrameLocal(bool is_local) override;
@@ -71,6 +70,10 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   base::TimeTicks GetStoredInBackForwardCacheTimestamp() {
     return stored_in_back_forward_cache_timestamp_;
   }
+  bool IsInBackForwardCache() const override {
+    return is_stored_in_back_forward_cache_;
+  }
+  bool has_ipc_detection_enabled() { return has_ipc_detection_enabled_; }
 
   std::unique_ptr<FrameScheduler> CreateFrameScheduler(
       FrameScheduler::Delegate* delegate,
@@ -101,7 +104,6 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
 
   bool IsPageVisible() const;
   bool IsFrozen() const;
-  bool OptedOutFromAllThrottling() const;
   bool OptedOutFromAggressiveThrottling() const;
   // Returns whether CPU time is throttled for the page. Note: This is
   // independent from wake up rate throttling.
@@ -115,7 +117,7 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   bool IsOrdinary() const;
 
   MainThreadSchedulerImpl* GetMainThreadScheduler() const;
-  AgentGroupSchedulerImpl& GetAgentGroupScheduler();
+  AgentGroupSchedulerImpl& GetAgentGroupScheduler() override;
 
   void Unregister(FrameSchedulerImpl*);
   void OnNavigation();
@@ -134,6 +136,9 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   PageLifecycleState GetPageLifecycleState() const;
 
   void SetUpIPCTaskDetection();
+  // This flag tracks whether or not IPC tasks are tracked if they are posted to
+  // frames or pages that are stored in the back-forward cache
+  bool has_ipc_detection_enabled_ = false;
 
   // Generally UKMs are associated with the main frame of a page, but the
   // implementation allows to request a recorder from any local frame with
@@ -304,7 +309,6 @@ class PLATFORM_EXPORT PageSchedulerImpl : public PageScheduler {
   AudioState audio_state_;
   bool is_frozen_;
   bool reported_background_throttling_since_navigation_;
-  bool opted_out_from_all_throttling_;
   bool opted_out_from_aggressive_throttling_;
   bool nested_runloop_;
   bool is_main_frame_local_;

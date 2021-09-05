@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Wyślij link pocztą e-mail</translation>
 <translation id="1454726940098520109">Nie pytaj ponownie</translation>
 <translation id="1462666970065907900">Czy na pewno chcesz zamknąć to okno?</translation>
+<translation id="1526344461589023948">Wystąpił błąd podczas próby zapisania pobranej aktualizacji. Sprawdź, czy komputer ma wystarczającą ilość miejsca na dysku i spróbuj ponownie później.</translation>
 <translation id="1657174850639146440">Potwór 9</translation>
 <translation id="1676595396635191120">Nowe okno prywatne</translation>
+<translation id="1702758681952953055">Jeśli błąd będzie się powtarzał, zgłoś go i podaj następujące informacje:</translation>
 <translation id="1728549374069268714">Wklej i przejdź</translation>
 <translation id="1756026472674246267">Otwórz link w nowej karcie</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Krajobraz 15</translation>
 <translation id="19598411548897379">Ogólny</translation>
 <translation id="2079036669923635404">Kliknij tutaj, aby zaktualizować Vivaldi do wersji <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Wystąpił błąd podczas pobierania plików aktualizacji. Sprawdź połączenie internetowe i spróbuj ponownie później.</translation>
 <translation id="2441056087170876076">Potwór 2</translation>
 <translation id="2444387452209867610">Wstaw notatkę</translation>
 <translation id="2486841023299517366">Zwierzę 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Otwórz link w nowym oknie</translation>
 <translation id="3588820906588687999">Otwórz obraz w nowej karcie</translation>
 <translation id="3601066750251199488">Potwór 3</translation>
+<translation id="3708982624815781692">Pobieranie zostało anulowane.</translation>
 <translation id="3732157130969736834">Dodaj link do zakładek</translation>
 <translation id="3732388226447288666">Zwierzę 2</translation>
 <translation id="3732439195215136813">Zwierzę 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Potwór 5</translation>
 <translation id="5615637589913244581">Opera 15+ (Beta)</translation>
 <translation id="5648110075441906505">Otwórz obraz w nowym oknie</translation>
+<translation id="5656371807944747581">Błąd aktualizacji!</translation>
 <translation id="5716238312826274098">Wyłącz powiadomienia</translation>
 <translation id="5770433027661640693">Krajobraz 10</translation>
 <translation id="5857090052475505287">Nowy folder</translation>
 <translation id="588258955323874662">Pełny ekran</translation>
 <translation id="5916080360077521750">Niestety, twoje ustawienia Chrome nie są dostępne podczas korzystania z przeglądarki. Aby zaimportować te ustawienia, zapisz swoją pracę i zamknij wszystkie okna Chrome. Następnie naciśnij Dalej, aby kontynuować.</translation>
+<translation id="6040143037577758943">Zamknij</translation>
 <translation id="6229528619562190452">Kliknij tutaj, aby zaktualizować przeglądarkę Vivaldi.</translation>
 <translation id="6234173136417926046">Użyj obrazu jako tła szybkiego wybierania</translation>
 <translation id="630690498669249215">Plik z zakładkami Opery</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Krajobraz 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Przeglądarka Vivaldi powstała dzięki otwartemu projektowi <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> oraz innego <ph name="BEGIN_LINK_OSS" />oprogramowania open source<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Nie udało się uruchomić instalatora aktualizacji. Sprawdź, czy komputer ma wystarczającą ilość pamięci lub miejsca na dysku i spróbuj ponownie później.</translation>
 <translation id="7715497554424665066">Ignoruj aktualizację</translation>
 <translation id="7724603315864178912">Wytnij</translation>
 <translation id="7793738202466490491">Dodaj jako wydarzenie kalendarza</translation>
+<translation id="7848222781052558334">Nie udało się zweryfikować podpisu cyfrowego pobranych plików.</translation>
 <translation id="7865983598101744945">Potwierdź zamknięcie</translation>
 <translation id="7957213167373139414">Mój kalendarz</translation>
 <translation id="8027581147000338959">Otwórz w nowym oknie</translation>

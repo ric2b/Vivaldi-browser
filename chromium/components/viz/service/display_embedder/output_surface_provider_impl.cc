@@ -7,7 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/sequenced_task_runner.h"
@@ -16,6 +17,7 @@
 #include "cc/base/switches.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
+#include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
 #include "components/viz/service/display_embedder/gl_output_surface.h"
 #include "components/viz/service/display_embedder/gl_output_surface_buffer_queue.h"
 #include "components/viz/service/display_embedder/gl_output_surface_offscreen.h"
@@ -99,10 +101,33 @@ OutputSurfaceProviderImpl::OutputSurfaceProviderImpl(bool headless)
 
 OutputSurfaceProviderImpl::~OutputSurfaceProviderImpl() = default;
 
+std::unique_ptr<DisplayCompositorMemoryAndTaskController>
+OutputSurfaceProviderImpl::CreateGpuDependency(
+    bool gpu_compositing,
+    gpu::SurfaceHandle surface_handle,
+    const RendererSettings& renderer_settings) {
+  if (!gpu_compositing)
+    return nullptr;
+
+  if (renderer_settings.use_skia_renderer) {
+    gpu::ScopedAllowScheduleGpuTask allow_schedule_gpu_task;
+    auto skia_deps = std::make_unique<SkiaOutputSurfaceDependencyImpl>(
+        gpu_service_impl_, surface_handle);
+    return std::make_unique<DisplayCompositorMemoryAndTaskController>(
+        std::move(skia_deps));
+  } else {
+    DCHECK(task_executor_);
+    gpu::ScopedAllowScheduleGpuTask allow_schedule_gpu_task;
+    return std::make_unique<DisplayCompositorMemoryAndTaskController>(
+        task_executor_, image_factory_);
+  }
+}
+
 std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
     gpu::SurfaceHandle surface_handle,
     bool gpu_compositing,
     mojom::DisplayClient* display_client,
+    DisplayCompositorMemoryAndTaskController* gpu_dependency,
     const RendererSettings& renderer_settings,
     const DebugRendererSettings* debug_settings) {
 #if defined(OS_CHROMEOS)
@@ -118,12 +143,11 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
     output_surface = std::make_unique<SoftwareOutputSurface>(
         CreateSoftwareOutputDeviceForPlatform(surface_handle, display_client));
   } else if (renderer_settings.use_skia_renderer) {
+    DCHECK(gpu_dependency);
     {
       gpu::ScopedAllowScheduleGpuTask allow_schedule_gpu_task;
       output_surface = SkiaOutputSurfaceImpl::Create(
-          std::make_unique<SkiaOutputSurfaceDependencyImpl>(gpu_service_impl_,
-                                                            surface_handle),
-          renderer_settings, debug_settings);
+          gpu_dependency, renderer_settings, debug_settings);
     }
     if (!output_surface) {
 #if defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)
@@ -138,6 +162,7 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
     }
   } else {
     DCHECK(task_executor_);
+    DCHECK(gpu_dependency);
 
     scoped_refptr<VizProcessContextProvider> context_provider;
 
@@ -155,7 +180,8 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
 
       context_provider = base::MakeRefCounted<VizProcessContextProvider>(
           task_executor_, surface_handle, gpu_memory_buffer_manager_.get(),
-          image_factory_, gpu_channel_manager_delegate_, renderer_settings);
+          image_factory_, gpu_channel_manager_delegate_, gpu_dependency,
+          renderer_settings);
       context_result = context_provider->BindToCurrentThread();
 
 #if defined(OS_ANDROID)
@@ -209,13 +235,6 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
   }
 
   return output_surface;
-}
-
-gpu::SharedImageManager* OutputSurfaceProviderImpl::GetSharedImageManager() {
-  if (!gpu_service_impl_)
-    return nullptr;
-
-  return gpu_service_impl_->shared_image_manager();
 }
 
 std::unique_ptr<SoftwareOutputDevice>

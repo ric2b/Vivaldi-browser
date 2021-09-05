@@ -3,10 +3,10 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//ui/base/ui_features.gni")
-import("//ui/ozone/ozone.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -253,6 +253,11 @@ component("events") {
       "gestures/gesture_recognizer_impl_mac.cc",
       "mac/keyboard_hook_mac.mm",
     ]
+  }
+
+  if (is_linux || is_chromeos || is_win) {
+    public += [ "keyboard_event_counter.h" ]
+    sources += [ "keyboard_event_counter.cc" ]
   }
 
   defines = [ "EVENTS_IMPLEMENTATION" ]
@@ -578,6 +583,9 @@ if (!is_ios) {
         "win/media_keyboard_hook_win_unittest.cc",
         "win/modifier_keyboard_hook_win_unittest.cc",
       ]
+    }
+    if (is_linux || is_chromeos || is_win) {
+      sources += [ "keyboard_event_counter_unittest.cc" ]
     }
 
     deps = [

@@ -35,7 +35,6 @@
 #include "content/common/content_export.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_replication_state.h"
-#include "content/common/frame_sink_provider.mojom.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/renderer_host.mojom.h"
@@ -129,8 +128,6 @@ class CONTENT_EXPORT RenderThreadImpl
     : public RenderThread,
       public ChildThreadImpl,
       public mojom::Renderer,
-      public mojom::RouteProvider,
-      public blink::mojom::AssociatedInterfaceProvider,
       public viz::mojom::CompositingModeWatcher,
       public CompositorDependencies {
  public:
@@ -170,6 +167,10 @@ class CONTENT_EXPORT RenderThreadImpl
   void AddRoute(int32_t routing_id, IPC::Listener* listener) override;
   void RemoveRoute(int32_t routing_id) override;
   int GenerateRoutingID() override;
+  bool GenerateFrameRoutingID(
+      int32_t& routing_id,
+      base::UnguessableToken& frame_token,
+      base::UnguessableToken& devtools_frame_token) override;
   void AddFilter(IPC::MessageFilter* filter) override;
   void RemoveFilter(IPC::MessageFilter* filter) override;
   void AddObserver(RenderThreadObserver* observer) override;
@@ -178,7 +179,6 @@ class CONTENT_EXPORT RenderThreadImpl
       ResourceDispatcherDelegate* delegate) override;
   void RegisterExtension(std::unique_ptr<v8::Extension> extension) override;
   int PostTaskToAllWebWorkers(base::RepeatingClosure closure) override;
-  bool ResolveProxy(const GURL& url, std::string* proxy_list) override;
   base::WaitableEvent* GetShutdownEvent() override;
   int32_t GetClientId() override;
   bool IsOnline() override;
@@ -206,11 +206,13 @@ class CONTENT_EXPORT RenderThreadImpl
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
   bool IsScrollAnimatorEnabled() override;
   std::unique_ptr<cc::UkmRecorderFactory> CreateUkmRecorderFactory() override;
-  void RequestNewLayerTreeFrameSink(
-      RenderWidget* render_widget,
-      const GURL& url,
-      LayerTreeFrameSinkCallback callback,
-      const char* client_name) override;
+
+  // TODO(crbug.com/1111231): The `enable_scroll_animator` flag is currently
+  // being passed as part of `CreateViewParams`, despite it looking like a
+  // global setting. It should probably be moved to some `mojom::Renderer` API
+  // and this method should be removed.
+  void SetScrollAnimatorEnabled(bool enable_scroll_animator,
+                                util::PassKey<AgentSchedulingGroup>);
 
   bool IsThreadedAnimationEnabled();
   scoped_refptr<base::SingleThreadTaskRunner>
@@ -218,22 +220,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // viz::mojom::CompositingModeWatcher implementation.
   void CompositingModeFallbackToSoftware() override;
-
-  // Formerly in mojom::Renderer (moved to mojom::AgentSchedulingGroup):
-  void CreateView(mojom::CreateViewParamsPtr params,
-                  util::PassKey<AgentSchedulingGroup>);
-  void DestroyView(int32_t view_id, util::PassKey<AgentSchedulingGroup>);
-  void CreateFrame(mojom::CreateFrameParamsPtr params,
-                   util::PassKey<AgentSchedulingGroup>);
-  void CreateFrameProxy(
-      int32_t routing_id,
-      int32_t render_view_routing_id,
-      const base::Optional<base::UnguessableToken>& opener_frame_token,
-      int32_t parent_routing_id,
-      const FrameReplicationState& replicated_state,
-      const base::UnguessableToken& frame_token,
-      const base::UnguessableToken& devtools_frame_token,
-      util::PassKey<AgentSchedulingGroup>);
 
   // Whether gpu compositing is being used or is disabled for software
   // compositing. Clients of the compositor should give resources that match
@@ -417,8 +403,6 @@ class CONTENT_EXPORT RenderThreadImpl
   };
   bool GetRendererMemoryMetrics(RendererMemoryMetrics* memory_metrics) const;
 
-  bool NeedsToRecordFirstActivePaint(int metric_type) const;
-
   void RecordMetricsForBackgroundedRendererPurge();
 
   // Sets the current pipeline rendering color space.
@@ -434,9 +418,6 @@ class CONTENT_EXPORT RenderThreadImpl
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
     video_frame_compositor_task_runner_ = task_runner;
   }
-
-  mojom::RouteProvider* GetRemoteRouteProvider(
-      util::PassKey<AgentSchedulingGroup>) override;
 
   // FEATURE_FORCE_ACCESS_TO_GPU
   scoped_refptr<gpu::GpuChannelHost> EstablishForcedGpuChannelSync();
@@ -505,18 +486,6 @@ class CONTENT_EXPORT RenderThreadImpl
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
-  // mojom::RouteProvider implementation:
-  void GetRoute(
-      int32_t routing_id,
-      mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterfaceProvider>
-          receiver) override;
-
-  // blink::mojom::AssociatedInterfaceProvider implementation:
-  void GetAssociatedInterface(
-      const std::string& name,
-      mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
-          receiver) override;
-
   bool RendererIsHidden() const;
   void OnRendererHidden();
   void OnRendererVisible();
@@ -539,12 +508,10 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<viz::SyntheticBeginFrameSource>
   CreateSyntheticBeginFrameSource();
 
-  void OnRouteProviderReceiver(
-      mojo::PendingAssociatedReceiver<mojom::RouteProvider> receiver);
   void OnRendererInterfaceReceiver(
       mojo::PendingAssociatedReceiver<mojom::Renderer> receiver);
 
-  std::unique_ptr<discardable_memory::ClientDiscardableSharedMemoryManager>
+  scoped_refptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_memory_allocator_;
 
   // These objects live solely on the render thread.
@@ -642,12 +609,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   mojo::AssociatedRemote<mojom::RendererHost> renderer_host_;
 
-  mojo::AssociatedReceiver<mojom::RouteProvider> route_provider_receiver_{this};
-  mojo::AssociatedReceiverSet<blink::mojom::AssociatedInterfaceProvider,
-                              int32_t>
-      associated_interface_provider_receivers_;
-  mojo::AssociatedRemote<mojom::RouteProvider> remote_route_provider_;
-
   blink::AssociatedInterfaceRegistry associated_interfaces_;
 
   mojo::AssociatedReceiver<mojom::Renderer> renderer_receiver_{this};
@@ -658,14 +619,10 @@ class CONTENT_EXPORT RenderThreadImpl
       agent_scheduling_groups_;
 
   RendererMemoryMetrics purge_and_suspend_memory_metrics_;
-  bool needs_to_record_first_active_paint_;
-  base::TimeTicks was_backgrounded_time_;
   int process_foregrounded_count_;
   bool online_status_ = true;
 
   int32_t client_id_;
-
-  mojo::Remote<mojom::FrameSinkProvider> frame_sink_provider_;
 
   // A mojo connection to the CompositingModeReporter service.
   mojo::Remote<viz::mojom::CompositingModeReporter> compositing_mode_reporter_;

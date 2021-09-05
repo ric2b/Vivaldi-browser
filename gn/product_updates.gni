@@ -53,7 +53,7 @@ if (is_win) {
     _platform_suffix = ".x64"
   }
 
-  update_target(
+  update_template_instance(
       "//chrome/installer/mini_installer:mini_installer_archive") {
     vivaldi_release_file = "$root_gen_dir/vivaldi/vivaldi.release"
     inputs -= [

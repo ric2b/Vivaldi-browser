@@ -8,6 +8,7 @@
 #import "base/values.h"
 #import "components/shared_highlighting/core/common/text_fragment.h"
 #import "components/shared_highlighting/core/common/text_fragments_utils.h"
+#import "components/ukm/ios/ukm_url_recorder.h"
 #import "ios/chrome/browser/link_to_text/link_to_text_payload.h"
 #import "ios/chrome/browser/link_to_text/link_to_text_utils.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
@@ -24,50 +25,93 @@ using shared_highlighting::TextFragment;
 
 @interface LinkToTextResponse ()
 
-// Initializes an object with the given |payload| of the link generation
-// request.
-- (instancetype)initWithPayload:(LinkToTextPayload*)payload
+// Initializes an object with a |sourceID| representing the current WebState,
+// along with the |latency| for link generation.
+- (instancetype)initWithSourceID:(ukm::SourceId)sourceID
+                         latency:(base::TimeDelta)latency
     NS_DESIGNATED_INITIALIZER;
 
+// Initializes an object with the given |payload| of the link generation
+// request, a |sourceID| representing the current WebState and the |latency| for
+// link generation.
+- (instancetype)initWithPayload:(LinkToTextPayload*)payload
+                       sourceID:(ukm::SourceId)sourceID
+                        latency:(base::TimeDelta)latency;
+
 // Initializes an object with the given |error| which occurred while trying to
-// generate a link.
-- (instancetype)initWithError:(LinkGenerationError)error;
+// generate a link, a |sourceID| representing the current WebState and the
+// |latency| for link generation.
+- (instancetype)initWithError:(LinkGenerationError)error
+                     sourceID:(ukm::SourceId)sourceID
+                      latency:(base::TimeDelta)latency;
 
 @end
 
 @implementation LinkToTextResponse
 
-- (instancetype)initWithPayload:(LinkToTextPayload*)payload {
+- (instancetype)initWithSourceID:(ukm::SourceId)sourceID
+                         latency:(base::TimeDelta)latency {
   if (self = [super init]) {
-    // Payload may be nil in cases of link generation error.
+    _sourceID = sourceID;
+    _latency = latency;
+  }
+  return self;
+}
+
+- (instancetype)initWithPayload:(LinkToTextPayload*)payload
+                       sourceID:(ukm::SourceId)sourceID
+                        latency:(base::TimeDelta)latency {
+  DCHECK(payload);
+  DCHECK(sourceID != ukm::kInvalidSourceId);
+  if (self = [self initWithSourceID:sourceID latency:latency]) {
     _payload = payload;
   }
   return self;
 }
 
-- (instancetype)initWithError:(LinkGenerationError)error {
-  if (self = [self initWithPayload:nil]) {
+- (instancetype)initWithError:(LinkGenerationError)error
+                     sourceID:(ukm::SourceId)sourceID
+                      latency:(base::TimeDelta)latency {
+  if (self = [self initWithSourceID:sourceID latency:latency]) {
     _error = error;
   }
   return self;
 }
 
-+ (instancetype)createFromValue:(const base::Value*)value
-                       webState:(web::WebState*)webState {
-  if (!webState || !link_to_text::IsValidDictValue(value)) {
-    return [LinkToTextResponse unknownError];
++ (instancetype)linkToTextResponseWithValue:(const base::Value*)value
+                                   webState:(web::WebState*)webState
+                                    latency:(base::TimeDelta)latency {
+  if (!webState) {
+    return [LinkToTextResponse
+        linkToTextResponseWithUnknownErrorAndLatency:latency];
+  }
+
+  ukm::SourceId sourceID = ukm::GetSourceIdForWebStateDocument(webState);
+
+  if (!link_to_text::IsValidDictValue(value)) {
+    if (link_to_text::IsLinkGenerationTimeout(latency)) {
+      return [[self alloc] initWithError:LinkGenerationError::kTimeout
+                                sourceID:sourceID
+                                 latency:latency];
+    }
+
+    return [self linkToTextResponseWithUnknownErrorAndSourceID:sourceID
+                                                       latency:latency];
   }
 
   base::Optional<LinkGenerationOutcome> outcome =
       link_to_text::ParseStatus(value->FindDoubleKey("status"));
   if (!outcome.has_value()) {
-    return [LinkToTextResponse unknownError];
+    return [self linkToTextResponseWithUnknownErrorAndSourceID:sourceID
+                                                       latency:latency];
   }
 
   if (outcome.value() != LinkGenerationOutcome::kSuccess) {
     // Convert to Error.
-    return [[LinkToTextResponse alloc]
-        initWithError:link_to_text::OutcomeToError(outcome.value())];
+    return [[self alloc]
+        initWithError:link_to_text::OutcomeToError(outcome.value())
+             sourceID:sourceID
+              latency:latency];
   }
 
   // Attempts to parse a payload from the response.
@@ -81,7 +125,8 @@ using shared_highlighting::TextFragment;
   // All values must be present to have a valid payload.
   if (!title || !fragment || !selectedText || !sourceRect) {
     // Library replied Success but some values are missing.
-    return [LinkToTextResponse unknownError];
+    return [self linkToTextResponseWithUnknownErrorAndSourceID:sourceID
+                                                       latency:latency];
   }
 
   // Create the deep-link.
@@ -95,14 +140,26 @@ using shared_highlighting::TextFragment;
         sourceView:webState->GetView()
         sourceRect:link_to_text::ConvertToBrowserRect(sourceRect.value(),
                                                       webState)];
-  return [[LinkToTextResponse alloc] initWithPayload:payload];
+  return [[self alloc] initWithPayload:payload
+                              sourceID:sourceID
+                               latency:latency];
 }
 
 #pragma mark - Private
 
-+ (instancetype)unknownError {
-  return
-      [[LinkToTextResponse alloc] initWithError:LinkGenerationError::kUnknown];
++ (instancetype)linkToTextResponseWithUnknownErrorAndLatency:
+    (base::TimeDelta)latency {
+  return [[self alloc] initWithError:LinkGenerationError::kUnknown
+                            sourceID:ukm::kInvalidSourceId
+                             latency:latency];
+}
+
++ (instancetype)
+    linkToTextResponseWithUnknownErrorAndSourceID:(ukm::SourceId)sourceID
+                                          latency:(base::TimeDelta)latency {
+  return [[self alloc] initWithError:LinkGenerationError::kUnknown
+                            sourceID:sourceID
+                             latency:latency];
 }
 
 @end

@@ -22,7 +22,7 @@ namespace ash {
 // view.
 class ArrowButtonView : public LoginButton {
  public:
-  ArrowButtonView(views::ButtonListener* listener, int size);
+  ArrowButtonView(PressedCallback callback, int size);
   ~ArrowButtonView() override;
 
   // views::Button:

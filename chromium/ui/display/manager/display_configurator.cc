@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -199,6 +199,13 @@ DisplayConfigurator::DisplayLayoutManagerImpl::ParseDisplays(
     display_state.selected_mode = GetUserSelectedMode(*snapshot);
     cached_displays.push_back(display_state);
   }
+
+  // TODO(crbug.com/1161556): Hardware mirroring is now disabled by deafult.
+  // This is the first step towards permanently disabling HW mirroring. The use
+  // of a feature flag will be removed once we verify no regressions occur due
+  // to disabling HW mirroring.
+  if (!features::IsHardwareMirrorModeEnabled())
+    return cached_displays;
 
   // Hardware mirroring doesn't work on desktop-linux Chrome OS's fake displays.
   // Skip mirror mode setup in that case to fall back on software mirroring.

@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -271,7 +270,7 @@ void UserCloudPolicyManagerChromeOS::Connect(
   app_install_event_log_uploader_ =
       std::make_unique<ArcAppInstallEventLogUploader>(client(), profile_);
   extension_install_event_log_uploader_ =
-      std::make_unique<ExtensionInstallEventLogUploader>(client(), profile_);
+      std::make_unique<ExtensionInstallEventLogUploader>(profile_);
 
   // Initializes an instance of DlpRulesManager to be responsible for the rules
   // of the data leak prevention policy.

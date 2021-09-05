@@ -112,6 +112,8 @@ class AX_EXPORT __declspec(uuid("3071e40d-a10d-45ff-a59f-6e8e1138e2c1"))
   base::string16 GetString(int max_count,
                            size_t* appended_newlines_count = nullptr);
   AXPlatformNodeWin* owner() const;
+  const AXPositionInstance& start() const { return endpoints_.GetStart(); }
+  const AXPositionInstance& end() const { return endpoints_.GetEnd(); }
   AXPlatformNodeDelegate* GetDelegate(
       const AXPositionInstanceType* position) const;
   AXPlatformNodeDelegate* GetDelegate(const AXTreeID tree_id,
@@ -158,12 +160,17 @@ class AX_EXPORT __declspec(uuid("3071e40d-a10d-45ff-a59f-6e8e1138e2c1"))
   // A text range normalization is necessary to prevent a |start_| endpoint to
   // be positioned at the end of an anchor when it can be at the start of the
   // next anchor. After normalization, it is guaranteed that:
-  // * both endpoints of a range are always positioned on unignored anchors;
-  // * both endpoints of a range are never between a grapheme cluster;
-  // * if the range is degenerate, both endpoints of a range are on the same
-  //   anchor.
-  void NormalizeTextRange();
-  void NormalizeAsUnignoredTextRange();
+  // * both endpoints passed by parameter are always positioned on unignored
+  //   anchors;
+  // * both endpoints passed by parameter are never between a grapheme cluster;
+  // * if the endpoints passed by parameter create a degenerate range, both
+  //   endpoints are on the same anchor.
+  // Normalization never updates the internal endpoints directly. Instead, it
+  // normalizes the endpoints passed by parameter.
+  // TODO(vicfei): Make static.
+  void NormalizeTextRange(AXPositionInstance& start, AXPositionInstance& end);
+  static void NormalizeAsUnignoredTextRange(AXPositionInstance& start,
+                                            AXPositionInstance& end);
 
   AXPlatformNodeDelegate* GetRootDelegate(const ui::AXTreeID tree_id);
   AXNode* GetSelectionCommonAnchor();
@@ -173,6 +180,9 @@ class AX_EXPORT __declspec(uuid("3071e40d-a10d-45ff-a59f-6e8e1138e2c1"))
   bool HasCaretOrSelectionInPlainTextField(
       const AXPositionInstance& position) const;
 
+  void SetStart(AXPositionInstance start);
+  void SetEnd(AXPositionInstance end);
+
   static bool TextAttributeIsArrayType(TEXTATTRIBUTEID attribute_id);
   static bool TextAttributeIsUiaReservedValue(
       const base::win::VariantVector& vector);
@@ -181,8 +191,32 @@ class AX_EXPORT __declspec(uuid("3071e40d-a10d-45ff-a59f-6e8e1138e2c1"))
       const base::win::VariantVector& vector);
 
   Microsoft::WRL::ComPtr<AXPlatformNodeWin> owner_;
-  AXPositionInstance start_;
-  AXPositionInstance end_;
+
+  // Why we can't use a ScopedObserver here:
+  // We tried using a ScopedObserver instead of a simple observer in this case,
+  // but there appears to be a problem with the lifetime of the referenced
+  // AXTreeManager in the ScopedObserver. The AXTreeManager can get deleted
+  // before the TextRangeEndpoints does, so when the destructor of the
+  // ScopedObserver calls ScopedObserver::RemoveAll on an already deleted
+  // AXTreeManager, it crashes.
+  class TextRangeEndpoints : public AXTreeObserver {
+   public:
+    TextRangeEndpoints();
+    ~TextRangeEndpoints() override;
+    const AXPositionInstance& GetStart() const { return start_; }
+    const AXPositionInstance& GetEnd() const { return end_; }
+    void SetStart(AXPositionInstance new_start);
+    void SetEnd(AXPositionInstance new_end);
+
+    void AddObserver(const AXTreeID tree_id);
+    void RemoveObserver(const AXTreeID tree_id);
+    void OnNodeWillBeDeleted(AXTree* tree, AXNode* node) override;
+
+   private:
+    AXPositionInstance start_;
+    AXPositionInstance end_;
+  };
+  TextRangeEndpoints endpoints_;
 };
 
 }  // namespace ui

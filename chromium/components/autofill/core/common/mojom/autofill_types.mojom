@@ -27,19 +27,7 @@ enum SubmissionIndicatorEvent {
   // DEPRECATED_FILLED_FORM_ON_START_PROVISIONAL_LOAD,
   // DEPRECATED_FILLED_INPUT_ELEMENTS_ON_START_PROVISIONAL_LOAD,
   PROBABLE_FORM_SUBMISSION = 10,
-};
-
-// This enum lists form field types as understood by the password manager,
-// essentially a digest of |autofill::ServerFieldType|. Note that we cannot
-// simply reuse |autofill::ServerFieldType| as it is defined in the browser,
-// while this enum will be used by both the browser and renderer.
-// TODO(https://crbug.com/1067347): move this enum to browser code. It is not
-// used in Mojo anymore.
-enum PasswordFormFieldPredictionType {
-  kUsername,
-  kCurrentPassword,
-  kNewPassword,
-  kNotPassword,
+  CHANGE_PASSWORD_FORM_CLEARED = 11,
 };
 
 enum SubmissionSource {

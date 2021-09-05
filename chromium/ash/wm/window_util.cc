@@ -26,7 +26,7 @@
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
-#include "chromeos/ui/chromeos_ui_constants.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
@@ -251,12 +251,16 @@ bool ShouldExcludeForOverview(const aura::Window* window) {
   return ShouldExcludeForCycleList(window);
 }
 
-void RemoveTransientDescendants(std::vector<aura::Window*>* out_window_list) {
+void EnsureTransientRoots(std::vector<aura::Window*>* out_window_list) {
   for (auto it = out_window_list->begin(); it != out_window_list->end();) {
     aura::Window* transient_root = ::wm::GetTransientRoot(*it);
-    if (*it != transient_root &&
-        base::Contains(*out_window_list, transient_root)) {
-      it = out_window_list->erase(it);
+    if (*it != transient_root) {
+      if (base::Contains(*out_window_list, transient_root)) {
+        it = out_window_list->erase(it);
+      } else {
+        *it = transient_root;
+        ++it;
+      }
     } else {
       ++it;
     }

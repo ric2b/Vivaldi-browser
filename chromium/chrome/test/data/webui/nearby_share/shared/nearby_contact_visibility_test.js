@@ -86,6 +86,13 @@ suite('nearby-contact-visibility', () => {
   }
 
   /**
+   * @return {boolean} true when visibility selection radio group is disabled
+   */
+  function isRadioGroupDisabled() {
+    return visibilityElement.$$('#visibilityRadioGroup').disabled;
+  }
+
+  /**
    * Checks the state of the contacts toggle button group
    * @param {boolean} all is allContacts checked?
    * @param {boolean} some is someContacts checked?
@@ -112,7 +119,7 @@ suite('nearby-contact-visibility', () => {
     assertFalse(isDownloadContactsPendingVisible());
 
     // If we click retry, we should go into pending state.
-    visibilityElement.$$('#contactRetryButton').click();
+    visibilityElement.$$('#tryAgainLink').click();
     await test_util.waitAfterNextRender(visibilityElement);
 
     assertFalse(isDownloadContactsFailedVisible());
@@ -127,6 +134,25 @@ suite('nearby-contact-visibility', () => {
     assertTrue(areContactCheckBoxesVisible());
     const list = visibilityElement.$$('#contactList');
     assertEquals(fakeContactManager.contactRecords.length, list.items.length);
+  });
+
+  test('Radio group disabled until successful download', async function() {
+    // Radio group disabled after download failure
+    fakeContactManager.failDownload();
+    await test_util.waitAfterNextRender(visibilityElement);
+    assertTrue(isDownloadContactsFailedVisible());
+    assertTrue(isRadioGroupDisabled());
+
+    // Radio group disabled while downloading
+    visibilityElement.$$('#tryAgainLink').click();
+    await test_util.waitAfterNextRender(visibilityElement);
+    assertTrue(isDownloadContactsPendingVisible());
+    assertTrue(isRadioGroupDisabled());
+
+    // Radio group enabled after successful download
+    succeedContactDownload();
+    await test_util.waitAfterNextRender(visibilityElement);
+    assertFalse(isRadioGroupDisabled());
   });
 
   test('Visibility component shows zero state for kUnknown', async function() {
@@ -172,7 +198,7 @@ suite('nearby-contact-visibility', () => {
         assertFalse(isNoContactsSectionVisible());
       });
 
-  test('Visibility component shows noContacts for kNoOne', async function() {
+  test('Visibility component shows no contacts for kNoOne', async function() {
     visibilityElement.set(
         'settings.visibility', nearbyShare.mojom.Visibility.kNoOne);
     succeedContactDownload();
@@ -181,7 +207,7 @@ suite('nearby-contact-visibility', () => {
 
     assertToggleState(/*all=*/ false, /*some=*/ false, /*no=*/ true);
     assertFalse(isZeroStateVisible());
-    assertTrue(areContactCheckBoxesVisible());
+    assertFalse(areContactCheckBoxesVisible());
     assertFalse(isNoContactsSectionVisible());
   });
 

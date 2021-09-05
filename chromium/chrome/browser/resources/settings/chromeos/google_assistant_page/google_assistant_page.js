@@ -6,7 +6,7 @@
  * The types of Hotword enable status without Dsp support.
  * @enum {number}
  */
-const DspHotwordState = {
+/* #export */ const DspHotwordState = {
   DEFAULT_ON: 0,
   ALWAYS_ON: 1,
   OFF: 2,
@@ -19,7 +19,7 @@ const DspHotwordState = {
  * chromeos/services/assistant/public/cpp/assistant_prefs.h
  * @enum {number}
  */
-const ConsentStatus = {
+/* #export */ const ConsentStatus = {
   // The status is unknown.
   kUnknown: 0,
 
@@ -217,7 +217,7 @@ Polymer({
    * @private
    */
   isDspHotwordStateMatch_(state) {
-    return state == this.dspHotwordState_;
+    return state === this.dspHotwordState_;
   },
 
   /** @private */
@@ -236,7 +236,7 @@ Polymer({
     const hotwordEnabled =
         this.getPref('settings.voice_interaction.hotword.enabled');
 
-    this.hotwordEnforced_ = hotwordEnabled.enforcement ==
+    this.hotwordEnforced_ = hotwordEnabled.enforcement ===
         chrome.settingsPrivate.Enforcement.ENFORCED;
 
     this.quickAnswersAvailable_ =

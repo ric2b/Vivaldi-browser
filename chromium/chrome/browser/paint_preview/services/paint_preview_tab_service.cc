@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "base/callback.h"
+#include "base/memory/memory_pressure_listener.h"
+#include "base/memory/memory_pressure_monitor.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
@@ -96,6 +98,13 @@ void PaintPreviewTabService::CaptureTab(int tab_id,
                                         FinishedCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  // If the system is under memory pressure don't try to capture.
+  auto* memory_monitor = base::MemoryPressureMonitor::Get();
+  if (memory_monitor &&
+      memory_monitor->GetCurrentPressureLevel() >=
+          base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE)
+    return;
+
   // Mark |contents| as being captured so that the renderer doesn't go away
   // until the capture is finished. This is done even before a file is created
   // to ensure the renderer doesn't go away while that happens.
@@ -110,9 +119,7 @@ void PaintPreviewTabService::CaptureTab(int tab_id,
       base::BindOnce(&PaintPreviewTabService::CaptureTabInternal,
                      weak_ptr_factory_.GetWeakPtr(), tab_id, key,
                      contents->GetMainFrame()->GetFrameTreeNodeId(),
-                     content::GlobalFrameRoutingId(
-                       contents->GetMainFrame()->GetProcess()->GetID(),
-                       contents->GetMainFrame()->GetRoutingID()),
+                     contents->GetMainFrame()->GetGlobalFrameRoutingId(),
                      std::move(callback)));
 }
 
@@ -244,12 +251,14 @@ void PaintPreviewTabService::CaptureTabInternal(
       content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
   auto* rfh = content::RenderFrameHost::FromID(frame_routing_id);
   if (!contents || !rfh || contents->IsBeingDestroyed() ||
-      contents->GetMainFrame() != rfh || !rfh->IsCurrent()) {
+      contents->GetMainFrame() != rfh || !rfh->IsCurrent() ||
+      !rfh->IsRenderFrameCreated() || !rfh->IsRenderFrameLive()) {
     std::move(callback).Run(Status::kWebContentsGone);
     return;
   }
   CapturePaintPreview(
-      contents, file_path.value(), gfx::Rect(), true, kMaxPerCaptureSizeBytes,
+      contents, rfh, file_path.value(), gfx::Rect(), true,
+      kMaxPerCaptureSizeBytes,
       base::BindOnce(&PaintPreviewTabService::OnCaptured,
                      weak_ptr_factory_.GetWeakPtr(), tab_id, key,
                      frame_tree_node_id, std::move(callback)));

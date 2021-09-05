@@ -33,6 +33,8 @@
 #include <utility>
 
 #include "cc/input/snap_selection_strategy.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
+#include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -42,6 +44,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_pointer_lock_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_into_view_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_to_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_set_inner_html_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_shadow_root_init.h"
 #include "third_party/blink/renderer/core/accessibility/ax_context.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
@@ -353,8 +356,8 @@ bool CalculateStyleShouldForceLegacyLayout(const Element& element,
     }
   }
 
-  if (style.IsDeprecatedWebkitBox() &&
-      !style.IsDeprecatedWebkitBoxWithVerticalLineClamp()) {
+  if (!RuntimeEnabledFeatures::LayoutNGWebkitBoxEnabled() &&
+      style.IsDeprecatedFlexboxUsingFlexLayout()) {
     UseCounter::Count(
         document, WebFeature::kLegacyLayoutByWebkitBoxWithoutVerticalLineClamp);
     return true;
@@ -400,7 +403,8 @@ bool CalculateStyleShouldForceLegacyLayout(const Element& element,
     // on). Inline display types end up on a line, and are therefore monolithic,
     // so we can allow those.
     if (!style.IsDisplayInlineType()) {
-      if (style.IsDisplayTableType() || style.IsDisplayFlexibleOrGridBox()) {
+      if (style.IsDisplayTableType() || style.IsDisplayFlexibleOrGridBox() ||
+          style.IsDeprecatedFlexboxUsingFlexLayout()) {
         UseCounter::Count(
             document,
             WebFeature::
@@ -1273,14 +1277,82 @@ int Element::clientTop() {
   return 0;
 }
 
+bool Element::IsViewportScrollElement() {
+  auto& document = GetDocument();
+  bool quirks_mode = document.InQuirksMode();
+  return (!quirks_mode && document.documentElement() == this) ||
+         (quirks_mode && IsHTMLElement() && document.body() == this);
+}
+
+void Element::RecordScrollbarSizeForStudy(int measurement,
+                                          bool is_width,
+                                          bool is_offset) {
+  if (!IdentifiabilityStudySettings::Get()->IsTypeAllowed(
+          IdentifiableSurface::Type::kScrollbarSize) ||
+      (!is_offset && !IsViewportScrollElement()))
+    return;
+
+  // Check for presence of a scrollbar.
+  PaintLayerScrollableArea* area;
+  if (IsViewportScrollElement()) {
+    auto* view = GetDocument().View();
+    if (!view)
+      return;
+    area = view->LayoutViewport();
+  } else {
+    auto* layout = GetLayoutBox();
+    if (!layout)
+      return;
+    area = layout->GetScrollableArea();
+  }
+  if (!area || area->HasOverlayOverflowControls())
+    return;
+
+  Scrollbar* scrollbar =
+      is_width ? area->VerticalScrollbar() : area->HorizontalScrollbar();
+  // We intentionally exclude platform overlay scrollbars since their size
+  // cannot be detected in JavaScript using the methods below.
+  if (!scrollbar)
+    return;
+
+  IdentifiableSurface::ScrollbarSurface surface;
+  int scrollbar_size;
+
+  // There are two common ways to detect the size of a scrollbar in a DOM
+  // window. They are:
+  // 1. Compute the difference of the window.inner[Width|Height] and the
+  //    corresponding document.scrollingElement.offset[Width|Height].
+  // 2. Any HTML element that insets the layout to fit a scrollbar, so it is
+  //    measurable by a JavaScript program on a site.
+  if (IsViewportScrollElement()) {
+    LocalDOMWindow* dom_window = GetDocument().domWindow();
+    scrollbar_size =
+        (is_width ? dom_window->innerWidth() : dom_window->innerHeight()) -
+        measurement;
+    surface =
+        is_width
+            ? IdentifiableSurface::ScrollbarSurface::kScrollingElementWidth
+            : IdentifiableSurface::ScrollbarSurface::kScrollingElementHeight;
+  } else {
+    scrollbar_size = measurement - (is_width ? clientWidth() : clientHeight());
+    surface = is_width
+                  ? IdentifiableSurface::ScrollbarSurface::kElemScrollbarWidth
+                  : IdentifiableSurface::ScrollbarSurface::kElemScrollbarHeight;
+  }
+
+  blink::IdentifiabilityMetricBuilder(GetDocument().UkmSourceID())
+      .Set(blink::IdentifiableSurface::FromTypeAndToken(
+               blink::IdentifiableSurface::Type::kScrollbarSize, surface),
+           scrollbar_size)
+      .Record(GetDocument().UkmRecorder());
+}
+
 int Element::clientWidth() {
   // When in strict mode, clientWidth for the document element should return the
   // width of the containing frame.
   // When in quirks mode, clientWidth for the body element should return the
   // width of the containing frame.
-  bool in_quirks_mode = GetDocument().InQuirksMode();
-  if ((!in_quirks_mode && GetDocument().documentElement() == this) ||
-      (in_quirks_mode && IsHTMLElement() && GetDocument().body() == this)) {
+  if (IsViewportScrollElement()) {
     auto* layout_view = GetDocument().GetLayoutView();
     if (layout_view) {
       // TODO(crbug.com/740879): Use per-page overlay scrollbar settings.
@@ -1290,32 +1362,43 @@ int Element::clientWidth() {
             this, DocumentUpdateReason::kJavaScript);
       }
       if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight()) {
-        // TODO(sky): deal with OverflowClipRect() being infinite along an
-        // axis (because of overflow: clip and overflow:visible along the
-        // opposite axis).
-        return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                   layout_view->OverflowClipRect(PhysicalOffset()).Width(),
-                   layout_view->StyleRef())
-            .Round();
+        // OverflowClipRect() may return infinite along a particular axis if
+        // |layout_view| is not a scroll-container.
+        DCHECK(layout_view->IsScrollContainer());
+        int result =
+            AdjustForAbsoluteZoom::AdjustLayoutUnit(
+                layout_view->OverflowClipRect(PhysicalOffset()).Width(),
+                layout_view->StyleRef())
+                .Round();
+        RecordScrollbarSizeForStudy(result, /* is_width= */ true,
+                                    /* is_offset= */ false);
+        return result;
       }
-      return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                 LayoutUnit(layout_view->GetLayoutSize().Width()),
-                 layout_view->StyleRef())
-          .Round();
+      int result = AdjustForAbsoluteZoom::AdjustLayoutUnit(
+                       LayoutUnit(layout_view->GetLayoutSize().Width()),
+                       layout_view->StyleRef())
+                       .Round();
+      RecordScrollbarSizeForStudy(result, /* is_width= */ true,
+                                  /* is_offset= */ false);
+      return result;
     }
   }
 
   GetDocument().UpdateStyleAndLayoutForNode(this,
                                             DocumentUpdateReason::kJavaScript);
 
-  if (LayoutBox* layout_object = GetLayoutBox())
-    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-               LayoutUnit(
-                   layout_object
-                       ->PixelSnappedClientWidthWithTableSpecialBehavior()),
-               layout_object->StyleRef())
-        .Round();
-  return 0;
+  int result = 0;
+  if (LayoutBox* layout_object = GetLayoutBox()) {
+    result =
+        AdjustForAbsoluteZoom::AdjustLayoutUnit(
+            LayoutUnit(layout_object
+                           ->PixelSnappedClientWidthWithTableSpecialBehavior()),
+            layout_object->StyleRef())
+            .Round();
+    RecordScrollbarSizeForStudy(result, /* is_width= */ true,
+                                /* is_offset= */ false);
+  }
+  return result;
 }
 
 int Element::clientHeight() {
@@ -1323,10 +1406,7 @@ int Element::clientHeight() {
   // the height of the containing frame.
   // When in quirks mode, clientHeight for the body element should return the
   // height of the containing frame.
-  bool in_quirks_mode = GetDocument().InQuirksMode();
-
-  if ((!in_quirks_mode && GetDocument().documentElement() == this) ||
-      (in_quirks_mode && IsHTMLElement() && GetDocument().body() == this)) {
+  if (IsViewportScrollElement()) {
     auto* layout_view = GetDocument().GetLayoutView();
     if (layout_view) {
       // TODO(crbug.com/740879): Use per-page overlay scrollbar settings.
@@ -1336,32 +1416,43 @@ int Element::clientHeight() {
             this, DocumentUpdateReason::kJavaScript);
       }
       if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight()) {
-        // TODO(sky): deal with OverflowClipRect() being infinite along an
-        // axis (because of overflow: clip and overflow:visible along the
-        // opposite axis).
-        return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                   layout_view->OverflowClipRect(PhysicalOffset()).Height(),
-                   layout_view->StyleRef())
-            .Round();
+        // OverflowClipRect() may return infinite along a particular axis if
+        // |layout_view| is not a scroll-container.
+        DCHECK(layout_view->IsScrollContainer());
+        int result =
+            AdjustForAbsoluteZoom::AdjustLayoutUnit(
+                layout_view->OverflowClipRect(PhysicalOffset()).Height(),
+                layout_view->StyleRef())
+                .Round();
+        RecordScrollbarSizeForStudy(result, /* is_width= */ false,
+                                    /* is_offset= */ false);
+        return result;
       }
-      return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                 LayoutUnit(layout_view->GetLayoutSize().Height()),
-                 layout_view->StyleRef())
-          .Round();
+      int result = AdjustForAbsoluteZoom::AdjustLayoutUnit(
+                       LayoutUnit(layout_view->GetLayoutSize().Height()),
+                       layout_view->StyleRef())
+                       .Round();
+      RecordScrollbarSizeForStudy(result, /* is_width= */ false,
+                                  /* is_offset= */ false);
+      return result;
     }
   }
 
   GetDocument().UpdateStyleAndLayoutForNode(this,
                                             DocumentUpdateReason::kJavaScript);
 
-  if (LayoutBox* layout_object = GetLayoutBox())
-    return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-               LayoutUnit(
-                   layout_object
-                       ->PixelSnappedClientHeightWithTableSpecialBehavior()),
-               layout_object->StyleRef())
-        .Round();
-  return 0;
+  int result = 0;
+  if (LayoutBox* layout_object = GetLayoutBox()) {
+    result = AdjustForAbsoluteZoom::AdjustLayoutUnit(
+                 LayoutUnit(
+                     layout_object
+                         ->PixelSnappedClientHeightWithTableSpecialBehavior()),
+                 layout_object->StyleRef())
+                 .Round();
+    RecordScrollbarSizeForStudy(result, /* is_width= */ false,
+                                /* is_offset= */ false);
+  }
+  return result;
 }
 
 LayoutBox* Element::GetLayoutBoxForScrolling() const {
@@ -1399,16 +1490,8 @@ double Element::scrollLeft() {
               kElementWithLeftwardOrUpwardOverflowDirection_ScrollLeftOrTop);
     }
 
-    // In order to keep the behavior of element scroll consistent with document
-    // scroll, and consistent with the behavior of other vendors, the scrollLeft
-    // of a box is changed to the offset from |ScrollOrigin()|.
-    if (RuntimeEnabledFeatures::CSSOMViewScrollCoordinatesEnabled()) {
-      return AdjustForAbsoluteZoom::AdjustScroll(
-          scrollable_area->GetScrollOffset().Width(), *GetLayoutBox());
-    } else {
-      return AdjustForAbsoluteZoom::AdjustScroll(
-          scrollable_area->ScrollPosition().X(), *GetLayoutBox());
-    }
+    return AdjustForAbsoluteZoom::AdjustScroll(
+        scrollable_area->GetScrollOffset().Width(), *GetLayoutBox());
   }
 
   return 0;
@@ -1440,16 +1523,8 @@ double Element::scrollTop() {
               kElementWithLeftwardOrUpwardOverflowDirection_ScrollLeftOrTop);
     }
 
-    // In order to keep the behavior of element scroll consistent with document
-    // scroll, and consistent with the behavior of other vendors, the scrollTop
-    // of a box is changed to the offset from |ScrollOrigin()|.
-    if (RuntimeEnabledFeatures::CSSOMViewScrollCoordinatesEnabled()) {
-      return AdjustForAbsoluteZoom::AdjustScroll(
-          scrollable_area->GetScrollOffset().Height(), *GetLayoutBox());
-    } else {
-      return AdjustForAbsoluteZoom::AdjustScroll(
-          scrollable_area->ScrollPosition().Y(), *GetLayoutBox());
-    }
+    return AdjustForAbsoluteZoom::AdjustScroll(
+        scrollable_area->GetScrollOffset().Height(), *GetLayoutBox());
   }
 
   return 0;
@@ -1490,38 +1565,21 @@ void Element::setScrollLeft(double new_left) {
       }
     }
 
-    if (RuntimeEnabledFeatures::CSSOMViewScrollCoordinatesEnabled()) {
-      ScrollOffset end_offset(new_left * box->Style()->EffectiveZoom(),
-                              scrollable_area->GetScrollOffset().Height());
-      std::unique_ptr<cc::SnapSelectionStrategy> strategy =
-          cc::SnapSelectionStrategy::CreateForEndPosition(
-              gfx::ScrollOffset(
-                  scrollable_area->ScrollOffsetToPosition(end_offset)),
-              true, false);
-      base::Optional<FloatPoint> snap_point =
-          scrollable_area->GetSnapPositionAndSetTarget(*strategy);
-      if (snap_point.has_value()) {
-        end_offset =
-            scrollable_area->ScrollPositionToOffset(snap_point.value());
-      }
-      scrollable_area->SetScrollOffset(end_offset,
-                                       mojom::blink::ScrollType::kProgrammatic,
-                                       mojom::blink::ScrollBehavior::kAuto);
-    } else {
-      FloatPoint end_point(new_left * box->Style()->EffectiveZoom(),
-                           scrollable_area->ScrollPosition().Y());
-      std::unique_ptr<cc::SnapSelectionStrategy> strategy =
-          cc::SnapSelectionStrategy::CreateForEndPosition(
-              gfx::ScrollOffset(end_point), true, false);
-      end_point =
-          scrollable_area->GetSnapPositionAndSetTarget(*strategy).value_or(
-              end_point);
-
-      FloatPoint new_position(end_point.X(),
-                              scrollable_area->ScrollPosition().Y());
-      scrollable_area->ScrollToAbsolutePosition(
-          new_position, mojom::blink::ScrollBehavior::kAuto);
+    ScrollOffset end_offset(new_left * box->Style()->EffectiveZoom(),
+                            scrollable_area->GetScrollOffset().Height());
+    std::unique_ptr<cc::SnapSelectionStrategy> strategy =
+        cc::SnapSelectionStrategy::CreateForEndPosition(
+            gfx::ScrollOffset(
+                scrollable_area->ScrollOffsetToPosition(end_offset)),
+            true, false);
+    base::Optional<FloatPoint> snap_point =
+        scrollable_area->GetSnapPositionAndSetTarget(*strategy);
+    if (snap_point.has_value()) {
+      end_offset = scrollable_area->ScrollPositionToOffset(snap_point.value());
     }
+    scrollable_area->SetScrollOffset(end_offset,
+                                     mojom::blink::ScrollType::kProgrammatic,
+                                     mojom::blink::ScrollBehavior::kAuto);
   }
 }
 
@@ -1560,38 +1618,22 @@ void Element::setScrollTop(double new_top) {
       }
     }
 
-    if (RuntimeEnabledFeatures::CSSOMViewScrollCoordinatesEnabled()) {
-      ScrollOffset end_offset(scrollable_area->GetScrollOffset().Width(),
-                              new_top * box->Style()->EffectiveZoom());
-      std::unique_ptr<cc::SnapSelectionStrategy> strategy =
-          cc::SnapSelectionStrategy::CreateForEndPosition(
-              gfx::ScrollOffset(
-                  scrollable_area->ScrollOffsetToPosition(end_offset)),
-              false, true);
-      base::Optional<FloatPoint> snap_point =
-          scrollable_area->GetSnapPositionAndSetTarget(*strategy);
-      if (snap_point.has_value()) {
-        end_offset =
-            scrollable_area->ScrollPositionToOffset(snap_point.value());
-      }
-
-      scrollable_area->SetScrollOffset(end_offset,
-                                       mojom::blink::ScrollType::kProgrammatic,
-                                       mojom::blink::ScrollBehavior::kAuto);
-    } else {
-      FloatPoint end_point(scrollable_area->ScrollPosition().X(),
-                           new_top * box->Style()->EffectiveZoom());
-      std::unique_ptr<cc::SnapSelectionStrategy> strategy =
-          cc::SnapSelectionStrategy::CreateForEndPosition(
-              gfx::ScrollOffset(end_point), false, true);
-      end_point =
-          scrollable_area->GetSnapPositionAndSetTarget(*strategy).value_or(
-              end_point);
-      FloatPoint new_position(scrollable_area->ScrollPosition().X(),
-                              end_point.Y());
-      scrollable_area->ScrollToAbsolutePosition(
-          new_position, mojom::blink::ScrollBehavior::kAuto);
+    ScrollOffset end_offset(scrollable_area->GetScrollOffset().Width(),
+                            new_top * box->Style()->EffectiveZoom());
+    std::unique_ptr<cc::SnapSelectionStrategy> strategy =
+        cc::SnapSelectionStrategy::CreateForEndPosition(
+            gfx::ScrollOffset(
+                scrollable_area->ScrollOffsetToPosition(end_offset)),
+            false, true);
+    base::Optional<FloatPoint> snap_point =
+        scrollable_area->GetSnapPositionAndSetTarget(*strategy);
+    if (snap_point.has_value()) {
+      end_offset = scrollable_area->ScrollPositionToOffset(snap_point.value());
     }
+
+    scrollable_area->SetScrollOffset(end_offset,
+                                     mojom::blink::ScrollType::kProgrammatic,
+                                     mojom::blink::ScrollBehavior::kAuto);
   }
 }
 
@@ -1759,60 +1801,31 @@ void Element::ScrollLayoutBoxTo(const ScrollToOptions* scroll_to_options) {
       }
     }
 
-    // In order to keep the behavior of element scroll consistent with document
-    // scroll, and consistent with the behavior of other vendors, the
-    // offsets in |scroll_to_options| are treated as the offset from
-    // |ScrollOrigin()|.
-    if (RuntimeEnabledFeatures::CSSOMViewScrollCoordinatesEnabled()) {
-      ScrollOffset new_offset = scrollable_area->GetScrollOffset();
-      if (scroll_to_options->hasLeft()) {
-        new_offset.SetWidth(ScrollableArea::NormalizeNonFiniteScroll(
-                                scroll_to_options->left()) *
-                            box->Style()->EffectiveZoom());
-      }
-      if (scroll_to_options->hasTop()) {
-        new_offset.SetHeight(
-            ScrollableArea::NormalizeNonFiniteScroll(scroll_to_options->top()) *
-            box->Style()->EffectiveZoom());
-      }
-
-      std::unique_ptr<cc::SnapSelectionStrategy> strategy =
-          cc::SnapSelectionStrategy::CreateForEndPosition(
-              gfx::ScrollOffset(
-                  scrollable_area->ScrollOffsetToPosition(new_offset)),
-              scroll_to_options->hasLeft(), scroll_to_options->hasTop());
-      base::Optional<FloatPoint> snap_point =
-          scrollable_area->GetSnapPositionAndSetTarget(*strategy);
-      if (snap_point.has_value()) {
-        new_offset =
-            scrollable_area->ScrollPositionToOffset(snap_point.value());
-      }
-
-      scrollable_area->SetScrollOffset(
-          new_offset, mojom::blink::ScrollType::kProgrammatic, scroll_behavior);
-    } else {
-      FloatPoint new_position(scrollable_area->ScrollPosition().X(),
-                              scrollable_area->ScrollPosition().Y());
-      if (scroll_to_options->hasLeft()) {
-        new_position.SetX(ScrollableArea::NormalizeNonFiniteScroll(
-                              scroll_to_options->left()) *
-                          box->Style()->EffectiveZoom());
-      }
-      if (scroll_to_options->hasTop()) {
-        new_position.SetY(
-            ScrollableArea::NormalizeNonFiniteScroll(scroll_to_options->top()) *
-            box->Style()->EffectiveZoom());
-      }
-
-      std::unique_ptr<cc::SnapSelectionStrategy> strategy =
-          cc::SnapSelectionStrategy::CreateForEndPosition(
-              gfx::ScrollOffset(new_position), scroll_to_options->hasLeft(),
-              scroll_to_options->hasTop());
-      new_position =
-          scrollable_area->GetSnapPositionAndSetTarget(*strategy).value_or(
-              new_position);
-      scrollable_area->ScrollToAbsolutePosition(new_position, scroll_behavior);
+    ScrollOffset new_offset = scrollable_area->GetScrollOffset();
+    if (scroll_to_options->hasLeft()) {
+      new_offset.SetWidth(
+          ScrollableArea::NormalizeNonFiniteScroll(scroll_to_options->left()) *
+          box->Style()->EffectiveZoom());
     }
+    if (scroll_to_options->hasTop()) {
+      new_offset.SetHeight(
+          ScrollableArea::NormalizeNonFiniteScroll(scroll_to_options->top()) *
+          box->Style()->EffectiveZoom());
+    }
+
+    std::unique_ptr<cc::SnapSelectionStrategy> strategy =
+        cc::SnapSelectionStrategy::CreateForEndPosition(
+            gfx::ScrollOffset(
+                scrollable_area->ScrollOffsetToPosition(new_offset)),
+            scroll_to_options->hasLeft(), scroll_to_options->hasTop());
+    base::Optional<FloatPoint> snap_point =
+        scrollable_area->GetSnapPositionAndSetTarget(*strategy);
+    if (snap_point.has_value()) {
+      new_offset = scrollable_area->ScrollPositionToOffset(snap_point.value());
+    }
+
+    scrollable_area->SetScrollOffset(
+        new_offset, mojom::blink::ScrollType::kProgrammatic, scroll_behavior);
   }
 }
 
@@ -2273,10 +2286,7 @@ void Element::AttributeChanged(const AttributeModificationParams& params) {
     }
   } else if (name == html_names::kClassAttr) {
     ClassAttributeChanged(params.new_value);
-    if (HasRareData() && GetElementRareData()->GetClassList()) {
-      GetElementRareData()->GetClassList()->DidUpdateAttributeValue(
-          params.old_value, params.new_value);
-    }
+    UpdateClassList(params.old_value, params.new_value);
   } else if (name == html_names::kNameAttr) {
     SetHasName(!params.new_value.IsNull());
   } else if (name == html_names::kPartAttr) {
@@ -2378,6 +2388,14 @@ void Element::ClassAttributeChanged(const AtomicString& new_class_string) {
     else
       GetElementData()->ClearClass();
   }
+}
+
+void Element::UpdateClassList(const AtomicString& old_class_string,
+                              const AtomicString& new_class_string) {
+  if (!HasRareData())
+    return;
+  if (DOMTokenList* class_list = GetElementRareData()->GetClassList())
+    class_list->DidUpdateAttributeValue(old_class_string, new_class_string);
 }
 
 bool Element::ShouldInvalidateDistributionWhenAttributeChanged(
@@ -3411,7 +3429,11 @@ const ElementInternals* Element::GetElementInternals() const {
 }
 
 ShadowRoot* Element::createShadowRoot(ExceptionState& exception_state) {
-  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled(GetExecutionContext()));
+  // TODO(crbug.com/937746): Anything caught by this DCHECK is using the
+  // now-removed Shadow DOM v0 API.
+  DCHECK(false) << "Shadow DOM v0 has been removed.";
+
+  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled());
   if (ShadowRoot* root = GetShadowRoot()) {
     if (root->IsUserAgent()) {
       exception_state.ThrowDOMException(
@@ -3446,7 +3468,7 @@ ShadowRoot* Element::createShadowRoot(ExceptionState& exception_state) {
 }
 
 ShadowRoot& Element::CreateShadowRootInternal() {
-  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled(GetExecutionContext()));
+  DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled());
   DCHECK(!ClosedShadowRoot());
   DCHECK(AreAuthorShadowsAllowed());
   DCHECK(!AlwaysCreateUserAgentShadowRoot());
@@ -3598,33 +3620,32 @@ ShadowRoot& Element::AttachShadowRootInternal(
   GetDocument().SetShadowCascadeOrder(ShadowCascadeOrder::kShadowCascadeV1);
 
   if (auto* shadow_root = GetShadowRoot()) {
-    // 5. If shadow host has a non-null shadow root whose "is declarative shadow
-    // root property is true, then remove all of shadow root’s children, in tree
-    // order. Return shadow host’s shadow root.
+    // NEW. If shadow host has a non-null shadow root whose "is declarative
+    // shadow root property is true, then remove all of shadow root’s children,
+    // in tree order. Return shadow host’s shadow root.
     DCHECK(shadow_root->IsDeclarativeShadowRoot());
     shadow_root->RemoveChildren();
     return *shadow_root;
   }
 
-  // 6. Let shadow be a new shadow root whose node document is shadow host’s
-  // node document, host is shadow host, and mode is mode.
-  // 9. Set shadow host’s shadow root to shadow.
+  // 5. Let shadow be a new shadow root whose node document is this’s node
+  // document, host is this, and mode is init’s mode.
   ShadowRoot& shadow_root = CreateAndAttachShadowRoot(type);
-  // 7. Set shadow’s delegates focus to delegates focus.
+  // 6. Set shadow’s delegates focus to init’s delegatesFocus.
   shadow_root.SetDelegatesFocus(focus_delegation ==
                                 FocusDelegation::kDelegateFocus);
-  // 8. Set shadow’s "is declarative shadow root" property to false.
+  // NEW. Set shadow’s "is declarative shadow root" property to false.
   shadow_root.SetIsDeclarativeShadowRoot(false);
 
-  // NEW. If shadow host is a custom element, and if custom element state is
-  // not "precustomized" or "custom", set shadow root's
-  // IsAvailableToElementInternals flag to false. Otherwise, set it to true.
+  // 7. If this’s custom element state is "precustomized" or "custom", then set
+  // shadow’s available to element internals to true.
   shadow_root.SetAvailableToElementInternals(
       !(IsCustomElement() &&
         GetCustomElementState() != CustomElementState::kCustom &&
         GetCustomElementState() != CustomElementState::kPreCustomized));
 
   shadow_root.SetSlotAssignmentMode(slot_assignment_mode);
+  // 8. Set this’s shadow root to shadow.
   return shadow_root;
 }
 
@@ -4442,14 +4463,17 @@ String Element::outerHTML() const {
   return CreateMarkup(this);
 }
 
-void Element::setInnerHTML(const String& html,
-                           ExceptionState& exception_state) {
-  probe::BreakableLocation(GetExecutionContext(), "Element.setInnerHTML");
+void Element::SetInnerHTMLInternal(const String& html,
+                                   const SetInnerHTMLOptions* options,
+                                   ExceptionState& exception_state) {
   if (html.IsEmpty() && !HasNonInBodyInsertionMode()) {
     setTextContent(html);
   } else {
+    bool allow_shadow_root =
+        options->hasAllowShadowRoot() && options->allowShadowRoot();
     if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
-            html, this, kAllowScriptingContent, "innerHTML", exception_state)) {
+            html, this, kAllowScriptingContent, "innerHTML", allow_shadow_root,
+            exception_state)) {
       ContainerNode* container = this;
       if (auto* template_element = DynamicTo<HTMLTemplateElement>(*this)) {
         // Allow replacing innerHTML on declarative shadow templates, prior to
@@ -4461,6 +4485,21 @@ void Element::setInnerHTML(const String& html,
       ReplaceChildrenWithFragment(container, fragment, exception_state);
     }
   }
+}
+
+void Element::setInnerHTML(const String& html,
+                           ExceptionState& exception_state) {
+  probe::BreakableLocation(GetExecutionContext(), "Element.setInnerHTML");
+  const SetInnerHTMLOptions options;
+  SetInnerHTMLInternal(html, &options, exception_state);
+}
+
+void Element::setInnerHTMLWithOptions(const String& html,
+                                      const SetInnerHTMLOptions* options,
+                                      ExceptionState& exception_state) {
+  DCHECK(RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled(
+      GetExecutionContext()));
+  SetInnerHTMLInternal(html, options, exception_state);
 }
 
 String Element::getInnerHTML(const GetInnerHTMLOptions* options) const {
@@ -4501,7 +4540,8 @@ void Element::setOuterHTML(const String& html,
   Node* next = nextSibling();
 
   DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
-      html, parent, kAllowScriptingContent, "outerHTML", exception_state);
+      html, parent, kAllowScriptingContent, "outerHTML",
+      /*allow_shadow_root=*/false, exception_state);
   if (exception_state.HadException())
     return;
 
@@ -4683,7 +4723,7 @@ void Element::insertAdjacentHTML(const String& where,
   // Step 3 of http://domparsing.spec.whatwg.org/#insertadjacenthtml()
   DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
       markup, context_element, kAllowScriptingContent, "insertAdjacentHTML",
-      exception_state);
+      /*allow_shadow_root=*/false, exception_state);
   if (!fragment)
     return;
   InsertAdjacent(where, fragment, exception_state);

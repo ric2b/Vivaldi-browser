@@ -47,7 +47,6 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -851,6 +850,7 @@ void SavePackage::SaveNextFile(bool process_all_remaining_items) {
         requester_frame->routing_id(), save_item_ptr->save_source(),
         save_item_ptr->full_path(), web_contents()->GetBrowserContext(),
         web_contents()
+            ->GetMainFrame()
             ->GetRenderViewHost()
             ->GetProcess()
             ->GetStoragePartition(),

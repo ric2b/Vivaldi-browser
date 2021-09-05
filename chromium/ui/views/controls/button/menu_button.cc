@@ -10,13 +10,14 @@
 #include "ui/events/event.h"
 #include "ui/views/controls/button/button_controller_delegate.h"
 #include "ui/views/controls/button/menu_button_controller.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace views {
 
 MenuButton::MenuButton(PressedCallback callback,
                        const base::string16& text,
                        int button_context)
-    : LabelButton(nullptr, text, button_context) {
+    : LabelButton(PressedCallback(), text, button_context) {
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
   std::unique_ptr<MenuButtonController> menu_button_controller =
       std::make_unique<MenuButtonController>(
@@ -24,12 +25,9 @@ MenuButton::MenuButton(PressedCallback callback,
           std::make_unique<Button::DefaultButtonControllerDelegate>(this));
   menu_button_controller_ = menu_button_controller.get();
   SetButtonController(std::move(menu_button_controller));
-}
 
-MenuButton::MenuButton(ButtonListener* listener,
-                       const base::string16& text,
-                       int button_context)
-    : MenuButton(PressedCallback(listener, this), text, button_context) {}
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+}
 
 MenuButton::~MenuButton() = default;
 

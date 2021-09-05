@@ -11,8 +11,8 @@
           &gt;
           <ph name="PROXIES_TITLE" />
           &gt;
-          LAN-innstillinger
-          og fjern avmerkingen for «Bruk en proxy-server for LAN-nettverket».</translation>
+          Lokalnettsinnstillinger
+          og fjern avmerkingen for «Bruk en mellomtjener for lokalnettverket».</translation>
 <translation id="4932161901409251843">Gå til
           Vivaldi-menyen &gt;
           <ph name="SETTINGS_TITLE" />
@@ -20,7 +20,7 @@
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
-          og sørg for at konfigurasjonen din er angitt til «ingen proxy-server» eller «direkte».</translation>
+          og sørg for at oppsettet ditt er «ingen mellomtjener» eller «direkte».</translation>
 <translation id="5248344925342018662">Du er på en sikker Vivaldi-side</translation>
 <translation id="7023871570427738255">Gå til
         Vivaldi-menyen &gt;
@@ -31,6 +31,6 @@
         Hvis dette ikke løser problemet, bør du velge dette alternativet
         på nytt for bedre ytelse.</translation>
 <translation id="8187289872471304532">Gå til
-          Programmer &gt; Systemvalg &gt; Nettverk &gt; Avansert &gt; Proxy
-          og fjern avmerkingen for alle valgte proxyservere.</translation>
+          Programmer &gt; Systemvalg &gt; Nettverk &gt; Avansert &gt; Mellomtjener
+          og fjern avmerkingen for alle valgte mellomtjenere.</translation>
 </translationbundle>

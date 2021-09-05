@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -41,6 +41,7 @@
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/isolation_info.h"
 #include "net/cookies/site_for_cookies.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
@@ -265,8 +266,8 @@ void SetupOnUIThread(
   // Get a process.
   blink::ServiceWorkerStatusCode status =
       process_manager->AllocateWorkerProcess(
-          embedded_worker_id, params->script_url, can_use_existing_process,
-          process_info.get());
+          embedded_worker_id, params->script_url, cross_origin_embedder_policy,
+          can_use_existing_process, process_info.get());
   if (status != blink::ServiceWorkerStatusCode::kOk) {
     base::Optional<base::Time> ui_post_time;
     if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled())
@@ -365,12 +366,12 @@ void SetupOnUIThread(
       std::move(coep_reporter_for_subresources),
       ContentBrowserClient::URLLoaderFactoryType::kServiceWorkerSubResource);
 
-  // TODO(crbug.com/862854): Support changes to
-  // blink::mojom::RendererPreferences while the worker is running.
+  // TODO(crbug.com/862854): Support changes to blink::RendererPreferences while
+  // the worker is running.
   DCHECK(process_manager->browser_context() || process_manager->IsShutdown());
-  params->renderer_preferences = blink::mojom::RendererPreferences::New();
+  params->renderer_preferences = blink::RendererPreferences();
   GetContentClient()->browser()->UpdateRendererPreferencesForWorker(
-      process_manager->browser_context(), params->renderer_preferences.get());
+      process_manager->browser_context(), &params->renderer_preferences);
 
   // Create a RendererPreferenceWatcher to observe updates in the preferences.
   mojo::PendingRemote<blink::mojom::RendererPreferenceWatcher> watcher_remote;
@@ -1219,11 +1220,10 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
   network::mojom::URLLoaderFactoryParamsPtr factory_params =
       URLLoaderFactoryParamsHelper::CreateForWorker(
           rph, origin,
-          net::IsolationInfo::Create(
-              net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
-              net::SiteForCookies::FromOrigin(origin)),
-          std::move(coep_reporter),
-          "EmbeddedWorkerInstance::CreateFactoryBundlesOnUI");
+          net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                     origin, origin,
+                                     net::SiteForCookies::FromOrigin(origin)),
+          std::move(coep_reporter));
   bool bypass_redirect_checks = false;
 
   DCHECK(factory_type ==
@@ -1235,7 +1235,7 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       rph->GetBrowserContext(), nullptr /* frame_host */, rph->GetID(),
       factory_type, origin, base::nullopt /* navigation_id */,
-      base::kInvalidUkmSourceId, &default_factory_receiver,
+      ukm::kInvalidSourceIdObj, &default_factory_receiver,
       &factory_params->header_client, &bypass_redirect_checks,
       nullptr /* disable_secure_dns */, &factory_params->factory_override);
   devtools_instrumentation::WillCreateURLLoaderFactoryForServiceWorker(
@@ -1257,32 +1257,12 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
 
   factory_bundle->set_bypass_redirect_checks(bypass_redirect_checks);
 
-  ContentBrowserClient::NonNetworkURLLoaderFactoryDeprecatedMap
-      non_network_uniquely_owned_factories;
   ContentBrowserClient::NonNetworkURLLoaderFactoryMap non_network_factories;
   non_network_factories[url::kDataScheme] = DataURLLoaderFactory::Create();
   GetContentClient()
       ->browser()
       ->RegisterNonNetworkSubresourceURLLoaderFactories(
-          rph->GetID(), MSG_ROUTING_NONE, &non_network_uniquely_owned_factories,
-          &non_network_factories);
-
-  for (auto& pair : non_network_uniquely_owned_factories) {
-    const std::string& scheme = pair.first;
-    std::unique_ptr<network::mojom::URLLoaderFactory> factory =
-        std::move(pair.second);
-
-    // To be safe, ignore schemes that aren't allowed to register service
-    // workers. We assume that importScripts and fetch() should fail on such
-    // schemes.
-    if (!base::Contains(GetServiceWorkerSchemes(), scheme))
-      continue;
-    mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_remote;
-    mojo::MakeSelfOwnedReceiver(
-        std::move(factory), factory_remote.InitWithNewPipeAndPassReceiver());
-    factory_bundle->pending_scheme_specific_factories().emplace(
-        scheme, std::move(factory_remote));
-  }
+          rph->GetID(), MSG_ROUTING_NONE, &non_network_factories);
 
   for (auto& pair : non_network_factories) {
     const std::string& scheme = pair.first;

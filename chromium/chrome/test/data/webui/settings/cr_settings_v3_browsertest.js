@@ -264,9 +264,16 @@ var CrSettingsPasswordsCheckV3Test = class extends CrSettingsV3BrowserTest {
   }
 };
 
-TEST_F('CrSettingsPasswordsCheckV3Test', 'All', function() {
+// Flaky on Mac builds https://crbug.com/1143801
+GEN('#if defined(OS_MAC)');
+GEN('#define MAYBE_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_All All');
+GEN('#endif');
+TEST_F('CrSettingsPasswordsCheckV3Test', 'MAYBE_All', function() {
   mocha.run();
 });
+GEN('#undef MAYBE_All');
 
 // eslint-disable-next-line no-var
 var CrSettingsSafetyCheckPageV3Test = class extends CrSettingsV3BrowserTest {
@@ -517,6 +524,13 @@ TEST_F('CrSettingsAdvancedPageV3Test', 'MAYBE_Load', function() {
  ['ZoomLevels', 'zoom_levels_tests.js'],
 ].forEach(test => registerTest(...test));
 
+// Timeout on MacOS dbg bots
+// https://crbug.com/1133412
+GEN('#if !defined(OS_MAC) || defined(NDEBUG)');
+[['SecurityPage', 'security_page_test.js'],
+].forEach(test => registerTest(...test));
+GEN('#endif  // !defined(OS_MAC) || defined(NDEBUG)');
+
 GEN('#if defined(OS_CHROMEOS)');
 [['LanguagesPageMetricsChromeOS', 'languages_page_metrics_test_cros.js'],
  ['PasswordsSectionCros', 'passwords_section_test_cros.js'],
@@ -528,8 +542,6 @@ GEN('#endif  // defined(OS_CHROMEOS)');
 
 GEN('#if !defined(OS_MAC)');
 [['EditDictionaryPage', 'edit_dictionary_page_test.js'],
- // TODO(https://crbug.com/1081908): Flaky on Mac. Fix and re-enable.
- ['SecurityPage', 'security_page_test.js'],
 ].forEach(test => registerTest(...test));
 GEN('#endif  //!defined(OS_MAC)');
 

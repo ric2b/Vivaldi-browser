@@ -92,7 +92,7 @@ public class EmptyTabModel implements TabModel {
     public void setIndex(int i, @TabSelectionType int type) {}
 
     @Override
-    public boolean isCurrentModel() {
+    public boolean isActiveModel() {
         return false;
     }
 
@@ -148,6 +148,9 @@ public class EmptyTabModel implements TabModel {
 
     @Override
     public void removeObserver(TabModelObserver observer) {}
+
+    @Override
+    public void setActive(boolean active) {}
 
     @Override
     public void removeTab(Tab tab) {}

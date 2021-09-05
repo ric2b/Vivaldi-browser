@@ -10,11 +10,11 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -37,6 +37,7 @@
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_content_client.h"
 #include "mojo/public/cpp/system/functions.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
@@ -78,17 +79,7 @@ class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
 
   ServiceWorkerTestContentBrowserClient() {}
 
-  AllowServiceWorkerResult AllowServiceWorkerOnIO(
-      const GURL& scope,
-      const GURL& site_for_cookies,
-      const base::Optional<url::Origin>& top_frame_origin,
-      const GURL& script_url,
-      content::ResourceContext* context) override {
-    logs_.emplace_back(scope, site_for_cookies, top_frame_origin, script_url);
-    return AllowServiceWorkerResult::No();
-  }
-
-  AllowServiceWorkerResult AllowServiceWorkerOnUI(
+  AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
       const GURL& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin,
@@ -212,7 +203,8 @@ class ServiceWorkerContainerHostTest : public testing::Test {
     // process right before navigation commit.
     container_host->OnBeginNavigationCommit(
         helper_->mock_render_process_id(), 1 /* route_id */,
-        network::CrossOriginEmbedderPolicy(), std::move(reporter));
+        network::CrossOriginEmbedderPolicy(), std::move(reporter),
+        ukm::UkmRecorder::GetNewSourceID());
   }
 
   blink::mojom::ServiceWorkerErrorType Register(
@@ -409,20 +401,22 @@ TEST_F(ServiceWorkerContainerHostTest, ContextSecurity) {
   container_host_secure_parent->UpdateUrls(
       GURL("http://host"), net::SiteForCookies::FromUrl(GURL("http://host")),
       url::Origin::Create(GURL("http://host")));
-  EXPECT_FALSE(container_host_secure_parent->IsContextSecureForServiceWorker());
+  EXPECT_FALSE(
+      container_host_secure_parent->IsEligibleForServiceWorkerController());
 
   // Insecure parent frame.
   container_host_insecure_parent->UpdateUrls(
       GURL("https://host"), net::SiteForCookies::FromUrl(GURL("https://host")),
       url::Origin::Create(GURL("https://host")));
   EXPECT_FALSE(
-      container_host_insecure_parent->IsContextSecureForServiceWorker());
+      container_host_insecure_parent->IsEligibleForServiceWorkerController());
 
   // Secure URL and parent frame.
   container_host_secure_parent->UpdateUrls(
       GURL("https://host"), net::SiteForCookies::FromUrl(GURL("https://host")),
       url::Origin::Create(GURL("https://host")));
-  EXPECT_TRUE(container_host_secure_parent->IsContextSecureForServiceWorker());
+  EXPECT_TRUE(
+      container_host_secure_parent->IsEligibleForServiceWorkerController());
 
   // Exceptional service worker scheme.
   GURL url(std::string(kServiceWorkerScheme) + "://host");
@@ -432,13 +426,14 @@ TEST_F(ServiceWorkerContainerHostTest, ContextSecurity) {
   EXPECT_TRUE(OriginCanAccessServiceWorkers(url));
   container_host_secure_parent->UpdateUrls(
       url, net::SiteForCookies::FromUrl(url), origin);
-  EXPECT_TRUE(container_host_secure_parent->IsContextSecureForServiceWorker());
+  EXPECT_TRUE(
+      container_host_secure_parent->IsEligibleForServiceWorkerController());
 
   // Exceptional service worker scheme with insecure parent frame.
   container_host_insecure_parent->UpdateUrls(
       url, net::SiteForCookies::FromUrl(url), origin);
   EXPECT_FALSE(
-      container_host_insecure_parent->IsContextSecureForServiceWorker());
+      container_host_insecure_parent->IsEligibleForServiceWorkerController());
 }
 
 TEST_F(ServiceWorkerContainerHostTest, UpdateUrls_SameOriginRedirect) {
@@ -1004,7 +999,8 @@ void ServiceWorkerContainerHostTest::TestReservedClientsAreNotExposed(
                                url::Origin::Create(url));
     EXPECT_FALSE(CanFindClientContainerHost(container_host.get()));
     container_host->CompleteWebWorkerPreparation(
-        network::CrossOriginEmbedderPolicy());
+        network::CrossOriginEmbedderPolicy(),
+        ukm::UkmRecorder::GetNewSourceID());
     EXPECT_TRUE(CanFindClientContainerHost(container_host.get()));
   }
 
@@ -1093,7 +1089,7 @@ void ServiceWorkerContainerHostTest::TestClientPhaseTransition(
   container_host->UpdateUrls(url, net::SiteForCookies::FromUrl(url),
                              url::Origin::Create(url));
   container_host->CompleteWebWorkerPreparation(
-      network::CrossOriginEmbedderPolicy());
+      network::CrossOriginEmbedderPolicy(), ukm::UkmRecorder::GetNewSourceID());
 
   EXPECT_TRUE(container_host->is_response_committed());
   EXPECT_TRUE(container_host->is_execution_ready());
@@ -1119,8 +1115,7 @@ class ServiceWorkerContainerHostTestWithBackForwardCache
  public:
   ServiceWorkerContainerHostTestWithBackForwardCache() {
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{features::kBackForwardCache, {GetFeatureParams()}},
-         {features::kServiceWorkerOnUI, {}}},
+        {{features::kBackForwardCache, {GetFeatureParams()}}},
         /*disabled_features=*/{});
   }
 
@@ -1193,9 +1188,8 @@ class TestServiceWorkerContextCoreObserver
     : public ServiceWorkerContextCoreObserver {
  public:
   explicit TestServiceWorkerContextCoreObserver(
-      ServiceWorkerContextWrapper* wrapper)
-      : observer_(this) {
-    observer_.Add(wrapper);
+      ServiceWorkerContextWrapper* wrapper) {
+    observation_.Observe(wrapper);
   }
 
   void OnControlleeAdded(int64_t version_id,
@@ -1227,8 +1221,9 @@ class TestServiceWorkerContextCoreObserver
   int on_controllee_removed_count_ = 0;
   int on_controllee_navigation_committed_count_ = 0;
 
-  ScopedObserver<ServiceWorkerContextWrapper, ServiceWorkerContextCoreObserver>
-      observer_;
+  base::ScopedObservation<ServiceWorkerContextWrapper,
+                          ServiceWorkerContextCoreObserver>
+      observation_{this};
 };
 
 TEST_F(ServiceWorkerContainerHostTestWithBackForwardCache, ControlleeEvents) {

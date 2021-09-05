@@ -10,7 +10,7 @@
 #include "ash/public/cpp/external_arc/message_center/arc_notification_manager.h"
 #include "ash/public/cpp/message_center/arc_notifications_host_initializer.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "components/arc/mojom/accessibility_helper.mojom.h"
 #include "components/arc/mojom/app.mojom.h"
 #include "components/arc/mojom/app_permissions.mojom.h"
@@ -25,6 +25,7 @@
 #include "components/arc/mojom/cert_store.mojom.h"
 #include "components/arc/mojom/clipboard.mojom.h"
 #include "components/arc/mojom/crash_collector.mojom.h"
+#include "components/arc/mojom/digital_goods.mojom.h"
 #include "components/arc/mojom/disk_quota.mojom.h"
 #include "components/arc/mojom/enterprise_reporting.mojom.h"
 #include "components/arc/mojom/file_system.mojom.h"
@@ -51,6 +52,7 @@
 #include "components/arc/mojom/rotation_lock.mojom.h"
 #include "components/arc/mojom/screen_capture.mojom.h"
 #include "components/arc/mojom/sensor.mojom.h"
+#include "components/arc/mojom/sharesheet.mojom.h"
 #include "components/arc/mojom/storage_manager.mojom.h"
 #include "components/arc/mojom/timer.mojom.h"
 #include "components/arc/mojom/tracing.mojom.h"
@@ -161,6 +163,12 @@ void ArcBridgeHostImpl::OnCrashCollectorInstanceReady(
     mojo::PendingRemote<mojom::CrashCollectorInstance> crash_collector_remote) {
   OnInstanceReady(arc_bridge_service_->crash_collector(),
                   std::move(crash_collector_remote));
+}
+
+void ArcBridgeHostImpl::OnDigitalGoodsInstanceReady(
+    mojo::PendingRemote<mojom::DigitalGoodsInstance> digital_goods_remote) {
+  OnInstanceReady(arc_bridge_service_->digital_goods(),
+                  std::move(digital_goods_remote));
 }
 
 void ArcBridgeHostImpl::OnDiskQuotaInstanceReady(
@@ -318,6 +326,12 @@ void ArcBridgeHostImpl::OnScreenCaptureInstanceReady(
 void ArcBridgeHostImpl::OnSensorInstanceReady(
     mojo::PendingRemote<mojom::SensorInstance> sensor_remote) {
   OnInstanceReady(arc_bridge_service_->sensor(), std::move(sensor_remote));
+}
+
+void ArcBridgeHostImpl::OnSharesheetInstanceReady(
+    mojo::PendingRemote<mojom::SharesheetInstance> sharesheet_remote) {
+  OnInstanceReady(arc_bridge_service_->sharesheet(),
+                  std::move(sharesheet_remote));
 }
 
 void ArcBridgeHostImpl::OnSmartCardManagerInstanceReady(

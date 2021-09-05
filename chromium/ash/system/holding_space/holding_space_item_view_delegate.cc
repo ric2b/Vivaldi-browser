@@ -12,12 +12,15 @@
 #include "ash/public/cpp/holding_space/holding_space_model.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/holding_space/holding_space_drag_util.h"
 #include "ash/system/holding_space/holding_space_item_view.h"
 #include "base/bind.h"
 #include "net/base/mime_util.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -74,14 +77,23 @@ void HoldingSpaceItemViewDelegate::OnHoldingSpaceItemViewCreated(
 bool HoldingSpaceItemViewDelegate::OnHoldingSpaceItemViewAccessibleAction(
     HoldingSpaceItemView* view,
     const ui::AXActionData& action_data) {
-  // When performing the default accessible action (e.g. Search + Space), we
-  // open the selected holding space items. If `view` is not part of the current
+  // When performing the default accessible action (e.g. Search + Space), open
+  // the selected holding space items. If `view` is not part of the current
   // selection it will become the entire selection.
   if (action_data.action == ax::mojom::Action::kDoDefault) {
     if (!view->selected())
       SetSelection(view);
     OpenItems(GetSelection());
     return true;
+  }
+  // When showing the context menu via accessible action (e.g. Search + M),
+  // ensure that `view` is part of the current selection. If it is not part of
+  // the current selection it will become the entire selection.
+  if (action_data.action == ax::mojom::Action::kShowContextMenu) {
+    if (!view->selected())
+      SetSelection(view);
+    // Return false so that the views framework will show the context menu.
+    return false;
   }
   return false;
 }
@@ -93,6 +105,15 @@ void HoldingSpaceItemViewDelegate::OnHoldingSpaceItemViewGestureEvent(
   // Ensure that the pressed `view` is the only view selected.
   if (event.type() == ui::ET_GESTURE_LONG_PRESS) {
     SetSelection(view);
+    return;
+  }
+  // If a scroll begin gesture is received while the context menu is showing,
+  // that means the user is trying to initiate a drag. Close the context menu
+  // and start the item drag.
+  if (event.type() == ui::ET_GESTURE_SCROLL_BEGIN && context_menu_runner_ &&
+      context_menu_runner_->IsRunning()) {
+    context_menu_runner_.reset();
+    view->StartDrag(event, ui::mojom::DragEventSource::kTouch);
     return;
   }
   // When a tap gesture occurs, we select and open only the item corresponding
@@ -195,9 +216,25 @@ void HoldingSpaceItemViewDelegate::ShowContextMenuForViewImpl(
     views::View* source,
     const gfx::Point& point,
     ui::MenuSourceType source_type) {
-  const int run_types = views::MenuRunner::USE_TOUCHABLE_LAYOUT |
-                        views::MenuRunner::CONTEXT_MENU |
-                        views::MenuRunner::FIXED_ANCHOR;
+  // In touch mode, gesture events continue to be sent to holding space views
+  // after showing the context menu so that it can be aborted if the user
+  // initiates a drag sequence. This means both `ui::ET_GESTURE_LONG_TAP` and
+  // `ui::ET_GESTURE_LONG_PRESS` may be received while showing the context menu
+  // which would result in trying to show the context menu twice. This would not
+  // be a fatal failure but would result in UI jank.
+  if (context_menu_runner_ && context_menu_runner_->IsRunning())
+    return;
+
+  int run_types = views::MenuRunner::USE_TOUCHABLE_LAYOUT |
+                  views::MenuRunner::CONTEXT_MENU |
+                  views::MenuRunner::FIXED_ANCHOR;
+
+  // In touch mode the context menu may be aborted if the user initiates a drag.
+  // In order to determine if the gesture resulting in this context menu being
+  // shown was actually the start of a drag sequence, holding space views will
+  // have to receive events that would otherwise be consumed by the `MenuHost`.
+  if (source_type == ui::MenuSourceType::MENU_SOURCE_TOUCH)
+    run_types |= views::MenuRunner::SEND_GESTURE_EVENTS_TO_OWNER;
 
   context_menu_runner_ =
       std::make_unique<views::MenuRunner>(BuildMenuModel(), run_types);
@@ -234,10 +271,17 @@ void HoldingSpaceItemViewDelegate::WriteDragDataForView(
   holding_space_metrics::RecordItemAction(
       GetItems(selection), holding_space_metrics::ItemAction::kDrag);
 
+  // Drag image.
+  gfx::ImageSkia drag_image;
+  gfx::Vector2d drag_offset;
+  holding_space_util::CreateDragImage(selection, &drag_image, &drag_offset);
+  data->provider().SetDragImage(std::move(drag_image), drag_offset);
+
+  // Payload.
   std::vector<ui::FileInfo> filenames;
   for (const HoldingSpaceItemView* view : selection) {
-    filenames.push_back(ui::FileInfo(view->item()->file_path(),
-                                     view->item()->file_path().BaseName()));
+    const base::FilePath& file_path = view->item()->file_path();
+    filenames.push_back(ui::FileInfo(file_path, file_path.BaseName()));
   }
   data->SetFilenames(filenames);
 }

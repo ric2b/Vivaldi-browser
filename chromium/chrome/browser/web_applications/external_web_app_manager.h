@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
@@ -17,6 +16,10 @@
 
 namespace base {
 class FilePath;
+}
+
+namespace user_prefs {
+class PrefRegistrySyncable;
 }
 
 class Profile;
@@ -46,12 +49,16 @@ class ExternalWebAppManager {
   static const char* kHistogramDisabledCount;
   static const char* kHistogramConfigErrorCount;
 
+  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
   static void SkipStartupForTesting();
   static void SetConfigDirForTesting(const base::FilePath* config_dir);
   static void SetConfigsForTesting(const std::vector<base::Value>* configs);
   static void SetFileUtilsForTesting(const FileUtilsWrapper* file_utils);
 
   explicit ExternalWebAppManager(Profile* profile);
+  ExternalWebAppManager(const ExternalWebAppManager&) = delete;
+  ExternalWebAppManager& operator=(const ExternalWebAppManager&) = delete;
   ~ExternalWebAppManager();
 
   void SetSubsystems(PendingAppManager* pending_app_manager);
@@ -83,12 +90,15 @@ class ExternalWebAppManager {
 
   base::FilePath GetConfigDir();
 
+  // Returns whether this is the first time we've deployed default apps on this
+  // profile.
+  bool IsNewUser();
+
   PendingAppManager* pending_app_manager_ = nullptr;
   Profile* const profile_;
 
   base::WeakPtrFactory<ExternalWebAppManager> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(ExternalWebAppManager);
 };
 
 }  // namespace web_app

@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Kon nie druk nie.</translation>
 <translation id="1125564390852150847">Skep nuwe oortjie.</translation>
 <translation id="1145536944570833626">Vee bestaande data uit.</translation>
+<translation id="1147031633655575115">Aangemeld as <ph name="USER" /></translation>
 <translation id="1154690515305205900">Kan nie 'n skakel na die gemerkte teks skep nie.</translation>
+<translation id="1157749421655780457">Laat ligging toe …</translation>
 <translation id="1165039591588034296">Fout</translation>
 <translation id="1172898394251786223">Volgende veld</translation>
 <translation id="1176932207622159128">Kan nie prent stoor nie</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Versteek wagwoord</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> items</translation>
 <translation id="1491277525950327607">Dubbeltik om instelling te wissel</translation>
+<translation id="1492417797159476138">Jy het hierdie gebruikernaam reeds vir hierdie werf gestoor</translation>
 <translation id="1509486075633541495">Meld by webwerf aan</translation>
 <translation id="1509960214886564027">Kenmerke op baie werwe kan breek</translation>
 <translation id="152234381334907219">Nooit gestoor nie</translation>
@@ -266,6 +269,7 @@ Volg die stappe hieronder:</translation>
 <translation id="385051799172605136">Terug</translation>
 <translation id="3892144330757387737">Jy sal jou geskiedenis hier kry</translation>
 <translation id="3897092660631435901">Kieslys</translation>
+<translation id="3913386780052199712">Aangemeld by Chrome</translation>
 <translation id="3915450441834151894">Werfinligting</translation>
 <translation id="3922310737605261887">Soek vir gekopieerde teks</translation>
 <translation id="3928666092801078803">Kombineer my data</translation>
@@ -340,6 +344,7 @@ Jou data is met jou sinkroniseringwagfrase geënkripteer. Voer dit in om te begi
 <translation id="4751645464639803239">Nuwe incognito-oortjie</translation>
 <translation id="4758977202923349869">Plaas kredietkaart in sy raam</translation>
 <translation id="4775879719735953715">Verstekblaaier</translation>
+<translation id="4778644898150334464">Gebruik ander wagwoord</translation>
 <translation id="4802417911091824046">Wagfrase-enkripsie sluit nie betaalmetodes en adresse van Google Pay af in nie.
 
 <ph name="BEGIN_LINK" />Stel sinkronisering terug<ph name="END_LINK" /> om hierdie instelling te verander</translation>
@@ -372,6 +377,7 @@ Jou data is met jou sinkroniseringwagfrase geënkripteer. Voer dit in om te begi
 <translation id="5059136629401106827">OK</translation>
 <translation id="5062321486222145940">Installeer Google Drive</translation>
 <translation id="5083464117946352670">Kan nie lêergrootte bepaal nie.</translation>
+<translation id="5090832849094901128">As hierdie wagwoord uitgevee word, sal jou rekening op <ph name="WEBSITE" /> nie uitgevee word nie.</translation>
 <translation id="5094827893301452931">Twiet is voltooi.</translation>
 <translation id="5118764316110575523">Af</translation>
 <translation id="5127805178023152808">Sinkronisering is af</translation>
@@ -511,6 +517,9 @@ Werwe kan nie webkoekies gebruik om jou blaai-aktiwiteit op verskillende werwe t
 <translation id="6476800141292307438">Vertaal tans die bladsy in <ph name="LANGUAGE" />. Opsies is naby die onderkant van die skerm beskikbaar.</translation>
 <translation id="648164694371393720">Stawingfout</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> items uitgevee</translation>
+<translation id="6497772452874122664">As jy <ph name="TIME" /> vertrou, kan jy 'n gestoorde wagwoord van 'n ander werf af gebruik.
+
+Probeer 'n unieke wagwoord vir elke werf gebruik.</translation>
 <translation id="651505212789431520">Kanselleer sinkronisering? Jy kan sinkronisering enige tyd in Instellings aanskakel.</translation>
 <translation id="6561262006871132942">Zoem in</translation>
 <translation id="6585618849026997638">Jy kan 'n boekmerk byvoeg om weer uit te kom by 'n bladsy wat vir jou belangrik is</translation>
@@ -590,6 +599,7 @@ Werwe kan nie webkoekies gebruik om jou blaai-aktiwiteit op verskillende werwe t
 <translation id="739941347996872055">Vorige oortjie</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> ongeleesde artikels.</translation>
+<translation id="7412027924265291969">Gaan voort</translation>
 <translation id="7425346204213733349">Veranderinge aan jou boekmerke, geskiedenis, wagwoorde en ander instellings sal nie meer met jou Google-rekening gesinkroniseer word nie. Jou bestaande data sal egter in jou Google-rekening geberg bly.</translation>
 <translation id="7435356471928173109">Afgeskakel deur jou administrateur</translation>
 <translation id="7454057999980797137">Staat / Distrik</translation>
@@ -600,6 +610,7 @@ Werwe kan nie webkoekies gebruik om jou blaai-aktiwiteit op verskillende werwe t
 <translation id="7472734401283673885">Maatskappynaam</translation>
 <translation id="7473891865547856676">Nee, dankie</translation>
 <translation id="7481312909269577407">Vorentoe</translation>
+<translation id="7483467499335917849">Gebruik jou huidige ligging</translation>
 <translation id="750493650310597496">0 gekies</translation>
 <translation id="7514365320538308">Laai af</translation>
 <translation id="7537586195939242955">Jammer, jou Pass kan nie tans na Passbook geïnstalleer word nie.</translation>
@@ -733,6 +744,7 @@ Werwe kan webkoekies gebruik om jou blaai-aktiwiteit op verskillende werwe te si
 <translation id="9094033019050270033">Dateer wagwoord op</translation>
 <translation id="9100610230175265781">Wagwoordfrase word vereis</translation>
 <translation id="9107664647686727385">Gaan na vir gekompromitteerde wagwoorde</translation>
+<translation id="9137526406337347448">Google-dienste</translation>
 <translation id="9148126808321036104">Meld weer aan …</translation>
 <translation id="9152539721251340337">Skep 'n QR-kode</translation>
 <translation id="9157836665414082580">Onderdruk dialoë</translation>

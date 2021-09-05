@@ -7,7 +7,7 @@
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -31,7 +31,7 @@
 #endif
 
 @interface PasswordDetailsCoordinator () <PasswordDetailsHandler> {
-  autofill::PasswordForm _password;
+  password_manager::PasswordForm _password;
 
   // Manager responsible for password check feature.
   IOSChromePasswordCheckManager* _manager;
@@ -66,7 +66,8 @@
     initWithBaseNavigationController:
         (UINavigationController*)navigationController
                              browser:(Browser*)browser
-                            password:(const autofill::PasswordForm&)password
+                            password:
+                                (const password_manager::PasswordForm&)password
                         reauthModule:(ReauthenticationModule*)reauthModule
                 passwordCheckManager:(IOSChromePasswordCheckManager*)manager {
   self = [super initWithBaseViewController:navigationController
@@ -147,13 +148,17 @@
   [self.alertCoordinator start];
 }
 
-- (void)showPasswordDeleteDialogWithOrigin:(NSString*)origin {
+- (void)showPasswordDeleteDialogWithOrigin:(NSString*)origin
+                       compromisedPassword:(BOOL)compromisedPassword {
   NSString* message;
 
-  if (origin.length > 0)
+  if (origin.length > 0) {
+    int stringID = compromisedPassword
+                       ? IDS_IOS_DELETE_COMPROMISED_PASSWORD_DESCRIPTION
+                       : IDS_IOS_DELETE_PASSWORD_DESCRIPTION;
     message =
-        l10n_util::GetNSStringF(IDS_IOS_DELETE_COMPROMISED_PASSWORD_DESCRIPTION,
-                                base::SysNSStringToUTF16(origin));
+        l10n_util::GetNSStringF(stringID, base::SysNSStringToUTF16(origin));
+  }
   self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser
@@ -167,9 +172,8 @@
   [self.actionSheetCoordinator
       addItemWithTitle:l10n_util::GetNSString(IDS_IOS_CONFIRM_PASSWORD_DELETION)
                 action:^{
-                  [weakSelf
-                      passwordDeletionConfirmedForCompromised:origin.length >
-                                                              0];
+                  [weakSelf passwordDeletionConfirmedForCompromised:
+                                compromisedPassword];
                 }
                  style:UIAlertActionStyleDestructive];
 

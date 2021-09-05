@@ -4,6 +4,9 @@
 
 #include "chromeos/services/ime/constants.h"
 
+#include <string.h>
+
+#include "base/files/file_util.h"
 #include "build/branding_buildflags.h"
 
 #define FPL FILE_PATH_LITERAL
@@ -24,7 +27,6 @@ const base::FilePath::CharType kSharedInputMethodsDirPath[] =
     FILE_PATH_LITERAL("/home/chronos/" IME_DIR_STRING);
 const base::FilePath::CharType kLanguageDataDirName[] =
     FILE_PATH_LITERAL("google");
-const char kCrosImeDecoderLib[] = "libimedecoder.so";
 #else
 // IME service does not support third-party IME yet, so the paths below kind
 // of act like a placeholder. In the future, put some well-designed paths here.
@@ -36,8 +38,6 @@ const base::FilePath::CharType kSharedInputMethodsDirPath[] =
     FILE_PATH_LITERAL("/tmp/" IME_DIR_STRING);
 const base::FilePath::CharType kLanguageDataDirName[] =
     FILE_PATH_LITERAL("data");
-// IME service does not support third-party IME decoder yet.
-const char kCrosImeDecoderLib[] = "";
 #endif
 
 const char kGoogleKeyboardDownloadDomain[] = "dl.google.com";

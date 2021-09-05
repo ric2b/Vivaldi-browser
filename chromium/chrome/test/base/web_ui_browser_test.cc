@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/files/file_util.h"
 #include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
@@ -101,6 +101,8 @@ class WebUITestMessageHandler : public content::WebUIMessageHandler,
                                 public WebUITestHandler {
  public:
   WebUITestMessageHandler() = default;
+  WebUITestMessageHandler(const WebUITestMessageHandler&) = delete;
+  WebUITestMessageHandler& operator=(const WebUITestMessageHandler&) = delete;
   ~WebUITestMessageHandler() override = default;
 
   // Receives testResult messages.
@@ -126,9 +128,6 @@ class WebUITestMessageHandler : public content::WebUIMessageHandler,
   }
 
   content::WebUI* GetWebUI() override { return web_ui(); }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebUITestMessageHandler);
 };
 
 }  // namespace
@@ -376,6 +375,8 @@ const GURL& DummyUrl() {
 class MockWebUIDataSource : public content::URLDataSource {
  public:
   MockWebUIDataSource() = default;
+  MockWebUIDataSource(const MockWebUIDataSource&) = delete;
+  MockWebUIDataSource& operator=(const MockWebUIDataSource&) = delete;
   ~MockWebUIDataSource() override = default;
 
  private:
@@ -410,8 +411,6 @@ class MockWebUIDataSource : public content::URLDataSource {
 
     return content::URLDataSource::GetContentSecurityPolicy(directive);
   }
-
-  DISALLOW_COPY_AND_ASSIGN(MockWebUIDataSource);
 };
 
 // WebUIProvider to allow attaching the DataSource for the dummy URL when
@@ -420,6 +419,8 @@ class MockWebUIProvider
     : public TestChromeWebUIControllerFactory::WebUIProvider {
  public:
   MockWebUIProvider() = default;
+  MockWebUIProvider(const MockWebUIProvider&) = delete;
+  MockWebUIProvider& operator=(const MockWebUIProvider&) = delete;
   ~MockWebUIProvider() override = default;
 
   // Returns a new WebUI
@@ -429,9 +430,6 @@ class MockWebUIProvider
                                 std::make_unique<MockWebUIDataSource>());
     return std::make_unique<content::WebUIController>(web_ui);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockWebUIProvider);
 };
 
 base::LazyInstance<MockWebUIProvider>::DestructorAtExit mock_provider_ =

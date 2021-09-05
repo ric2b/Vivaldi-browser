@@ -27,10 +27,7 @@
 #include "chrome/browser/chromeos/login/screens/reset_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
-#include "chrome/browser/chromeos/policy/enrollment_requisition_manager.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
-#include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
-#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/demo_setup_screen_handler.h"
@@ -126,7 +123,6 @@ void CoreOobeHandler::Initialize() {
 #else
   version_info_updater_.StartUpdate(false);
 #endif
-  UpdateDeviceRequisition();
   UpdateKeyboardState();
   UpdateClientAreaSize();
 }
@@ -144,8 +140,6 @@ void CoreOobeHandler::RegisterMessages() {
   AddCallback("screenStateInitialize", &CoreOobeHandler::HandleInitialized);
   AddCallback("updateCurrentScreen",
               &CoreOobeHandler::HandleUpdateCurrentScreen);
-  AddCallback("setDeviceRequisition",
-              &CoreOobeHandler::HandleSetDeviceRequisition);
   AddCallback("skipToLoginForTesting",
               &CoreOobeHandler::HandleSkipToLoginForTesting);
   AddCallback("skipToUpdateForTesting",
@@ -227,9 +221,7 @@ void CoreOobeHandler::SetShelfHeight(int height) {
 }
 
 void CoreOobeHandler::HandleInitialized() {
-  // TODO(crbug.com/1082670): Remove excessive logging after investigation.
-  LOG(ERROR) << "1082670 : CoreOobeHandler::HandleInitialized";
-
+  VLOG(3) << "CoreOobeHandler::HandleInitialized";
   GetOobeUI()->InitializeHandlers();
   AllowJavascript();
 }
@@ -245,27 +237,6 @@ void CoreOobeHandler::HandleUpdateCurrentScreen(
 void CoreOobeHandler::HandleHideOobeDialog() {
   if (LoginDisplayHost::default_host())
     LoginDisplayHost::default_host()->HideOobeDialog();
-}
-
-void CoreOobeHandler::HandleSetDeviceRequisition(
-    const std::string& requisition) {
-  std::string initial_requisition =
-      policy::EnrollmentRequisitionManager::GetDeviceRequisition();
-  policy::EnrollmentRequisitionManager::SetDeviceRequisition(requisition);
-
-  if (policy::EnrollmentRequisitionManager::IsRemoraRequisition()) {
-    // CfM devices default to static timezone.
-    g_browser_process->local_state()->SetInteger(
-        prefs::kResolveDeviceTimezoneByGeolocationMethod,
-        static_cast<int>(chromeos::system::TimeZoneResolverManager::
-                             TimeZoneResolveMethod::DISABLED));
-  }
-
-  // Exit Chrome to force the restart as soon as a new requisition is set.
-  if (initial_requisition !=
-      policy::EnrollmentRequisitionManager::GetDeviceRequisition()) {
-    chrome::AttemptRestart();
-  }
 }
 
 void CoreOobeHandler::HandleSkipToLoginForTesting() {
@@ -362,11 +333,6 @@ ui::EventSink* CoreOobeHandler::GetEventSink() {
 void CoreOobeHandler::UpdateLabel(const std::string& id,
                                   const std::string& text) {
   CallJS("cr.ui.Oobe.setLabelText", id, text);
-}
-
-void CoreOobeHandler::UpdateDeviceRequisition() {
-  CallJS("cr.ui.Oobe.updateDeviceRequisition",
-         policy::EnrollmentRequisitionManager::GetDeviceRequisition());
 }
 
 void CoreOobeHandler::UpdateKeyboardState() {

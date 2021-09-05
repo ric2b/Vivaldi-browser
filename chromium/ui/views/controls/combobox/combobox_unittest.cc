@@ -29,6 +29,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/types/event_type.h"
+#include "ui/gfx/text_utils.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/combobox_test_api.h"
@@ -150,8 +151,8 @@ class VectorComboboxModel : public ui::ComboboxModel {
 class EvilListener {
  public:
   EvilListener() {
-    combobox_->set_callback(base::BindRepeating(&EvilListener::OnPerformAction,
-                                                base::Unretained(this)));
+    combobox_->SetCallback(base::BindRepeating(&EvilListener::OnPerformAction,
+                                               base::Unretained(this)));
   }
   ~EvilListener() = default;
 
@@ -546,7 +547,7 @@ TEST_F(ComboboxTest, Click) {
   InitCombobox(nullptr);
 
   TestComboboxListener listener(combobox_);
-  combobox_->set_callback(base::BindRepeating(
+  combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
   combobox_->Layout();
 
@@ -562,7 +563,7 @@ TEST_F(ComboboxTest, ClickButDisabled) {
   InitCombobox(nullptr);
 
   TestComboboxListener listener(combobox_);
-  combobox_->set_callback(base::BindRepeating(
+  combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
 
   combobox_->Layout();
@@ -579,7 +580,7 @@ TEST_F(ComboboxTest, NotifyOnClickWithReturnKey) {
   InitCombobox(nullptr);
 
   TestComboboxListener listener(combobox_);
-  combobox_->set_callback(base::BindRepeating(
+  combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
 
   // The click event is ignored. Instead the menu is shown.
@@ -593,7 +594,7 @@ TEST_F(ComboboxTest, NotifyOnClickWithSpaceKey) {
   InitCombobox(nullptr);
 
   TestComboboxListener listener(combobox_);
-  combobox_->set_callback(base::BindRepeating(
+  combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
 
   // The click event is ignored. Instead the menu is shwon.
@@ -640,7 +641,7 @@ TEST_F(ComboboxTest, NotifyOnClickWithMouse) {
   InitCombobox(nullptr);
 
   TestComboboxListener listener(combobox_);
-  combobox_->set_callback(base::BindRepeating(
+  combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
 
   combobox_->Layout();
@@ -684,6 +685,35 @@ TEST_F(ComboboxTest, ConsumingPressKeyEvents) {
     EXPECT_FALSE(combobox_->OnKeyPressed(return_press));
     EXPECT_EQ(1, menu_show_count_);
   }
+}
+
+// Test that ensures that the combobox is resized correctly when selecting
+// between indices of different label lengths.
+TEST_F(ComboboxTest, ContentSizeUpdateOnSetSelectedIndex) {
+  const gfx::FontList& font_list =
+      style::GetFont(Combobox::kDefaultComboboxTextContext,
+                     Combobox::kDefaultComboboxTextStyle);
+  InitCombobox(nullptr);
+  combobox_->SetSizeToLargestLabel(false);
+  test_api_->PerformActionAt(1);
+  EXPECT_EQ(gfx::GetStringWidth(model_->GetItemAt(1), font_list),
+            test_api_->content_size().width());
+  combobox_->SetSelectedIndex(1);
+  EXPECT_EQ(gfx::GetStringWidth(model_->GetItemAt(1), font_list),
+            test_api_->content_size().width());
+
+  // Avoid selected_index_ == index optimization and start with index 1 selected
+  // to test resizing from a an index with a shorter label to an index with a
+  // longer label.
+  combobox_->SetSelectedIndex(0);
+  combobox_->SetSelectedIndex(1);
+
+  test_api_->PerformActionAt(0);
+  EXPECT_EQ(gfx::GetStringWidth(model_->GetItemAt(0), font_list),
+            test_api_->content_size().width());
+  combobox_->SetSelectedIndex(0);
+  EXPECT_EQ(gfx::GetStringWidth(model_->GetItemAt(0), font_list),
+            test_api_->content_size().width());
 }
 
 TEST_F(ComboboxTest, ContentWidth) {
@@ -760,7 +790,7 @@ TEST_F(ComboboxTest, TypingPrefixNotifiesListener) {
   InitCombobox(nullptr);
 
   TestComboboxListener listener(combobox_);
-  combobox_->set_callback(base::BindRepeating(
+  combobox_->SetCallback(base::BindRepeating(
       &TestComboboxListener::OnPerformAction, base::Unretained(&listener)));
   ui::TextInputClient* input_client =
       widget_->GetInputMethod()->GetTextInputClient();
@@ -830,13 +860,14 @@ TEST_F(ComboboxTest, MenuModel) {
   EXPECT_TRUE(menu_model->IsVisibleAt(0));
 }
 
-// Verifies setting the tooltip text will call NotifyAccessibilityEvent.
+// Verifies SetTooltipTextAndAccessibleName will call NotifyAccessibilityEvent.
 TEST_F(ComboboxTest, SetTooltipTextNotifiesAccessibilityEvent) {
   InitCombobox(nullptr);
   base::string16 test_tooltip_text = ASCIIToUTF16("Test Tooltip Text");
   test::AXEventCounter counter(AXEventManager::Get());
   EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kTextChanged));
-  combobox_->SetTooltipText(test_tooltip_text);
+  combobox_->SetTooltipTextAndAccessibleName(test_tooltip_text);
+  EXPECT_EQ(test_tooltip_text, combobox_->GetTooltipTextAndAccessibleName());
   EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kTextChanged));
   EXPECT_EQ(test_tooltip_text, combobox_->GetAccessibleName());
   ui::AXNodeData data;

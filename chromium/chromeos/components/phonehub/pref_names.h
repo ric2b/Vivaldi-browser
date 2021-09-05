@@ -9,8 +9,10 @@ namespace chromeos {
 namespace phonehub {
 namespace prefs {
 
-extern const char kNotificationAccessGranted[];
-extern const char kHasDismissedUiAfterCompletingOnboarding[];
+extern const char kNotificationAccessStatus[];
+extern const char kHideOnboardingUi[];
+extern const char kIsAwaitingVerifiedHost[];
+extern const char kHasDismissedSetupRequiredUi[];
 
 }  // namespace prefs
 }  // namespace phonehub

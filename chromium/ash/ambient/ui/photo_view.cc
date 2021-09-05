@@ -12,12 +12,11 @@
 #include "ash/ambient/model/ambient_backend_model.h"
 #include "ash/ambient/ui/ambient_background_image_view.h"
 #include "ash/ambient/ui/ambient_view_delegate.h"
-#include "ash/assistant/ui/assistant_view_ids.h"
+#include "ash/ambient/ui/ambient_view_ids.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window.h"
-#include "ui/compositor/animation_metrics_reporter.h"
 #include "ui/compositor/animation_throughput_reporter.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -32,7 +31,8 @@ constexpr char kPhotoTransitionSmoothness[] =
     "Ash.AmbientMode.AnimationSmoothness.PhotoTransition";
 
 void ReportSmoothness(int value) {
-  base::UmaHistogramPercentage(kPhotoTransitionSmoothness, value);
+  base::UmaHistogramPercentageObsoleteDoNotUse(kPhotoTransitionSmoothness,
+                                               value);
 }
 
 }  // namespace
@@ -40,7 +40,7 @@ void ReportSmoothness(int value) {
 // PhotoView ------------------------------------------------------------------
 PhotoView::PhotoView(AmbientViewDelegate* delegate) : delegate_(delegate) {
   DCHECK(delegate_);
-  SetID(AssistantViewID::kAmbientPhotoView);
+  SetID(AmbientViewID::kAmbientPhotoView);
   Init();
 }
 

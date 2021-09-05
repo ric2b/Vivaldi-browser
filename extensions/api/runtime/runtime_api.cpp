@@ -9,17 +9,11 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
-#include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/json/json_reader.h"
-#include "base/memory/singleton.h"
-#include "base/threading/thread_restrictions.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
@@ -42,15 +36,13 @@
 #include "chrome/common/pref_names.h"
 #include "components/download/public/background_service/download_service.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
-#include "components/keyed_service/content/browser_context_keyed_service_factory.h"
-#include "components/prefs/pref_filter.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/api/window/window_private_api.h"
-#include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/runtime_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -60,176 +52,37 @@
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_ui_utils.h"
 
-using base::PathService;
-
 namespace extensions {
 
-const char kRuntimeFeaturesFilename[] = "features.json";
+namespace {
 
-using vivaldi::runtime_private::FeatureFlagInfo;
+class ProfileStorageObserver : public ProfileAttributesStorage::Observer {
+ public:
+  ProfileStorageObserver();
 
-FeatureEntry::FeatureEntry() {}
+  // This is never called.
+  ~ProfileStorageObserver() override = default;
 
-VivaldiRuntimeFeatures::VivaldiRuntimeFeatures(Profile* profile)
-    : profile_(profile), weak_ptr_factory_(this) {
-  LoadRuntimeFeatures();
-}
+  static ProfileStorageObserver& GetInstance();
 
-VivaldiRuntimeFeatures::VivaldiRuntimeFeatures()
-    : profile_(nullptr), weak_ptr_factory_(this) {}
+  // ProfileAttributesStorage::Observer:
+  void OnProfileAdded(const base::FilePath& profile_path) override;
+  void OnProfileWasRemoved(const base::FilePath& profile_path,
+    const base::string16& profile_name) override;
+  void OnProfileNameChanged(const base::FilePath& profile_path,
+    const base::string16& old_profile_name) override;
+  void OnProfileAuthInfoChanged(const base::FilePath& profile_path) override;
+  void OnProfileAvatarChanged(const base::FilePath& profile_path) override;
+  void OnProfileHighResAvatarLoaded(
+    const base::FilePath& profile_path) override;
+  void OnProfileSigninRequiredChanged(
+    const base::FilePath& profile_path) override;
+  void OnProfileIsOmittedChanged(const base::FilePath& profile_path) override;
 
-VivaldiRuntimeFeatures::~VivaldiRuntimeFeatures() {}
+  void UpdateProfiles();
+};
 
-/* static */
-bool VivaldiRuntimeFeatures::IsEnabled(content::BrowserContext* context,
-                                       const std::string& feature_name) {
-  extensions::VivaldiRuntimeFeatures* features =
-      extensions::VivaldiRuntimeFeaturesFactory::GetForBrowserContext(context);
-  DCHECK(features);
-  FeatureEntry* feature = features->FindNamedFeature(feature_name);
-  DCHECK(feature);
-  return (feature && feature->enabled);
-}
-
-void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
-  // This might be called outside the startup, eg. during creation of a guest
-  // window, so need to allow IO.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  base::FilePath path;
-
-#if defined(OS_MAC)
-  if(PathService::Get(chrome::DIR_RESOURCES, &path)) {
-#else
-  if (PathService::Get(base::DIR_MODULE, &path)) {
-#endif  // defined(OS_MAC)
-    path = path.AppendASCII(kRuntimeFeaturesFilename);
-
-    store_ = new JsonPrefStore(
-        path, std::unique_ptr<PrefFilter>(),
-        base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock()})
-            .get());
-    store_->ReadPrefs();
-
-    if (!GetFlags(&flags_)) {
-      LOG(ERROR) << "Unable to locate the \"flags\" preference file: "
-                 << path.value();
-    }
-  } else {
-    LOG(ERROR) << "Unable to locate the \"flags\" preference file.";
-  }
-}
-
-bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap* flags) {
-  DCHECK(store_.get());
-
-  const base::Value* flags_value;
-  if (!store_->GetValue("flags", &flags_value))
-    return false;
-
-  const base::DictionaryValue* dict;
-  if (!flags_value->GetAsDictionary(&dict))
-    return false;
-
-  base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
-
-  for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd(); it.Advance()) {
-    const base::Value* root = NULL;
-    if (!dict->GetWithoutPathExpansion(it.key(), &root)) {
-      LOG(WARNING) << "Invalid entry in \"" << kRuntimeFeaturesFilename
-                   << "\" file.";
-      continue;
-    }
-    const base::DictionaryValue* value = NULL;
-    if (root->GetAsDictionary(&value)) {
-      FeatureEntry* entry = new FeatureEntry;
-
-      for (base::DictionaryValue::Iterator values_it(*value);
-           !values_it.IsAtEnd(); values_it.Advance()) {
-        const base::Value* sub_value = NULL;
-        if (value->GetWithoutPathExpansion(values_it.key(), &sub_value)) {
-          if (values_it.key() == "description") {
-            sub_value->GetAsString(&entry->description);
-          } else if (values_it.key() == "friendly_name") {
-            sub_value->GetAsString(&entry->friendly_name);
-          } else if (values_it.key() == "value") {
-            entry->default_enabled = sub_value->GetBool();
-#if defined(OFFICIAL_BUILD)
-            entry->enabled = entry->default_enabled;
-#endif
-          } else if (values_it.key() == "internal_value") {
-            entry->internal_default_enabled = sub_value->GetBool();
-#if !defined(OFFICIAL_BUILD)
-            entry->enabled = entry->internal_default_enabled;
-            if (entry->internal_default_enabled) {
-              // Features enabled by default in internal builds can't be turned
-              // off, they pop up again as enabled after restart. Disable the
-              // ability to turn them off in the UI to avoid confusion.
-              entry->force_value = true;
-            }
-#endif
-          }
-        }
-      }
-      // Check if this has been enabled or disabled on the cmd line.
-      std::string cmd_switch = "enable-feature:";
-      cmd_switch.append(it.key());
-
-      if (cl->HasSwitch(cmd_switch)) {
-        // always enable this feature and force it always on
-        entry->enabled = true;
-        entry->force_value = true;
-      }
-      cmd_switch = "disable-feature:";
-      cmd_switch.append(it.key());
-      if (cl->HasSwitch(cmd_switch)) {
-        // always disable this feature and force it always off
-        entry->enabled = false;
-        entry->force_value = true;
-      }
-      flags->insert(std::make_pair(it.key(), entry));
-    }
-  }
-  const base::ListValue* list =
-      profile_->GetPrefs()->GetList(vivaldiprefs::kVivaldiExperiments);
-
-  // Check for any features that might be enabled by the user now.
-  for (auto& flag_entry : *flags) {
-    base::ListValue::const_iterator it =
-        list->Find(base::Value(flag_entry.first));
-    if (it != list->end() && flag_entry.second->force_value == false) {
-      flag_entry.second->enabled = true;
-    }
-  }
-  return true;
-}
-
-FeatureEntry* VivaldiRuntimeFeatures::FindNamedFeature(
-    const std::string& feature_name) {
-  FeatureEntryMap::iterator it = flags_.find(feature_name);
-  if (it != flags_.end()) {
-    return (*it).second;
-  }
-  return nullptr;
-}
-
-const FeatureEntryMap& VivaldiRuntimeFeatures::GetAllFeatures() {
-  return flags_;
-}
-
-VivaldiRuntimeFeatures* VivaldiRuntimeFeaturesFactory::GetForBrowserContext(
-    content::BrowserContext* browser_context) {
-  return static_cast<VivaldiRuntimeFeatures*>(
-      GetInstance()->GetServiceForBrowserContext(browser_context, true));
-}
-
-VivaldiRuntimeFeaturesFactory* VivaldiRuntimeFeaturesFactory::GetInstance() {
-  return base::Singleton<VivaldiRuntimeFeaturesFactory>::get();
-}
-
-VivaldiRuntimeFeaturesFactory::VivaldiRuntimeFeaturesFactory()
-    : BrowserContextKeyedServiceFactory(
-          "VivaldiRuntimeFeatures",
-          BrowserContextDependencyManager::GetInstance()) {
+ProfileStorageObserver::ProfileStorageObserver() {
   if (!::vivaldi::IsVivaldiRunning() && !::vivaldi::IsDebuggingVivaldi())
     return;
   ProfileAttributesStorage& storage =
@@ -239,94 +92,79 @@ VivaldiRuntimeFeaturesFactory::VivaldiRuntimeFeaturesFactory()
   storage.AddObserver(this);
 }
 
-VivaldiRuntimeFeaturesFactory::~VivaldiRuntimeFeaturesFactory() {
-  if (!::vivaldi::IsVivaldiRunning() && !::vivaldi::IsDebuggingVivaldi())
-    return;
-
-  // Browser process is gone on exit, no need to remove listener then.
-  if (g_browser_process) {
-    ProfileAttributesStorage& storage =
-      g_browser_process->profile_manager()->GetProfileAttributesStorage();
-
-    storage.RemoveObserver(this);
-  }
+/* static */
+ProfileStorageObserver& ProfileStorageObserver::GetInstance() {
+  static base::NoDestructor<ProfileStorageObserver> instance;
+  return *instance;
 }
 
-KeyedService* VivaldiRuntimeFeaturesFactory::BuildServiceInstanceFor(
-    content::BrowserContext* profile) const {
-  return new VivaldiRuntimeFeatures(Profile::FromBrowserContext(profile));
-}
-
-bool VivaldiRuntimeFeaturesFactory::ServiceIsNULLWhileTesting() const {
-  return false;
-}
-
-bool VivaldiRuntimeFeaturesFactory::ServiceIsCreatedWithBrowserContext() const {
-  return true;
-}
-
-content::BrowserContext* VivaldiRuntimeFeaturesFactory::GetBrowserContextToUse(
-    content::BrowserContext* context) const {
-  // Redirected in incognito.
-  return extensions::ExtensionsBrowserClient::Get()->GetOriginalContext(
-      context);
-}
-
-void VivaldiRuntimeFeaturesFactory::UpdateProfiles() {
+void ProfileStorageObserver::UpdateProfiles() {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   std::vector<Profile*> active_profiles = profile_manager->GetLoadedProfiles();
 
   // We need to notify all profiles.
   for (Profile* profile : active_profiles) {
     DCHECK(profile);
-    std::unique_ptr<base::ListValue> args(new base::ListValue);
-
+    auto args = std::make_unique<base::ListValue>();
     ::vivaldi::BroadcastEvent(
         vivaldi::runtime_private::OnProfilesUpdated::kEventName,
         std::move(args), profile);
   }
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileAdded(
+void ProfileStorageObserver::OnProfileAdded(
     const base::FilePath& profile_path) {
   UpdateProfiles();
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileWasRemoved(
+void ProfileStorageObserver::OnProfileWasRemoved(
     const base::FilePath& profile_path,
     const base::string16& profile_name) {
   UpdateProfiles();
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileNameChanged(
+void ProfileStorageObserver::OnProfileNameChanged(
     const base::FilePath& profile_path,
     const base::string16& old_profile_name) {
   UpdateProfiles();
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileAuthInfoChanged(
+void ProfileStorageObserver::OnProfileAuthInfoChanged(
     const base::FilePath& profile_path) {
   UpdateProfiles();
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileAvatarChanged(
+void ProfileStorageObserver::OnProfileAvatarChanged(
     const base::FilePath& profile_path) {
   UpdateProfiles();
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileHighResAvatarLoaded(
+void ProfileStorageObserver::OnProfileHighResAvatarLoaded(
     const base::FilePath& profile_path) {
   UpdateProfiles();
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileSigninRequiredChanged(
+void ProfileStorageObserver::OnProfileSigninRequiredChanged(
     const base::FilePath& profile_path) {
   UpdateProfiles();
 }
 
-void VivaldiRuntimeFeaturesFactory::OnProfileIsOmittedChanged(
+void ProfileStorageObserver::OnProfileIsOmittedChanged(
     const base::FilePath& profile_path) {
   UpdateProfiles();
+}
+
+}  // namespace
+
+// static
+void RuntimeAPI::Init() {
+  ProfileStorageObserver::GetInstance();
+}
+
+// static
+void RuntimeAPI::OnProfileAvatarChanged(Profile* profile) {
+  ProfileStorageObserver::GetInstance().OnProfileAvatarChanged(
+      profile->GetPath());
 }
 
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
@@ -341,23 +179,21 @@ ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
 ExtensionFunction::ResponseAction
 RuntimePrivateGetAllFeatureFlagsFunction::Run() {
   namespace Results = vivaldi::runtime_private::GetAllFeatureFlags::Results;
+  using vivaldi::runtime_private::FeatureFlagInfo;
 
-  extensions::VivaldiRuntimeFeatures* features =
-      extensions::VivaldiRuntimeFeaturesFactory::GetForBrowserContext(
-          browser_context());
-
-  const FeatureEntryMap& flags = features->GetAllFeatures();
   std::vector<FeatureFlagInfo> results;
-
-  for (auto& entry : flags) {
-    FeatureFlagInfo* flag = new FeatureFlagInfo;
-    flag->name = entry.first;
-    flag->friendly_name = entry.second->friendly_name;
-    flag->description = entry.second->description;
-    flag->value = entry.second->enabled;
-    flag->locked = entry.second->force_value;
-
-    results.push_back(std::move(*flag));
+  const vivaldi_runtime_feature::EntryMap* entries =
+      vivaldi_runtime_feature::GetAll(browser_context());
+  if (entries) {
+    for (auto& entry : *entries) {
+      FeatureFlagInfo flag;
+      flag.name = entry.first;
+      flag.friendly_name = entry.second.friendly_name;
+      flag.description = entry.second.description;
+      flag.value = entry.second.enabled;
+      flag.locked = entry.second.force_value;
+      results.push_back(std::move(flag));
+    }
   }
   return RespondNow(ArgumentList(Results::Create(results)));
 }
@@ -370,37 +206,8 @@ RuntimePrivateSetFeatureEnabledFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  extensions::VivaldiRuntimeFeatures* features =
-      extensions::VivaldiRuntimeFeaturesFactory::GetForBrowserContext(
-          browser_context());
-
-  bool found = false;
-  FeatureEntry* entry = features->FindNamedFeature(params->feature_name);
-  bool enable_entry = params->enable;
-  DCHECK(entry);
-  if (entry && !entry->force_value) {
-    // Update the entry in-memory only so the list is always up-to-date.
-    entry->enabled = enable_entry;
-    found = true;
-    ListPrefUpdate update(
-        Profile::FromBrowserContext(browser_context())->GetPrefs(),
-        vivaldiprefs::kVivaldiExperiments);
-    base::ListValue* experiments_list = update.Get();
-
-    experiments_list->Clear();
-    const extensions::FeatureEntryMap& flags = features->GetAllFeatures();
-    for (auto& flag : flags) {
-      // Enable it if it's different than the default
-      if (flag.second->enabled &&
-#if defined(OFFICIAL_BUILD)
-          !flag.second->default_enabled) {
-#else
-          !flag.second->internal_default_enabled) {
-#endif
-        experiments_list->AppendString(flag.first);
-      }
-    }
-  }
+  bool found = vivaldi_runtime_feature::Enable(
+      browser_context(), params->feature_name, params->enable);
   return RespondNow(ArgumentList(Results::Create(found)));
 }
 
@@ -538,9 +345,9 @@ ExtensionFunction::ResponseAction RuntimePrivateGetUserProfilesFunction::Run() {
     }
   }
   if (has_custom_avatars) {
-    base::PostTask(
+    base::ThreadPool::PostTask(
         FROM_HERE,
-        {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
+        {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
         base::BindOnce(
             &RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread,
@@ -593,8 +400,8 @@ void RuntimePrivateGetUserProfilesFunction::ProcessImagesOnWorkerThread(
 
     profile.custom_avatar.swap(image_data);
   }
-  base::PostTask(
-    FROM_HERE, { content::BrowserThread::UI },
+  content::GetUIThreadTaskRunner({})->PostTask(
+    FROM_HERE,
     base::BindOnce(
       &RuntimePrivateGetUserProfilesFunction::FinishProcessImagesOnUIThread, this,
       std::move(profiles)));

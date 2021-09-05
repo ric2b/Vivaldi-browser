@@ -8,9 +8,10 @@ import android.content.Context;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.LayoutRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.RecyclerView;
@@ -20,16 +21,18 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.bookmarks.BookmarkListEntry.ViewType;
 import org.chromium.chrome.browser.bookmarks.BookmarkRow.Location;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableListAdapter;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.feature_engagement.EventConstants;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,37 +40,22 @@ import java.util.Collections;
 import java.util.Comparator;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
  * BaseAdapter for {@link RecyclerView}. It manages bookmarks to list there.
  */
-class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
+class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkListEntry>
         implements BookmarkUIObserver, ProfileSyncService.SyncStateChangedListener {
-    /**
-     * Specifies the view types that the bookmark delegate screen can contain.
-     */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({ViewType.INVALID_PROMO, ViewType.PERSONALIZED_SIGNIN_PROMO,
-            ViewType.PERSONALIZED_SYNC_PROMO, ViewType.SYNC_PROMO, ViewType.FOLDER,
-            ViewType.BOOKMARK})
-    private @interface ViewType {
-        int INVALID_PROMO = -1;
-        int PERSONALIZED_SIGNIN_PROMO = 0;
-        int PERSONALIZED_SYNC_PROMO = 1;
-        int SYNC_PROMO = 2;
-        int FOLDER = 3;
-        int BOOKMARK = 4;
-    }
-
     private static final int MAXIMUM_NUMBER_OF_SEARCH_RESULTS = 500;
     private static final String EMPTY_QUERY = null;
 
     private final List<BookmarkId> mTopLevelFolders = new ArrayList<>();
 
     // There can only be one promo header at a time. This takes on one of the values:
-    // ViewType.PERSONALIZED_SIGNIN_PROMO, ViewType.SYNC_PROMO, or ViewType.INVALID_PROMO
+    // ViewType.PERSONALIZED_SIGNIN_PROMO, ViewType.SYNC_PROMO, or ViewType.INVALID.
     @ViewType
-    private int mPromoHeaderType = ViewType.INVALID_PROMO;
+    private int mPromoHeaderType = ViewType.INVALID;
     private BookmarkDelegate mDelegate;
     private BookmarkPromoHeader mPromoHeaderManager;
     private String mSearchText;
@@ -152,10 +140,24 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         clearHighlight();
         mElements.clear();
         // Restore the header, if it exists, then update it.
-        if (hasPromoHeader()) mElements.add(null);
+        if (hasPromoHeader()) {
+            mElements.add(BookmarkListEntry.createSyncPromoHeader(mPromoHeaderType));
+        }
+
         updateHeader(false);
         for (BookmarkId bId : bookmarks) {
-            mElements.add(mDelegate.getModel().getBookmarkById(bId));
+            BookmarkItem item = mDelegate.getModel().getBookmarkById(bId);
+            mElements.add(BookmarkListEntry.createBookmarkEntry(item));
+            // Add a divider below the reading list folder.
+            if (item.getId().getType() == BookmarkType.READING_LIST && item.isFolder()) {
+                mElements.add(BookmarkListEntry.createDivider());
+                assert topLevelFoldersShowing();
+            }
+        }
+
+        if (mCurrentFolder.getType() == BookmarkType.READING_LIST
+                && mDelegate.getCurrentState() != BookmarkUIState.STATE_SEARCHING) {
+            ReadingListSectionHeader.maybeSortAndInsertSectionHeaders(mElements, mContext);
         }
         notifyDataSetChanged();
     }
@@ -168,16 +170,8 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
     // DragReorderableListAdapter implementation.
     @Override
     public @ViewType int getItemViewType(int position) {
-        if (position == 0 && hasPromoHeader()) {
-            return mPromoHeaderType;
-        } else {
-            BookmarkItem item = getItemByPosition(position);
-            if (item.isFolder()) {
-                return ViewType.FOLDER;
-            } else {
-                return ViewType.BOOKMARK;
-            }
-        }
+        BookmarkListEntry entry = getItemByPosition(position);
+        return entry.getViewType();
     }
 
     private ViewHolder createViewHolderHelper(ViewGroup parent, @LayoutRes int layoutId) {
@@ -202,10 +196,16 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
                 return mPromoHeaderManager.createPersonalizedSigninAndSyncPromoHolder(parent);
             case ViewType.SYNC_PROMO:
                 return mPromoHeaderManager.createSyncPromoHolder(parent);
+            case ViewType.SECTION_HEADER:
+                return createSectionHeaderViewHolder(parent, viewType);
             case ViewType.FOLDER:
                 return createViewHolderHelper(parent, R.layout.bookmark_folder_row);
             case ViewType.BOOKMARK:
                 return createViewHolderHelper(parent, R.layout.bookmark_item_row);
+            case ViewType.DIVIDER:
+                return new ViewHolder(
+                        LayoutInflater.from(parent.getContext())
+                                .inflate(R.layout.horizontal_divider, parent, false)) {};
             default:
                 assert false;
                 return null;
@@ -220,7 +220,9 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         } else if (holder.getItemViewType() == ViewType.PERSONALIZED_SYNC_PROMO) {
             PersonalizedSigninPromoView view = (PersonalizedSigninPromoView) holder.itemView;
             mPromoHeaderManager.setupPersonalizedSyncPromo(view);
-        } else if (!(holder.getItemViewType() == ViewType.SYNC_PROMO)) {
+        } else if (holder.getItemViewType() == ViewType.SECTION_HEADER) {
+            bindSectionHeaderViewHolder(holder.itemView, getItemByPosition(position));
+        } else if (BookmarkListEntry.isBookmarkEntry(holder.getItemViewType())) {
             BookmarkRow row = ((BookmarkRow) holder.itemView);
             BookmarkId id = getIdByPosition(position);
             row.setBookmarkId(id, getLocationFromPosition(position));
@@ -240,6 +242,23 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
                 ViewHighlighter.turnOffHighlight(holder.itemView);
             }
         }
+    }
+
+    private ViewHolder createSectionHeaderViewHolder(ViewGroup parent, @ViewType int viewType) {
+        ViewGroup sectionHeader = (ViewGroup) LayoutInflater.from(parent.getContext())
+                                          .inflate(R.layout.bookmark_section_header, parent, false);
+
+        // ViewHolder is abstract and it cannot be instantiated directly.
+        return new ViewHolder(sectionHeader) {};
+    }
+
+    private void bindSectionHeaderViewHolder(View view, BookmarkListEntry listItem) {
+        TextView title = view.findViewById(R.id.title);
+        TextView description = view.findViewById(R.id.description);
+        title.setText(listItem.getHeaderTitle());
+        description.setText(listItem.getHeaderDescription());
+        description.setVisibility(
+                TextUtils.isEmpty(listItem.getHeaderDescription()) ? View.GONE : View.VISIBLE);
     }
 
     @Override
@@ -300,20 +319,26 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
 
         mSearchText = EMPTY_QUERY;
         mCurrentFolder = folder;
-
-        if (!(folder.equals(mCurrentFolder))) {
-            mCurrentFolder = folder;
-        }
         enableDrag();
 
         if (topLevelFoldersShowing()) {
             setBookmarks(mTopLevelFolders);
         } else {
-            if (ChromeApplication.isVivaldi())
-                setBookmarks(mDelegate.getModel().getChildIDsVivaldi(folder, true,
-                        true, false));
+            if (ChromeApplication.isVivaldi()) {
+                setBookmarksWithSortOrder(folder);
+            }
             else
             setBookmarks(mDelegate.getModel().getChildIDs(folder));
+        }
+
+        if (folder.getType() == BookmarkType.READING_LIST) {
+            TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
+                    .notifyEvent(EventConstants.READ_LATER_BOOKMARK_FOLDER_OPENED);
+            mDelegate.getSelectableListLayout().setEmptyViewText(
+                    R.string.reading_list_empty_list_title, R.string.bookmark_no_result);
+        } else {
+            mDelegate.getSelectableListLayout().setEmptyViewText(
+                    R.string.bookmarks_folder_empty, R.string.bookmark_no_result);
         }
     }
 
@@ -324,6 +349,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         // Headers should not appear in Search mode
         // Don't need to notify because we need to redraw everything in the next step
         updateHeader(false);
+        removeSectionHeaders();
         notifyDataSetChanged();
     }
 
@@ -357,8 +383,11 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
      */
     void moveUpOne(BookmarkId bookmarkId) {
         int pos = getPositionForBookmark(bookmarkId);
+        assert isOrderable(getItemByPosition(pos));
         mElements.remove(pos);
-        mElements.add(pos - 1, mDelegate.getModel().getBookmarkById(bookmarkId));
+        mElements.add(pos - 1,
+                BookmarkListEntry.createBookmarkEntry(
+                        mDelegate.getModel().getBookmarkById(bookmarkId)));
         setOrder(mElements);
     }
 
@@ -367,8 +396,11 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
      */
     void moveDownOne(BookmarkId bookmarkId) {
         int pos = getPositionForBookmark(bookmarkId);
+        assert isOrderable(getItemByPosition(pos));
         mElements.remove(pos);
-        mElements.add(pos + 1, mDelegate.getModel().getBookmarkById(bookmarkId));
+        mElements.add(pos + 1,
+                BookmarkListEntry.createBookmarkEntry(
+                        mDelegate.getModel().getBookmarkById(bookmarkId)));
         setOrder(mElements);
     }
 
@@ -402,11 +434,11 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         if (currentUIState == BookmarkUIState.STATE_LOADING) {
             return;
         } else if (currentUIState == BookmarkUIState.STATE_SEARCHING) {
-            mPromoHeaderType = ViewType.INVALID_PROMO;
+            mPromoHeaderType = ViewType.INVALID;
         } else {
             switch (mPromoHeaderManager.getPromoState()) {
                 case BookmarkPromoHeader.PromoState.PROMO_NONE:
-                    mPromoHeaderType = ViewType.INVALID_PROMO;
+                    mPromoHeaderType = ViewType.INVALID;
                     break;
                 case BookmarkPromoHeader.PromoState.PROMO_SIGNIN_PERSONALIZED:
                     mPromoHeaderType = ViewType.PERSONALIZED_SIGNIN_PROMO;
@@ -426,7 +458,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
 
         if (!wasShowingPromo && willShowPromo) {
             // A null element at the 0th index represents a promo header.
-            mElements.add(0, null);
+            mElements.add(0, BookmarkListEntry.createSyncPromoHeader(mPromoHeaderType));
             if (shouldNotify) notifyItemInserted(0);
         } else if (wasShowingPromo && willShowPromo) {
             if (shouldNotify) notifyItemChanged(0);
@@ -436,33 +468,17 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         }
     }
 
+    /** Removes all section headers from the current list. */
+    private void removeSectionHeaders() {
+        for (int i = mElements.size() - 1; i >= 0; i--) {
+            if (mElements.get(i).getViewType() == ViewType.SECTION_HEADER) {
+                mElements.remove(i);
+            }
+        }
+    }
+
     private void populateTopLevelFoldersList() {
-        BookmarkId desktopNodeId = mDelegate.getModel().getDesktopFolderId();
-        BookmarkId mobileNodeId = mDelegate.getModel().getMobileFolderId();
-        BookmarkId othersNodeId = mDelegate.getModel().getOtherFolderId();
-
-        if (mDelegate.getModel().isFolderVisible(mobileNodeId)) {
-            mTopLevelFolders.add(mobileNodeId);
-        }
-        if (mDelegate.getModel().isFolderVisible(desktopNodeId)) {
-            mTopLevelFolders.add(desktopNodeId);
-        }
-        if (mDelegate.getModel().isFolderVisible(othersNodeId)) {
-            mTopLevelFolders.add(othersNodeId);
-        }
-
-        if (ChromeApplication.isVivaldi())
-            addTrashAsTopLevelFolder();
-
-        // Add any top-level managed and partner bookmark folders that are children of the root
-        // folder.
-        List<BookmarkId> managedAndPartnerFolderIds =
-                mDelegate.getModel().getTopLevelFolderIDs(true, false);
-        BookmarkId rootFolder = mDelegate.getModel().getRootFolderId();
-        for (BookmarkId bookmarkId : managedAndPartnerFolderIds) {
-            BookmarkId parent = mDelegate.getModel().getBookmarkById(bookmarkId).getParentId();
-            if (parent.equals(rootFolder)) mTopLevelFolders.add(bookmarkId);
-        }
+        mTopLevelFolders.addAll(BookmarkUtils.populateTopLevelFolders(mDelegate.getModel()));
     }
 
     @VisibleForTesting
@@ -471,7 +487,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
     }
 
     @Override
-    protected void setOrder(List<BookmarkItem> bookmarkItems) {
+    protected void setOrder(List<BookmarkListEntry> listEntries) {
         assert !topLevelFoldersShowing() : "Cannot reorder top-level folders!";
         assert mCurrentFolder.getType()
                 != BookmarkType.PARTNER : "Cannot reorder partner bookmarks!";
@@ -484,7 +500,9 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         // Get the new order for the IDs.
         long[] newOrder = new long[endIndex - startIndex + 1];
         for (int i = startIndex; i <= endIndex; i++) {
-            newOrder[i - startIndex] = bookmarkItems.get(i).getId().getId();
+            BookmarkItem bookmarkItem = listEntries.get(i).getBookmarkItem();
+            assert bookmarkItem != null;
+            newOrder[i - startIndex] = bookmarkItem.getId().getId();
         }
         mDelegate.getModel().reorderBookmarks(mCurrentFolder, newOrder);
         if (mDragStateDelegate.getDragActive()) {
@@ -498,14 +516,17 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
 
     private int getBookmarkItemEndIndex() {
         int endIndex = mElements.size() - 1;
-        if (!mElements.get(endIndex).isMovable()) {
+        BookmarkItem bookmarkItem = mElements.get(endIndex).getBookmarkItem();
+        assert bookmarkItem != null;
+        if (!bookmarkItem.isMovable()) {
             endIndex--;
         }
         return endIndex;
     }
 
-    private boolean isOrderable(BookmarkItem bItem) {
-        return bItem != null && bItem.isMovable();
+    private boolean isOrderable(BookmarkListEntry entry) {
+        return entry != null && entry.getBookmarkItem() != null
+                && entry.getBookmarkItem().isMovable();
     }
 
     @Override
@@ -518,19 +539,18 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
     @Override
     @VisibleForTesting
     public boolean isPassivelyDraggable(ViewHolder viewHolder) {
-        BookmarkItem bItem = getItemByHolder(viewHolder);
-        return isOrderable(bItem);
+        return isOrderable(getItemByHolder(viewHolder));
     }
 
     @VisibleForTesting
     BookmarkId getIdByPosition(int position) {
-        BookmarkItem bItem = getItemByPosition(position);
-        if (bItem == null) return null;
-        return bItem.getId();
+        BookmarkListEntry entry = getItemByPosition(position);
+        if (entry == null || entry.getBookmarkItem() == null) return null;
+        return entry.getBookmarkItem().getId();
     }
 
     private boolean hasPromoHeader() {
-        return mPromoHeaderType != ViewType.INVALID_PROMO;
+        return mPromoHeaderType != ViewType.INVALID;
     }
 
     private @Location int getLocationFromPosition(int position) {
@@ -584,20 +604,14 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
                 mCurrentFolder.getId() == mDelegate.getModel().getTrashFolderId().getId();
     }
 
-    private void addTrashAsTopLevelFolder() {
-        BookmarkId trashNodeId = mDelegate.getModel().getTrashFolderId();
-        if (mDelegate.getModel().isFolderVisible(trashNodeId)) {
-            mTopLevelFolders.add(trashNodeId);
-        }
-    }
-
     /** Vivaldi **/
     enum SortOrder {
         MANUAL(0),
         TITLE(1),
         ADDRESS(2),
         NICK(3),
-        DESCRIPTION(4);
+        DESCRIPTION(4),
+        DATE(5);
 
         public static SortOrder forNumber(int value) {
             switch (value) {
@@ -606,6 +620,7 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
                 case 2: return ADDRESS;
                 case 3: return NICK;
                 case 4: return DESCRIPTION;
+                case 5: return DATE;
                 default: return null;
             }
         }
@@ -619,28 +634,59 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         }
     }
 
-    void setSortOrder(SortOrder sortOrder) {
-        if (sortOrder == mSortOrder) return;
+    /** Vivaldi **/
+    private void setBookmarksWithSortOrder(BookmarkId folder) {
+        SortOrder sortOrder = SortOrder.valueOf(SharedPreferencesManager.getInstance().
+                readString(BookmarkManager.PREF_BOOKMARKS_SORT_ORDER, SortOrder.MANUAL.name()));
+        if (sortOrder == SortOrder.MANUAL)
+            setBookmarks(mDelegate.getModel().getChildIDsVivaldi(folder, true,
+                    true, false));
+        else {
+            mElements.clear();
+            List<BookmarkId> bookmarkIds = mDelegate.getModel().getChildIDsVivaldi(folder,
+                    true, true, false);
+            for (BookmarkId bId : bookmarkIds) {
+                BookmarkItem item = mDelegate.getModel().getBookmarkById(bId);
+                mElements.add(BookmarkListEntry.createBookmarkEntry(item));
+            }
+            setSortOrder(sortOrder, true);
+        }
+    }
+
+    /** Vivaldi
+     * @param force - if set update sort order and sorting even if choice did not change
+    **/
+    void setSortOrder(SortOrder sortOrder, boolean force) {
+        if (sortOrder == mSortOrder && !force) return;
         if (sortOrder != SortOrder.MANUAL) {
-            Collections.sort(mElements, new Comparator<BookmarkItem>() {
+            Collections.sort(mElements, new Comparator<BookmarkListEntry>() {
                 @Override
-                public int compare(BookmarkItem bookmarkItem, BookmarkItem t1) {
+                public int compare(BookmarkListEntry entry, BookmarkListEntry t1) {
+                    BookmarkItem item = entry.getBookmarkItem();
                     switch (sortOrder) {
                         case TITLE:
-                            return bookmarkItem.getTitle().compareTo(t1.getTitle());
+                            return item.getTitle().compareTo(t1.getBookmarkItem().getTitle());
                         case ADDRESS:
-                            return bookmarkItem.getUrl().compareTo(t1.getUrl());
+                            return item.getUrl().compareTo(t1.getBookmarkItem().getUrl());
                         case NICK:
-                            return bookmarkItem.getNickName().compareTo(t1.getNickName());
+                            if (item.getNickName().isEmpty()) return 1;
+                            else if (t1.getBookmarkItem().getNickName().isEmpty()) return -1;
+                            return item.getNickName().compareTo(t1.getBookmarkItem().getNickName());
                         case DESCRIPTION:
-                            return bookmarkItem.getDescription().compareTo(t1.getDescription());
+                            if (item.getDescription().isEmpty()) return 1;
+                            else if (t1.getBookmarkItem().getDescription().isEmpty()) return -1;
+                            return item.getDescription().compareTo(t1.getBookmarkItem().getDescription());
+                        case DATE:
+                            return (int)(item.getCreated() -(t1.getBookmarkItem().getCreated()));
                         default:
                             return 0;
                     }
                 }
             });
             List<BookmarkId> sortedIds = new ArrayList<>(mElements.size());
-            for (BookmarkItem item : mElements) sortedIds.add(item.getId());
+            for (BookmarkListEntry entry : mElements) {
+                sortedIds.add(entry.getBookmarkItem().getId());
+            }
             setBookmarks(sortedIds);
             disableDrag();
         } else {
@@ -651,5 +697,6 @@ class BookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkItem>
         mSortOrder = sortOrder;
     }
 
+    /** Vivaldi **/
     public SortOrder getSortOrder() { return mSortOrder; }
 }

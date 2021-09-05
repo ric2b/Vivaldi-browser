@@ -5,7 +5,7 @@
 #include "content/browser/accessibility/hit_testing_browsertest.h"
 
 #include "base/check.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
@@ -29,6 +29,8 @@
 #include "ui/gfx/geometry/vector2d_conversions.h"
 
 namespace content {
+
+using ui::AXTreeFormatter;
 
 #define EXPECT_ACCESSIBILITY_HIT_TEST_RESULT(css_point, expected_node, \
                                              hit_node)                 \
@@ -264,13 +266,13 @@ void AccessibilityHitTestingBrowserTest::SimulatePinchZoom(
 
 std::string
 AccessibilityHitTestingBrowserTest::FormatHitTestAccessibilityTree() {
-  std::unique_ptr<AccessibilityTreeFormatter> accessibility_tree_formatter =
+  std::unique_ptr<AXTreeFormatter> accessibility_tree_formatter =
       AccessibilityTreeFormatterBlink::CreateBlink();
   accessibility_tree_formatter->set_show_ids(true);
   accessibility_tree_formatter->SetPropertyFilters(
-      {{"name=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {"location=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
-       {"size=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW}});
+      {{"name=*", ui::AXPropertyFilter::ALLOW},
+       {"location=*", ui::AXPropertyFilter::ALLOW},
+       {"size=*", ui::AXPropertyFilter::ALLOW}});
   std::string accessibility_tree;
   accessibility_tree_formatter->FormatAccessibilityTreeForTesting(
       GetRootAndAssertNonNull(), &accessibility_tree);
@@ -466,7 +468,7 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingCrossProcessBrowserTest,
   ASSERT_EQ(1U, root->child_count());
 
   FrameTreeNode* child = root->child_at(0);
-  NavigateFrameToURL(child, url_b);
+  EXPECT_TRUE(NavigateToURLFromRenderer(child, url_b));
   EXPECT_EQ(url_b, child->current_url());
   WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
                                                 "rectF");

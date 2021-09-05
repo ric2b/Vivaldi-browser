@@ -33,6 +33,7 @@
     documentSelectionChanged,
     documentTitleChanged,
     dropeffectChanged,
+    editableTextChanged,
     enabledChanged,
     endOfTest,
     expanded,
@@ -85,9 +86,14 @@
     nameChanged,
     objectAttributeChanged,
     otherAttributeChanged,
+    parentChanged,
     placeholderChanged,
     portalActivated,
     positionInSetChanged,
+    rangeValueChanged,
+    rangeValueMaxChanged,
+    rangeValueMinChanged,
+    rangeValueStepChanged,
     readonlyChanged,
     relatedNodeChanged,
     requiredStateChanged,
@@ -101,8 +107,10 @@
     scrolledToAnchor,
     selectedChanged,
     selectedChildrenChanged,
+    selectedValueChanged,
     selection,
     selectionAdd,
+    selectionInTextFieldChanged,
     selectionRemove,
     setSizeChanged,
     show,
@@ -110,15 +118,13 @@
     stateChanged,
     subtreeCreated,
     textAttributeChanged,
+    textSelectionChanged,  // Deprecated.
     textChanged,
-    textSelectionChanged,
     tooltipClosed,
     tooltipOpened,
     treeChanged,
-    valueChanged,
-    valueMaxChanged,
-    valueMinChanged,
-    valueStepChanged,
+    valueInTextFieldChanged,
+    valueChanged,  // Deprecated.
     windowActivated,
     windowDeactivated,
     windowVisibilityChanged
@@ -197,6 +203,8 @@
     docNoteRef,
     docNotice,
     docPageBreak,
+    docPageFooter,
+    docPageHeader,
     docPageList,
     docPart,
     docPreface,
@@ -848,6 +856,10 @@ enum SortDirectionType {
 
     // The purpose of the node, other than the role, if any.
     DOMString? description;
+
+    // Description of the state of the checkbox.
+    // Used only when the node is checkable.
+    DOMString? checkedStateDescription;
 
     // The placeholder for this text field, if any.
     DOMString? placeholder;

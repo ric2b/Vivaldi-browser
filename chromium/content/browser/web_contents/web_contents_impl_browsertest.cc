@@ -18,7 +18,7 @@
 #include "base/stl_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
@@ -38,7 +38,6 @@
 #include "content/common/frame.mojom-test-utils.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
-#include "content/common/page_messages.h"
 #include "content/common/unfreezable_frame_messages.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_thread.h"
@@ -1424,8 +1423,9 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   // clicking on the link right away would cause the ExecuteScript to never
   // return.
   SetShouldProceedOnBeforeUnload(shell(), false, false);
+  AppModalDialogWaiter dialog_waiter(shell());
   EXPECT_TRUE(ExecuteScript(shell(), "clickLinkSoon()"));
-  WaitForAppModalDialog(shell());
+  dialog_waiter.Wait();
 
   // Have the cross-site navigation commit. The main RenderFrameHost should
   // still be loading after that.
@@ -1514,10 +1514,56 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       SuddenTerminationDisablerOnVisibilityChange) {
+                       SuddenTerminationDisablerOnVisibilityChangeDocument) {
   const std::string VISIBILITYCHANGE_HTML =
-      "<html><body><script>document.onvisibilitychange=function(e) {}</script>"
-      "</body></html>";
+      "<html><body><script>"
+      "document.addEventListener('visibilitychange', (e) => {});"
+      "</script></body></html>";
+  NavigateToDataURLAndCheckForTerminationDisabler(
+      shell(), VISIBILITYCHANGE_HTML, false /* expect_unload */,
+      false /* expect_beforeunload */, false /* expect_pagehide */,
+      true /* expect_visibilitychange */);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SuddenTerminationDisablerOnVisibilityChangeWindow) {
+  const std::string VISIBILITYCHANGE_HTML =
+      "<html><body><script>"
+      "window.addEventListener('visibilitychange', (e) => {});"
+      "</script></body></html>";
+  NavigateToDataURLAndCheckForTerminationDisabler(
+      shell(), VISIBILITYCHANGE_HTML, false /* expect_unload */,
+      false /* expect_beforeunload */, false /* expect_pagehide */,
+      true /* expect_visibilitychange */);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    WebContentsImplBrowserTest,
+    SuddenTerminationDisablerOnVisibilityChangeRemoveDocumentListener) {
+  const std::string VISIBILITYCHANGE_HTML =
+      "<html><body><script>"
+      "function handleVisibilityChange(e) {}"
+      "window.addEventListener('visibilitychange', handleVisibilityChange);"
+      "document.addEventListener('visibilitychange', handleVisibilityChange);"
+      "document.removeEventListener('visibilitychange', "
+      "handleVisibilityChange);"
+      "</script></body></html>";
+  NavigateToDataURLAndCheckForTerminationDisabler(
+      shell(), VISIBILITYCHANGE_HTML, false /* expect_unload */,
+      false /* expect_beforeunload */, false /* expect_pagehide */,
+      true /* expect_visibilitychange */);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    WebContentsImplBrowserTest,
+    SuddenTerminationDisablerOnVisibilityChangeRemoveWindowListener) {
+  const std::string VISIBILITYCHANGE_HTML =
+      "<html><body><script>"
+      "function handleVisibilityChange(e) {}"
+      "window.onvisibilitychange = handleVisibilityChange;"
+      "document.onvisibilitychange = handleVisibilityChange;"
+      "window.removeEventListener('visibilitychange', handleVisibilityChange);"
+      "</script></body></html>";
   NavigateToDataURLAndCheckForTerminationDisabler(
       shell(), VISIBILITYCHANGE_HTML, false /* expect_unload */,
       false /* expect_beforeunload */, false /* expect_pagehide */,
@@ -1561,10 +1607,12 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
       "window.addEventListener('unload', handleEverything);"
       "window.addEventListener('beforeunload', handleEverything);"
       "window.addEventListener('pagehide', handleEverything);"
+      "window.addEventListener('visibilitychange', handleEverything);"
       "document.addEventListener('visibilitychange', handleEverything);"
       "window.removeEventListener('unload', handleEverything);"
       "window.removeEventListener('beforeunload', handleEverything);"
       "window.removeEventListener('pagehide', handleEverything);"
+      "window.removeEventListener('visibilitychange', handleEverything);"
       "document.removeEventListener('visibilitychange', handleEverything);"
       "</script></body></html>";
   // After the handlers were added, they got deleted, so we should treat them as
@@ -1799,8 +1847,8 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_EQ("about:blank", test_delegate.last_message());
 
   // Navigate the subframe cross-site.
-  NavigateFrameToURL(frame,
-                     embedded_test_server()->GetURL("b.com", "/title2.html"));
+  EXPECT_TRUE(NavigateToURLFromRenderer(
+      frame, embedded_test_server()->GetURL("b.com", "/title2.html")));
   EXPECT_TRUE(WaitForLoadStop(wc));
 
   // A dialog from the subframe.
@@ -2779,7 +2827,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UpdateTargetURL) {
   FrameTreeNode* subframe = web_contents->GetFrameTree()->root()->child_at(0);
   GURL subframe_url =
       embedded_test_server()->GetURL("b.com", "/simple_links.html");
-  NavigateFrameToURL(subframe, subframe_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(subframe, subframe_url));
 
   // Focusing the link should fire the UpdateTargetURL notification.
   UpdateTargetURLWaiter target_url_waiter(web_contents);
@@ -2950,17 +2998,17 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, NotifyPreferencesChanged) {
 
 namespace {
 
-class OutgoingSetRendererPrefsIPCWatcher {
+class OutgoingSetRendererPrefsMojoWatcher {
  public:
-  OutgoingSetRendererPrefsIPCWatcher(RenderProcessHostImpl* rph)
-      : rph_(rph), outgoing_message_seen_(false) {
-    rph_->SetIpcSendWatcherForTesting(
-        base::BindRepeating(&OutgoingSetRendererPrefsIPCWatcher::OnMessage,
-                            base::Unretained(this)));
+  explicit OutgoingSetRendererPrefsMojoWatcher(RenderViewHostImpl* rvh)
+      : rvh_(rvh), outgoing_message_seen_(false) {
+    rvh_->SetWillSendRendererPreferencesCallbackForTesting(base::BindRepeating(
+        &OutgoingSetRendererPrefsMojoWatcher::OnRendererPreferencesSent,
+        base::Unretained(this)));
   }
-  ~OutgoingSetRendererPrefsIPCWatcher() {
-    rph_->SetIpcSendWatcherForTesting(
-        base::RepeatingCallback<void(const IPC::Message& msg)>());
+  ~OutgoingSetRendererPrefsMojoWatcher() {
+    rvh_->SetWillSendRendererPreferencesCallbackForTesting(
+        base::RepeatingCallback<void(const blink::RendererPreferences&)>());
   }
 
   void WaitForIPC() {
@@ -2971,29 +3019,23 @@ class OutgoingSetRendererPrefsIPCWatcher {
     run_loop_.reset();
   }
 
-  const blink::mojom::RendererPreferences& renderer_preferences() const {
+  const blink::RendererPreferences& renderer_preferences() const {
     return renderer_preferences_;
   }
 
  private:
-  void OnMessage(const IPC::Message& message) {
-    IPC_BEGIN_MESSAGE_MAP(OutgoingSetRendererPrefsIPCWatcher, message)
-      IPC_MESSAGE_HANDLER(PageMsg_SetRendererPrefs, OnSetRendererPrefs)
-    IPC_END_MESSAGE_MAP()
-  }
-
-  void OnSetRendererPrefs(
-      const blink::mojom::RendererPreferences& renderer_prefs) {
+  void OnRendererPreferencesSent(
+      const blink::RendererPreferences& preferences) {
     outgoing_message_seen_ = true;
-    renderer_preferences_ = renderer_prefs;
+    renderer_preferences_ = preferences;
     if (run_loop_)
       run_loop_->Quit();
   }
 
-  RenderProcessHostImpl* rph_;
+  RenderViewHostImpl* rvh_;
   bool outgoing_message_seen_;
   std::unique_ptr<base::RunLoop> run_loop_;
-  blink::mojom::RendererPreferences renderer_preferences_;
+  blink::RendererPreferences renderer_preferences_;
 };
 }  // namespace
 
@@ -3008,38 +3050,38 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, SyncRendererPrefs) {
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
   // Retrieve an arbitrary renderer preference.
-  blink::mojom::RendererPreferences* renderer_preferences =
+  blink::RendererPreferences* renderer_preferences =
       web_contents->GetMutableRendererPrefs();
   const bool use_custom_colors_old = renderer_preferences->use_custom_colors;
 
-  // Retrieve all unique render process hosts.
-  std::vector<RenderProcessHostImpl*> render_process_hosts;
+  // Retrieve all unique render view hosts.
+  std::vector<RenderViewHostImpl*> render_view_hosts;
   for (FrameTreeNode* frame_tree_node : web_contents->GetFrameTree()->Nodes()) {
-    RenderProcessHostImpl* render_process_host =
-        static_cast<RenderProcessHostImpl*>(
-            frame_tree_node->current_frame_host()->GetProcess());
-    ASSERT_NE(nullptr, render_process_host);
-    DLOG(INFO) << "render_process_host=" << render_process_host;
+    RenderViewHostImpl* render_view_host = static_cast<RenderViewHostImpl*>(
+        frame_tree_node->current_frame_host()->GetRenderViewHost());
+    ASSERT_NE(nullptr, render_view_host);
+    DLOG(INFO) << "render_view_host=" << render_view_host;
 
-    // It's possible (Android e.g.) for frame hosts to share a
-    // RenderProcessHost.
-    if (std::find(render_process_hosts.begin(), render_process_hosts.end(),
-                  render_process_host) == render_process_hosts.end()) {
-      render_process_hosts.push_back(render_process_host);
+    // Multiple frame hosts can be associated to the same RenderViewHost.
+    if (std::find(render_view_hosts.begin(), render_view_hosts.end(),
+                  render_view_host) == render_view_hosts.end()) {
+      render_view_hosts.push_back(render_view_host);
     }
   }
 
-  // Set up watchers for PageMsg_SetRendererPrefs message being sent from unique
+  // Set up watchers for SetRendererPreferences message being sent from unique
   // render process hosts.
-  std::vector<std::unique_ptr<OutgoingSetRendererPrefsIPCWatcher>> ipc_watchers;
-  for (auto* render_process_host : render_process_hosts) {
-    ipc_watchers.push_back(std::make_unique<OutgoingSetRendererPrefsIPCWatcher>(
-        render_process_host));
+  std::vector<std::unique_ptr<OutgoingSetRendererPrefsMojoWatcher>>
+      mojo_watchers;
+  for (auto* render_view_host : render_view_hosts) {
+    mojo_watchers.push_back(
+        std::make_unique<OutgoingSetRendererPrefsMojoWatcher>(
+            render_view_host));
 
-    // Make sure the IPC watchers have the same default value for the arbitrary
+    // Make sure the Mojo watchers have the same default value for the arbitrary
     // preference.
     EXPECT_EQ(use_custom_colors_old,
-              ipc_watchers.back()->renderer_preferences().use_custom_colors);
+              mojo_watchers.back()->renderer_preferences().use_custom_colors);
   }
 
   // Change the arbitrary renderer preference.
@@ -3047,11 +3089,11 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, SyncRendererPrefs) {
   renderer_preferences->use_custom_colors = use_custom_colors_new;
   web_contents->SyncRendererPrefs();
 
-  // Ensure IPC is sent to each frame.
-  for (auto& ipc_watcher : ipc_watchers) {
-    ipc_watcher->WaitForIPC();
+  // Ensure Mojo messages are sent to each frame.
+  for (auto& mojo_watcher : mojo_watchers) {
+    mojo_watcher->WaitForIPC();
     EXPECT_EQ(use_custom_colors_new,
-              ipc_watcher->renderer_preferences().use_custom_colors);
+              mojo_watcher->renderer_preferences().use_custom_colors);
   }
 
   renderer_preferences->use_custom_colors = use_custom_colors_old;
@@ -4038,7 +4080,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
-                       LoadingCallbacksOrder_ErrorPage) {
+                       LoadingCallbacksOrder_ErrorPage_EmptyBody) {
   const char kPageURL[] = "/controlled_page_load.html";
   net::test_server::ControllableHttpResponse response(embedded_test_server(),
                                                       kPageURL);
@@ -4060,7 +4102,31 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
               testing::ElementsAre(
                   "DidStartLoading", "DidStartNavigation",
                   "DidFinishNavigation", "DocumentAvailableInMainFrame",
-                  "DOMContentLoaded", "DidFinishLoad", "DidStartNavigation",
+                  "DOMContentLoaded", "DocumentOnLoadCompletedInMainFrame",
+                  "DidFinishLoad", "DidStopLoading"));
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       LoadingCallbacksOrder_ErrorPage_NonEmptyBody) {
+  const char kPageURL[] = "/controlled_page_load.html";
+  net::test_server::ControllableHttpResponse response(embedded_test_server(),
+                                                      kPageURL);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL url = embedded_test_server()->GetURL("a.com", kPageURL);
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+
+  LoadingObserver loading_observer(web_contents);
+  shell()->LoadURL(url);
+  response.WaitForRequest();
+  response.Send(net::HTTP_NOT_FOUND, "text/html", "<html><body>foo</body>");
+  response.Done();
+
+  loading_observer.Wait();
+  EXPECT_THAT(loading_observer.GetEvents(),
+              testing::ElementsAre(
+                  "DidStartLoading", "DidStartNavigation",
                   "DidFinishNavigation", "DocumentAvailableInMainFrame",
                   "DOMContentLoaded", "DocumentOnLoadCompletedInMainFrame",
                   "DidFinishLoad", "DidStopLoading"));
@@ -4241,7 +4307,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   auto* web_contents = static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* iframe = web_contents->GetFrameTree()->root()->child_at(0);
   GURL iframe_url(server->GetURL("b.co", "/scrollable_page_with_content.html"));
-  NavigateFrameToURL(iframe, iframe_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(iframe, iframe_url));
 
   // Size our view so that we can scroll both horizontally and vertically.
   ResizeWebContentsView(shell(), gfx::Size(10, 10), /*set_start_page=*/false);

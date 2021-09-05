@@ -9,10 +9,12 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/password_manager/credentials_cleaner_runner_factory.h"
+#include "chrome/browser/password_manager/password_store_utils.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -71,7 +73,7 @@ class UnsyncedCredentialsDeletionNotifierImpl
   ~UnsyncedCredentialsDeletionNotifierImpl() override = default;
 
   // Finds the last active tab and notifies their ManagePasswordsUIController.
-  void Notify(std::vector<autofill::PasswordForm> credentials) override;
+  void Notify(std::vector<password_manager::PasswordForm> credentials) override;
   base::WeakPtr<UnsyncedCredentialsDeletionNotifier> GetWeakPtr() override;
 
  private:
@@ -85,7 +87,7 @@ UnsyncedCredentialsDeletionNotifierImpl::
     : profile_(profile) {}
 
 void UnsyncedCredentialsDeletionNotifierImpl::Notify(
-    std::vector<autofill::PasswordForm> credentials) {
+    std::vector<password_manager::PasswordForm> credentials) {
   Browser* browser = chrome::FindBrowserWithProfile(profile_);
   if (!browser)
     return;
@@ -202,8 +204,10 @@ AccountPasswordStoreFactory::BuildServiceInstanceFor(
             ->GetNetworkContext();
       },
       profile);
-  password_manager_util::RemoveUselessCredentials(ps, profile->GetPrefs(), 60,
-                                                  network_context_getter);
+  password_manager_util::RemoveUselessCredentials(
+      CredentialsCleanerRunnerFactory::GetForProfile(profile), ps,
+      profile->GetPrefs(), base::TimeDelta::FromSeconds(60),
+      network_context_getter);
 
 #if !defined(OS_ANDROID)
   ps->SetUnsyncedCredentialsDeletionNotifier(

@@ -56,11 +56,8 @@
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/inter_process_time_ticks_converter.h"
-#include "content/common/page_messages.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/common/renderer.mojom.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/browser_context.h"
@@ -149,20 +146,6 @@ void GetFontInfo(gfx::win::SystemFont system_font,
 }
 #endif  // OS_WIN
 
-#if defined(USE_OZONE) || defined(USE_X11)
-bool IsSelectionBufferAvailable() {
-#if defined(USE_OZONE)
-  if (features::IsUsingOzonePlatform())
-    return ui::Clipboard::GetForCurrentThread()->IsSelectionBufferAvailable();
-#endif
-#if defined(USE_X11)
-  return true;
-#else
-  return false;
-#endif
-}
-#endif  // defined(USE_OZONE) || defined(USE_X11)
-
 // Set of RenderViewHostImpl* that can be attached as UserData to a
 // RenderProcessHost. Used to keep track of whether any RenderViewHostImpl
 // instances are in the bfcache.
@@ -212,7 +195,7 @@ const int PerProcessRenderViewHostSet::kUserDataKey;
 }  // namespace
 
 // static
-const int64_t RenderViewHostImpl::kUnloadTimeoutMS = 500;
+const base::TimeDelta RenderViewHostImpl::kUnloadTimeout;
 
 ///////////////////////////////////////////////////////////////////////////////
 // RenderViewHost, public:
@@ -253,7 +236,7 @@ RenderViewHostImpl* RenderViewHostImpl::From(RenderWidgetHost* rwh) {
 
 // static
 void RenderViewHostImpl::GetPlatformSpecificPrefs(
-    blink::mojom::RendererPreferences* prefs) {
+    blink::RendererPreferences* prefs) {
 #if defined(OS_WIN)
   // Note that what is called "height" in this struct is actually the font size;
   // font "height" typically includes ascender, descender, and padding and is
@@ -287,7 +270,9 @@ void RenderViewHostImpl::GetPlatformSpecificPrefs(
   prefs->focus_ring_color = SK_AlphaTRANSPARENT;
 #endif
 #if defined(USE_OZONE) || defined(USE_X11)
-  prefs->selection_clipboard_buffer_available = IsSelectionBufferAvailable();
+  prefs->selection_clipboard_buffer_available =
+      ui::Clipboard::IsSupportedClipboardBuffer(
+          ui::ClipboardBuffer::kSelection);
 #endif
 }
 
@@ -331,8 +316,8 @@ RenderViewHostImpl::RenderViewHostImpl(
   // brief window where the internal ChannelProxy is null. This ensures that the
   // ChannelProxy is re-initialized in such cases so that subsequent messages
   // make their way to the new renderer once its restarted.
-  // TODO(crbug.com/1111231): Should this go via ASGH? Is it even needed after
-  // the migration?
+  // TODO(crbug.com/1111231): Should this go via AgentSchedulerGroupHost? Is it
+  // even needed after the migration?
   GetProcess()->EnableSendQueue();
 
   if (!is_active())
@@ -358,21 +343,25 @@ RenderViewHostImpl::~RenderViewHostImpl() {
 
   // We can't release the SessionStorageNamespace until our peer
   // in the renderer has wound down.
-  // TODO(crbug.com/1111231): `ReleaseOnCloseACK()` should probably be called on
-  // the ASGH rather than the RPHI. If that happens, does it still make sense to
-  // test if the process is still alive, or should that be encapsulated in
-  // `ASGH::ReleaseOnCloseAck()`?
+  // TODO(crbug.com/1111231): `WillDestroyRenderView()` should probably be
+  // called on the AgentSchedulerGroupHost rather than the
+  // RenderProcessHostImpl. If that happens, does it still make sense to test if
+  // the process is still alive, or should that be encapsulated in
+  // `AgentSchedulerGroupHost::WillDestroyRenderView()`?
   if (GetProcess()->IsInitializedAndNotDead()) {
-    RenderProcessHostImpl::ReleaseOnCloseACK(
+    RenderProcessHostImpl::WillDestroyRenderView(
         GetProcess(), delegate_->GetSessionStorageNamespaceMap(),
-        GetWidget()->GetRoutingID());
+        GetRoutingID());
   }
 
   // Destroy the RenderWidgetHost.
   GetWidget()->ShutdownAndDestroyWidget(false);
   if (IsRenderViewLive()) {
     // Destroy the RenderView, which will also destroy the RenderWidget.
-    GetAgentSchedulingGroup().DestroyView(GetRoutingID());
+    GetAgentSchedulingGroup().DestroyView(
+        GetRoutingID(),
+        base::BindOnce(&RenderProcessHostImpl::DidDestroyRenderView,
+                       GetProcess()->GetID(), GetRoutingID()));
   }
 
   ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
@@ -409,9 +398,9 @@ bool RenderViewHostImpl::CreateRenderView(
 
   // The process may (if we're sharing a process with another host that already
   // initialized it) or may not (we have our own process or the old process
-  // crashed) have been initialized. Calling Init multiple times will be
+  // crashed) have been initialized. Calling Init() multiple times will be
   // ignored, so this is safe.
-  if (!GetAgentSchedulingGroup().InitProcessAndMojos())
+  if (!GetAgentSchedulingGroup().Init())
     return false;
   DCHECK(GetProcess()->IsInitializedAndNotDead());
   DCHECK(GetProcess()->GetBrowserContext());
@@ -438,9 +427,8 @@ bool RenderViewHostImpl::CreateRenderView(
   GetWidget()->set_renderer_initialized(true);
 
   mojom::CreateViewParamsPtr params = mojom::CreateViewParams::New();
-  params->renderer_preferences = delegate_->GetRendererPrefs().Clone();
-  RenderViewHostImpl::GetPlatformSpecificPrefs(
-      params->renderer_preferences.get());
+  params->renderer_preferences = delegate_->GetRendererPrefs();
+  RenderViewHostImpl::GetPlatformSpecificPrefs(&params->renderer_preferences);
   params->web_preferences = delegate_->GetOrCreateWebPreferences();
   params->view_id = GetRoutingID();
   if (main_rfh) {
@@ -460,6 +448,17 @@ bool RenderViewHostImpl::CreateRenderView(
         main_rfh->GetRenderWidgetHost()->BindNewWidgetInterfaces();
     std::tie(params->frame_widget_host, params->frame_widget) =
         main_rfh->GetRenderWidgetHost()->BindNewFrameWidgetInterfaces();
+
+    // If this is a new RenderFrameHost for a frame that has already committed a
+    // document, we don't have a PolicyContainerHost yet. Indeed, in that case,
+    // this RenderFrameHost will not display any document until it commits a
+    // navigation. The policy container for the navigated document will be sent
+    // to Blink at CommitNavigation time and then stored in this RenderFrameHost
+    // in DidCommitNewDocument.
+    if (main_rfh->policy_container_host()) {
+      params->policy_container =
+          main_rfh->policy_container_host()->CreatePolicyContainerForBlink();
+    }
   }
   params->main_frame_frame_token =
       main_rfh ? main_rfh->GetFrameToken() : main_rfph->GetFrameToken();
@@ -628,7 +627,7 @@ void RenderViewHostImpl::ClosePage() {
   is_waiting_for_page_close_completion_ = true;
 
   if (IsRenderViewLive() && !SuddenTerminationAllowed()) {
-    close_timeout_->Start(TimeDelta::FromMilliseconds(kUnloadTimeoutMS));
+    close_timeout_->Start(kUnloadTimeout);
 
     // TODO(creis): Should this be moved to Shutdown?  It may not be called for
     // RenderViewHosts that have been swapped out.
@@ -671,10 +670,6 @@ void RenderViewHostImpl::RenderProcessExited(
   GetWidget()->RendererExited();
   delegate_->RenderViewTerminated(this, info.status, info.exit_code);
   // |this| might have been deleted. Do not add code here.
-}
-
-bool RenderViewHostImpl::Send(IPC::Message* msg) {
-  return GetWidget()->Send(msg);
 }
 
 RenderWidgetHostImpl* RenderViewHostImpl::GetWidget() {
@@ -759,42 +754,11 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
   // with URL of the main frame.
   ScopedActiveURL scoped_active_url(this);
 
-  if (delegate_->OnMessageReceived(this, msg))
-    return true;
-
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP(RenderViewHostImpl, msg)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ShowWidget, OnShowWidget)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_ShowFullscreenWidget,
-                        OnShowFullscreenWidget)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_TakeFocus, OnTakeFocus)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-
-  return handled;
+  return delegate_->OnMessageReceived(this, msg);
 }
 
 void RenderViewHostImpl::RenderWidgetDidInit() {
   PostRenderViewReady();
-}
-
-void RenderViewHostImpl::RenderWidgetDidClose() {
-  // If the renderer is telling us to close, it has already run the unload
-  // events, and we can take the fast path.
-  ClosePageIgnoringUnloadEvents();
-}
-
-void RenderViewHostImpl::OnShowWidget(int widget_route_id,
-                                      const gfx::Rect& initial_rect) {
-  delegate_->ShowCreatedWidget(GetProcess()->GetID(), widget_route_id,
-                               initial_rect);
-  Send(new WidgetMsg_SetBounds_ACK(widget_route_id));
-}
-
-void RenderViewHostImpl::OnShowFullscreenWidget(int widget_route_id) {
-  delegate_->ShowCreatedFullscreenWidget(GetProcess()->GetID(),
-                                         widget_route_id);
-  Send(new WidgetMsg_SetBounds_ACK(widget_route_id));
 }
 
 void RenderViewHostImpl::OnDidContentsPreferredSizeChange(
@@ -851,14 +815,18 @@ bool RenderViewHostImpl::ShouldContributePriorityToProcess() {
   return is_active();
 }
 
-void RenderViewHostImpl::RequestSetBounds(const gfx::Rect& bounds) {
-  if (is_active())
-    delegate_->RequestSetBounds(bounds);
-}
-
 void RenderViewHostImpl::SendWebPreferencesToRenderer() {
   if (auto& broadcast = GetAssociatedPageBroadcast())
     broadcast->UpdateWebPreferences(delegate_->GetOrCreateWebPreferences());
+}
+
+void RenderViewHostImpl::SendRendererPreferencesToRenderer(
+    const blink::RendererPreferences& preferences) {
+  if (auto& broadcast = GetAssociatedPageBroadcast()) {
+    if (!will_send_renderer_preferences_callback_for_testing_.is_null())
+      will_send_renderer_preferences_callback_for_testing_.Run(preferences);
+    broadcast->UpdateRendererPreferences(preferences);
+  }
 }
 
 void RenderViewHostImpl::OnHardwareConfigurationChanged() {
@@ -886,10 +854,6 @@ void RenderViewHostImpl::ExecutePluginActionAtLocation(
   static_cast<RenderFrameHostImpl*>(GetMainFrame())
       ->GetAssociatedLocalMainFrame()
       ->PluginActionAt(local_location, plugin_action);
-}
-
-void RenderViewHostImpl::NotifyMoveOrResizeStarted() {
-  Send(new ViewMsg_MoveOrResizeStarted(GetRoutingID()));
 }
 
 void RenderViewHostImpl::PostRenderViewReady() {
@@ -954,12 +918,23 @@ void RenderViewHostImpl::OnThemeColorChanged(
 
 void RenderViewHostImpl::DidChangeBackgroundColor(
     RenderFrameHostImpl* rfh,
-    const SkColor& background_color) {
+    const SkColor& background_color,
+    bool color_adjust) {
   if (GetMainFrame() != rfh)
     return;
 
   main_frame_background_color_ = background_color;
   delegate_->OnBackgroundColorChanged(this);
+  if (color_adjust) {
+    // <meta name="color-scheme" content="dark"> may pass the dark canvas
+    // background before the first paint in order to avoid flashing the white
+    // background in between loading documents. If we perform a navigation
+    // within the same renderer process, we keep the content background from the
+    // previous page while rendering is blocked in the new page, but for cross
+    // process navigations we would paint the default background (typically
+    // white) while the rendering is blocked.
+    GetWidget()->GetView()->SetContentBackgroundColor(background_color);
+  }
 }
 
 void RenderViewHostImpl::SetContentsMimeType(const std::string mime_type) {
@@ -981,6 +956,11 @@ bool RenderViewHostImpl::IsTestRenderViewHost() const {
 void RenderViewHostImpl::SetWillEnterBackForwardCacheCallbackForTesting(
     const WillEnterBackForwardCacheCallbackForTesting& callback) {
   will_enter_back_forward_cache_callback_for_testing_ = callback;
+}
+
+void RenderViewHostImpl::SetWillSendRendererPreferencesCallbackForTesting(
+    const WillSendRendererPreferencesCallbackForTesting& callback) {
+  will_send_renderer_preferences_callback_for_testing_ = callback;
 }
 
 }  // namespace content

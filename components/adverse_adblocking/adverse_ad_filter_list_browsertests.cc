@@ -23,7 +23,6 @@
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
-#include "chrome/browser/subresource_filter/test_ruleset_publisher.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -38,7 +37,9 @@
 #include "components/security_interstitials/core/unsafe_resource.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter_test_utils.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
+#include "components/subresource_filter/content/browser/test_ruleset_publisher.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features_test_support.h"
@@ -255,7 +256,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
       kSubframeNames, kExpectOnlySecondSubframe));
   ExpectFramesIncludedInLayout(kSubframeNames, kExpectOnlySecondSubframe);
   histogram_tester.ExpectBucketCount(kSubresourceFilterActionsHistogram,
-                                     SubresourceFilterAction::kUIShown, 1);
+                                     subresource_filter::SubresourceFilterAction::kUIShown, 1);
 
   // Now navigate the first subframe to an allowed URL and ensure that the load
   // successfully commits and the frame gets restored (no longer collapsed).
@@ -323,7 +324,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
       kSubframeNames, kExpectScriptInFrameToLoadWithActivation));
 
   // Console message should now be displayed.
-  EXPECT_EQ(kActivationConsoleMessage, console_observer.GetMessageAt(0u));
+  EXPECT_EQ(1u, console_observer.messages().size());
 
   ASSERT_TRUE(web_contents()->GetController().CanGoBack());
   content::WindowedNotificationObserver back_navigation_stop_observer(

@@ -139,6 +139,8 @@ class TabImpl : public Tab,
     return java_impl_;
   }
 
+  bool desktop_user_agent_enabled() { return desktop_user_agent_enabled_; }
+
   // Call this method to disable integration with the system-level Autofill
   // infrastructure. Useful in conjunction with InitializeAutofillForTests().
   // Should be called early in the lifetime of WebLayer, and in
@@ -194,6 +196,9 @@ class TabImpl : public Tab,
   void SetTranslateTargetLanguage(
       JNIEnv* env,
       const base::android::JavaParamRef<jstring>& translate_target_lang);
+  void SetDesktopUserAgentEnabled(JNIEnv* env, jboolean enable);
+  jboolean IsDesktopUserAgentEnabled(JNIEnv* env);
+  void Download(JNIEnv* env, jlong native_context_menu_params);
 #endif
 
   ErrorPageDelegate* error_page_delegate() { return error_page_delegate_; }
@@ -206,6 +211,7 @@ class TabImpl : public Tab,
   }
 
   // Tab:
+  Browser* GetBrowser() override;
   void SetErrorPageDelegate(ErrorPageDelegate* delegate) override;
   void SetFullscreenDelegate(FullscreenDelegate* delegate) override;
   void SetNewTabDelegate(NewTabDelegate* delegate) override;
@@ -271,7 +277,6 @@ class TabImpl : public Tab,
       content::WebContents* web_contents) override;
   bool OnlyExpandTopControlsAtPageTop() override;
   bool ShouldAnimateBrowserControlsHeightChanges() override;
-  bool EmbedsFullscreenWidget() override;
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
@@ -387,6 +392,8 @@ class TabImpl : public Tab,
 
   std::map<std::string, std::unique_ptr<WebMessageHostFactoryProxy>>
       js_name_to_proxy_;
+
+  bool desktop_user_agent_enabled_ = false;
 #endif
 
   bool is_fullscreen_ = false;

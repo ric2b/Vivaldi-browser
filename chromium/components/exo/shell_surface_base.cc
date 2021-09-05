@@ -9,9 +9,7 @@
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/public/cpp/window_pin_type.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/public/cpp/window_state_type.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/drag_window_resizer.h"
@@ -26,6 +24,10 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
 #include "cc/trees/layer_tree_frame_sink.h"
+#include "chromeos/crosapi/cpp/crosapi_constants.h"
+#include "chromeos/ui/base//window_properties.h"
+#include "chromeos/ui/base/window_pin_type.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
@@ -64,6 +66,11 @@ void SetSkipImeProcessingToDescendentSurfaces(aura::Window* window) {
     window->SetProperty(aura::client::kSkipImeProcessing, true);
   for (aura::Window* child : window->children())
     SetSkipImeProcessingToDescendentSurfaces(child);
+}
+
+// Returns true, if the given ID represents Lacros.
+bool IsLacrosAppId(base::StringPiece app_id) {
+  return base::StartsWith(app_id, crosapi::kLacrosAppIdPrefix);
 }
 
 // The accelerator keys used to close ShellSurfaces.
@@ -317,6 +324,9 @@ ShellSurfaceBase::ShellSurfaceBase(Surface* surface,
   host_window()->Show();
   set_owned_by_client();
 
+  SetCanMinimize(can_minimize_);
+  SetCanMaximize(ash::desks_util::IsDeskContainerId(container_));
+  SetCanResize(true);
   SetShowTitle(false);
 }
 
@@ -409,8 +419,11 @@ void ShellSurfaceBase::SetApplicationId(const char* application_id) {
   else
     application_id_.reset();
 
-  if (widget_ && widget_->GetNativeWindow())
+  if (widget_ && widget_->GetNativeWindow()) {
     SetShellApplicationId(widget_->GetNativeWindow(), application_id_);
+    if (application_id_.has_value() && IsLacrosAppId(*application_id_))
+      SetLacrosAppType(widget_->GetNativeWindow());
+  }
 }
 
 void ShellSurfaceBase::SetStartupId(const char* startup_id) {
@@ -474,8 +487,7 @@ void ShellSurfaceBase::SetActivatable(bool activatable) {
 
 void ShellSurfaceBase::SetContainer(int container) {
   TRACE_EVENT1("exo", "ShellSurfaceBase::SetContainer", "container", container);
-
-  container_ = container;
+  SetContainerInternal(container);
 }
 
 void ShellSurfaceBase::SetMaximumSize(const gfx::Size& size) {
@@ -504,10 +516,12 @@ void ShellSurfaceBase::SetCanMinimize(bool can_minimize) {
                can_minimize);
 
   can_minimize_ = can_minimize;
+  WidgetDelegate::SetCanMinimize(!parent_ && can_minimize_);
 }
 
 void ShellSurfaceBase::DisableMovement() {
   movement_disabled_ = true;
+  SetCanResize(false);
 
   if (widget_)
     widget_->set_movement_disabled(true);
@@ -619,9 +633,9 @@ void ShellSurfaceBase::OnSetFrameColors(SkColor active_color,
   active_frame_color_ = SkColorSetA(active_color, SK_AlphaOPAQUE);
   inactive_frame_color_ = SkColorSetA(inactive_color, SK_AlphaOPAQUE);
   if (widget_) {
-    widget_->GetNativeWindow()->SetProperty(ash::kFrameActiveColorKey,
+    widget_->GetNativeWindow()->SetProperty(chromeos::kFrameActiveColorKey,
                                             active_frame_color_);
-    widget_->GetNativeWindow()->SetProperty(ash::kFrameInactiveColorKey,
+    widget_->GetNativeWindow()->SetProperty(chromeos::kFrameInactiveColorKey,
                                             inactive_frame_color_);
   }
 }
@@ -667,28 +681,6 @@ void ShellSurfaceBase::OnSurfaceDestroying(Surface* surface) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // views::WidgetDelegate overrides:
-
-bool ShellSurfaceBase::CanResize() const {
-  if (movement_disabled_)
-    return false;
-  // The shell surface is resizable by default when min/max size is empty,
-  // othersize it's resizable when min size != max size.
-  return minimum_size_.IsEmpty() || minimum_size_ != maximum_size_;
-}
-
-bool ShellSurfaceBase::CanMaximize() const {
-  // Shell surfaces in system modal container cannot be maximized.
-  if (!ash::desks_util::IsDeskContainerId(container_))
-    return false;
-
-  // Non-transient shell surfaces can be maximized.
-  return !parent_;
-}
-
-bool ShellSurfaceBase::CanMinimize() const {
-  // Non-transient shell surfaces can be minimized.
-  return !parent_ && can_minimize_;
-}
 
 bool ShellSurfaceBase::OnCloseRequested(
     views::Widget::ClosedReason close_reason) {
@@ -825,12 +817,8 @@ void ShellSurfaceBase::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 // aura::WindowObserver overrides:
 
 void ShellSurfaceBase::OnWindowDestroying(aura::Window* window) {
-  if (window == parent_) {
-    parent_ = nullptr;
-    // |parent_| being set to null effects the ability to maximize the window.
-    if (widget_)
-      widget_->OnSizeConstraintsChanged();
-  }
+  if (window == parent_)
+    SetParentInternal(nullptr);
   window->RemoveObserver(this);
 }
 
@@ -894,7 +882,7 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
     // override redirect is used for menu, tooltips etc, which should be placed
     // above normal windows, but below lock screen. Specify the container here
     // to avoid using parent_ in params.parent.
-    container_ = ash::kShellWindowId_ShelfBubbleContainer;
+    SetContainerInternal(ash::kShellWindowId_ShelfBubbleContainer);
     // X11 override redirect should not be activatable.
     activatable_ = false;
     DisableMovement();
@@ -944,6 +932,8 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
       aura::EventTargetingPolicy::kTargetAndDescendants);
   InstallCustomWindowTargeter();
   SetShellApplicationId(window, application_id_);
+  if (application_id_.has_value() && IsLacrosAppId(*application_id_))
+    SetLacrosAppType(window);
   SetShellStartupId(window, startup_id_);
   SetShellMainSurface(window, root_surface());
 
@@ -1095,7 +1085,7 @@ ShellSurfaceBase::CreateNonClientFrameViewInternal(views::Widget* widget,
                                                    bool client_controlled) {
   aura::Window* window = widget_->GetNativeWindow();
   // ShellSurfaces always use immersive mode.
-  window->SetProperty(ash::kImmersiveIsActive, true);
+  window->SetProperty(chromeos::kImmersiveIsActive, true);
   ash::WindowState* window_state = ash::WindowState::Get(window);
   if (!frame_enabled() && !window_state->HasDelegate()) {
     window_state->SetDelegate(std::make_unique<CustomWindowStateDelegate>());
@@ -1129,6 +1119,23 @@ void ShellSurfaceBase::OnPostWidgetCommit() {
   shadow_bounds_changed_ = false;
 }
 
+void ShellSurfaceBase::SetContainerInternal(int container) {
+  container_ = container;
+  WidgetDelegate::SetCanMaximize(
+      !parent_ && ash::desks_util::IsDeskContainerId(container_));
+  if (widget_)
+    widget_->OnSizeConstraintsChanged();
+}
+
+void ShellSurfaceBase::SetParentInternal(aura::Window* parent) {
+  parent_ = parent;
+  WidgetDelegate::SetCanMinimize(!parent_ && can_minimize_);
+  WidgetDelegate::SetCanMaximize(
+      !parent_ && ash::desks_util::IsDeskContainerId(container_));
+  if (widget_)
+    widget_->OnSizeConstraintsChanged();
+}
+
 void ShellSurfaceBase::CommitWidget() {
   // Apply new window geometry.
   geometry_ = pending_geometry_;
@@ -1139,6 +1146,8 @@ void ShellSurfaceBase::CommitWidget() {
                                  maximum_size_ != pending_maximum_size_;
   minimum_size_ = pending_minimum_size_;
   maximum_size_ = pending_maximum_size_;
+  SetCanResize(!movement_disabled_ &&
+               (minimum_size_.IsEmpty() || minimum_size_ != maximum_size_));
 
   if (!widget_)
     return;

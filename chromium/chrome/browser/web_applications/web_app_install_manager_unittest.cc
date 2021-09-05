@@ -9,20 +9,21 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/compiler_specific.h"
 #include "base/containers/flat_set.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/test_data_retriever.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
-#include "chrome/browser/web_applications/test/test_os_integration_manager.h"
 #include "chrome/browser/web_applications/test/test_web_app_database_factory.h"
 #include "chrome/browser/web_applications/test/test_web_app_registry_controller.h"
 #include "chrome/browser/web_applications/test/test_web_app_ui_manager.h"
@@ -36,7 +37,6 @@
 #include "chrome/browser/web_applications/web_app_install_task.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/testing_profile.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
@@ -128,7 +128,8 @@ std::unique_ptr<WebAppInstallTask> CreateDummyTask() {
       /*profile=*/nullptr,
       /*os_integration_manager=*/nullptr,
       /*install_finalizer=*/nullptr,
-      /*data_retriever=*/nullptr);
+      /*data_retriever=*/nullptr,
+      /*registrar=*/nullptr);
 }
 
 }  // namespace
@@ -154,12 +155,9 @@ class WebAppInstallManagerTest : public WebAppTest {
     install_finalizer_ = std::make_unique<WebAppInstallFinalizer>(
         profile(), icon_manager_.get(), /*legacy_finalizer=*/nullptr);
 
-    os_integration_manager_ = std::make_unique<TestOsIntegrationManager>(
-        profile(), /*app_shortcut_manager=*/nullptr,
-        /*file_handler_manager=*/nullptr);
-
     install_manager_ = std::make_unique<WebAppInstallManager>(profile());
-    install_manager_->SetSubsystems(&registrar(), os_integration_manager_.get(),
+    install_manager_->SetSubsystems(&registrar(),
+                                    &controller().os_integration_manager(),
                                     install_finalizer_.get());
 
     auto test_url_loader = std::make_unique<TestWebAppUrlLoader>();
@@ -171,13 +169,8 @@ class WebAppInstallManagerTest : public WebAppTest {
 
     install_finalizer_->SetSubsystems(
         &registrar(), ui_manager_.get(),
-        &test_registry_controller_->sync_bridge());
-
-    // TODO(https://crbug.com/1108611) we should use a single
-    // TestOsIntegrationManager
-    WebAppProviderBase::GetProviderBase(profile())
-        ->os_integration_manager()
-        .SuppressOsHooksForTesting();
+        &test_registry_controller_->sync_bridge(),
+        &test_registry_controller_->os_integration_manager());
   }
 
   void TearDown() override {
@@ -187,9 +180,6 @@ class WebAppInstallManagerTest : public WebAppTest {
 
   WebAppRegistrar& registrar() { return controller().registrar(); }
   WebAppInstallManager& install_manager() { return *install_manager_; }
-  TestOsIntegrationManager& os_integration_manager() {
-    return *os_integration_manager_;
-  }
   WebAppInstallFinalizer& finalizer() { return *install_finalizer_; }
   WebAppIconManager& icon_manager() { return *icon_manager_; }
   TestWebAppUrlLoader& url_loader() { return *test_url_loader_; }
@@ -385,10 +375,12 @@ class WebAppInstallManagerTest : public WebAppTest {
 
   int GetNumFullyInstalledApps() const {
     int num_apps = 0;
-    for (const WebApp& app : test_registry_controller_->registrar().AllApps()) {
-      if (!app.is_in_sync_install())
-        ++num_apps;
+
+    for (const WebApp& app : test_registry_controller_->registrar().GetApps()) {
+      ALLOW_UNUSED_LOCAL(app);
+      ++num_apps;
     }
+
     return num_apps;
   }
 
@@ -445,7 +437,6 @@ class WebAppInstallManagerTest : public WebAppTest {
     // The reverse order of creation:
     ui_manager_.reset();
     install_manager_.reset();
-    os_integration_manager_.reset();
     install_finalizer_.reset();
     icon_manager_.reset();
     test_registry_controller_.reset();
@@ -459,7 +450,6 @@ class WebAppInstallManagerTest : public WebAppTest {
   std::unique_ptr<TestWebAppRegistryController> test_registry_controller_;
   std::unique_ptr<WebAppIconManager> icon_manager_;
 
-  std::unique_ptr<TestOsIntegrationManager> os_integration_manager_;
   std::unique_ptr<WebAppInstallManager> install_manager_;
   std::unique_ptr<WebAppInstallFinalizer> install_finalizer_;
   std::unique_ptr<TestWebAppUiManager> ui_manager_;
@@ -815,7 +805,10 @@ TEST_F(WebAppInstallManagerTest, InstallWebAppsAfterSync_Fallback) {
   // Simulate if the web app publisher's website is down.
   url_loader().SetNextLoadUrlResult(
       url, WebAppUrlLoader::Result::kFailedPageTookTooLong);
-  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded});
+  // about:blank will be loaded twice, one for the initial attempt and one for
+  // the fallback attempt.
+  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded});
 
   install_manager().SetDataRetrieverFactoryForTesting(
       base::BindLambdaForTesting([]() {
@@ -1081,6 +1074,8 @@ TEST_F(WebAppInstallManagerTest, InstallBookmarkAppFromSync_LoadFailed) {
   const auto url2 = GURL("https://example.org/");
 
   url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded,
                                          WebAppUrlLoader::Result::kUrlLoaded});
 
   // Induce a load failure:
@@ -1193,7 +1188,10 @@ TEST_F(WebAppInstallManagerTest, InstallBookmarkAppFromSync_TwoIcons_Fallback) {
   const GURL icon1_url{"https://example.com/path/icon1.png"};
   const GURL icon2_url{"https://example.com/path/icon2.png"};
 
-  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded});
+  // about:blank will be loaded twice, one for the initial attempt and one for
+  // the fallback attempt.
+  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded});
   // Induce a load failure:
   url_loader().SetNextLoadUrlResult(
       url, WebAppUrlLoader::Result::kRedirectedUrlLoaded);
@@ -1254,7 +1252,10 @@ TEST_F(WebAppInstallManagerTest, InstallBookmarkAppFromSync_NoIcons) {
 
   const GURL url{"https://example.com/path"};
 
-  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded});
+  // about:blank will be loaded twice, one for the initial attempt and one for
+  // the fallback attempt.
+  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded});
   // Induce a load failure:
   url_loader().SetNextLoadUrlResult(
       url, WebAppUrlLoader::Result::kRedirectedUrlLoaded);
@@ -1290,7 +1291,8 @@ TEST_F(WebAppInstallManagerTest, InstallBookmarkAppFromSync_ExpectAppIdFailed) {
 
   const GURL old_url{"https://example.com/path"};
 
-  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded});
+  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded});
   url_loader().SetNextLoadUrlResult(old_url,
                                     WebAppUrlLoader::Result::kUrlLoaded);
 
@@ -1505,8 +1507,9 @@ TEST_F(WebAppInstallManagerTest, SyncRace_InstallBookmarkAppFull_ThenWebApp) {
   const GURL url{"https://example.com/path"};
   const AppId app_id = GenerateAppIdFromURL(url);
 
+  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded});
   // The web site url must be loaded only once.
-  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded});
   url_loader().AddNextLoadUrlResults(url,
                                      {WebAppUrlLoader::Result::kUrlLoaded});
 
@@ -1568,8 +1571,9 @@ TEST_F(WebAppInstallManagerTest,
   const GURL url{"https://example.com/path"};
   const AppId app_id = GenerateAppIdFromURL(url);
 
+  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded,
+                                         WebAppUrlLoader::Result::kUrlLoaded});
   // We will try to load the web site url only once.
-  url_loader().AddPrepareForLoadResults({WebAppUrlLoader::Result::kUrlLoaded});
   // The web site url will fail.
   url_loader().AddNextLoadUrlResults(
       url, {WebAppUrlLoader::Result::kFailedPageTookTooLong});

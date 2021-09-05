@@ -5,8 +5,9 @@
 cr.define('cellular_setup', function() {
   /** @enum{string} */
   /* #export */ const ESimPageName = {
-    ESIM: 'qr-code-page',
-    FINAL: 'final-page',
+    PROFILE_DISCOVERY: 'profileDiscoveryPage',
+    ESIM: 'activationCodePage',
+    FINAL: 'finalPage',
   };
   /**
    * Root element for the eSIM cellular setup flow. This element interacts with
@@ -25,23 +26,13 @@ cr.define('cellular_setup', function() {
       delegate: Object,
 
       /**
-       * @type {string}
-       * @private
-       */
-      activationCode_: {
-        type: String,
-        value: '',
-        observer: 'onActivationCodeChanged_',
-      },
-
-      /**
        * Element name of the current selected sub-page.
        * @type {!cellular_setup.ESimPageName}
        * @private
        */
       selectedESimPageName_: {
         type: String,
-        value: ESimPageName.ESIM,
+        value: ESimPageName.PROFILE_DISCOVERY,
       },
 
       /**
@@ -52,18 +43,59 @@ cr.define('cellular_setup', function() {
         type: Boolean,
         value: false,
       },
+
+      /**
+       * @type {Array<!Object>}
+       * @private
+       */
+      selectedProfiles_: {
+        type: Object,
+      },
     },
+
+    listeners: {
+      'activation-code-updated': 'onActivationCodeUpdated_',
+    },
+
+    observers: ['onSelectedProfilesChanged_(selectedProfiles_.splices)'],
 
     initSubflow() {
       this.buttonState = {
-        backward: cellularSetup.ButtonState.SHOWN_AND_ENABLED,
+        backward: cellularSetup.ButtonState.HIDDEN,
         cancel: this.delegate.shouldShowCancelButton() ?
             cellularSetup.ButtonState.SHOWN_AND_ENABLED :
             cellularSetup.ButtonState.HIDDEN,
         done: cellularSetup.ButtonState.HIDDEN,
-        next: cellularSetup.ButtonState.SHOWN_BUT_DISABLED,
-        tryAgain: cellularSetup.ButtonState.HIDDEN
+        next: cellularSetup.ButtonState.HIDDEN,
+        tryAgain: cellularSetup.ButtonState.HIDDEN,
+        skipDiscovery: cellularSetup.ButtonState.SHOWN_AND_ENABLED,
       };
+    },
+
+    /** @private */
+    onActivationCodeUpdated_(event) {
+      if (event.detail.activationCode) {
+        this.set(
+            'buttonState.next', cellularSetup.ButtonState.SHOWN_AND_ENABLED);
+      } else {
+        this.set(
+            'buttonState.next', cellularSetup.ButtonState.SHOWN_BUT_DISABLED);
+      }
+    },
+
+    /** @private */
+    onSelectedProfilesChanged_() {
+      // TODO(crbug.com/1093185): Add navigation logic.
+      if (this.selectedProfiles_.length > 0) {
+        this.set('buttonState.skipDiscovery', cellularSetup.ButtonState.HIDDEN);
+        this.set(
+            'buttonState.done', cellularSetup.ButtonState.SHOWN_AND_ENABLED);
+      } else {
+        this.set(
+            'buttonState.skipDiscovery',
+            cellularSetup.ButtonState.SHOWN_AND_ENABLED);
+        this.set('buttonState.done', cellularSetup.ButtonState.HIDDEN);
+      }
     },
 
     navigateForward() {
@@ -77,16 +109,6 @@ cr.define('cellular_setup', function() {
       // TODO(crbug.com/1093185): Handle state when camera is used
       return false;
     },
-
-    /** @private */
-    onActivationCodeChanged_() {
-      if (!this.activationCode_) {
-        this.buttonState.next = cellularSetup.ButtonState.SHOWN_BUT_DISABLED;
-        return;
-      }
-
-      this.buttonState.next = cellularSetup.ButtonState.SHOWN_AND_ENABLED;
-    }
   });
 
   // #cr_define_end

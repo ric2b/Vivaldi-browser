@@ -58,7 +58,7 @@ bool UIControlsX11::SendKeyPressNotifyWhenDone(gfx::NativeWindow window,
   if (command)
     SetKeycodeAndSendThenMask(&xevent, XK_Meta_L, x11::KeyButMask::Mod4);
   xevent.detail = x11::Connection::Get()->KeysymToKeycode(
-      static_cast<x11::KeySym>(ui::XKeysymForWindowsKeyCode(key, shift)));
+      ui::XKeysymForWindowsKeyCode(key, shift));
   PostEventToWindowTreeHost(host_, &xevent);
 
   // Send key release events.
@@ -189,21 +189,19 @@ void UIControlsX11::RunClosureAfterAllPendingUIEvents(
 }
 
 void UIControlsX11::SetKeycodeAndSendThenMask(x11::KeyEvent* xevent,
-                                              KeySym keysym,
+                                              uint32_t keysym,
                                               x11::KeyButMask mask) {
-  xevent->detail =
-      x11::Connection::Get()->KeysymToKeycode(static_cast<x11::KeySym>(keysym));
+  xevent->detail = x11::Connection::Get()->KeysymToKeycode(keysym);
   PostEventToWindowTreeHost(host_, xevent);
   xevent->state = xevent->state | mask;
 }
 
 void UIControlsX11::UnmaskAndSetKeycodeThenSend(x11::KeyEvent* xevent,
                                                 x11::KeyButMask mask,
-                                                KeySym keysym) {
+                                                uint32_t keysym) {
   xevent->state = static_cast<x11::KeyButMask>(
       static_cast<uint32_t>(xevent->state) ^ static_cast<uint32_t>(mask));
-  xevent->detail =
-      x11::Connection::Get()->KeysymToKeycode(static_cast<x11::KeySym>(keysym));
+  xevent->detail = x11::Connection::Get()->KeysymToKeycode(keysym);
   PostEventToWindowTreeHost(host_, xevent);
 }
 

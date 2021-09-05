@@ -4,6 +4,7 @@
 
 #include "net/dns/dns_transaction.h"
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -31,6 +32,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -130,8 +132,7 @@ base::Value NetLogStartParams(const std::string& hostname, uint16_t qtype) {
 // matches. Logging is done in the socket and in the outer DnsTransaction.
 class DnsAttempt {
  public:
-  explicit DnsAttempt(size_t server_index)
-      : result_(ERR_FAILED), server_index_(server_index) {}
+  explicit DnsAttempt(size_t server_index) : server_index_(server_index) {}
 
   virtual ~DnsAttempt() = default;
   // Starts the attempt. Returns ERR_IO_PENDING if cannot complete synchronously
@@ -165,21 +166,10 @@ class DnsAttempt {
     return dict;
   }
 
-  void set_result(int result) { result_ = result; }
-
   // True if current attempt is pending (waiting for server response).
-  bool is_pending() const { return result_ == ERR_IO_PENDING; }
-
-  // True if attempt is completed (received server response).
-  bool is_completed() const {
-    return (result_ == OK) || (result_ == ERR_NAME_NOT_RESOLVED) ||
-           (result_ == ERR_DNS_SERVER_REQUIRES_TCP);
-  }
+  virtual bool IsPending() const = 0;
 
  private:
-  // Result of last operation.
-  int result_;
-
   const size_t server_index_;
 
   DISALLOW_COPY_AND_ASSIGN(DnsAttempt);
@@ -223,6 +213,8 @@ class DnsUDPAttempt : public DnsAttempt {
     return socket_->NetLog();
   }
 
+  bool IsPending() const override { return next_state_ != STATE_NONE; }
+
  private:
   enum State {
     STATE_SEND_QUERY,
@@ -257,13 +249,9 @@ class DnsUDPAttempt : public DnsAttempt {
       }
     } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 
-    set_result(rv);
-
-    if (rv == ERR_IO_PENDING)
-      return rv;
-
-    if (rv == OK)
+    if (rv != ERR_IO_PENDING)
       DCHECK_EQ(STATE_NONE, next_state_);
+
     return rv;
   }
 
@@ -527,6 +515,8 @@ class DnsHTTPAttempt : public DnsAttempt, public URLRequest::Delegate {
     }
   }
 
+  bool IsPending() const override { return !callback_.is_null(); }
+
  private:
   void ResponseCompleted(int net_error) {
     request_.reset();
@@ -620,7 +610,6 @@ class DnsTCPAttempt : public DnsAttempt {
     int rv = socket_->Connect(
         base::BindOnce(&DnsTCPAttempt::OnIOComplete, base::Unretained(this)));
     if (rv == ERR_IO_PENDING) {
-      set_result(rv);
       return rv;
     }
     return DoLoop(rv);
@@ -636,6 +625,8 @@ class DnsTCPAttempt : public DnsAttempt {
   const NetLogWithSource& GetSocketNetLog() const override {
     return socket_->NetLog();
   }
+
+  bool IsPending() const override { return next_state_ != STATE_NONE; }
 
  private:
   enum State {
@@ -683,9 +674,9 @@ class DnsTCPAttempt : public DnsAttempt {
       }
     } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 
-    set_result(rv);
-    if (rv == OK)
+    if (rv != ERR_IO_PENDING)
       DCHECK_EQ(STATE_NONE, next_state_);
+
     return rv;
   }
 
@@ -985,7 +976,7 @@ class DnsOverHttpsProbeRunner : public DnsProbeRunner {
           probe_stats->probe_attempts[attempt_number].get();
       const DnsResponse* response = attempt->GetResponse();
       AddressList addresses;
-      base::TimeDelta ttl;
+      base::Optional<base::TimeDelta> ttl;
       if (response &&
           attempt->GetResponse()->ParseToAddressList(&addresses, &ttl) ==
               DnsResponse::DNS_PARSE_OK &&
@@ -1030,9 +1021,9 @@ class DnsOverHttpsProbeRunner : public DnsProbeRunner {
 
 // Implements DnsTransaction. Configuration is supplied by DnsSession.
 // The suffix list is built according to the DnsConfig from the session.
-// The timeout for each DnsUDPAttempt is given by
-// ResolveContext::NextClassicTimeout. The first server to attempt on each query
-// is given by ResolveContext::NextFirstServerIndex, and the order is
+// The fallback period for each DnsUDPAttempt is given by
+// ResolveContext::NextClassicFallbackPeriod(). The first server to attempt on
+// each query is given by ResolveContext::NextFirstServerIndex, and the order is
 // round-robin afterwards. Each server is attempted DnsConfig::attempts times.
 class DnsTransactionImpl : public DnsTransaction,
                            public base::SupportsWeakPtr<DnsTransactionImpl> {
@@ -1045,7 +1036,8 @@ class DnsTransactionImpl : public DnsTransaction,
                      const OptRecordRdata* opt_rdata,
                      bool secure,
                      SecureDnsMode secure_dns_mode,
-                     ResolveContext* resolve_context)
+                     ResolveContext* resolve_context,
+                     bool fast_timeout)
       : session_(session),
         hostname_(hostname),
         qtype_(qtype),
@@ -1053,6 +1045,7 @@ class DnsTransactionImpl : public DnsTransaction,
         secure_(secure),
         secure_dns_mode_(secure_dns_mode),
         callback_(std::move(callback)),
+        fast_timeout_(fast_timeout),
         net_log_(net_log),
         qnames_initial_size_(0),
         attempts_count_(0),
@@ -1088,6 +1081,7 @@ class DnsTransactionImpl : public DnsTransaction,
     DCHECK(attempts_.empty());
     net_log_.BeginEvent(NetLogEventType::DNS_TRANSACTION,
                         [&] { return NetLogStartParams(hostname_, qtype_); });
+    time_from_start_ = std::make_unique<base::ElapsedTimer>();
     AttemptResult result(PrepareSearch(), nullptr);
     if (result.rv == OK) {
       qnames_initial_size_ = qnames_.size();
@@ -1210,6 +1204,8 @@ class DnsTransactionImpl : public DnsTransaction,
   }
 
   AttemptResult MakeAttempt() {
+    DCHECK(MoreAttemptsAllowed());
+
     DnsConfig config = session_->config();
     if (secure_) {
       DCHECK_GT(config.dns_over_https_servers.size(), 0u);
@@ -1243,9 +1239,11 @@ class DnsTransactionImpl : public DnsTransaction,
     }
 
     if (result.rv == ERR_IO_PENDING) {
-      base::TimeDelta timeout = resolve_context_->NextClassicTimeout(
-          server_index, attempt_number, session_.get());
-      timer_.Start(FROM_HERE, timeout, this, &DnsTransactionImpl::OnTimeout);
+      base::TimeDelta fallback_period =
+          resolve_context_->NextClassicFallbackPeriod(
+              server_index, attempt_number, session_.get());
+      timer_.Start(FROM_HERE, fallback_period, this,
+                   &DnsTransactionImpl::OnFallbackPeriodExpired);
     }
 
     return result;
@@ -1303,9 +1301,10 @@ class DnsTransactionImpl : public DnsTransaction,
         &DnsTransactionImpl::OnAttemptComplete, base::Unretained(this),
         attempt_number, true /* record_rtt */, base::TimeTicks::Now()));
     if (rv == ERR_IO_PENDING) {
-      base::TimeDelta timeout =
-          resolve_context_->NextDohTimeout(doh_server_index, session_.get());
-      timer_.Start(FROM_HERE, timeout, this, &DnsTransactionImpl::OnTimeout);
+      base::TimeDelta fallback_period = resolve_context_->NextDohFallbackPeriod(
+          doh_server_index, session_.get());
+      timer_.Start(FROM_HERE, fallback_period, this,
+                   &DnsTransactionImpl::OnFallbackPeriodExpired);
     }
     return AttemptResult(rv, attempts_.back().get());
   }
@@ -1332,9 +1331,10 @@ class DnsTransactionImpl : public DnsTransaction,
     RecordAttemptUma(DnsAttemptType::kTcpTruncationRetry);
 
     if (result.rv == ERR_IO_PENDING) {
-      // On TCP upgrade, use 2x the upgraded timeout.
-      base::TimeDelta timeout = timer_.GetCurrentDelay() * 2;
-      timer_.Start(FROM_HERE, timeout, this, &DnsTransactionImpl::OnTimeout);
+      // On TCP upgrade, use 2x the upgraded fallback period.
+      base::TimeDelta fallback_period = timer_.GetCurrentDelay() * 2;
+      timer_.Start(FROM_HERE, fallback_period, this,
+                   &DnsTransactionImpl::OnFallbackPeriodExpired);
     }
 
     return result;
@@ -1368,9 +1368,11 @@ class DnsTransactionImpl : public DnsTransaction,
 
   // Begins query for the current name. Makes the first attempt.
   AttemptResult StartQuery() {
-    std::string dotted_qname = DNSDomainToString(qnames_.front());
-    net_log_.BeginEventWithStringParams(NetLogEventType::DNS_TRANSACTION_QUERY,
-                                        "qname", dotted_qname);
+    base::Optional<std::string> dotted_qname =
+        DnsDomainToString(qnames_.front());
+    net_log_.BeginEventWithStringParams(
+        NetLogEventType::DNS_TRANSACTION_QUERY, "qname",
+        dotted_qname.value_or("???MALFORMED_NAME???"));
 
     attempts_.clear();
     had_tcp_retry_ = false;
@@ -1425,6 +1427,8 @@ class DnsTransactionImpl : public DnsTransaction,
   // Resolves the result of a DnsAttempt until a terminal result is reached
   // or it will complete asynchronously (ERR_IO_PENDING).
   AttemptResult ProcessAttemptResult(AttemptResult result) {
+    DCHECK(!callback_.is_null());
+
     while (result.rv != ERR_IO_PENDING) {
       LogResponse(result.attempt);
 
@@ -1458,17 +1462,25 @@ class DnsTransactionImpl : public DnsTransaction,
           break;
         case ERR_CONNECTION_REFUSED:
         case ERR_DNS_TIMED_OUT:
+          timer_.Stop();
+
           if (result.attempt) {
+            DCHECK(result.attempt == attempts_.back().get());
             resolve_context_->RecordServerFailure(
                 result.attempt->server_index(), secure_ /* is_doh_server */,
                 result.rv, session_.get());
           }
           if (MoreAttemptsAllowed()) {
             result = MakeAttempt();
-          } else {
-            return result;
+            break;
           }
-          break;
+
+          if (!fast_timeout_ && AnyAttemptPending()) {
+            StartTimeoutTimer();
+            return AttemptResult(ERR_IO_PENDING, nullptr);
+          }
+
+          return result;
         case ERR_DNS_SERVER_REQUIRES_TCP:
           result = RetryUdpAttemptAsTcp(result.attempt);
           break;
@@ -1481,33 +1493,48 @@ class DnsTransactionImpl : public DnsTransaction,
           DCHECK(result.attempt);
 
           // If attempt is not the most recent attempt, means this error is for
-          // an attempt that already timed out and was treated as complete but
-          // allowed to continue attempting in parallel with new attempts (see
-          // the ERR_DNS_TIMED_OUT case above). As the failure was already
-          // recorded at timeout time and is no longer being waited on, ignore
-          // this failure.
-          if (result.attempt != attempts_.back().get()) {
+          // a previous attempt that already passed its fallback period and
+          // continued attempting in parallel with new attempts (see the
+          // ERR_DNS_TIMED_OUT case above). As the failure was already recorded
+          // at fallback time and is no longer being waited on, ignore this
+          // failure.
+          if (result.attempt == attempts_.back().get()) {
+            timer_.Stop();
+            resolve_context_->RecordServerFailure(
+                result.attempt->server_index(), secure_ /* is_doh_server */,
+                result.rv, session_.get());
+
+            if (MoreAttemptsAllowed()) {
+              result = MakeAttempt();
+              break;
+            }
+
+            if (fast_timeout_) {
+              return result;
+            }
+
+            // No more attempts can be made, but there may be other attempts
+            // still pending, so start the timeout timer.
+            StartTimeoutTimer();
+          }
+
+          // If any attempts are still pending, continue to wait for them.
+          if (AnyAttemptPending()) {
+            DCHECK(timer_.IsRunning());
             return AttemptResult(ERR_IO_PENDING, nullptr);
           }
 
-          resolve_context_->RecordServerFailure(result.attempt->server_index(),
-                                                secure_ /* is_doh_server */,
-                                                result.rv, session_.get());
-          if (!MoreAttemptsAllowed()) {
-            return result;
-          }
-          result = MakeAttempt();
-          break;
+          return result;
       }
     }
     return result;
   }
 
-  // Clears and cancels all non-completed attempts. If |leave_attempt| is not
-  // null, it is not cleared even if complete.
+  // Clears and cancels all pending attempts. If |leave_attempt| is not
+  // null, that attempt is not cleared even if pending.
   void ClearAttempts(const DnsAttempt* leave_attempt) {
     for (auto it = attempts_.begin(); it != attempts_.end();) {
-      if (!(*it)->is_completed() && it->get() != leave_attempt) {
+      if ((*it)->IsPending() && it->get() != leave_attempt) {
         it = attempts_.erase(it);
       } else {
         ++it;
@@ -1515,7 +1542,14 @@ class DnsTransactionImpl : public DnsTransaction,
     }
   }
 
-  void OnTimeout() {
+  bool AnyAttemptPending() {
+    return std::any_of(attempts_.begin(), attempts_.end(),
+                       [](std::unique_ptr<DnsAttempt>& attempt) {
+                         return attempt->IsPending();
+                       });
+  }
+
+  void OnFallbackPeriodExpired() {
     if (callback_.is_null())
       return;
     DCHECK(!attempts_.empty());
@@ -1523,6 +1557,29 @@ class DnsTransactionImpl : public DnsTransaction,
         AttemptResult(ERR_DNS_TIMED_OUT, attempts_.back().get()));
     if (result.rv != ERR_IO_PENDING)
       DoCallback(result);
+  }
+
+  void StartTimeoutTimer() {
+    DCHECK(!fast_timeout_);
+    DCHECK(!timer_.IsRunning());
+    DCHECK(!callback_.is_null());
+
+    base::TimeDelta timeout;
+    if (secure_) {
+      timeout = resolve_context_->SecureTransactionTimeout(secure_dns_mode_,
+                                                           session_.get());
+    } else {
+      timeout = resolve_context_->ClassicTransactionTimeout(session_.get());
+    }
+    timeout -= time_from_start_->Elapsed();
+
+    timer_.Start(FROM_HERE, timeout, this, &DnsTransactionImpl::OnTimeout);
+  }
+
+  void OnTimeout() {
+    if (callback_.is_null())
+      return;
+    DoCallback(AttemptResult(ERR_DNS_TIMED_OUT, nullptr));
   }
 
   scoped_refptr<DnsSession> session_;
@@ -1533,6 +1590,11 @@ class DnsTransactionImpl : public DnsTransaction,
   const SecureDnsMode secure_dns_mode_;
   // Cleared in DoCallback.
   DnsTransactionFactory::CallbackType callback_;
+
+  // When true, transaction should time out immediately on expiration of the
+  // last attempt fallback period rather than waiting the overall transaction
+  // timeout period.
+  const bool fast_timeout_;
 
   NetLogWithSource net_log_;
 
@@ -1552,6 +1614,7 @@ class DnsTransactionImpl : public DnsTransaction,
   std::unique_ptr<DnsServerIterator> dns_server_iterator_;
 
   base::OneShotTimer timer_;
+  std::unique_ptr<base::ElapsedTimer> time_from_start_;
 
   // TODO(ericorth@chromium.org): Use base::UnownedPtr once available.
   ResolveContext* resolve_context_;
@@ -1579,10 +1642,12 @@ class DnsTransactionFactoryImpl : public DnsTransactionFactory {
       const NetLogWithSource& net_log,
       bool secure,
       SecureDnsMode secure_dns_mode,
-      ResolveContext* resolve_context) override {
+      ResolveContext* resolve_context,
+      bool fast_timeout) override {
     return std::make_unique<DnsTransactionImpl>(
         session_.get(), hostname, qtype, std::move(callback), net_log,
-        opt_rdata_.get(), secure, secure_dns_mode, resolve_context);
+        opt_rdata_.get(), secure, secure_dns_mode, resolve_context,
+        fast_timeout);
   }
 
   std::unique_ptr<DnsProbeRunner> CreateDohProbeRunner(

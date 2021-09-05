@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">سایت <ph name="SITE_NAME" /> اضافه شد</translation>
 <translation id="1383876407941801731">جستجو</translation>
 <translation id="1384959399684842514">بارگیری موقتاً متوقف شد</translation>
+<translation id="1415402041810619267">نشانی وب کوتاه‌شده</translation>
 <translation id="1431402976894535801">مسدود کردن سایت‌ها برای اطلاع از وضعیت حضور شما</translation>
 <translation id="1446450296470737166">‏اجازه کنترل کامل دستگاه‌های MIDI</translation>
 <translation id="1509960214886564027">ویژگی‌های بسیاری از سایت‌ها ممکن است درست کار نکنند</translation>
 <translation id="1620510694547887537">دوربین</translation>
-<translation id="1647391597548383849">دسترسی به دوربین</translation>
 <translation id="1660204651932907780">به سایت‌ها اجازه داده شود صدا پخش کنند (توصیه می‌شود)</translation>
 <translation id="1677097821151855053">از کوکی‌ها و دیگر داده‌های سایت برای به‌خاطر سپردن شما استفاده می‌شود؛ برای مثال ورود به سیستم یا نمایش آگهی‌های شخصی‌شده. برای مدیریت کردن کوکی‌ها برای همه سایت‌ها، به <ph name="BEGIN_LINK" />تنظیمات<ph name="END_LINK" /> بروید.</translation>
 <translation id="1688867105868176567">داده‌های سایت پاک شود؟</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">نشانی وب سایت</translation>
 <translation id="2025115093177348061">واقعیت افزوده</translation>
 <translation id="2030769033451695672">برای برگشتن به <ph name="URL_OF_THE_CURRENT_TAB" /> ضربه بزنید</translation>
+<translation id="2054665754582400095">حضور شما</translation>
 <translation id="2079545284768500474">لغو</translation>
 <translation id="2091887806945687916">صدا</translation>
 <translation id="2107397443965016585">قبل از اجازه به سایت‌ها برای پخش محتوای محافظت‌شده سؤال شود (توصیه می‌شود)</translation>
 <translation id="2146738493024040262">برنامه فوری را باز کنید</translation>
 <translation id="2148716181193084225">امروز</translation>
 <translation id="2182457891543959921">قبل از اینکه به سایت‌ها اجازه داده شود نقشه سه‌بعدی از محیط ایجاد کنند یا موقعیت دوربین را ردیابی کنند سؤال شود (توصیه می‌شود)</translation>
-<translation id="2187243482123994665">حضور کاربر</translation>
 <translation id="2212565012507486665">مجاز کردن کوکی ها</translation>
 <translation id="2228071138934252756">‏برای اینکه به <ph name="APP_NAME" /> اجازه دهید به دوربین دسترسی پیدا کند، دوربین را در <ph name="BEGIN_LINK" />تنظیمات Android<ph name="END_LINK" /> نیز روشن کنید.</translation>
 <translation id="2241634353105152135">فقط یک بار</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> مگابایت</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" />، و <ph name="NUM_MORE" /> اجازه دیگر مجاز هستند}one{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" />، و <ph name="NUM_MORE" /> اجازه دیگر مجاز هستند}other{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" />، و <ph name="NUM_MORE" /> اجازه دیگر مجاز هستند}}</translation>
 <translation id="2434158240863470628">بارگیری کامل شد <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">دسترسی به موقعیت مکانی</translation>
 <translation id="2482878487686419369">اعلان‌ها</translation>
 <translation id="2490684707762498678">تحت مدیریت <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">راهنمایی و بازخورد</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">میکروفن</translation>
 <translation id="3277252321222022663">مجاز بودن دسترسی سایت‌ها به حسگرها (توصیه می‌شود)</translation>
 <translation id="3295602654194328831">پنهان کردن اطلاعات</translation>
+<translation id="3328801116991980348">اطلاعات سایت</translation>
 <translation id="3333961966071413176">همه مخاطبین</translation>
 <translation id="3386292677130313581">قبل از اجازه به سایت‌ها برای اطلاع از مکانتان، ابتدا سؤال شود (توصیه می‌شود)</translation>
 <translation id="3538390592868664640">قابلیت سایت‌ها برای ایجاد نقشه سه‌بعدی از محیط یا ردیابی موقعیت دوربین مسدود می‌شود</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">به سایت‌ها اجازه داده شود محتوای محافظت‌شده پخش کنند</translation>
 <translation id="4468959413250150279">سایتی خاص بی‌صدا شود.</translation>
 <translation id="4479647676395637221">قبل از اجازه به سایت‌ها برای استفاده از دوربین، ابتدا سؤال شود (توصیه می‌شود)</translation>
+<translation id="4505788138578415521">نشانی وب گسترده شد</translation>
 <translation id="4534723447064627427">‏برای اینکه به <ph name="APP_NAME" /> اجازه دهید به میکروفون دسترسی پیدا کند، میکروفون را در <ph name="BEGIN_LINK" />تنظیمات Android<ph name="END_LINK" /> نیز روشن کنید.</translation>
 <translation id="4570913071927164677">جزئیات</translation>
 <translation id="4645575059429386691">مدیریت شده توسط والدین شما</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">بلوتوث</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" />، و <ph name="NUM_MORE" /> اجازه دیگر}one{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" />، و <ph name="NUM_MORE" /> اجازه دیگر}other{<ph name="PERMISSION_1" />، <ph name="PERMISSION_2" />، و <ph name="NUM_MORE" /> اجازه دیگر}}</translation>
 <translation id="913657688200966289">‏اجازه‌های <ph name="APP_NAME" /> را در <ph name="BEGIN_LINK" />تنظیمات Android<ph name="END_LINK" /> روشن کنید.</translation>
-<translation id="945632385593298557">دسترسی به میکروفن</translation>
 <translation id="965817943346481315">اگر سایتْ آگهی‌های مزاحم یا گمراه‌کننده نشان می‌دهد مسدود شود (توصیه می‌شود)</translation>
 <translation id="967624055006145463">داده ذخیره شد</translation>
 </translationbundle>

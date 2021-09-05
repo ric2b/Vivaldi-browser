@@ -15,13 +15,14 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/scoped_observation.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -140,7 +141,7 @@ net::CanonicalCookie CreateCookieWithHost(const url::Origin& origin) {
       std::make_unique<net::CanonicalCookie>(
           "A", "1", origin.host(), "/", base::Time::Now(), base::Time::Now(),
           base::Time(), false, false, net::CookieSameSite::NO_RESTRICTION,
-          net::COOKIE_PRIORITY_MEDIUM));
+          net::COOKIE_PRIORITY_MEDIUM, false));
   EXPECT_TRUE(cookie);
   return *cookie;
 }
@@ -1353,8 +1354,8 @@ class MultipleTasksObserver {
   class Target : public BrowsingDataRemover::Observer {
    public:
     Target(MultipleTasksObserver* parent, BrowsingDataRemover* remover)
-        : parent_(parent), observer_(this) {
-      observer_.Add(remover);
+        : parent_(parent) {
+      observation_.Observe(remover);
     }
     ~Target() override = default;
 
@@ -1364,8 +1365,8 @@ class MultipleTasksObserver {
 
    private:
     MultipleTasksObserver* parent_;
-    ScopedObserver<BrowsingDataRemover, BrowsingDataRemover::Observer>
-        observer_;
+    base::ScopedObservation<BrowsingDataRemover, BrowsingDataRemover::Observer>
+        observation_{this};
   };
 
   explicit MultipleTasksObserver(BrowsingDataRemover* remover)

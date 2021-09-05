@@ -63,10 +63,6 @@ class UserCreationScreen
   void OnUserAction(const std::string& action_id) override;
   bool HandleAccelerator(ash::LoginAcceleratorAction action) override;
 
-  void ShowOfflineMessage(NetworkStateInformer::State state,
-                          NetworkError::ErrorReason reason);
-  void HideOfflineMessage();
-
   UserCreationView* view_ = nullptr;
 
   scoped_refptr<NetworkStateInformer> network_state_informer_;
@@ -77,6 +73,7 @@ class UserCreationScreen
 
   ErrorScreen* error_screen_ = nullptr;
 
+  // TODO(crbug.com/1154669) Refactor error screen usage
   bool error_screen_visible_ = false;
 
   ScreenExitCallback exit_callback_;

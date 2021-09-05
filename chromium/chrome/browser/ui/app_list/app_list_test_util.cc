@@ -12,7 +12,6 @@
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
 #include "chrome/browser/web_applications/test/test_web_app_url_loader.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_profile.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension_set.h"
@@ -44,8 +43,7 @@ void AppListTestBase::SetUp() {
   InitializeInstalledExtensionService(pref_path, source_install_dir);
   service_->Init();
 
-  if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions))
-    ConfigureWebAppProvider();
+  ConfigureWebAppProvider();
 
   // Let any async services complete their set-up.
   base::RunLoop().RunUntilIdle();

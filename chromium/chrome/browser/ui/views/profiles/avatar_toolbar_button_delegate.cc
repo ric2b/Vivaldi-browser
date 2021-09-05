@@ -89,6 +89,12 @@ gfx::Image GetAvatarImage(Profile* profile,
   return entry->GetAvatarIcon(preferred_size);
 }
 
+// TODO(crbug.com/1125474): Replace IsGuest(profile) calls with
+// Profile::IsGuestProfile() after IsEphemeralGuestProfile is fully migrated.
+bool IsGuest(Profile* profile) {
+  return profile->IsGuestSession() || profile->IsEphemeralGuestProfile();
+}
+
 }  // namespace
 
 AvatarToolbarButtonDelegate::AvatarToolbarButtonDelegate() = default;
@@ -161,14 +167,14 @@ gfx::Image AvatarToolbarButtonDelegate::GetProfileAvatarImage(
 }
 
 int AvatarToolbarButtonDelegate::GetWindowCount() const {
-  if (profile_->IsGuestSession())
+  if (IsGuest(profile_))
     return BrowserList::GetGuestBrowserCount();
   DCHECK(profile_->IsOffTheRecord());
   return BrowserList::GetOffTheRecordBrowsersActiveForProfile(profile_);
 }
 
 AvatarToolbarButton::State AvatarToolbarButtonDelegate::GetState() const {
-  if (profile_->IsGuestSession())
+  if (IsGuest(profile_))
     return AvatarToolbarButton::State::kGuestSession;
 
   // Return |kIncognitoProfile| state for all OffTheRecord profile types except
@@ -259,7 +265,7 @@ void AvatarToolbarButtonDelegate::ShowIdentityAnimation(
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&AvatarToolbarButtonDelegate::OnIdentityAnimationTimeout,
-                     weak_ptr_factory_.GetWeakPtr()),
+                     weak_ptr_factory_.GetWeakPtr(), user_identity.account_id),
       kIdentityAnimationDuration);
 }
 
@@ -380,7 +386,17 @@ void AvatarToolbarButtonDelegate::OnUserIdentityChanged() {
   avatar_toolbar_button_->UpdateIcon();
 }
 
-void AvatarToolbarButtonDelegate::OnIdentityAnimationTimeout() {
+void AvatarToolbarButtonDelegate::OnIdentityAnimationTimeout(
+    CoreAccountId account_id) {
+  CoreAccountInfo user_identity =
+      IdentityManagerFactory::GetForProfile(profile_)->GetPrimaryAccountInfo(
+          signin::ConsentLevel::kNotRequired);
+  // If another account is signed-in then the one that initiated this animation,
+  // don't hide it. There's one more pending OnIdentityAnimationTimeout() that
+  // will properly hide it after the proper delay.
+  if (!user_identity.IsEmpty() && user_identity.account_id != account_id)
+    return;
+
   DCHECK_EQ(identity_animation_state_,
             IdentityAnimationState::kShowingUntilTimeout);
   identity_animation_state_ =

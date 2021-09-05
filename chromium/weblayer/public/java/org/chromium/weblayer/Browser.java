@@ -35,6 +35,7 @@ public class Browser {
     private final ObserverList<TabListCallback> mTabListCallbacks;
     private final UrlBarController mUrlBarController;
 
+    private final ObserverList<BrowserControlsOffsetCallback> mBrowserControlsOffsetCallbacks;
     private final ObserverList<BrowserRestoreCallback> mBrowserRestoreCallbacks;
 
     // Constructor for test mocking.
@@ -42,6 +43,7 @@ public class Browser {
         mImpl = null;
         mTabListCallbacks = null;
         mUrlBarController = null;
+        mBrowserControlsOffsetCallbacks = null;
         mBrowserRestoreCallbacks = null;
     }
 
@@ -49,6 +51,7 @@ public class Browser {
         mImpl = impl;
         mFragment = fragment;
         mTabListCallbacks = new ObserverList<TabListCallback>();
+        mBrowserControlsOffsetCallbacks = new ObserverList<BrowserControlsOffsetCallback>();
         mBrowserRestoreCallbacks = new ObserverList<BrowserRestoreCallback>();
 
         try {
@@ -65,6 +68,10 @@ public class Browser {
         }
     }
 
+    IBrowser getIBrowser() {
+        return mImpl;
+    }
+
     /**
      * Returns the Browser for the supplied Fragment; null if
      * {@link fragment} was not created by WebLayer.
@@ -75,6 +82,14 @@ public class Browser {
     public static Browser fromFragment(@Nullable Fragment fragment) {
         return fragment instanceof BrowserFragment ? ((BrowserFragment) fragment).getBrowser()
                                                    : null;
+    }
+
+    /**
+     * Returns true if this Browser has been destroyed.
+     */
+    public boolean isDestroyed() {
+        ThreadCheck.ensureOnUiThread();
+        return mImpl == null;
     }
 
     // Called prior to notifying IBrowser of destroy().
@@ -331,6 +346,55 @@ public class Browser {
     }
 
     /**
+     * Registers {@link callback} to be notified when the offset of the top or bottom view changes.
+     *
+     * @param callback The BrowserControlsOffsetCallback to notify
+     *
+     * @since 88
+     */
+    public void registerBrowserControlsOffsetCallback(
+            @NonNull BrowserControlsOffsetCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
+        if (WebLayer.getSupportedMajorVersionInternal() < 88) {
+            throw new UnsupportedOperationException();
+        }
+        if (mBrowserControlsOffsetCallbacks.isEmpty()) {
+            try {
+                mImpl.setBrowserControlsOffsetsEnabled(true);
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
+        }
+        mBrowserControlsOffsetCallbacks.addObserver(callback);
+    }
+
+    /**
+     * Removes a BrowserControlsOffsetCallback that was added using {@link
+     * registerBrowserControlsOffsetCallback}.
+     *
+     * @param callback The BrowserControlsOffsetCallback to remove.
+     *
+     * @since 88
+     */
+    public void unregisterBrowserControlsOffsetCallback(
+            @NonNull BrowserControlsOffsetCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
+        if (WebLayer.getSupportedMajorVersionInternal() < 88) {
+            throw new UnsupportedOperationException();
+        }
+        mBrowserControlsOffsetCallbacks.removeObserver(callback);
+        if (mBrowserControlsOffsetCallbacks.isEmpty()) {
+            try {
+                mImpl.setBrowserControlsOffsetsEnabled(false);
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
+        }
+    }
+
+    /**
      * Creates a new tab attached to this browser. This will call {@link TabListCallback#onTabAdded}
      * with the new tab.
      *
@@ -451,6 +515,17 @@ public class Browser {
         public IRemoteFragment createMediaRouteDialogFragment() {
             StrictModeWorkaround.apply();
             return MediaRouteDialogFragment.create(mFragment);
+        }
+
+        @Override
+        public void onBrowserControlsOffsetsChanged(boolean isTop, int offset) {
+            for (BrowserControlsOffsetCallback callback : mBrowserControlsOffsetCallbacks) {
+                if (isTop) {
+                    callback.onTopViewOffsetChanged(offset);
+                } else {
+                    callback.onBottomViewOffsetChanged(offset);
+                }
+            }
         }
 
         @Override

@@ -432,6 +432,9 @@ public class ChromeBrowserInitializer {
         ChromeCachedFlags.getInstance().cacheServiceManagerOnlyFlags();
 
         ModuleUtil.recordStartupTime();
+
+        ChromeStartupDelegate startupDelegate = AppHooks.get().createChromeStartupDelegate();
+        startupDelegate.init();
     }
 
     private ActivityStateListener createActivityStateListener() {

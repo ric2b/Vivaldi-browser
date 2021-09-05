@@ -27,6 +27,7 @@
 #include "components/policy/core/common/remote_commands/remote_command_job.h"
 #include "components/policy/policy_export.h"
 #include "components/policy/proto/device_management_backend.pb.h"
+#include "components/policy/proto/record.pb.h"
 
 namespace network {
 class SharedURLLoaderFactory;
@@ -305,9 +306,15 @@ class POLICY_EXPORT CloudPolicyClient {
   // Uploads a report containing enterprise connectors real-time security
   // events. As above, the client must be in a registered state.  The |callback|
   // will be called when the operation completes.
-  // TODO(crbug.com/1098437): Pick a more specific name.
-  virtual void UploadRealtimeReport(base::Value report,
-                                    StatusCallback callback);
+  virtual void UploadSecurityEventReport(base::Value report,
+                                         StatusCallback callback);
+
+  // Uploads a report containing an EncryptedRecord. The client must be in a
+  // registered state. The |callback| will be called when the operation
+  // completes.
+  virtual void UploadEncryptedReport(const ::reporting::EncryptedRecord& record,
+                                     base::Optional<base::Value> context,
+                                     StatusCallback callback);
 
   // Uploads a report on the status of app push-installs. The client must be in
   // a registered state. The |callback| will be called when the operation
@@ -633,6 +640,13 @@ class POLICY_EXPORT CloudPolicyClient {
                                        DeviceManagementStatus status,
                                        int net_error,
                                        const base::Value& response);
+
+  // Callback for encrypted report upload requests.
+  void OnEncryptedReportUploadCompleted(StatusCallback callback,
+                                        DeviceManagementService::Job* job,
+                                        DeviceManagementStatus status,
+                                        int net_error,
+                                        const base::Value& response);
 
   // Callback for remote command fetch requests.
   void OnRemoteCommandsFetched(

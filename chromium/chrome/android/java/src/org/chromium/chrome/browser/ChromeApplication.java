@@ -18,12 +18,14 @@ import org.chromium.base.BuildConfig;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLineInitUtil;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.LocaleUtils;
 import org.chromium.base.PathUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.annotations.MainDex;
-import org.chromium.base.annotations.UsedByReflection;
+import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.memory.MemoryPressureMonitor;
 import org.chromium.chrome.browser.background_task_scheduler.ChromeBackgroundTaskFactory;
+import org.chromium.chrome.browser.base.MainDexApplicationImpl;
 import org.chromium.chrome.browser.base.SplitCompatApplication;
 import org.chromium.chrome.browser.crash.ApplicationStatusTracker;
 import org.chromium.chrome.browser.crash.FirebaseConfig;
@@ -65,16 +67,14 @@ public class ChromeApplication extends SplitCompatApplication {
     private static volatile ChromeAppComponent sComponent;
 
     /** Chrome application logic. */
-    @UsedByReflection("SplitChromeApplication.java")
-    public static class ChromeApplicationImpl extends Impl {
-        @UsedByReflection("SplitChromeApplication.java")
+    public static class ChromeApplicationImpl extends MainDexApplicationImpl {
         public ChromeApplicationImpl() {}
 
         // Called by the framework for ALL processes. Runs before ContentProviders are created.
         // Quirk: context.getApplicationContext() returns null during this method.
         @Override
         public void attachBaseContext(Context context) {
-            boolean isBrowserProcess = isBrowserProcess();
+            boolean isBrowserProcess = SplitCompatApplication.isBrowserProcess();
 
             if (isBrowserProcess) {
                 UmaUtils.recordMainEntryPointTime();
@@ -83,8 +83,10 @@ public class ChromeApplication extends SplitCompatApplication {
                 // context to use as the base context for the application.
                 // Must be initialized early to override Application level localizations.
                 if (GlobalAppLocaleController.getInstance().init(context)) {
-                    context = context.createConfigurationContext(
-                            GlobalAppLocaleController.getInstance().getOverrideConfig(context));
+                    Configuration config =
+                            GlobalAppLocaleController.getInstance().getOverrideConfig(context);
+                    LocaleUtils.setDefaultLocalesFromConfiguration(config);
+                    context = context.createConfigurationContext(config);
                 }
             }
 
@@ -130,6 +132,8 @@ public class ChromeApplication extends SplitCompatApplication {
                 // Set Chrome factory for mapping BackgroundTask classes to TaskIds.
                 ChromeBackgroundTaskFactory.setAsDefault();
 
+                AppHooks.get().getChimeDelegate().initialize();
+
                 if (VersionConstants.CHANNEL == Channel.CANARY) {
                     GURL.setReportDebugThrowableCallback(
                             PureJavaExceptionReporter::reportJavaException);
@@ -146,6 +150,17 @@ public class ChromeApplication extends SplitCompatApplication {
 
             if (isBrowserProcess) {
                 TraceEvent.end("ChromeApplication.attachBaseContext");
+            }
+        }
+
+        @Override
+        public void onCreate() {
+            super.onCreate();
+
+            if (SplitCompatApplication.isBrowserProcess()
+                    && CachedFeatureFlags.isEnabled(ChromeFeatureList.EARLY_LIBRARY_LOAD)) {
+                // Kick off library loading in a separate thread so it's ready when we need it.
+                new Thread(() -> LibraryLoader.getInstance().ensureMainDexInitialized()).start();
             }
         }
 
@@ -208,7 +223,7 @@ public class ChromeApplication extends SplitCompatApplication {
         public void onConfigurationChanged(Configuration newConfig) {
             super.onConfigurationChanged(newConfig);
             // TODO(huayinz): Add observer pattern for application configuration changes.
-            if (isBrowserProcess()) {
+            if (SplitCompatApplication.isBrowserProcess()) {
                 SystemNightModeMonitor.getInstance().onApplicationConfigurationChanged();
             }
         }

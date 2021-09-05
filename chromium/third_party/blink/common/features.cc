@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/forcedark/forcedark_switches.h"
 
@@ -83,10 +84,6 @@ const base::Feature kLayoutNG{"LayoutNG", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kLayoutNGFieldset{"LayoutNGFieldset",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable LayoutNGRuby by default. This feature is for a kill switch.
-const base::Feature kLayoutNGRuby{"LayoutNGRuby",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kFragmentItem{"FragmentItem",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -117,8 +114,9 @@ const base::Feature kPlzDedicatedWorker{"PlzDedicatedWorker",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable Portals. https://crbug.com/865123.
-// For the current origin trial (https://crbug.com/1040212), this is enabled on
-// Android only.
+// Note that default enabling this does not expose the portal
+// element on its own, but does allow its use with an origin trial. This was the
+// case for the M85 Android only origin trial (https://crbug.com/1040212).
 const base::Feature kPortals {
   "Portals",
 #if defined(OS_ANDROID)
@@ -134,6 +132,10 @@ const base::Feature kPortals {
 // https://crbug.com/1013389
 const base::Feature kPortalsCrossOrigin{"PortalsCrossOrigin",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enable the prerender V2. https://crbug.com/1126305.
+const base::Feature kPrerender2{"Prerender2",
+                                base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable limiting previews loading hints to specific resource types.
 const base::Feature kPreviewsResourceLoadingHintsSpecificResourceTypes{
@@ -166,18 +168,19 @@ const base::Feature kImplicitRootScroller {
 #endif
 };
 
-// Enable CSSOM View Scroll Coordinates. https://crbug.com/721759.
-const base::Feature kCSSOMViewScrollCoordinates{
-    "CSSOMViewScrollCoordinates", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables toggling overwrite mode when insert key is pressed.
+// https://crbug.com/1030231.
+const base::Feature kInsertKeyToggleMode = {"InsertKeyToggleMode",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables Raw Clipboard. https://crbug.com/897289.
 const base::Feature kRawClipboard{"RawClipboard",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables usage of getDisplayMedia() that allows capture of web content, see
-// https://crbug.com/865060.
-const base::Feature kRTCGetDisplayMedia{"RTCGetDisplayMedia",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables usage of getCurrentBrowsingContextMedia() that allows capturing of
+// web content from the tab from which it is called. (crbug.com/1136940)
+const base::Feature kRTCGetCurrentBrowsingContextMedia{
+    "RTCGetCurrentBrowsingContextMedia", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Changes the default RTCPeerConnection constructor behavior to use Unified
 // Plan as the SDP semantics. When the feature is enabled, Unified Plan is used
@@ -192,6 +195,14 @@ const base::Feature kRTCUnifiedPlanByDefault{"RTCUnifiedPlanByDefault",
 // constructor.
 const base::Feature kRTCOfferExtmapAllowMixed{
     "RTCOfferExtmapAllowMixed", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables waiting for codec support status notification from GPU factory in RTC
+// codec factories.
+const base::Feature kRTCGpuCodecSupportWaiter{"kRTCGpuCodecSupportWaiter",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::FeatureParam<int> kRTCGpuCodecSupportWaiterTimeoutParam{
+    &kRTCGpuCodecSupportWaiter, "timeout_ms", 3000};
 
 // Prevents workers from sending IsolateInBackgroundNotification to V8
 // and thus instructs V8 to favor performance over memory on workers.
@@ -232,14 +243,6 @@ const base::Feature kIntensiveWakeUpThrottling{
 // When enabled, timers with timeout=0 are not throttled.
 const base::Feature kOptOutZeroTimeoutTimersFromThrottling{
     "OptOutZeroTimeoutTimersFromThrottling", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// When enabled, no throttling is applied to a page when it uses WebRTC.
-//
-// This allows a page to use a timer to do video processing on frames. An
-// event-driven mechanism should be provided to do video processing. When it is
-// available, this feature should be removed. https://crbug.com/1101806
-const base::Feature kOptOutWebRTCFromAllThrottling{
-    "OptOutWebRTCFromAllThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Name of the parameter that controls the grace period during which there is no
 // intensive wake up throttling after a page is hidden. Defined here to allow
@@ -296,14 +299,13 @@ const base::Feature kFileHandlingAPI{"FileHandlingAPI",
 const base::Feature kAllowSyncXHRInPageDismissal{
     "AllowSyncXHRInPageDismissal", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Font enumeration and table access. https://crbug.com/535764 and
-// https://crbug.com/982054.
+// Font enumeration and data access. https://crbug.com/535764
 const base::Feature kFontAccess{"FontAccess",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Allows Web Components v0 to be re-enabled.
-const base::Feature kWebComponentsV0{"WebComponentsV0",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+// Font access using a chooser interface. https://crbug.com/1138621
+const base::Feature kFontAccessChooser{"FontAccessChooser",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Prefetch request properties are updated to be privacy-preserving. See
 // crbug.com/988956.
@@ -343,6 +345,12 @@ const base::Feature kBlockingFocusWithoutUserActivation{
 
 const base::Feature kAudioWorkletRealtimeThread{
     "AudioWorkletRealtimeThread", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// A server-side switch for the REALTIME_AUDIO thread priority of
+// RealtimeAudioWorkletThread object. When disabled, it will use the NORMAL
+// priority thread.
+const base::Feature kAudioWorkletThreadRealtimePriority{
+    "AudioWorkletThreadRealtimePriority", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // A feature to reduce the set of resources fetched by No-State Prefetch.
 const base::Feature kLightweightNoStatePrefetch {
@@ -407,7 +415,7 @@ const base::FeatureParam<int> kForceDarkBackgroundLightnessThresholdParam{
 const base::Feature kWebRtcUseMinMaxVEADimensions {
   "WebRtcUseMinMaxVEADimensions",
   // TODO(crbug.com/1008491): enable other platforms.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -442,7 +450,7 @@ const base::Feature kVerifyHTMLFetchedFromAppCacheBeforeDelay{
 // compositor & IO threads.
 const base::Feature kBlinkCompositorUseDisplayThreadPriority {
   "BlinkCompositorUseDisplayThreadPriority",
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_WIN)
+#if defined(OS_ANDROID) || BUILDFLAG(IS_ASH) || defined(OS_WIN)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -507,7 +515,7 @@ const base::Feature kDispatchBeforeUnloadOnFreeze{
 // us to overlay these resources.
 const base::Feature kLowLatencyCanvas2dImageChromium {
   "LowLatencyCanvas2dImageChromium",
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -526,6 +534,10 @@ const base::Feature kLowLatencyWebGLSwapChain{"LowLatencyWebGLSwapChain",
 const base::Feature kDawn2dCanvas{"Dawn2dCanvas",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables small accelerated canvases for webview (crbug.com/1004304)
+const base::Feature kWebviewAccelerateSmallCanvases{
+    "WebviewAccelerateSmallCanvases", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kCSSReducedFontLoadingLayoutInvalidations{
     "CSSReducedFontLoadingLayoutInvalidations",
     base::FEATURE_ENABLED_BY_DEFAULT};
@@ -534,12 +546,6 @@ const base::Feature kCSSReducedFontLoadingLayoutInvalidations{
 // and modules. Needed for the experiment in http://crbug.com/1045052.
 const base::Feature kDiscardCodeCacheAfterFirstUse{
     "DiscardCodeCacheAfterFirstUse", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// The kill-switch for the fix for https://crbug.com/1051439.
-// TODO(crbug.com/1053369): Remove this around M84.
-const base::Feature kSuppressContentTypeForBeaconMadeWithArrayBufferView{
-    "SuppressContentTypeForBeaconMadeWithArrayBufferView",
-    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kBlockHTMLParserOnStyleSheets{
     "BlockHTMLParserOnStyleSheets", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -560,7 +566,7 @@ const base::FeatureParam<int> kFontPreloadingDelaysRenderingParam{
     &kFontPreloadingDelaysRendering, "delay-in-ms", 50};
 
 const base::Feature kFlexAspectRatio{"FlexAspectRatio",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kKeepScriptResourceAlive{"KeepScriptResourceAlive",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -660,6 +666,12 @@ const base::Feature kThrottleInstallingServiceWorker{
 const base::FeatureParam<int> kInstallingServiceWorkerOutstandingThrottledLimit{
     &kThrottleInstallingServiceWorker, "limit", 3};
 
+// Enables storing and loading security policies (for now, referrer policy) in
+// the policy container. The policy container for the current document is
+// attached to the RenderFrameHost and mirrored to the LocalFrame in Blink.
+const base::Feature kPolicyContainer{"PolicyContainer",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kInputPredictorTypeChoice{
     "InputPredictorTypeChoice", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -672,13 +684,14 @@ const base::Feature kResamplingScrollEvents{"ResamplingScrollEvents",
 // Enables the device-memory, resource-width, viewport-width and DPR client
 // hints to be sent to third-party origins if the first-party has opted in to
 // receiving client hints, regardless of Feature Policy.
+const base::Feature kAllowClientHintsToThirdParty{
+  "AllowClientHintsToThirdParty",
 #if defined(OS_ANDROID)
-const base::Feature kAllowClientHintsToThirdParty{
-    "AllowClientHintsToThirdParty", base::FEATURE_ENABLED_BY_DEFAULT};
+      base::FEATURE_ENABLED_BY_DEFAULT
 #else
-const base::Feature kAllowClientHintsToThirdParty{
-    "AllowClientHintsToThirdParty", base::FEATURE_DISABLED_BY_DEFAULT};
+      base::FEATURE_DISABLED_BY_DEFAULT
 #endif
+};
 
 const base::Feature kFilteringScrollPrediction{
     "FilteringScrollPrediction", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -702,7 +715,7 @@ const char kSkipTouchEventFilterFilteringProcessParamValueBrowserAndRenderer[] =
 
 // Improves support for WebXR on computers with multiple GPUs.
 const base::Feature kWebXrMultiGpu{"WebXRMultiGpu",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables dependency support in blink::MatchedPropertiesCache, which allows
 // caching of previously uncachable objects.
@@ -737,15 +750,27 @@ const base::Feature kCompositingOptimizations{
 const base::Feature kReducedReferrerGranularity{
     "ReducedReferrerGranularity", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables the constant streaming in the ContentCapture task.
+const base::Feature kContentCaptureConstantStreaming = {
+    "ContentCaptureConstantStreaming", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the user activated exponential delay in the ContentCapture task.
 const base::Feature kContentCaptureUserActivatedDelay = {
-    "ContentCaptureUserActivatedDelay", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ContentCaptureUserActivatedDelay", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Dispatches a fake fetch event to a service worker to check the offline
 // capability of the site before promoting installation.
 // See https://crbug.com/965802 for more details.
 const base::Feature kCheckOfflineCapability{"CheckOfflineCapability",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+const base::FeatureParam<CheckOfflineCapabilityMode>::Option
+    check_offline_capability_types[] = {
+        {CheckOfflineCapabilityMode::kWarnOnly, "warn_only"},
+        {CheckOfflineCapabilityMode::kEnforce, "enforce"}};
+const base::FeatureParam<CheckOfflineCapabilityMode>
+    kCheckOfflineCapabilityParam{&kCheckOfflineCapability, "check_mode",
+                                 CheckOfflineCapabilityMode::kWarnOnly,
+                                 &check_offline_capability_types};
 
 // The "BackForwardCacheABExperimentControl" feature indicates the state of the
 // same-site BackForwardCache experiment. This information is used when sending
@@ -765,5 +790,44 @@ const base::Feature kPreferCompositingToLCDText = {
 const base::Feature kLogUnexpectedIPCPostedToBackForwardCachedDocuments{
     "LogUnexpectedIPCPostedToBackForwardCachedDocuments",
     base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls URL handling feature in web apps. Controls parsing of "url_handlers"
+// field in web app manifests. See explainer for more information:
+// https://github.com/WICG/pwa-url-handler/blob/master/explainer.md
+const base::Feature kWebAppEnableUrlHandlers{"WebAppEnableUrlHandlers",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables Protocol handling feature in web apps. Controls parsing of
+// "protocol_handlers" field in web app manifests. See explainer for more
+// information:
+// https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/main/URLProtocolHandler/explainer.md
+const base::Feature kWebAppEnableProtocolHandlers{
+    "WebAppEnableProtocolHandlers", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled NV12 frames on a GPU will be forwarded to libvpx encoders
+// without conversion to I420.
+const base::Feature kWebRtcLibvpxEncodeNV12 {
+  "WebRtcLibvpxEncodeNV12",
+#if defined(OS_CHROMEOS)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
+
+// Makes network loading tasks unfreezable so that they can be processed while
+// the page is frozen.
+const base::Feature kLoadingTasksUnfreezable{"LoadingTasksUnfreezable",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Kill switch for the new behavior whereby anchors with target=_blank get
+// noopener behavior by default. TODO(crbug.com/898942): Remove in Chrome 95.
+const base::Feature kTargetBlankImpliesNoOpener{
+    "TargetBlankImpliesNoOpener", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls how max frame rates are enforced in MediaStreamTracks.
+// TODO(crbug.com/1152307): Remove in M91.
+const base::Feature kMediaStreamTrackUseConfigMaxFrameRate{
+    "MediaStreamTrackUseConfigMaxFrameRate", base::FEATURE_DISABLED_BY_DEFAULT};
 }  // namespace features
 }  // namespace blink

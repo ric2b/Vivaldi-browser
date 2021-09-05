@@ -8,11 +8,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <ostream>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
+#include "ui/accessibility/ax_common.h"
 #include "ui/accessibility/ax_export.h"
 #include "ui/accessibility/ax_tree_source.h"
 #include "ui/accessibility/ax_tree_update.h"
@@ -177,9 +181,6 @@ class AXTreeSerializer {
   bool SerializeChangedNodes(
       AXSourceNode node,
       AXTreeUpdateBase<AXNodeData, AXTreeData>* out_update);
-
-  // Visit all of the descendants of |node| once.
-  void WalkAllDescendants(AXSourceNode node);
 
   // Delete the entire client subtree but don't set the did_reset_ flag
   // like when Reset() is called.
@@ -365,9 +366,9 @@ bool AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::
         // This child is already in the client tree and valid, we won't
         // recursively serialize it so we don't need to check this
         // subtree recursively for reparenting.
-        // However, if the child is ignored, the children may now be
+        // However, if the child is or was ignored, the children may now be
         // considered as reparented, so continue recursion in that case.
-        if (!client_child->ignored)
+        if (!client_child->ignored && !tree_->IsIgnored(child))
           continue;
       }
     }
@@ -395,11 +396,22 @@ ClientTreeNode*
 AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::GetClientTreeNodeParent(
     ClientTreeNode* obj) {
   ClientTreeNode* parent = obj->parent;
-#if DCHECK_IS_ON()
   if (!parent)
     return nullptr;
-  DCHECK(ClientTreeNodeById(parent->id)) << "Parent not in id map.";
-#endif  // DCHECK_IS_ON()
+  if (!ClientTreeNodeById(parent->id)) {
+    std::ostringstream error;
+    error << "Child: " << tree_->GetDebugString(tree_->GetFromId(obj->id))
+          << "\nParent: "
+          << tree_->GetDebugString(tree_->GetFromId(parent->id));
+    static auto* missing_parent_err = base::debug::AllocateCrashKeyString(
+        "ax_ts_missing_parent_err", base::debug::CrashKeySize::Size256);
+    base::debug::SetCrashKeyString(missing_parent_err,
+                                   error.str().substr(0, 230));
+#if defined(AX_FAIL_FAST_BUILD)
+    CHECK(false) << error.str();
+#endif  // defined(AX_FAIL_FAST_BUILD)
+    base::debug::DumpWithoutCrashing();
+  }
   return parent;
 }
 
@@ -458,12 +470,6 @@ bool AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::SerializeChanges(
   // Serialize from the LCA, or from the root if there isn't one.
   if (!tree_->IsValid(lca))
     lca = tree_->GetRoot();
-
-  // Work around flaky source trees where nodes don't figure out their
-  // correct parent/child relationships until you walk the whole tree once.
-  // Covered by this test in the content_browsertests suite:
-  //     DumpAccessibilityTreeTest.AccessibilityAriaOwns.
-  WalkAllDescendants(lca);
 
   if (!SerializeChangedNodes(lca, out_update))
     return false;
@@ -588,12 +594,23 @@ bool AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::
 
     ClientTreeNode* client_child = ClientTreeNodeById(new_child_id);
     if (client_child && GetClientTreeNodeParent(client_child) != client_node) {
-      DVLOG(1) << "Illegal reparenting detected";
-#if defined(ADDRESS_SANITIZER)
-      // Wrapping this in ADDRESS_SANITIZER will cause it to run on
-      // clusterfuzz, which should help us narrow down the issue.
-      NOTREACHED() << "Illegal reparenting detected";
-#endif
+#if defined(AX_FAIL_FAST_BUILD)
+      // This condition leads to performance problems. It will
+      // also reset virtual buffers, causing users to lose their place.
+      std::ostringstream error;
+      error << "Passed-in parent: "
+            << tree_->GetDebugString(tree_->GetFromId(client_node->id))
+            << "\nChild: " << tree_->GetDebugString(child)
+            << "\nChild's parent: "
+            << tree_->GetDebugString(
+                   tree_->GetFromId(client_child->parent->id));
+      static auto* reparent_err = base::debug::AllocateCrashKeyString(
+          "ax_ts_reparent_err", base::debug::CrashKeySize::Size256);
+      base::debug::SetCrashKeyString(reparent_err, error.str().substr(0, 230));
+      CHECK(false) << error.str();
+#endif  // defined(AX_FAIL_FAST_BUILD)
+      // TODO: re-add this, including crash keys above.
+      // base::debug::DumpWithoutCrashing();
       Reset();
       return false;
     }
@@ -672,6 +689,28 @@ bool AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::
       new_child->ignored = tree_->IsIgnored(child);
       new_child->invalid = false;
       client_node->children.push_back(new_child);
+      if (ClientTreeNodeById(child_id)) {
+        // TODO(accessibility) Remove all cases where this occurs and re-add
+        // This condition leads to performance problems. It will
+        // also reset virtual buffers, causing users to lose their place.
+        std::ostringstream error;
+        error << "Child id " << child_id << " already in map."
+              << "\nChild: "
+              << tree_->GetDebugString(tree_->GetFromId(child_id))
+              << "\nWanted for parent " << tree_->GetDebugString(node)
+              << "\nAlready had parent "
+              << tree_->GetDebugString(tree_->GetFromId(
+                     ClientTreeNodeById(child_id)->parent->id));
+        static auto* dupe_id_err = base::debug::AllocateCrashKeyString(
+            "ax_ts_dupe_id_err", base::debug::CrashKeySize::Size256);
+        base::debug::SetCrashKeyString(dupe_id_err, error.str().substr(0, 230));
+#if defined(AX_FAIL_FAST_BUILD)
+        CHECK(false) << error.str();
+#endif  // defined(AX_FAIL_FAST_BUILD)
+        base::debug::DumpWithoutCrashing();
+        Reset();
+        return false;
+      }
       client_id_map_[child_id] = new_child;
       if (!SerializeChangedNodes(child, out_update))
         return false;
@@ -684,15 +723,6 @@ bool AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::
       actual_serialized_node_child_ids);
 
   return true;
-}
-
-template <typename AXSourceNode, typename AXNodeData, typename AXTreeData>
-void AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::WalkAllDescendants(
-    AXSourceNode node) {
-  std::vector<AXSourceNode> children;
-  tree_->GetChildren(node, &children);
-  for (size_t i = 0; i < children.size(); ++i)
-    WalkAllDescendants(children[i]);
 }
 
 }  // namespace ui

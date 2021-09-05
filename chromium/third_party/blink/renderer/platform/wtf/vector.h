@@ -265,7 +265,8 @@ struct VectorMover<true, T, Allocator> {
 
   static void SwapImpl(T* src, T* src_end, T* dst) {
     if (Allocator::kIsGarbageCollected) {
-      alignas(std::max(alignof(T), sizeof(size_t))) char buf[sizeof(T)];
+      constexpr size_t boundary = std::max(alignof(T), sizeof(size_t));
+      alignas(boundary) char buf[sizeof(T)];
       for (; src < src_end; ++src, ++dst) {
         memcpy(buf, dst, sizeof(T));
         AtomicWriteMemcpy<sizeof(T)>(dst, src);
@@ -1155,6 +1156,7 @@ class Vector
   // without a reallocation. It can be zero.
   wtf_size_t size() const { return size_; }
   wtf_size_t capacity() const { return Base::capacity(); }
+  size_t CapacityInBytes() const { return Base::AllocationSize(capacity()); }
   bool IsEmpty() const { return !size(); }
 
   // at() and operator[]: Obtain the reference of the element that is located
@@ -2135,6 +2137,16 @@ void TraceInlinedBuffer(VisitorDispatcher visitor,
     Allocator::template Trace<T, VectorTraits<T>>(visitor, *buffer_entry);
   }
 }
+
+template <typename Allocator,
+          typename VisitorDispatcher,
+          typename T,
+          wtf_size_t inlineCapacity>
+void DeferredTraceImpl(VisitorDispatcher visitor, const void* object) {
+  internal::TraceInlinedBuffer<Allocator>(
+      visitor, reinterpret_cast<const T*>(object), inlineCapacity);
+}
+
 }  // namespace internal
 
 // Only defined for HeapAllocator. Used when visiting vector object.
@@ -2167,12 +2179,8 @@ Vector<T, inlineCapacity, Allocator>::Trace(VisitorDispatcher visitor) const {
     // Bail out for concurrent marking.
     if (!VectorTraits<T>::kCanTraceConcurrently) {
       if (visitor->DeferredTraceIfConcurrent(
-              {buffer,
-               [](blink::Visitor* visitor, const void* object) {
-                 const T* buffer = reinterpret_cast<const T*>(object);
-                 internal::TraceInlinedBuffer<Allocator>(visitor, buffer,
-                                                         inlineCapacity);
-               }},
+              {buffer, internal::DeferredTraceImpl<Allocator, VisitorDispatcher,
+                                                   T, inlineCapacity>},
               inlineCapacity * sizeof(T)))
         return;
     }

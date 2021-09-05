@@ -29,12 +29,14 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CloseableOnMainThread;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.download.DownloadTestRule;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -51,8 +53,6 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.contextmenu.RevampedContextMenuUtils;
 import org.chromium.components.policy.test.annotations.Policies;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
@@ -422,19 +422,16 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
         RevampedContextMenuCoordinator menuCoordinator =
                 RevampedContextMenuUtils.openContextMenu(tab, "testImage");
         // Needs to run on UI thread so creation happens on same thread as dismissal.
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> menuCoordinator.simulateShoppyImageClassificationForTesting());
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            menuCoordinator.simulateShoppyImageClassificationForTesting();
+            Assert.assertTrue("Chip popoup not showing.",
+                    menuCoordinator.getCurrentPopupWindowForTesting().isShowing());
+            menuCoordinator.clickChipForTesting();
+        });
 
-        Assert.assertTrue("Chip popoup not showing.",
-                menuCoordinator.getCurrentPopupWindowForTesting().isShowing());
-
-        RevampedContextMenuUtils.selectAlreadyOpenedContextMenuChipWithExpectedIntent(
-                InstrumentationRegistry.getInstrumentation(), mDownloadTestRule.getActivity(),
-                menuCoordinator, "testImage", R.id.contextmenu_shop_image_with_google_lens,
-                "com.google.android.googlequicksearchbox");
         Assert.assertEquals("Selection histogram pings not equal to one", 1,
-                RecordHistogram.getHistogramTotalCountForTesting(
-                        "ContextMenu.SelectedOptionAndroid.Image"));
+                RecordHistogram.getHistogramValueCountForTesting("ContextMenu.LensChip.Event",
+                        RevampedContextMenuChipController.ChipEvent.CLICKED));
         Assert.assertFalse("Chip popoup still showing.",
                 menuCoordinator.getCurrentPopupWindowForTesting().isShowing());
     }
@@ -559,7 +556,7 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
                 "Number of open tabs does not match", numOpenedTabs, tabModel.getCount());
 
         // Wait for any new tab animation to finish if we're being driven by the compositor.
-        final LayoutManager layoutDriver =
+        final LayoutManagerImpl layoutDriver =
                 mDownloadTestRule.getActivity().getCompositorViewHolder().getLayoutManager();
         CriteriaHelper.pollUiThread(() -> {
             return layoutDriver.getActiveLayout().shouldDisplayContentOverlay();
@@ -1098,7 +1095,8 @@ public class RevampedContextMenuTest implements DownloadTestRule.CustomMainActiv
         String mockImageData = "randomdata";
         byte[] mockImageByteArray = mockImageData.getBytes();
         // See function javadoc for more context.
-        ChromeContextMenuPopulator.setHardcodedImageBytesForTesting(mockImageByteArray, extension);
+        ContextMenuNativeDelegateImpl.setHardcodedImageBytesForTesting(
+                mockImageByteArray, extension);
     }
 
     private void assertStringContains(String subString, String superString) {

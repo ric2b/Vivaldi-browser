@@ -100,7 +100,7 @@ class CORE_EXPORT NGPhysicalFragment
   }
   bool IsFragmentainerBox() const { return IsColumnBox(); }
   bool IsColumnSpanAll() const {
-    if (const LayoutBox* box = ToLayoutBoxOrNull(GetLayoutObject()))
+    if (const auto* box = DynamicTo<LayoutBox>(GetLayoutObject()))
       return box->IsColumnSpanAll();
     return false;
   }
@@ -128,6 +128,8 @@ class CORE_EXPORT NGPhysicalFragment
     return IsBox() && BoxType() == NGBoxType::kRenderedLegend;
   }
   bool IsMathMLFraction() const { return IsBox() && is_math_fraction_; }
+
+  bool IsMathMLOperator() const { return IsBox() && is_math_operator_; }
 
   // Return true if this fragment corresponds directly to an entry in the CSS
   // box tree [1]. Note that anonymous blocks also exist in the CSS box
@@ -158,7 +160,24 @@ class CORE_EXPORT NGPhysicalFragment
            layout_object_->IsRubyBase();
   }
 
-  bool IsTable() const { return layout_object_->IsTable(); }
+  bool IsTableNGPart() const { return is_table_ng_part_; }
+
+  bool IsTable() const { return IsBox() && layout_object_->IsTable(); }
+
+  bool IsTableNGRow() const {
+    return IsTableNGPart() && layout_object_->IsTableRow();
+  }
+
+  bool IsTableNGSection() const {
+    return IsTableNGPart() && layout_object_->IsTableSection();
+  }
+
+  bool IsTableNGCell() const {
+    return IsTableNGPart() && layout_object_->IsTableCell() &&
+           !layout_object_->IsTableCellLegacy();
+  }
+
+  bool IsTextControlPlaceholder() const;
 
   // Return true if this fragment is a container established by a fieldset
   // element. Such a fragment contains an optional rendered legend fragment and
@@ -171,6 +190,9 @@ class CORE_EXPORT NGPhysicalFragment
 
   // Returns whether the fragment should be atomically painted.
   bool IsPaintedAtomically() const { return is_painted_atomically_; }
+
+  // Returns whether the fragment is a table part with collapsed borders.
+  bool HasCollapsedBorders() const { return has_collapsed_borders_; }
 
   bool IsFormattingContextRoot() const {
     return (IsBox() && BoxType() >= NGBoxType::kMinimumFormattingContextRoot) ||
@@ -225,8 +247,12 @@ class CORE_EXPORT NGPhysicalFragment
   // from GetNode() when this fragment is content of a pseudo node.
   Node* NodeForHitTest() const { return layout_object_->NodeForHitTest(); }
 
+  Node* NonPseudoNode() const {
+    return IsCSSBox() ? layout_object_->NonPseudoNode() : nullptr;
+  }
+
   bool IsInSelfHitTestingPhase(HitTestAction action) const {
-    if (const auto* box = ToLayoutBoxOrNull(GetLayoutObject()))
+    if (const auto* box = DynamicTo<LayoutBox>(GetLayoutObject()))
       return box->IsInSelfHitTestingPhase(action);
     if (IsInlineBox())
       return action == kHitTestForeground;
@@ -264,8 +290,26 @@ class CORE_EXPORT NGPhysicalFragment
     return IsCSSBox() && layout_object_->IsScrollContainer();
   }
 
+  // Return true if the given object is the effective root scroller in its
+  // Document. See |effective root scroller| in page/scrolling/README.md.
+  // Note: a root scroller always establishes a PaintLayer.
+  // This bit is updated in
+  // RootScrollerController::RecomputeEffectiveRootScroller in the LayoutClean
+  // document lifecycle phase.
+  bool IsEffectiveRootScroller() const {
+    return IsCSSBox() && layout_object_->IsEffectiveRootScroller();
+  }
+
+  bool ShouldApplyLayoutContainment() const {
+    return IsCSSBox() && layout_object_->ShouldApplyLayoutContainment();
+  }
+
   bool ShouldClipOverflowAlongEitherAxis() const {
     return IsCSSBox() && layout_object_->ShouldClipOverflowAlongEitherAxis();
+  }
+
+  bool ShouldClipOverflowAlongBothAxis() const {
+    return IsCSSBox() && layout_object_->ShouldClipOverflowAlongBothAxis();
   }
 
   bool IsFragmentationContextRoot() const {
@@ -297,7 +341,7 @@ class CORE_EXPORT NGPhysicalFragment
     const LayoutObject* layout_object = GetLayoutObject();
     if (!layout_object || !IsBox() || !layout_object->IsBox())
       return false;
-    return ToLayoutBox(layout_object)->GetNGPaginationBreakability() ==
+    return To<LayoutBox>(layout_object)->GetNGPaginationBreakability() ==
            LayoutBox::kForbidBreaks;
   }
 
@@ -339,11 +383,6 @@ class CORE_EXPORT NGPhysicalFragment
   // check if there were newer generations.
   const NGPhysicalFragment* PostLayout() const;
 
-  PhysicalRect InkOverflow() const {
-    // TODO(layout-dev): Implement box fragment overflow.
-    return LocalRect();
-  }
-
   // Specifies the type of scrollable overflow computation.
   enum TextHeightType {
     // Apply text fragment size as is.
@@ -369,6 +408,9 @@ class CORE_EXPORT NGPhysicalFragment
   // The allowed touch action is the union of the effective touch action
   // (from style) and blocking touch event handlers.
   TouchAction EffectiveAllowedTouchAction() const;
+
+  // Returns if this fragment is inside a non-passive wheel event handler.
+  bool InsideBlockingWheelEventHandler() const;
 
   // Returns the bidi level of a text or atomic inline fragment.
   UBiDiLevel BidiLevel() const;
@@ -469,6 +511,7 @@ class CORE_EXPORT NGPhysicalFragment
   const unsigned style_variant_ : 2;  // NGStyleVariant
   const unsigned is_hidden_for_paint_ : 1;
   unsigned is_math_fraction_ : 1;
+  unsigned is_math_operator_ : 1;
   // base (line box) or resolve (text) direction
   unsigned base_or_resolved_direction_ : 1;  // TextDirection
   unsigned may_have_descendant_above_block_start_ : 1;
@@ -476,8 +519,10 @@ class CORE_EXPORT NGPhysicalFragment
   // The following are only used by NGPhysicalBoxFragment but are initialized
   // for all types to allow methods using them to be inlined.
   unsigned is_fieldset_container_ : 1;
+  unsigned is_table_ng_part_ : 1;
   unsigned is_legacy_layout_root_ : 1;
   unsigned is_painted_atomically_ : 1;
+  unsigned has_collapsed_borders_ : 1;
   unsigned has_baseline_ : 1;
   unsigned has_last_baseline_ : 1;
 

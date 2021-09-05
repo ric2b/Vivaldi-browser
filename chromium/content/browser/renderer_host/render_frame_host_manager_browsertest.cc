@@ -10,7 +10,7 @@
 #include <set>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
@@ -22,7 +22,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -54,7 +54,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -94,6 +93,7 @@ const char kOpenUrlViaClickTargetFunc[] =
     "(function(url) {\n"
     "  var lnk = document.createElement(\"a\");\n"
     "  lnk.href = url;\n"
+    "  lnk.rel = 'opener';\n"
     "  lnk.target = \"_blank\";\n"
     "  document.body.appendChild(lnk);\n"
     "  lnk.click();\n"
@@ -105,6 +105,20 @@ void OpenUrlViaClickTarget(const ToRenderFrameHost& adapter, const GURL& url) {
                                          "(\"" + url.spec() + "\");"));
 }
 
+content::RenderFrameHostChangedCallback GetAsyncScriptExecutorCallback(
+    std::string callback_script) {
+  return base::BindOnce(
+      [](std::string callback_script, RenderFrameHost* old_host,
+         RenderFrameHost* new_host) {
+        ExecuteScriptAsync(old_host, callback_script);
+      },
+      callback_script);
+}
+
+// DO NOT USE THIS FUNCTION, use GetAsyncScriptExecutorCallback() instead.
+// GetScriptExecutorCallback must not be used, because it forces waiting for a
+// browser <-> renderer IPC roundtrip while being in the middle of a very
+// complex operation: swapping the current RenderFrameHost
 content::RenderFrameHostChangedCallback GetScriptExecutorCallback(
     std::string callback_script) {
   return base::BindOnce(
@@ -2260,7 +2274,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
 
   // Let's ensure that when we start with a blank window, navigating away to a
   // view-source URL, we create a new SiteInstance.
-  RenderViewHost* blank_rvh = shell()->web_contents()->GetRenderViewHost();
+  RenderViewHost* blank_rvh =
+      shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
   SiteInstance* blank_site_instance = blank_rvh->GetSiteInstance();
   EXPECT_EQ(shell()->web_contents()->GetLastCommittedURL(), GURL::EmptyGURL());
   EXPECT_EQ(blank_site_instance->GetSiteURL(), GURL::EmptyGURL());
@@ -2269,26 +2284,36 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // Now navigate to the view-source URL and ensure we got a different
   // SiteInstance and RenderViewHost.
   EXPECT_TRUE(NavigateToURL(shell(), view_source_url));
-  EXPECT_NE(blank_rvh, shell()->web_contents()->GetRenderViewHost());
-  EXPECT_NE(blank_site_instance,
-            shell()->web_contents()->GetRenderViewHost()->GetSiteInstance());
+  EXPECT_NE(blank_rvh,
+            shell()->web_contents()->GetMainFrame()->GetRenderViewHost());
+  EXPECT_NE(blank_site_instance, shell()
+                                     ->web_contents()
+                                     ->GetMainFrame()
+                                     ->GetRenderViewHost()
+                                     ->GetSiteInstance());
   rvh_observers.EnsureRVHGetsDestructed(
-      shell()->web_contents()->GetRenderViewHost());
+      shell()->web_contents()->GetMainFrame()->GetRenderViewHost());
 
   // Load a random page and then navigate to view-source: of it.
   // This used to cause two RVH instances for the same SiteInstance, which
   // was a problem.  This is no longer the case.
   EXPECT_TRUE(NavigateToURL(shell(), navigated_url));
-  SiteInstance* site_instance1 =
-      shell()->web_contents()->GetRenderViewHost()->GetSiteInstance();
+  SiteInstance* site_instance1 = shell()
+                                     ->web_contents()
+                                     ->GetMainFrame()
+                                     ->GetRenderViewHost()
+                                     ->GetSiteInstance();
   rvh_observers.EnsureRVHGetsDestructed(
-      shell()->web_contents()->GetRenderViewHost());
+      shell()->web_contents()->GetMainFrame()->GetRenderViewHost());
 
   EXPECT_TRUE(NavigateToURL(shell(), view_source_url));
   rvh_observers.EnsureRVHGetsDestructed(
-      shell()->web_contents()->GetRenderViewHost());
-  SiteInstance* site_instance2 =
-      shell()->web_contents()->GetRenderViewHost()->GetSiteInstance();
+      shell()->web_contents()->GetMainFrame()->GetRenderViewHost());
+  SiteInstance* site_instance2 = shell()
+                                     ->web_contents()
+                                     ->GetMainFrame()
+                                     ->GetRenderViewHost()
+                                     ->GetSiteInstance();
 
   // Ensure that view-source navigations force a new SiteInstance.
   EXPECT_NE(site_instance1, site_instance2);
@@ -2297,7 +2322,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("foo.com", "/title2.html")));
   rvh_observers.EnsureRVHGetsDestructed(
-      shell()->web_contents()->GetRenderViewHost());
+      shell()->web_contents()->GetMainFrame()->GetRenderViewHost());
 
   // This used to leak a render view host.
   shell()->Close();
@@ -3557,7 +3582,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // to point to valid cross-site URLs.
   GURL frame_url(
       embedded_test_server()->GetURL("a.com", "/click-noreferrer-links.html"));
-  NavigateFrameToURL(root->child_at(0), frame_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), frame_url));
   std::string script = "setOriginForLinks('http://b.com:" +
                        embedded_test_server()->base_url().port() + "/');";
   EXPECT_TRUE(ExecuteScript(root->child_at(0), script));
@@ -5846,7 +5871,7 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(c_site_instance->GetProcess(),
             RenderProcessHostImpl::GetSoleProcessHostForSite(
                 c_site_instance->GetIsolationContext(),
-                c_site_instance->GetSiteInfo(), c_site_instance->IsGuest()));
+                c_site_instance->GetSiteInfo()));
 
   // Make sure we will not use process-per-site for B.
   content_browser_client.SetShouldUseProcessPerSite(false);
@@ -5895,7 +5920,7 @@ IN_PROC_BROWSER_TEST_P(
   scoped_refptr<SiteInstanceImpl> placeholder_b_site_instance =
       SiteInstanceImpl::CreateForUrlInfo(
           web_contents->GetBrowserContext(), UrlInfo::CreateForTesting(b_url),
-          false /* is_coop_coep_cross_origin_isolated */);
+          CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   RenderProcessHost* process_for_b =
       RenderProcessHostImpl::CreateRenderProcessHost(
           web_contents->GetBrowserContext(), placeholder_b_site_instance.get());
@@ -5904,8 +5929,7 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(process_for_b,
             RenderProcessHostImpl::GetSoleProcessHostForSite(
                 placeholder_b_site_instance->GetIsolationContext(),
-                placeholder_b_site_instance->GetSiteInfo(),
-                placeholder_b_site_instance->IsGuest()));
+                placeholder_b_site_instance->GetSiteInfo()));
   // Make sure we will use process-per-site for B.
   content_browser_client.SetShouldUseProcessPerSite(true);
 
@@ -5926,7 +5950,7 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(b_site_instance->GetProcess(),
             RenderProcessHostImpl::GetSoleProcessHostForSite(
                 b_site_instance->GetIsolationContext(),
-                b_site_instance->GetSiteInfo(), b_site_instance->IsGuest()));
+                b_site_instance->GetSiteInfo()));
 
   SetBrowserClientForTesting(old_client);
 }
@@ -5936,6 +5960,8 @@ IN_PROC_BROWSER_TEST_P(
 IN_PROC_BROWSER_TEST_P(
     ProactivelySwapBrowsingInstancesCrossSiteReuseProcessTest,
     NavigationToSiteThatRequiresDedicatedProcess) {
+  if (AreAllSitesIsolatedForTesting())
+    return;
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL b_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
@@ -5972,6 +5998,8 @@ IN_PROC_BROWSER_TEST_P(
 IN_PROC_BROWSER_TEST_P(
     ProactivelySwapBrowsingInstancesCrossSiteReuseProcessTest,
     NavigationFromSiteThatRequiresDedicatedProcess) {
+  if (AreAllSitesIsolatedForTesting())
+    return;
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL b_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
@@ -6972,10 +7000,8 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
 
   // 5) Do a replaceState to another URL.
   {
-    GURL url_2(embedded_test_server()->GetURL("/title2.html"));
     TestNavigationObserver observer(web_contents);
-    std::string script =
-        "history.replaceState({}, '', '/" + url_2.spec() + "')";
+    std::string script = "history.replaceState({}, '', '/title2.html')";
     EXPECT_TRUE(ExecJs(root, script));
     observer.Wait();
   }
@@ -7574,7 +7600,8 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
 
   // 2) Set up a navigation that will start after we commit the next navigation.
   RenderFrameHostChangedCallbackRunner navigate_after_commit(
-      web_contents, GetScriptExecutorCallback("window.location.reload();"));
+      web_contents,
+      GetAsyncScriptExecutorCallback("window.location.reload();"));
 
   // 3) Navigate same-site to a.com/title2.html.
   EXPECT_TRUE(NavigateToURL(shell(), url_a2));
@@ -7612,6 +7639,8 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   {
     // 2) Set up a script that will call postMessage on the current window
     // after we commit the next navigation.
+    // TODO(https://crbug.com/1110497): GetAsyncScriptExecutorCallback() must be
+    // removed in favor of GetSyncExecutorCallback()
     RenderFrameHostChangedCallbackRunner post_message_after_same_site_commit(
         web_contents,
         GetScriptExecutorCallback("window.postMessage('hello', '*')"));
@@ -7631,6 +7660,8 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   {
     // 4) Set up a script that will call postMessage on the current window
     // after we commit the next navigation.
+    // TODO(https://crbug.com/1110497): GetAsyncScriptExecutorCallback() must be
+    // removed in favor of GetSyncExecutorCallback()
     RenderFrameHostChangedCallbackRunner post_message_after_cross_site_commit(
         web_contents,
         GetScriptExecutorCallback("window.postMessage('hello', '*')"));
@@ -7674,6 +7705,8 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   {
     // 2) Set up a script that will call postMessage on a same-site iframe
     // after we commit the next navigation.
+    // TODO(https://crbug.com/1110497): GetAsyncScriptExecutorCallback() must be
+    // removed in favor of GetSyncExecutorCallback()
     RenderFrameHostChangedCallbackRunner post_message_after_same_site_commit(
         web_contents, GetScriptExecutorCallback(
                           "window.frames[0].postMessage('hello', '*')"));
@@ -7693,6 +7726,8 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
   {
     // 4) Set up a script that will call postMessage on a cross-site iframe
     // after we commit the next navigation.
+    // TODO(https://crbug.com/1110497): GetAsyncScriptExecutorCallback() must be
+    // removed in favor of GetSyncExecutorCallback()
     RenderFrameHostChangedCallbackRunner post_message_after_same_site_commit(
         web_contents, GetScriptExecutorCallback(
                           "window.frames[0].postMessage('hello', '*')"));
@@ -7754,8 +7789,8 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
     // navigation.
     RenderFrameHostChangedCallbackRunner
         set_local_storage_after_same_site_commit(
-            web_contents,
-            GetScriptExecutorCallback("localStorage.setItem('foo', 'bar'); "));
+            web_contents, GetAsyncScriptExecutorCallback(
+                              "localStorage.setItem('foo', 'bar'); "));
 
     // 3) Navigate same-site to a.com/title2.html.
     EXPECT_TRUE(NavigateToURL(shell(), url_a2));
@@ -7773,7 +7808,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
     // next navigation.
     RenderFrameHostChangedCallbackRunner
         set_session_storage_after_same_site_commit(
-            web_contents, GetScriptExecutorCallback(
+            web_contents, GetAsyncScriptExecutorCallback(
                               "sessionStorage.setItem('foo', 'bar'); "));
 
     // 5) Navigate same-site to a.com/title3.html.
@@ -7790,7 +7825,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
     // 6) Set up a script that will modify localStorage and sessionStorage after
     // we commit the next navigation.
     RenderFrameHostChangedCallbackRunner set_storage_after_cross_site_commit(
-        web_contents, GetScriptExecutorCallback(R"(
+        web_contents, GetAsyncScriptExecutorCallback(R"(
       localStorage.setItem('foo', 'bar');
       sessionStorage.setItem('foo', 'bar');
     )"));
@@ -7810,7 +7845,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteTest,
     // 8) Set up a script that will access localStorage and sessionStorage after
     // we commit the next navigation.
     RenderFrameHostChangedCallbackRunner get_storage_after_same_site_commit(
-        web_contents, GetScriptExecutorCallback(R"(
+        web_contents, GetAsyncScriptExecutorCallback(R"(
       localStorage.getItem('foo');
       sessionStorage.getItem('foo');
     )"));
@@ -8598,10 +8633,9 @@ IN_PROC_BROWSER_TEST_P(
   TestNavigationManager foo_manager(web_contents, foo_url);
   auto& current_isolation_context =
       root->current_frame_host()->GetSiteInstance()->GetIsolationContext();
-  EXPECT_TRUE(SiteInstanceImpl::DoesSiteInfoRequireDedicatedProcess(
-      current_isolation_context,
-      SiteInstanceImpl::ComputeSiteInfoForTesting(current_isolation_context,
-                                                  GURL("http://foo.com"))));
+  auto site_info = SiteInstanceImpl::ComputeSiteInfoForTesting(
+      current_isolation_context, GURL("http://foo.com"));
+  EXPECT_TRUE(site_info.RequiresDedicatedProcess(current_isolation_context));
 
   // Set up the work to be done after the renderer is asked to commit
   // |siteless_url|, but before the corresponding DidCommitProvisionalLoad IPC
@@ -8677,11 +8711,10 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_NE(process1, process2);
   EXPECT_EQ(GURL("http://foo.com"),
             web_contents->GetMainFrame()->GetSiteInstance()->GetSiteURL());
-  EXPECT_EQ(ProcessLock(SiteInfo(
-                GURL("http://foo.com"), GURL("http://foo.com"),
-                false /* is_origin_keyed */,
-                false /* is_coop_coep_cross_origin_isolated */,
-                base::nullopt /* coop_coep_cross_origin_isolated_origin */)),
+  EXPECT_EQ(ProcessLock(
+                SiteInfo(GURL("http://foo.com"), GURL("http://foo.com"),
+                         false /* is_origin_keyed */,
+                         CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated())),
             policy->GetProcessLock(process2->GetID()));
 
   // Ensure also that the foo.com process didn't change midway through the
@@ -8867,9 +8900,6 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // anything without SiteIsolation.
   if (!AreAllSitesIsolatedForTesting())
     return;
-  // TODO(https://crbug.com/1064944): Fix this test and remove this.
-  if (ShouldCreateNewHostForSameSiteSubframe())
-    return;
 
   // 1. Navigate to A1(B2, B3(B4), C5).
   StartEmbeddedServer();
@@ -8952,8 +8982,8 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   ASSERT_EQ(0u, b3->child_count());
 
   EXPECT_FALSE(a1->must_be_replaced());
-  EXPECT_EQ(b2->must_be_replaced(), ShouldCreateNewHostForCrashedFrame());
-  EXPECT_EQ(b3->must_be_replaced(), ShouldCreateNewHostForCrashedFrame());
+  EXPECT_TRUE(b2->must_be_replaced());
+  EXPECT_TRUE(b3->must_be_replaced());
   EXPECT_FALSE(c5->must_be_replaced());
 
   EXPECT_EQ(2u, proxy_count(a1));
@@ -8974,19 +9004,12 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // 3. Reload B2, B6 is created.
   NavigateFrameToURL(b2->frame_tree_node(), b2_url);
 
-  if (ShouldCreateNewHostForCrashedFrame()) {
-    // B2 has been replaced
-    EXPECT_NE(b2_routing_id,
-              a1->child_at(0)->current_frame_host()->routing_id());
-  } else {
-    // B2 has not been replaced
-    EXPECT_EQ(b2_routing_id,
-              a1->child_at(0)->current_frame_host()->routing_id());
-  }
+  // B2 has been replaced
+  EXPECT_NE(b2_routing_id, a1->child_at(0)->current_frame_host()->routing_id());
   // B3 hasn't been replaced.
   EXPECT_EQ(b3, a1->child_at(1)->current_frame_host());
   RenderFrameHostImpl* b6 = a1->child_at(0)->current_frame_host();
-  EXPECT_EQ(b3->must_be_replaced(), ShouldCreateNewHostForCrashedFrame());
+  EXPECT_TRUE(b3->must_be_replaced());
   EXPECT_FALSE(b6->must_be_replaced());
 
   EXPECT_EQ(a_site_instance, a1->GetSiteInstance());
@@ -9055,6 +9078,63 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   }
 }
 
+// Helper class to run tests without site isolation.
+class RenderFrameHostManagerNoSiteIsolationTest
+    : public RenderFrameHostManagerTest {
+ public:
+  RenderFrameHostManagerNoSiteIsolationTest() = default;
+  ~RenderFrameHostManagerNoSiteIsolationTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(switches::kDisableSiteIsolation);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(RenderFrameHostManagerNoSiteIsolationTest);
+};
+
+// Ensure that when a process that allows any site gets reused by new
+// BrowsingInstances, ChildProcessSecurityPolicy gets notified about those new
+// BrowsingInstances.  Failure to do so will lead to a crash at commit time due
+// to mismatched process locks.  See https://crbug.com/1141877.
+IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerNoSiteIsolationTest,
+                       IncludeIsolationContextInProcessThatAllowsAnySite) {
+  StartEmbeddedServer();
+  // Ensure we have one renderer process that's reused for everything.
+  RenderProcessHost::SetMaxRendererProcessCount(1);
+
+  // The test starts out with an initial window with a blank SiteInstance.
+  // Create a new window in a new BrowsingInstance and another blank
+  // SiteInstance.
+  Shell* shell2 =
+      Shell::CreateNewWindow(shell()->web_contents()->GetBrowserContext(),
+                             GURL(), nullptr, gfx::Size());
+  SiteInstanceImpl* old_instance = static_cast<SiteInstanceImpl*>(
+      shell()->web_contents()->GetMainFrame()->GetSiteInstance());
+  SiteInstanceImpl* new_instance = static_cast<SiteInstanceImpl*>(
+      shell2->web_contents()->GetMainFrame()->GetSiteInstance());
+  EXPECT_FALSE(old_instance->IsRelatedSiteInstance(new_instance));
+
+  // At this point, neither SiteInstance should have a site assigned.
+  EXPECT_FALSE(old_instance->HasSite());
+  EXPECT_FALSE(new_instance->HasSite());
+
+  // Both should use the same process.
+  EXPECT_EQ(old_instance->GetProcess(), new_instance->GetProcess());
+
+  // Make sure the BrowsingInstanceId is cleaned up immediately.
+  ChildProcessSecurityPolicyImpl::GetInstance()
+      ->SetBrowsingInstanceCleanupDelayForTesting(0);
+
+  // Close the test's initial window.  This should destroy the initial
+  // BrowsingInstance and remove it from ChildProcessSecurityPolicy.
+  shell()->Close();
+
+  // Navigate to a web URL in the second window.  This shouldn't crash.
+  GURL url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell2->web_contents(), url));
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          RenderFrameHostManagerTest,
                          testing::ValuesIn(RenderDocumentFeatureLevelValues()));
@@ -9084,4 +9164,8 @@ INSTANTIATE_TEST_SUITE_P(All,
 INSTANTIATE_TEST_SUITE_P(All,
                          RenderFrameHostManagerDefaultProcessTest,
                          testing::ValuesIn(RenderDocumentFeatureLevelValues()));
+INSTANTIATE_TEST_SUITE_P(All,
+                         RenderFrameHostManagerNoSiteIsolationTest,
+                         testing::ValuesIn(RenderDocumentFeatureLevelValues()));
+
 }  // namespace content

@@ -44,6 +44,7 @@ if (is_win || is_mac) {
       "crash_client.h",
       "crash_reporter.cc",
       "crash_reporter.h",
+      "enum_traits.h",
       "patcher.cc",
       "patcher.h",
       "persisted_data.cc",
@@ -94,8 +95,10 @@ if (is_win || is_mac) {
       "app/app_wake.h",
       "configurator.cc",
       "configurator.h",
-      "control_service_in_process.cc",
-      "control_service_in_process.h",
+      "control_service_impl.cc",
+      "control_service_impl.h",
+      "control_service_impl_inactive.cc",
+      "control_service_impl_inactive.h",
       "crx_downloader_factory.h",
       "external_constants.cc",
       "external_constants.h",
@@ -111,14 +114,17 @@ if (is_win || is_mac) {
       "setup.h",
       "tag.cc",
       "tag.h",
-      "update_service_in_process.cc",
-      "update_service_in_process.h",
+      "update_service_impl.cc",
+      "update_service_impl.h",
+      "update_service_impl_inactive.cc",
+      "update_service_impl_inactive.h",
       "updater.cc",
       "updater.h",
     ]
 
     if (is_mac) {
       sources += [
+        "app/app_install_mac.mm",
         "app/server/mac/app_server.h",
         "app/server/mac/server.h",
         "app/server/mac/server.mm",
@@ -132,10 +138,10 @@ if (is_win || is_mac) {
         "launchd_util.cc",
         "launchd_util.h",
         "lib_util_mac.mm",
-        "mac/control_service_out_of_process.h",
-        "mac/control_service_out_of_process.mm",
-        "mac/update_service_out_of_process.h",
-        "mac/update_service_out_of_process.mm",
+        "mac/control_service_proxy.h",
+        "mac/control_service_proxy.mm",
+        "mac/update_service_proxy.h",
+        "mac/update_service_proxy.mm",
         "prefs_mac.mm",
         "service_factory_mac.mm",
         "setup_mac.mm",
@@ -144,6 +150,7 @@ if (is_win || is_mac) {
 
     if (is_win) {
       sources += [
+        "app/app_install_win.cc",
         "app/server/win/com_classes.cc",
         "app/server/win/com_classes.h",
         "app/server/win/com_classes_legacy.cc",
@@ -192,6 +199,7 @@ if (is_win || is_mac) {
         "//chrome/updater/mac:installer_sources",
         "//chrome/updater/mac:network_fetcher_sources",
         "//chrome/updater/mac:updater_setup_sources",
+        "//chrome/updater/mac:util",
         "//chrome/updater/mac:xpc_names",
       ]
     }
@@ -248,12 +256,44 @@ if (is_win || is_mac) {
     ]
   }
 
+  source_set("browser_sources") {
+    sources = [
+      "//chrome/updater/constants.cc",
+      "//chrome/updater/constants.h",
+      "//chrome/updater/enum_traits.h",
+      "//chrome/updater/registration_data.cc",
+      "//chrome/updater/registration_data.h",
+      "//chrome/updater/update_service.cc",
+      "//chrome/updater/update_service.h",
+    ]
+
+    deps = [
+      "//base",
+      "//components/update_client",
+    ]
+
+    if (is_mac) {
+      sources += [
+        "//chrome/updater/app/server/mac/service_protocol.h",
+        "//chrome/updater/app/server/mac/service_protocol.mm",
+        "//chrome/updater/app/server/mac/update_service_wrappers.h",
+        "//chrome/updater/app/server/mac/update_service_wrappers.mm",
+      ]
+    }
+
+    visibility = [
+      "//chrome/browser/ui:ui",
+      "//chrome/browser/updater:*",
+    ]
+  }
+
   # These tests are run serially since they mutate system state.
   test("updater_tests") {
     testonly = true
 
     sources = [
       "app/app_server_unittest.cc",
+      "enum_traits_unittest.cc",
       "external_constants_unittest.cc",
       "external_constants_unittest.h",
       "lib_util_unittest.cc",
@@ -268,7 +308,6 @@ if (is_win || is_mac) {
       "test/integration_tests.h",
       "unittest_util_unittest.cc",
       "updater_unittest.cc",
-      "util_unittest.cc",
     ]
 
     deps = [
@@ -313,7 +352,7 @@ if (is_win || is_mac) {
         "external_constants_mac_unittest.mm",
         "mac/scoped_xpc_service_mock.h",
         "mac/scoped_xpc_service_mock.mm",
-        "mac/update_service_out_of_process_test.mm",
+        "mac/update_service_proxy_test.mm",
         "test/integration_tests_mac.mm",
       ]
 
@@ -325,6 +364,7 @@ if (is_win || is_mac) {
         "//chrome/updater/mac:updater_bundle",
         "//chrome/updater/mac:updater_setup_tests",
         "//chrome/updater/mac:updater_tests",
+        "//chrome/updater/mac:util",
         "//chrome/updater/mac:xpc_names",
         "//third_party/ocmock",
       ]
@@ -336,16 +376,64 @@ if (is_win || is_mac) {
     }
   }
 
-  group("updater_integration_tests") {
-    testonly = true
+  process_version("version_header_py") {
+    process_only = true
+
+    sources = [ "//chrome/VERSION" ]
+
+    extra_args = [
+      "-e",
+      "COMPANY_FULLNAME=\"$updater_company_full_name\"",
+      "-e",
+      "COMPANY_SHORTNAME=\"$updater_company_short_name\"",
+      "-e",
+      "PRODUCT_FULLNAME=\"$updater_product_full_name\"",
+      "-e",
+      "COPYRIGHT=\"updater_copyright\"",
+      "-e",
+      "MAC_BUNDLE_IDENTIFIER=\"$mac_updater_bundle_identifier\"",
+      "-e",
+      "BROWSER_NAME=\"$browser_name\"",
+      "-e",
+      "MAC_BROWSER_BUNDLE_IDENTIFIER=\"$mac_browser_bundle_identifier\"",
+    ]
+
+    template_file = "test/integration_tests/updater/version_info.py.in"
+    output = "$target_gen_dir/version_info.py"
+  }
+
+  script_test("updater_integration_tests") {
+    script = "//testing/scripts/run_isolated_script_test.py"
+
+    args = [
+      "@WrappedPath(" +
+          rebase_path("//chrome/updater/run_updater_tests.py", root_build_dir) +
+          ")",
+      "--build-dir",
+      "@WrappedPath(" + rebase_path(root_build_dir, root_build_dir) + ")",
+      "--target-gen-dir",
+      "@WrappedPath(" + rebase_path(target_gen_dir, target_gen_dir) + ")",
+    ]
 
     data = [
       "//chrome/updater/run_updater_tests.py",
       "//chrome/updater/test/",
-      "//testing/scripts/common.py",
-      "//testing/scripts/run_isolated_script_test.py",
-      "//testing/xvfb.py",
       "//third_party/catapult/third_party/typ/",
+      "$target_gen_dir/version_info.py",
     ]
+
+    if (is_win) {
+      data_deps = [
+        ":version_header_py",
+        "//chrome/updater/win:updater",
+        "//chrome/updater/win/installer",
+      ]
+    }
+    if (is_mac) {
+      data_deps = [
+        ":version_header_py",
+        "//chrome/updater/mac:updater_bundle",
+      ]
+    }
   }
 }

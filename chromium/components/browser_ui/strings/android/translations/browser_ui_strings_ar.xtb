@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">تمت إضافة الموقع <ph name="SITE_NAME" /></translation>
 <translation id="1383876407941801731">البحث</translation>
 <translation id="1384959399684842514">تم إيقاف التنزيل مؤقتًا</translation>
+<translation id="1415402041810619267">‏تم اقتطاع عنوان URL</translation>
 <translation id="1431402976894535801">منع المواقع الإلكترونية من معرفة متى تستخدم الجهاز</translation>
 <translation id="1446450296470737166">‏السماح بالتحكم الكامل لأجهزة MIDI</translation>
 <translation id="1509960214886564027">قد تتوقف الميزات عن العمل في العديد من المواقع الإلكترونية.</translation>
 <translation id="1620510694547887537">الكاميرا</translation>
-<translation id="1647391597548383849">الدخول إلى الكاميرا</translation>
 <translation id="1660204651932907780">السماح للمواقع الإلكترونية بتشغيل الصوت (موصى به)</translation>
 <translation id="1677097821151855053">يتم استخدام ملفات تعريف الارتباط وبيانات المواقع الإلكترونية الأخرى لتذكُّرك بهدف تسجيل دخولك أو تقديم إعلانات مخصّصة لك مثلاً. لإدارة ملفات تعريف الارتباط لجميع المواقع الإلكترونية، يمكنك الاطّلاع على <ph name="BEGIN_LINK" />الإعدادات<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">هل تريد محو بيانات الموقع الإلكتروني؟</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">‏عنوان URL للموقع</translation>
 <translation id="2025115093177348061">الواقع المعزّز</translation>
 <translation id="2030769033451695672">يُرجى النقر للرجوع إلى <ph name="URL_OF_THE_CURRENT_TAB" />.</translation>
+<translation id="2054665754582400095">متى تستخدم جهازك</translation>
 <translation id="2079545284768500474">تراجع</translation>
 <translation id="2091887806945687916">الصوت</translation>
 <translation id="2107397443965016585">السؤال أولاً قبل السماح للمواقع الإلكترونية بتشغيل المحتوى المَحمي (موصى به)</translation>
 <translation id="2146738493024040262">فتح تطبيق فوري</translation>
 <translation id="2148716181193084225">اليوم</translation>
 <translation id="2182457891543959921">طلب الإذن قبل السماح لموقع إلكتروني بإنشاء خريطة ثلاثية الأبعاد للبيئة المحيطة بك أو تتبُّع موضع الكاميرا (مقترَح)</translation>
-<translation id="2187243482123994665">استخدام الجهاز</translation>
 <translation id="2212565012507486665">السماح بملفات تعريف الارتباط</translation>
 <translation id="2228071138934252756">‏للسماح لتطبيق <ph name="APP_NAME" /> بالوصول إلى الكاميرا، يُرجى أيضًا تفعيل الكاميرا في <ph name="BEGIN_LINK" />إعدادات Android<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">مرة واحدة فقط</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> ميغابايت</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{تم السماح بالوصول إلى <ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> وإذن واحد (<ph name="NUM_MORE" />) آخر.}zero{تم السماح بالوصول إلى <ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> إذن آخر.}two{تم السماح بالوصول إلى <ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> وإذنَين (<ph name="NUM_MORE" />) آخرَين.}few{تم السماح بالوصول إلى <ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> أذونات أخرى.}many{تم السماح بالوصول إلى <ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> إذنًا آخر.}other{تم السماح بالوصول إلى <ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> إذن آخر.}}</translation>
 <translation id="2434158240863470628">اكتمل التنزيل <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">تحديد الموقع الجغرافي</translation>
 <translation id="2482878487686419369">الإشعارات</translation>
 <translation id="2490684707762498678">تتم إدارتها من خلال <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">المساعدة والتعليقات</translation>
@@ -75,7 +74,7 @@
 <translation id="2874939134665556319">المقطع الصوتي السابق</translation>
 <translation id="2903493209154104877">العناوين</translation>
 <translation id="2910701580606108292">السؤال قبل السماح للمواقع الإلكترونية بتشغيل المحتوى المحمي</translation>
-<translation id="2913331724188855103">السماح للمواقع الإلكترونية بحفظ بيانات ملفات تعريف الارتباط وقراءتها (موصى به)</translation>
+<translation id="2913331724188855103">ألسماح للمواقع الإلكترونية بحفظ بيانات ملفات تعريف الارتباط وقراءتها (يُنصح به)</translation>
 <translation id="2968755619301702150">عارض الشهادات</translation>
 <translation id="300526633675317032">سيؤدي هذا إلى محو مساحة التخزين البالغة <ph name="SIZE_IN_KB" /> بأكملها من مساحة تخزين المواقع الإلكترونية.</translation>
 <translation id="3008272652534848354">إعادة ضبط الأذونات</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">الميكروفون</translation>
 <translation id="3277252321222022663">يمكنك السماح للمواقع بالوصول إلى أجهزة الاستشعار (مُقترَح).</translation>
 <translation id="3295602654194328831">إخفاء المعلومات</translation>
+<translation id="3328801116991980348">معلومات الموقع الإلكتروني</translation>
 <translation id="3333961966071413176">جميع جهات الاتصال</translation>
 <translation id="3386292677130313581">السؤال قبل السماح للمواقع الإلكترونية بمعرفة الموقع الجغرافي (موصى به)</translation>
 <translation id="3538390592868664640">منع المواقع الإلكترونية من إنشاء خريطة ثلاثية الأبعاد للبيئة المحيطة بك أو تتبُّع موضع الكاميرا</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">السماح للمواقع الإلكترونية بتشغيل المحتوى المَحمي</translation>
 <translation id="4468959413250150279">كتم صوت موقع إلكتروني معين.</translation>
 <translation id="4479647676395637221">السؤال أولاً قبل السماح للمواقع الإلكترونية باستخدام الكاميرا (موصى به)</translation>
+<translation id="4505788138578415521">‏تم توسيع عنوان URL.</translation>
 <translation id="4534723447064627427">‏للسماح لتطبيق <ph name="APP_NAME" /> بالوصول إلى الميكروفون، يُرجى أيضًا تفعيل الميكروفون في <ph name="BEGIN_LINK" />إعدادات Android<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">التفاصيل</translation>
 <translation id="4645575059429386691">يديره والداك</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">بلوتوث</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> وإذن واحد (<ph name="NUM_MORE" />) آخر}zero{<ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> إذن آخر}two{<ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> وإذنان (<ph name="NUM_MORE" />) آخران}few{<ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> أذونات أخرى}many{<ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> إذنًا آخر}other{<ph name="PERMISSION_1" /> و<ph name="PERMISSION_2" /> و<ph name="NUM_MORE" /> إذن آخر}}</translation>
 <translation id="913657688200966289">‏فعِّل الأذونات لتطبيق <ph name="APP_NAME" /> في <ph name="BEGIN_LINK" />إعدادات Android<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">الدخول إلى الميكروفون</translation>
 <translation id="965817943346481315">الحظر في حال كان الموقع الإلكتروني يعرض إعلانات مضلِّلة أو غير مرغوب فيها (مُستحسَن)</translation>
 <translation id="967624055006145463">البيانات المُخزَّنة</translation>
 </translationbundle>

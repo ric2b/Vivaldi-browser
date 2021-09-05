@@ -1366,25 +1366,24 @@ STDMETHODIMP BrowserAccessibilityComWin::InternalQueryInterface(
   BrowserAccessibilityComWin* accessibility =
       reinterpret_cast<BrowserAccessibilityComWin*>(this_ptr);
 
-  if (!accessibility->owner()) {
+  if (!accessibility || !accessibility->owner()) {
     *object = nullptr;
     return E_NOINTERFACE;
   }
 
-  ax::mojom::Role role = accessibility->owner()->GetRole();
-
   if (iid == IID_IAccessibleImage) {
+    const ax::mojom::Role role = accessibility->owner()->GetRole();
     if (!ui::IsImage(role)) {
       *object = nullptr;
       return E_NOINTERFACE;
     }
   } else if (iid == IID_ISimpleDOMDocument) {
-    if (!ui::IsDocument(role)) {
+    if (!accessibility->IsDocument()) {
       *object = nullptr;
       return E_NOINTERFACE;
     }
   } else if (iid == IID_IAccessibleHyperlink) {
-    if (!accessibility || !accessibility->IsHyperlink()) {
+    if (!accessibility->IsHyperlink()) {
       *object = nullptr;
       return E_NOINTERFACE;
     }
@@ -1428,17 +1427,12 @@ void BrowserAccessibilityComWin::UpdateStep1ComputeWinAttributes() {
   // as the MSAA role.
   if (!win_attributes_->ia2_role)
     win_attributes_->ia2_role = win_attributes_->ia_role;
-
   win_attributes_->ia2_state = ComputeIA2State();
   win_attributes_->ia2_attributes = ComputeIA2Attributes();
-
   win_attributes_->name = owner()->GetNameAsString16();
-
   win_attributes_->description =
       owner()->GetString16Attribute(ax::mojom::StringAttribute::kDescription);
-
-  win_attributes_->value = GetValue();
-
+  win_attributes_->value = GetValueForControl();
   win_attributes_->ignored = owner()->IsIgnored();
 }
 

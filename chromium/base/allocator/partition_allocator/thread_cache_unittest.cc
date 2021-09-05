@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/synchronization/lock.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -27,7 +27,8 @@
 // on Windows 7 (at least). As long as it doesn't use something else on Windows,
 // disable the cache (and tests)
 #if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && \
-    !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) && defined(OS_LINUX)
+    !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) &&  \
+    defined(PA_THREAD_CACHE_SUPPORTED)
 
 namespace base {
 namespace internal {
@@ -259,7 +260,7 @@ TEST_F(ThreadCacheTest, ThreadCacheRegistry) {
     auto* tcache = g_root->thread_cache_for_testing();
     EXPECT_TRUE(tcache);
 
-    AutoLock lock(ThreadCacheRegistry::GetLock());
+    PartitionAutoLock lock(ThreadCacheRegistry::GetLock());
     EXPECT_EQ(tcache->prev_, nullptr);
     EXPECT_EQ(tcache->next_, parent_thread_tcache);
   })};
@@ -268,7 +269,7 @@ TEST_F(ThreadCacheTest, ThreadCacheRegistry) {
   PlatformThread::Create(0, &delegate, &thread_handle);
   PlatformThread::Join(thread_handle);
 
-  AutoLock lock(ThreadCacheRegistry::GetLock());
+  PartitionAutoLock lock(ThreadCacheRegistry::GetLock());
   EXPECT_EQ(parent_thread_tcache->prev_, nullptr);
   EXPECT_EQ(parent_thread_tcache->next_, nullptr);
 }
@@ -311,11 +312,11 @@ TEST_F(ThreadCacheTest, RecordStats) {
   EXPECT_EQ(10u, cache_fill_misses_counter.Delta());
 
   // Memory footprint.
-  size_t allocated_size = g_root->buckets[bucket_index].slot_size;
   ThreadCacheStats stats;
   ThreadCacheRegistry::Instance().DumpStats(true, &stats);
-  EXPECT_EQ(allocated_size * ThreadCache::kMaxCountPerBucket,
-            stats.bucket_total_memory);
+  EXPECT_EQ(
+      g_root->buckets[bucket_index].slot_size * ThreadCache::kMaxCountPerBucket,
+      stats.bucket_total_memory);
   EXPECT_EQ(sizeof(ThreadCache), stats.metadata_overhead);
 }
 
@@ -331,9 +332,9 @@ TEST_F(ThreadCacheTest, MultipleThreadCachesAccounting) {
 
     ThreadCacheStats stats;
     ThreadCacheRegistry::Instance().DumpStats(false, &stats);
-    size_t allocated_size = g_root->buckets[bucket_index].slot_size;
     // 2* for this thread and the parent one.
-    EXPECT_EQ(2 * allocated_size, stats.bucket_total_memory);
+    EXPECT_EQ(2 * g_root->buckets[bucket_index].slot_size,
+              stats.bucket_total_memory);
     EXPECT_EQ(2 * sizeof(ThreadCache), stats.metadata_overhead);
 
     uint64_t this_thread_alloc_count =
@@ -402,4 +403,5 @@ TEST_F(ThreadCacheTest, PurgeAll) NO_THREAD_SAFETY_ANALYSIS {
 }  // namespace base
 
 #endif  // !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) &&
-        // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) && defined(OS_LINUX)
+        // !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) &&
+        // defined(PA_THREAD_CACHE_SUPPORTED)

@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.NewTabButton;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
 
 /** View of the StartSurfaceToolbar */
 class StartSurfaceToolbarView extends RelativeLayout {
@@ -153,6 +154,18 @@ class StartSurfaceToolbarView extends RelativeLayout {
         }
     }
 
+    /**
+     * @param highlight If the new tab button should be highlighted.
+     */
+    void setNewTabButtonHighlight(boolean highlight) {
+        if (mNewTabButton == null) return;
+        if (highlight) {
+            ViewHighlighter.turnOnCircularHighlight(mNewTabButton);
+        } else {
+            ViewHighlighter.turnOffHighlight(mNewTabButton);
+        }
+    }
+
     /** Called when incognito mode changes. */
     void updateIncognito(boolean isIncognito) {
         updatePrimaryColorAndTint(isIncognito);
@@ -247,7 +260,7 @@ class StartSurfaceToolbarView extends RelativeLayout {
 
         if (mVisibilityAnimator != null) {
             mVisibilityAnimator.cancel();
-            mVisibilityAnimator = null;
+            finishAnimation(showStartSurfaceToolbar);
         }
 
         mIsShowing = showStartSurfaceToolbar;

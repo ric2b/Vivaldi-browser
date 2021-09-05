@@ -64,6 +64,10 @@ EditingViewPortElement::CustomStyleForLayoutObject() {
   return style;
 }
 
+bool EditingViewPortElement::TypeShouldForceLegacyLayout() const {
+  return !RuntimeEnabledFeatures::LayoutNGTextControlEnabled();
+}
+
 // ---------------------------
 
 TextControlInnerEditorElement::TextControlInnerEditorElement(Document& document)
@@ -116,6 +120,10 @@ void TextControlInnerEditorElement::FocusChanged() {
   // for text-overflow. See TextControlElement::ValueForTextOverflow().
   SetNeedsStyleRecalc(kLocalStyleChange, StyleChangeReasonForTracing::Create(
                                              style_change_reason::kControl));
+}
+
+bool TextControlInnerEditorElement::TypeShouldForceLegacyLayout() const {
+  return !RuntimeEnabledFeatures::LayoutNGTextControlEnabled();
 }
 
 LayoutObject* TextControlInnerEditorElement::CreateLayoutObject(
@@ -196,6 +204,10 @@ TextControlInnerEditorElement::CreateInnerEditorStyle() const {
     no_scrollbar_style->SetDisplay(EDisplay::kNone);
     text_block_style->AddCachedPseudoElementStyle(no_scrollbar_style);
     text_block_style->SetHasPseudoElementStyle(kPseudoIdScrollbar);
+
+    text_block_style->SetDisplay(EDisplay::kFlowRoot);
+    if (parentNode()->IsShadowRoot())
+      text_block_style->SetAlignSelfBlockCenter(true);
   }
 
   return text_block_style;
@@ -239,6 +251,10 @@ bool SearchFieldCancelButtonElement::WillRespondToMouseClickEvents() {
     return true;
 
   return HTMLDivElement::WillRespondToMouseClickEvents();
+}
+
+bool SearchFieldCancelButtonElement::TypeShouldForceLegacyLayout() const {
+  return !RuntimeEnabledFeatures::LayoutNGTextControlEnabled();
 }
 
 // ----------------------------

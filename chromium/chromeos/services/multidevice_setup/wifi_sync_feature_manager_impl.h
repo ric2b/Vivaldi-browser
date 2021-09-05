@@ -102,7 +102,8 @@ class WifiSyncFeatureManagerImpl
   enum class PendingState {
     kPendingNone = 0,
     kPendingEnable = 1,
-    kPendingDisable = 2
+    kPendingDisable = 2,
+    kSetPendingEnableOnVerify = 3
   };
 
   enum class CurrentState {
@@ -120,6 +121,9 @@ class WifiSyncFeatureManagerImpl
   void OnSetWifiSyncHostStateNetworkRequestFinished(
       bool attempted_to_enable,
       device_sync::mojom::NetworkRequestResult result_code);
+  bool ShouldEnableOnVerify();
+  void ProcessEnableOnVerifyAttempt();
+  bool ShouldAttemptToEnableAfterHostVerified();
 
   HostStatusProvider* host_status_provider_;
   PrefService* pref_service_;
